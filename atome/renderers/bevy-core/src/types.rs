@@ -397,6 +397,8 @@ pub struct AtomeRenderNode {
     pub clip_rect: Option<[f32; 4]>,
     #[serde(default)]
     pub clip_rotation: f32,
+    #[serde(default)]
+    pub clip_rounded_rects: Vec<[f32; 8]>,
     #[serde(default = "default_transform_scale")]
     pub scale: [f32; 2],
     #[serde(default)]

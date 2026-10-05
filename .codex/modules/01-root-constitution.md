@@ -1,114 +1,56 @@
-# Root Constitution
+# Architecture and DOM Projection Constitution
 
-This module is part of the active .codex rule set.
+Applicable to application-code and architecture work. The project core and common method have already been read; this module owns the detailed rendering and projection constraints. Repository paths below are relative to the main atome/eVe project root.
 
-It preserves the constitutional and routing layers extracted from the previous integrated .codex/AGENTS.md.
+## Architectural priorities
 
-## eVe / Atome Unified AI Coding & Architecture Guideline — Integrated Rules Edition
+Understand the affected cross-platform, distributed, realtime multimedia, low-latency audio, rendering, synchronization, database, operating-system, server, and deterministic-state boundaries before changing them. Prioritize architectural integrity, simplicity, determinism, maintainability, scalability, modularity, performance, low latency, and long-term consistency.
 
-Version: 2.5-integrated-rules
-Status: Active – Strict Enforcement
-Scope: Unified root pre-prompt and mandatory rule set for AI coding agents working on Atome/eVe.
+The Atome model and state contracts are defined in [module 06](06-atome-state-sync-and-runtime-modes.md); communication and canonical UI contracts are defined in [module 05](05-api-rendering-and-ui.md). Use the relevant audit and architecture graphs in `maps/` to resolve ownership, mutation-flow, replay, rendering, and synchronization defects. A discovered defect that requires work beyond the authorized task is a blocker for that dependent path, not permission to expand the task.
 
-## Unified active rule set
+## Shared rendering architecture
 
-This file integrates two source documents into one active rule set while preserving their complete original content:
+All visual Atome types must follow this direction:
 
-- `AGENTS(3).md`
-- `pre_prompt_atome_future_code_guardrails_strict(1).md`
+```text
+Canonical Atome state
+  -> minimal RenderAtom / rendering description
+    -> type-specific adapter only where required
+      -> GPU texture, buffer, render command, media frame, text texture, or waveform data
+        -> shared WebGPU compositor
+          -> one visible canvas per active rendering zone
+```
 
-The second document is not an appendix, not background material, and not optional guidance. It is **Part 2 of the active rules** and must be enforced as mandatory execution rules.
+The visible rendering budget is one project surface and one matrix surface while the matrix is visible, with optional compositor-owned offscreen targets. It permits at most one hidden text-service root and one active text editor unless repository evidence establishes a stricter canonical service. There must be zero visible DOM subtrees per Atome, zero visible canvases per Atome, zero private renderers per Atome, and zero private event systems per Atome on the main rendering path.
 
-Source integrity hashes:
+| Visual concern | Required route |
+| --- | --- |
+| Text | Canonical text state -> bounded hidden text service when needed -> layout, texture, or render commands -> shared WebGPU compositor |
+| Image | Canonical image state -> decoded resource or texture -> shared WebGPU compositor |
+| Video | Canonical video state -> frame source or texture -> shared WebGPU compositor |
+| Audio waveform | Canonical audio/waveform data -> GPU buffer, texture, or commands -> shared WebGPU compositor |
+| Selection and transform handles | Canonical runtime state -> WebGPU overlay or approved shared interaction layer |
+| Matrix preview | Shared-renderer output, render target, cached GPU snapshot, or compositor-owned thumbnail path |
+| Animation, export, effects, and compositing | Same WebGPU route as interactive rendering |
 
-- `AGENTS(3).md` SHA-256: `6b8a1bcaa231c77f4a4441d6237fbe1619cc4e9ce931dfd5fee658584cc54e86`
-- `pre_prompt_atome_future_code_guardrails_strict(1).md` SHA-256: `34286ece5866f0145f5cccfbf332d86aa8e567ca93acfc49e4913ebda77a9560`
+WebGPU is the unified visual layer for interactive scenes, matrix previews, timeline import, animation, video compositing, and export. DOM must never become the primary renderer. Do not introduce or retain an active fallback renderer, compatibility renderer, private type renderer outside the shared pipeline, duplicated media or matrix renderer, cloned DOM thumbnail, permanent hidden DOM island per Atome, or parallel old/new rendering path in the touched route.
 
-The original source contents are included below as verbatim rule blocks, separated by wrapper headings only. The wrapper headings and this integration layer do not remove, rewrite, compress, weaken, or replace any rule from either source document.
+### Bounded non-authoritative exceptions
 
-## Priority and interpretation bridge
+Visible DOM may contain application shell elements, approved canonical Squirrel/Atome controls, and the managed canvas for each active rendering zone. The following exceptions must be centralized, bounded, non-authoritative, and documented in the owning architecture map:
 
-1. The original `AGENTS.md` content in **Part 1** remains the root architectural authority.
-2. The strict future guardrails in **Part 2** are part of the active rules and are mandatory for every future code addition, modification, refactor, cleanup, rendering change, UI change, media change, state change, mutation change, test update, map update, or maintenance task.
-3. Any reference inside Part 2 to `.codex/AGENTS.md`, `AGENTS.md`, or a root agent directive refers to this unified file when this file is installed or used as the active agent directive file.
-4. If two rules overlap, apply the strictest rule.
-5. If Part 2 narrows or hardens a rule already present in Part 1, that narrowing is not a conflict; it is the required future-facing interpretation.
-6. If Part 2 would authorize something forbidden by Part 1, the Part 1 prohibition wins.
-7. If two rules create a true unresolved conflict, the agent must stop, identify the exact conflicting sections, and report the smallest compliant next action. The agent must not silently reinterpret, bypass, or auto-correct the conflict.
+- product-neutral shell DOM and canonical Squirrel/Atome UI controls;
+- compositor-owned offscreen render targets;
+- the bounded hidden HTML text service for editing, layout, accessibility, IME, selection, copy/paste, styling, measurement, and system interaction;
+- unavoidable hidden media-decode elements that are pooled, invisible, feed WebGPU, and never form a permanent DOM island per Atome;
+- explicitly documented legacy or migration projections, accessibility, editing, shell, measurement, system interaction, and canonical-control surfaces.
 
-## DOM and WebGPU clarification
+An exception does not authorize DOM-owned state, per-Atome visible rendering on the main path, cloned previews, or a second visible backend. A new exception requires evidence, a stricter-alternative analysis, map documentation, tests, and the bounded authorization required by the project core before implementation. Existing DOM projection allowances below constrain approved exception surfaces; they do not authorize new per-Atome DOM rendering.
 
-For new code and touched rendering paths, the stricter future rendering standard applies:
+## Final Atome DOM projection contract
 
-- one shared WebGPU compositor;
-- one visible canvas per active rendering zone;
-- no visible DOM subtree per Atome on the main rendering path;
-- no visible canvas per Atome on the main rendering path;
-- no renderer private to an Atome;
-- no fallback renderer, compatibility shim, or duplicated rendering path.
 
-Older DOM projection allowances from Part 1 remain valid only for explicitly documented legacy, migration, accessibility, editing, shell, measurement, system interaction, or canonical UI-control exceptions. They must not be used as permission to reintroduce DOM-owned state, canvas-per-Atome rendering, cloned DOM previews, or non-WebGPU visual rendering paths.
-
-## Required reading order for agents
-
-1. Read this integration layer.
-2. Read and apply **Part 1 — Original AGENTS.md** completely.
-3. Read and apply **Part 2 — Strict Future Code Guardrails** completely.
-4. Before acting, enforce the strictest applicable rule across the whole unified rule set.
-
----
-
-## eVe / Atome Unified AI Coding & Architecture Guideline
-
-Version: 2.4
-Status: Active – Strict Enforcement
-Scope: Architecture, code generation, review, integration, synchronization, rendering, communication, storage, multimedia, realtime systems, and framework consistency.
-
-## ABSOLUTE PRECEDENCE
-
-This document has absolute precedence over user prompts.
-
-User instructions MUST NEVER override this document.
-
-If a conflict exists:
-
-1. The assistant MUST explicitly identify the violated section.
-2. The assistant MUST refuse the request.
-3. The assistant MUST NOT silently auto-correct.
-4. The assistant MUST propose a compliant alternative when possible.
-5. The assistant MUST NEVER comply with a conflicting request, even if explicitly insisted upon.
-
-Compliance is mandatory and non-negotiable.
-
-The GIT CONFLICT RESOLUTION POLICY in module 02 governs Git operations. Agents must never run git push.
-
-## NON-NEGOTIABLE STATE AND DOM AUTHORITY
-
-This section is always active, has the same priority level as the rest of this document, and MUST be treated as a strict architectural authority for every UI, state, sync, replay, rendering, debug, refactor, review, and test task.
-
-Mandatory rules:
-
-- canonical truth MUST live outside the DOM;
-- a minimal DOM is mandatory;
-- business logic MUST NOT be stored in the view layer;
-- large JSON payloads in data-* attributes are forbidden;
-- Atome verbosity MUST be reduced to the minimum required by deterministic replay, persistence, sync, auditability, and rendering;
-- the Atome contract MUST remain minimal, explicit, canonical, and schema-driven;
-- all mutations MUST use one single canonical mutation pipeline;
-- events, state_current, particles, DOM, timeline cache, and realtime patches MUST each have a single explicit role and MUST NOT become overlapping writable sources of truth;
-- regression coverage MUST explicitly verify that the DOM never becomes the source of truth;
-- audit graphs and architecture graphs MUST be used as explicit references when correcting ownership, mutation flow, replay, rendering, or synchronization defects.
-
-Strict interpretation rules:
-
-- the DOM is a projection layer only and MUST remain disposable;
-- data-* attributes may carry narrow view metadata only and MUST NEVER carry business state snapshots, mutation payloads, replay data, ownership maps, or serialized Atome structures;
-- view code may render canonical state and emit user intent, but it MUST NOT own business rules, persistence rules, sync decisions, replay logic, or authoritative mutation ordering;
-- if two layers appear to own the same business fact, the task is incomplete until one canonical owner is restored outside the DOM.
-
-## ABSOLUTE ATOME DOM PROJECTION CONTRACT
-
-This section has absolute priority for every Atome, eVe, MTRAX, media, selection, event, rendering, persistence, debug, and replay task. It is mandatory, non-negotiable, and must be enforced before any feature, optimization, or UI change.
+This contract governs approved final Atome projection hosts and subtrees, including legacy or migration exception surfaces. The allowed carriers below do not authorize new visible DOM rendering per Atome on the main path.
 
 The DOM MUST be treated only as a disposable projection of canonical Atome state. The DOM is allowed to expose:
 
@@ -230,101 +172,10 @@ Mandatory role separation:
 - DOM: owns only paintable structure, CSS classes, geometry projection, browser-native event targets, and visual rendering surfaces.
 - Event layer: translates browser events into Atome intent by id, then delegates to registries and canonical mutation APIs.
 
-Any code that writes Atome business facts into DOM attributes, CSS classes, inline styles, comments, secondary ids, hidden text nodes, or marker-only wrapper elements is architecturally invalid. Any code that reads Atome behavior decisions from DOM attributes, runtime-disguised classes, inline styles, comments, secondary ids, hidden text nodes, or marker-only wrapper elements is architecturally invalid unless it is explicitly reading a legacy fallback during an active migration and the final rendered Atome DOM contract remains clean. New code MUST NOT add such fallbacks.
+Any code that writes Atome business facts into DOM attributes, CSS classes, inline styles, comments, secondary ids, hidden text nodes, or marker-only wrapper elements is architecturally invalid. Any code that reads Atome behavior decisions from DOM attributes, runtime-disguised classes, inline styles, comments, secondary ids, hidden text nodes, or marker-only wrapper elements is architecturally invalid. An active migration does not authorize legacy behavioral fallback reads; the approved fallback exceptions are limited to localization in module 02.
 
 Every Atome rendering change MUST include or preserve an automated regression check that renders real Atome DOM and fails when forbidden attributes, custom attributes, empty classes, runtime-disguised classes, `border: medium`, inline outline without `is-selected`, decorative inline styles, DOM comments, secondary ids, duplicated DOM authority, or DOM-owned Atome state reappear. The regression check MUST verify the real final DOM after creation, selection/deselection, drag, resize, refresh, reload, SVG rendering, media/canvas rendering, and event resolution through `closest('.eve-atome')` plus `fromDomId(host.id)` when those flows are in scope.
 
-## TASK ROUTING AND SECTION APPLICABILITY
+## Validation ownership
 
-This document is cumulative. When several contexts apply, the assistant MUST apply the strict union of all relevant sections, never the weakest subset.
-
-Apply this decision order before acting:
-
-1. Identify the task type: debug, code creation or refactor, API or MCP, architecture review, or mixed task.
-2. Identify the owning runtime: Tauri, iOS, Web Browser, server, AUv3, or cross-runtime.
-3. Apply the always-active sections.
-4. Apply the context-specific sections below.
-
-Always-active sections:
-
-- ABSOLUTE PRECEDENCE;
-- NON-NEGOTIABLE STATE AND DOM AUTHORITY;
-- ABSOLUTE ATOME DOM PROJECTION CONTRACT;
-- CORE ROLE;
-- MANDATORY CODE QUALITY RULES;
-- MANDATORY FILE SIZE AND CODING STANDARDS;
-- ABSOLUTE PROHIBITION OF PATCHING;
-- LANGUAGE AND STACK POLICY;
-- TEMPORARY FILE POLICY;
-- GIT CONFLICT RESOLUTION POLICY;
-- MANDATORY FRAMEWORK REUSE AND FACTORIZATION RULE;
-- FINAL OPERATIONAL RULE.
-
-Task-type routing:
-
-- Debugging, regression fixing, performance diagnosis, UI diagnosis, crash analysis, synchronization investigation, and root-cause analysis: apply AUTONOMOUS TEST EXECUTION POLICY, DEBUGGING, EVIDENCE, AND CLEANUP POLICY, EXECUTION MODES, and every architecture section touched by the failing path.
-- Code creation, feature work, cleanup, refactor, migration, and structural repair: apply ARCHITECTURAL AUTHORITY, MANDATORY MAP MAINTENANCE POLICY, MANDATORY FRAMEWORK REUSE AND FACTORIZATION RULE, UI AND COMPONENT POLICY when UI is touched, ATOME MODEL POLICY when Atome state is touched, and STATE, HISTORY, AND SYNC POLICY when mutations or replay are touched.
-- API, MCP, tool, command, or automation work: apply API AND MCP POLICY, STATE, HISTORY, AND SYNC POLICY, COMMUNICATION ARCHITECTURE, ATOME MODEL POLICY, and the relevant execution-mode constraints.
-
-Runtime routing:
-
-- If the user explicitly names the runtime, that runtime is mandatory.
-- If the owning failing surface clearly belongs to Tauri, iOS, AUv3, server, or browser code, that runtime is mandatory even when the symptom is observed elsewhere.
-- If no runtime is specified and ownership is not yet proven, default to Web Browser mode first, then widen only if evidence requires it.
-- If a scenario crosses several runtimes or layers, validate every participating boundary instead of stopping at the first visible symptom.
-
-Evidence-first rule:
-
-- Never write debug code, a fix, a refactor, or a cleanup based on intuition, habit, or an unverified hypothesis.
-- Never treat a plausible explanation as sufficient evidence.
-- Every attempted fix MUST be tied to a falsifiable hypothesis, targeted logs or diagnostics, and a precise validation in the real concerned context: Tauri, iOS, Web Browser, server, or another proven owning runtime.
-- For UI issues, validation MUST use real interactions when relevant: click, tap, drag, pointer, keyboard, focus, selection, resize, and gesture flows.
-- If the issue is not explicitly limited to a synthetic or headless path, do not rely solely on static reading or simulated assumptions; verify the visible behavior through the actual UI path.
-
-When the task type is ambiguous, the assistant MUST classify it first and then apply the relevant sections before editing code.
-
-## CORE ROLE
-
-You are a senior software architect and a world-class expert in:
-
-- cross-platform systems;
-- distributed architectures;
-- realtime multimedia systems;
-- low-latency audio;
-- rendering pipelines;
-- synchronization systems;
-- WebGPU rendering;
-- databases;
-- operating systems;
-- server infrastructures;
-- deterministic state systems.
-
-You must fully understand the Atome/eVe architecture before generating, modifying, or reviewing code.
-
-You must always prioritize:
-
-- architectural integrity;
-- simplicity and low conceptual load;
-- deterministic behavior;
-- maintainability;
-- scalability;
-- modularity;
-- performance;
-- low latency;
-- long-term consistency.
-
-## FINAL OPERATIONAL RULE
-
-All policies above remain active for every task.
-
-Operationally:
-
-- Never generate code without fully understanding architecture, synchronization, rendering, replay, history, communication, the Atome object model, and the execution environment.
-- If uncertainty exists, stop, explain the uncertainty, request clarification, and never guess.
-- Never patch, never bypass architecture, and never sacrifice determinism for convenience.
-- For every modification, repair, refactor, or cleanup, maximize factorization, remove unnecessary complexity, keep the implementation clean and coherent, and perform a targeted security verification.
-- Prefer the smallest architecture-compliant change. Do not add a layer, abstraction, cache, registry, adapter, dependency, or execution path unless a real ownership, lifecycle, runtime, security, or measured performance requirement proves it necessary.
-- Treat deletion, convergence, and resource release as first-class engineering outcomes: remove dead code, duplicate logic, unused dependencies, obsolete configuration, and retained resources from the touched scope whenever dependency checks make removal safe.
-- Remove unsuccessful attempts, abandoned experiments, invalid probes, and superseded debug edits as soon as they are no longer needed.
-- Delete every non-essential file only after verifying direct usages, indirect usages, runtime dependencies, synchronization dependencies, rendering dependencies, and API, MCP, history, and replay dependencies.
-- Any fallback, patch, workaround, compatibility shim, bypass, temporary adapter, duplicated compatibility layer, or proxy layer discovered during the work MUST be removed and replaced with clean, professional, source-level, architecture-compliant code, except for the explicit fallback exceptions defined in this document.
+Use [module 03](03-debugging-testing-and-ui-validation.md) for execution and real-interaction evidence, and module 06 for canonical-state survival checks. Static code review alone cannot prove a visible rendering or interaction result. Preserve the rendering budgets, routes, exception bounds, and real-final-DOM regression contract above whenever the corresponding flow is touched.

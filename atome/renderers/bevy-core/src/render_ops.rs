@@ -91,7 +91,8 @@ pub fn apply_transform(world: &mut World, patch: AtomeTransformPatch) -> Result<
     let previous_clip_rect =
         world.get::<AtomeClipRect>(entity).ok_or_else(|| format!("bevy_transform_clip_missing:{}", patch.id))?.0;
     let previous_clip_rotation = world.get::<AtomeClipRotation>(entity).map(|value| value.0).unwrap_or(0.0);
-    let clip_changed = previous_clip_rect != patch.clip_rect || previous_clip_rotation != patch.clip_rotation;
+    let clip_changed = previous_clip_rect != patch.clip_rect || previous_clip_rotation != patch.clip_rotation
+        || world.get::<AtomeClipRoundedRects>(entity).map(|value| &value.0) != Some(&patch.clip_rounded_rects);
     let width = patch.logical_size[0].max(1.0);
     let height = patch.logical_size[1].max(1.0);
     let previous_size =
@@ -120,7 +121,7 @@ pub fn apply_transform(world: &mut World, patch: AtomeTransformPatch) -> Result<
         .ok_or_else(|| format!("bevy_transform_local_missing:{}", patch.id))? = local_transform;
     *world.get_mut::<AtomeClipRect>(entity).ok_or_else(|| format!("bevy_transform_clip_missing:{}", patch.id))? =
         AtomeClipRect(patch.clip_rect);
-    world.entity_mut(entity).insert(AtomeClipRotation(patch.clip_rotation));
+    world.entity_mut(entity).insert((AtomeClipRotation(patch.clip_rotation), AtomeClipRoundedRects(patch.clip_rounded_rects)));
     let next_transform = transform_for_rect(
         patch.logical_position[0],
         patch.logical_position[1],

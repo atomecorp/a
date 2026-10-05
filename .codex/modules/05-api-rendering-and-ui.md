@@ -1,113 +1,50 @@
-# API Rendering And UI
+# API, Communication, and Canonical UI
 
-This module is part of the active .codex rule set.
+Applicable to API, MCP, tool-command, rendering, and UI work. The project core and common method have already been read. Repository paths below are relative to the main atome/eVe project root. Detailed rendering/DOM constraints belong to [module 01](01-root-constitution.md); mutations, history, synchronization, and permissions belong to [module 06](06-atome-state-sync-and-runtime-modes.md).
 
-## API AND MCP POLICY
+## API and command execution
 
-Every new feature MUST be exposed through a properly defined API.
+Every new feature must expose an explicitly declared, documented, typed API that is MCP-compatible, accessible to AI systems, integrated with Atome history, granularly traceable, deterministically replayable, and consistent with Atome versioning. Typed contracts do not imply adopting TypeScript.
 
-Every API must:
+Every effectful operation must pass through the canonical Command Bus, policy checks, capability validation, audit logging, and idempotency checks. Tools and executable code return intentions (Command Bus actions), not direct hidden effects. Same inputs and canonical state must produce the same commands. Durable changes then use the canonical commit/event pipeline defined in module 06.
 
-- be explicitly declared;
-- be documented;
-- be typed;
-- be MCP-compatible;
-- be accessible to AI systems;
-- integrate with Atome history;
-- support granular traceability;
-- support deterministic replay;
-- respect Atome versioning rules.
+Tool execution is sandboxed: no raw filesystem, network, or process access. Use the canonical capability and system boundaries. Standardize tool input across UI, AI, and Voice. Tool APIs are programmable for batch operations and AI control; their mutations are persisted and fully historized through the same pipeline. Gestures such as drag, resize, and rotate must be recorded with sufficient precision for deterministic movie-like replay, while undo/restore respects module 06's logical-event boundaries.
 
-All effectful operations must pass through:
+Inspect the actual tool gateway, registered tool, dispatch path, and mutation owner before changing an API or exposing a tool in a panel. A similarly named function, copied control, external wrapper, or unregistered implementation does not prove that a native tool is available. Apply the core's compatibility and missing-component gate; preserve the tool's existing native options rather than inventing a panel-specific execution path.
 
-- the Command Bus;
-- policy checks;
-- capability validation;
-- audit logging;
-- idempotency checks.
+## Communication architecture
 
-Tools must return intentions, never direct hidden side effects.
+All application commands, signaling, synchronization, and durable-data communication must use the centralized, shared WebSocket architecture. Account operations, sharing, canonical business state, durable mutations, and application commands belong to `/ws/api`. Authenticated cloud delivery and replay use `/ws/sync`, with the responsibilities defined in module 06.
 
-Bypassing the Command Bus is forbidden.
+Two narrowly bounded exceptions exist:
 
-## COMMUNICATION ARCHITECTURE
+- mediasoup realtime audio/video streams may use WebRTC/RTP only for their media plane. Signaling, authorization, room control, application state, and durable data remain on canonical WebSockets.
+- An in-process or host-provided native bridge may adapt capabilities that an operating system, application/plugin host, or realtime-media runtime exposes natively and cannot provide through the WebSocket boundary without breaking its platform contract. Examples are AUv3 tempo/transport callbacks, realtime audio/MIDI, sandboxed file pickers, native credential stores, device capabilities, and equivalent Tauri/iOS host calls. It is a capability adapter, never an alternate application transport or owner of business state, durable mutations, accounts, sharing, or sync.
 
-All application commands, signaling, synchronization, and durable data communications MUST exclusively use WebSockets.
+REST fallbacks, HTTP polling, duplicated or hybrid application transports outside these exceptions, and scattered communication implementations are forbidden. Native exceptions do not override the owning runtime's filesystem, security, or realtime constraints in module 06.
 
-Narrow exception: mediasoup real-time audio and video media streams MAY use WebRTC/RTP where required by the mediasoup protocol. This exception applies only to the media plane. Signaling, authorization, room control, application state, and durable data MUST continue to use the canonical WebSocket architecture.
+## Canonical UI controls and tools
 
-Narrow native-platform exception: an in-process or host-provided native bridge MAY be
-used only for capabilities that the operating system, application host, plugin host, or
-realtime media runtime exposes natively and cannot provide through the application
-WebSocket boundary without breaking the platform contract. Examples include AUv3 host
-tempo/transport callbacks, realtime audio/MIDI exchange, sandboxed native file pickers,
-native credential stores, device capabilities, and equivalent Tauri/iOS host calls.
-This bridge is a platform capability adapter, not an alternate application transport.
-It MUST NOT own or carry canonical Atome business state, durable mutations, account
-operations, sharing, application synchronization, or another command path that belongs
-to `/ws/api`.
+Use Squirrel APIs and canonical Atome/Squirrel component systems for DOM creation, controls, and events. Direct DOM manipulation is forbidden unless explicitly required within an authorized canonical creation path. `document.createElement`, `innerHTML`, manual listeners/selectors, string-generated DOM trees, and unmanaged nodes must not become competing UI implementations. Approved projection/event-resolution paths remain constrained by module 01. Do not use browser system dialogs such as `confirm()` or `alert()`; product dialogs belong to the canonical webview UI. Platform file pickers and credential adapters remain bounded by the native exception above.
 
-REST fallbacks, HTTP polling, duplicated application transports, and any other hybrid application communication paths remain forbidden.
+Every UI element must have a unique id, exist as a canonical Atome or a property of an existing Atome, and remain traceable in the Atome structure. Anonymous UI elements and standalone unmanaged nodes are forbidden.
 
-HTTP polling, REST fallbacks, duplicated application communication systems, and hybrid
-application transports outside the explicit mediasoup media-plane and bounded native
-platform exceptions are forbidden.
+Buttons, sliders, inputs, toggles, selects, tool buttons, palette items, ribbon/footer/projected controls, and equivalent primitives must use canonical component code and system design definitions. Each control has one implementation owner and one visual-contract owner. Local wrappers may compose, configure, and place it; they must not redefine interaction semantics, rendering, geometry, state ownership, or styling tokens through eVe-local factories, feature-local builders, ad-hoc DOM creation, local presets, or surface-specific contracts.
 
-Communication logic must:
+If a required control is absent, incompatible, or unverifiable, stop at the core's missing-component gate. Approval for the requested feature does not authorize implementing or completing a new control. After explicit bounded authorization, create or extend the canonical Atome/Squirrel owner and consume it by composition.
 
-- remain centralized;
-- use a single shared architecture;
-- remain fully DRY.
+Follow the readiness, component-format, children-array, batching, and system-abstraction conventions in [the Squirrel coding guide](../../atome/documentations/instructions_for_ai.md) when using those APIs.
 
-Scattered communication implementations are forbidden.
+### Product ToolSlider owner
 
-## RENDERING PIPELINE
+The canonical owner already exists at `atome/src/squirrel/components/tool_slider_builder.js`; `atome/src/squirrel/spark.js` registers `ToolSlider`. `eVe/intuition/shared/slider_tool_content.js` imports and configures that owner with ribbon tokens; it is a consumer, not a temporary independent implementation.
 
-All rendering MUST use WebGPU.
+Preserve the native product-tool behavior: the same compact square surface as the other tools, expansion on pointer/touch down to expose manipulable slider content, collapse on pointer up/cancel unless explicitly pinned, and the owner's native interaction/options. Do not replace it with a plain permanently open range input. Verify the actual owner and consumer in the current revision before extending the contract; this ownership statement does not authorize a migration or establish runtime validation.
 
-This includes:
+## Structured product design
 
-- UI;
-- text;
-- animations;
-- media;
-- effects;
-- compositing;
-- interaction layers.
+Product design is JavaScript-driven: tokens are JavaScript constants or JavaScript-installed CSS variables, presets/themes are structured objects, DOM creation belongs to canonical JavaScript factories, and styles use object literals, structured style objects, or approved controlled generators. Product HTML and CSS must not become parallel static sources of truth.
 
-DOM rendering MUST NEVER be the primary rendering engine.
+Allowed CSS exceptions are product-neutral framework shell CSS, vendored library CSS, generated distribution CSS, and JavaScript-generated style tags produced by an approved structured design module documented in `maps/DESIGN_MAP.md`.
 
-Text rendering must:
-
-- use WebGPU;
-- maintain synchronized hidden HTML elements for:
-  - accessibility;
-  - editing;
-  - styling;
-  - system interaction.
-
-## UI AND COMPONENT POLICY
-
-UI must exclusively use Squirrel APIs and Squirrel component systems.
-
-Direct DOM manipulation is forbidden unless explicitly authorized. Forbidden patterns include innerHTML, manual query selectors, string-generated DOM trees, and unmanaged UI nodes.
-
-All UI elements MUST have unique ids, exist as canonical Atome objects or properties of existing Atomes, and remain fully traceable in the Atome structure. Anonymous UI elements and standalone unmanaged UI nodes are forbidden.
-
-All system UI controls, including buttons, sliders, inputs, toggles, selects, tool buttons, palette items, ribbon controls, footer controls, projected tool controls, and equivalent primitives, MUST depend on the canonical Atome/Squirrel component code and on the canonical Atome system design definitions. They MUST NOT define or preserve a parallel source of truth in eVe-local factories, feature-local DOM builders, ad-hoc document.createElement code, local presets, or surface-specific styling contracts.
-
-If a required system control does not yet exist in the canonical Atome/Squirrel registry, that control MUST be implemented or completed in Atome first and then consumed everywhere else. Recreating the same control in eVe panels, projections, ribbons, flowers, footers, palettes, dialogs, or tool-specific modules is forbidden.
-
-Button, Slider, Input, Toggle, Select, and equivalent system controls MUST each have one owning implementation surface and one owning visual contract. Local wrappers may compose, configure, or place a canonical control, but they MUST NOT redefine interaction semantics, rendering behavior, geometry rules, state ownership, or styling tokens.
-
-For product tool sliders, the canonical visual and interaction contract is the Intuition slider-tool pattern currently implemented around `eVe/intuition/shared/slider_tool_content.js` and consumed by the main ribbon/projection tool surfaces: a slider is first rendered as the same compact square tool surface as the other tools, expands on pointer down or touch down to reveal the manipulable slider content, and collapses back on pointer up or pointer cancel unless it is explicitly pinned by the interaction model. Any refactor, migration, or Atome/Squirrel promotion of slider controls MUST preserve this exact product-tool behavior instead of replacing it with a plain always-open range input.
-
-Until that exact product-tool slider contract is promoted into the canonical Atome/Squirrel component registry, `eVe/intuition/shared/slider_tool_content.js` is the temporary reference implementation for behavior only. During that transition, all eVe slider-tool surfaces MUST consume that single shared runtime and MUST NOT recreate it locally. The target end state remains a canonical Atome/Squirrel owner for the slider-tool control, with eVe reduced to composition and placement only.
-
-Product styling MUST NOT be maintained as a classic static CSS layer. Atome/eVe product design is JavaScript-driven: design tokens are JavaScript constants or JavaScript-installed CSS variables, presets are structured JavaScript definitions, DOM is created by JavaScript factories, and styles are applied through JavaScript object literals, structured style objects, or controlled style generators. Product HTML and product CSS must not become parallel static source-of-truth layers.
-
-Allowed CSS exceptions are framework shell CSS when product-neutral, vendored library CSS, generated distribution CSS, and JavaScript-generated style tags produced by an approved structured design module and documented in maps/DESIGN_MAP.md.
-
-Strictly forbidden: CSS template literals, HTML template literals, string-based CSS injection, and string-based HTML generation.
-
-All styles MUST use JavaScript object literals or other declarative structured objects. Themes MUST be structured object definitions.
+CSS template literals, HTML template literals, string-based CSS injection, and string-based HTML generation are forbidden. Final Atome-host and media/SVG styling must also satisfy module 01's stricter projection limits.

@@ -80,30 +80,39 @@ test('standard rows, photo cards and minimum controls use the existing unit', ()
     assert.equal(legacy.length,0);
 });
 
-for (const direction of ['up','down']) test(`four disclosure levels share content edges and badge navigation (${direction})`, () => {
-    let activations=0; const revealed=[]; const width=340;
+for (const direction of ['up','down']) for (const handedness of ['left','right']) test(`four disclosure levels share a passive rail in the existing inset (${direction}, ${handedness})`, () => {
+    const width=340;
     let child=node('deep_content','panel',{size:[width,30]});
     for(let level=5;level>=2;level--) {
-        child=accordionNode({id:'level_'+level,label:'Level '+level,width,expanded:true,direction,
-            bodyHeight:child.style.size[1],bodyChildren:[child],onActivate:()=>activations++});
+        child=accordionNode({id:'level_'+level,label:'Level '+level,width,expanded:true,direction,handedness,
+            bodyHeight:child.style.size[1],bodyChildren:[child]});
     }
-    const rail=panelHierarchyNode({id:'hierarchy',width:width+T.hierarchy.gutterPx,children:[child],gap:T.gapPx,
-        revealHeader:(id,side)=>revealed.push({id,side})});
-    const badges=walk(rail).filter(node=>node.id.endsWith('_level_badge'));
-    assert.deepEqual(badges.map(badge=>badge.children[0].text),['2','3','4','5']);
-    assert.equal(new Set(badges.map(badge=>badge.style.position[0])).size,1);
-    assert.deepEqual(badges.map(badge=>hex(badge.style.background)),['#f28c29','#2a80ed','#f28c29','#2a80ed']);
+    const rail=panelHierarchyNode({id:'hierarchy',width,children:[child],gap:T.gapPx,handedness});
+    assert.equal(walk(rail).some(node=>/_level_(badge|number|endpoint)$/.test(node.id)),false);
+    assert.deepEqual(find(rail,'hierarchy_content').style.position,[0,0]);
+    assert.equal(find(rail,'hierarchy_content').style.size[0],width);
     for(let level=2;level<=5;level++) {
         const header=find(rail,'level_'+level+'_header'),body=find(rail,'level_'+level+'_body');
         assert.equal(header.style.size[0],width); assert.equal(body.style.size[0],width);
         assert.deepEqual(body.style.padding,[0,0,0,0]);
         if(direction==='up') assert.ok(header.style.position[1]>=body.style.position[1]+body.style.size[1]);
         else assert.ok(body.style.position[1]>=header.style.size[1]);
+        assert.equal(hex(find(rail,'level_'+level+'_return_start').style.background),level%2===0?'#f28c29':'#2a80ed');
     }
-    badges.at(-1).on.activate();
-    assert.deepEqual(revealed,[{id:'level_5_header',side:direction}]); assert.equal(activations,0);
     const segments=walk(rail).filter(node=>node.id.includes('_segment_'));
     assert.equal(new Set(segments.map(segment=>segment.style.position[0])).size,1);
+    const axis=handedness==='left'?-T.paddingPx/2:width+T.paddingPx/2;
+    segments.forEach(segment=>{
+        near(segment.style.position[0]+segment.style.size[0]/2,axis);
+        assert.equal(segment.on,undefined);
+    });
+    const returns=walk(rail).filter(node=>node.id.includes('_return_'));
+    assert.equal(returns.length,8);
+    returns.forEach(ret=>{
+        assert.equal(ret.on,undefined);
+        if(handedness==='left') near(ret.style.position[0]+ret.style.size[0],0);
+        else near(ret.style.position[0],width);
+    });
     const normalized=normalizeBevyUiTree({id:'hierarchy_tree',tree:rail});
     assert.ok(projectBevyUiTreeRecords({tree:normalized,treeId:'hierarchy_tree',workspaceLayer:'panel'}).length);
 });
@@ -149,13 +158,26 @@ test('material survives normalization and the native bridge, while removal is ex
 });
 
 test('flat hierarchical lists use real depths without consuming another indentation gutter', () => {
-    const list=hierarchicalSelectableListNode({id:'flat',width:340,entries:[
+    for(const direction of ['up','down']) for(const handedness of ['left','right']) {
+    const entries=[
         {id:'parent',label:'Parent',depth:0,hasChildren:true,expanded:true},
         {id:'child',label:'Child',depth:1,hasChildren:true,expanded:true},
-        {id:'leaf',label:'Leaf',depth:2}],onToggle:()=>{}}).node;
-    const rail=panelHierarchyNode({id:'flat_rail',width:340+T.hierarchy.gutterPx,children:[list],gap:0,revealHeader:()=>{}});
-    assert.deepEqual(walk(rail).filter(node=>node.id.endsWith('_level_number')).map(node=>node.text),['2','3']);
+        {id:'leaf',label:'Leaf',depth:2}].map(entry=>({...entry,expandDirection:direction}));
+    if(direction==='up') entries.reverse();
+    const list=hierarchicalSelectableListNode({id:'flat',width:340,entries,handedness,onToggle:()=>{}}).node;
+    const rail=panelHierarchyNode({id:'flat_rail',width:340,children:[list],gap:0,handedness});
+    assert.equal(walk(rail).some(node=>node.id.endsWith('_level_number')),false);
+    assert.deepEqual(walk(rail).filter(node=>node.id.endsWith('_return_start')).map(node=>hex(node.style.background)),
+        direction==='up'?['#2a80ed','#f28c29']:['#f28c29','#2a80ed']);
     assert.equal(find(list,'flat_entry_0').style.size[0],find(list,'flat_entry_2').style.size[0]);
+    const childStart=find(rail,'flat_entry_1_return_start').style.position[1];
+    const childEnd=find(rail,'flat_entry_1_return_end').style.position[1];
+    const childMid=(childStart+childEnd)/2+T.hierarchy.lineWidthPx/2;
+    const shared=walk(rail).find(node=>node.id.includes('_segment_')&&node.style.position[1]<=childMid
+        &&node.style.position[1]+node.style.size[1]>=childMid);
+    assert.equal(hex(shared.style.background),'#2a80ed');
+    near(shared.style.position[0]+T.hierarchy.lineWidthPx/2,handedness==='left'?-T.paddingPx/2:340+T.paddingPx/2);
+    }
 });
 
 test('contact commands fit narrow and wide bands without a footer selection action', () => {
@@ -205,5 +227,57 @@ test('compact footer retains centered title, inset close, edge grips and bottom-
         const records=projectBevyUiTreeRecords({tree:normalizeBevyUiTree({id:'compact_tree',tree:tree.root}),treeId:'compact_tree'});
         const projected=records.find(record=>record.id.endsWith('_compact_footer'));
         assert.deepEqual(projected.properties.corner_radii,[0,0,15,15]);
+    }
+});
+
+test('closed sections have no hierarchy decoration or reserved column', () => {
+    const closed=accordionNode({id:'closed',width:340,label:'Closed',expanded:false});
+    const rail=panelHierarchyNode({id:'closed_rail',width:340,children:[closed]});
+    assert.deepEqual(rail.children.map(node=>node.id),['closed_rail_content']);
+    assert.deepEqual(rail.style.size,closed.style.size);
+    assert.deepEqual(rail.children[0].style.position,[0,0]);
+});
+
+test('rail limits connect header centre to revealed content in either direction', () => {
+    for(const direction of ['up','down']) {
+        const accordion=accordionNode({id:'limit',width:340,label:'Section',expanded:true,direction,
+            bodyHeight:120,bodyChildren:[node('limit_child','panel',{size:[340,120]})]});
+        const rail=panelHierarchyNode({id:'limit_rail',width:340,children:[accordion]});
+        const header=find(accordion,'limit_header');
+        const start=find(rail,'limit_return_start'),end=find(rail,'limit_return_end');
+        near((direction==='up'?end:start).style.position[1]+T.hierarchy.lineWidthPx/2,
+            header.style.position[1]+header.style.size[1]/2);
+        near((direction==='up'?start:end).style.position[1]+T.hierarchy.lineWidthPx/2,
+            direction==='up'?0:accordion.style.size[1]);
+    }
+});
+
+test('production projection gives all content the complete symmetric body width', async () => {
+    const {buildPanelTreeForDefinition}=await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_projection.js');
+    for(const [surfaceWidth,surfaceHeight] of [[320,640],[850,390],[900,800]]) {
+        const surface={clientWidth:surfaceWidth,clientHeight:surfaceHeight};
+        const runtimeState={geometryBySurfaceKey:new Map(),requestedHeightBySurfaceKey:new Map(),
+            desktopGeometryBySurfaceKey:new Map(),fullscreenGeometryBySurfaceKey:new Map(),
+            detachedSurfaceKeys:new Set(),chromeStateBySurfaceKey:new Map(),mounted:new Map()};
+        const widths=[];
+        const tree=buildPanelTreeForDefinition({surface,runtimeState,definition:{surfaceKey:'width_fixture',title:'Panel',
+            buildContent:(_,{bodyWidth})=>{widths.push(bodyWidth);return [accordionNode({id:'width_header',width:bodyWidth,label:'Section'})];}},
+            refresh:()=>{},closeBevyPanelSurface:()=>{},getPanelRuntime:()=>null,treeIdFor:key=>'eve_bevy_panel_'+key,
+            surfaceSize:()=>({width:surfaceWidth,height:surfaceHeight}),pinnedAccordionAlign:()=>'',
+            applyHeaderPinShift:({geometry})=>geometry,warnDuplicateNodeIds:(_,tree)=>tree,decoratePanelSweepTree:({tree})=>tree});
+        const shell=find(tree.root,'eve_bevy_panel_width_fixture_panel');
+        const header=find(tree.root,'width_header_header');
+        near(header.style.size[0],shell.style.size[0]-2*T.paddingPx);
+        assert.equal(widths.at(-1),header.style.size[0]);
+        const body=find(tree.root,'eve_bevy_panel_width_fixture_body');
+        assert.deepEqual(body.style.radius_corners,[T.radiusPx,T.radiusPx,0,0]);
+        const records=projectBevyUiTreeRecords({tree:normalizeBevyUiTree({id:tree.id,tree}),treeId:tree.id,workspaceLayer:'panel'});
+        const headerRecord=records.find(record=>record.id.endsWith('_width_header_header'));
+        // Record projection snaps paint coordinates to pixels; layout remains exact.
+        const left=headerRecord.properties.left-shell.style.position[0];
+        const right=shell.style.position[0]+shell.style.size[0]-headerRecord.properties.left-headerRecord.properties.width;
+        assert.ok(Math.abs(left-T.paddingPx)<=0.5);
+        assert.ok(Math.abs(right-T.paddingPx)<=1);
+        assert.ok(Math.abs(left-right)<=1);
     }
 });

@@ -249,7 +249,7 @@ fn a_node_reads_its_variant_and_its_defaults() {
             logical_position: [0.0, 0.0],
             logical_size: [120.0, 120.0],
             clip_rect: None,
-            clip_rotation: 0.0,
+            clip_rotation: 0.0, clip_rounded_rects: vec![],
             scale: [1.0, 1.0],
             rotation: 0.0,
             origin: [0.0, 0.0],

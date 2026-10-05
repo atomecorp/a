@@ -84,6 +84,10 @@ fn radius_for_quadrant(x: f32, y: f32, width: f32, height: f32, radii: AtomeCorn
     };
     // Each corner is independently clamped to the half-extent so an oversized
     // radius cannot bleed across the shape.
+    clamp_corner_radius(radius, width, height)
+}
+
+pub(crate) fn clamp_corner_radius(radius: f32, width: f32, height: f32) -> f32 {
     radius.max(0.0).min(width / 2.0).min(height / 2.0)
 }
 

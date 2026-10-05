@@ -2019,12 +2019,16 @@ Reusable APIs:
   tokenized release inertia, animation cancellation, and scrollbar projection;
   `bevy_ui_pointer_runtime.js` owns pointer arbitration.
   `bevy_projection_clip_contract.js` maps Virtual Scene clips to Bevy
-  `clip_rect`; `atome/renderers/bevy-core/src/clip.rs` crops resident sprite
+  `clip_rect`, `clip_rotation` and inherited `clip_rounded_rects` boundaries;
+  `atome/renderers/bevy-core/src/clip.rs` crops resident sprite
   geometry/UVs and backdrop `Mesh2d` geometry/UVs, while
   `backdrop_surface.rs` mutates the existing mesh asset and
   `shape_shadow_overlay.rs` applies the same viewport clip to associated
   shadows. The complete fixed blurred-footer and release-inertia
   path was explicitly approved on 2026-07-24.
+  Rounded overflow reuses `clip_polygon.rs` and the native surface-radius clamp;
+  `tests/rendering/panel_overflow_clip.rs` registers rectangular/video and rounded
+  scroll, nested intersection, 1x/2x, resident-proxy hide/reuse regression checks.
 - `eVe/intuition/runtime/eve_intuition/main_menu_content_runtime.js` owns the authenticated main ribbon declaration; `main_menu_create_content_runtime.js` is the focused Create palette owner and enforces exclusive Text/Draw/Code/Page latches on the real Bevy invocation route plus explicit second-click shutdown. It reads the effective post-invocation tool state instead of a stale gateway envelope. `bevy_ui_menu_surface.js` projects the shared active fill on the stable interactive shell so a latch repaint is visible in presented pixels. View changes preserve the active latch but never call its preparation hook, so they cannot create content implicitly.
 - `tool_runtime_bootstrap.js` and `tool_runtime_bootstrap_defs_b.js` register `ui.code.editor` in the V2 registered-handler gateway and delegate every click/on/off transition to the existing `intuition/tools/code.js` editor owner. Create exclusivity may therefore shut Code down without a `tool_not_found` warning or a second editor implementation.
 - `eVe/core/atome_events/project_layer_runtime.js` defers shared-canvas background Text/lasso presses to the injected canonical BevyUI hit-test before scene/background routing; menu and panel pixels therefore retain UI ownership even when the project layer and surface listeners share one canvas target.

@@ -33,6 +33,10 @@ pub struct AtomeClipRect(pub Option<[f32; 4]>);
 #[derive(Clone, Copy, Debug, Default, PartialEq, Component)]
 pub struct AtomeClipRotation(pub f32);
 
+/// Original rounded overflow boundaries, independent of their rectangular intersection.
+#[derive(Component, Clone, Debug, Default, PartialEq)]
+pub struct AtomeClipRoundedRects(pub Vec<[f32; 8]>);
+
 #[derive(Clone, Copy, Debug, Component)]
 pub struct AtomeSpriteSourceRect(pub Option<Rect>);
 

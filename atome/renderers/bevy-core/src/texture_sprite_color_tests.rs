@@ -11,7 +11,7 @@ fn textured_image_node(id: &str) -> AtomeRenderNode {
         logical_position: [0.0, 0.0],
         logical_size: [32.0, 32.0],
         clip_rect: None,
-        clip_rotation: 0.0,
+        clip_rotation: 0.0, clip_rounded_rects: vec![],
         scale: [1.0, 1.0],
         rotation: 0.0,
         origin: [0.0, 0.0],

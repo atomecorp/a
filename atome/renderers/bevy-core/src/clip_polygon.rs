@@ -356,7 +356,7 @@ mod clip_polygon_tests {
             id: "tilted".to_string(), kind: "shape".to_string(), parent_id: None,
             logical_position: [100.0, 100.0], logical_size: [100.0, 100.0],
             // La page : un carre droit dont l'atome deborde une fois tourne.
-            clip_rect: Some([100.0, 100.0, 100.0, 100.0]), clip_rotation: 0.0,
+            clip_rect: Some([100.0, 100.0, 100.0, 100.0]), clip_rotation: 0.0, clip_rounded_rects: vec![],
             scale: [1.0, 1.0], rotation, origin: [0.5, 0.5], layer: 3, opacity: 1.0,
             corner_radius: 0.0, corner_radii: None,
             shape_variant: None, star_branches: None, star_inner_radius: None, polygon_sides: None,
@@ -373,7 +373,7 @@ mod clip_polygon_tests {
         crate::AtomeTransformPatch {
             id: "tilted".to_string(), logical_position: [100.0, 100.0], logical_size: [100.0, 100.0],
             scale: [1.0, 1.0], rotation, origin: [0.5, 0.5],
-            clip_rect: Some([100.0, 100.0, 100.0, 100.0]), clip_rotation: 0.0,
+            clip_rect: Some([100.0, 100.0, 100.0, 100.0]), clip_rotation: 0.0, clip_rounded_rects: vec![],
         }
     }
 

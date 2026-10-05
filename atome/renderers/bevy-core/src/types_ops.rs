@@ -21,6 +21,8 @@ pub struct AtomeTransformPatch {
     pub clip_rect: Option<[f32; 4]>,
     #[serde(default)]
     pub clip_rotation: f32,
+    #[serde(default)]
+    pub clip_rounded_rects: Vec<[f32; 8]>,
 }
 
 #[derive(Clone, Debug, Deserialize)]

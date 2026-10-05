@@ -1,47 +1,15 @@
-# Feature Work Cleanup And Framework Reuse
+# Feature Work, Cleanup And Framework Reuse
 
-This module is part of the active .codex rule set.
+Read this module for implementation, reuse, cleanup, refactoring, migration, or maintenance. The [root instructions](../../AGENTS.md) own the composition and explicit missing-component authorization rules. The [common method](07-future-code-guardrails.md) owns the reuse audit, status classifications, implementation gate, blockers, and reporting. This module supplies concrete owners, cleanup obligations, and map maintenance.
 
-## MANDATORY LEGACY FILE PRIORITY AND REMOVAL POLICY
+## Canonical component owners
 
-This rule is strict, non-negotiable, and applies to every task without exception: feature work, bug fixes, optimization, refactor, cleanup, migration, API work, rendering work, synchronization work, tests, tooling, and documentation-driven architecture changes.
+These are named single owners, not permission to create an equivalent implementation. Inspect the owner's current contract and actual availability before use. Source existence alone does not prove runtime mounting or compatibility.
 
-If the assistant encounters a legacy file, legacy module, legacy code path, legacy adapter, legacy wrapper, legacy bypass, or obsolete implementation involved in the requested scope, that legacy surface immediately becomes a priority of the task.
-
-Mandatory behavior:
-
-- The assistant MUST NOT ignore, preserve by habit, or postpone a legacy surface merely because the user's original request targeted something else.
-- A legacy file encountered in scope MUST be analyzed as a first-class architectural liability and treated before the task can be considered complete.
-- Legacy files are not allowed to remain in place when their responsibility can be migrated, factorized, replaced by the canonical owner, or removed safely.
-- The target state for a legacy file is removal, not coexistence.
-- If safe direct deletion is not immediately possible, the assistant MUST perform the necessary migration, call-site cleanup, dependency cleanup, ownership transfer, validation, and structural refactor required to make deletion correct and verifiable.
-- Before deleting a legacy file, verify all imports, runtime references, dynamic loading paths, tests, synchronization dependencies, generated outputs, and map or documentation contracts that still depend on it.
-- After deleting or replacing a legacy file, run the narrowest relevant executable validations first, then widen as needed to prove that nothing was broken.
-- The assistant MUST NOT keep a legacy file as a dormant backup, compatibility layer, fallback, safety copy, or historical duplicate.
-
-Strictly forbidden:
-
-- leaving a known legacy file untouched in the active scope without an evidence-backed reason;
-- treating legacy cleanup as optional follow-up when the file is already on the controlling path;
-- deleting a legacy file without dependency verification and targeted validation;
-- preserving parallel old and new implementations when the legacy surface can be removed.
-
-## CANONICAL COMPONENT OWNERS
-
-The reuse rule above has always been strict. On 2026-08-07 an audit found it
-violated anyway: the inline text editor existed in **six copies** (981 lines
-over a 750-line canonical stack), and the virtualized window in three. Two of
-those copies were written the same day, by an assistant that had read this
-module. Injunctions alone did not hold the line.
-
-What was missing is factual, not rhetorical: the rule said "reuse the canonical
-owner" without ever naming one. This section names them. It is enforced by
-`npm run check:component-reuse-guardrails`, wired into `check:m0`.
-
-| Responsibility | Single owner |
+| Responsibility | Single owner, relative to the main repository root |
 | --- | --- |
-| Inline text editing (session, caret, selection, commit) | `eVe/intuition/runtime/bevy_panel/bevy_panel_text_editing.js` |
-| Text field node (paint, focus, alignment) | `eVe/intuition/runtime/bevy_panel/bevy_panel_editable_text.js` |
+| Inline text editing: session, caret, selection, commit | `eVe/intuition/runtime/bevy_panel/bevy_panel_text_editing.js` |
+| Text field node: paint, focus, alignment | `eVe/intuition/runtime/bevy_panel/bevy_panel_editable_text.js` |
 | Text geometry, word and line ranges | `eVe/domains/rendering/text_editing_layout.js` |
 | Hidden text / IME service | `eVe/domains/rendering/hidden_text_service_runtime.js` |
 | List row, hierarchy, selection, drag | `eVe/intuition/runtime/bevy_panel/bevy_panel_selectable_list.js` |
@@ -52,105 +20,58 @@ owner" without ever naming one. This section names them. It is enforced by
 | Panel shell, footer, scroll area | `eVe/intuition/runtime/bevy_panel/bevy_panel_tree.js` |
 | Empty / loading / error state | `eVe/intuition/runtime/bevy_panel/bevy_panel_state.js` |
 | Visual tokens | `EVE_PANEL_SKIN_TOKENS` in `eVe/elements/skin/panel_skin.js` |
-| Project name write | `eVe/intuition/matrix/core/project_data.js` (`updateProjectName`) |
+| Project name write | `updateProjectName` in `eVe/intuition/matrix/core/project_data.js` |
 
-The operative clause, which is checkable rather than incantatory:
+`npm run check:component-reuse-guardrails` enforces this ownership and is included in `check:m0`.
 
-**Adding a consumer to a canonical owner is always allowed. Writing a second
-owner never is. When an owner cannot serve a new need, the only correct answer
-is an additive parameter on that owner, defaulting to the existing behaviour.**
+- A compatible consumer may use the verified existing contract within the authorized task. Writing a second owner is forbidden.
+- If the contract cannot serve the need, use the root missing-component gate. An additive parameter is a proposal requiring bounded authorization, not an automatic remedy; preserve existing behavior by default when such an extension is authorized.
+- Do not create files such as `*_editing.js` or `*_virtual_window.js` that announce a responsibility already owned; the guardrail rejects duplicated ownership.
+- Surface-specific labels, injections, or panel differences do not justify a copy.
+- Converge discovered copies to the owner when authorized and verifiable; otherwise report the prerequisite and bounded migration proposal before feature growth.
 
-Three consequences, all mandatory:
+The guardrail allowlist records remaining copies. It may shrink and must never grow. Remove an entry only after validated convergence; adding a new entry or leaving parallel implementations does not satisfy the rule.
 
-1. A file whose name announces an owned component — `*_editing.js`,
-   `*_virtual_window.js` — may not be created. The guardrail refuses it by name,
-   before its logic is even written.
-2. A per-surface copy is not justified by "this panel is different". Every one
-   of the six text-editor copies believed that; their differences were four
-   injections and two labels.
-3. When a copy is discovered, converging it is part of the task that touched it,
-   not a follow-up. The legacy-file policy at the top of this module already
-   says so; this section removes the excuse of not knowing what to converge on.
+## Legacy cleanup and dependency verification
 
-Declared debt is tracked in the guardrail's allowlist, not in prose: an entry
-there is a copy that still has to converge, and removing that entry is the
-definition of done. The list may shrink. It may never grow.
+For any task, analyze legacy files, modules, paths, adapters, wrappers, bypasses, or obsolete implementations on the relevant controlling path as architectural liabilities. Do not ignore them because the original request emphasized another surface, preserve them by habit, or defer them merely because they are large or central.
 
-## ARCHITECTURAL AUTHORITY
+The target is safe removal through the canonical owner, rather than coexistence. Within the authorized scope, perform the necessary migration, call-site and dependency cleanup, ownership transfer, structural refactor, and validation. If completion requires broader scope or an unavailable internal component, report evidence and a bounded proposal through the common method; do not expand implementation automatically or claim the unresolved prerequisite is repaired.
 
-The authoritative architecture documentation is located under `atome/documentations/`, `eVe/documentations/`, and `maps/` (paths relative to the repository root). Before generating or modifying code, the assistant MUST ensure full consistency with these documents.
+Before deleting or replacing a legacy file, verify every import, runtime reference, dynamic loading path, test, synchronization dependency, generated output, and map/documentation contract depending on it, including rendering, API/MCP, history and replay dependencies. Run the narrowest relevant executable checks after removal, widening as needed to prove no regression.
 
-## MANDATORY MAP MAINTENANCE POLICY
+Forbidden: deletion without dependency proof, dormant legacy backups in production, compatibility copies, fallback safety paths, historical duplicates, and parallel old/new implementations that can safely converge. An evidence-backed blocker must explain any legacy surface that remains in the controlling path.
 
-The framework maps are active architectural contracts, not optional notes.
+## Architectural contracts and maps
 
-Mandatory maps are `maps/CODEMAP.md`, `maps/API_MAP.md`, `maps/DESIGN_MAP.md`, and `maps/ARCHITECTURE_MAP.md`.
+Authoritative contracts live under `atome/documentations/`, `eVe/documentations/`, and `maps/`. Inspect applicable contracts and relevant maps, then verify the actual implementation before code changes. Maps and historical graphs guide inspection; they are not proof of availability or runtime behavior.
 
-Whenever a task changes structure, creates new files, moves modules, changes ownership boundaries, adds or modifies code or APIs, changes runtime exposure, changes design tokens, changes JavaScript-generated styling, changes visual factories, or changes product design behavior, the relevant map or maps MUST be updated in the same task.
+Update relevant maps in the same authorized task when source structure, files, module placement, ownership, code/API surfaces, runtime exposure, design tokens, JavaScript-generated styling, visual factories, product design behavior, lifecycle, or dependency boundaries change:
 
-Map responsibilities:
+| Map | Responsibility |
+| --- | --- |
+| [CODEMAP](../../maps/CODEMAP.md) | Source structure, owners, reusable modules, entry points, and major responsibilities. |
+| [API_MAP](../../maps/API_MAP.md) | API families, exposure, public/internal surfaces, and open/closed ownership. |
+| [DESIGN_MAP](../../maps/DESIGN_MAP.md) | JavaScript design, tokens, presets, factories, injected styles, assets, and CSS exceptions. |
+| [ARCHITECTURE_MAP](../../maps/ARCHITECTURE_MAP.md) | Cross-layer architecture, dependency direction, lifecycle, and open/closed boundaries. |
 
-- CODEMAP: source structure, ownership, reusable modules, entry points, and major responsibility boundaries.
-- API_MAP: API families, runtime exposure, public or internal surfaces, and open/closed ownership.
-- DESIGN_MAP: JavaScript-generated design, tokens, presets, factories, injected styles, visual assets, and CSS exceptions.
-- ARCHITECTURE_MAP: cross-layer architecture, dependency direction, lifecycle, and open/closed boundaries.
+Creating or moving an architectural surface while leaving its maps stale is forbidden. A documentation-only instruction refactor that changes no application architecture does not require inventing a framework map change; explain the actual impact in the common report.
 
-It is forbidden to create or move architectural surfaces and leave the maps stale.
+## Factorization and capacity recovery
 
-## MANDATORY FRAMEWORK REUSE AND FACTORIZATION RULE
+Apply the root composition rule, the common reuse audit, and [module 02's simplicity gate](02-coding-standards-and-prohibitions.md). Search thoroughly before proposing any file, API, component, helper, adapter, service, utility, token, style generator, visual factory, runtime surface, or documentation-driven architectural contract.
 
-This rule is permanently active for every implementation, refactor, cleanup, migration, API change, design change, and structural change.
+Within authorization:
 
-Before creating, modifying, or adding any file, module, API, component, helper, adapter, service, utility, design token, style generator, visual factory, runtime surface, or documentation-driven architecture contract:
+- connect and compose verified existing owners rather than recreating available functionality;
+- factorize similar code into the canonical owner instead of adding a version, isolated implementation, wrapper, fallback, or redundant adapter;
+- restore a single source of truth for touched responsibility, state, configuration, rendering, and business rules;
+- simplify redundant branches, conditions, aliases, conversions, indirection, feature flags, configuration, and unused imports, exports, dependencies, comments, or documentation claims;
+- remove obsolete, dead, redundant, duplicated, transitional, and experimental code when dependency checks prove removal safe;
+- verify whether legacy `MTrax` naming, identifiers, labels, comments, modules, or references for Molecule-owned behavior can migrate coherently, and rename or remove them when safe and verifiable;
+- release resources, subscriptions, timers, listeners, caches, workers, retained media, and GPU objects at their explicit owner and lifecycle boundary;
+- keep persistent regression tests under `tests/`, and remove product-injected tests, temporary debug code, probes, traces, and logs according to [module 03](03-debugging-testing-and-ui-validation.md).
 
-- consult the relevant maps;
-- search the existing codebase thoroughly;
-- verify whether an equivalent, similar, partial, or reusable implementation already exists.
+Do not preserve dead code as a backup, example, dormant option, or historical copy. Use version control and documentary evidence for history. Do not finalize a touched ownership path with competing sources of truth or unresolved prerequisites disguised as a completed change.
 
-You must:
-
-1. Prefer extending, connecting to, or factorizing existing code rather than creating a duplicate implementation.
-2. Avoid parallel systems, duplicated logic, redundant adapters, temporary wrappers, fallback layers, or isolated implementations.
-3. If similar code already exists, refactor or centralize it cleanly instead of adding another version.
-4. Ensure new work integrates naturally into the existing architecture and respects the global vision of the framework.
-5. Create a new file only when no existing file, module, API, abstraction, token module, or visual factory can correctly host the change.
-6. Keep the implementation minimal, smaller when possible, less complex, coherent, maintainable, and aligned with the framework’s existing structure.
-7. During every bug fix, debug session, cleanup, refactor, or feature addition, simplify the touched scope whenever possible: remove unnecessary branches, collapse redundant indirection, reduce moving parts, and keep responsibilities tight.
-8. Preserve or restore a single canonical source of truth for each responsibility, state, configuration, rendering contract, and business rule touched by the task.
-9. If the touched scope contains duplicated ownership, mirrored writable state, competing implementations, or parallel source-of-truth layers, converge them to the canonical owner instead of keeping both alive.
-10. Always wire new behavior into the existing canonical module, API, component, state owner, or design contract when it can host the change correctly.
-11. Whenever the touched scope still carries legacy `MTrax` naming, identifiers, comments, labels, modules, or references for behavior now owned by Molecule, verify whether they can be renamed or removed coherently and do so whenever the change is safe and verifiable.
-12. After implementation, remove obsolete, redundant, unused, temporary, duplicated, or legacy transitional code introduced or discovered during the task.
-13. Never leave test code, debug code, probes, traces, temporary logs, or experimental logic in the final result.
-
-Mandatory simplicity gate before creating new code:
-
-1. Can the canonical owner be extended with a smaller direct change?
-2. Have existing code, configuration, and dependencies been checked for deletion, merging, or simplification before adding scope, and simplified where safe and relevant?
-3. Does the proposed boundary represent a real independent responsibility rather than a speculative future need?
-4. Does the change minimize and avoid any unnecessary increase in concepts, writable states, dependencies, branches, or runtime paths?
-5. Is every cache, registry, adapter, worker, pool, or dependency justified by measured need or an unavoidable runtime boundary?
-
-If any answer is no, do not add the proposed layer. Continue the inspection and simplify the owning architecture first.
-
-Capacity recovery is mandatory in the touched scope:
-
-- remove unused imports, dependencies, exports, code paths, feature flags, configuration, comments, and documentation claims when they no longer serve a verified purpose;
-- collapse duplicated conditionals, aliases, conversions, and indirection into the canonical implementation;
-- release resources, subscriptions, timers, listeners, caches, and retained media or GPU objects at their explicit lifecycle boundary;
-- do not preserve dead code as a backup, example, dormant option, or historical copy; use version control and documentation for history instead.
-
-Before coding, provide a short implementation plan stating:
-
-- what existing files or modules were inspected;
-- what reusable logic or architecture was found;
-- what the canonical owner or single source of truth is for the touched behavior;
-- whether legacy `MTrax` references in the touched scope can be migrated to Molecule now;
-- whether the change will reuse, extend, refactor, or create new code;
-- why the chosen approach is the cleanest and most consistent one.
-
-If the codebase already contains the required functionality, do not recreate it. Use it, expose it properly, factorize it, or connect to it.
-
-If multiple sources of truth exist in the touched area, the task is not complete until the change clearly restores or preserves one canonical owner.
-
-If architectural uncertainty exists, stop immediately, request clarification, and never guess architecture behavior.
+The pre-edit gate in the common method must identify inspected files, reusable contracts, the canonical owner, proposed reuse or authorized extension, legacy/Molecule implications, complexity and capacity impact, validations, and map impact. If architectural ownership remains uncertain, continue read-only inspection or stop with the precise blocker; do not guess.

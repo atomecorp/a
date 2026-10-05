@@ -14,7 +14,7 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         logical_position: [12.0, 24.0],
         logical_size: [120.0, 50.0],
         clip_rect: None,
-        clip_rotation: 0.0,
+        clip_rotation: 0.0, clip_rounded_rects: vec![],
         scale: [1.0, 1.0],
         rotation: 0.0,
         origin: [0.0, 0.0],
@@ -283,7 +283,7 @@ fn shape_shadow_translation_reuses_existing_texture() {
             logical_position: [72.0, 84.0],
             logical_size: [120.0, 50.0],
             clip_rect: None,
-            clip_rotation: 0.0,
+            clip_rotation: 0.0, clip_rounded_rects: vec![],
             scale: [1.0, 1.0],
             rotation: 0.0,
             origin: [0.0, 0.0],
@@ -527,7 +527,7 @@ fn rotated_atom_overlays_follow_its_pose() {
             rotation: 0.0,
             origin: [0.0, 0.0],
             clip_rect: None,
-            clip_rotation: 0.0,
+            clip_rotation: 0.0, clip_rounded_rects: vec![],
         },
     )
     .unwrap();
@@ -561,7 +561,7 @@ fn a_rotated_page_clips_its_rotated_member_on_the_rotated_edge() {
             logical_size: [200.0, 100.0],
             rotation: angle,
             clip_rect: Some([frame_origin.x, frame_origin.y, 300.0, 200.0]),
-            clip_rotation: angle,
+            clip_rotation: angle, clip_rounded_rects: vec![],
             ..shape_node("page_member")
         },
     )

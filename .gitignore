@@ -106,6 +106,7 @@ tests/eve/*
 !tests/eve/atome_record_projection_project_id.test.mjs
 !tests/eve/bevy_panel_component_reuse_contract.test.mjs
 !tests/eve/bevy_panel_dark_skin_contract.test.mjs
+!tests/eve/bevy_ui_rounded_overflow.test.mjs
 !tests/eve/bevy_panel_contact_contract.test.mjs
 !tests/eve/bevy_panel_contact_pick_contract.test.mjs
 !tests/eve/bevy_panel_input_contract.test.mjs
@@ -132,6 +133,7 @@ tests/eve/*
 tests/rendering/*
 !tests/rendering/animated_png_tests.rs
 !tests/rendering/panel_surface_paint.rs
+!tests/rendering/panel_overflow_clip.rs
 !tests/eve/project_view_playback_regressions.test.mjs
 !tests/eve/project_workspace_activation_contract.test.mjs
 !tests/eve/project_view_mode_state.test.mjs

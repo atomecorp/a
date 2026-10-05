@@ -82,6 +82,7 @@
   "tests/eve/bevy_ui_overlay_reconciliation.test.mjs",
   "tests/eve/bevy_ui_overlay_scene_routing.test.mjs",
   "tests/eve/bevy_ui_pointer_contract.test.mjs",
+  "tests/eve/bevy_ui_rounded_overflow.test.mjs",
   "tests/eve/bevy_ui_runtime_contract.test.mjs",
   "tests/eve/bevy_ui_touch_surface_contract.test.mjs",
   "tests/eve/bevy_video_decode_source_runtime.test.mjs",

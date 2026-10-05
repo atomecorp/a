@@ -1,233 +1,99 @@
 # Coding Standards And Prohibitions
 
-This module is part of the active .codex rule set.
+Read this module when changing code, executable configuration, scripts, developer documentation, or their standards. The root instructions and common method have already selected the applicable contracts; their authorization gates apply to every rule below.
 
-## MANDATORY CODE QUALITY RULES
+## Code quality and simplicity
 
-All generated code must be:
+Generated code must be modular, factorized, production-grade, maintainable, deterministic, DRY, traceable, and professionally structured around explicit architectural owners.
 
-- modular;
-- highly factorized;
-- production-grade;
-- maintainable;
-- deterministic;
-- DRY;
-- architecture-oriented;
-- fully traceable;
-- professionally structured.
+Within the authorized scope, eliminate duplication and dead code, remove unused dependencies, simplify complexity, preserve framework coherence, optimize allocations and realtime performance, and avoid unnecessary abstractions.
 
-You must:
+At equal correctness, determinism, security, and validation, choose fewer concepts, writable state holders, modules, branches, execution paths, dependencies, allocations, retained resources, code, and configuration. Keep one canonical owner per responsibility.
 
-- eliminate duplication;
-- remove dead code;
-- remove unused dependencies;
-- simplify complexity;
-- preserve coherence across the framework;
-- optimize memory allocations;
-- optimize realtime performance;
-- avoid unnecessary abstractions.
-
-## MANDATORY SIMPLICITY AND RESOURCE EFFICIENCY POLICY
-
-Simplicity is a mandatory architectural constraint, not a stylistic preference.
-
-At equal correctness, determinism, security, and validation, choose the solution with:
-
-- fewer concepts to understand;
-- fewer writable state holders;
-- fewer modules, branches, and execution paths;
-- fewer dependencies, allocations, and retained resources;
-- less code and less configuration;
-- one explicit canonical owner for every responsibility.
-
-Before adding a module, abstraction, adapter, cache, registry, wrapper, service, state layer, compatibility path, or new dependency, prove that the existing canonical architecture cannot correctly own the responsibility.
-
-Strictly forbidden:
-
-- speculative abstractions created for imagined future use;
-- generalized helpers with only one real caller when direct cohesive code is clearer;
-- caches, memoization, pooling, background work, or indexes without measured evidence of a real bottleneck;
-- new configuration switches that only preserve obsolete behavior or compensate for unclear ownership;
-- adding code to avoid reading, understanding, simplifying, or correctly repairing the owning path.
-
-Required decision rules:
-
-1. Extend the existing canonical owner when it can own the behavior cleanly.
-2. Create a new boundary only for a proven independent responsibility, lifecycle, runtime boundary, or reusable contract.
-3. Remove an abstraction when it no longer reduces total complexity.
-4. Prefer deletion, convergence, and direct composition over another compatibility layer.
-5. Measure performance before adding a performance mechanism; remove the mechanism if the evidence no longer justifies its cost.
-
-Every substantive change must leave the touched scope no more complex than before. When safe and relevant, it must reduce code size, duplicate logic, allocation pressure, dependency surface, or runtime work.
-
-## MANDATORY FILE SIZE AND CODING STANDARDS
-
-The codebase MUST respect explicit file-size, module-boundary, and cleanup rules.
-
-Scope and thresholds:
-
-- This policy applies to source code and maintained executable or configuration modules.
-- Markdown files, maps, plans, reports, and documentation are exempt from the numeric thresholds because they are documentary, not executable, but they must still remain clear, navigable, non-duplicative, and architecturally coherent.
-- ideal file: under 300 lines;
-- transitional zone: 300 to 500 lines only when the module remains cohesive and the boundary is architecturally justified;
-- hard maximum for a normal module: 500 lines;
-- above 500 lines: non-compliant and must be reduced before adding new scope, except when the current task is explicitly performing that reduction;
-- above 800 lines: critical legacy state requiring immediate reduction ownership and no feature growth;
-- 1000+ lines: forbidden without explicit architectural justification and an active reduction plan.
-
-Mandatory rules:
-
-- Do not create new oversized files when a split is possible.
-- Do not keep extending a file already above 500 lines unless the current task is explicitly reducing or restructuring it.
-- Do not multiply files artificially to satisfy line-count targets; split only along stable responsibilities or real shared reusable logic.
-- Do not create pass-through files, proxy wrappers, useless micro-modules, or scattered file fragments just to lower a line count.
-- File-size thresholds and legacy complexity never authorize skipping, deferring, or aborting the treatment of an important file during debugging, optimization, cleanup, or refactoring work.
-- Every touched file, including legacy files, inherits the same size, factorization, cleanup, and optimization obligations as new code.
-- If a touched file can be brought into compliance within the current scope, it must be.
-- If compliance requires a broader architectural split, that split becomes part of the task rather than an optional follow-up.
-- Any justified exception above 800 lines must document the reason, ownership boundary, and intended reduction plan.
-
-Coding standards:
-
-- one clear responsibility per module whenever architecture allows it;
-- strong factorization without artificial file multiplication;
-- cohesive file boundaries;
-- explicit and consistent naming;
-- stable and readable public interfaces;
-- no dead, deprecated, duplicated, or unreachable code;
-- no silent failure paths hiding invalid states;
-- no broad utility duplication when a shared module is appropriate;
-- no artificial fragmentation that harms navigation or hides cohesion problems.
-
-Mandatory validation for every modified file:
-
-- run the narrowest relevant executable validation after each substantive edit when one exists;
-- verify security, authorization, validation, sanitization, trust boundaries, and secret handling did not regress;
-- verify final line count, module boundary, and factorization quality;
-- verify the change did not scatter previously cohesive logic across an unjustified number of files;
-- verify no dead, duplicated, deprecated, or unreachable code remains in touched files;
-- do not finalize while a touched file remains unvalidated.
-
-Before deleting files, verify all usages, runtime dependencies, and synchronization dependencies.
-
-## ABSOLUTE PROHIBITION OF PATCHING
-
-Patching is categorically forbidden.
-
-Architecture always takes precedence over delivery speed.
-
-The following are strictly prohibited:
-
-- temporary fixes;
-- workaround patches;
-- quick fixes;
-- symptom-level fixes;
-- compatibility shims;
-- defensive guards hiding root causes;
-- silent catch blocks;
-- hidden bypasses;
-- fallback architectures;
-- transitional adapters;
-- duplicated compatibility layers;
-- intermediary proxy layers created to avoid proper fixes.
-
-You must:
-
-- identify the root cause;
-- isolate the architectural issue;
-- fix the problem at the source;
-- perform deep refactors when necessary;
-- perform structural rewrites when required.
-
-If a clean solution is impossible:
-
-- stop;
-- explicitly explain the architectural uncertainty;
-- request clarification.
-
-Under no condition may a temporary solution be implemented “until later”.
-
-## LANGUAGE AND STACK POLICY
-
-Implementation languages are restricted to JavaScript only for the main codebase, Rust for Tauri and iOS platform code, Swift for iOS native code, Ruby when needed for scripts, and C/C++ for DSP or high-end operations.
-
-Strictly forbidden languages: TypeScript and Python.
-
-All generated comments, logs, warnings, errors, documentation, and debug messages must be written exclusively in English.
-
-Any request requiring TypeScript or Python implementation must be refused.
-
-## TEMPORARY FILE POLICY
-
-All temporary files MUST be created exclusively under ./temp. This includes probes, debug scripts, validation scripts, temporary fixtures, temporary outputs, and temporary logs.
-
-Persistent test files MUST be created exclusively under ./tests.
-
-Temporary files MUST NEVER be created in source directories, documentation directories, tool directories, project root, or anywhere outside ./temp.
-
-## GIT CONFLICT RESOLUTION POLICY
-
-Git inspection is allowed when needed for the task.
-
-Only when a user explicitly asks the agent to perform Git conflict resolution or integration may the agent run Git write operations for that request. A coding task, a request to inspect Git status, or the presence of conflicts does not by itself authorize Git write operations. For an explicitly authorized request, the agent may fetch changes, start or continue a merge or rebase, preserve local work with stash, resolve conflicts, stage resolved files, create or switch to a branch, update a submodule, and create the commits needed to complete the integration. Before acting, inspect the working tree and preserve unrelated local changes. Inspect the resulting diff and report the commits and remaining local changes.
-
-Agents must never run git push, including force-push. The user performs every push. Agents must not delete branches or tags, discard local changes with reset --hard, restore, or clean, or change Git credentials, hooks, remotes, or configuration. Outside the scope of an explicit user request for conflict resolution or integration, Git remains read-only for agents.
-
-## FALLBACK POLICY
+Before proposing a module, abstraction, adapter, cache, registry, wrapper, service, state layer, compatibility path, or dependency, prove that the existing owner cannot correctly own the responsibility. This evidence does not authorize its creation or extension; apply the root gate.
 
 Forbidden:
 
-- runtime fallbacks;
-- data fallbacks;
-- control-flow fallbacks;
-- hidden proxies;
-- silent fallback behavior;
-- legacy bypass routes.
+- speculative abstractions for imagined future use;
+- generalized helpers with one real caller when cohesive direct code is clearer;
+- caches, memoization, pooling, indexes, or background work without a measured bottleneck;
+- configuration switches preserving obsolete behavior or compensating for unclear ownership;
+- adding code to avoid understanding, simplifying, or repairing the owning path.
 
-Missing dependencies MUST generate explicit errors.
+Use the existing owner when its verified contract can serve the need. Propose a new boundary only for a proven independent responsibility, lifecycle, runtime boundary, or reusable contract. Remove abstractions that no longer reduce total complexity. Prefer deletion, convergence, and direct composition over compatibility layers. Measure performance before proposing a performance mechanism; remove unjustified mechanisms when safe and authorized.
 
-Only allowed exception:
+Every substantive change must leave the touched scope no more complex than before. Where safe and relevant, reduce code size, duplicate logic, allocation pressure, dependencies, or runtime work.
 
-- eveT(key, fallback)
-- ui.label_fallback
+## File size and boundaries
 
-No other fallback mechanism is permitted.
+Numeric thresholds apply to source code and maintained executable or configuration modules. Markdown, maps, plans, reports, and documentation are exempt, but must remain clear, navigable, coherent, and non-duplicative.
 
-## INTERNATIONALIZATION POLICY
+| Size | Requirement |
+| --- | --- |
+| Under 300 lines | Preferred size. |
+| 300–500 lines | Transitional zone; require a cohesive, justified boundary. |
+| Above 500 lines | Non-compliant; reduce before adding scope unless the task explicitly performs that reduction. |
+| Above 800 lines | Critical legacy state; identify reduction ownership and prohibit feature growth. |
+| 1000+ lines | Forbidden without explicit architectural justification and an active reduction plan. |
 
-All user-visible text MUST use the existing Atome/eVe internationalization system:
+- Do not create oversized files when a coherent split is possible.
+- Do not extend a file above 500 lines unless the authorized task reduces or restructures it.
+- Split along stable responsibilities or real shared logic. Artificial fragmentation, pass-through files, proxy wrappers, useless micro-modules, and scattered fragments are forbidden.
+- File size never excuses skipping investigation. Inspect important large files in sequential passes and cover their full relevant controlling chain.
+- Touched legacy files inherit the same size, factorization, cleanup, and optimization obligations as new code. Bring them into compliance when possible within the authorized scope.
+- If compliance requires a broader split or a missing internal component, identify the owner, evidence, and bounded proposal through the common method. Do not enlarge the task automatically or add feature scope while the prerequisite remains unresolved.
+- Any justified exception above 800 lines must record the reason, ownership boundary, and reduction plan.
 
-- eveT()
+Use clear responsibilities, cohesive boundaries, explicit consistent naming, stable readable public interfaces, and shared owners instead of broad utility duplication. Do not retain dead, deprecated, duplicated, unreachable code or silent paths hiding invalid states.
 
-This applies to every system text rendered or exposed by:
+For each substantively modified executable file:
 
-- tools;
-- panels;
-- dialogs;
-- modal windows;
-- confirmation boxes;
-- system objects;
-- Atome objects;
-- menu entries;
-- tooltips;
-- buttons;
-- labels;
-- placeholders;
-- empty states;
-- status messages;
-- visible warnings;
-- visible errors;
-- onboarding or helper text;
-- accessibility-facing text when it is user-visible or assistive.
+- run the narrowest relevant executable validation after the edit when one exists;
+- check security, authorization, validation, sanitization, trust boundaries, and secret handling for regressions;
+- verify final line count, boundaries, factorization, and absence of unjustified fragmentation;
+- verify no dead, duplicated, deprecated, or unreachable code remains in the touched scope;
+- report unavailable required validation as blocked; do not claim an unvalidated file is complete.
 
-Hardcoded user-visible strings are forbidden in tools, panels, dialogs, object definitions, and system UI.
+Before deleting a file, verify usages, runtime dependencies, and synchronization dependencies. Apply the fuller dependency checklist in [module 04](04-feature-work-cleanup-and-framework-reuse.md) for legacy removals.
 
-Keys must remain grouped by domain:
+## Root-cause repair
 
-- eve.menu.*
-- eve.user.*
-- etc.
+"Patching" here means a symptom-level workaround, not the file-editing tool used to make a source correction. Architecture takes precedence over delivery speed.
 
-Non-i18n-compliant labels, placeholders, messages, titles, buttons, and system UI text are forbidden.
+Forbidden: temporary fixes, workaround or quick fixes, symptom-level repairs, compatibility shims, defensive guards hiding root causes, silent catches, hidden bypasses, fallback architectures, transitional adapters, duplicated compatibility layers, and proxy layers created to avoid a proper repair.
 
-English-only internal code comments, logs, warnings, debug messages, and developer documentation remain governed by the LANGUAGE AND STACK POLICY and must not be confused with user-visible localized text.
+Identify the root cause and architectural issue. Correct the source and perform a structured refactor or rewrite when required and authorized. If a clean correction needs broader scope, a missing component, or an unresolved architectural decision, follow the common stop-and-proposal procedure. Never implement a temporary solution "until later".
+
+## Language and stack details
+
+The main application language and architectural stack are governed by the root instructions. Existing platform-specific boundaries permit Rust for Tauri and iOS platform code, Swift for iOS native code, Ruby where needed for scripts, and C/C++ for DSP or high-end operations. These exceptions do not authorize moving main application behavior to another language or introducing a new dependency or platform layer.
+
+TypeScript and Python implementations are forbidden. Report the conflicting requirement and a compliant alternative rather than implementing them.
+
+Generated comments, internal logs, warnings, errors, documentation, and debug messages must be English. User-visible and assistive text instead follows the localization policy below.
+
+Do not generate raw product HTML or CSS outside documented existing shell, native, or canonical Squirrel/Atome ownership exceptions in [modules 01](01-root-constitution.md) and [05](05-api-rendering-and-ui.md). Do not use browser/system `alert` or `confirm` dialogs for product flows; use the verified internal dialog owner. If none can serve the need, follow the root missing-component gate rather than inventing a substitute.
+
+## Temporary artifacts
+
+All temporary files belong exclusively under the main repository's `temp/`: probes, debug or validation scripts, fixtures, outputs, screenshots, and logs. Persistent tests belong exclusively under `tests/`.
+
+Never create temporary files in source, documentation, tools, repository root, or elsewhere. When working from eVe or another subdirectory, resolve these paths against the main repository root, not the current directory.
+
+## Git operations
+
+Git inspection is allowed as needed. Git writes require an explicit user request for conflict resolution or integration; a coding request, status inspection, or observed conflict alone does not authorize them.
+
+For an explicitly authorized integration request, agents may fetch, start or continue a merge or rebase, preserve local work with stash, resolve conflicts, stage resolved files, create or switch branches, update a submodule, and create the commits needed for the integration. Inspect the working trees first, preserve unrelated local work, inspect the resulting diff, and report commits and remaining changes.
+
+Agents must never run `git push`, including force-push. The user performs all pushes. Do not delete branches or tags, discard local changes with `reset --hard`, `restore`, or `clean`, or change Git credentials, hooks, remotes, or configuration. Outside explicitly requested conflict resolution or integration, Git remains read-only.
+
+## Fallbacks and localization
+
+Runtime, data, control-flow, silent, proxy, and legacy-bypass fallbacks are forbidden. Missing dependencies must produce explicit errors and follow the root missing-component gate.
+
+The only permitted fallback forms are `eveT(key, fallback)` and `ui.label_fallback`, strictly for translating user-visible labels or messages. They cannot replace an unavailable tool, unsupported type, missing property, component, runtime capability, dependency, mutation route, or architecture. No other fallback mechanism is permitted. Correct missing translation keys in scope instead of using these exceptions to hide unresolved localization defects.
+
+All user-visible system and Atome text must use the existing `eveT()` internationalization system. This includes tools, panels, dialogs, modals, confirmations, objects, menus, tooltips, buttons, labels, placeholders, empty states, statuses, visible warnings and errors, onboarding, helpers, and accessibility-facing text.
+
+Hardcoded user-visible strings are forbidden in tools, panels, dialogs, object definitions, and system UI. Group keys by domain, such as `eve.menu.*` and `eve.user.*`. Internal English-only developer messages must not be confused with localized visible or assistive messages.
