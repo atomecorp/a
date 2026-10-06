@@ -142,6 +142,10 @@ const RESPONSE_PAYLOADS = {
         restored_atome_ids: message.restored_atome_ids
     }),
     'auth-response': (message) => ({
+        paymentRequired: message.paymentRequired,
+        payment: message.payment,
+        developmentLink: message.developmentLink,
+        newAccount: message.newAccount,
         attemptId: message.attemptId,
         expiresAt: message.expiresAt,
         challenge: message.challenge,

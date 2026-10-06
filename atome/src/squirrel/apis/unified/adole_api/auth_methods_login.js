@@ -90,6 +90,7 @@ async function installRemote(result, { attemptId } = {}) {
             throw new Error('auth_challenge_invalid');
         }
         local = await localRequest('local-link-complete', { ...fields, ...await device.sign(challenge) });
+        local.user = { ...local.user, first_launch_version: result.user.first_launch_version || null };
         try {
             await store.put('local-grant', { phone, keyId: device.keyId, scope: device.scope, user: normalizeUser(local.user),
                 localSession: local.localSession, locked: false });
@@ -103,9 +104,12 @@ async function installRemote(result, { attemptId } = {}) {
     await setBrowserWorkspaceIdentity(local.user);
     FastifyAdapter.setToken(result.token);
     remoteExpiresAt = Date.now() + 840000;
+    local.user = { ...local.user, first_launch_version: result.user.first_launch_version || null };
     installLocal(local, isTauriRuntime() ? 'tauri' : 'fastify');
-    globalThis.window?.dispatchEvent(new CustomEvent('squirrel:remote-session-ready', { detail: { userId: result.user.id } }));
-    if (attemptId) globalThis.window?.dispatchEvent(new CustomEvent('squirrel:phone-login-complete'));
+    globalThis.window?.dispatchEvent(new CustomEvent('squirrel:remote-session-ready', { detail: { userId: result.user.id, user: result.user } }));
+    if (attemptId) globalThis.window?.dispatchEvent(new CustomEvent('squirrel:phone-login-complete', {
+        detail: { newAccount: result.newAccount === true, user: result.user }
+    }));
 }
 
 export function phoneLinkClient() {
@@ -291,6 +295,9 @@ export const loginMethods = {
         return result;
     },
     async resumePhoneLogin() { return phoneLinkClient().resume(); },
+    async resendPhoneLogin() { return phoneLinkClient().resend(); },
+    async getPendingPhoneLogin() { return phoneLinkClient().pendingAttempt(); },
+    async simulatePhonePayment(method) { return phoneLinkClient().simulatePayment(method); },
     async completePhoneLogin(link) { return phoneLinkClient().consumeLink(link); },
     async cancelPhoneLogin() { return phoneLinkClient().cancel(); },
     ensureLocalSession

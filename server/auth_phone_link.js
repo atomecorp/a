@@ -9,11 +9,30 @@ export function createPhoneLinkAuth({ query, transaction, findByPhone, findById,
     if (!Number.isSafeInteger(dailyLimit) || dailyLimit < 1) reject('auth_budget_invalid');
     const proof = createAuthProofSecurity({ query, transaction, masterSecret, now });
     const sessions = createDeviceSessions({ query, transaction, proof, now, issueAccess, findById, disconnectSession, deleteAccount });
-    const attempt = async (id) => {
+    const attempt = async (id, { forCancellation = false } = {}) => {
         requireHandle(id);
         const value = await query('get', 'SELECT * FROM auth_link_attempts WHERE attempt_id = ?', [id]);
-        if (!value || value.expires_ms <= now() || ['blocked', 'consumed', 'cancelled'].includes(value.state)) reject();
+        if (!value || value.expires_ms <= now() || ['consumed', 'cancelled'].includes(value.state)
+            || (value.state === 'blocked' && !forCancellation)) reject();
         return value;
+    };
+    const deliver = async (value, token) => {
+        let delivery;
+        try {
+            delivery = await sendLink(proof.openPhone(value.phone_sealed), `${AUTH_LINK_ORIGIN}/auth/v/${value.attempt_id}#t=${token}`);
+            await transaction(async () => {
+                await query('run', "UPDATE auth_link_attempts SET state = 'sent' WHERE attempt_id = ? AND state = 'created'", [value.attempt_id]);
+                await proof.audit('sms_provider_accepted', null, value.attempt_id);
+            });
+        } catch {
+            await transaction(async () => {
+                await query('run', "UPDATE auth_link_attempts SET state = 'blocked' WHERE attempt_id = ?", [value.attempt_id]);
+                await proof.audit('sms_delivery_failed', null, value.attempt_id);
+            });
+            reject('sms_delivery_unavailable');
+        }
+        return { ok: true, attemptId: value.attempt_id, expiresAt: value.expires_ms,
+            ...(delivery?.developmentLink ? { developmentLink: delivery.developmentLink } : {}) };
     };
     async function start({ phone, publicKey, clientNonce }, network, phoneChange = null) {
         if (typeof phone !== 'string' || !/^\+[1-9]\d{7,14}$/.test(phone)) reject('auth_phone_e164_required');
@@ -37,35 +56,42 @@ export function createPhoneLinkAuth({ query, transaction, findByPhone, findById,
             if (registered && (registered.revoked_ms !== null || registered.principal_id !== (phoneChange?.principal_id || account?.user_id))) reject();
             // Only a new attempt from the same device supersedes its predecessor.
             await query('run', `UPDATE auth_link_attempts SET state = 'cancelled'
-                WHERE phone_index = ? AND key_id = ? AND state IN ('created', 'sent')`, [phoneIndex, keyId]);
+                WHERE phone_index = ? AND key_id = ? AND state IN ('awaiting_payment', 'created', 'sent')`, [phoneIndex, keyId]);
             await query('run', `INSERT INTO auth_link_attempts VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'created', ?, ?, NULL)`,
                 [id, proof.sealPhone(phone), phoneIndex, account?.user_id || null, keyId,
                     JSON.stringify(jwk), clientNonce, digest(token), now(), now() + AUTH_LINK_TTL_MS]);
             if (phoneChange) await query('run', 'INSERT INTO auth_phone_changes VALUES (?, ?, ?)', [id, phoneChange.principal_id, phoneChange.session_id]);
+            if (!account && !phoneChange) await query('run', "UPDATE auth_link_attempts SET state = 'awaiting_payment' WHERE attempt_id = ?", [id]);
             await proof.audit('authentication_started', account?.user_id || null, id);
         });
-        let delivery;
-        try {
-            delivery = await sendLink(phone, `${AUTH_LINK_ORIGIN}/auth/v/${id}#t=${token}`);
-            await transaction(async () => {
-                await query('run', "UPDATE auth_link_attempts SET state = 'sent' WHERE attempt_id = ? AND state = 'created'", [id]);
-                await proof.audit('sms_provider_accepted', null, id);
-            });
-        } catch {
-            await transaction(async () => {
-                await query('run', "UPDATE auth_link_attempts SET state = 'blocked' WHERE attempt_id = ?", [id]);
-                await proof.audit('sms_delivery_failed', null, id);
-            });
-            reject('sms_delivery_unavailable');
+        const value = await attempt(id);
+        if (value.state === 'awaiting_payment') {
+            return { ok: true, attemptId: id, expiresAt: value.expires_ms, paymentRequired: true };
         }
-        return { ok: true, attemptId: id, expiresAt: now() + AUTH_LINK_TTL_MS,
-            ...(delivery?.developmentLink ? { developmentLink: delivery.developmentLink } : {}) };
+        return deliver(value, token);
+    }
+    // A fictional receipt never grants a session: the SMS and device proofs remain mandatory.
+    async function simulatePayment(input) {
+        if (!['card', 'paypal', 'wero', 'apple_pay', 'google_pay', 'other'].includes(input.method)) reject('auth_payment_method_invalid');
+        const token = randomHandle();
+        const outcome = await transaction(async () => {
+            const value = await attempt(input.attemptId);
+            await proof.consumeProof(input, 'simulate-payment', input.attemptId, JSON.parse(value.public_key));
+            if (['created', 'sent', 'approved'].includes(value.state)) return { pending: true, value };
+            if (value.state !== 'awaiting_payment' || value.candidate_id) reject();
+            if (await findByPhone(proof.openPhone(value.phone_sealed))) reject();
+            await query('run', "UPDATE auth_link_attempts SET state = 'created', token_hash = ? WHERE attempt_id = ? AND state = 'awaiting_payment'", [digest(token), input.attemptId]);
+            await proof.audit(`payment_simulated:${input.method}`, null, input.attemptId);
+            return { value };
+        });
+        if (outcome.pending) return { ok: true, pending: true, attemptId: input.attemptId, expiresAt: outcome.value.expires_ms };
+        return { ...await deliver(outcome.value, token), payment: { mode: 'simulated', amountCents: 1200, currency: 'EUR', period: 'month' } };
     }
     async function getChallenge({ attemptId, keyId, purpose }, network) {
-        if (!['consume', 'approve', 'resume', 'cancel'].includes(purpose)) reject('auth_request_invalid');
+        if (!['consume', 'approve', 'resume', 'resend', 'cancel', 'simulate-payment'].includes(purpose)) reject('auth_request_invalid');
         return transaction(async () => {
             await proof.limit(`challenge:${proof.keyedIndex(String(network))}`, 60, 60000);
-            const value = await attempt(attemptId);
+            const value = await attempt(attemptId, { forCancellation: purpose === 'cancel' });
             if (purpose === 'approve') {
                 const device = await query('get', 'SELECT * FROM auth_device_keys WHERE key_id = ?', [keyId]);
                 if (!device || device.revoked_ms !== null || device.principal_id !== value.candidate_id
@@ -73,6 +99,24 @@ export function createPhoneLinkAuth({ query, transaction, findByPhone, findById,
             } else if (value.key_id !== keyId) reject();
             return { ok: true, challenge: await proof.challenge(purpose, attemptId, keyId, value.client_nonce) };
         });
+    }
+    async function resend(input) {
+        const token = randomHandle();
+        const outcome = await transaction(async () => {
+            const value = await attempt(input.attemptId);
+            if (!['sent', 'approved'].includes(value.state)) reject();
+            await proof.consumeProof(input, 'resend', input.attemptId, JSON.parse(value.public_key));
+            if (value.state === 'approved') return { value, pending: true };
+            if (((await findByPhone(proof.openPhone(value.phone_sealed)))?.user_id || null) !== value.candidate_id) reject();
+            await proof.limit(`phone-minute:${value.phone_index}`, 1, 60000);
+            await proof.limit(`phone-hour:${value.phone_index}`, 5, 3600000);
+            await proof.limit(`device:${value.key_id}`, 10, 3600000);
+            await proof.limit('sms-daily', dailyLimit, 86400000);
+            await query('run', "UPDATE auth_link_attempts SET state = 'created', token_hash = ? WHERE attempt_id = ? AND state = 'sent'", [digest(token), value.attempt_id]);
+            await proof.audit('sms_resend_requested', value.candidate_id, value.attempt_id);
+            return { value };
+        });
+        return outcome.pending ? { ok: true, pending: true } : deliver(outcome.value, token);
     }
     async function complete(input) {
         const outcome = await transaction(async () => {
@@ -110,7 +154,7 @@ export function createPhoneLinkAuth({ query, transaction, findByPhone, findById,
             const changed = await query('run', `UPDATE auth_link_attempts SET state = 'consumed'
                 WHERE attempt_id = ? AND state IN ('sent', 'approved')`, [input.attemptId]);
             if (Number(changed.changes) !== 1) reject();
-            return sessions.create(account, value.key_id);
+            return { ...await sessions.create(account, value.key_id), newAccount: !existing && !changing };
         });
         return outcome;
     }
@@ -147,7 +191,7 @@ export function createPhoneLinkAuth({ query, transaction, findByPhone, findById,
     }
     async function cancel(input) {
         return transaction(async () => {
-            const value = await attempt(input.attemptId);
+            const value = await attempt(input.attemptId, { forCancellation: true });
             await proof.consumeProof(input, 'cancel', input.attemptId, JSON.parse(value.public_key));
             await query('run', "UPDATE auth_link_attempts SET state = 'cancelled' WHERE attempt_id = ?", [input.attemptId]);
             return { ok: true };
@@ -159,5 +203,5 @@ export function createPhoneLinkAuth({ query, transaction, findByPhone, findById,
         if (keyId !== authorization.key_id) reject();
         return start({ ...input, phone: input.newPhone }, network, authorization);
     }
-    return { start, startPhoneChange, getChallenge, complete, approve, confirm, cancel, sessions };
+    return { start, simulatePayment, resend, startPhoneChange, getChallenge, complete, approve, confirm, cancel, sessions };
 }

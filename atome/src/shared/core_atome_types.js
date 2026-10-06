@@ -90,6 +90,7 @@ export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
             project_program: { type: 'object', properties: {
                 definition: { type: 'object' }, status: { type: 'string', enum: ['draft', 'active', 'paused'] },
                 revision: { type: 'number', minimum: 0 }, accepted: { type: 'object' }, pausedAt: { type: 'string' },
+                bricks: { type: 'array', items: { type: 'string' } }, sleep_preferences: { type: 'object' },
                 involvement: { type: 'object', properties: { minutes: { type: 'number', minimum: 0, maximum: 10080 },
                     basis: { type: 'string', enum: ['day', 'week'] }, days: { type: 'array' }, rhythm: { type: 'number', minimum: 1, maximum: 5 }
                 }, required: ['minutes', 'basis', 'days', 'rhythm'] }
@@ -116,8 +117,13 @@ export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
             label: { type: 'string' },
             children: { type: 'array' },
             module: { type: 'string' },
+            layout_fill: { type: 'string', enum: ['surface'] },
+            matrix_template: { type: 'string' },
+            template_control: { type: 'object' },
+            template_value: {},
             matrix_cell: { type: 'object', properties: {
                 row: { type: 'number', minimum: -1 }, column: { type: 'number', minimum: 0 },
+                row_span: { type: 'number', minimum: 1 }, column_span: { type: 'number', minimum: 1 },
                 role: { type: 'string', enum: ['header', 'cell'] }
             }, required: ['row', 'column', 'role'] },
             matrix_grid: { type: 'object', properties: {

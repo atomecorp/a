@@ -235,7 +235,8 @@ export const sessionAccountMethods = {
             id: state.user?.id || null,
             user_id: state.user?.id || null,
             username: state.user?.username || null,
-            phone: state.user?.phone || null
+            phone: state.user?.phone || null,
+            first_launch_version: state.user?.first_launch_version || null
         };
     },
 

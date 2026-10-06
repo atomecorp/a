@@ -10,7 +10,7 @@ import { generateOpaquePrincipalId } from './auth_crypto.js';
 import { AUTH_LINK_ORIGIN, AUTH_ACCESS_TTL_SECONDS } from '../atome/src/shared/auth_link_contract.js';
 import { attachWsApiClientToUser, detachWsApiClient, wsApiConnections } from './wsApiState.js';
 
-const ACTIONS = new Set(['phone-link-start', 'phone-change-start', 'phone-link-challenge', 'phone-link-consume',
+const ACTIONS = new Set(['phone-link-start', 'phone-link-simulate-payment', 'phone-link-resend', 'phone-change-start', 'phone-link-challenge', 'phone-link-consume',
     'phone-link-approve', 'phone-link-confirm', 'phone-link-resume', 'phone-link-cancel', 'session-challenge',
     'session-delete-account', 'session-renew', 'session-local-bind', 'session-logout', 'session-logout-all', 'session-revoke-device']);
 const PUBLIC_ERRORS = new Set(['auth_phone_e164_required', 'auth_rate_limited', 'sms_delivery_unavailable',
@@ -52,7 +52,8 @@ export function createWsPhoneLinkHandler({ projectRoot, jwtSecret, sendLink, dat
         findById: (id) => findUserById(dataSource, id),
         createAccount: async (phone) => {
             const id = generateOpaquePrincipalId();
-            return createUserAtome(dataSource, id, `user_${id}`, phone, 'private');
+            const account = await createUserAtome(dataSource, id, `user_${id}`, phone, 'private', { first_launch_version: 1 });
+            return { ...account, first_launch_version: 1 };
         },
         sendLink: deliverLink,
         issueAccess: ({ principalId, keyId, sessionId }) => jwt.sign(
@@ -103,6 +104,8 @@ export function createWsPhoneLinkHandler({ projectRoot, jwtSecret, sendLink, dat
             switch (message.action) {
                 case 'phone-change-start': result = await service.startPhoneChange(message, network); break;
                 case 'phone-link-start': result = await service.start(message, network); break;
+                case 'phone-link-simulate-payment': result = await service.simulatePayment(message); break;
+                case 'phone-link-resend': result = await service.resend(message); break;
                 case 'phone-link-challenge': result = await service.getChallenge(message, network); break;
                 case 'phone-link-consume': result = await service.complete({ ...message, action: 'consume' }); break;
                 case 'phone-link-resume':

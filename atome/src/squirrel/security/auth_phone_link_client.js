@@ -66,10 +66,22 @@ export function createPhoneLinkClient({ devices, send, installSession, locks = g
     }
     async function resumeAttempt(record) {
         if (!record || record.expiresAt <= now()) throw new Error('auth_attempt_expired');
+        if (record.paymentRequired) return { ok: true, paymentRequired: true, attemptId: record.attemptId, expiresAt: record.expiresAt };
         const device = await devices.forPhone(record.phone);
         const signed = await attemptProof(record, 'resume', device);
         const result = await request('phone-link-resume', { attemptId: record.attemptId, ...signed });
         return result.pending ? result : accept(result, record.phone, record.attemptId);
+    }
+    async function followDelivery(response, record) {
+        if (response.developmentLink) {
+            const link = parseAuthLink(response.developmentLink);
+            if (link.attemptId !== record.attemptId) throw new Error('auth_link_invalid');
+            const device = await devices.forPhone(record.phone);
+            const signed = await attemptProof(record, 'consume', device);
+            return accept(await request('phone-link-consume', { ...link, ...signed }), record.phone, record.attemptId);
+        }
+        const result = await resumeAttempt(record);
+        return result.pending ? { ...result, ok: true, attemptId: record.attemptId, expiresAt: record.expiresAt } : result;
     }
     return {
         retryRevocations: () => exclusive(async () => {
@@ -95,23 +107,37 @@ export function createPhoneLinkClient({ devices, send, installSession, locks = g
             const device = await devices.forPhone(phone);
             const clientNonce = devices.randomHandle();
             const response = await request('phone-link-start', { phone, publicKey: device.publicKey, clientNonce });
-            const record = { phone, clientNonce, attemptId: response.attemptId, expiresAt: response.expiresAt };
+            const record = { phone, clientNonce, attemptId: response.attemptId, expiresAt: response.expiresAt,
+                paymentRequired: response.paymentRequired === true };
             await devices.put('attempt', record);
-            // A development server may return the freshly generated link to the
-            // same originating socket. Consume it with the normal device proof:
-            // no SMS is sent and no authentication check is bypassed.
-            if (response.developmentLink) {
-                const link = parseAuthLink(response.developmentLink);
-                if (link.attemptId !== record.attemptId) throw new Error('auth_link_invalid');
-                const signed = await attemptProof(record, 'consume', device);
-                const result = await request('phone-link-consume', { ...link, ...signed });
-                return accept(result, record.phone, record.attemptId);
-            }
-            // Signed resume also subscribes this socket to approval notifications.
-            await resumeAttempt(record);
-            return { ok: true, attemptId: record.attemptId, expiresAt: record.expiresAt, pending: true };
+            if (record.paymentRequired) return { ok: true, paymentRequired: true, attemptId: record.attemptId, expiresAt: record.expiresAt };
+            // Development delivery still consumes the ordinary SMS token and device proof.
+            return followDelivery(response, record);
         }),
         resume: () => exclusive(async () => resumeAttempt(await devices.read('attempt'))),
+        simulatePayment: method => exclusive(async () => {
+            const record = await devices.read('attempt');
+            if (!record || record.expiresAt <= now()) throw new Error('auth_attempt_expired');
+            const device = await devices.forPhone(record.phone);
+            const signed = await attemptProof(record, 'simulate-payment', device);
+            const response = await request('phone-link-simulate-payment', { attemptId: record.attemptId, method, ...signed });
+            await devices.put('attempt', { ...record, paymentRequired: false });
+            return followDelivery(response, { ...record, paymentRequired: false });
+        }),
+        pendingAttempt: async () => {
+            const record = await devices.read('attempt');
+            return record && record.expiresAt > now() ? {
+                phone: record.phone, expiresAt: record.expiresAt, paymentRequired: record.paymentRequired === true
+            } : null;
+        },
+        resend: () => exclusive(async () => {
+            const record = await devices.read('attempt');
+            if (!record || record.expiresAt <= now()) throw new Error('auth_attempt_expired');
+            if (record.paymentRequired) throw new Error('auth_payment_required');
+            const device = await devices.forPhone(record.phone);
+            const signed = await attemptProof(record, 'resend', device);
+            return followDelivery(await request('phone-link-resend', { attemptId: record.attemptId, ...signed }), record);
+        }),
         consumeLink: (url) => exclusive(async () => {
             const link = parseAuthLink(url);
             const record = await devices.read('attempt');

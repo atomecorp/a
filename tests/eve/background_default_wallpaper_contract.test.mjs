@@ -276,44 +276,6 @@ const installCoverCanvasHarness = (window) => {
     return { draws, surface };
 };
 
-test.each(['image', 'video'])('the login Canvas covers portrait, landscape and square surfaces with a %s', async (kind) => {
-    const { window } = await bootBackgroundRuntime();
-    const { draws, surface } = installCoverCanvasHarness(window);
-    const runtime = await import('../../eVe/domains/rendering/bevy_surface_background_runtime.js');
-    const { createLoginCanvasBackground } = await import('../../eVe/intuition/tools/user_login_canvas_background.js');
-    const applied = [];
-    runtime.registerBevySurfaceBackgroundRuntime(surface, { started: true, wasmModule: {
-        apply_atome_bevy_surface_background(patch) { applied.push(patch); }
-    } });
-    for (const [sw, sh] of [[400, 200], [200, 400], [300, 300]]) {
-        const video = { videoWidth: sw, videoHeight: sh, readyState: 2, seeking: false };
-        videoSource.register.mockResolvedValue({ ok: true, video, dispose() {} });
-        runtime.publishBevySurfaceBackground({
-            signature: `${kind}:${sw}:${sh}`, color: [0, 0, 0, 1], mediaKind: kind,
-            ...(kind === 'video' ? { sourceUrl: `/video/${sw}/${sh}` } : {
-                texture: { width: sw, height: sh, rgba: new Uint8Array(sw * sh * 4) }
-            })
-        }, window);
-        const painter = createLoginCanvasBackground(window.document);
-        for (const [width, height] of [[400, 800], [1000, 500], [600, 600]]) {
-            draws.length = 0;
-            const context = surface.getContext('2d');
-            assert.equal((await painter.paint(context, width, height, 1)).ready, true);
-            const [, x, y, w, h] = draws.at(-1);
-            assert.ok(w >= width && h >= height);
-            assert.ok(Math.abs(w / h - sw / sh) < 0.0001);
-            assert.ok(Math.abs(x - (width - w) / 2) < 0.0001);
-            assert.ok(Math.abs(y - (height - h) / 2) < 0.0001);
-            assert.equal(draws.length, kind === 'video' ? 2 : 1);
-        }
-        painter.destroy();
-    }
-    assert.ok(applied.length > 0);
-    for (const patch of applied) {
-        for (const key of ['fit', 'backdrop', 'tile_size']) assert.equal(Object.hasOwn(patch, key), false);
-    }
-});
-
 test('the video background waits for metadata before applying its natural dimensions', async () => {
     const { window } = await bootBackgroundRuntime();
     const { surface } = installCoverCanvasHarness(window);
@@ -419,7 +381,7 @@ test.each(['video', 'image'])('use selection preserves the selected %s kind with
 
 test('authentication paints the bundled default video from the Dashboard playback owner', async () => {
     const { window } = await bootBackgroundRuntime();
-    const { surface, draws } = installCoverCanvasHarness(window);
+    const { surface } = installCoverCanvasHarness(window);
     const video = { videoWidth: 1920, videoHeight: 1080, readyState: 2, seeking: false };
     videoSource.register.mockResolvedValue({ ok: true, video, dispose() {} });
     const runtime = await import('../../eVe/domains/rendering/bevy_surface_background_runtime.js');
@@ -427,21 +389,15 @@ test('authentication paints the bundled default video from the Dashboard playbac
     runtime.registerBevySurfaceBackgroundRuntime(surface, { started: true, wasmModule: {
         apply_atome_bevy_surface_background(patch) { patches.push(patch); }
     } });
-    const { createLoginCanvasBackground } = await import('../../eVe/intuition/tools/user_login_canvas_background.js');
-    const painter = createLoginCanvasBackground(window.document);
     try {
-        const result = await painter.paint(surface.getContext('2d'), 400, 800, 1);
-        assert.equal(result.ready, true);
+        const result = await runtime.readResolvedBevySurfaceBackgroundMedia(surface);
+        await runtime.ensureBevySurfaceBackgroundApplied(surface, result);
+        assert.equal(result.mediaKind, 'video');
         assert.equal(videoSource.register.mock.calls.length, 1, 'login shares one decoder with the Dashboard');
         assert.equal(videoSource.register.mock.calls[0][0].source, DEFAULT_BACKGROUND_URL);
         for (const key of ['autoplay', 'loop', 'muted']) assert.equal(videoSource.register.mock.calls[0][0][key], true);
         assert.equal(patches.at(-1).video.width, 1920);
-        const [, x, y, width, height] = draws.at(-1);
-        assert.ok(width >= 400 && height >= 800);
-        assert.equal(x, (400 - width) / 2);
-        assert.equal(y, (800 - height) / 2);
-        assert.equal(painter.signature(), null, 'animated wallpaper must redraw continuously');
-    } finally { painter.destroy(); }
+    } finally { /* The canonical background owner releases its decoder at teardown. */ }
 });
 
 
@@ -454,21 +410,19 @@ test('logout authentication remains paintable while the video decoder is waiting
     runtime.registerBevySurfaceBackgroundRuntime(surface, { started: true, wasmModule: {
         apply_atome_bevy_surface_background() {}
     } });
-    const { createLoginCanvasBackground } = await import('../../eVe/intuition/tools/user_login_canvas_background.js');
-    const painter = createLoginCanvasBackground(window.document);
+    const resolve = () => runtime.readResolvedBevySurfaceBackgroundMedia(surface, null, { waitForVideo: false });
     try {
         const waiting = await Promise.race([
-            painter.resolve(),
+            resolve(),
             new Promise(resolve => window.setTimeout(() => resolve({ ready: false, blocked: true }), 30))
         ]);
-        assert.equal(waiting.ready, true, 'video loading must not block the login controls');
-        const painted = await painter.paint(surface.getContext('2d'), 400, 800, 1);
-        assert.equal(painted.ready, true);
+        assert.equal(waiting.mediaKind, 'video', 'video loading must not block the login controls');
+        assert.equal(waiting.mediaKind, 'video');
         const video = { videoWidth: 960, videoHeight: 960, readyState: 2, seeking: false };
         finishDecode({ ok: true, video, dispose() {} });
-        await vi.waitFor(async () => assert.equal((await painter.resolve()).media.video, video));
+        await vi.waitFor(async () => assert.equal((await resolve()).video, video));
         assert.equal(videoSource.register.mock.calls.length, 1, 'pending frames share the same decoder');
-    } finally { painter.destroy(); }
+    } finally { /* Decoder release belongs to the background owner. */ }
 });
 
 

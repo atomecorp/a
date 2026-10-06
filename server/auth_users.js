@@ -143,7 +143,8 @@ export async function findUserById(dataSource, userId) {
     const rows = await dataSource.query(
         `SELECT a.atome_id as user_id, a.atome_type, a.created_at, a.updated_at, a.last_sync, a.created_source,
                 MAX(CASE WHEN p.particle_key = 'username' THEN p.particle_value END) AS username,
-                MAX(CASE WHEN p.particle_key = 'visibility' THEN p.particle_value END) AS visibility
+                MAX(CASE WHEN p.particle_key = 'visibility' THEN p.particle_value END) AS visibility,
+                MAX(CASE WHEN p.particle_key = 'first_launch_version' THEN p.particle_value END) AS first_launch_version
          FROM atomes a
          LEFT JOIN particles p ON a.atome_id = p.atome_id
          WHERE a.atome_id = ? AND a.atome_type = 'user' AND a.deleted_at IS NULL
@@ -158,6 +159,7 @@ export async function findUserById(dataSource, userId) {
             username: user.username ? JSON.parse(user.username) : null,
             phone: await readPrincipalPhone(dataSource, user.user_id),
             visibility: user.visibility ? JSON.parse(user.visibility) : 'private',
+            first_launch_version: user.first_launch_version ? JSON.parse(user.first_launch_version) : null,
             created_at: user.created_at,
             updated_at: user.updated_at,
             last_sync: user.last_sync,
@@ -229,5 +231,6 @@ export async function deleteUserAtome(dataSource, userId) {
 
 // Private self-authentication projection only. Never use for public user lookup.
 export const authenticatedUserSnapshot = user => ({
-    id: user.user_id, user_id: user.user_id, username: user.username, phone: user.phone
+    id: user.user_id, user_id: user.user_id, username: user.username, phone: user.phone,
+    first_launch_version: user.first_launch_version || null
 });

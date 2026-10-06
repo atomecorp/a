@@ -345,3 +345,8 @@ eve/application
 !tests/eve/project_templates_panel.test.mjs
 !tests/eve/project_preview_runtime.test.mjs
 !tests/rendering/shadow_outer_knockout.rs
+
+# First-launch Matrix and phone-payment regression suites
+!tests/eve/first_launch_matrix.test.mjs
+!tests/eve/first_launch_phone_payment.test.mjs
+!tests/eve/first_launch_runtime.test.mjs

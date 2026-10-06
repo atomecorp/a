@@ -923,7 +923,7 @@ test('the masked-video Flower enables Play and routes it only to the hidden vide
     }
 });
 
-test('the Utilities palette gathers Mode, Validation and the projects Matrix', async () => {
+test('the Utilities palette gathers Mode, Validation, the projects Matrix and the expertise level', async () => {
     const { createMainMenuContentRuntime } = await import('../../eVe/intuition/runtime/eve_intuition/main_menu_content_runtime.js');
     const inertDependencies = [
         'applyDeleteSelection', 'closeBackgroundPanel', 'closeCalendarPanel', 'closeCanonicalHomePanel',
@@ -938,7 +938,8 @@ test('the Utilities palette gathers Mode, Validation and the projects Matrix', a
         'openPastePanel', 'openTimelinePanel', 'openUndoPanel', 'orientationChanged'
     ];
     // Le contenu REEL du menu principal : la palette du Mystic n'est pas une
-    // seconde table, elle rend les memes trois enfants que la barre.
+    // seconde table, elle rend les memes enfants que la barre, plus le niveau
+    // d'expertise ajoute le 2026-10-06.
     const content = createMainMenuContentRuntime({
         ...Object.fromEntries(inertDependencies.map((name) => [name, () => null])),
         directionValues: [],
@@ -952,10 +953,55 @@ test('the Utilities palette gathers Mode, Validation and the projects Matrix', a
         const utilities = runtime.resolveMysticContextItems({ type: 'project', projectId: 'p' })
             .find(item => item.key === 'utilities');
         assert.equal(utilities.type, 'palette');
-        assert.deepEqual(utilities.children.map(child => child.key), ['mode', 'validation', 'matrix']);
+        assert.deepEqual(utilities.children.map(child => child.key), ['mode', 'validation', 'matrix', 'level']);
         const mode = utilities.children.find(child => child.key === 'mode');
         assert.equal(mode.type, 'palette');
         assert.deepEqual(mode.children.map(child => child.key), ['perform', 'mode_edit', 'mode_consume']);
+        // « Niveau d'expertise » : une palette d'un niveau de plus, trois choix
+        // qui ecrivent la MEME preference que le panneau Home.
+        const level = utilities.children.find(child => child.key === 'level');
+        assert.equal(level.type, 'palette');
+        assert.deepEqual(level.children.map(child => child.key), ['level_beginner', 'level_intermediate', 'level_advanced']);
+        assert.deepEqual(
+            level.children.map(child => child.extraInput.mastery_level),
+            ['beginner', 'intermediate', 'advanced']
+        );
+    }, { getDefaultContent: () => content });
+});
+
+test('the in-force expertise level is the only choice that carries the check icon', async () => {
+    const { createMainMenuContentRuntime } = await import('../../eVe/intuition/runtime/eve_intuition/main_menu_content_runtime.js');
+    const inertDependencies = [
+        'applyDeleteSelection', 'closeBackgroundPanel', 'closeCalendarPanel', 'closeCanonicalHomePanel',
+        'closeCommunicatePanel', 'closeCouleurPanel', 'closeDeletePanel', 'closeFinderPanel',
+        'closeFontPanel', 'closeInfoPanel', 'closeLayerPanel', 'closeMatrixView', 'closePastePanel',
+        'closeTimelinePanel', 'closeUndoPanel', 'defaultOrientation', 'directionValueToLabel',
+        'ensureActivitiesModule', 'ensureCopyModule', 'ensurePastePanelModule', 'handleAiTouch',
+        'handleFinderTouch', 'invokeTool', 'openBackgroundPanel', 'openCalendarPanel',
+        'openCanonicalHomePanel', 'openCommunicatePanel', 'openCouleurPanel', 'openDeletePanel',
+        'openFinderPanel', 'openFontPanel', 'openInfoPanel', 'openLayerPanel', 'openMatrixView',
+        'openMediaPanel', 'closeMediaPanel',
+        'openPastePanel', 'openTimelinePanel', 'openUndoPanel', 'orientationChanged'
+    ];
+    const content = createMainMenuContentRuntime({
+        ...Object.fromEntries(inertDependencies.map((name) => [name, () => null])),
+        directionValues: [],
+        mainToolIdByKey: {
+            mode: 'tool.main.mode', matrix: 'tool.main.matrix', perform: 'tool.main.perform',
+            create: 'tool.main.create', draw: 'tool.main.draw', capture: 'tool.main.capture', view: 'tool.main.view'
+        },
+        translate: (_key, fallback) => fallback
+    });
+    await withMenuWindow(async ({ runtime }) => {
+        // The published preferences are the same source the context menus read.
+        globalThis.window.__eveProfilePreferences = { visual: { masteryLevel: 'intermediate' } };
+        const level = runtime.resolveMysticContextItems({ type: 'project', projectId: 'p' })
+            .find(item => item.key === 'utilities').children.find(child => child.key === 'level');
+        const iconOf = (key) => level.children.find(child => child.key === key).icon;
+        assert.equal(iconOf('level_intermediate').endsWith('check.svg'), true);
+        assert.equal(iconOf('level_beginner').endsWith('check.svg'), false);
+        assert.equal(iconOf('level_advanced').endsWith('check.svg'), false);
+        assert.equal(iconOf('level_beginner').endsWith('user.svg'), true);
     }, { getDefaultContent: () => content });
 });
 

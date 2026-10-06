@@ -97,7 +97,8 @@ const normalizeUser = (user) => {
     return {
         id: String(id),
         username: user.username || null,
-        phone: user.phone || null
+        phone: user.phone || null,
+        first_launch_version: user.first_launch_version || null
     };
 };
 

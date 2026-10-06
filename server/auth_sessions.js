@@ -17,7 +17,8 @@ export function createDeviceSessions({ query, transaction, proof, now, issueAcce
         ok: true, token: await issueAccess({ principalId: row.principal_id, keyId: row.key_id, sessionId: row.session_id }),
         session: { id: row.session_id, generation: row.generation, keyId: row.key_id,
             expiresAt: row.expires_ms, idleExpiresAt: row.idle_expires_ms },
-        user: { id: account.user_id, user_id: account.user_id, username: account.username, phone: account.phone }
+        user: { id: account.user_id, user_id: account.user_id, username: account.username, phone: account.phone,
+            first_launch_version: account.first_launch_version || null }
     });
     async function create(account, keyId) {
         const row = { session_id: randomHandle(), principal_id: account.user_id, key_id: keyId,
@@ -79,7 +80,8 @@ export function createDeviceSessions({ query, transaction, proof, now, issueAcce
             if (!account) reject('auth_session_invalid');
             await proof.audit('local_identity_verified', row.principal_id, row.session_id);
             return { ok: true, keyId: row.key_id,
-                user: { id: account.user_id, username: account.username, phone: account.phone } };
+                user: { id: account.user_id, username: account.username, phone: account.phone,
+                    first_launch_version: account.first_launch_version || null } };
         });
     }
     async function revoke(input) {

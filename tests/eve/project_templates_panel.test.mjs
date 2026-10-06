@@ -74,19 +74,20 @@ test('native Template panel lists the real Dashboard first and opens through its
     const invoke = vi.fn(async () => ({ ok: true }));
     const surface = createProjectTemplatesSurface({
         ensureDashboard: async () => ({ ok: true, project_id: 'dashboard_source' }),
-        listTemplates: async () => [{ id: 'personal_source', name: 'Personal' }, { id: 'dashboard_source', name: 'Dashboard Pro' }], invoke
+        ensureBasic: async () => ({ ok: true, project_id: 'basic_source' }), ensureOnboarding: async () => {},
+        listTemplates: async () => [{ id: 'personal_source', name: 'Personal' }, { id: 'dashboard_source', name: 'Dashboard Pro' }, { id: 'basic_source', name: 'Dashboard Basique' }], invoke
     });
     await surface.onOpen({ refresh: vi.fn() });
     const snapshot = surface.readState();
-    expect(snapshot.entries.map(entry => entry.label)).toEqual(['Dashboard Pro', 'Personal']);
+    expect(snapshot.entries.map(entry => entry.label)).toEqual(['Dashboard Basique', 'Dashboard Pro', 'Personal']);
     const events = [];
     const nodes = surface.buildContent(snapshot, { emit: event => events.push(event), bodyWidth: 420 });
     const dashboardRow = walk(nodes[0]).find(node => node.kind === 'button' && node.on?.activate);
     expect(dashboardRow).toBeTruthy();
     dashboardRow.on.activate();
-    expect(events[0]).toMatchObject({ type: 'project_templates.open', value: 'dashboard_source' });
+    expect(events[0]).toMatchObject({ type: 'project_templates.open', value: 'basic_source' });
     await surface.handleEvent(events[0], {});
-    expect(invoke).toHaveBeenCalledWith(expect.objectContaining({ tool_id: 'ui.project.templates.open', input: { template_project_id: 'dashboard_source' } }));
+    expect(invoke).toHaveBeenCalledWith(expect.objectContaining({ tool_id: 'ui.project.templates.open', input: { template_project_id: 'basic_source' } }));
     const fixed = surface.buildFixedContent(snapshot, { emit: event => events.push(event), bodyWidth: 420 });
     fixed[0].on.activate();
     await surface.handleEvent(events[1], {});
@@ -94,7 +95,8 @@ test('native Template panel lists the real Dashboard first and opens through its
 });
 test('Template panel refuses an absent Dashboard and stale choices without inventing entries', async () => {
     const invoke = vi.fn();
-    const surface = createProjectTemplatesSurface({ ensureDashboard: async () => ({ ok: true, project_id: 'missing' }), listTemplates: async () => [], invoke });
+    const surface = createProjectTemplatesSurface({ ensureDashboard: async () => ({ ok: true, project_id: 'missing' }),
+        ensureBasic: async () => ({ ok: true, project_id: 'basic_source' }), ensureOnboarding: async () => {}, listTemplates: async () => [], invoke });
     await expect(surface.onOpen({ refresh: vi.fn() })).rejects.toThrow('dashboard_template_catalog_missing');
     expect(await surface.handleEvent({ type: 'project_templates.open', value: 'missing' }, {})).toMatchObject({ ok: false });
     expect(invoke).not.toHaveBeenCalled();

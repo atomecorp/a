@@ -180,7 +180,7 @@ test('surface background colours convert to the RGBA floats the Bevy patch consu
     for (const invalid of [null, '', 'red', '#12345', 'color(display-p3 1 0 0)']) {
         assert.equal(readSurfaceBackgroundRgba(invalid), null, `${String(invalid)} is not a surface colour`);
     }
-    assert.deepEqual(readDefaultSurfaceBackgroundRgba(), [245 / 255, 245 / 255, 247 / 255, 1],
+    assert.deepEqual(readDefaultSurfaceBackgroundRgba(), [169 / 255, 169 / 255, 169 / 255, 1],
         'the shared default surface colour the project falls back to is unchanged');
 });
 

@@ -149,7 +149,16 @@ test('the permanent bar is the five intents plus view/help/contact; mode and act
     // la commande de la capture, `matrix` la porte des projets en vignettes.
     assert.equal(content.utilities.type, 'palette');
     assert.equal(content.utilities.tool_type, 'palette');
-    assert.deepEqual(content.utilities.children, ['mode', 'validation', 'matrix']);
+    assert.deepEqual(content.utilities.children, ['mode', 'validation', 'matrix', 'level']);
+    // « Niveau d'expertise » (2026-10-06) : un niveau de plus dans la navigation
+    // hierarchique de Mystic, trois feuilles qui ecrivent LA preference existante
+    // (`preferences.visual.masteryLevel`) par le proprietaire de profil.
+    assert.equal(content.level.type, 'palette');
+    assert.deepEqual(content.level.children, ['level_beginner', 'level_intermediate', 'level_advanced']);
+    assert.deepEqual(content.level.children.map((key) => content[key].tool_id),
+        ['ui.level.beginner', 'ui.level.intermediate', 'ui.level.advanced']);
+    assert.deepEqual(content.level.children.map((key) => content[key].extra_input.mastery_level),
+        ['beginner', 'intermediate', 'advanced']);
     assert.deepEqual(content.mode.children, ['perform', 'mode_edit', 'mode_consume']);
     assert.equal(content.validation.tool_id, 'ui.capture.validation');
     assert.equal(content.matrix.tool_id, 'tool.main.matrix');

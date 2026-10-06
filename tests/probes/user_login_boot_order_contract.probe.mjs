@@ -5,6 +5,17 @@ import { DASHBOARD_WORKSPACE_PROJECT_ID } from '../../eVe/domains/dashboard/dash
 import { setMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_product_registry.js';
 
 const { window, document } = installMockBrowserEnv();
+// This probe checks shell ownership, not GPU pixels. The real native controls
+// build their retained tree; only the renderer transport is isolated here.
+const projectedTrees = new Map();
+window.eveBevyUiRuntime = {
+    mountTree: async ({ id, tree }) => { projectedTrees.set(id, tree); return { ok: true }; },
+    unmountTree: async ({ id }) => { projectedTrees.delete(id); return { ok: true }; },
+    updateTreeMotion: async () => ({ ok: true })
+};
+window.AdoleAPI.auth.getPendingPhoneLogin = async () => null;
+const authView = document.getElementById('view') || document.createElement('div'); authView.id = 'view'; document.body.appendChild(authView);
+
 
 globalThis.MutationObserver = window.MutationObserver;
 globalThis.getComputedStyle = window.getComputedStyle.bind(window);
@@ -99,13 +110,15 @@ await new Promise((resolve) => setTimeout(resolve, 0));
 
 assert.equal(openResult?.ok, true, 'initial unauthenticated boot must open the login sequence');
 assert.equal(homeModuleLoadCount, 0, 'initial login choice must not wait for the Home panel module');
-assert.equal(document.getElementById('eve_login_sequence')?.style?.display, 'block', 'login shell must be present immediately');
-assert.equal(document.getElementById('eve_login_sequence__choice')?.style?.display, 'flex', 'login choice must be the first visible auth surface');
+assert.ok(projectedTrees.has('eve_bevy_panel_first_launch'), 'the shared Matrix tree must be mounted');
+assert.equal((await import('../../eVe/domains/user/first_launch_runtime.js')).getFirstLaunchRuntime().state.stage, 'access', 'the canonical access Template is presented first');
 assert.equal(loginMountedEventCount, 1, 'login choice must publish a mounted event for early hidden warmups');
-assert.equal(loginVisibleEventCount, 1, 'login choice must publish a readiness event for deferred warmups');
+assert.equal(loginVisibleEventCount, 0, 'boot readiness must not depend on the removed CSS-animation route');
 assert.deepEqual(menuUpdates.at(-1)?.toolbox?.children, [], 'disconnected boot must keep toolbox content empty before workspace');
 assert.equal(menuHiddenCount, 1, 'disconnected boot must hide the main menu before the user enters a workspace');
 
+await (await import('../../eVe/domains/user/first_launch_runtime.js')).getFirstLaunchRuntime().close();
+authView.remove();delete window.__eveWorkspaceMode;
 const visibleProjectLayer = document.createElement('div');
 visibleProjectLayer.id = 'project_view_visible_project';
 visibleProjectLayer.getBoundingClientRect = () => ({ x: 0, y: 0, width: 1200, height: 800 });
