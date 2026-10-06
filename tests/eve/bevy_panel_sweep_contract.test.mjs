@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
-import { createBevyUiPointerRuntime } from '../../eVe/domains/rendering/bevy_ui_pointer_runtime.js';
+import { createBevyUiPointerRuntime, localBevyEventForTarget } from '../../eVe/domains/rendering/bevy_ui_pointer_runtime.js';
 import { createBevyUiMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_runtime.js';
 import { registerPanelApi, clearPanelApi } from '../../eVe/intuition/runtime/panel_api.js';
 import { createPanelSurfaceRuntime } from '../../eVe/intuition/runtime/eve_intuition/panel_surface_runtime.js';
@@ -48,7 +48,11 @@ const registerSweepSurface = (surfaceKey = SWEEP_SURFACE) => {
             // valeur declare son propre `palette_choose` : il recoit l'evenement
             // local et le panneau se referme derriere lui.
             node('sweep_pick', 'button', { size: [32, 32] }, [], {
-                on: { palette_choose: (event) => { registerSweepSurface.picks.push(event?.x); return { ok: true }; } }
+                on: {
+                    palette_choose: (event) => { registerSweepSurface.picks.push(event?.x); return { ok: true }; },
+                    palette_preview: (event) => { registerSweepSurface.previews.push(event?.x); },
+                    palette_preview_leave: () => { registerSweepSurface.previews.push(null); }
+                }
             }),
             textNode('sweep_label', 'Fixture', { size: [120, 24] })
         ],
@@ -61,6 +65,7 @@ const registerSweepSurface = (surfaceKey = SWEEP_SURFACE) => {
 registerSweepSurface.chosen = [];
 registerSweepSurface.closed = 0;
 registerSweepSurface.picks = [];
+registerSweepSurface.previews = [];
 
 const installPanelEnv = () => {
     const env = installDom();
@@ -155,6 +160,9 @@ test('every panel control answers quick mode without hover handlers or hover ref
         await waitMs(5);
         const pick = findNode(tree(), 'sweep_pick');
         assert.equal(typeof pick.on.palette_choose, 'function');
+        assert.equal(typeof pick.on.palette_preview, 'function', 'the palette preview pair survives the sweep decorator');
+        assert.equal(typeof pick.on.palette_preview_leave, 'function');
+        assert.equal(typeof pick.on.hover, 'undefined', 'only hover is removed centrally');
         registerSweepSurface.picks.length = 0;
         pick.on.palette_choose({ x: 12 });
         await waitMs(5);
@@ -349,4 +357,72 @@ test('the shared pointer route applies the release on the panel control and neve
     runtime.routePointerEvent({ canvas, phase: 'pointerdown', point: { x: 30, y: 470 }, event: {} });
     runtime.routePointerEvent({ canvas, phase: 'pointerup', point: { x: 30, y: 470 }, event: {} });
     assert.deepEqual(emitted.map((entry) => entry.event), ['activate']);
+});
+
+test('a held palette gesture previews the choice under the finger and reverts when it leaves', () => {
+    const state = {
+        handlers: new Map(),
+        lastSurfacePoints: new Map(),
+        capturedPointerHandlers: new Map(),
+        paletteHoverTarget: null,
+        hoverTarget: null,
+        pointerTarget: null
+    };
+    const names = [];
+    const previews = [];
+    const leaves = [];
+    const dispatch = (list) => list.forEach((event) => {
+        names.push(event.event);
+        if (event.event === 'palette_preview') previews.push(event);
+        if (event.event === 'palette_preview_leave') leaves.push(event);
+        state.handlers.get(`${event.tree_id}:${event.node_id}:${event.event}`)?.(event);
+    });
+    const tool = { treeId: 'menu', nodeId: 'tool_color', kind: 'icon_button', box: { x: 0, y: 0, width: 60, height: 60 } };
+    const wheel = { treeId: 'panel', nodeId: 'color_wheel_capture', kind: 'pointer_capture', box: { x: 100, y: 100, width: 200, height: 200 } };
+    state.handlers.set('menu:tool_color:palette_slide_open', () => {});
+    state.handlers.set('panel:color_wheel_capture:palette_choose', () => {});
+    state.handlers.set('panel:color_wheel_capture:palette_preview', () => {});
+    state.handlers.set('panel:color_wheel_capture:palette_preview_leave', () => {});
+    const pointer = createBevyUiPointerRuntime({
+        state,
+        hitTestTrees: (_canvas, point) => (
+            point.y < 80 ? tool : (point.x >= 100 && point.y >= 100 ? wheel : null)
+        ),
+        localEventForTarget: localBevyEventForTarget,
+        emitUiEvents: dispatch,
+        scrollRuntime: { begin() {}, drag() { return false; }, end() { return false; }, hover() {}, wheel() { return false; } }
+    });
+    const canvas = {};
+    const move = (x, y) => pointer.routePointerEvent({ canvas, phase: 'pointermove', point: { x, y, rectLeft: 0, rectTop: 0 }, event: { pointerId: 7 } });
+
+    // An ordinary hover (no held gesture) must never preview: that is the path a
+    // scrolling panel sees, and it must stay paint-free.
+    move(200, 200);
+    assert.equal(previews.length, 0, 'an ordinary hover does not preview');
+    assert.equal(leaves.length, 0);
+
+    pointer.routePointerEvent({ canvas, phase: 'pointerdown', point: { x: 10, y: 10, rectLeft: 0, rectTop: 0 }, event: { pointerId: 7, pointerType: 'touch', isPrimary: true, button: 0 } });
+    move(10, 40);      // the slide reveals the panel under the finger
+    move(200, 220);    // the finger lands on the colour wheel
+    assert.equal(previews.length, 1, 'the held sweep previews the wheel under the finger');
+    assert.equal(previews[0].tree_id, 'panel');
+    assert.equal(previews[0].node_id, 'color_wheel_capture');
+    assert.equal(previews[0].x, 100, 'the preview carries the point inside the wheel');
+    assert.equal(previews[0].y, 120);
+
+    // Sliding inside the same element keeps following: the preview is re-sent
+    // with the new point instead of freezing on the colour the finger entered
+    // on. This is what lets the object's background track the finger.
+    move(160, 260);
+    assert.equal(previews.length, 2, 'moving inside the wheel keeps previewing');
+    assert.equal(previews[1].x, 60);
+    assert.equal(previews[1].y, 160);
+    assert.equal(leaves.length, 0, 'staying inside the wheel does not revert');
+
+    move(50, 220);     // off every colour element
+    assert.equal(leaves.length, 1, 'leaving the colour element reverts the preview');
+    assert.equal(leaves[0].node_id, 'color_wheel_capture');
+
+    pointer.routePointerEvent({ canvas, phase: 'pointerup', point: { x: 50, y: 220, rectLeft: 0, rectTop: 0 }, event: { pointerId: 7 } });
+    assert.ok(names.includes('palette_choose') === false, 'releasing off the wheel chooses nothing');
 });

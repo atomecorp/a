@@ -120,3 +120,65 @@ test('a panel quick-mode release on the wheel or a bar chooses the pointed value
     assert.equal(applied[0].channels.a, 0);
     assert.equal(COLOR_CONTROL_CHANNELS.length, 4);
 });
+
+test('a held palette sweep previews the pointed colour and restores it on leave', async () => {
+    const previews = [];
+    const control = createColorControlRuntime({
+        id: 'color', label: 'Color', initial: { r: 255, g: 255, b: 255, a: 100 },
+        onPreview: async (channels, options) => { previews.push({ channels, phase: options?.phase }); }
+    });
+    const width = 320;
+    const wheelSize = 280;
+    const tree = control.buildNode(control.readState(), () => {}, { width });
+
+    // The colour elements carry the palette preview pair next to the quick-mode
+    // choice, so a held sweep can show the candidate and take it back.
+    ['color_wheel_capture', 'color_value_capture', 'color_opacity_capture', 'color_swatch_0_0'].forEach((nodeId) => {
+        const node = findNode(tree, nodeId);
+        assert.equal(typeof node?.on?.palette_preview, 'function', `${nodeId} previews during a sweep`);
+        assert.equal(typeof node?.on?.palette_preview_leave, 'function', `${nodeId} reverts when left`);
+    });
+
+    await control.handleEvent({ type: 'color.wheel.preview', event: { x: wheelSize / 2, y: 0 }, size: wheelSize }, {});
+    assert.equal(previews.at(-1).phase, 'preview');
+    assert.deepEqual(previews.at(-1).channels, { r: 255, g: 0, b: 0, a: 100 }, 'the wheel top previews pure red');
+    assert.deepEqual(control.readState().channels, { r: 255, g: 0, b: 0, a: 100 }, 'the panel display follows the preview');
+
+    // The wheel is painted as a circle inside a square node: a corner is off
+    // the visible wheel, so the preview reverts there instead of applying a
+    // clamped colour.
+    await control.handleEvent({ type: 'color.wheel.preview', event: { x: 0, y: 0 }, size: wheelSize }, {});
+    assert.equal(previews.at(-1).phase, 'preview_leave', 'a corner of the wheel box counts as a leave');
+    assert.equal(previews.at(-1).channels, null);
+    assert.deepEqual(control.readState().channels, { r: 255, g: 255, b: 255, a: 100 }, 'the display comes back off the circle');
+
+    await control.handleEvent({ type: 'color.wheel.preview', event: { x: wheelSize / 2, y: 0 }, size: wheelSize }, {});
+    assert.deepEqual(control.readState().channels, { r: 255, g: 0, b: 0, a: 100 }, 're-entering the circle previews again');
+    await control.handleEvent({ type: 'color.wheel.preview_leave' }, {});
+    assert.equal(previews.at(-1).channels, null);
+    assert.equal(previews.at(-1).phase, 'preview_leave');
+    assert.deepEqual(control.readState().channels, { r: 255, g: 255, b: 255, a: 100 }, 'the display returns to the pre-gesture colour');
+
+    // A bar previews its own ratio, and a swatch previews its own hex.
+    await control.handleEvent({ type: 'color.value.preview', event: { x: 0 }, width }, {});
+    assert.deepEqual(previews.at(-1).channels, { r: 0, g: 0, b: 0, a: 100 }, 'the value bar bottom previews black');
+    await control.handleEvent({ type: 'color.value.preview_leave' }, {});
+    await control.handleEvent({ type: 'color.swatch.preview', value: '#2196f3' }, {});
+    assert.deepEqual(previews.at(-1).channels, { r: 33, g: 150, b: 243, a: 100 });
+    await control.handleEvent({ type: 'color.swatch.preview_leave' }, {});
+    assert.deepEqual(control.readState().channels, { r: 255, g: 255, b: 255, a: 100 }, 'leaving every colour restores the original');
+
+    // The release still commits once, and clears the preview bookkeeping.
+    const applied = [];
+    const committed = createColorControlRuntime({
+        id: 'color', label: 'Color', initial: { r: 255, g: 255, b: 255, a: 100 },
+        onPreview: async () => {},
+        onChange: async (channels, options) => { applied.push({ channels, phase: options?.phase }); return { ok: true }; }
+    });
+    committed.buildNode(committed.readState(), () => {}, { width });
+    await committed.handleEvent({ type: 'color.wheel.preview', event: { x: wheelSize / 2, y: 0 }, size: wheelSize }, {});
+    await committed.handleEvent({ type: 'color.wheel.choose', event: { x: wheelSize / 2, y: 0 }, size: wheelSize }, { refresh: () => {} });
+    assert.equal(applied.length, 1, 'only the release writes');
+    assert.equal(applied[0].phase, 'end');
+    assert.deepEqual(applied[0].channels, { r: 255, g: 0, b: 0, a: 100 });
+});

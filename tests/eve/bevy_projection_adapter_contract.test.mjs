@@ -631,3 +631,19 @@ test('A live corner or mask change is a style patch, not a rebuild', () => {
     const removed = mapVirtualSceneStyleToBevyPatch({ id: 'masked_live', patch: { mask: null } });
     assert.equal(removed.mask, null);
 });
+
+test('a transient fill preview maps to a live colour patch that clears back to null', () => {
+    // The palette-sweep preview patches `material.fill` on the projected node
+    // only (no record): this is the payload the renderer receives, and the
+    // revert is the same op with the original fill.
+    const preview = mapVirtualSceneStyleToBevyPatch({
+        id: 'shape_color_preview',
+        patch: { material: { fill: 'rgba(255, 0, 0, 1.00)' } }
+    });
+    assert.deepEqual(preview.color, [1, 0, 0, 1]);
+    const cleared = mapVirtualSceneStyleToBevyPatch({
+        id: 'shape_color_preview',
+        patch: { material: { fill: null } }
+    });
+    assert.equal(cleared.color, null);
+});
