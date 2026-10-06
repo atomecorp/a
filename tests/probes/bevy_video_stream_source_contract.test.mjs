@@ -23,7 +23,7 @@ const makeTrack = () => ({
     stop() { this.stopCalls += 1; }
 });
 
-const withVideoStubs = async (windowRef, callback) => {
+const withVideoStubs = async (windowRef, callback, {presentable = false} = {}) => {
     const originalCreateElement = windowRef.document.createElement.bind(windowRef.document);
     const calls = { cancelVideoFrame: 0, videos: [] };
     windowRef.document.createElement = (tagName, ...args) => {
@@ -79,6 +79,7 @@ const withVideoStubs = async (windowRef, callback) => {
                 expectedDisplayTime: callbackTime
             });
         };
+        if (presentable) element.__setPresentable();
         calls.videos.push(element);
         return element;
     };
@@ -140,6 +141,45 @@ test('live MediaStream replaces URL decode, drives shared lookups at 15 fps, and
         stopAllBevyVideoDecodeSources();
         delete globalThis.window;
         delete globalThis.document;
+    }
+});
+
+test('project covers retain the actual wallpaper decoder and advancing frame source', async () => {
+    const dom = new JSDOM('<!doctype html><html><body><canvas id="eve_surface_project"></canvas></body></html>');
+    const previous = {window: globalThis.window, document: globalThis.document};
+    globalThis.window = dom.window; globalThis.document = dom.window.document;
+    const surface = dom.window.document.querySelector('canvas');
+    const {publishBevySurfaceBackground, registerBevySurfaceBackgroundRuntime, ensureBevySurfaceBackgroundApplied} =
+        await import('../../eVe/domains/rendering/bevy_surface_background_runtime.js');
+    const payloads = [];
+    try {
+        await withVideoStubs(dom.window, async (calls) => {
+            registerBevySurfaceBackgroundRuntime(surface, {started: true, wasmModule: {
+                apply_atome_bevy_surface_background: patch => payloads.push(patch),
+                request_atome_bevy_redraw() {}
+            }});
+            const wallpaper = {signature: 'persistent-video', sourceUrl: '/wallpaper.mp4', mediaKind: 'video', color: [0, 0, 0, 1]};
+            publishBevySurfaceBackground({...wallpaper, cover: [0, 0, 0, 0]}, dom.window);
+            await ensureBevySurfaceBackgroundApplied(surface);
+            const video = calls.videos[0];
+            for (let step = 0; step < 12; step++) {
+                const cover = step % 2 ? [0, 0, 0, 0] : [1, 1, 1, 1];
+                publishBevySurfaceBackground({...wallpaper, cover}, dom.window);
+                await ensureBevySurfaceBackgroundApplied(surface);
+                video.__flushVideoFrame(step * 80);
+                assert.equal(calls.videos.length, 1, 'navigation never creates a second decoder');
+                assert.equal(calls.cancelVideoFrame, 0, 'navigation never disposes the frame callback');
+                assert.equal(video.paused, false);
+                assert.equal(video.isConnected, true);
+                assert.equal(dom.window.__EVE_BEVY_VIDEO_SOURCE_FOR_ID__('__eve_surface_background_video'), video);
+                assert.deepEqual(payloads.at(-1).cover, cover);
+            }
+            assert.equal(getBevyVideoStreamSourceStatus({id: '__eve_surface_background_video', surface}).frameVersion, 12);
+        }, {presentable: true});
+    } finally {
+        unregisterBevyVideoStreamSource({id: '__eve_surface_background_video', surface});
+        globalThis.window = previous.window; globalThis.document = previous.document;
+        dom.window.close();
     }
 });
 

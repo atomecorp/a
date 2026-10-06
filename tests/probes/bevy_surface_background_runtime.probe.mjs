@@ -113,6 +113,7 @@ test('Bevy surface background runtime applies generated texture payloads', async
     assert.deepEqual(calls[0], {
         signature: 'generated:test',
         color: [0.2, 0.3, 0.4, 1],
+        cover: [0, 0, 0, 0],
         texture: { width: 1, height: 1, rgba: new Uint8Array([8, 9, 10, 255]) },
         video: null
     });
@@ -476,7 +477,7 @@ test('Bevy background runtime skips duplicate surface signatures', () => {
     assert.match(source, /IMAGE_TEXTURE_CACHE\.set\(cacheKey, pending\)/);
 });
 
-test('the wallpaper follows the workspace mode: Dashboard only, clean surface in the project', async () => {
+test('workspace navigation covers and reveals the same wallpaper', async () => {
     const harness = createWindowHarness();
     const previousGetComputedStyle = globalThis.getComputedStyle;
     const getComputedStyle = () => ({
@@ -521,20 +522,21 @@ test('the wallpaper follows the workspace mode: Dashboard only, clean surface in
         globalThis.window.__eveWorkspaceMode = { mode: 'project', projectId: 'project-1' };
         harness.emit('eve:workspace-mode-changed', { mode: 'project', projectId: 'project-1' });
         const project = globalThis.window.__eveSurfaceBackground;
-        assert.equal(project.signature, 'project-default-surface-background');
-        assert.equal(project.mode, 'color');
+        assert.equal(project.signature, dashboard.signature);
+        assert.equal(project.sourceUrl, dashboard.sourceUrl);
+        assert.equal(project.mode, 'image');
         assert.equal(project.fit, 'cover');
-        assert.deepEqual(project.color, [245 / 255, 245 / 255, 247 / 255, 1]);
+        assert.deepEqual(project.cover, [245 / 255, 245 / 255, 247 / 255, 1]);
         assert.equal(Object.hasOwn(project, 'texture'), false);
-        assert.equal(Object.hasOwn(project, 'sourceUrl'), false);
+        assert.equal(Object.hasOwn(project, 'sourceUrl'), true);
 
-        // Coming back must republish the image, not skip it as a duplicate of the
-        // image that was already applied before the project excursion.
+        // Coming back reveals the same source without invalidating it.
         globalThis.window.__eveWorkspaceMode = { mode: 'dashboard', projectId: '__eve_dashboard_workspace__' };
         harness.emit('eve:workspace-mode-changed', { mode: 'dashboard', projectId: '__eve_dashboard_workspace__' });
         const restored = globalThis.window.__eveSurfaceBackground;
         assert.equal(restored.signature, 'image:cover:/api/uploads/wallpaper.png');
         assert.equal(restored.sourceUrl, '/api/uploads/wallpaper.png');
+        assert.deepEqual(restored.cover, [0, 0, 0, 0]);
     } finally {
         if (previousGetComputedStyle === undefined) {
             delete globalThis.getComputedStyle;

@@ -54,6 +54,9 @@ pub struct AtomeSurfaceBackgroundPatch {
     pub signature: String,
     pub color: [f32; 4],
     pub texture: Option<AtomeTexture>,
+    /// Project colour above the retained wallpaper; transparent reveals it.
+    #[serde(default)]
+    pub cover: [f32; 4],
     /// An animated wallpaper: one hidden `<video>` the page registers under
     /// `id` in the video source lookup. One quad covers the surface with a centred crop.
     #[serde(default)]

@@ -38,7 +38,6 @@ use std::any::TypeId;
 use wasm_bindgen::{JsCast, JsValue};
 
 use crate::{
-    render_math::depth_for_layer,
     types::{AtomeColorFilters, AtomeTransition},
     video_external_texture::AtomeVideoExternalTexture,
 };
@@ -54,8 +53,7 @@ const IDENTITY_GAMUT_CONVERSION: [f32; 9] = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 
 #[derive(Resource)]
 struct VideoExternalTextureShader(Handle<Shader>);
 
-/// La texture 1x1 opaque liee a toute video SANS masque : meme liaison, meme
-/// formule d'alpha, aucun cas particulier dans le shader.
+/// Opaque mask for unmasked videos using the same shader contract.
 #[derive(Resource)]
 struct VideoExternalMaskFallback(Handle<Image>);
 
@@ -83,30 +81,19 @@ type DrawVideoExternalTexture2d = (
     SetMesh2dViewBindGroup<0>,
     SetMesh2dBindGroup<1>,
     SetVideoExternalTextureBindGroup<2>,
-    DrawVideoExternalTextureMesh2d,
+    DrawMesh2d,
 );
 
-// VideoParams uniform — matches the struct in video_external.wgsl:
-// base = (opacity, brightness, contrast, saturate); filters = (grayscale, sepia,
-// invert, hue); transition = (kind, progress, role, softness).
+// VideoParams uniform order matches video_external.wgsl.
 fn video_params_bytes(
     opacity: f32,
     filters: &AtomeColorFilters,
     transition: &AtomeTransition,
 ) -> [u8; 48] {
     let values: [f32; 12] = [
-        opacity.clamp(0.0, 1.0),
-        filters.brightness,
-        filters.contrast,
-        filters.saturate,
-        filters.grayscale,
-        filters.sepia,
-        filters.invert,
-        filters.hue,
-        transition.kind,
-        transition.progress,
-        transition.role,
-        transition.softness,
+        opacity.clamp(0.0, 1.0), filters.brightness, filters.contrast, filters.saturate,
+        filters.grayscale, filters.sepia, filters.invert, filters.hue,
+        transition.kind, transition.progress, transition.role, transition.softness,
     ];
     let mut bytes = [0u8; 48];
     for (index, value) in values.iter().enumerate() {
@@ -124,7 +111,6 @@ pub fn build_web_external_texture_renderer(app: &mut App) {
         let mut images = app.world_mut().resource_mut::<Assets<Image>>();
         images.add(mask_fallback_image())
     };
-
     if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
         render_app
             .insert_resource(VideoExternalTextureShader(shader))
@@ -181,9 +167,7 @@ fn init_video_external_texture_pipeline(
                 },
                 count: None,
             },
-            // La silhouette du masque : une texture d'alpha echantillonnee par
-            // le fragment shader (une texture externe ne peut pas etre recopiee
-            // cote CPU comme l'est celle d'un sprite).
+            // Mask alpha is sampled by the external-texture fragment shader.
             BindGroupLayoutEntry {
                 binding: 3,
                 visibility: ShaderStages::FRAGMENT,
@@ -216,8 +200,7 @@ fn init_video_external_texture_pipeline(
     });
 }
 
-/// Une image 1x1 blanche : l'alpha du masque y vaut 1, donc la video sans
-/// masque traverse le meme chemin que la video masquee.
+/// White mask keeps unmasked videos on the shared shader path.
 fn mask_fallback_image() -> Image {
     Image::new_fill(
         Extent3d {
@@ -234,14 +217,12 @@ fn mask_fallback_image() -> Image {
 
 impl SpecializedRenderPipeline for VideoExternalTexturePipeline {
     type Key = Mesh2dPipelineKey;
-
     fn specialize(&self, key: Self::Key) -> RenderPipelineDescriptor {
         let vertex_layout = VertexBufferLayout::from_vertex_formats(
             VertexStepMode::Vertex,
             vec![VertexFormat::Float32x3, VertexFormat::Float32x2],
         );
         let format = key.target_format();
-
         RenderPipelineDescriptor {
             vertex: VertexState {
                 shader: self.shader.clone(),
@@ -304,14 +285,10 @@ fn prepare_video_external_texture_bind_groups(
     videos: Query<(&MainEntity, &AtomeVideoExternalTexture)>,
 ) {
     prepared.0.clear();
-
-    // Sans l'image de repli, aucune video ne peut etre liee : la liaison 3 est
-    // obligatoire dans le layout. Elle existe des la construction du plugin,
-    // donc ce cas ne se produit qu'a la toute premiere image.
+    // Binding 3 is mandatory and may still be uploading on the first frame.
     let Some(fallback_image) = gpu_images.get(&mask_fallback.0) else {
         return;
     };
-
     for (main_entity, video) in &videos {
         let Some(source) = hidden_video_source_for_id(&video.id) else {
             continue;
@@ -319,7 +296,6 @@ fn prepare_video_external_texture_bind_groups(
         if source.width() == 0 || source.height() == 0 {
             continue;
         }
-
         let external_texture = render_device.wgpu_device().create_external_texture(
             &wgpu::ExternalTextureDescriptor {
                 label: Some("atome_video_external_texture"),
@@ -342,8 +318,7 @@ fn prepare_video_external_texture_bind_groups(
             contents: &params_uniform,
             usage: BufferUsages::UNIFORM,
         });
-        // La silhouette du masque quand le noeud en porte un, l'image blanche
-        // de repli sinon : la video se lit dans les deux cas.
+        // Both masked and unmasked videos use the same bindings.
         let mask_image = video
             .mask_texture
             .as_ref()
@@ -401,7 +376,6 @@ fn queue_video_external_textures(
     let draw_video = transparent_draw_functions
         .read()
         .id::<DrawVideoExternalTexture2d>();
-
     for (visible_entities, view, msaa) in &views {
         let Some(transparent_phase) = transparent_render_phases.get_mut(&view.retained_view_entity)
         else {
@@ -421,11 +395,10 @@ fn queue_video_external_textures(
                     .iter()
                     .map(|(visible_entity, render_entity)| (*render_entity, *visible_entity)),
             );
-
         for (render_entity, visible_entity) in mesh2d_visible_entities {
-            let Ok(video) = videos.get(render_entity) else {
+            if videos.get(render_entity).is_err() {
                 continue;
-            };
+            }
             let Some(mesh_instance) = render_mesh_instances.get(&visible_entity) else {
                 continue;
             };
@@ -439,12 +412,10 @@ fn queue_video_external_textures(
                     mesh.index_format(),
                 );
             let pipeline_id = pipelines.specialize(&pipeline_cache, &pipeline, key);
-            let mesh_z = depth_for_layer(video.layer);
-            // Transient, like sprites: this system re-queues every visible video
-            // each frame. A retained item was never removed, so a despawned (or
-            // no longer visible) video left its pipeline in the phase, and once
-            // that pipeline no longer matched the pass the whole command buffer
-            // was invalid — the canvas went black for good.
+            // Match sprite ordering, including the reserved wallpaper depth.
+            let mesh_z = mesh_instance.transforms.world_from_local.translation.z;
+            // Transient items disappear with their video; retaining obsolete
+            // pipelines invalidates later command buffers.
             transparent_phase.add_transient(Transparent2d {
                 entity: (render_entity, visible_entity.into()),
                 draw_function: draw_video,
@@ -465,7 +436,6 @@ impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetVideoExternalTextureB
     type Param = SRes<PreparedVideoExternalTextureBindGroups>;
     type ViewQuery = ();
     type ItemQuery = Read<AtomeVideoExternalTexture>;
-
     fn render<'w>(
         item: &P,
         _view: (),
@@ -482,24 +452,6 @@ impl<P: PhaseItem, const I: usize> RenderCommand<P> for SetVideoExternalTextureB
             record_video_external_event("bevy.video.external.draw", &video.id);
         }
         RenderCommandResult::Success
-    }
-}
-
-struct DrawVideoExternalTextureMesh2d;
-
-impl<P: PhaseItem> RenderCommand<P> for DrawVideoExternalTextureMesh2d {
-    type Param = <DrawMesh2d as RenderCommand<P>>::Param;
-    type ViewQuery = <DrawMesh2d as RenderCommand<P>>::ViewQuery;
-    type ItemQuery = <DrawMesh2d as RenderCommand<P>>::ItemQuery;
-
-    fn render<'w>(
-        item: &P,
-        view: bevy::ecs::query::ROQueryItem<'w, '_, Self::ViewQuery>,
-        entity: Option<bevy::ecs::query::ROQueryItem<'w, '_, Self::ItemQuery>>,
-        param: bevy::ecs::system::SystemParamItem<'w, '_, Self::Param>,
-        pass: &mut TrackedRenderPass<'w>,
-    ) -> RenderCommandResult {
-        DrawMesh2d::render(item, view, entity, param, pass)
     }
 }
 

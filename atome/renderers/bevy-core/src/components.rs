@@ -247,6 +247,9 @@ pub struct AtomeWaveformPlaybackOverlay {
 #[derive(Clone, Copy, Debug, Component)]
 pub struct AtomeSurfaceBackground;
 
+#[derive(Clone, Copy, Debug, Component)]
+pub struct AtomeSurfaceBackgroundCover;
+
 #[derive(Clone, Debug, Component)]
 pub struct AtomeSurfaceBackgroundVisual {
     pub signature: String,

@@ -37,7 +37,7 @@ const createCanvasStub = () => {
     return {width: 0, height: 0, getContext: () => context};
 };
 
-const createProjectSurfaceHarness = ({mode = 'project', projectState = null, params = {}} = {}) => {
+const createProjectSurfaceHarness = ({mode = 'project', projectState = null, params = {}, backgroundOptions = {}} = {}) => {
     const previous = {window: globalThis.window, document: globalThis.document};
     const dom = installDom('<!doctype html><html><body><div id="eve_view"></div></body></html>');
     const windowRef = dom.window;
@@ -59,7 +59,8 @@ const createProjectSurfaceHarness = ({mode = 'project', projectState = null, par
         resolveBackgroundMediaUrl: (url) => url,
         isProtectedMediaUrl: () => false,
         resolveProtectedBackgroundObjectUrl: async () => '',
-        clearBackgroundObjectUrl: () => {}
+        clearBackgroundObjectUrl: () => {},
+        ...backgroundOptions
     });
     return {
         runtime,
@@ -78,6 +79,42 @@ const createProjectSurfaceHarness = ({mode = 'project', projectState = null, par
 };
 
 const nextTick = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+test('navigation retains a protected wallpaper URL, including a fetch completing inside a project', async () => {
+    let resolveMedia;
+    let fetches = 0;
+    let clears = 0;
+    const harness = createProjectSurfaceHarness({mode: 'dashboard', params: {
+        backgroundSource: 'image', backgroundImageUrl: '/protected.mp4', backgroundMediaKind: 'video'
+    }, backgroundOptions: {
+        isProtectedMediaUrl: () => true,
+        resolveProtectedBackgroundObjectUrl: () => { fetches++; return new Promise(resolve => { resolveMedia = resolve; }); },
+        clearBackgroundObjectUrl: () => { clears++; }
+    }});
+    const navigate = mode => {
+        harness.windowRef.__eveWorkspaceMode = {mode, projectId: PROJECT_ID};
+        harness.windowRef.dispatchEvent(new harness.windowRef.CustomEvent('eve:workspace-mode-changed'));
+    };
+    try {
+        harness.runtime.start();
+        navigate('project');
+        resolveMedia('blob:retained-wallpaper');
+        await nextTick();
+        assert.equal(harness.latest().sourceUrl, 'blob:retained-wallpaper');
+        assert.deepEqual(harness.latest().cover, readDefaultSurfaceBackgroundRgba());
+        const signature = harness.latest().signature;
+        for (const mode of ['dashboard', 'project', 'dashboard', 'project', 'dashboard']) {
+            navigate(mode);
+            assert.equal(harness.latest().sourceUrl, 'blob:retained-wallpaper');
+            assert.equal(harness.latest().signature, signature);
+            assert.deepEqual(harness.latest().cover, mode === 'project' ? readDefaultSurfaceBackgroundRgba() : [0, 0, 0, 0]);
+        }
+        assert.equal(fetches, 1);
+        assert.equal(clears, 0, 'navigation cannot revoke the decoder source');
+    } finally {
+        harness.runtime.stop(); harness.restore();
+    }
+});
 
 test('the project rail resolves the colour tool and keeps the sibling project actions', () => {
     assert.equal(CONTEXT_MENUS.menus.sidebar.objects.project.couleur, 'beginner',
@@ -100,7 +137,8 @@ test('full-surface Dashboard Matrix shares the current wallpaper across project 
         PROJECT_SCENES.set(PROJECT_ID, {records: new Map()});
         harness.runtime.start();
         await nextTick();
-        assert.equal(harness.latest().mode, 'color');
+        assert.equal(harness.latest().sourceUrl, '/wallpaper.mp4');
+        assert.deepEqual(harness.latest().cover, RED_RGBA);
         const records = PROJECT_SCENES.get(PROJECT_ID).records;
         records.set('matrix', {id: 'matrix', properties: {module: 'matrix', layout_fill: 'surface', matrix_background: false}});
         const rendered = () => harness.windowRef.dispatchEvent(new harness.windowRef.CustomEvent('eve:project-render-done', {detail: {projectId: PROJECT_ID}}));
@@ -108,6 +146,7 @@ test('full-surface Dashboard Matrix shares the current wallpaper across project 
         assert.equal(harness.latest().sourceUrl, '/wallpaper.mp4');
         assert.equal(harness.latest().mediaKind, 'video');
         assert.equal(harness.latest().fit, 'cover');
+        assert.deepEqual(harness.latest().cover, [0, 0, 0, 0]);
         const wallpaper = harness.latest();
         harness.commit({background: '#000'});
         assert.deepEqual(harness.latest(), wallpaper, 'a project colour cannot cover the active Dashboard wallpaper');
@@ -117,11 +156,11 @@ test('full-surface Dashboard Matrix shares the current wallpaper across project 
         assert.equal(harness.latest().sourceUrl, '/current.png', 'the current wallpaper is read live');
         records.get('matrix').properties.layout_fill = 'none';
         rendered();
-        assert.equal(harness.latest().mode, 'color', 'ordinary embedded Matrix keeps its project colour');
+        assert.deepEqual(harness.latest().cover, [0, 0, 0, 1], 'ordinary Matrix covers the retained wallpaper');
         records.get('matrix').properties.layout_fill = 'surface';
         records.get('matrix').properties.deleted = true;
         rendered();
-        assert.equal(harness.latest().mode, 'color', 'deleted Dashboard does not own the backplane');
+        assert.deepEqual(harness.latest().cover, [0, 0, 0, 1], 'deleted Dashboard does not reveal the wallpaper');
     } finally {
         harness.runtime.stop();
         harness.restore();
@@ -149,16 +188,15 @@ test('the project surface paints the committed project colour and the default wi
     const harness = createProjectSurfaceHarness({projectState: {properties: {background: PROJECT_RED}}});
     try {
         harness.runtime.start();
-        assert.equal(harness.latest().signature, 'project-default-surface-background',
-            'the project is painted before the canonical colour is read');
+        assert.deepEqual(harness.latest().cover, readDefaultSurfaceBackgroundRgba(),
+            'the cover is painted before the canonical colour is read');
         await nextTick();
-        assert.equal(harness.latest().signature, `project-color-surface-background:${PROJECT_ID}:${RED_RGBA.join(':')}`);
-        assert.deepEqual(harness.latest().color, RED_RGBA);
-        assert.equal(harness.latest().mode, 'color');
+        const wallpaperSignature = harness.latest().signature;
+        assert.deepEqual(harness.latest().cover, RED_RGBA);
         // A colour applied while the work surface is visible repaints at the gesture.
         harness.commit({background: 'rgba(0, 188, 212, 1.00)'});
-        assert.equal(harness.latest().signature, `project-color-surface-background:${PROJECT_ID}:${[0, 188 / 255, 212 / 255, 1].join(':')}`);
-        assert.deepEqual(harness.latest().color, [0, 188 / 255, 212 / 255, 1]);
+        assert.equal(harness.latest().signature, wallpaperSignature);
+        assert.deepEqual(harness.latest().cover, [0, 188 / 255, 212 / 255, 1]);
     } finally {
         harness.runtime.stop();
         harness.restore();
@@ -170,8 +208,7 @@ test('a project without colour keeps the default surface and the colour tool spe
     try {
         plain.runtime.start();
         await nextTick();
-        assert.equal(plain.latest().signature, 'project-default-surface-background');
-        assert.deepEqual(plain.latest().color, readDefaultSurfaceBackgroundRgba());
+        assert.deepEqual(plain.latest().cover, readDefaultSurfaceBackgroundRgba());
     } finally {
         plain.runtime.stop();
         plain.restore();
@@ -181,8 +218,8 @@ test('a project without colour keeps the default surface and the colour tool spe
         try {
             harness.runtime.start();
             await nextTick();
-            assert.ok(String(harness.latest().signature).startsWith('project-color-surface-background:'),
-                `${key} is read as the project surface colour`);
+            assert.deepEqual(harness.latest().cover, readSurfaceBackgroundRgba(value),
+                `${key} is read as the project cover colour`);
         } finally {
             harness.runtime.stop();
             harness.restore();

@@ -9,7 +9,7 @@ use crate::{
     render_math::{color_from_rgba, BEVY_LAYER_DEPTH_LIMIT},
     texture::image_handle_from_texture,
     types::{
-        AtomeColorFilters, AtomeSurfaceBackground,
+        AtomeColorFilters, AtomeSurfaceBackground, AtomeSurfaceBackgroundCover,
         AtomeSurfaceBackgroundPatch, AtomeSurfaceBackgroundVideo, AtomeSurfaceBackgroundVisual,
         AtomeBevyRendererConfig, AtomeTransition,
     },
@@ -19,6 +19,7 @@ use crate::{
 const BACKGROUND_DEPTH: f32 = -BEVY_LAYER_DEPTH_LIMIT - 1.0;
 // The video sits above its base colour, below every atome layer.
 const BACKGROUND_VIDEO_DEPTH: f32 = BACKGROUND_DEPTH + 0.5;
+const BACKGROUND_COVER_DEPTH: f32 = BACKGROUND_DEPTH + 0.75;
 
 pub(crate) fn cover_source_rect(
     surface_width: f32,
@@ -163,6 +164,26 @@ pub fn apply_surface_background(
         let config = world.resource::<AtomeBevyRendererConfig>();
         (config.width, config.height)
     };
+    let cover_entity = world
+        .query_filtered::<Entity, With<AtomeSurfaceBackgroundCover>>()
+        .iter(world).next();
+    let cover = (
+        AtomeSurfaceBackgroundCover,
+        Sprite::from_color(color_from_rgba(patch.cover), Vec2::new(surface_width, surface_height)),
+        Transform::from_translation(Vec3::new(0.0, 0.0, BACKGROUND_COVER_DEPTH)),
+    );
+    if let Some(entity) = cover_entity {
+        world.entity_mut(entity).insert(cover);
+    } else {
+        world.spawn(cover);
+    }
+    // Cover-only updates must not recreate the resident texture or video quad.
+    if let Some(entity) = existing {
+        if world.get::<AtomeSurfaceBackgroundVisual>(entity)
+            .is_some_and(|visual| visual.signature == patch.signature) {
+            return Ok(entity);
+        }
+    }
     let (sprite, fill_handle, fill_size) = {
         let mut images = world
             .get_resource_mut::<Assets<Image>>()
@@ -203,15 +224,18 @@ pub fn resize_surface_background(world: &mut World) {
         sprite.custom_size = Some(Vec2::new(surface_width, surface_height));
         sprite.rect = cover_source_rect(surface_width, surface_height, visual.texture_size);
     }
+    for mut sprite in world.query_filtered::<&mut Sprite, With<AtomeSurfaceBackgroundCover>>().iter_mut(world) {
+        sprite.custom_size = Some(Vec2::new(surface_width, surface_height));
+    }
     // Rebuild the video quad with the centred crop for the new surface size.
-    let videos: Vec<(Entity, AtomeSurfaceBackgroundVideo)> = world
-        .query::<(Entity, &AtomeSurfaceBackgroundVideo)>()
+    let videos: Vec<(Handle<Mesh>, AtomeSurfaceBackgroundVideo)> = world
+        .query::<(&Mesh2d, &AtomeSurfaceBackgroundVideo)>()
         .iter(world)
-        .map(|(entity, video)| (entity, video.clone()))
+        .map(|(mesh, video)| (mesh.0.clone(), video.clone()))
         .collect();
-    for (entity, video) in videos {
-        if let Ok(mesh) = video_background_mesh_handle(world, surface_width, surface_height, &video) {
-            world.entity_mut(entity).insert(Mesh2d(mesh));
-        }
+    for (handle, video) in videos {
+        let mut meshes = world.resource_mut::<Assets<Mesh>>();
+        let (size, uv) = video_background_geometry(surface_width, surface_height, &video);
+        if let Some(mut mesh) = meshes.get_mut(&handle) { *mesh = video_background_mesh(size, uv); };
     }
 }

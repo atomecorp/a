@@ -8,6 +8,19 @@ import { commitWorkspaceEvents, getGuestAtome, listGuestAtomes, listWorkspaceEve
 const owns = message => ['events', 'state-current', 'atome'].includes(message?.type);
 export function ownsBrowserWorkspaceMessage(message) { return !isTauriRuntime() && owns(message); }
 
+// Local storage authorizes by the session's owner namespace. Project that
+// existing authority for readers such as contextual menus; never persist it or
+// replace an access projection already supplied by the server.
+const projectLocalOwnerAccess = (state, owner) => {
+    if (String(state?.owner_id || '') !== owner) throw new Error('workspace_identity_mismatch');
+    if (state.capabilities) return state;
+    return { ...state, capabilities: {
+        read: true, write: true, create: true, delete: true, share: true,
+        properties: Object.fromEntries(Object.keys(state.properties || {}).map(name =>
+            [name, { write: true, delete: true, share: true }]))
+    } };
+};
+
 export async function browserWorkspaceRequest(message) {
     const session = getSessionState();
     if (!['anonymous', 'authenticated'].includes(session.mode) || !session.user?.id) throw new Error('local_authorization_required');
@@ -20,13 +33,15 @@ export async function browserWorkspaceRequest(message) {
     } else if (message.type === 'events' && message.action === 'list') {
         result = { events: await listWorkspaceEvents(owner, message) };
     } else if (['state-current', 'atome'].includes(message.type) && message.action === 'get') {
-        const state = await getGuestAtome(owner, message.atome_id);
-        if (!state) throw new Error('atome_not_available_locally');
+        const record = await getGuestAtome(owner, message.atome_id);
+        if (!record) throw new Error('atome_not_available_locally');
+        const state = projectLocalOwnerAccess(record, owner);
         result = { state, atome: state, data: state };
     } else if (['state-current', 'atome'].includes(message.type) && message.action === 'list') {
         const records = (await listGuestAtomes(owner, { include_deleted: message.include_deleted, type: message.atome_type }))
             .filter(row => !message.project_id || row.project_id === message.project_id || row.atome_id === message.project_id)
-            .filter(row => !message.parent_id || row.parent_id === message.parent_id);
+            .filter(row => !message.parent_id || row.parent_id === message.parent_id)
+            .map(row => projectLocalOwnerAccess(row, owner));
         const offset = Math.max(0, Number(message.offset) || 0), limit = Math.max(1, Number(message.limit) || 1000);
         result = { states: records.slice(offset, offset + limit), atomes: records.slice(offset, offset + limit), total: records.length };
     } else throw new Error('workspace_action_unsupported');

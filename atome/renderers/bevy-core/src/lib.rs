@@ -70,3 +70,7 @@ mod panel_surface_paint_tests;
 #[cfg(test)]
 #[path = "../../../../tests/rendering/shadow_outer_knockout.rs"]
 mod shadow_outer_knockout_tests;
+
+#[cfg(test)]
+#[path = "../../../../tests/rendering/persistent_wallpaper.rs"]
+mod persistent_wallpaper_tests;
