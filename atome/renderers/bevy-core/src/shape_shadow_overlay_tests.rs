@@ -1,11 +1,9 @@
 use bevy::{image::Image, prelude::*};
 
-use crate::shape_shadow_overlay::{
-    build_backdrop_shadow_texture_rgba, build_shape_shadow_texture_rgba,
-};
+use crate::shape_shadow_overlay::build_shape_shadow_texture_rgba;
 use crate::*;
 
-fn shape_node(id: &str) -> AtomeRenderNode {
+pub(crate) fn shape_node(id: &str) -> AtomeRenderNode {
     AtomeRenderNode {
         project_space: false,
         id: id.to_string(),
@@ -48,7 +46,7 @@ fn shape_node(id: &str) -> AtomeRenderNode {
     }
 }
 
-fn test_world() -> World {
+pub(crate) fn test_world() -> World {
     let mut world = World::new();
     world.insert_resource(AtomeEntityTable::default());
     world.insert_resource(AtomeBevyRendererConfig::empty(640.0, 480.0));
@@ -59,7 +57,7 @@ fn test_world() -> World {
 
 #[test]
 fn backdrop_shadow_keeps_the_outer_halo_but_never_fills_the_tool_interior() {
-    let (width, height, rgba) = build_backdrop_shadow_texture_rgba(
+    let (width, height, rgba) = crate::shadow_texture::build_gaussian_outer_shadow_texture_rgba(
         [0.0, 0.0, 0.0, 1.0],
         60.0,
         60.0,
@@ -424,8 +422,7 @@ fn rounded_shape_shadow_overlay_uses_card_radius() {
         .as_ref()
         .expect("rounded shadow should keep rgba data");
     assert_eq!(alpha_at(data, width, 1, 10), 0);
-    // Le corps de l'ombre est plein : un offset ne decouvre donc jamais de vide.
-    assert!(alpha_at(data, width, 72, 37) > 100);
+    assert_eq!(alpha_at(data, width, 72, 37), 0);
     assert!(alpha_at(data, width, 132, 37) > 0);
 }
 

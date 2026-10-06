@@ -106,7 +106,18 @@ mod video_clip_tests {
         let before = world.resource::<Assets<Mesh>>().len();
         apply_video_clip_mesh(&mut world, entity, original, visible).expect("clip again");
         assert_eq!(world.get::<AtomeVideoClipMesh>(entity).copied().map(|state| state.0), Some([140.0, 100.0, 0.0, 0.0, 0.7, 1.0]));
-        assert!(world.resource::<Assets<Mesh>>().len() > before, "la decoupe est bien reposee");
+        assert_eq!(world.resource::<Assets<Mesh>>().len(), before, "clipping reuses the rebuilt quad");
+        let mesh = world.resource::<Assets<Mesh>>().get(&world.get::<Mesh2d>(entity).unwrap().0).unwrap();
+        let Some(bevy::mesh::VertexAttributeValues::Float32x2(uvs)) = mesh.attribute(Mesh::ATTRIBUTE_UV_0) else {
+            panic!("clipped video UVs required");
+        };
+        for uv in uvs {
+            assert!(uv[0] <= 0.70001, "the rebuilt quad is cropped again");
+        }
+        let Some(bevy::mesh::VertexAttributeValues::Float32x3(vertices)) = mesh.attribute(Mesh::ATTRIBUTE_POSITION) else {
+            panic!("clipped video vertices required");
+        };
+        assert!(vertices.iter().all(|vertex| vertex[0].abs() <= 70.001));
     }
 
     #[test]

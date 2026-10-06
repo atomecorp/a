@@ -333,3 +333,13 @@ eve/application
 
 # Shared Bevy panel stacking regression
 !tests/eve/bevy_panel_stack_contract.test.mjs
+
+# Authorized Matrix and native Interaction regressions
+!tests/eve/matrix_grid_objects.test.mjs
+!tests/eve/matrix_grid_relayout.test.mjs
+!tests/eve/interaction_native_extensions.test.mjs
+!tests/eve/interaction_hold_surface.test.mjs
+
+!tests/eve/project_templates_panel.test.mjs
+!tests/eve/project_preview_runtime.test.mjs
+!tests/rendering/shadow_outer_knockout.rs

@@ -135,6 +135,7 @@ const installMockBrowserEnv = () => {
     globalThis.Node = window.Node;
     globalThis.CustomEvent = window.CustomEvent;
     globalThis.Event = window.Event;
+    globalThis.WebSocket = window.WebSocket;
     globalThis.MouseEvent = window.MouseEvent;
     globalThis.PointerEvent = window.PointerEvent || window.MouseEvent;
     globalThis.localStorage = window.localStorage;

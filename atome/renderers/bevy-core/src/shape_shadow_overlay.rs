@@ -158,23 +158,28 @@ fn cached_shape_shadow_handle(
             .total_bytes
             .saturating_sub(cache.byte_sizes.remove(&key).unwrap_or(0));
     }
-    // The two silhouettes are two different images: the drop shadow is the
-    // BLURRED silhouette, the block shadow is the hard silhouette itself (and
-    // its
-    // `invert` band). Neither is ever built from the other.
+    let grown = AtomeShapeSilhouette {
+        width: (silhouette.width + shadow.spread * 2.0).max(1.0),
+        height: (silhouette.height + shadow.spread * 2.0).max(1.0),
+        corner_radii: silhouette.corner_radii.map(|radius|
+            if radius > 0.0 { (radius + shadow.spread).max(0.0) } else { 0.0 }),
+        geometry: silhouette.geometry,
+    };
+    // Block keeps its hard silhouette. Drop blurs then excludes the owner's
+    // interior, including when spread and offset move the shadow relative to it.
     let texture = if shadow.kind == crate::types::AtomeShadowKind::Block {
         build_block_shadow_texture_rgba_for_silhouette(
-            silhouette,
+            &grown,
             shadow.color,
             shadow.spread,
             shadow.invert,
         )
     } else {
         build_gaussian_shadow_texture_rgba_for_silhouette(
-            silhouette,
+            &grown,
             shadow.color,
             shadow.blur,
-            false,
+            Some((silhouette, [shadow.offset_x - shadow.spread, shadow.offset_y - shadow.spread])),
         )
     };
     let Some((image_width, image_height, rgba)) = texture else {
@@ -240,23 +245,6 @@ pub(crate) fn build_shape_shadow_texture_rgba(
         height,
         corner_radii,
         style.shadow_size,
-    )
-}
-
-#[cfg(test)]
-pub(crate) fn build_backdrop_shadow_texture_rgba(
-    color: [f32; 4],
-    width: f32,
-    height: f32,
-    corner_radii: crate::texture::AtomeCornerRadii,
-    blur: f32,
-) -> Option<(u32, u32, Vec<u8>)> {
-    crate::shadow_texture::build_gaussian_outer_shadow_texture_rgba(
-        color,
-        width,
-        height,
-        corner_radii,
-        blur,
     )
 }
 
@@ -384,16 +372,10 @@ pub fn rebuild_shape_shadow_overlay(world: &mut World, entity: Entity) -> Result
         .get::<AtomeVisualOpacity>(entity)
         .map(|value| value.0)
         .unwrap_or_else(|| normalize_opacity(1.0));
-    let shadow_width = (size.width.max(1.0) + shadow.spread * 2.0).max(1.0);
-    let shadow_height = (size.height.max(1.0) + shadow.spread * 2.0).max(1.0);
-    // The shadow silhouette follows the shape, so a partially rounded surface
-    // keeps its square corners square in the shadow too. Spread grows every
-    // non-zero corner; a zero corner stays sharp.
     let corner_radii = world
         .get::<AtomeCornerRadius>(entity)
         .map(|value| value.0)
-        .unwrap_or([0.0; 4])
-        .map(|radius| if radius > 0.0 { (radius + shadow.spread).max(0.0) } else { 0.0 });
+        .unwrap_or([0.0; 4]);
     // La silhouette de l'ombre est celle de LA variante : une etoile projette
     // ses pointes, un polygone ses sommets, et l'arrondi de sommets du panneau
     // Arrondi se retrouve dans l'ombre du meme coup.
@@ -402,8 +384,8 @@ pub fn rebuild_shape_shadow_overlay(world: &mut World, entity: Entity) -> Result
             .get::<AtomeShapeProfile>(entity)
             .map(|value| value.0)
             .unwrap_or_default(),
-        width: shadow_width,
-        height: shadow_height,
+        width: size.width.max(1.0),
+        height: size.height.max(1.0),
         corner_radii,
     };
     let resolved_mask = world

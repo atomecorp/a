@@ -117,25 +117,19 @@ pub(crate) fn build_shadow_texture_rgba_for_alpha(
         rgba[offset] = channel_to_u8(shadow.color[0]);
         rgba[offset + 1] = channel_to_u8(shadow.color[1]);
         rgba[offset + 2] = channel_to_u8(shadow.color[2]);
-        rgba[offset + 3] = channel_to_u8(shadow.color[3] * value);
+        let cutout = if shadow.kind == AtomeShadowKind::Drop {
+            let x = index % width;
+            let y = index / width;
+            let owner_x = x as f32 - padding as f32 + shadow.offset_x - shadow.spread;
+            let owner_y = y as f32 - padding as f32 + shadow.offset_y - shadow.spread;
+            if owner_x >= 0.0 && owner_y >= 0.0
+                && owner_x < source_width as f32 && owner_y < source_height as f32 {
+                source_rgba[(owner_y as usize * source_width as usize + owner_x as usize) * 4 + 3] as f32 / 255.0
+            } else { 0.0 }
+        } else { 0.0 };
+        rgba[offset + 3] = channel_to_u8(shadow.color[3] * value * (1.0 - cutout));
     }
     Some((width as u32, height as u32, rgba))
-}
-
-fn build_gaussian_shadow_texture_rgba_with_cutout(
-    color: [f32; 4],
-    width: f32,
-    height: f32,
-    corner_radii: AtomeCornerRadii,
-    blur: f32,
-    inner_cutout: bool,
-) -> Option<(u32, u32, Vec<u8>)> {
-    build_gaussian_shadow_texture_rgba_for_silhouette(
-        &rect_silhouette(width, height, corner_radii),
-        color,
-        blur,
-        inner_cutout,
-    )
 }
 
 /// La meme ombre portee, mais pour une silhouette quelconque : une etoile
@@ -144,14 +138,11 @@ pub(crate) fn build_gaussian_shadow_texture_rgba_for_silhouette(
     silhouette: &AtomeShapeSilhouette,
     color: [f32; 4],
     blur: f32,
-    inner_cutout: bool,
+    owner_cutout: Option<(&AtomeShapeSilhouette, [f32; 2])>,
 ) -> Option<(u32, u32, Vec<u8>)> {
     let (width, height) = (silhouette.width, silhouette.height);
-    // La silhouette PLEINE est peinte, interieur compris. L'ancienne version ne
-    // peignait que l'exterieur en supposant que l'objet recouvrait le trou : des
-    // que l'ombre est decalee, le trou voyage avec elle et laisse une bande
-    // claire entre l'objet et son ombre. Un flou nul reste une ombre : c'est un
-    // aplat dur, pas un trou.
+    // Blur the complete shadow silhouette first. Knock out the owner afterwards,
+    // in owner coordinates: its hole must not travel with a shifted shadow.
     if color[3] <= 0.0 {
         return None;
     }
@@ -182,11 +173,11 @@ pub(crate) fn build_gaussian_shadow_texture_rgba_for_silhouette(
     let mut rgba = vec![0; image_width * image_height * 4];
     for (index, value) in alpha.iter().enumerate() {
         let offset = index * 4;
-        let visible_alpha = if inner_cutout {
-            value * (1.0 - mask[index])
-        } else {
-            *value
-        };
+        let visible_alpha = owner_cutout.map_or(*value, |(owner, offset)| {
+            let x = (index % image_width) as f32 + 0.5 - padding as f32 + offset[0];
+            let y = (index / image_width) as f32 + 0.5 - padding as f32 + offset[1];
+            value * (owner.signed_distance(x, y) + 0.5).clamp(0.0, 1.0)
+        });
         rgba[offset] = channel_to_u8(color[0]);
         rgba[offset + 1] = channel_to_u8(color[1]);
         rgba[offset + 2] = channel_to_u8(color[2]);
@@ -287,13 +278,8 @@ pub(crate) fn build_gaussian_shadow_texture_rgba(
     corner_radii: AtomeCornerRadii,
     blur: f32,
 ) -> Option<(u32, u32, Vec<u8>)> {
-    build_gaussian_shadow_texture_rgba_with_cutout(
-        color,
-        width,
-        height,
-        corner_radii,
-        blur,
-        false,
+    build_gaussian_shadow_texture_rgba_for_silhouette(
+        &rect_silhouette(width, height, corner_radii), color, blur, None,
     )
 }
 

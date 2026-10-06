@@ -115,6 +115,15 @@ export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
             ...frameSchema,
             label: { type: 'string' },
             children: { type: 'array' },
+            module: { type: 'string' },
+            matrix_cell: { type: 'object', properties: {
+                row: { type: 'number', minimum: -1 }, column: { type: 'number', minimum: 0 },
+                role: { type: 'string', enum: ['header', 'cell'] }
+            }, required: ['row', 'column', 'role'] },
+            matrix_grid: { type: 'object', properties: {
+                rows: { type: 'number', minimum: 1 }, columns: { type: 'number', minimum: 1 },
+                gap: { type: 'number', minimum: 0 }, headers: { type: 'boolean' }
+            }, required: ['rows', 'columns', 'gap', 'headers'] },
             // A mask is a structural property of its dedicated Molecule owner.
             // Keeping it in the canonical schema is essential: core Atome types
             // reject unknown properties, so an undeclared mask could disappear

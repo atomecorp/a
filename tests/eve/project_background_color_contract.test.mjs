@@ -9,6 +9,7 @@ import {
 import {createUserSurfaceBackgroundTextureRuntime} from '../../eVe/domains/rendering/user_surface_background_texture_runtime.js';
 import eventBus from '../../eVe/core/event_bus.js';
 import {installDom} from './unified_rendering_test_helpers.mjs';
+import {PROJECT_SCENES, sceneState} from '../../eVe/domains/rendering/project_scene_state.js';
 
 const PROJECT_ID = 'project_surface_color';
 const PROJECT_RED = 'rgba(244, 67, 54, 1.00)';
@@ -36,7 +37,7 @@ const createCanvasStub = () => {
     return {width: 0, height: 0, getContext: () => context};
 };
 
-const createProjectSurfaceHarness = ({mode = 'project', projectState = null} = {}) => {
+const createProjectSurfaceHarness = ({mode = 'project', projectState = null, params = {}} = {}) => {
     const previous = {window: globalThis.window, document: globalThis.document};
     const dom = installDom('<!doctype html><html><body><div id="eve_view"></div></body></html>');
     const windowRef = dom.window;
@@ -54,7 +55,7 @@ const createProjectSurfaceHarness = ({mode = 'project', projectState = null} = {
     windowRef.addEventListener('eve:surface-background-changed', (event) => published.push(event.detail));
     const runtime = createUserSurfaceBackgroundTextureRuntime({
         view: windowRef.document.getElementById('eve_view'),
-        params: {},
+        params,
         resolveBackgroundMediaUrl: (url) => url,
         isProtectedMediaUrl: () => false,
         resolveProtectedBackgroundObjectUrl: async () => '',
@@ -62,6 +63,7 @@ const createProjectSurfaceHarness = ({mode = 'project', projectState = null} = {
     });
     return {
         runtime,
+        windowRef,
         published,
         latest: () => windowRef.__eveSurfaceBackground || null,
         commit: (properties) => {
@@ -85,6 +87,47 @@ test('the project rail resolves the colour tool and keeps the sibling project ac
         assert.ok(keys.includes('couleur'), `the ${level} project rail exposes the colour tool`);
         assert.ok(keys.includes('select_all'), `the ${level} project rail keeps its previous rail-only tool`);
         assert.ok(keys.includes('paste') && keys.includes('import'), `the ${level} project rail keeps its earlier actions`);
+    }
+});
+
+test('full-surface Dashboard Matrix shares the current wallpaper across project loads and colour commits', async () => {
+    const previousForeground = sceneState.foregroundProjectId;
+    const previousScene = PROJECT_SCENES.get(PROJECT_ID);
+    const params = {backgroundSource: 'image', backgroundImageUrl: '/wallpaper.mp4', backgroundMediaKind: 'video'};
+    const harness = createProjectSurfaceHarness({projectState: {properties: {background: PROJECT_RED}}, params});
+    try {
+        sceneState.foregroundProjectId = PROJECT_ID;
+        PROJECT_SCENES.set(PROJECT_ID, {records: new Map()});
+        harness.runtime.start();
+        await nextTick();
+        assert.equal(harness.latest().mode, 'color');
+        const records = PROJECT_SCENES.get(PROJECT_ID).records;
+        records.set('matrix', {id: 'matrix', properties: {module: 'matrix', layout_fill: 'surface', matrix_background: false}});
+        const rendered = () => harness.windowRef.dispatchEvent(new harness.windowRef.CustomEvent('eve:project-render-done', {detail: {projectId: PROJECT_ID}}));
+        rendered();
+        assert.equal(harness.latest().sourceUrl, '/wallpaper.mp4');
+        assert.equal(harness.latest().mediaKind, 'video');
+        assert.equal(harness.latest().fit, 'cover');
+        const wallpaper = harness.latest();
+        harness.commit({background: '#000'});
+        assert.deepEqual(harness.latest(), wallpaper, 'a project colour cannot cover the active Dashboard wallpaper');
+        params.backgroundImageUrl = '/current.png';
+        params.backgroundMediaKind = 'image';
+        harness.runtime.resize();
+        assert.equal(harness.latest().sourceUrl, '/current.png', 'the current wallpaper is read live');
+        records.get('matrix').properties.layout_fill = 'none';
+        rendered();
+        assert.equal(harness.latest().mode, 'color', 'ordinary embedded Matrix keeps its project colour');
+        records.get('matrix').properties.layout_fill = 'surface';
+        records.get('matrix').properties.deleted = true;
+        rendered();
+        assert.equal(harness.latest().mode, 'color', 'deleted Dashboard does not own the backplane');
+    } finally {
+        harness.runtime.stop();
+        harness.restore();
+        sceneState.foregroundProjectId = previousForeground;
+        if (previousScene) PROJECT_SCENES.set(PROJECT_ID, previousScene);
+        else PROJECT_SCENES.delete(PROJECT_ID);
     }
 });
 

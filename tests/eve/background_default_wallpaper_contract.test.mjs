@@ -105,7 +105,14 @@ beforeEach(() => {
     assetBox.downloadRemoteWallpaper.mockReset();
 });
 
-afterEach(() => {
+afterEach(async () => {
+    // Stop the real visibility-aware profile watcher before replacing its page.
+    if (restoreGlobals && globalThis.document) {
+        Object.defineProperty(document, 'visibilityState', {configurable: true, value: 'hidden'});
+        document.dispatchEvent(new window.Event('visibilitychange'));
+        await Promise.resolve();
+        window.close();
+    }
     if (restoreGlobals) restoreGlobals();
     vi.restoreAllMocks();
     vi.useRealTimers();
@@ -358,8 +365,14 @@ test.each([false, true])('a protected video uses its current session before star
     }));
     const video = { videoWidth: 1920, videoHeight: 1080, readyState: 2, seeking: false };
     videoSource.register.mockResolvedValue({ ok: true, video, dispose() {} });
-    window.eveBackground.setParams({ backgroundSource: 'image', backgroundMediaKind: 'video',
-        backgroundImageUrl: '/api/uploads/wallpaper.webm?media_user_id=wallpaper-owner' });
+    // A real panel selection declares its pending profile choice. Raw preview
+    // params alone intentionally remain replaceable by profile reconciliation.
+    window.dispatchEvent(new window.CustomEvent('eve:profile-preferences-updated', {detail: {
+        source: 'background_panel', preferences: {background: {
+            backgroundSource: 'image', backgroundMediaKind: 'video',
+            backgroundImageUrl: '/api/uploads/wallpaper.webm?media_user_id=wallpaper-owner'
+        }}
+    }}));
     await vi.waitFor(() => assert.equal(patches.at(-1)?.video?.width, 1920));
     assert.equal(fetchMock.mock.calls.length, 1);
     assert.equal(fetchMock.mock.calls[0][1].headers.Authorization, `Bearer ${expectedBearer}`);

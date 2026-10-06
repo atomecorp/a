@@ -66,3 +66,7 @@ mod animated_png_pixels;
 #[cfg(test)]
 #[path = "../../../../tests/rendering/panel_surface_paint.rs"]
 mod panel_surface_paint_tests;
+
+#[cfg(test)]
+#[path = "../../../../tests/rendering/shadow_outer_knockout.rs"]
+mod shadow_outer_knockout_tests;

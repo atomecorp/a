@@ -209,11 +209,20 @@ pub fn insert_clipped_video_quad_mesh(
     logical_size: [f32; 2],
     uv_rect: [f32; 4],
 ) -> Result<(), String> {
+    let current = world.get::<Mesh2d>(entity).map(|mesh| mesh.0.clone());
     let handle = {
-        let mut meshes = world
-            .get_resource_mut::<Assets<Mesh>>()
+        let mut meshes = world.get_resource_mut::<Assets<Mesh>>()
             .ok_or_else(|| "bevy_mesh_assets_required".to_string())?;
-        video_quad_mesh_handle_from_size(&mut meshes, logical_size, uv_rect)
+        match current {
+            Some(handle) => {
+                // Update the resident quad instead of retaining a new asset per crop.
+                *meshes.get_mut(&handle)
+                    .ok_or_else(|| "bevy_video_quad_asset_required".to_string())?
+                    = video_quad_mesh_from_size(logical_size, uv_rect);
+                handle
+            }
+            None => video_quad_mesh_handle_from_size(&mut meshes, logical_size, uv_rect),
+        }
     };
     world.entity_mut(entity).insert(Mesh2d(handle));
     Ok(())

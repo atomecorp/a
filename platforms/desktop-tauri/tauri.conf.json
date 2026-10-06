@@ -36,7 +36,10 @@
     ],
     "resources": {
       "../../atome/version.txt": "project/version.txt",
-      "../../atome": "project/atome",
+      "../../atome/src": "project/atome/src",
+      "../../atome/security": "project/atome/security",
+      "../../atome/engines": "project/atome/engines",
+      "../../atome/documentations": "project/atome/documentations",
       "../../eVe": "project/eVe",
       "../../node_modules/rubberband-wasm/dist": "project/node_modules/rubberband-wasm/dist"
     }
