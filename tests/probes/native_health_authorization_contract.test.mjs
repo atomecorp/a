@@ -65,8 +65,12 @@ test('the full iOS catalog survives native capability discovery and HealthKit re
         assert.match(read(`platforms/ios/atome-auv3/application/${file}`), /<key>com.apple.developer.healthkit<\/key>\s*<true\/>/);
     }
     const plist = read('platforms/ios/atome-auv3/application/Info.plist');
+    // The application carries the com.apple.developer.healthkit entitlement,
+    // which covers read AND write access, so App Store validation (altool
+    // 90683) requires both purpose strings even though the code only reads.
+    // Read-only behaviour is still enforced by rejecting save/delete below.
     assert.ok(plist.includes('NSHealthShareUsageDescription'));
-    assert.ok(!plist.includes('NSHealthUpdateUsageDescription'));
+    assert.ok(plist.includes('NSHealthUpdateUsageDescription'));
     assert.ok(!/healthStore\.(save|delete)\(/.test(controller + read('platforms/ios/atome-auv3/Common/AppNativeHealthQueries.swift')));
 });
 

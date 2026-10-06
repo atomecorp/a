@@ -63,6 +63,8 @@
     <string>Atome utilise votre position uniquement lorsque vous demandez la météo locale.</string>
     <key>NSHealthShareUsageDescription</key>
     <string>Atome lit uniquement les données de santé que vous choisissez d'afficher dans vos moniteurs (rubrique Moniteur du Dashboard) et dans vos critères dynamiques. Ces données restent sur cet appareil.</string>
+    <key>NSHealthUpdateUsageDescription</key>
+    <string>Atome n'enregistre rien dans l'app Santé. Cette autorisation accompagne l'accès HealthKit, utilisé uniquement en lecture pour vos moniteurs et vos critères dynamiques, et est requise pour que l'app puisse demander l'autorisation Santé. Vos données restent sur cet appareil.</string>
     <key>NSMotionUsageDescription</key>
     <string>Atome compte les pas mesurés par cet iPhone pour le moniteur « Pas de cet iPhone » que vous avez choisi.</string>
     <key>NSAppleMusicUsageDescription</key>
