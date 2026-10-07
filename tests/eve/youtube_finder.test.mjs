@@ -71,3 +71,49 @@ test('Saved YouTube video projects its poster through the image renderer', () =>
     assert.equal(atom.content.source, 'https://i.ytimg.com/vi/abcDEFghi12/mqdefault.jpg');
     assert.equal(atom.content.source.includes('watch?v='), false);
 });
+
+test('YouTube Finder shows the viewing history until a search is submitted and again once the field is emptied', async () => {
+    const history = [{ id: 'histVIDEO01', name: 'Watched', type: 'image' }];
+    const runtime = createFinderPanelSurface({
+        searchVideos: async () => ({ records: [{ id: 'abcDEFghi12', name: 'Found', type: 'image' }], nextPageToken: '' }),
+        readVideoHistory: () => history,
+        events: { on: () => () => {} }
+    });
+    await runtime.applyToolContext({ scope: 'youtube', query: '' });
+    let snapshot = runtime.readState();
+    assert.equal(snapshot.statusKind, null);
+    assert.equal(snapshot.youtubeHistory, true);
+    assert.deepEqual(snapshot.records.map((record) => record.id), ['histVIDEO01']);
+
+    await runtime.applyToolContext({ query: 'music', submitted: true });
+    snapshot = runtime.readState();
+    assert.equal(snapshot.youtubeHistory, false);
+    assert.deepEqual(snapshot.records.map((record) => record.id), ['abcDEFghi12']);
+
+    await runtime.applyToolContext({ query: '' });
+    snapshot = runtime.readState();
+    assert.equal(snapshot.youtubeHistory, true);
+    assert.deepEqual(snapshot.records.map((record) => record.id), ['histVIDEO01']);
+});
+
+test('YouTube history keeps the last twenty distinct videos, newest first, and publishes them at once', async () => {
+    const { normalizeYoutubeHistory, readYoutubeHistory, recordYoutubeHistory, YOUTUBE_HISTORY_LIMIT } =
+        await import('../../eVe/intuition/tools/youtube_history_preference.js');
+    const id = (n) => `video${String(n).padStart(6, '0')}`;
+    const many = Array.from({ length: 30 }, (_, n) => ({ videoId: id(n), title: `T${n}` }));
+    const normalized = normalizeYoutubeHistory([...many, { videoId: id(0) }, { videoId: 'bad id' }]);
+    assert.equal(normalized.length, YOUTUBE_HISTORY_LIMIT);
+    assert.equal(new Set(normalized.map((entry) => entry.videoId)).size, YOUTUBE_HISTORY_LIMIT);
+
+    const events = [];
+    globalThis.window = { __eveProfilePreferences: { youtube: { history: [{ videoId: id(1) }, { videoId: id(2) }] } },
+        dispatchEvent: (event) => events.push(event.type), CustomEvent: class { constructor(type) { this.type = type; } } };
+    try {
+        void recordYoutubeHistory({ videoId: id(2), title: 'Again', channel: 'C', thumbnail: 'https://i.ytimg.com/x.jpg' });
+        assert.deepEqual(readYoutubeHistory().map((entry) => entry.videoId), [id(2), id(1)]);
+        assert.equal(readYoutubeHistory()[0].title, 'Again');
+        assert.deepEqual(events, ['eve:profile-preferences-updated']);
+    } finally {
+        delete globalThis.window;
+    }
+});

@@ -17,10 +17,16 @@ extension WebViewManager {
         return json
     }
 
+    // Scrub and playback fire these several times per frame: three log lines
+    // each flood the console (and slow the app while Xcode is attached).
+    // Their failures are still logged.
+    static let quietNativeInvokeCommands: Set<String> = ["audio_play_instance", "audio_stop_instance"]
+
     static func sendNativeInvokeResponse(requestId: String,
                                                  payload: [String: Any]? = nil,
-                                                 error: String? = nil) {
-        print("[NATIVE_INVOKE] resolve request=\(requestId) success=\(error == nil) error=\(error ?? "<none>") payload_keys=\(Array((payload ?? [:]).keys).sorted())")
+                                                 error: String? = nil,
+                                                 log: Bool = true) {
+        if log || error != nil { print("[NATIVE_INVOKE] resolve request=\(requestId) success=\(error == nil) error=\(error ?? "<none>") payload_keys=\(Array((payload ?? [:]).keys).sorted())") }
         guard let requestLiteral = jsonLiteral(requestId) else { return }
         let payloadLiteral = payload.flatMap { jsonLiteral($0) } ?? "null"
         let errorLiteral = error.flatMap { jsonLiteral($0) } ?? "null"
@@ -61,9 +67,12 @@ extension WebViewManager {
             sendNativeInvokeResponse(requestId: requestId, error: "ios_app_native_invoke_handler_unavailable")
             return
         }
-        print("[NATIVE_INVOKE] dispatch request=\(requestId) command=\(command) payload_keys=\(Array(payload.keys).sorted())")
+        let log = !quietNativeInvokeCommands.contains(command)
+        if log {
+            print("[NATIVE_INVOKE] dispatch request=\(requestId) command=\(command) payload_keys=\(Array(payload.keys).sorted())")
+        }
         handler(command, payload) { response, error in
-            sendNativeInvokeResponse(requestId: requestId, payload: response, error: error)
+            sendNativeInvokeResponse(requestId: requestId, payload: response, error: error, log: log)
         }
     }
 

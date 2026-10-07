@@ -56,3 +56,19 @@ test('YouTube search limits guest requests per address', async () => {
     const limited = await handleWsYoutubeSearch(input, 'finder-test-4', options);
     assert.equal(limited.error, 'youtube_search_rate_limited');
 });
+
+test('YouTube search returns plain-text titles and logs provider refusals without the key', async () => {
+    const logs = [];
+    const options = { apiKey: 'private-test-key', now: Date.parse('2026-10-03T00:00:00Z'), log: (level, entry) => logs.push({ level, ...entry }) };
+    const ok = await handleWsYoutubeSearch({ type: 'youtube-search', requestId: 'r', query: 'pulse' }, 'finder-test-5', { ...options,
+        fetchResource: async () => ({ ok: true, json: async () => ({ items: [{ id: { videoId: 'dQw4w9WgXcQ' },
+            snippet: { title: 'Restored &amp; Re-Edited &quot;Live&quot; &#39;94', channelTitle: 'Rock &amp; Co' } }] }) }) });
+    assert.equal(ok.results[0].title, 'Restored & Re-Edited "Live" \'94');
+    assert.equal(ok.results[0].channel, 'Rock & Co');
+    const refused = await handleWsYoutubeSearch({ type: 'youtube-search', requestId: 'r2', query: 'pulse' }, 'finder-test-6', { ...options,
+        fetchResource: async () => ({ ok: false, status: 403, json: async () => ({ error: { message: 'API disabled', errors: [{ reason: 'accessNotConfigured' }] } }) }) });
+    assert.equal(refused.error, 'youtube_search_quota_or_permission');
+    assert.equal(logs.length, 1);
+    assert.equal(logs[0].data.reason, 'accessNotConfigured');
+    assert.equal(JSON.stringify(logs).includes('private-test-key'), false);
+});

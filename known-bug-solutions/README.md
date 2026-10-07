@@ -10,6 +10,7 @@ the established solution before attempting a new implementation.
 
 | Symptom | Folder |
 | --- | --- |
+| Logout loses the welcome screen; Billing actions stall; Dashboard restoration flashes gray | [first-launch-logout-and-restore](first-launch-logout-and-restore/README.md) |
 | Guest project rail remains absent and a browser update retains the old reader | [guest-contextual-access](guest-contextual-access/README.md) |
 | Opaque floating Bevy panels interleave rails, text, commands and footers | [panel-window-stack](panel-window-stack/README.md) |
 | Assistant appears before connection, loses voice on token refresh, or its input covers ribbon tools | [assistant-connection-ribbon](assistant-connection-ribbon/README.md) |

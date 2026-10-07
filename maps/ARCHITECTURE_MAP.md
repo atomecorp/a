@@ -1,3 +1,5 @@
+2026-10-07 Authenticated logout follow-up replaces duplicate session/workspace DOM teardown with project_bootstrap_support.clearProjectView and its awaited canonical scene cleanup. Session emits existing clear-view flags; Home serializes logout and auth-checked before mounting Access; loaded Home handlers own reentry. The shared canvas survives host removal. Authenticated preparation preserves the Dashboard host while the destination preference resolves and waits for cleanup before loading; Dashboard opening leaves the wallpaper canvas visible. Basic Matrix arrival stays in transition until records exist; ordinary restored projects reuse the existing thumbnail colour fade. Billing navigation uses existing auth tools and phone proof, with current-generation completion guards. No second renderer, writable state authority, registry or transport.
+
 2026-10-07 Basic Dashboard v3 remains an ordinary linked home Template: Matrix -> existing Dashboard records/panel icon buttons -> shared Bevy projection. Its frame uses canonical record dimensions through existing readBounds, with bottom alignment and native scrolling on short viewports. Programme/profile/consented recorded measurements and declarations are canonical read sources; sensor readings stay health-owner ephemeral data. Writes remain in existing tools. Shared Matrix signatures include root geometry and the render queue drains updates arriving during completion, so template updates cannot leave a stale frame. Account changes or opening failures release presentation/source subscriptions. No additional renderer, DOM island, layout system, style owner or business store.
 
 2026-10-06 Mystic « Niveau d'expertise » stays a pure menu composition. The Utilitaires palette gains one hierarchical level whose three leaves only select the existing user preference `preferences.visual.masteryLevel`; `eVe/intuition/tools/user_mastery_level_preference.js` is the single writer, over the canonical `loadUserProfile`/`upsertUserProfile` owner, and publishes the same `window.__eveProfilePreferences` + `eve:profile-preferences-updated` pair the Home panel already emits. The active level is read back through the existing synchronous visual-level cache and drawn with the menu's existing state-dependent tile presentation. No parallel storage, panel, DOM layer, renderer or mutation owner is added.
@@ -175,10 +177,14 @@ Mute/Solo/All/None, with full-container batches through the canonical loader.
 The former selection/deletion choices are no longer part of this palette.
 
 List authoring previews and clip geometry use the recursive transport plan on
-one container axis, retaining muted clips in authoring. An individual row scrub
-and the footer scrub drive the same shared transport position through the
-canonical scrub path, so the chosen time persists; no local-scrub isolation or
-restoration remains, and no M/S is written.
+one container axis, retaining muted clips in authoring. Both scrubs drive the one
+shared transport through the canonical scrub path: the footer scrubs the level
+plan, an individual row scrubs that row's own playback plan (the one its Play
+loads), so only that row's media sounds and its released position persists;
+playing that paused selection resumes there. No restoration, no M/S is written.
+Natural temporal-crop seeks load the shared transport with the Atome alone so
+the waveform scrub is audible; inside a video in edition the drag seeks the same
+way (frames follow), edges still reframe and Alt still zooms.
 Clip edits use the occurrence-edit owner, disposable previews, and one durable
 transaction at release. Escape routes through shared pointer cancellation.
 Current Web evidence and open acceptance cases:

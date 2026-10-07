@@ -13,6 +13,15 @@ const reply = (requestId, fields) => ({
   success: fields.ok === true, ...fields
 });
 
+// The Data API returns HTML-escaped snippet text ("Rock &amp; Roll"); the
+// Finder shows plain text.
+const NAMED_ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
+const plainText = (value) => String(value || '').replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (entity, code) => {
+  if (code[0] !== '#') return NAMED_ENTITIES[code.toLowerCase()] ?? entity;
+  const point = code[1] === 'x' || code[1] === 'X' ? parseInt(code.slice(2), 16) : Number(code.slice(1));
+  return Number.isInteger(point) && point > 0 && point <= 0x10ffff ? String.fromCodePoint(point) : entity;
+});
+
 // The client only receives a stable code; the real cause stays in the server log.
 const logFailure = (log, requestId, error, data) => log('warn', {
   component: 'youtube_search', request_id: requestId, message: error, data
@@ -78,9 +87,9 @@ export const handleWsYoutubeSearch = async (message, address, {
       return [{
         videoId,
         url: `https://www.youtube.com/watch?v=${videoId}`,
-        title: String(item?.snippet?.title || ''),
+        title: plainText(item?.snippet?.title),
         thumbnail: String(item?.snippet?.thumbnails?.medium?.url || item?.snippet?.thumbnails?.default?.url || ''),
-        channel: String(item?.snippet?.channelTitle || '')
+        channel: plainText(item?.snippet?.channelTitle)
       }];
     });
     return reply(requestId, { ok: true, results,

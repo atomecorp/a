@@ -94,6 +94,7 @@ import { buildDashboardCardRecords } from '../../eVe/domains/dashboard/dashboard
 import { buildBevyToolSliderNode } from '../../eVe/intuition/shared/bevy_ui_tool_slider.js';
 import { applyTreeScrollLayout } from '../../eVe/domains/rendering/bevy_ui_scroll_layout.js';
 import { locateBevyUiNode } from '../../eVe/domains/rendering/bevy_ui_scroll_runtime.js';
+import { hitTestBevyUiNode } from '../../eVe/domains/rendering/bevy_ui_hit_test_runtime.js';
 it('projects native panel controls and Dashboard material without a private skin', async () => {
     const previousWindow = globalThis.window, previousDocument = globalThis.document;
     const dom = new JSDOM('<canvas id="eve_surface_project"></canvas>');
@@ -128,6 +129,12 @@ it('projects native panel controls and Dashboard material without a private skin
                 expect(pay.style.surfacePaint).toBe(BEVY_PANEL_TOKENS.buttonMaterial.idle.surfacePaint);
                 expect(pay.style.shadow).toBe(BEVY_PANEL_TOKENS.buttonMaterial.idle.shadow);
                 expect(nodes.find(node => node.id === 'pay_label').style.font_size).toBe(BEVY_PANEL_TOKENS.controlTextSizePx);
+                for (const id of ['pay', 'back']) {
+                    const { box } = locateBevyUiNode({ node: trees.at(-1).root, nodeId: id });
+                    const hit = hitTestBevyUiNode(trees.at(-1).root, { x: box.x + box.width / 2, y: box.y + box.height / 2 });
+                    expect(hit?.node.id).toBe(id);
+                    expect(hit.node.on.activate).toBeTypeOf('function');
+                }
             }
             if (key === 'first_launch_goals') {
                 const cards = nodes.filter(node => node.on?.activate);

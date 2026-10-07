@@ -22,60 +22,6 @@ const dispatchEvent = (name, detail) => {
     
 };
 
-const clearMatrixDom = () => {
-    if (typeof document === 'undefined') return;
-    const matrixRoot = document.getElementById('eve_project_matrix');
-    if (!matrixRoot) return;
-    matrixRoot.classList.remove('is-active');
-    matrixRoot.style.display = 'none';
-    matrixRoot.style.opacity = '0';
-    matrixRoot.style.transform = '';
-    matrixRoot.style.transformOrigin = '';
-    const scroll = matrixRoot.querySelector('#eve_project_matrix_scroll');
-    if (scroll) {
-        scroll.innerHTML = '';
-    }
-};
-
-const clearProjectAndAtomeDom = () => {
-    if (typeof document === 'undefined') return;
-    const viewRoot = document.getElementById('view');
-    const atomeElements = viewRoot
-        ? viewRoot.querySelectorAll('[data-atome], .atome-element, .eve-atome')
-        : [];
-    atomeElements.forEach((el) => {
-        el.remove();
-    });
-    const projectViews = document.querySelectorAll('[id^="project_view_"], #view .project-view');
-    projectViews.forEach((el) => {
-        
-            if (String(el.id || '').startsWith('project_view_')) {
-                el.remove();
-            } else {
-                el.innerHTML = '';
-            }
-        
-    });
-};
-
-const resetBackgroundVisual = () => {
-    if (typeof document === 'undefined' || typeof window === 'undefined') return;
-    const view = document.getElementById('view');
-    if (view && view.style) {
-        view.style.backgroundImage = 'none';
-        view.style.backgroundColor = '';
-        view.style.backgroundSize = '';
-        view.style.backgroundPosition = '';
-        view.style.backgroundRepeat = '';
-        view.style.backgroundAttachment = '';
-    }
-    
-        if (window.eveBackground?.setParams && window.eveBackground?.defaults) {
-            window.eveBackground.setParams({ ...window.eveBackground.defaults });
-        }
-    
-};
-
 const clearWindowSessionState = () => {
     if (typeof window === 'undefined') return;
     delete window.__currentUser;
@@ -202,10 +148,8 @@ export const clearSessionState = () => {
 
 export const resetWorkspaceForNextUser = ({ clearStorage = false, reason = 'logout' } = {}) => {
     clearWindowSessionState();
-    clearMatrixDom();
-    clearProjectAndAtomeDom();
-    resetBackgroundVisual();
-
+    // Projection owners consume this event and retain the shared canvas.
+    // Session reset must not tear down their host or overwrite the wallpaper.
     dispatchEvent('squirrel:clear-view', {
         reason: `${reason}_workspace_reset`,
         clearAtomes: true,

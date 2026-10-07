@@ -348,7 +348,10 @@ eve/application
 
 # First-launch Matrix and phone-payment regression suites
 !tests/eve/first_launch_matrix.test.mjs
+!tests/eve/first_launch_logout.test.mjs
 !tests/eve/first_launch_phone_payment.test.mjs
 !tests/eve/first_launch_runtime.test.mjs
+!tests/eve/first_launch_workspace_restore.test.mjs
+!tests/eve/workspace_surface_preference_contract.test.mjs
 
 !tests/eve/slider_options_contract.test.mjs

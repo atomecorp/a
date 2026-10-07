@@ -29,6 +29,30 @@ beforeEach(() => {
     owners.readFile.mockReset().mockResolvedValue({ type: 'image/png' }); owners.readImage.mockReset().mockResolvedValue('data:image/png;base64,selected');
 });
 describe('first-launch canonical lifecycle', () => {
+    it('shares one pending opening across the menu and Home entry points', async () => {
+        const f = fixture(); let resolve;
+        window.AdoleAPI.auth.getPendingPhoneLogin.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+        const menu = f.flow.open(), home = f.flow.open();
+        resolve(null);
+        expect(await menu).toMatchObject({ ok: true });
+        expect(await home).toMatchObject({ ok: true });
+        expect(window.AdoleAPI.auth.getPendingPhoneLogin).toHaveBeenCalledTimes(1);
+        expect(f.renders).toEqual(['access']);
+    });
+    it('cancels an opening during logout and waits for teardown before reentry', async () => {
+        const f = fixture(); let resolve;
+        window.AdoleAPI.auth.getPendingPhoneLogin.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+        const pending = f.flow.open();
+        const closing = f.flow.close();
+        const reopened = f.flow.open();
+        resolve(null);
+        expect(await pending).toMatchObject({ ok: true, cancelled: true });
+        await closing;
+        expect(await reopened).toMatchObject({ ok: true });
+        expect(f.renders).toEqual(['access']);
+        expect(f.flow.isOpen()).toBe(true);
+        expect(f.saves).toHaveLength(0);
+    });
     it('persists optional biometrics in the canonical profile without replacing other bio fields', async () => {
         const f = fixture({ bio: { birth: '2000-01-01', weight: '70', height: '180', biometrics: [{ label: 'owned', value: 'kept' }] },
             preferences: { first_launch: { version: 1, step: 'sleep', program_id: 'sleep-project' } } });
@@ -98,6 +122,44 @@ describe('first-launch canonical lifecycle', () => {
         await f.flow.handle({ operation: 'method', value: 'paypal' });
         await f.flow.handle({ operation: 'pay' }); expect(window.AdoleAPI.auth.simulatePhonePayment).toHaveBeenCalledWith('paypal');
         expect(f.flow.state.stage).toBe('sms'); expect(f.saves).toHaveLength(0);
+    });
+    it('advances simulated Pay before SMS delivery settles and keeps delivery failures visible', async () => {
+        const f = fixture(); await f.flow.open();
+        await f.flow.handle({ operation: 'phone' }); f.draft('phone', '+33612345678');
+        await f.flow.handle({ operation: 'authenticate' }); let release;
+        window.AdoleAPI.auth.simulatePhonePayment.mockImplementationOnce(() => new Promise(done => { release = done; }));
+        const paying = f.flow.handle({ operation: 'pay' });
+        await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+        expect(f.flow.state.stage).toBe('sms'); expect(f.saves).toHaveLength(0);
+        release({ ok: false, error: 'sms_delivery_unavailable' });
+        expect(await paying).toMatchObject({ ok: false, error: 'sms_delivery_unavailable' });
+        expect(f.flow.state.notice).toBeTruthy(); expect(f.flow.state.busy).toBe(false);
+        expect((await f.flow.handle({ operation: 'change_phone' })).ok).toBe(true);
+        expect(f.flow.state.stage).toBe('phone');
+    });
+    it('returns from Billing before cancellation settles and reports its failure on the phone panel', async () => {
+        const f = fixture(); window.AdoleAPI.auth.getPendingPhoneLogin.mockResolvedValue({ phone: '+33612345678', paymentRequired: true });
+        await f.flow.open(); let release;
+        window.AdoleAPI.auth.cancelPhoneLogin.mockImplementationOnce(() => new Promise(done => { release = done; }));
+        const back = f.flow.handle({ operation: 'change_phone' });
+        await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+        expect(f.flow.state.stage).toBe('phone');
+        release({ ok: false, error: 'auth_connection_unavailable' });
+        expect(await back).toMatchObject({ ok: false, error: 'auth_connection_unavailable' });
+        expect(f.flow.state.notice).toBeTruthy(); expect(f.flow.state.busy).toBe(false); expect(f.saves).toHaveLength(0);
+    });
+    it('keeps Back actionable while delivery is pending and ignores an obsolete payment failure', async () => {
+        const f = fixture(); window.AdoleAPI.auth.getPendingPhoneLogin.mockResolvedValue({ phone: '+33612345678', paymentRequired: true });
+        await f.flow.open(); let release;
+        window.AdoleAPI.auth.simulatePhonePayment.mockImplementationOnce(() => new Promise(done => { release = done; }));
+        const paying = f.flow.handle({ operation: 'pay' });
+        await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+        expect(f.flow.state.busy).toBe(false);
+        expect(await f.flow.handle({ operation: 'change_phone' })).toMatchObject({ ok: true });
+        expect(f.flow.state.stage).toBe('phone');
+        release({ ok: false, error: 'sms_delivery_unavailable' });
+        await paying;
+        expect(f.flow.state.stage).toBe('phone'); expect(f.flow.state.notice).toBe(''); expect(f.flow.state.busy).toBe(false);
     });
     it('preserves legacy users without loading or mutating their profile', async () => {
         const f = fixture(); expect(await f.flow.authenticated({ user: { id: 'old' } })).toBe(false); expect(f.saves).toHaveLength(0); expect(f.renders).toHaveLength(0);

@@ -172,7 +172,9 @@ extension WebViewManager {
                                 return
                             }
                         }
-                        print("[NATIVE_INVOKE] recv request=\(requestId) command=\(command) payload_keys=\(Array(payload.keys).sorted())")
+                        if !WebViewManager.quietNativeInvokeCommands.contains(command) {
+                            print("[NATIVE_INVOKE] recv request=\(requestId) command=\(command) payload_keys=\(Array(payload.keys).sorted())")
+                        }
                         WebViewManager.handleNativeInvokeMessage(requestId: requestId, command: command, payload: payload)
                         return
                     }

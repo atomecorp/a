@@ -33,8 +33,7 @@ window.eveDashboardBevyUiRuntime = {
 
 const { clearProjectView } = await import('../../eVe/intuition/tools/project_bootstrap_support.js');
 
-clearProjectView({ preserveDashboardWorkspace: true });
-await new Promise((resolve) => setTimeout(resolve, 0));
+await clearProjectView({ preserveDashboardWorkspace: true });
 
 assert.equal(
     document.getElementById(DASHBOARD_WORKSPACE_HOST_ID),
@@ -68,8 +67,8 @@ const bootstrapSource = readFileSync(
 );
 assert.match(
     bootstrapSource,
-    /clearProjectView\(\{\s*preserveDashboardWorkspace:\s*readStartupView\(\)\s*!==\s*['"]project['"]\s*\}\);/,
-    'unauthenticated or late-auth bootstrap cleanup must preserve the neutral Dashboard workspace in dashboard startup mode'
+    /await clearProjectView\(\{\s*preserveDashboardWorkspace:\s*true\s*\}\);/,
+    'restoration must retain the wallpaper while awaiting cleanup, before resolving the destination'
 );
 
 console.log('project_bootstrap_dashboard_clear_contract.test: PASS');
