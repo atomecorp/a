@@ -154,7 +154,7 @@ impl AtomeProceduralSdf {
             lens_refraction_px: finite_or(self.lens_refraction_px, 24.0).clamp(0.0, 128.0),
             assistant_background_tint: self.assistant_background_tint.map(|value| finite_or(value, 0.0).clamp(0.0, 1.0)),
             // 0 = assistant, 1 = unused (the retired Flower menu), 2 = water drop,
-            // 3-4 reserved for the next design versions (procedural_sdf.wgsl).
+            // 3 = mystic tiles; 4 = restored login SVG/light (login_light.wgsl).
             mode: finite_or(self.mode, 0.0).clamp(0.0, 4.0),
             surface_count: finite_or(self.surface_count, 0.0).clamp(0.0, 8.0),
             surface_core_radius: finite_or(self.surface_core_radius, 0.0).max(0.0),

@@ -11,13 +11,17 @@ use bevy::{
         CompositeAlphaMode, PresentMode, RequestRedraw, Window, WindowPlugin, WindowResized,
         WindowResolution,
     },
-    winit::{EventLoopProxy, EventLoopProxyWrapper, UpdateMode, WinitSettings, WinitUserEvent},
 };
 use serde::Serialize;
 use std::cell::{Cell, RefCell};
-use std::time::Duration;
 
 mod exports;
+mod frame_clock;
+
+use frame_clock::{
+    remember_event_loop_proxy, request_frame_paced_web_redraw, wake_web_renderer, web_winit_settings,
+    WEB_WAKE_COALESCED, WEB_WAKE_INFLIGHT,
+};
 
 thread_local! {
     static WEB_PENDING_OPS: RefCell<Vec<AtomeRenderOp>> = RefCell::new(Vec::new());
@@ -26,13 +30,9 @@ thread_local! {
     static WEB_LAST_UI_DIAGNOSTICS: RefCell<AtomeUiDiagnostics> = RefCell::new(AtomeUiDiagnostics::default());
     static WEB_DRAINED_UI_EVENTS: RefCell<Vec<AtomeUiEvent>> = const { RefCell::new(Vec::new()) };
     static WEB_PENDING_VIDEO_FRAMES: RefCell<u32> = const { RefCell::new(0) };
-    static WEB_EVENT_LOOP_PROXY: RefCell<Option<EventLoopProxy<WinitUserEvent>>> = const { RefCell::new(None) };
-    static WEB_WAKE_PENDING: RefCell<bool> = const { RefCell::new(false) };
     static WEB_REDRAW_PENDING: RefCell<bool> = const { RefCell::new(false) };
     static WEB_DIAGNOSTICS: RefCell<WebRendererDiagnostics> = RefCell::new(WebRendererDiagnostics::default());
     static WEB_RUNNING_APPS: RefCell<Vec<App>> = const { RefCell::new(Vec::new()) };
-    static WEB_WAKE_INFLIGHT: RefCell<bool> = const { RefCell::new(false) };
-    static WEB_WAKE_COALESCED: RefCell<bool> = const { RefCell::new(false) };
     static WEB_FRAME_PROBE: RefCell<WebFrameProbe> = RefCell::new(WebFrameProbe::default());
     static WEB_EVENT_LOOP_STARTED: Cell<bool> = const { Cell::new(false) };
 }
@@ -141,6 +141,7 @@ struct WebRendererDiagnostics {
     redraw_requests: u32,
     redraw_applied: u32,
     wake_calls: u32,
+    paced_redraws: u32,
     wake_send_failures: u32,
     video_frame_notifications: u32,
     video_frame_redraws: u32,
@@ -382,7 +383,7 @@ fn notify_web_video_frame(id: String, frame_version: u32) {
         let mut pending = cell.borrow_mut();
         *pending = pending.saturating_add(1);
     });
-    wake_web_renderer();
+    request_frame_paced_web_redraw();
 }
 
 fn drain_web_video_frames() -> u32 {
@@ -420,69 +421,6 @@ fn queue_web_ui_events(events: Vec<AtomeUiEvent>) {
         return;
     }
     WEB_DRAINED_UI_EVENTS.with(|cell| cell.borrow_mut().extend(events));
-}
-
-fn remember_event_loop_proxy(proxy: Option<Res<EventLoopProxyWrapper>>) {
-    let Some(proxy) = proxy else {
-        return;
-    };
-    let wrapper: &EventLoopProxyWrapper = &proxy;
-    let event_loop_proxy: &EventLoopProxy<WinitUserEvent> = wrapper;
-    WEB_EVENT_LOOP_PROXY.with(|cell| {
-        *cell.borrow_mut() = Some(event_loop_proxy.clone());
-    });
-    WEB_WAKE_PENDING.with(|cell| {
-        if cell.replace(false) {
-            let _ = event_loop_proxy.send_event(WinitUserEvent::WakeUp);
-        }
-    });
-}
-
-// Wakes are the renderer's frame clock.
-//
-// The loop no longer self-ticks at display rate (see `web_winit_settings`), so
-// a wake is what turns queued work into a frame. It must therefore never be
-// dropped for being "too soon" — a time-based throttle here would cap the
-// interactive frame rate at its own period.
-//
-// Wakes issued while a tick is already scheduled are merged into it rather than
-// sent twice — the pending queues are drained wholesale, so a second event
-// would only re-render an identical frame.
-//
-// Merging must not *drop* the wake, though. Delivering a `WakeUp` costs an
-// extra event-loop turn (Bevy re-arms `window.request_redraw()` after each
-// update), so a wake issued once per animation frame only lands every other
-// frame: measured 60 wakes/s producing 30 ticks/s, against a loop that reaches
-// 60 ticks/s when fed faster. A merged wake is therefore remembered and
-// re-emitted once the tick completes, which pipelines one frame behind and
-// restores full display-rate interaction.
-//
-// A wake can only ever be held until the next tick of any kind, and the
-// heartbeat guarantees one — so a lost `WakeUp` cannot wedge the clock.
-fn wake_web_renderer() {
-    WEB_DIAGNOSTICS.with(|cell| {
-        cell.borrow_mut().wake_calls += 1;
-    });
-    let already_scheduled = WEB_WAKE_INFLIGHT.with(|cell| cell.replace(true));
-    if already_scheduled {
-        WEB_WAKE_COALESCED.with(|cell| {
-            *cell.borrow_mut() = true;
-        });
-        return;
-    }
-    WEB_EVENT_LOOP_PROXY.with(|cell| {
-        if let Some(proxy) = cell.borrow().as_ref() {
-            if proxy.send_event(WinitUserEvent::WakeUp).is_err() {
-                WEB_DIAGNOSTICS.with(|diagnostics| {
-                    diagnostics.borrow_mut().wake_send_failures += 1;
-                });
-            }
-        } else {
-            WEB_WAKE_PENDING.with(|pending| {
-                *pending.borrow_mut() = true;
-            });
-        }
-    });
 }
 
 #[derive(Clone, Debug)]
@@ -541,35 +479,6 @@ struct WebBevyRendererPlugin {
     config: WebBevyRendererConfig,
 }
 
-/// Interval of the idle heartbeat, *not* a frame budget.
-///
-/// `UpdateMode::Reactive { wait }` runs a full `app.update()` — extract, render
-/// and present included — every time `wait` elapses, whether or not anything
-/// changed. A 16 ms wait therefore meant ~60 full redraws per second on a
-/// completely static workspace, which is what made the device heat up with no
-/// finger on the screen.
-///
-/// Frames are driven by wakes instead: every path that queues work
-/// (`queue_web_ops`, `queue_web_ui_ops`, `request_web_redraw`,
-/// `notify_web_video_frame`) calls `wake_web_renderer`, and the JS runtime
-/// already batches those on `requestAnimationFrame`. Interaction therefore
-/// still renders at display rate — and, being rAF-driven, in step with the
-/// compositor rather than a free-running timer.
-///
-/// This wait is only a failsafe: it bounds how long a dropped wake can leave
-/// the surface stale and clears a stuck in-flight wake flag. WKWebView can
-/// occasionally defer the async Winit user-event waker after a cold reload, so
-/// keep the bound below the one-second interaction budget without returning to
-/// a display-rate idle loop.
-const WEB_IDLE_HEARTBEAT_MS: u64 = 500;
-
-fn web_winit_settings() -> WinitSettings {
-    WinitSettings {
-        focused_mode: UpdateMode::reactive(Duration::from_millis(WEB_IDLE_HEARTBEAT_MS)),
-        unfocused_mode: UpdateMode::reactive(Duration::from_millis(WEB_IDLE_HEARTBEAT_MS)),
-    }
-}
-
 impl Plugin for WebBevyRendererPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<RequestRedraw>()
@@ -607,13 +516,17 @@ fn request_initial_web_redraw(world: &mut World) {
     world.write_message(RequestRedraw);
 }
 
+// The drain systems below never write `RequestRedraw`: the update that drains
+// queued work is the update that renders it (no pipelined rendering on the
+// web). A redraw message here only re-rendered an identical frame — twice,
+// because bevy_winit re-reads the double-buffered message on the following
+// update too. Measured: 3 renders per wake, 37 renders/s for a 12.5 fps video.
 fn apply_pending_web_ops(world: &mut World) {
     let ops = drain_web_ops();
     if ops.is_empty() {
         return;
     }
     apply_render_ops(world, ops);
-    world.write_message(RequestRedraw);
 }
 
 fn queue_web_ui_font(weight: u16, bytes: Vec<u8>) {
@@ -654,7 +567,6 @@ fn apply_pending_web_ui_ops(world: &mut World) {
     if !drained.is_empty() {
         WEB_DRAINED_UI_EVENTS.with(|cell| cell.borrow_mut().extend(drained));
     }
-    world.write_message(RequestRedraw);
 }
 
 fn drain_ui_events_for_web(world: &mut World) {
@@ -718,17 +630,16 @@ fn apply_browser_window_resize_to_surface(world: &mut World) {
     world.write_message(RequestRedraw);
 }
 
-fn apply_pending_web_redraw(world: &mut World) {
+fn apply_pending_web_redraw() {
     if !drain_web_redraw_request() {
         return;
     }
     WEB_DIAGNOSTICS.with(|cell| {
         cell.borrow_mut().redraw_applied += 1;
     });
-    world.write_message(RequestRedraw);
 }
 
-fn apply_pending_video_frame_notifications(world: &mut World) {
+fn apply_pending_video_frame_notifications() {
     let drained = drain_web_video_frames();
     if drained == 0 {
         return;
@@ -737,7 +648,6 @@ fn apply_pending_video_frame_notifications(world: &mut World) {
         let mut diagnostics = cell.borrow_mut();
         diagnostics.video_frame_redraws = diagnostics.video_frame_redraws.saturating_add(drained);
     });
-    world.write_message(RequestRedraw);
 }
 
 fn read_web_renderer_diagnostics() -> WebRendererDiagnostics {

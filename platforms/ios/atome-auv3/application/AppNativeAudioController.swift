@@ -58,6 +58,7 @@ final class AppNativeAudioController: NSObject {
     var wakeCaptureBackground = false
     var playbackEngineNeedsReset = false
     var playbackRouteSignature = ""
+    var playbackEngineIdlePause: DispatchWorkItem?
     var activeRecordingSessionId: String?
     var activeRecordingFileName: String?
     var activeRecordingPath: String?

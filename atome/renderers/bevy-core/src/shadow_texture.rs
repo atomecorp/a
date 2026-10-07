@@ -35,21 +35,43 @@ fn gaussian_kernel(blur: f32) -> Vec<f32> {
     weights
 }
 
+/// Index range `[start, end)` of outputs whose tap `index` samples inside
+/// `0..len`: `output + index - radius` must lie in `0..len`.
+fn tap_range(index: usize, radius: usize, len: usize) -> Option<(usize, usize)> {
+    let start = radius.saturating_sub(index);
+    let end = (len + radius).saturating_sub(index).min(len);
+    (start < end).then_some((start, end))
+}
+
+/// Separable gaussian pass. Taps are applied one at a time over contiguous
+/// runs: every output still sums exactly the same in-range terms in the same
+/// order (kernel index ascending, out-of-range taps skipped), so the result is
+/// bit-identical to the per-pixel form, without a bounds test per tap. The
+/// per-pixel form made the first opening of a shadowed panel freeze for
+/// ~400 ms on the main thread (WASM).
 fn convolve_axis(source: &[f32], width: usize, height: usize, kernel: &[f32], horizontal: bool) -> Vec<f32> {
-    let radius = (kernel.len() / 2) as isize;
-    let mut result = vec![0.0; source.len()];
-    for y in 0..height {
-        for x in 0..width {
-            let mut alpha = 0.0;
-            for (index, weight) in kernel.iter().enumerate() {
-                let offset = index as isize - radius;
-                let sample_x = if horizontal { x as isize + offset } else { x as isize };
-                let sample_y = if horizontal { y as isize } else { y as isize + offset };
-                if sample_x >= 0 && sample_x < width as isize && sample_y >= 0 && sample_y < height as isize {
-                    alpha += source[sample_y as usize * width + sample_x as usize] * weight;
+    let radius = kernel.len() / 2;
+    let mut result = vec![0.0_f32; source.len()];
+    if horizontal {
+        for (row, out) in source.chunks_exact(width).zip(result.chunks_exact_mut(width)) {
+            for (index, &weight) in kernel.iter().enumerate() {
+                let Some((start, end)) = tap_range(index, radius, width) else { continue };
+                let shifted = &row[start + index - radius..end + index - radius];
+                for (value, sample) in out[start..end].iter_mut().zip(shifted) {
+                    *value += sample * weight;
                 }
             }
-            result[y * width + x] = alpha;
+        }
+    } else {
+        for (index, &weight) in kernel.iter().enumerate() {
+            let Some((start, end)) = tap_range(index, radius, height) else { continue };
+            for y in start..end {
+                let sample_y = y + index - radius;
+                let samples = &source[sample_y * width..(sample_y + 1) * width];
+                for (value, sample) in result[y * width..(y + 1) * width].iter_mut().zip(samples) {
+                    *value += sample * weight;
+                }
+            }
         }
     }
     result
@@ -170,6 +192,7 @@ pub(crate) fn build_gaussian_shadow_texture_rgba_for_silhouette(
         // elle est l'antialiasing du contour, exactement comme le bloc.
         mask.clone()
     };
+    let rgb = [channel_to_u8(color[0]), channel_to_u8(color[1]), channel_to_u8(color[2])];
     let mut rgba = vec![0; image_width * image_height * 4];
     for (index, value) in alpha.iter().enumerate() {
         let offset = index * 4;
@@ -178,9 +201,7 @@ pub(crate) fn build_gaussian_shadow_texture_rgba_for_silhouette(
             let y = (index / image_width) as f32 + 0.5 - padding as f32 + offset[1];
             value * (owner.signed_distance(x, y) + 0.5).clamp(0.0, 1.0)
         });
-        rgba[offset] = channel_to_u8(color[0]);
-        rgba[offset + 1] = channel_to_u8(color[1]);
-        rgba[offset + 2] = channel_to_u8(color[2]);
+        rgba[offset..offset + 3].copy_from_slice(&rgb);
         rgba[offset + 3] = channel_to_u8(color[3] * visible_alpha);
     }
     Some((image_width as u32, image_height as u32, rgba))
@@ -334,4 +355,46 @@ pub(crate) fn build_gaussian_outer_shadow_texture_rgba_for_silhouette(
         }
     }
     Some((image_width as u32, image_height as u32, rgba))
+}
+
+#[cfg(test)]
+mod convolution_equivalence_tests {
+    use super::{convolve_axis, gaussian_kernel};
+
+    /// The per-pixel form this pass replaced: the output must stay bit-identical.
+    fn reference(source: &[f32], width: usize, height: usize, kernel: &[f32], horizontal: bool) -> Vec<f32> {
+        let radius = (kernel.len() / 2) as isize;
+        let mut result = vec![0.0; source.len()];
+        for y in 0..height {
+            for x in 0..width {
+                let mut alpha = 0.0;
+                for (index, weight) in kernel.iter().enumerate() {
+                    let offset = index as isize - radius;
+                    let sample_x = if horizontal { x as isize + offset } else { x as isize };
+                    let sample_y = if horizontal { y as isize } else { y as isize + offset };
+                    if sample_x >= 0 && sample_x < width as isize && sample_y >= 0 && sample_y < height as isize {
+                        alpha += source[sample_y as usize * width + sample_x as usize] * weight;
+                    }
+                }
+                result[y * width + x] = alpha;
+            }
+        }
+        result
+    }
+
+    #[test]
+    fn tap_major_convolution_is_bit_identical_to_the_per_pixel_form() {
+        let mut seed = 0x2545_f491_u32;
+        let mut next = || { seed ^= seed << 13; seed ^= seed >> 17; seed ^= seed << 5; (seed % 1000) as f32 / 999.0 };
+        for &(width, height, blur) in &[(1, 1, 24.0), (3, 70, 24.0), (70, 3, 24.0), (17, 23, 0.4), (120, 80, 6.0), (64, 64, 48.0)] {
+            let source: Vec<f32> = (0..width * height).map(|_| next()).collect();
+            let kernel = gaussian_kernel(blur);
+            for horizontal in [true, false] {
+                let expected = reference(&source, width, height, &kernel, horizontal);
+                let actual = convolve_axis(&source, width, height, &kernel, horizontal);
+                assert!(expected.iter().zip(&actual).all(|(a, b)| a.to_bits() == b.to_bits()),
+                    "{width}x{height} blur {blur} horizontal {horizontal}");
+            }
+        }
+    }
 }

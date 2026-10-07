@@ -79,7 +79,7 @@ export const runProjectViewLayoutAcceptance = async ({ page, report, check, ensu
         assert(Math.abs(restored.state.presentationRatio - split) < 0.001, 'list_split_not_restored');
         await screenshot({ page, report, outDir, name: 'structured_split_reloaded' });
     });
-    await check('local scrub isolates its row, shows empty ranges and restores context', async () => {
+    await check('local scrub drives the shared project transport and keeps its chosen position', async () => {
         const view = await geometry();
         let rowId; let cursor;
         for (const id of view.rows) {
@@ -92,35 +92,36 @@ export const runProjectViewLayoutAcceptance = async ({ page, report, check, ensu
         const durations = Array.from({ length: 20 }, (_, index) => [2, 3, 5][index % 3]);
         const timing = { start: durations.slice(0, canonicalIndex).reduce((sum, duration) => sum + duration, 0),
             duration: durations[canonicalIndex], total: durations.reduce((sum, duration) => sum + duration, 0) };
+        const targetRatio = (timing.start + timing.duration / 2) / timing.total;
         const preview = await target(rowId + '_preview');
         const point = await playwrightPointForClientTarget(page, cursor);
         const read = () => page.evaluate(async () => (await import('/eVe/domains/rendering/project_view_transport_runtime.js')).projectViewTransport.read());
         const prior = await read();
         await page.mouse.move(point.x, point.y); await page.mouse.down();
-        await waitFor(page, async () => ({ ok: (await import('/eVe/domains/rendering/project_view_transport_runtime.js')).projectViewTransport.read().status === 'scrubbing' }));
-        const middleX = preview.hit.box.x + (timing.start + timing.duration / 2) / timing.total * preview.hit.box.width;
-        await page.mouse.move(middleX, point.y, { steps: 12 });
         await waitFor(page, async (id) => {
             const transport = (await import('/eVe/domains/rendering/project_view_transport_runtime.js')).projectViewTransport.read();
-            return { ok: transport.rootId === id && transport.isolatedId === id && transport.progress > 0.45 && transport.progress < 0.55
-                && transport.activeLeafIds.join() === id, transport };
-        }, atomeId);
-        await screenshot({ page, report, outDir, name: 'structured_local_scrub', preservePointer: true });
-        await page.mouse.move(preview.hit.box.x + (timing.start > 0 ? 0 : 0.95) * preview.hit.box.width + 2, point.y, { steps: 12 });
-        await waitFor(page, async () => ({ ok: (await import('/eVe/domains/rendering/project_view_transport_runtime.js')).projectViewTransport.read().activeLeafIds.length === 0 }));
-        const emptyGeometry = await geometry();
-        const emptyRatio = timing.start > 0 ? 0 : 0.95;
-        const expectedCursor = Math.max(0, emptyRatio * emptyGeometry.nodes[rowId + '_preview'].size[0] - 6);
-        assert(Math.abs(emptyGeometry.nodes[rowId + '_playhead'].position[0] - expectedCursor) < 5,
-            'empty_range_cursor_clamped_to_clip');
-        await screenshot({ page, report, outDir, name: 'structured_local_scrub_empty', preservePointer: true });
-        await page.mouse.up();
-        await waitFor(page, async (prior) => {
+            return { ok: transport.status === 'scrubbing' && transport.rootId === id, transport };
+        }, project.id);
+        const middleX = preview.hit.box.x + targetRatio * preview.hit.box.width;
+        await page.mouse.move(middleX, point.y, { steps: 12 });
+        await waitFor(page, async (ratio) => {
             const transport = (await import('/eVe/domains/rendering/project_view_transport_runtime.js')).projectViewTransport.read();
-            return { ok: !transport.isolatedId && transport.rootId === prior.rootId && transport.status === prior.status, transport };
-        }, prior);
+            return { ok: transport.status === 'scrubbing' && Math.abs(transport.progress - ratio) < 0.08, transport };
+        }, targetRatio);
+        await screenshot({ page, report, outDir, name: 'structured_local_scrub', preservePointer: true });
+        await page.mouse.up();
+        await waitFor(page, async (ratio) => {
+            const transport = (await import('/eVe/domains/rendering/project_view_transport_runtime.js')).projectViewTransport.read();
+            return { ok: transport.status === 'paused' && Math.abs(transport.progress - ratio) < 0.08, transport };
+        }, targetRatio);
+        const after = await read();
+        assert(after.rootId === project.id && after.status === 'paused', `local_scrub_left_shared_transport:${JSON.stringify(after)}`);
+        assert(Math.abs(after.progress - targetRatio) < 0.08, `local_scrub_not_persisted:${JSON.stringify(after)}`);
+        const settled = await geometry();
+        const expectedCursor = Math.max(0, targetRatio * settled.nodes[rowId + '_preview'].size[0] - 6);
+        assert(Math.abs(settled.nodes[rowId + '_playhead'].position[0] - expectedCursor) < 6, 'local_scrub_cursor_reset');
         assert(await findBevyUiNodeTarget(page, { treeId: 'eve_bevy_ui_project_view', nodeId: rowId }), 'scrub_hid_visible_track');
-        report.layoutLocalScrub = { prior, after: await read(), timing };
+        report.layoutLocalScrub = { prior, after, timing, targetRatio };
     });
     await check('project cursor scrubs the complete container rather than the selected track', async () => {
         const view = await geometry();

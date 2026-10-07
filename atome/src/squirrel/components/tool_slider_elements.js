@@ -1,4 +1,5 @@
 // Extracted from tool_slider_builder.js: builds the IntuitionX slider tool DOM (shell/hitzone/input/value).
+import { normalizeSliderOptions, formatSliderBound } from './slider_contract.js';
 import { createNode, addOptionalClassNames, resolveDesignTokens } from './tool_slider_helpers.js';
 
 const createSliderToolElements = ({
@@ -11,11 +12,12 @@ const createSliderToolElements = ({
     initialValue,
     label,
     orientation = 'horizontal',
-    designTokens = {}
+    designTokens = {}, sliderOptions = {}
 } = {}) => {
     const host = contentHost instanceof HTMLElement ? contentHost : button;
     const colors = resolveDesignTokens(designTokens);
     const vertical = orientation === 'vertical';
+    const options = normalizeSliderOptions(sliderOptions);
 
     const shell = createNode('div', {
         parent: host,
@@ -42,6 +44,7 @@ const createSliderToolElements = ({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'stretch',
+            ...(options.showBounds ? { flexDirection: vertical ? 'column' : 'row', gap: '7px' } : {}),
             minHeight: '0',
             paddingTop: '0',
             paddingBottom: '0',
@@ -75,6 +78,16 @@ const createSliderToolElements = ({
     });
     addOptionalClassNames(input, classNames.input);
 
+    const bounds = options.showBounds ? [min, max].map((value, index) => {
+        const entry = createNode('span', { attrs: { id: button.id + (index ? '_max' : '_min') },
+            text: formatSliderBound(value), css: { fontSize: '11px', lineHeight: '1', color: colors.textMain,
+                flex: '0 0 auto', pointerEvents: 'none' } });
+        if ((vertical && index === 1) || (!vertical && index === 0)) hitzone.insertBefore(entry, input);
+        else hitzone.appendChild(entry);
+        return entry;
+    }) : [];
+    if (bounds.length) input.style.flex = '1 1 auto';
+
     const infoRow = createNode('div', {
         parent: shell,
         attrs: { 'data-role': 'eve_intuitionx-slider-info' },
@@ -84,6 +97,7 @@ const createSliderToolElements = ({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
+            ...(options.valueInsetPx ? { paddingTop: options.valueInsetPx + 'px' } : {}),
             gap: '8px',
             pointerEvents: 'auto'
         }
@@ -198,6 +212,7 @@ const createSliderToolElements = ({
 
     return {
         shell,
+        bounds,
         hitzone,
         input,
         labelEl,
@@ -207,5 +222,13 @@ const createSliderToolElements = ({
     };
 };
 
-
-export { createSliderToolElements };
+/** Both manual-entry controls keep the same canonical typography and frame. */
+const createSliderToolEditor = ({ parent, colors, unit = false, value, min, max, step }) => createNode(unit ? 'select' : 'input', {
+    parent, attrs: unit ? { 'data-role': 'eve_intuitionx-slider-unit-select' } : {
+        'data-role': 'eve_intuitionx-slider-value-input', type: 'number', min: String(min), max: String(max), step: String(step), value: String(value) },
+    css: { ...(unit ? { minWidth: '52px' } : { width: '72px', minWidth: '52px', textAlign: 'right' }),
+        fontSize: '11px', lineHeight: '1', fontWeight: '600', letterSpacing: '0.04em', textTransform: 'uppercase',
+        color: colors.textMain, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)',
+        borderRadius: '5px', padding: '2px 4px', outline: 'none' }
+});
+export { createSliderToolElements, createSliderToolEditor };

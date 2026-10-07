@@ -34,7 +34,8 @@ test('shared vertical tool slider renders an upward compact anchor and clamps it
         id: 'slider', label: 'Size', value: 50, unit: '%', expanded: true
     });
     assert.deepEqual(expanded.style.size, [60, 180]);
-    assert.deepEqual(findNode(expanded, 'slider_background').style.position, [0, 120]);
+    assert.deepEqual(findNode(expanded, 'slider_background').style.position, [0, 0]);
+    assert.deepEqual(findNode(expanded, 'slider_background').style.size, [60, 180]);
     assert.equal(findNode(expanded, 'slider_value').text, '50 %');
     assert.ok(findNode(expanded, 'slider_rail'));
     assert.ok(findNode(expanded, 'slider_thumb'));

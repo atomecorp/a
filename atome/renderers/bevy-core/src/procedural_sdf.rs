@@ -70,6 +70,7 @@ pub struct ProceduralSdfPlugin;
 
 impl Plugin for ProceduralSdfPlugin {
     fn build(&self, app: &mut App) {
+        app.add_plugins(crate::login_light::LoginLightPlugin);
         app.init_resource::<Assets<Shader>>();
         load_internal_asset!(
             app,
@@ -204,6 +205,9 @@ pub fn insert_procedural_sdf(
 }
 
 pub fn resize_procedural_sdf(world: &mut World, entity: Entity, logical_size: [f32; 2]) -> Result<(), String> {
+    if world.get::<MeshMaterial2d<crate::login_light::LoginLightMaterial>>(entity).is_some() {
+        return crate::login_light::resize(world, entity, logical_size);
+    }
     if world.get::<MeshMaterial2d<ProceduralSdfMaterial>>(entity).is_none() {
         return Ok(());
     }
@@ -217,6 +221,9 @@ pub fn resize_procedural_sdf(world: &mut World, entity: Entity, logical_size: [f
 }
 
 pub fn patch_procedural_sdf(world: &mut World, entity: Entity, contract: AtomeProceduralSdf) -> Result<(), String> {
+    if world.get::<MeshMaterial2d<crate::login_light::LoginLightMaterial>>(entity).is_some() {
+        return crate::login_light::patch(world, entity, contract);
+    }
     let handle = world
         .get::<MeshMaterial2d<ProceduralSdfMaterial>>(entity)
         .map(|material| material.0.clone())

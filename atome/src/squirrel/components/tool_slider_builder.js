@@ -2,7 +2,8 @@ import { $ } from '../squirrel.js';
 // The slider's collapsed square is the framework base unit; the caller passes the
 // live surface size, this import is only the last-resort default.
 import { SYSTEM_UI_METRICS } from '../../../../eVe/elements/system_ui_tokens.js';
-import { createSliderToolElements } from './tool_slider_elements.js';
+import { normalizeSliderOptions, resolveSliderLength, quantizeSliderValue as quantize, formatSliderBound } from './slider_contract.js';
+import { createSliderToolElements, createSliderToolEditor } from './tool_slider_elements.js';
 import { createDirectSliderDragController } from './tool_slider_drag.js';
 import { createSliderEmitters } from './tool_slider_emit.js';
 import { VALUE_DOUBLE_CLICK_GUARD_MS, CANONICAL_SLIDER_TOOL_SHELL_SELECTOR, CANONICAL_SLIDER_TOOL_HITZONE_SELECTOR,
@@ -24,7 +25,7 @@ const mountIntuitionXSliderToolContent = ({
     onUnitChange = null,
     onDragStart = null,
     onDragEnd = null,
-    designTokens = {}
+    designTokens = {}, sliderOptions = definition.sliderOptions || {}, availableLength = null
 } = {}) => {
     if (!(button instanceof HTMLElement)) return null;
     const resolvedOrientation = String(orientation || definition?.orientation || 'horizontal').trim().toLowerCase() === 'vertical'
@@ -32,7 +33,8 @@ const mountIntuitionXSliderToolContent = ({
         : 'horizontal';
     const vertical = resolvedOrientation === 'vertical';
     const toolSizePx = Math.max(1, Math.round(toFiniteNumber(collapsedWidthPx, SYSTEM_UI_METRICS.unitPx)));
-    const expandedLength = Math.max(toolSizePx, Math.round(toFiniteNumber(expandedWidthPx, Math.round(toolSizePx * 3))));
+    const options = normalizeSliderOptions(sliderOptions);
+    const expandedLength = Math.max(toolSizePx, resolveSliderLength(options, Math.round(toFiniteNumber(expandedWidthPx, toolSizePx * 3)), availableLength));
     const min = toFiniteNumber(definition.sliderMin, 0);
     const max = Math.max(min, toFiniteNumber(definition.sliderMax, 100));
     const step = Math.max(0.0001, toFiniteNumber(definition.sliderStep, 1));
@@ -58,6 +60,7 @@ const mountIntuitionXSliderToolContent = ({
 
     const {
         shell,
+        bounds,
         hitzone,
         input,
         labelEl,
@@ -74,13 +77,14 @@ const mountIntuitionXSliderToolContent = ({
         initialValue,
         label,
         orientation: resolvedOrientation,
-        designTokens: colors
+        designTokens: colors, sliderOptions: options
     });
     const { emitInput, emitChange, emitUnitChange } = createSliderEmitters({
         onInput, onChange, onUnitChange, input, button, labelEl, valueButton, unitButton,
         getUnit: () => currentUnit
     });
     const syncValueVisual = () => {
+        bounds.forEach((bound, index) => { bound.textContent = formatSliderBound(index ? max : min, currentUnit); });
         const currentValue = clamp(toFiniteNumber(input.value, initialValue), min, max);
         valueButton.textContent = formatSliderValue({
             value: currentValue,
@@ -92,11 +96,7 @@ const mountIntuitionXSliderToolContent = ({
             display: showUnit ? 'inline-flex' : 'none'
         });
     };
-    const quantizeSliderValue = (raw) => {
-        const clamped = clamp(toFiniteNumber(raw, initialValue), min, max);
-        const steps = Math.round((clamped - min) / step);
-        return clamp(min + (steps * step), min, max);
-    };
+    const quantizeSliderValue = raw => quantize(raw, { min, max, step });
     const destroyUnitEditor = () => {
         if (!unitEditorSelect) return;
         try {
@@ -128,6 +128,7 @@ const mountIntuitionXSliderToolContent = ({
     const applyExpandedState = (nextExpanded) => {
         const previousExpanded = expanded;
         expanded = nextExpanded === true;
+        bounds.forEach(bound => { bound.hidden = !expanded; });
         button.dataset.sliderExpanded = expanded ? 'true' : 'false';
         setStyles(button, {
             width: `${vertical ? toolSizePx : (expanded ? expandedLength : toolSizePx)}px`,
@@ -181,6 +182,7 @@ const mountIntuitionXSliderToolContent = ({
         input,
         hitzone,
         expandedLength,
+        useTrackLength: options.showBounds || options.lengthPx !== null,
         orientation: resolvedOrientation,
         step,
         min,
@@ -304,33 +306,7 @@ const mountIntuitionXSliderToolContent = ({
         setStyles(valueButton, {
             display: 'none'
         });
-        valueEditorInput = createNode('input', {
-            parent: valueWrap,
-            attrs: {
-                'data-role': 'eve_intuitionx-slider-value-input',
-                type: 'number',
-                min: String(min),
-                max: String(max),
-                step: String(step),
-                value: String(currentValue)
-            },
-            css: {
-                width: '72px',
-                minWidth: '52px',
-                fontSize: '11px',
-                lineHeight: '1',
-                fontWeight: '600',
-                letterSpacing: '0.04em',
-                textTransform: 'uppercase',
-                textAlign: 'right',
-                color: colors.textMain,
-                background: 'rgba(255,255,255,0.08)',
-                border: '1px solid rgba(255,255,255,0.18)',
-                borderRadius: '5px',
-                padding: '2px 4px',
-                outline: 'none'
-            }
-        });
+        valueEditorInput = createSliderToolEditor({ parent: valueWrap, colors, value: currentValue, min, max, step });
         addOptionalClassNames(valueEditorInput, classNames.valueEditorInput);
         const commit = () => {
             if (!valueEditorInput) return;
@@ -376,26 +352,7 @@ const mountIntuitionXSliderToolContent = ({
         if (unitEditorSelect) return;
         const options = normalizeUnitOptions(definition, currentUnit);
         if (options.length <= 1) return;
-        unitEditorSelect = createNode('select', {
-            parent: valueWrap,
-            attrs: {
-                'data-role': 'eve_intuitionx-slider-unit-select'
-            },
-            css: {
-                minWidth: '52px',
-                fontSize: '11px',
-                lineHeight: '1',
-                fontWeight: '600',
-                letterSpacing: '0.04em',
-                textTransform: 'uppercase',
-                color: colors.textMain,
-                background: 'rgba(255,255,255,0.08)',
-                border: '1px solid rgba(255,255,255,0.18)',
-                borderRadius: '5px',
-                padding: '2px 4px',
-                outline: 'none'
-            }
-        });
+        unitEditorSelect = createSliderToolEditor({ parent: valueWrap, colors, unit: true });
         addOptionalClassNames(unitEditorSelect, classNames.unitEditorSelect);
         options.forEach((entry) => {
             createNode('option', {

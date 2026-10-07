@@ -36,6 +36,13 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         surface_paint: None,
         backdrop: None,
         presentation: false,
+        shape_variant: None,
+        star_branches: None,
+        star_inner_radius: None,
+        polygon_sides: None,
+        mask: None,
+        mask_source: false,
+        menu_plane: 0,
         procedural: None,
         text: None,
         source: None,
@@ -95,7 +102,8 @@ fn web_update_systems_do_not_emit_recursive_wakes_after_export_wake() {
             .resource::<Messages<RequestRedraw>>()
             .iter_current_update_messages()
             .count(),
-        1
+        0,
+        "a drain is rendered by the update that drains it"
     );
 }
 
@@ -109,7 +117,7 @@ fn explicit_redraw_drain_does_not_emit_recursive_wake() {
     request_web_redraw();
     assert_eq!(read_web_renderer_diagnostics().wake_calls, 1);
 
-    apply_pending_web_redraw(app.world_mut());
+    apply_pending_web_redraw();
 
     let diagnostics = read_web_renderer_diagnostics();
     assert_eq!(diagnostics.wake_calls, 1);
@@ -120,7 +128,8 @@ fn explicit_redraw_drain_does_not_emit_recursive_wake() {
             .resource::<Messages<RequestRedraw>>()
             .iter_current_update_messages()
             .count(),
-        1
+        0,
+        "a drain is rendered by the update that drains it"
     );
 }
 

@@ -1,5 +1,5 @@
 import { getFastifyHttpBaseUrl } from '../adole_backend.js';
-import { synchronizeBrowserWorkspace } from './browser_workspace.js';
+import { requeueRefusedBrowserWorkspaceEvents, synchronizeBrowserWorkspace } from './browser_workspace.js';
 // Application authentication owner: remote proof exchange and local authorization
 // are separate lifecycles. Neither a cached phone nor an expired bearer unlocks data.
 import { TauriAdapter, FastifyAdapter } from '../adole.js';
@@ -272,7 +272,12 @@ export async function initializePhoneLinks() {
     };
     workspaceSynchronize = synchronize;
     const requestSync = () => { void synchronize().catch(error => env.dispatchEvent(new CustomEvent('squirrel:workspace-sync-paused', { detail: { code: error.message } }))); };
-    env.addEventListener('squirrel:remote-session-ready', requestSync, { signal: listeners.signal });
+    env.addEventListener('squirrel:remote-session-ready', () => {
+        void requeueRefusedBrowserWorkspaceEvents().then(requestSync, (error) => {
+            env.dispatchEvent(new CustomEvent('squirrel:workspace-sync-paused', { detail: { code: error.message } }));
+            requestSync();
+        });
+    }, { signal: listeners.signal });
     env.addEventListener('squirrel:workspace-outbox-ready', requestSync, { signal: listeners.signal });
     env.addEventListener('online', requestSync, { signal: listeners.signal });
     env.addEventListener('squirrel:phone-link-ready', resume, { signal: listeners.signal });

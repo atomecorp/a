@@ -350,3 +350,5 @@ eve/application
 !tests/eve/first_launch_matrix.test.mjs
 !tests/eve/first_launch_phone_payment.test.mjs
 !tests/eve/first_launch_runtime.test.mjs
+
+!tests/eve/slider_options_contract.test.mjs

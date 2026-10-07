@@ -7,6 +7,7 @@ use bevy::prelude::*;
 use bevy::window::{CompositeAlphaMode, RequestRedraw, WindowResized, WindowResolution};
 use bevy::winit::UpdateMode;
 use std::time::Duration;
+use crate::frame_clock::WEB_IDLE_HEARTBEAT_MS;
 
 use super::*;
 
@@ -32,6 +33,13 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         surface_paint: None,
         backdrop: None,
         presentation: false,
+        shape_variant: None,
+        star_branches: None,
+        star_inner_radius: None,
+        polygon_sides: None,
+        mask: None,
+        mask_source: false,
+        menu_plane: 0,
         procedural: None,
         text: None,
         source: None,
@@ -340,7 +348,8 @@ fn queued_exports_apply_through_shared_core() {
             .resource::<Messages<RequestRedraw>>()
             .iter_current_update_messages()
             .count(),
-        1
+        0,
+        "a drain is rendered by the update that drains it"
     );
 }
 
@@ -381,6 +390,13 @@ fn queued_audio_progress_styles_are_coalesced_per_atome() {
         surface_paint: None,
         backdrop: None,
         procedural: None,
+        corner_radius: None,
+        corner_radii: None,
+        shape_variant: None,
+        star_branches: None,
+        star_inner_radius: None,
+        polygon_sides: None,
+        mask: None,
     }));
     queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
         id: "waveform_1".to_string(),
@@ -394,6 +410,13 @@ fn queued_audio_progress_styles_are_coalesced_per_atome() {
         surface_paint: None,
         backdrop: None,
         procedural: None,
+        corner_radius: None,
+        corner_radii: None,
+        shape_variant: None,
+        star_branches: None,
+        star_inner_radius: None,
+        polygon_sides: None,
+        mask: None,
     }));
     queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
         id: "waveform_2".to_string(),
@@ -407,6 +430,13 @@ fn queued_audio_progress_styles_are_coalesced_per_atome() {
         surface_paint: None,
         backdrop: None,
         procedural: None,
+        corner_radius: None,
+        corner_radii: None,
+        shape_variant: None,
+        star_branches: None,
+        star_inner_radius: None,
+        polygon_sides: None,
+        mask: None,
     }));
 
     let ops = drain_web_ops();
@@ -439,6 +469,13 @@ fn queued_opacity_styles_are_merged_per_atome() {
         surface_paint: None,
         backdrop: None,
         procedural: None,
+        corner_radius: None,
+        corner_radii: None,
+        shape_variant: None,
+        star_branches: None,
+        star_inner_radius: None,
+        polygon_sides: None,
+        mask: None,
     }));
     queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
         id: "video_1".to_string(),
@@ -452,6 +489,13 @@ fn queued_opacity_styles_are_merged_per_atome() {
         surface_paint: None,
         backdrop: None,
         procedural: None,
+        corner_radius: None,
+        corner_radii: None,
+        shape_variant: None,
+        star_branches: None,
+        star_inner_radius: None,
+        polygon_sides: None,
+        mask: None,
     }));
 
     let ops = drain_web_ops();
@@ -479,6 +523,13 @@ fn queued_styles_are_not_merged_across_non_style_ops_for_same_atome() {
         surface_paint: None,
         backdrop: None,
         procedural: None,
+        corner_radius: None,
+        corner_radii: None,
+        shape_variant: None,
+        star_branches: None,
+        star_inner_radius: None,
+        polygon_sides: None,
+        mask: None,
     }));
     queue_web_op(AtomeRenderOp::Despawn("atom_1".to_string()));
     queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
@@ -493,6 +544,13 @@ fn queued_styles_are_not_merged_across_non_style_ops_for_same_atome() {
         surface_paint: None,
         backdrop: None,
         procedural: None,
+        corner_radius: None,
+        corner_radii: None,
+        shape_variant: None,
+        star_branches: None,
+        star_inner_radius: None,
+        polygon_sides: None,
+        mask: None,
     }));
 
     let ops = drain_web_ops();
@@ -515,6 +573,13 @@ fn queued_styles_with_transition_are_not_merged() {
         surface_paint: None,
         backdrop: None,
         procedural: None,
+        corner_radius: None,
+        corner_radii: None,
+        shape_variant: None,
+        star_branches: None,
+        star_inner_radius: None,
+        polygon_sides: None,
+        mask: None,
     }));
     queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
         id: "atom_t".to_string(),
@@ -528,6 +593,13 @@ fn queued_styles_with_transition_are_not_merged() {
         surface_paint: None,
         backdrop: None,
         procedural: None,
+        corner_radius: None,
+        corner_radii: None,
+        shape_variant: None,
+        star_branches: None,
+        star_inner_radius: None,
+        polygon_sides: None,
+        mask: None,
     }));
 
     let ops = drain_web_ops();
@@ -557,14 +629,15 @@ fn exported_web_redraw_request_is_applied_before_user_input() {
     let _ = reset_web_renderer_diagnostics();
 
     request_web_redraw();
-    apply_pending_web_redraw(app.world_mut());
+    apply_pending_web_redraw();
 
     assert_eq!(
         app.world()
             .resource::<Messages<RequestRedraw>>()
             .iter_current_update_messages()
             .count(),
-        1
+        0,
+        "a drain is rendered by the update that drains it"
     );
     let diagnostics = read_web_renderer_diagnostics();
     assert_eq!(diagnostics.redraw_requests, 1);
@@ -572,21 +645,22 @@ fn exported_web_redraw_request_is_applied_before_user_input() {
 }
 
 #[test]
-fn exported_video_frame_notification_requests_redraw() {
+fn exported_video_frame_notification_is_drained_without_extra_redraw() {
     let _ = drain_web_video_frames();
     let _ = reset_web_renderer_diagnostics();
     let mut app = App::new();
     app.add_message::<RequestRedraw>();
 
     notify_web_video_frame("video_live".to_string(), 7);
-    apply_pending_video_frame_notifications(app.world_mut());
+    apply_pending_video_frame_notifications();
 
     assert_eq!(
         app.world()
             .resource::<Messages<RequestRedraw>>()
             .iter_current_update_messages()
             .count(),
-        1
+        0,
+        "a drain is rendered by the update that drains it"
     );
     let diagnostics = read_web_renderer_diagnostics();
     assert_eq!(diagnostics.video_frame_notifications, 1);

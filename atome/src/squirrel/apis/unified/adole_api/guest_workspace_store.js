@@ -3,12 +3,18 @@ import { sanitizeAtomeProperties } from '../../../../shared/atome_contract.js';
 // Installation-scoped browser guest persistence. This is the only local guest
 // authority and keeps append-only events separate from projected current state.
 const DB_NAME = 'squirrel_guest_workspace_v1';
-const DB_VERSION = 1;
+const DB_VERSION = 3;
 const STORE_RECORDS = 'records';
 const STORE_EVENTS = 'events';
 const STORE_SNAPSHOTS = 'snapshots';
 const STORE_QUEUE = 'queue';
 const STORE_FILES = 'files';
+// Outbox rows the server refused: kept, never dropped, out of the send order so
+// they cannot hold back the rows behind them; requeued on the next session.
+const STORE_REFUSED = 'refused_queue';
+// Outbox rows of one owner in send order. Without it, finding the next row to
+// send meant deserializing the whole outbox on every commit.
+const QUEUE_ORDER_INDEX = 'owner_created';
 
 function unavailable() {
     if (!globalThis.indexedDB) throw new Error('guest_storage_unavailable');
@@ -21,9 +27,11 @@ function openDatabase() {
         request.onerror = () => reject(request.error || new Error('guest_storage_open_failed'));
         request.onupgradeneeded = () => {
             const database = request.result;
-            [STORE_RECORDS, STORE_EVENTS, STORE_SNAPSHOTS, STORE_QUEUE, STORE_FILES].forEach((name) => {
+            [STORE_RECORDS, STORE_EVENTS, STORE_SNAPSHOTS, STORE_QUEUE, STORE_FILES, STORE_REFUSED].forEach((name) => {
                 if (!database.objectStoreNames.contains(name)) database.createObjectStore(name, { keyPath: 'key' });
             });
+            const queue = request.transaction.objectStore(STORE_QUEUE);
+            if (!queue.indexNames.contains(QUEUE_ORDER_INDEX)) queue.createIndex(QUEUE_ORDER_INDEX, ['owner_id', 'created_at']);
         };
         request.onsuccess = () => resolve(request.result);
     });
@@ -195,7 +203,10 @@ export async function guestAdoptionPayload(ownerId, targetOwner = null) {
         listGuestAtomes(ownerId, { include_deleted: true }),
         transact([STORE_EVENTS], 'readonly', (transaction) => requestValue(transaction.objectStore(STORE_EVENTS).getAll())),
         transact([STORE_SNAPSHOTS], 'readonly', (transaction) => requestValue(transaction.objectStore(STORE_SNAPSHOTS).getAll())),
-        transact([STORE_QUEUE], 'readonly', (transaction) => requestValue(transaction.objectStore(STORE_QUEUE).getAll())),
+        transact([STORE_QUEUE, STORE_REFUSED], 'readonly', (transaction) => Promise.all([
+            requestValue(transaction.objectStore(STORE_QUEUE).getAll()),
+            requestValue(transaction.objectStore(STORE_REFUSED).getAll())
+        ]).then(([queued, refused]) => [...queued, ...refused.map(({ refused: _refused, ...row }) => row)])),
         listGuestFiles(ownerId)
     ]);
     return rebindGuestMedia({
@@ -209,7 +220,7 @@ export async function guestAdoptionPayload(ownerId, targetOwner = null) {
 }
 
 export async function clearGuestWorkspace(ownerId) {
-    const stores = [STORE_RECORDS, STORE_EVENTS, STORE_SNAPSHOTS, STORE_QUEUE, STORE_FILES];
+    const stores = [STORE_RECORDS, STORE_EVENTS, STORE_SNAPSHOTS, STORE_QUEUE, STORE_FILES, STORE_REFUSED];
     const all = await Promise.all(stores.map((store) => transact([store], 'readonly', (transaction) => requestValue(transaction.objectStore(store).getAllKeys()))));
     await transact(stores, 'readwrite', (transaction) => {
         all.forEach((keys, index) => (keys || []).filter((value) => String(value).startsWith(`${String(ownerId)}:`))
@@ -231,13 +242,56 @@ export async function listWorkspaceEvents(ownerId, options = {}) {
         .map(({ key: _key, ...event }) => event);
 }
 
+// Same rows and order as filtering the outbox by owner then sorting it by
+// `created_at` (ties keep primary-key order in both), read from the index.
+// The bounds span every key type `created_at` could hold (number to string).
+const ownerQueueRange = (ownerId) => IDBKeyRange.bound([String(ownerId), -Infinity], [String(ownerId), []]);
+
 export async function pendingWorkspaceEvents(ownerId) {
-    const rows = await transact([STORE_QUEUE], 'readonly', tx => requestValue(tx.objectStore(STORE_QUEUE).getAll()));
-    return rows.filter(row => row.owner_id === String(ownerId)).sort((a, b) => a.created_at.localeCompare(b.created_at));
+    return transact([STORE_QUEUE], 'readonly', tx => requestValue(
+        tx.objectStore(STORE_QUEUE).index(QUEUE_ORDER_INDEX).getAll(ownerQueueRange(ownerId))));
+}
+
+// The next row to send: one cursor step instead of the whole outbox.
+export async function oldestPendingWorkspaceEvent(ownerId) {
+    return transact([STORE_QUEUE], 'readonly', tx => new Promise((resolve, reject) => {
+        const request = tx.objectStore(STORE_QUEUE).index(QUEUE_ORDER_INDEX).openCursor(ownerQueueRange(ownerId));
+        request.onsuccess = () => resolve(request.result ? request.result.value : null);
+        request.onerror = () => reject(request.error || new Error('guest_storage_request_failed'));
+    }));
 }
 
 export async function acknowledgeWorkspaceEvent(ownerId, eventId) {
     await transact([STORE_QUEUE], 'readwrite', tx => tx.objectStore(STORE_QUEUE).delete(key(ownerId, eventId)));
+}
+
+const ownerKeyRange = (ownerId) => IDBKeyRange.bound(`${String(ownerId)}:`, `${String(ownerId)}:\uffff`);
+
+// Moves a refused row out of the send order, atomically and without loss.
+export async function parkRefusedWorkspaceEvent(ownerId, entry, error) {
+    await transact([STORE_QUEUE, STORE_REFUSED], 'readwrite', tx => {
+        tx.objectStore(STORE_REFUSED).put({ ...entry, refused: { error: String(error || 'workspace_sync_refused'), at: new Date().toISOString() } });
+        tx.objectStore(STORE_QUEUE).delete(entry.key);
+    });
+}
+
+// Puts every refused row back in the outbox; `created_at` restores its place.
+export async function requeueRefusedWorkspaceEvents(ownerId) {
+    return transact([STORE_QUEUE, STORE_REFUSED], 'readwrite', tx => new Promise((resolve, reject) => {
+        const refused = tx.objectStore(STORE_REFUSED).getAll(ownerKeyRange(ownerId));
+        refused.onerror = () => reject(refused.error || new Error('guest_storage_request_failed'));
+        refused.onsuccess = () => {
+            for (const { refused: _refused, ...row } of refused.result) {
+                tx.objectStore(STORE_QUEUE).put(row);
+                tx.objectStore(STORE_REFUSED).delete(row.key);
+            }
+            resolve(refused.result.length);
+        };
+    }));
+}
+
+export async function refusedWorkspaceEvents(ownerId) {
+    return transact([STORE_REFUSED], 'readonly', tx => requestValue(tx.objectStore(STORE_REFUSED).getAll(ownerKeyRange(ownerId))));
 }
 
 // Incoming state cannot overwrite an unsent local change. Account namespaces and
@@ -249,10 +303,11 @@ export async function importWorkspaceStates(ownerId, states) {
         if (!properties || typeof properties !== 'object' || Array.isArray(properties)) throw new Error('workspace_properties_invalid');
         return { ...state, properties };
     });
-    await transact([STORE_RECORDS, STORE_QUEUE], 'readwrite', tx => {
+    await transact([STORE_RECORDS, STORE_QUEUE, STORE_REFUSED], 'readwrite', tx => {
         const pending = tx.objectStore(STORE_QUEUE).getAll();
-        pending.onsuccess = () => {
-            const dirty = new Set(pending.result.filter(row => row.owner_id === String(ownerId)).map(row => row.payload.atome_id));
+        const refused = tx.objectStore(STORE_REFUSED).getAll(ownerKeyRange(ownerId));
+        refused.onsuccess = () => {
+            const dirty = new Set([...pending.result, ...refused.result].filter(row => row.owner_id === String(ownerId)).map(row => row.payload.atome_id));
             for (const state of owned) {
                 if (dirty.has(state.atome_id)) continue;
                 const props = state.properties;
@@ -274,7 +329,7 @@ export async function acknowledgeWorkspaceFile(ownerId, fileId) {
 // Account copies and removal of the guest source share one local transaction.
 export async function completeBrowserGuestAdoption(fromOwner, toOwner) {
     if (!fromOwner || !toOwner || fromOwner === toOwner) throw new Error('guest_adoption_identity_invalid');
-    const stores = [STORE_RECORDS, STORE_EVENTS, STORE_SNAPSHOTS, STORE_QUEUE, STORE_FILES];
+    const stores = [STORE_RECORDS, STORE_EVENTS, STORE_SNAPSHOTS, STORE_QUEUE, STORE_FILES, STORE_REFUSED];
     let failure;
     try {
         await transact(stores, 'readwrite', tx => {
@@ -285,7 +340,7 @@ export async function completeBrowserGuestAdoption(fromOwner, toOwner) {
                     try {
                         for (const row of request.result) {
                             if (!String(row.key).startsWith(String(fromOwner) + ':')) continue;
-                            if (storeName !== STORE_QUEUE) {
+                            if (storeName !== STORE_QUEUE && storeName !== STORE_REFUSED) {
                                 const adopted = { ...rebindGuestMedia(row, fromOwner, toOwner), key: String(toOwner) + row.key.slice(String(fromOwner).length), owner_id: String(toOwner) };
                                 if (storeName === STORE_FILES) adopted.uploaded = true;
                                 store.add(adopted);

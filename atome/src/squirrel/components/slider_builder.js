@@ -7,6 +7,7 @@
 import { $, define } from '../squirrel.js';
 import { sliderVariants, sliderSizes, sliderPresets } from './slider_builder_data.js';
 import { setupSliderBehavior } from './slider_builder_behavior.js';
+import { normalizeSliderOptions, resolveSliderLength, normalizeSliderRange, formatSliderBound } from './slider_contract.js';
 import { makeId } from '../shared/scalars.js';
 
 // === DÉFINITION DES TEMPLATES DE BASE ===
@@ -111,6 +112,7 @@ const createSlider = (config = {}) => {
     // Nouveaux paramètres pour zone de drag limitée
     dragMin = null,  // Zone de drag minimum (null = utilise min)
     dragMax = null,  // Zone de drag maximum (null = utilise max)
+    unit = '', sliderOptions = {}, availableLength = null,
     ...otherProps
   } = config;
   let min = initialMin;
@@ -123,6 +125,7 @@ const createSlider = (config = {}) => {
   // Validation des valeurs
   const currentValue = Math.max(min, Math.min(max, value));
   const isCircular = type === 'circular';
+  const options = normalizeSliderOptions(sliderOptions);
 
   // Styles de base selon type et taille
   let containerStyles = { ...sliderVariants[type]?.container || {}, ...sliderSizes[size] || {} };
@@ -144,6 +147,22 @@ const createSlider = (config = {}) => {
   if (skin.progression) progressionStyles = { ...progressionStyles, ...skin.progression };
   if (skin.handle) handleStyles = { ...handleStyles, ...skin.handle };
   if (skin.label) labelStyles = { ...labelStyles, ...skin.label };
+
+  if (options.lengthPx !== null) {
+    const axis = type === 'vertical' ? 'height' : 'width';
+    const length = resolveSliderLength(options, parseFloat(containerStyles[axis]), availableLength);
+    containerStyles[axis] = length + 'px';
+    if (isCircular) containerStyles.height = length + 'px';
+  }
+  if (options.valueInsetPx) {
+    const axis = type === 'vertical' ? 'left' : 'top';
+    labelStyles[axis] = `calc(${labelStyles[axis] || '0px'} + ${options.valueInsetPx}px)`;
+  }
+  if (options.showBounds) {
+    // Reserve the midpoint for the current value; endpoints keep the native label style.
+    labelStyles[type === 'vertical' ? 'top' : 'left'] = '50%';
+    labelStyles.zIndex = '3';
+  }
 
   // Styles pour état disabled
   if (disabled) {
@@ -202,6 +221,13 @@ const createSlider = (config = {}) => {
     });
   }
 
+  const bounds = options.showBounds ? [min, max].map((bound, index) => $('slider-label', {
+    id: sliderId + (index ? '_max' : '_min'), text: formatSliderBound(bound, unit),
+    css: isCircular ? { ...labelStyles, top: '100%', left: index ? '100%' : '0' }
+      : type === 'vertical' ? { ...labelStyles, top: index ? '0' : '100%' }
+      : { ...labelStyles, left: index ? '100%' : '0', top: sliderVariants.horizontal.label.top }
+  })) : [];
+
   // Création des graduations si demandées
   if (showTicks && ticks.length > 0) {
     ticks.forEach((tickValue, index) => {
@@ -232,12 +258,17 @@ const createSlider = (config = {}) => {
   if (!isCircular && progression) track.appendChild(progression);
   container.appendChild(handle);  // Handle toujours au niveau du conteneur
   if (label) container.appendChild(label);
+  bounds.forEach(bound => container.appendChild(bound));
 
   // Variables de state
   const sState = { isDragging: false, currentVal: currentValue, currentHandleOffset: handleOffset };
 
   // Fonction de mise à jour de position
-  const { updatePosition } = setupSliderBehavior({ container, track, handle, progression, label, type, isCircular, min, max, step, value, disabled, onChange, onInput, sState });
+  const readConfig = () => ({ ...normalizeSliderRange({ min, max, step }), disabled, dragMin, dragMax, unit });
+  const { updatePosition, destroy } = setupSliderBehavior({ container, track, handle, progression, label, bounds, type, isCircular, readConfig, onChange, onInput, sState,
+    circularStyles: { stroke: skin.progression?.stroke || progressionStyles.backgroundColor || '#007bff',
+      strokeWidth: skin.progression?.strokeWidth || '6', strokeLinecap: skin.progression?.strokeLinecap || 'butt', opacity: skin.progression?.opacity || '1' } });
+  container.destroy = destroy;
   container.setValue = (newValue) => {
     updatePosition(newValue);
     if (onChange) onChange(sState.currentVal);
@@ -247,8 +278,7 @@ const createSlider = (config = {}) => {
   container.getValue = () => sState.currentVal;
 
   container.setRange = (newMin, newMax) => {
-    min = newMin;
-    max = newMax;
+    ({ min, max } = normalizeSliderRange({ min: newMin, max: newMax, step }));
     updatePosition(sState.currentVal);
     return container;
   };

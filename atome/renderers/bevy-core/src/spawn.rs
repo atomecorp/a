@@ -381,7 +381,11 @@ pub fn spawn_node_with_texture_handle(
                     surface_height,
                 ))
                 .id();
-            insert_procedural_sdf(world, entity, [width, height], contract)?;
+            if contract.mode > 3.5 {
+                crate::login_light::insert(world, entity, [width, height], contract, texture_handle)?;
+            } else {
+                insert_procedural_sdf(world, entity, [width, height], contract)?;
+            }
             entity
         }
         other => return Err(format!("bevy_render_kind_unsupported:{other}")),

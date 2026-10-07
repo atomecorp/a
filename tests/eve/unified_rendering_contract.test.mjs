@@ -44,8 +44,8 @@ import {
 import { normalizeTexturePayload } from '../../eVe/domains/rendering/bevy_ui_image_runtime.js';
 import { LOGIN_AMBIENT_ITERATIONS } from '../../eVe/intuition/tools/user_login_visual_contract.js';
 
-test('mobile login ambience stops after its entrance pass', () => {
-    assert.equal(LOGIN_AMBIENT_ITERATIONS, 1);
+test('explicitly restored login ambience repeats while the access screen is open', () => {
+    assert.equal(LOGIN_AMBIENT_ITERATIONS, Infinity);
 });
 
 test('Bevy media texture cache evicts by retained bytes and rejects oversized entries', () => {

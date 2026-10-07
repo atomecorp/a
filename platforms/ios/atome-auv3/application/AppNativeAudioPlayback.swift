@@ -28,6 +28,8 @@ extension AppNativeAudioController {
     }
 
     func ensureAudioEngineRunning(playbackFormat: AVAudioFormat? = nil) throws {
+        playbackEngineIdlePause?.cancel()
+        playbackEngineIdlePause = nil
         if engine.isRunning { return }
         let mixerNode = engine.mainMixerNode
         let outputNode = engine.outputNode
@@ -255,6 +257,30 @@ extension AppNativeAudioController {
         voice.stopWorkItem?.cancel()
         voice.playerNode.stop()
         detachVoiceNodes(voice)
+        schedulePlaybackEngineIdlePauseLocked()
+    }
+
+    /// A running `AVAudioEngine` keeps its output I/O unit rendering silence on
+    /// the realtime thread after the last voice ends — and, with
+    /// `UIBackgroundModes: audio`, keeps the whole app (WebView and renderer
+    /// included) awake in the background. Once no voice is left the engine is
+    /// paused: the graph and its resources stay allocated, and
+    /// `ensureAudioEngineRunning` restarts it on the next play. The grace
+    /// period spares back-to-back plays a restart.
+    static let playbackEngineIdlePauseSeconds: Double = 2.0
+
+    func schedulePlaybackEngineIdlePauseLocked() {
+        playbackEngineIdlePause?.cancel()
+        playbackEngineIdlePause = nil
+        guard voices.isEmpty, engine.isRunning else { return }
+        let pause = DispatchWorkItem { [weak self] in
+            guard let self, self.voices.isEmpty, self.engine.isRunning else { return }
+            self.playbackEngineIdlePause = nil
+            self.engine.pause()
+            AppNativeAudioDiagnostics.log("engine idle_paused")
+        }
+        playbackEngineIdlePause = pause
+        queue.asyncAfter(deadline: .now() + Self.playbackEngineIdlePauseSeconds, execute: pause)
     }
 
     func stopVoicesForAssetLocked(_ assetId: String) {

@@ -3,7 +3,7 @@
 import { getSessionState } from './session.js';
 import { isTauriRuntime } from './runtime.js';
 import { commitWorkspaceEvents, getGuestAtome, listGuestAtomes, listWorkspaceEvents,
-    pendingWorkspaceEvents, acknowledgeWorkspaceEvent, importWorkspaceStates, listGuestFiles, acknowledgeWorkspaceFile } from './guest_workspace_store.js';
+    oldestPendingWorkspaceEvent, acknowledgeWorkspaceEvent, parkRefusedWorkspaceEvent, requeueRefusedWorkspaceEvents, importWorkspaceStates, listGuestFiles, acknowledgeWorkspaceFile } from './guest_workspace_store.js';
 
 const owns = message => ['events', 'state-current', 'atome'].includes(message?.type);
 export function ownsBrowserWorkspaceMessage(message) { return !isTauriRuntime() && owns(message); }
@@ -49,6 +49,22 @@ export async function browserWorkspaceRequest(message) {
     return { ok: true, success: true, ...result };
 }
 
+// A row is parked only on the server's verdict about that row. No response, a
+// lost socket or a timeout (status 0) and an authentication refusal say
+// nothing about the row: the pass stops and the row keeps its place.
+const AUTHENTICATION_REFUSAL = /auth|token|session|unauthori[sz]ed|login|credential/i;
+const isRowRefusal = (response) => !!response && response.ok !== true && response.offline !== true
+    && Number(response.status) !== 0 && Number(response.status) !== 401
+    && !AUTHENTICATION_REFUSAL.test(String(response.error || ''));
+
+// Refused rows go back in the outbox once a session is (re)established: a right
+// granted meanwhile, or a server-side repair, lets them through in order.
+export async function requeueRefusedBrowserWorkspaceEvents() {
+    const owner = getSessionState().user?.id;
+    if (isTauriRuntime() || !owner || getSessionState().mode !== 'authenticated') return 0;
+    return requeueRefusedWorkspaceEvents(String(owner));
+}
+
 let synchronization;
 let synchronizationRequested = false;
 // Un commit arrive PENDANT une passe n'est pas dans la liste qu'elle a deja lue : il etait
@@ -86,11 +102,25 @@ async function synchronizeBrowserWorkspaceOnce({ send, ensureSession, uploadFile
         if (!result?.success || result.file_name !== file.file_name || result.owner_id !== owner) throw new Error('workspace_media_sync_failed');
         await acknowledgeWorkspaceFile(owner, file.file_id);
     }
-    for (const entry of await pendingWorkspaceEvents(owner)) {
+    // Oldest first, one row at a time, rows committed during the pass included.
+    // A row the server refuses is parked (kept, reported) so it cannot hold
+    // back every later change; any other failure stops the pass in place.
+    const refused = [];
+    for (let entry = await oldestPendingWorkspaceEvent(owner), previousKey = null; entry;
+        previousKey = entry.key, entry = await oldestPendingWorkspaceEvent(owner)) {
+        if (entry.key === previousKey) throw new Error('workspace_sync_acknowledgement_failed');
         stillAuthorized();
         const response = await send({ type: 'events', action: 'commit', event: entry.payload });
-        if (!response?.ok) throw new Error(response?.error || 'workspace_sync_failed');
-        await acknowledgeWorkspaceEvent(owner, entry.payload.id);
+        if (response?.ok) {
+            await acknowledgeWorkspaceEvent(owner, entry.payload.id);
+            continue;
+        }
+        if (!isRowRefusal(response)) throw new Error(response?.error || 'workspace_sync_failed');
+        await parkRefusedWorkspaceEvent(owner, entry, response.error);
+        refused.push({ id: entry.payload.id, atome_id: entry.payload.atome_id, error: String(response.error || 'workspace_sync_refused') });
+    }
+    if (refused.length) {
+        globalThis.window?.dispatchEvent(new CustomEvent('squirrel:workspace-sync-refused', { detail: { userId: owner, refused } }));
     }
     for (let offset = 0; ; offset += 250) {
         stillAuthorized();

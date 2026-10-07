@@ -189,3 +189,36 @@ test('shared Assistant/tool consumers retain their existing absolute subtree dep
     assert.equal(absolute.style.z_index, 1600);
     assert.equal(absolute.children[0].style.z_index, 1601);
 });
+
+test('data arriving during the first GPU mount is painted without another user gesture', async () => {
+    const previousWindow = globalThis.window, previousDocument = globalThis.document, previousRuntime = bevyPanelRuntimeState.runtime;
+    const dom = new JSDOM('<canvas id="eve_surface_project"></canvas>');
+    globalThis.window = dom.window; globalThis.document = dom.window.document;
+    dom.window.__eveWorkspaceMode = { mode: 'dashboard' }; dom.window.__eveDashboardMainMenuSuspended = true;
+    dom.window.requestAnimationFrame = cb => dom.window.setTimeout(cb, 0);
+    dom.window.cancelAnimationFrame = id => dom.window.clearTimeout(id);
+    const surface = dom.window.document.querySelector('canvas');
+    surface.getBoundingClientRect = () => ({ width: 800, height: 600 });
+    let value = 'Loading', requestRefresh;
+    const painted = [];
+    bevyPanelRuntimeState.runtime = {
+        mountTree: async ({ tree }) => {
+            painted.push(tree);
+            value = 'Loaded image'; requestRefresh(); requestRefresh();
+        },
+        updateTree: async ({ tree }) => { painted.push(tree); }, unmountTree: async () => {}
+    };
+    registerBevyPanelSurface({ surfaceKey: 'initial_refresh_fixture', title: 'Image picker',
+        onOpen: ({ refresh }) => { requestRefresh = refresh; }, readState: () => ({ value }),
+        buildContent: state => [textNode('loaded_media', state.value, { size: [140, 30] })] });
+    try {
+        await openBevyPanelSurface('initial_refresh_fixture');
+        const text = tree => projectBevyUiTreeRecords({ tree, treeId: tree.id, workspaceLayer: 'panel' }).find(record => record.properties.text === 'Loaded image');
+        assert.ok(text(painted.at(-1)), 'the loaded data must replace the first loading frame automatically');
+        assert.equal(painted.length, 2, 'initial refreshes coalesce into the standard refresh queue');
+    } finally {
+        await closeBevyPanelSurface('initial_refresh_fixture'); bevyPanelRuntimeState.definitions.delete('initial_refresh_fixture');
+        bevyPanelRuntimeState.runtime = previousRuntime;
+        globalThis.window = previousWindow; globalThis.document = previousDocument; dom.window.close();
+    }
+});

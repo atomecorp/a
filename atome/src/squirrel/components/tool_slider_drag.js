@@ -1,13 +1,7 @@
 // Extracted from tool_slider_builder.js: canonical slider-tool interaction semantics.
 const TOOL_SLIDER_DRAG_THRESHOLD_PX = 4;
+import { quantizeSliderValue as quantize } from './slider_contract.js';
 const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
-const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
-const quantize = (value, config = {}) => {
-    const min = finite(config.min, 0);
-    const max = Math.max(min, finite(config.max, 100));
-    const step = Math.max(0.0001, finite(config.step, 1));
-    return clamp(min + (Math.round((clamp(finite(value, min), min, max) - min) / step) * step), min, max);
-};
 
 const beginToolSliderSession = (value, config = {}, options = {}) => {
     const startValue = quantize(value, config);
@@ -58,7 +52,7 @@ const releaseToolSliderSession = (session = {}, options = {}) => {
 const createDirectSliderDragController = ({
     input,
     hitzone,
-    expandedLength,
+    expandedLength, useTrackLength = false,
     orientation = 'horizontal',
     step,
     min,
@@ -98,6 +92,7 @@ const createDirectSliderDragController = ({
     const resolveTrackLength = () => {
         const inputRect = input.getBoundingClientRect?.();
         const hitzoneRect = hitzone.getBoundingClientRect?.();
+        if (useTrackLength) return Math.max(1, Number(vertical ? inputRect?.height : inputRect?.width) || expandedLength);
         return Math.max(
             1,
             Number(vertical ? inputRect?.height : inputRect?.width) || 0,

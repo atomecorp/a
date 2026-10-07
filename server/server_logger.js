@@ -43,7 +43,7 @@ export function logStructured(level, { source = 'fastify', component = 'server',
     data
   };
   if (typeof _server?.log?.[level] === 'function') {
-    server.log[level](payload, message);
+    _server.log[level](payload, message);
   } else {
     const logLine = { ...payload, level, timestamp: new Date().toISOString(), message };
     process.stdout.write(`${JSON.stringify(logLine)}\n`);

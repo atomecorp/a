@@ -20,6 +20,7 @@ mod render_style_ops;
 pub mod shape_shadow_overlay;
 pub mod spawn;
 pub mod texture;
+mod login_light;
 pub mod types;
 mod types_procedural;
 mod types_ops;
@@ -74,3 +75,7 @@ mod shadow_outer_knockout_tests;
 #[cfg(test)]
 #[path = "../../../../tests/rendering/persistent_wallpaper.rs"]
 mod persistent_wallpaper_tests;
+
+#[cfg(test)]
+#[path = "../../../../tests/rendering/login_light.rs"]
+mod login_light_tests;
