@@ -507,8 +507,8 @@ final class LocalHTTPServer {
             return
         }
 
-        if type == "youtube-search" {
-            FastifySyncClient.shared.searchYoutube(payload) { [weak self, weak connection] response in
+        if FastifySyncClient.publicTypes.contains(type) {
+            FastifySyncClient.shared.relayPublic(payload) { [weak self, weak connection] response in
                 guard let self, let connection else { return }
                 self.queue.async { self.sendWebSocketJson(response, on: connection) }
             }

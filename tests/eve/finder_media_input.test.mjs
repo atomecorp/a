@@ -47,7 +47,10 @@ test('YouTube submits only on Enter, preserves pagination and ignores responses 
     const page = runtime.handleEvent({ type: 'finder.youtube.more' }); expect(requests[1].pageToken).toBe('page2');
     await runtime.handleEvent({ type: 'finder.query.field.focus', key: 'query' }); type('drums');
     finish({ records: [{ id: 'late', type: 'image', name: 'Late' }], nextPageToken: '' }); await page;
-    expect(runtime.readState().records).toEqual([]); submit(); runtime.surface.onClose();
+    // Editing keeps the shown results until Return; the late page of the old
+    // query is ignored (no "Late" row, no stale page token).
+    expect(runtime.readState().records.map(row => row.id)).toEqual(['abcDEFghi12']);
+    expect(runtime.readState().nextPageToken).toBe(''); submit(); runtime.surface.onClose();
     finish({ records: [{ id: 'closed', type: 'image' }], nextPageToken: '' });
     await new Promise(resolve => setTimeout(resolve, 0)); expect(runtime.state.records).toEqual([]);
 });

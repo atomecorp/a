@@ -274,3 +274,92 @@ WASM reconstruit, cartes `CODEMAP`/`API_MAP`.
 | Glisser de panneau | p95 17,6 ms, 0 longue tâche |
 
 Reste : validation énergie sur iPhone (par l'utilisateur).
+
+---
+
+# 4e passe — régression « tout est saccadé » (7 oct., soir)
+
+Signalé par l'utilisateur : sur iOS (et partout), zoom, rotation et ouverture de
+Mystic « par à-coups » sur un projet chargé (6 YouTube, 6 vidéos, 3 sons, 4 photos).
+
+## Cause démontrée
+
+La 1re passe (même jour) a retiré `RequestRedraw` des vidanges mais laissé les
+réveils d'entrée sur l'événement winit `WakeUp`. Un `WakeUp` réémis **pendant**
+un tick (réveils fusionnés, `Last`) est mis en file derrière `AboutToWait` et
+n'est traité qu'au tour suivant de la boucle — le battement de 500 ms — tandis
+que le drapeau « en vol » fusionne tous les réveils suivants dedans. Avant, la
+chaîne `RequestRedraw` → nouvelle frame masquait ce défaut.
+
+Sonde `temp/perf_regression_2026-10-07/gestures.probe.mjs` (projet de 19 médias,
+compteur de présentations WebGPU, ticks Bevy) :
+
+| Geste | WASM d'avant la 1re passe | WASM du matin | Corrigé (installé `5938a42173c303fd`) |
+|---|---|---|---|
+| Zoom objet (ctrl+molette) | 41 rendus/s | **2,6** | 53–57 |
+| Rotation 2 doigts | 31 | **2,7** | 50–54 |
+| Pincement objet | 40 | **1,9** | 53–57 |
+| Zoom de vue | 48 | **3,2** | 58–61 |
+| Mystic (2e ouverture) | 19 (doublons) | **2,8** | 44–46 rendus/s, écart p95 18 ms |
+| Repos en projet | 2 | 2 | 2 |
+
+La sonde d'interactions du matin ne l'a pas vu : elle mesurait la cadence rAF
+**JavaScript** (60/s) ; Bevy ne produisait que 4–5 images pendant Mystic (rapport
+`interactions_final`). Toujours mesurer ticks Bevy et présentations.
+
+## Corrections
+
+1. `frame_clock.rs` : un réveil demande la prochaine frame d'animation de la
+   fenêtre (une seule demande par frame, réarmée au début du tick) ; plus de
+   `WakeUp` une fois la fenêtre créée. Un réveil fusionné fait demander la frame
+   suivante en fin de tick (`continue_merged_wake`) — sinon une animation rAF ne
+   rend qu'une frame sur deux (mesuré : Mystic à 30/s). Vidéo et entrée partagent
+   ce chemin (`request_frame_paced_web_redraw` supprimé, diagnostic
+   `frame_requests` au lieu de `paced_redraws`).
+2. `guest_workspace_store.js#importWorkspaceStates` : la file d'envoi n'est plus
+   désérialisée **entière** (toutes identités : 47 441 lignes dans le profil de
+   sonde) pour chaque page de 250 états importés, à chaque passe de synchro (donc
+   après chaque geste) ; lecture des seules lignes du propriétaire par l'index
+   `owner_created`. Longues tâches de 300–660 ms en début de geste → 0.
+
+## Preuves
+
+- `tests/probes/bevy_web_frame_clock_cadence.probe.mjs` (nouveau, persistant) :
+  vraie boucle navigateur, scène vide, réveils cadencés rAF ; WASM du matin
+  5 rendus / 122 frames (ROUGE), corrigé 121/121 (VERT), headless 104/104, repos
+  2 ticks/s.
+- Tests Rust `squirrel-bevy-renderer` : 27/27.
+- Console : seuls avertissements préexistants (MIDI SysEx ; texture vidéo ignorée
+  sur les atomes YouTube sans affiche créés par la sonde), identiques avant/après.
+
+## Reste
+
+- 1re ouverture de Mystic dans une session : à-coup unique (~230–400 ms sur Mac)
+  = compilation des shaders/pipelines (naga) à la première utilisation. Piste :
+  préchauffer ces pipelines au repos après l'ouverture du projet.
+- Pas de validation sur iPhone possible ici (Bevy panique dans le simulateur) :
+  reconstruire l'app iOS (elle embarque `atome/src/wasm`) et vérifier zoom,
+  rotation, Mystic.
+- Web : chaque passe de synchro réimporte tout l'état du compte (pages de 250)
+  après chaque commit — coût proportionnel au compte ; un import incrémental
+  demande un curseur côté serveur (contrat de sync, module 06).
+
+## 4e passe — suite (optimisations mesurées après la réparation)
+
+| Changement | Avant → après |
+|---|---|
+| `listGuestAtomes` / `listWorkspaceEvents` bornés à la plage de clés du propriétaire (plus de désérialisation de toutes les identités) | Templates 1,05–1,28 s / 0,84–0,94 s → 0,84 s / 0,24 s |
+| `convolve_axis` : une ligne/colonne identique au bit près à sa voisine n'est calculée qu'une fois (rectangle arrondi = coins + bords) ; axe du dégradé de surface sorti de la boucle | 1re ouverture Info 820 → 509 ms, Media 225 → 156 ms (Mac) |
+| Rotation/échelle : l'ombre existante est reposée au lieu d'être re-rastérisée | sortie identique au pixel (A/B avant/pendant/après pincement) |
+
+Preuves : `atome-bevy-renderer-core` 173/173 (nouveaux tests d'identité au bit et
+d'ombre de panneau de bout en bout) ; `store_owner_range_equivalence.probe.mjs`
+(3 identités dont un préfixe partagé, protection à l'import) ;
+`rotated_shadow_pixels.probe.mjs` (ombre visible, 0 pixel différent).
+Mesure finale (WASM installé `b46bc53102ffe652`) : zoom objet 60, rotation 55,
+pincement 59, zoom de vue 59 rendus/s ; Mystic 2e ouverture p95 17 ms ; repos 2/s.
+
+Reste mesuré et non traité : texture de surface + évaluation de distance signée
+par pixel (~280 ms sur la 1re ouverture d'un panneau, O(surface)) ; passe JS
+`bleedTransparentTextPixels` (156 ms, déjà proche de son coût minimal) ;
+compilation des shaders à la 1re ouverture de Mystic.

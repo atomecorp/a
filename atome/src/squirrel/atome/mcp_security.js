@@ -44,6 +44,11 @@ const DEFAULT_ACTOR_CAPABILITIES = Object.freeze([
     'voice.read',
     'ai.read',
     'ai.execute',
+    // Watching television or a YouTube video for the user (ephemeral, no data written).
+    'tv.read',
+    'tv.control',
+    'youtube.read',
+    'youtube.control',
     'audit.read'
 ]);
 

@@ -1,4 +1,5 @@
 import { TV_COMMANDS, validateTvInput } from '../tv/contracts.js';
+import { YOUTUBE_COMMANDS, validateYoutubeInput } from '../youtube/contracts.js';
 import { SOCIAL_COMMANDS, validateSocialInput } from '../social/contracts.js';
 import { ensureRuntimeToolApi } from './mcp_bridges.js';
 import { buildRuntimeInvocationPayload, projectRuntimeMcpResult } from './mcp_runtime.js';
@@ -19,5 +20,7 @@ const createContractHandlers = ({ commands, validate, layer, noClient }) => Obje
 
 export const createMcpTvHandlers = () => createContractHandlers({
     commands: TV_COMMANDS, validate: validateTvInput, layer: 'atome_mcp_tv', noClient: 'NO_ACTIVE_CLIENT' });
+export const createMcpYoutubeHandlers = () => createContractHandlers({
+    commands: YOUTUBE_COMMANDS, validate: validateYoutubeInput, layer: 'atome_mcp_youtube', noClient: 'NO_ACTIVE_VIDEO' });
 export const createMcpSocialHandlers = () => createContractHandlers({
     commands: SOCIAL_COMMANDS, validate: validateSocialInput, layer: 'atome_mcp_social', noClient: 'social_handoff_unavailable' });

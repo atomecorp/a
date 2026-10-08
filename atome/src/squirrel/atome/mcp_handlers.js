@@ -1,4 +1,4 @@
-import { createMcpSocialHandlers, createMcpTvHandlers } from './mcp_handlers_contracts.js';
+import { createMcpSocialHandlers, createMcpTvHandlers, createMcpYoutubeHandlers } from './mcp_handlers_contracts.js';
 import { createMcpAiRuntimeHandlers } from './mcp_handlers_ai_runtime.js';
 import { createMcpCommunicationHandlers } from './mcp_handlers_communication.js';
 import { createMcpPlatformHandlers } from './mcp_handlers_platform.js';
@@ -13,5 +13,6 @@ Object.assign(
     createMcpCommunicationHandlers(),
     createMcpConditionHandlers(),
     createMcpTvHandlers(),
+    createMcpYoutubeHandlers(),
     createMcpSocialHandlers()
 );

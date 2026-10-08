@@ -2,8 +2,8 @@
 //!
 //! The winit loop runs in `Reactive` mode (an idle heartbeat, not a display-rate
 //! loop); a frame happens when something wakes it. Input-driven work wakes it
-//! immediately through the event-loop proxy, decoder-paced video frames request
-//! the next animation frame. Both must cost exactly the frames they need.
+//! by requesting the window's next animation frame — input and decoder-paced
+//! video frames alike — so each frame costs exactly one render.
 
 use bevy::{
     prelude::*,
@@ -17,7 +17,7 @@ use super::WEB_DIAGNOSTICS;
 thread_local! {
     pub(crate) static WEB_EVENT_LOOP_PROXY: RefCell<Option<EventLoopProxy<WinitUserEvent>>> = const { RefCell::new(None) };
     pub(crate) static WEB_WAKE_PENDING: RefCell<bool> = const { RefCell::new(false) };
-    pub(crate) static WEB_WAKE_INFLIGHT: RefCell<bool> = const { RefCell::new(false) };
+    pub(crate) static WEB_FRAME_REQUESTED: RefCell<bool> = const { RefCell::new(false) };
     pub(crate) static WEB_WAKE_COALESCED: RefCell<bool> = const { RefCell::new(false) };
 }
 
@@ -30,17 +30,15 @@ thread_local! {
 /// finger on the screen.
 ///
 /// Frames are driven by wakes instead: every path that queues work
-/// (`queue_web_ops`, `queue_web_ui_ops`, `request_web_redraw`) calls
-/// `wake_web_renderer`, video frames call `request_frame_paced_web_redraw`, and the JS runtime
+/// (`queue_web_ops`, `queue_web_ui_ops`, `request_web_redraw`,
+/// `notify_web_video_frame`) calls `wake_web_renderer`, and the JS runtime
 /// already batches those on `requestAnimationFrame`. Interaction therefore
 /// still renders at display rate — and, being rAF-driven, in step with the
 /// compositor rather than a free-running timer.
 ///
-/// This wait is only a failsafe: it bounds how long a dropped wake can leave
-/// the surface stale and clears a stuck in-flight wake flag. WKWebView can
-/// occasionally defer the async Winit user-event waker after a cold reload, so
-/// keep the bound below the one-second interaction budget without returning to
-/// a display-rate idle loop.
+/// This wait is only a failsafe: it bounds how long a frame the browser never
+/// delivered (hidden document) can leave the surface stale, without returning
+/// to a display-rate idle loop.
 pub(crate) const WEB_IDLE_HEARTBEAT_MS: u64 = 500;
 
 pub(crate) fn web_winit_settings() -> WinitSettings {
@@ -73,31 +71,51 @@ pub(crate) fn remember_event_loop_proxy(proxy: Option<Res<EventLoopProxyWrapper>
 // dropped for being "too soon" — a time-based throttle here would cap the
 // interactive frame rate at its own period.
 //
-// Wakes issued while a tick is already scheduled are merged into it rather than
-// sent twice — the pending queues are drained wholesale, so a second event
-// would only re-render an identical frame.
+// A wake requests the window's next animation frame: winit delivers it as one
+// `RedrawRequested`, whose update drains every queue and renders once, in step
+// with the compositor. Wakes issued before that frame starts are already
+// covered by it, so only the first one requests; `web_frame_probe_begin`
+// re-arms the request when the tick starts.
 //
-// Merging must not *drop* the wake, though. Delivering a `WakeUp` costs an
-// extra event-loop turn (Bevy re-arms `window.request_redraw()` after each
-// update), so a wake issued once per animation frame only lands every other
-// frame: measured 60 wakes/s producing 30 ticks/s, against a loop that reaches
-// 60 ticks/s when fed faster. A merged wake is therefore remembered and
-// re-emitted once the tick completes, which pipelines one frame behind and
-// restores full display-rate interaction.
+// The request is a frame, never a winit `WakeUp` user event. A `WakeUp` sent
+// while the loop is running — from inside a tick — is queued behind
+// `AboutToWait` and only processed on the loop's next turn: with nothing else
+// asking for a frame, that turn was the 500 ms heartbeat, and every wake in
+// between was merged into the stranded one. Interaction then rendered at
+// 2 frames/s (measured 2026-10-07: 70-150 wakes/s, 2 ticks/s). A frame
+// request cannot be stranded: the browser always delivers it.
 //
-// A wake can only ever be held until the next tick of any kind, and the
-// heartbeat guarantees one — so a lost `WakeUp` cannot wedge the clock.
+// Requesting only once per frame also keeps the request cheap and safe:
+// winit cancels and re-requests its animation frame on every call, so
+// repeated calls from a callback running ahead of it would push it back one
+// frame each time.
+//
+// A wake issued from a JavaScript animation callback that runs *before* the
+// renderer's own callback in the same frame is merged into that frame — but
+// then the next frame's wake runs after the tick re-armed the request, during
+// the animation-frame phase, and can only request the frame after it: one tick
+// every other frame (measured: Mystic opening at 30 frames/s). A merged wake
+// is therefore remembered, and the tick that covered it requests the next
+// frame itself (`continue_merged_wake`), which pipelines one frame ahead while
+// work keeps arriving and costs a single idle frame once it stops.
 pub(crate) fn wake_web_renderer() {
     WEB_DIAGNOSTICS.with(|cell| {
         cell.borrow_mut().wake_calls += 1;
     });
-    let already_scheduled = WEB_WAKE_INFLIGHT.with(|cell| cell.replace(true));
-    if already_scheduled {
+    if WEB_FRAME_REQUESTED.with(|cell| cell.replace(true)) {
         WEB_WAKE_COALESCED.with(|cell| {
             *cell.borrow_mut() = true;
         });
         return;
     }
+    if request_web_frame() {
+        return;
+    }
+    // Before the window exists there is no frame to request: hand the wake to
+    // the event loop instead (the startup ticks drain the queues).
+    WEB_FRAME_REQUESTED.with(|cell| {
+        *cell.borrow_mut() = false;
+    });
     WEB_EVENT_LOOP_PROXY.with(|cell| {
         if let Some(proxy) = cell.borrow().as_ref() {
             if proxy.send_event(WinitUserEvent::WakeUp).is_err() {
@@ -113,17 +131,23 @@ pub(crate) fn wake_web_renderer() {
     });
 }
 
-// Video frames are paced by their decoder, not by input: they need the next
-// display frame, never an immediate tick. A `WakeUp` costs two full renders —
-// the update it triggers, then the one bevy_winit forces by requesting a window
-// redraw after every `WakeUp` — so a 12.5 fps video wallpaper rendered 25-37
-// frames per second. Requesting the window redraw directly schedules a single
-// `RedrawRequested` on the next animation frame, whose update drains the frame:
-// one render per decoded frame, and none while the document is hidden.
-//
-// Before the window exists there is nothing to redraw yet; the startup wake
-// queue (`wake_web_renderer`) already holds the request until it does.
-pub(crate) fn request_frame_paced_web_redraw() {
+/// Called at the end of a tick: if a wake was merged into it, request the next
+/// frame now (see `wake_web_renderer`).
+pub(crate) fn continue_merged_wake() {
+    if !WEB_WAKE_COALESCED.with(|cell| cell.replace(false)) {
+        return;
+    }
+    if WEB_FRAME_REQUESTED.with(|cell| cell.replace(true)) {
+        return;
+    }
+    if !request_web_frame() {
+        WEB_FRAME_REQUESTED.with(|cell| {
+            *cell.borrow_mut() = false;
+        });
+    }
+}
+
+fn request_web_frame() -> bool {
     let requested = bevy::winit::WINIT_WINDOWS.with(|cell| {
         let Ok(windows) = cell.try_borrow() else {
             return false;
@@ -137,9 +161,8 @@ pub(crate) fn request_frame_paced_web_redraw() {
     });
     if requested {
         WEB_DIAGNOSTICS.with(|cell| {
-            cell.borrow_mut().paced_redraws += 1;
+            cell.borrow_mut().frame_requests += 1;
         });
-        return;
     }
-    wake_web_renderer();
+    requested
 }

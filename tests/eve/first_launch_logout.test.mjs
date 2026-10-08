@@ -6,6 +6,7 @@ import { createUserWorkspaceRuntime } from '../../eVe/intuition/tools/user_works
 import { createUserHomePanelRuntime } from '../../eVe/intuition/tools/user_home_panel_runtime.js';
 import { getFirstLaunchRuntime } from '../../eVe/domains/user/first_launch_runtime.js';
 import * as panelRuntime from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js';
+import { buildHomeFixedContent } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_view.js';
 import { setSessionState, clearSessionState, resetWorkspaceForNextUser } from '../../atome/src/squirrel/apis/unified/adole_api/session.js';
 
 const transport = vi.hoisted(() => ({ presentations: [], cleanup: null }));
@@ -47,6 +48,33 @@ const setup = async () => {
 };
 
 describe('logout first-launch ownership', () => {
+    it('keeps adoption choices and logout inside the standard Home fixed strip', async () => {
+        const f = await setup();
+        f.api.security.guestAdoptionStatus = () => ({ pending: false });
+        const actions = [];
+        const fixed = buildHomeFixedContent({ guest: false, busy: false, sessionBusy: false }, {
+            emit: event => actions.push(event), bodyWidth: 452
+        });
+        expect(fixed).toHaveLength(1);
+        expect(fixed[0].kind).toBe('column');
+        expect(fixed[0].style.size[0]).toBe(452);
+        expect(fixed[0].style.size[1]).toBeGreaterThanOrEqual(fixed[0].children.reduce((sum, entry) => sum + entry.style.size[1], 0));
+        fixed[0].children.find(entry => entry.id === 'home_session_exit').on.activate();
+        expect(actions).toEqual([{ type: 'home.session.exit' }]);
+    });
+    it('resumes an authenticated first-launch account before the workspace readiness gate', async () => {
+        const f = await setup(); transport.cleanup = null;
+        await f.home.openLoginSequenceAfterAuthCheck(); await f.flow().close();
+        const user = { id: 'pending-account', first_launch_version: 1 };
+        f.api.security.isAuthenticated = () => true; f.api.auth.getCurrentInfo = () => user;
+        f.win.__authCheckResult = { complete: true, authenticated: true, userId: user.id };
+        setSessionState({ mode: 'authenticated', user }, { persist: false, silent: true });
+        const resumed = vi.spyOn(f.flow(), 'authenticated').mockResolvedValue(true);
+        expect(f.gate.isWorkspaceActiveForMainMenu()).toBe(false);
+        await f.gate.openInitialLoginSequence();
+        expect(resumed).toHaveBeenCalledWith({ user });
+        expect(f.failures).toEqual([]);
+    });
     it('allows a restored legacy account to leave the public login presentation', async () => {
         const f = await setup(); transport.cleanup = null;
         await f.home.openLoginSequenceAfterAuthCheck();

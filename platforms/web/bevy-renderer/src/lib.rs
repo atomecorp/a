@@ -19,8 +19,7 @@ mod exports;
 mod frame_clock;
 
 use frame_clock::{
-    remember_event_loop_proxy, request_frame_paced_web_redraw, wake_web_renderer, web_winit_settings,
-    WEB_WAKE_COALESCED, WEB_WAKE_INFLIGHT,
+    continue_merged_wake, remember_event_loop_proxy, wake_web_renderer, web_winit_settings, WEB_FRAME_REQUESTED,
 };
 
 thread_local! {
@@ -54,16 +53,14 @@ struct WebFrameProbe {
 }
 
 fn web_frame_probe_begin(_world: &mut World) {
-    // Reopen the wake path as soon as this tick starts, not when it ends.
+    // Re-arm the frame request as soon as this tick starts, not when it ends.
     //
-    // Holding it until `Last` cost exactly half the interactive frame rate
-    // (measured: 60 wakes/s produced only 30 ticks/s): the browser delivers the
-    // next frame's rAF callback before the current tick finishes, so every
-    // other wake was swallowed. JavaScript cannot run during a tick, so no work
-    // can be queued between here and the drain in `Update` — clearing early is
-    // free of races and keeps one wake per animation frame turning into one
-    // frame.
-    WEB_WAKE_INFLIGHT.with(|cell| {
+    // The browser runs the next frame's callbacks before the current tick can
+    // finish, so re-arming at `Last` would swallow every other wake (measured:
+    // 60 wakes/s, 30 ticks/s). JavaScript cannot run during a tick, so nothing
+    // can be queued between here and the drain in `Update` — re-arming early
+    // is free of races and turns one wake per animation frame into one frame.
+    WEB_FRAME_REQUESTED.with(|cell| {
         *cell.borrow_mut() = false;
     });
     WEB_DIAGNOSTICS.with(|cell| {
@@ -77,11 +74,7 @@ fn web_frame_probe_begin(_world: &mut World) {
 }
 
 fn web_frame_probe_end(world: &mut World) {
-    // Re-emit a wake that arrived while this tick was already scheduled, so no
-    // animation frame is ever dropped (see `wake_web_renderer`).
-    if WEB_WAKE_COALESCED.with(|cell| cell.replace(false)) {
-        wake_web_renderer();
-    }
+    continue_merged_wake();
     // Read the same canonical default camera that BevyUI itself targets. The
     // world also contains quarter-resolution blur cameras, so an unfiltered
     // camera query would intermittently publish their viewport instead.
@@ -141,7 +134,7 @@ struct WebRendererDiagnostics {
     redraw_requests: u32,
     redraw_applied: u32,
     wake_calls: u32,
-    paced_redraws: u32,
+    frame_requests: u32,
     wake_send_failures: u32,
     video_frame_notifications: u32,
     video_frame_redraws: u32,
@@ -383,7 +376,7 @@ fn notify_web_video_frame(id: String, frame_version: u32) {
         let mut pending = cell.borrow_mut();
         *pending = pending.saturating_add(1);
     });
-    request_frame_paced_web_redraw();
+    wake_web_renderer();
 }
 
 fn drain_web_video_frames() -> u32 {

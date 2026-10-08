@@ -1,4 +1,7 @@
 import { validateParams } from '../ai/agent_gateway_normalize.js';
+// Accent-, case- and space-insensitive matching of channel names and queries.
+export const normalizeTvQuery = value => String(value ?? '').normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 export const TV_ERRORS = Object.freeze(['INVALID_ARGUMENT', 'CHANNEL_NOT_FOUND', 'AMBIGUOUS_CHANNEL',
     'AUTH_REQUIRED', 'GEO_BLOCKED', 'PROVIDER_UNAVAILABLE', 'DRM_UNSUPPORTED', 'EMBED_NOT_ALLOWED',
     'EXTERNAL_ONLY', 'NOT_CONFIGURED', 'RIGHTS_NOT_VERIFIED', 'USER_GESTURE_REQUIRED',
@@ -10,11 +13,11 @@ const text = { type: 'string', minLength: 1, maxLength: 200, pattern: '\\S' };
 const date = { type: 'string', format: 'date-time', maxLength: 40 };
 const page = { cursor: { type: 'string', maxLength: 32 }, limit: { type: 'integer', minimum: 1, maximum: 200 } };
 const shapes = {
-    list_channels: [{ category: text, query: { type: 'string', maxLength: 200 }, ...page }, [], 'List configured television channels and verified availability; does not start playback.'],
-    find_channel: [{ query: text }, ['query'], 'Find TV channels by name, alias or category; return candidates on ambiguity.'],
-    open_channel: [{ channel: text, fullscreen: { type: 'boolean' } }, ['channel'], 'Open television in the standard viewer: France 2, TF1, M6 or aliases. fullscreen requests viewer fullscreen.'],
+    list_channels: [{ category: text, query: { type: 'string', maxLength: 200 }, ...page }, [], 'List television channels of the public catalogue (Free-TV, IPTV-org). With query: matching channels of every country, the user\'s country first; without: the country being browsed, favourites first. Does not start playback.'],
+    find_channel: [{ query: text }, ['query'], 'Find television channels by name in every country (e.g. CNN, BBC News, Rai 1); returns candidates, does not start playback.'],
+    open_channel: [{ channel: text, fullscreen: { type: 'boolean' } }, ['channel'], 'Put on a television channel by its exact name (e.g. TF1, France 3, franceinfo, CNN, BBC News): it plays in place on a TV object of the current project. Without an exact name it returns CHANNEL_NOT_FOUND or AMBIGUOUS_CHANNEL with candidates to propose to the user; never open a candidate without confirmation. fullscreen enlarges playback to the whole project view.'],
     close: [{}, [], 'Stop and close television, releasing playback resources.'],
-    set_fullscreen: [{ enabled: { type: 'boolean' } }, ['enabled'], 'Set TV viewer fullscreen; false restores its standard panel and footer without stopping playback.'],
+    set_fullscreen: [{ enabled: { type: 'boolean' } }, ['enabled'], 'Enlarge television playback to the whole project view (true) or return it to its TV object (false); playback continues.'],
     get_state: [{}, [], 'Read actual television playback and presentation, including required user actions.'],
     now: [{ channel: text }, [], 'Read the current TV programme from authorized EPG; does not open television.'],
     next: [{ channel: text }, [], 'Read the next programme, not the next channel; does not open television.'],

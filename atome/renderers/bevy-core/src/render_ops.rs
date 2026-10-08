@@ -163,7 +163,14 @@ pub fn apply_transform(world: &mut World, patch: AtomeTransformPatch) -> Result<
     }
     if dimensions_changed || local_transform_changed || clip_changed {
         rebuild_selection_overlay(world, entity)?;
-        rebuild_shape_shadow_overlay(world, entity)?;
+        // The shadow texture depends on the size, silhouette and clip, never on
+        // the pose: a rotation or scale only re-poses it (a two-finger rotation
+        // re-rasterised the blurred shadow every frame).
+        if dimensions_changed || clip_changed {
+            rebuild_shape_shadow_overlay(world, entity)?;
+        } else {
+            sync_shape_shadow_overlay_transform(world, entity)?;
+        }
         rebuild_waveform_playback_overlay(world, entity)?;
     } else {
         translate_selection_overlay(

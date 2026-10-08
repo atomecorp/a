@@ -61,6 +61,7 @@ tests/database/*
 !tests/server/
 tests/server/*
 !tests/server/ws_youtube_search.test.mjs
+!tests/server/ws_tv_catalog.test.mjs
 !tests/server/principal_file_migration.test.mjs
 !tests/server/atome_property_security.test.mjs
 !tests/server/atome_persistence_boundary.test.mjs
@@ -94,6 +95,7 @@ tests/shared/*
 !tests/shared/semantic_rename_contract.test.mjs
 !tests/eve/
 tests/eve/*
+!tests/eve/tv_inplace_player.test.mjs
 !tests/eve/dashboard_creation_contract.test.mjs
 !tests/eve/dashboard_project_change_events.test.mjs
 !tests/eve/finder_import_context.test.mjs
@@ -352,6 +354,10 @@ eve/application
 !tests/eve/first_launch_phone_payment.test.mjs
 !tests/eve/first_launch_runtime.test.mjs
 !tests/eve/first_launch_workspace_restore.test.mjs
+!tests/native/
+tests/native/*
+!tests/native/auth_development_request.rs
+!tests/governance/build_cache_retention.test.mjs
 !tests/eve/workspace_surface_preference_contract.test.mjs
 
 !tests/eve/slider_options_contract.test.mjs

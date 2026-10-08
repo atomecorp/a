@@ -79,6 +79,7 @@ import { createWsPhoneLinkHandler } from './wsPhoneLinkAuth.js';
 import { assertDeviceSessionClaims, validateConnectionDeviceSession } from './auth_session_validation.js';
 import { handleWsPersonalImport } from './ws_personal_import.js';
 import { handleWsYoutubeSearch } from './ws_youtube_search.js';
+import { handleWsTvCatalog, handleWsTvResolve } from './ws_tv_catalog.js';
 import { issueMediaToken, readMediaTokenFromQuery, verifyMediaToken } from './media_capability.js';
 import { handleWsApiGuestAdoption } from './wsApiGuestAdoption.js';
 import { announceWsSurfaceDisconnect, handleWsSurfaceOperation } from './wsSurfaceOperations.js';
@@ -2181,6 +2182,12 @@ async function startServer() {
           const youtubeSearchResponse = await handleWsYoutubeSearch(data, request.ip);
           if (youtubeSearchResponse) {
             safeSend(youtubeSearchResponse);
+            return;
+          }
+
+          const tvCatalogResponse = await handleWsTvCatalog(data) || await handleWsTvResolve(data);
+          if (tvCatalogResponse) {
+            safeSend(tvCatalogResponse);
             return;
           }
 

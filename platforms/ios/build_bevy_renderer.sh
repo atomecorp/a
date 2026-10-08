@@ -7,10 +7,15 @@ PROFILE_DIR=release
 CARGO_PROFILE_FLAG=--release
 
 export PATH="$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
-# App and AUv3 are built in dependency order but have different
-# PROJECT_TEMP_DIR values. Use the configuration-wide directory so Cargo does
-# not compile the identical Rust crate once per Xcode target.
-export CARGO_TARGET_DIR="${CONFIGURATION_TEMP_DIR:-$PROJECT_TEMP_DIR/..}/ios-bevy-renderer-target"
+# Keep the existing device cache path across configurations, targets and SDKs.
+# Cargo separates architectures inside it; Debug and Release both normally use
+# the Rust release profile. TestFlight must not create another Rust cache.
+DERIVED_CACHE_ROOT="${PROJECT_TEMP_DIR%%/Build/*}"
+if [ "$DERIVED_CACHE_ROOT" = "$PROJECT_TEMP_DIR" ]; then
+  echo "[IOS_BEVY_BUILD] fatal unsupported Xcode intermediate layout" >&2
+  exit 1
+fi
+export CARGO_TARGET_DIR="$DERIVED_CACHE_ROOT/Build/Intermediates.noindex/atome.build/Debug-iphoneos/ios-bevy-renderer-target"
 if [ -n "${RUSTFLAGS:-}" ]; then
   export RUSTFLAGS="$RUSTFLAGS -C force-unwind-tables=no"
 else

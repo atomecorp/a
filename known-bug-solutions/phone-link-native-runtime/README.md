@@ -111,3 +111,13 @@ can POST jobs but receives HTTP 403 for the outgoing-history API, so delivery
 receipt remains **To verify** until that read permission is granted or the user
 observes and opens the latest link. Do not retry automatically: an ambiguous
 send consumes budget and may still arrive.
+
+## 2026-10-07: local mock payment and native logout
+
+The existing Tauri development command accepted only start/challenge/consume/resume, while Billing invokes signed `phone-link-simulate-payment`. Its allowlist now includes payment, resend, cancel and the renewal/logout lifecycle, still requiring SMS mock mode and an exact loopback HTTP origin. Native logout also differed from restart: it recomputed a phone-derived key instead of reopening the enrolled scope returned by SQLite. It now uses the enrolled scope and keyId contract; the WebView cache remains optional after the native lock.
+
+Three deterministic logout regressions failed before the repair; all 34 focused tests and architecture/syntax guards pass afterwards. The verified local Fastify mock completed payment, automatic signed link consumption, renewal and logout without a real SMS. The persistent Rust transport tests are not yet executed: compilation and native builds were interrupted when disk capacity was exhausted. The subsequent user launch reproduces explicit Rust ENOSPC. Final Tauri and physical-iOS interaction acceptance remains **To verify** after freeing build space and rebuilding.
+
+Follow-up: the signed iOS Debug build subsequently succeeded with recovered free space and was over-installed without deleting the existing app. A physical-iPhone launch without forced termination restored the SQLite grant via a fresh native signature and reached presentation readiness in 3260 ms with zero missing resources and no SMS request. The logout gesture remains **To verify**. Tauri rebuild and Rust transport execution remain blocked by disk capacity.
+
+The two persistent Rust transport tests now pass after the authorized incremental cache cleanup. Debug bundle generation still fails with explicit ENOSPC, including with an invocation-only application debug-info override; no persistent build settings changed. Additional intermediate-object cleanup remains awaiting bounded authorization. This is a capacity blocker, not a passing native-UI result.

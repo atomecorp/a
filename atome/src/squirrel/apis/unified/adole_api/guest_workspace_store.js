@@ -72,9 +72,12 @@ async function sha256(bytes) {
 }
 
 const key = (ownerId, id) => `${String(ownerId)}:${String(id)}`;
+const ownerKeyRange = (ownerId) => IDBKeyRange.bound(`${String(ownerId)}:`, `${String(ownerId)}:\uffff`);
 
+// Records, events and outbox rows are keyed `<owner>:<id>`: reads stay inside
+// the owner's key range instead of deserializing every identity on the device.
 export async function listGuestAtomes(ownerId, options = {}) {
-    const records = await transact([STORE_RECORDS], 'readonly', (transaction) => requestValue(transaction.objectStore(STORE_RECORDS).getAll()));
+    const records = await transact([STORE_RECORDS], 'readonly', (transaction) => requestValue(transaction.objectStore(STORE_RECORDS).getAll(ownerKeyRange(ownerId))));
     return (records || []).filter((record) => record.owner_id === String(ownerId))
         .filter((record) => options.include_deleted || !record.deleted_at)
         .filter((record) => !options.type || record.atome_type === options.type)
@@ -229,7 +232,7 @@ export async function clearGuestWorkspace(ownerId) {
 }
 
 export async function listWorkspaceEvents(ownerId, options = {}) {
-    const events = await transact([STORE_EVENTS], 'readonly', tx => requestValue(tx.objectStore(STORE_EVENTS).getAll()));
+    const events = await transact([STORE_EVENTS], 'readonly', tx => requestValue(tx.objectStore(STORE_EVENTS).getAll(ownerKeyRange(ownerId))));
     return events.filter(event => String(event.key).startsWith(String(ownerId) + ':'))
         .filter(event => !options.atome_id || event.atome_id === options.atome_id)
         .filter(event => !options.project_id || event.project_id === options.project_id)
@@ -264,8 +267,6 @@ export async function oldestPendingWorkspaceEvent(ownerId) {
 export async function acknowledgeWorkspaceEvent(ownerId, eventId) {
     await transact([STORE_QUEUE], 'readwrite', tx => tx.objectStore(STORE_QUEUE).delete(key(ownerId, eventId)));
 }
-
-const ownerKeyRange = (ownerId) => IDBKeyRange.bound(`${String(ownerId)}:`, `${String(ownerId)}:\uffff`);
 
 // Moves a refused row out of the send order, atomically and without loss.
 export async function parkRefusedWorkspaceEvent(ownerId, entry, error) {
@@ -303,11 +304,13 @@ export async function importWorkspaceStates(ownerId, states) {
         if (!properties || typeof properties !== 'object' || Array.isArray(properties)) throw new Error('workspace_properties_invalid');
         return { ...state, properties };
     });
+    // Only this owner's unsent rows, read from the send-order index: the outbox
+    // of every identity on the device was deserialized for each imported page.
     await transact([STORE_RECORDS, STORE_QUEUE, STORE_REFUSED], 'readwrite', tx => {
-        const pending = tx.objectStore(STORE_QUEUE).getAll();
+        const pending = tx.objectStore(STORE_QUEUE).index(QUEUE_ORDER_INDEX).getAll(ownerQueueRange(ownerId));
         const refused = tx.objectStore(STORE_REFUSED).getAll(ownerKeyRange(ownerId));
         refused.onsuccess = () => {
-            const dirty = new Set([...pending.result, ...refused.result].filter(row => row.owner_id === String(ownerId)).map(row => row.payload.atome_id));
+            const dirty = new Set([...pending.result, ...refused.result].map(row => row.payload.atome_id));
             for (const state of owned) {
                 if (dirty.has(state.atome_id)) continue;
                 const props = state.properties;

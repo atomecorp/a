@@ -33,7 +33,7 @@ const readinessMessages = (messages) => messages.filter((message) => (
 
 // One install owns one boot, exactly like the page: the awaited contract, the
 // menu state and the native messages all belong to that single launch.
-const bootOnce = async ({ route, scenario, menuMountedAfterMs = 0, dashboardReadyAfterMs = 0 }) => {
+const bootOnce = async ({ route, scenario, menuMountedAfterMs = 0, dashboardReadyAfterMs = 0, workspaceReady = true }) => {
     const messages = [];
     window.webkit = {
         messageHandlers: {
@@ -103,7 +103,7 @@ const bootOnce = async ({ route, scenario, menuMountedAfterMs = 0, dashboardRead
         installSvgVectorEditRuntime() {},
         installTextStyleToolSelectionGuard() {},
         invokeAtomeContextualRailToolDefinitionWithContext() {},
-        isWorkspaceActiveForMainMenu: () => true,
+        isWorkspaceActiveForMainMenu: () => workspaceReady,
         newMenu: {
             measure: () => ({
                 active: menuState.active,
@@ -155,7 +155,8 @@ const bootOnce = async ({ route, scenario, menuMountedAfterMs = 0, dashboardRead
         warmupToolGatewayRuntime() {}
     };
     installEveIntuitionBootRuntime(bindings);
-    return { messages, menuState, readMountedNodes: () => mountedNodes, setMountedNodes: (value) => { mountedNodes = value; } };
+    return { messages, menuState, readMountedNodes: () => mountedNodes, setMountedNodes: (value) => { mountedNodes = value; },
+        setWorkspaceReady: value => { workspaceReady = value; } };
 };
 
 // 1. A Dashboard boot also presents the native surface: it is released by the
@@ -224,5 +225,19 @@ const switchedReady = readinessMessages(switchedBoot.messages);
 assert.equal(switchedReady.length, 1, 'the project opened from a Dashboard entry must publish exactly one contract');
 assert.equal(switchedReady[0]?.route, 'project', 'the switched contract must describe the project now presented');
 assert.equal(switchedReady[0]?.main_menu?.tree_mounted, true, 'the switched contract must prove the mounted Main Toolbar tree');
+
+// Profile recovery may outlast the failure-retry budget without an open failing.
+const lateProfileBoot = await bootOnce({ route: 'dashboard', workspaceReady: false });
+const realNow = Date.now;
+Date.now = () => realNow() + 11000;
+try {
+    await wait(250);
+    assert.notEqual(window.__eveWorkspaceBootOpenError?.error, 'workspace_boot_open_timeout',
+        'waiting for the restored profile must not exhaust the failed-open budget');
+    lateProfileBoot.setWorkspaceReady(true);
+    await wait(250);
+    assert.equal(readinessMessages(lateProfileBoot.messages).length, 1,
+        'a profile restored after the old timeout must still present its Dashboard');
+} finally { Date.now = realNow; }
 
 console.log('iOS boot presentation contract probes passed');

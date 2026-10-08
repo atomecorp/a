@@ -35,9 +35,9 @@ project's opaque colour hides the wallpaper completely.
 
 ## Correction
 
-- Drain systems never write `RequestRedraw`; video frames call
-  `request_frame_paced_web_redraw()` (`src/frame_clock.rs`) → one
-  `RedrawRequested` on the next animation frame → one render per decoded frame.
+- Drain systems never write `RequestRedraw`; every wake (input or decoded video
+  frame) requests the window's next animation frame once (`wake_web_renderer`,
+  `src/frame_clock.rs`) → one `RedrawRequested` → one render.
 - The wallpaper video pauses while the applied cover is opaque and resumes when
   uncovered (decoder, URL and playhead kept).
 - iOS: `schedulePlaybackEngineIdlePauseLocked()` pauses the engine 2 s after
@@ -53,7 +53,30 @@ project's opaque colour hides the wallpaper completely.
 - Lowering the frame rate or the video cap: forbidden as a fix (masks the
   multiplier); the 15 fps video cap was already in place.
 
+## Follow-up regression (same day): interaction at 2 frames/s
+
+The first correction kept input wakes on winit `WakeUp` user events. Without the
+`RequestRedraw` chain, a `WakeUp` re-emitted from inside a tick (merged wakes,
+`Last`) is queued behind `AboutToWait` and only processed on the loop's next
+turn — the 500 ms heartbeat — while the in-flight flag merges every later wake
+into it. Measured on Web with a media-heavy project: 70-150 wakes/s, **2 ticks/s**
+during object zoom, rotation, pinch, view zoom and Mystic (pre-fix WASM: 30-48).
+The morning gesture probe missed it because it measured JavaScript rAF pacing,
+not Bevy ticks or presents.
+
+Correction: wakes request an animation frame (guarded once per frame, re-armed
+at tick start); a merged wake makes its tick request the next frame at `Last`
+(otherwise rAF-driven animation renders every other frame, 30 frames/s).
+Result: gestures 50-61 renders/s, Mystic 60/s after the first opening, idle
+still 2/s. Measure **Bevy ticks and presents**, never JavaScript rAF alone.
+
 ## Regression checks
+
+- `tests/probes/bevy_web_frame_clock_cadence.probe.mjs` (real browser loop,
+  quiet scene, rAF-driven wakes: one render per frame, idle ≤ 4 ticks/s; red on
+  the 2-frames/s build, green after).
+- `temp/perf_regression_2026-10-07/gestures.probe.mjs` (media-heavy project:
+  ticks, presents and present gaps per gesture).
 
 - `temp/perf_audit_2026-10/baseline.probe.mjs` (scenario rates, ticks/s,
   GPU calls), `ab_drag_idle.probe.mjs` (A/B with the pre-fix WASM served by

@@ -40,3 +40,31 @@ test('voice context supplies fullscreen by default, preserves small-window reque
     await voice.execute({ call_id: 'epg', name: 'atome_6', arguments: '{"input":{"channel":"fr2"},"action":"pointer.click"}' });
     assert.equal(invocations[2].tool_id, 'tv.now'); assert.equal(Object.hasOwn(invocations[2].input, 'fullscreen'), false);
 });
+
+test('viewing commands are always at hand; an open tool adds its commands and one line, a closed one nothing', async () => {
+    const { YOUTUBE_COMMANDS } = await import('../../atome/src/squirrel/youtube/contracts.js');
+    const catalogue = [...TV_COMMANDS, ...YOUTUBE_COMMANDS].map(c => ({ name: c.name, description: c.description, parameters: c.input_schema }));
+    let open = null;
+    const session = createConversationSession({ actor: () => ({ id: 'u' }), quota: { getSummary: () => ({}) },
+        mcp: async ({ method }) => ({ result: method === 'runtime.tools.list' ? { tools: catalogue } : { tools: [] } }),
+        toolContext: async () => open,
+        request: async () => { throw new Error('no provider response in this test'); } });
+    const named = (voice) => voice.tools.map(tool => String(tool.description || '').split(':')[0]).filter(Boolean);
+    const closed = await session.createVoiceTools({ signal: new AbortController().signal, deliver: async () => {} });
+    assert.deepEqual(named(closed).sort(), ['Discover authorized Atome tools by matching words in their names and descriptions. Search before choosing a tool that is not yet available.', 'tv.open_channel', 'youtube.play'].sort());
+    assert.equal(closed.instructions.includes('Open tools:'), false);
+    open = { preload: YOUTUBE_COMMANDS.map(c => c.name), notes: ['YouTube is open: « mets … » means youtube.play.'] };
+    const opened = await session.createVoiceTools({ signal: new AbortController().signal, deliver: async () => {} });
+    assert.ok(['youtube.search', 'youtube.close', 'youtube.set_fullscreen'].every(name => named(opened).includes(name)));
+    assert.ok(opened.instructions.endsWith('Open tools: YouTube is open: « mets … » means youtube.play.'));
+});
+
+test('the assistant actor may watch television and YouTube but still needs confirmation to publish', async () => {
+    const { resolveActorProfile, hasActorCapability } = await import('../../atome/src/squirrel/atome/mcp_security.js');
+    const actor = resolveActorProfile({ actor: { user_id: 'u' } });
+    for (const tool of ['tv.open_channel', 'tv.list_channels', 'youtube.play', 'youtube.search']) {
+        const policy = resolveAccessPolicy('runtime.tools.call', { tool_id: tool });
+        assert.equal(hasActorCapability(actor, policy.required_capabilities), true, tool);
+    }
+    assert.equal(resolveAccessPolicy('runtime.tools.call', { tool_id: 'social.publish' }).confirmation_required, true);
+});

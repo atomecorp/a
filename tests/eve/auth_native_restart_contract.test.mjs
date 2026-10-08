@@ -4,6 +4,61 @@ import { test, expect } from 'vitest';
 
 const read = (path) => fs.readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
 
+function nativeLogout({ cacheUnavailable = false, keyMismatch = false } = {}) {
+    const calls = [];
+    const record = { phone: '+33612345678', scope: 'enrolled-before-origin-migration', keyId: 'enrolled-key',
+        localSession: { id: 'grant', generation: 4 }, locked: false };
+    const device = { keyId: keyMismatch ? 'other-key' : record.keyId, sign: async challenge => {
+        if (challenge.keyId !== device.keyId) throw new Error('auth_challenge_key_mismatch');
+        calls.push('sign'); return { challengeId: 'challenge', signature: 'native-proof' };
+    } };
+    const store = {
+        read: async () => { if (cacheUnavailable) throw new Error('auth_protected_storage_unavailable'); return null; },
+        forScope: async scope => { expect(scope).toBe(record.scope); calls.push('enrolled-key'); return device; },
+        forPhone: async () => ({ keyId: 'new-phone-scope', sign: async () => { throw new Error('auth_challenge_key_mismatch'); } }),
+        put: async () => { if (cacheUnavailable) throw new Error('auth_storage_write_failed'); calls.push('cache'); }
+    };
+    const source = read('atome/src/squirrel/apis/unified/adole_api/auth_methods_login.js');
+    const owner = source.slice(source.indexOf('export async function lockLocalAuthorization()'), source.indexOf('export function ensureRemoteSession()'))
+        .replace('export async function', 'async function');
+    const lock = vm.runInNewContext(`${owner}; lockLocalAuthorization`, {
+        deviceStore: () => store, isTauriRuntime: () => true, localExpiresAt: 1,
+        setBrowserWorkspaceIdentity: async () => { calls.push('clear-identity'); },
+        localRequest: async (action, fields) => {
+            calls.push(action);
+            if (action === 'local-session-describe') return { localGrant: record };
+            if (action === 'local-session-challenge') return { challenge: {
+                purpose: 'local-lock', reference: 'grant:4', keyId: record.keyId
+            } };
+            expect(fields).toMatchObject({ grantId: 'grant', signature: 'native-proof' });
+            record.locked = true;
+            return { ok: true };
+        }
+    });
+    return { lock, calls, record };
+}
+
+test('native logout signs with the enrolled scope after a WebView or phone-scope migration', async () => {
+    const run = nativeLogout();
+    await run.lock();
+    expect(run.record.locked).toBe(true);
+    expect(run.calls).toEqual(['local-session-describe', 'enrolled-key', 'local-session-challenge', 'sign', 'local-session-lock', 'cache', 'clear-identity']);
+});
+
+test('native logout completes when its optional WebView cache is unavailable', async () => {
+    const run = nativeLogout({ cacheUnavailable: true });
+    await run.lock();
+    expect(run.record.locked).toBe(true);
+    expect(run.calls.at(-1)).toBe('clear-identity');
+});
+
+test('native logout rejects a different device key before requesting a lock proof', async () => {
+    const run = nativeLogout({ keyMismatch: true });
+    await expect(run.lock()).rejects.toThrow('auth_device_binding_mismatch');
+    expect(run.record.locked).toBe(false);
+    expect(run.calls).toEqual(['local-session-describe', 'enrolled-key']);
+});
+
 test('Tauri injects the production authentication authority in debug and release builds', () => {
     const source = read('platforms/desktop-tauri/src/lib.rs');
     const owner = source.slice(source.indexOf('fn configured_tauri_fastify_url'), source.indexOf('fn tauri_runtime_init_script'));

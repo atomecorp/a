@@ -7,7 +7,7 @@ use bevy::prelude::*;
 use bevy::window::{CompositeAlphaMode, RequestRedraw, WindowResized, WindowResolution};
 use bevy::winit::UpdateMode;
 use std::time::Duration;
-use crate::frame_clock::WEB_IDLE_HEARTBEAT_MS;
+use crate::frame_clock::{WEB_IDLE_HEARTBEAT_MS, WEB_WAKE_COALESCED};
 
 use super::*;
 
@@ -793,10 +793,10 @@ fn bench_app() -> App {
 fn wakes_are_coalesced_per_tick_but_never_rate_limited() {
     // A wake is the renderer's frame clock: dropping one for being "too soon"
     // would cap the interactive frame rate at the throttle period. Only a wake
-    // issued while a tick is already scheduled is redundant.
+    // issued while a frame is already requested is redundant.
     let _ = drain_web_ops();
     let _ = reset_web_renderer_diagnostics();
-    WEB_WAKE_INFLIGHT.with(|cell| *cell.borrow_mut() = false);
+    WEB_FRAME_REQUESTED.with(|cell| *cell.borrow_mut() = true);
     WEB_WAKE_COALESCED.with(|cell| *cell.borrow_mut() = false);
 
     request_web_redraw();
@@ -807,37 +807,33 @@ fn wakes_are_coalesced_per_tick_but_never_rate_limited() {
         3,
         "every wake must still be observable in diagnostics"
     );
-    assert!(
-        WEB_WAKE_INFLIGHT.with(|cell| *cell.borrow()),
-        "a tick is scheduled, so further wakes coalesce into it"
+    assert_eq!(
+        read_web_renderer_diagnostics().frame_requests,
+        0,
+        "wakes issued before the requested frame starts are covered by it"
     );
     assert!(
         WEB_WAKE_COALESCED.with(|cell| *cell.borrow()),
-        "the merged wakes must be remembered, not discarded"
+        "a merged wake must be remembered so its tick requests the next frame"
     );
 
-    // Delivering a WakeUp costs an extra event-loop turn, so a wake issued once
-    // per animation frame would only land every other frame if merging dropped
-    // it. The completed tick must therefore re-emit it.
+    // The tick re-arms the request when it starts, so the next wake (the next
+    // animation frame's work) requests its own frame.
     let mut app = bench_app();
     app.update();
     assert!(
         !WEB_WAKE_COALESCED.with(|cell| *cell.borrow()),
-        "the remembered wake must be consumed by the tick"
-    );
-    assert!(
-        WEB_WAKE_INFLIGHT.with(|cell| *cell.borrow()),
-        "the remembered wake must be re-emitted so no animation frame is dropped"
+        "the tick that covered the merged wake must consume it"
     );
 }
 
 #[test]
-fn a_tick_with_no_merged_wake_leaves_the_loop_idle() {
-    // The mirror case: without pending work, a tick must not schedule another
-    // one. Otherwise the loop would free-run again and the idle saving is lost.
+fn a_tick_with_no_wake_leaves_the_loop_idle() {
+    // Without pending work, a tick must not request another one. Otherwise the
+    // loop would free-run again and the idle saving is lost.
     let _ = drain_web_ops();
     let _ = reset_web_renderer_diagnostics();
-    WEB_WAKE_INFLIGHT.with(|cell| *cell.borrow_mut() = false);
+    WEB_FRAME_REQUESTED.with(|cell| *cell.borrow_mut() = false);
     WEB_WAKE_COALESCED.with(|cell| *cell.borrow_mut() = false);
 
     let mut app = bench_app();
@@ -845,11 +841,8 @@ fn a_tick_with_no_merged_wake_leaves_the_loop_idle() {
     app.update();
 
     assert!(
-        !WEB_WAKE_COALESCED.with(|cell| *cell.borrow()),
-        "an idle tick must not remember a wake"
+        !WEB_FRAME_REQUESTED.with(|cell| *cell.borrow()),
+        "an idle tick must not request a follow-up frame"
     );
-    assert!(
-        !WEB_WAKE_INFLIGHT.with(|cell| *cell.borrow()),
-        "an idle tick must not schedule a follow-up tick"
-    );
+    assert_eq!(read_web_renderer_diagnostics().frame_requests, 0);
 }

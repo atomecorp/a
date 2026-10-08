@@ -49,32 +49,98 @@ fn tap_range(index: usize, radius: usize, len: usize) -> Option<(usize, usize)> 
 /// bit-identical to the per-pixel form, without a bounds test per tap. The
 /// per-pixel form made the first opening of a shadowed panel freeze for
 /// ~400 ms on the main thread (WASM).
+///
+/// A row (horizontal pass) or a column (vertical pass) identical, bit for bit,
+/// to its neighbour gives an identical output, so it is computed once and
+/// copied. A rounded rectangle — every panel, card and button shadow — is
+/// identical along its straight edges: the work drops from the shadow's area to
+/// its corners and borders (a panel shell stacks three blurs of up to 119 taps).
 fn convolve_axis(source: &[f32], width: usize, height: usize, kernel: &[f32], horizontal: bool) -> Vec<f32> {
     let radius = kernel.len() / 2;
     let mut result = vec![0.0_f32; source.len()];
+    if width == 0 || height == 0 {
+        return result;
+    }
     if horizontal {
-        for (row, out) in source.chunks_exact(width).zip(result.chunks_exact_mut(width)) {
-            for (index, &weight) in kernel.iter().enumerate() {
-                let Some((start, end)) = tap_range(index, radius, width) else { continue };
-                let shifted = &row[start + index - radius..end + index - radius];
-                for (value, sample) in out[start..end].iter_mut().zip(shifted) {
-                    *value += sample * weight;
+        let mut computed: Option<usize> = None;
+        for y in 0..height {
+            let row = &source[y * width..(y + 1) * width];
+            if let Some(previous) = computed {
+                if same_bits(row, &source[previous * width..(previous + 1) * width]) {
+                    result.copy_within(previous * width..(previous + 1) * width, y * width);
+                    continue;
                 }
             }
+            convolve_row(row, &mut result[y * width..(y + 1) * width], kernel, radius);
+            computed = Some(y);
         }
-    } else {
-        for (index, &weight) in kernel.iter().enumerate() {
-            let Some((start, end)) = tap_range(index, radius, height) else { continue };
-            for y in start..end {
-                let sample_y = y + index - radius;
-                let samples = &source[sample_y * width..(sample_y + 1) * width];
-                for (value, sample) in result[y * width..(y + 1) * width].iter_mut().zip(samples) {
-                    *value += sample * weight;
-                }
+        return result;
+    }
+    // Columns equal to their left neighbour on every row share its output.
+    let mut repeats = vec![true; width];
+    repeats[0] = false;
+    for row in source.chunks_exact(width) {
+        for x in 1..width {
+            if repeats[x] && row[x].to_bits() != row[x - 1].to_bits() {
+                repeats[x] = false;
             }
         }
     }
+    let distinct: Vec<usize> = (0..width).filter(|&x| !repeats[x]).collect();
+    if distinct.len() == width {
+        convolve_columns(source, &mut result, width, height, kernel, radius);
+        return result;
+    }
+    let compact_width = distinct.len();
+    let mut compact = vec![0.0_f32; compact_width * height];
+    for (row, out) in source.chunks_exact(width).zip(compact.chunks_exact_mut(compact_width)) {
+        for (value, &x) in out.iter_mut().zip(&distinct) {
+            *value = row[x];
+        }
+    }
+    let mut compact_result = vec![0.0_f32; compact.len()];
+    convolve_columns(&compact, &mut compact_result, compact_width, height, kernel, radius);
+    let mut next = 0;
+    let owners: Vec<usize> = repeats.iter().map(|&repeat| {
+        if !repeat {
+            next += 1;
+        }
+        next - 1
+    }).collect();
+    for (out, compact_row) in result.chunks_exact_mut(width).zip(compact_result.chunks_exact(compact_width)) {
+        for (value, &owner) in out.iter_mut().zip(&owners) {
+            *value = compact_row[owner];
+        }
+    }
     result
+}
+
+fn same_bits(a: &[f32], b: &[f32]) -> bool {
+    a.iter().zip(b).all(|(x, y)| x.to_bits() == y.to_bits())
+}
+
+fn convolve_row(row: &[f32], out: &mut [f32], kernel: &[f32], radius: usize) {
+    let width = row.len();
+    for (index, &weight) in kernel.iter().enumerate() {
+        let Some((start, end)) = tap_range(index, radius, width) else { continue };
+        let shifted = &row[start + index - radius..end + index - radius];
+        for (value, sample) in out[start..end].iter_mut().zip(shifted) {
+            *value += sample * weight;
+        }
+    }
+}
+
+fn convolve_columns(source: &[f32], result: &mut [f32], width: usize, height: usize, kernel: &[f32], radius: usize) {
+    for (index, &weight) in kernel.iter().enumerate() {
+        let Some((start, end)) = tap_range(index, radius, height) else { continue };
+        for y in start..end {
+            let sample_y = y + index - radius;
+            let samples = &source[sample_y * width..(sample_y + 1) * width];
+            for (value, sample) in result[y * width..(y + 1) * width].iter_mut().zip(samples) {
+                *value += sample * weight;
+            }
+        }
+    }
 }
 
 /// Builds a shadow from the alpha that is actually painted after masking.
@@ -358,43 +424,5 @@ pub(crate) fn build_gaussian_outer_shadow_texture_rgba_for_silhouette(
 }
 
 #[cfg(test)]
-mod convolution_equivalence_tests {
-    use super::{convolve_axis, gaussian_kernel};
-
-    /// The per-pixel form this pass replaced: the output must stay bit-identical.
-    fn reference(source: &[f32], width: usize, height: usize, kernel: &[f32], horizontal: bool) -> Vec<f32> {
-        let radius = (kernel.len() / 2) as isize;
-        let mut result = vec![0.0; source.len()];
-        for y in 0..height {
-            for x in 0..width {
-                let mut alpha = 0.0;
-                for (index, weight) in kernel.iter().enumerate() {
-                    let offset = index as isize - radius;
-                    let sample_x = if horizontal { x as isize + offset } else { x as isize };
-                    let sample_y = if horizontal { y as isize } else { y as isize + offset };
-                    if sample_x >= 0 && sample_x < width as isize && sample_y >= 0 && sample_y < height as isize {
-                        alpha += source[sample_y as usize * width + sample_x as usize] * weight;
-                    }
-                }
-                result[y * width + x] = alpha;
-            }
-        }
-        result
-    }
-
-    #[test]
-    fn tap_major_convolution_is_bit_identical_to_the_per_pixel_form() {
-        let mut seed = 0x2545_f491_u32;
-        let mut next = || { seed ^= seed << 13; seed ^= seed >> 17; seed ^= seed << 5; (seed % 1000) as f32 / 999.0 };
-        for &(width, height, blur) in &[(1, 1, 24.0), (3, 70, 24.0), (70, 3, 24.0), (17, 23, 0.4), (120, 80, 6.0), (64, 64, 48.0)] {
-            let source: Vec<f32> = (0..width * height).map(|_| next()).collect();
-            let kernel = gaussian_kernel(blur);
-            for horizontal in [true, false] {
-                let expected = reference(&source, width, height, &kernel, horizontal);
-                let actual = convolve_axis(&source, width, height, &kernel, horizontal);
-                assert!(expected.iter().zip(&actual).all(|(a, b)| a.to_bits() == b.to_bits()),
-                    "{width}x{height} blur {blur} horizontal {horizontal}");
-            }
-        }
-    }
-}
+#[path = "../../../../tests/rendering/shadow_texture_convolution.rs"]
+mod convolution_equivalence_tests;

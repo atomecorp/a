@@ -31,7 +31,7 @@ assert.match(loginMethods, /tauriInvoke\('auth_local_request', \{ message \}\)/,
 assert.match(tauriAuthDevice, /pub async fn auth_local_request[\s\S]*ws:\/\/127\.0\.0\.1:3000\/ws\/api/, 'the native local auth bridge must target only the private Axum endpoint');
 assert.match(tauriAuthDevice, /local-session-describe[\s\S]*local-session-resume[\s\S]*local-session-lock/, 'the native local auth bridge must expose the durable-session lifecycle');
 assert.match(tauriAuthDevice, /auth_development_mode_disabled/, 'the native development transport must be gated by the mock-mode environment');
-assert.match(tauriAuthDevice, /http:\/\/127\.0\.0\.1[\s\S]*http:\/\/localhost/, 'the native development transport must accept loopback authorities only');
+assert.match(tauriAuthDevice, /url\.scheme\(\) != "http"[\s\S]*url\.host_str\(\), Some\("127\.0\.0\.1" \| "localhost"\)/, 'the native development transport must validate exact loopback origins');
 assert.doesNotMatch(runUnix, /--test is forbidden on a production server setup/, 'run_unix must not reject explicit test mode only because a Debian test host uses service-style setup');
 assert.match(runUnix, /PROD_BUILD"\s*=\s*true[\s\S]*--test cannot be combined with production build mode/, 'run_unix must reject --test with production builds');
 

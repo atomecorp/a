@@ -46,6 +46,8 @@
   "scripts": {
     "setup": "node scripts/setup/cli/run.mjs",
     "setup:audit": "node scripts/setup/cli/run.mjs --audit",
+    "clean:build-cache": "node scripts/build_cache_retention.mjs --apply",
+    "clean:build-cache:preview": "node scripts/build_cache_retention.mjs",
     "setup:bootstrap": "./setup.sh",
     "dev": "./run.sh",
     "dev:windows": "./scripts/setup/run_windows.sh",

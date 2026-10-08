@@ -1,5 +1,6 @@
 import { PERSONAL_IMPORT_TOOLS } from '#shared/personal_import_tools.js';
 import { TV_COMMANDS } from '../tv/contracts.js';
+import { YOUTUBE_COMMANDS } from '../youtube/contracts.js';
 import { SOCIAL_COMMANDS } from '../social/contracts.js';
 const SOCIAL_CONFIRMED = ['social.connect', 'social.publish', 'social.disconnect'];
 import { cloneValue } from './mcp_core.js';
@@ -125,6 +126,7 @@ export function listAclRules() {
             { subject: 'calendar.update', access: 'confirm', required_capabilities: ['calendar.write'] },
             { subject: 'calendar.delete', access: 'confirm', required_capabilities: ['calendar.write'] },
             { subject: 'calendar.share', access: 'confirm', required_capabilities: ['calendar.write', 'share.write'] },
+            ...[...TV_COMMANDS, ...YOUTUBE_COMMANDS].map(command => ({ subject: command.name, required_capabilities: [command.capability], access: 'allow' })),
             ...SOCIAL_COMMANDS.map(command => ({ subject: command.name, required_capabilities: [command.capability], access: SOCIAL_CONFIRMED.includes(command.name) ? 'confirm' : 'allow' })),
             {
                 subject: 'runtime.tools.call:ui.capture.*',
@@ -280,7 +282,7 @@ export function resolveAccessPolicy(method, params = {}) {
     // Contract commands (TV, social), direct or via runtime.tools.call. Social connect, publish
     // and disconnect act on an external account (SOCIAL_CONFIRMED) and need confirmation.
     const contractId = normalizedMethod === 'runtime.tools.call' ? normalizeRuntimeToolIdentifier(params) : normalizedMethod;
-    const contract = [...TV_COMMANDS, ...SOCIAL_COMMANDS].find(entry => entry.name === contractId);
+    const contract = [...TV_COMMANDS, ...YOUTUBE_COMMANDS, ...SOCIAL_COMMANDS].find(entry => entry.name === contractId);
     if (contract || normalizedMethod.startsWith('tv.')) {
         const confirm = SOCIAL_CONFIRMED.includes(contract?.name);
         return { ...defaultPolicy, scope: 'tool', subject: contractId, required_capabilities: [contract?.capability || 'tv.control'],

@@ -95,6 +95,37 @@ import { buildBevyToolSliderNode } from '../../eVe/intuition/shared/bevy_ui_tool
 import { applyTreeScrollLayout } from '../../eVe/domains/rendering/bevy_ui_scroll_layout.js';
 import { locateBevyUiNode } from '../../eVe/domains/rendering/bevy_ui_scroll_runtime.js';
 import { hitTestBevyUiNode } from '../../eVe/domains/rendering/bevy_ui_hit_test_runtime.js';
+it('projects persisted Axum identities through every authenticated first-launch Template', async () => {
+    const previousWindow = globalThis.window, previousDocument = globalThis.document;
+    const dom = new JSDOM('<canvas id="eve_surface_project"></canvas>');
+    globalThis.window = dom.window; globalThis.document = dom.window.document;
+    const trees = [], actions = [];
+    const uiRuntime = { mountTree: async ({ tree }) => trees.push(tree), unmountTree: async () => {}, updateTreeMotion: async () => ({ ok: true }) };
+    const walk = node => [node, ...(node.children || []).flatMap(walk)];
+    try {
+        for (const stage of ['welcome', 'profile', 'goals', 'sleep', 'program']) {
+            const key = `first_launch_${stage}`;
+            const records = FIRST_LAUNCH_TEMPLATES[key].atoms.map(atom => ({
+                atome_id: atom.ref, parent_id: atom.parent_ref || 'template-project', properties: { kind: atom.type, ...atom.props }
+            }));
+            const runtime = createMatrixTemplateRuntime({ treeId: key, records, uiRuntime,
+                readBounds: () => ({ x: 0, y: 0, width: 390, height: 844 }),
+                readValues: () => ({ bricks: ['nap'], hours: 8, effort: 50, preparationMinutes: 10 }),
+                activate: async control => { actions.push(control.operation); return { ok: true }; } });
+            try {
+                await runtime.open();
+                const nodes = walk(trees.at(-1).root);
+                expect(nodes.some(node => node.id.includes('undefined'))).toBe(false);
+                expect(nodes.some(node => node.id === 'logo')).toBe(true);
+                const button = nodes.find(node => node.on?.activate);
+                expect(button).toBeDefined(); await button.on.activate();
+                await Promise.resolve(); expect(actions.length).toBeGreaterThan(0);
+                await runtime.updateRecords(records.map(record => ({ ...record })));
+                expect(walk(trees.at(-1).root).some(node => node.id === 'logo')).toBe(true);
+            } finally { await runtime.destroy(); }
+        }
+    } finally { globalThis.window = previousWindow; globalThis.document = previousDocument; dom.window.close(); }
+});
 it('projects native panel controls and Dashboard material without a private skin', async () => {
     const previousWindow = globalThis.window, previousDocument = globalThis.document;
     const dom = new JSDOM('<canvas id="eve_surface_project"></canvas>');

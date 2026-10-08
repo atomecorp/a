@@ -128,13 +128,18 @@ impl SurfacePaint {
         result
     }
 
-    fn fill_at(&self, x: f32, y: f32, width: f32, height: f32, fill: [f32; 4]) -> [f32; 4] {
+    /// The gradient axis and its extent are constant over the texture: computed
+    /// once, not per pixel.
+    fn gradient_axis(&self, width: f32, height: f32) -> ([f32; 2], f32) {
+        let angle = self.gradient.as_ref().map_or(0.0, |g| g.angle).to_radians();
+        let axis = [angle.sin(), -angle.cos()];
+        (axis, axis[0].abs() * width + axis[1].abs() * height)
+    }
+
+    fn fill_at(&self, x: f32, y: f32, width: f32, height: f32, (axis, extent): ([f32; 2], f32), fill: [f32; 4]) -> [f32; 4] {
         let Some(g) = &self.gradient else {
             return fill;
         };
-        let angle = g.angle.to_radians();
-        let axis = [angle.sin(), -angle.cos()];
-        let extent = axis[0].abs() * width + axis[1].abs() * height;
         let t = (((x - width / 2.0) * axis[0] + (y - height / 2.0) * axis[1]) / extent.max(1.0)
             + 0.5)
             .clamp(0.0, 1.0);
@@ -158,6 +163,7 @@ impl SurfacePaint {
         let width = silhouette.width.ceil().max(1.0) as u32;
         let height = silhouette.height.ceil().max(1.0) as u32;
         let mut rgba = vec![0; width as usize * height as usize * 4];
+        let gradient_axis = self.gradient_axis(silhouette.width, silhouette.height);
         for y in 0..height {
             for x in 0..width {
                 let point = [x as f32 + 0.5, y as f32 + 0.5];
@@ -170,6 +176,7 @@ impl SurfacePaint {
                     point[1],
                     silhouette.width,
                     silhouette.height,
+                    gradient_axis,
                     fill,
                 );
                 // CSS lists the topmost inset first. Reverse before alpha composition.

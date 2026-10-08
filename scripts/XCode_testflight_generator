@@ -589,7 +589,6 @@ main() {
         -configuration "$CONFIGURATION" \
         -destination "generic/platform=iOS" \
         -archivePath "$archive_path" \
-        -derivedDataPath "$run_directory/DerivedData" \
         "MARKETING_VERSION=$NEXT_MARKETING_VERSION" \
         "CURRENT_PROJECT_VERSION=$NEXT_BUILD" \
         archive

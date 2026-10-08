@@ -10,6 +10,7 @@ the established solution before attempting a new implementation.
 
 | Symptom | Folder |
 | --- | --- |
+| Native builds repeatedly fill the disk with Rust objects and per-run Xcode caches | [build-cache-disk-exhaustion](build-cache-disk-exhaustion/README.md) |
 | Logout loses the welcome screen; Billing actions stall; Dashboard restoration flashes gray | [first-launch-logout-and-restore](first-launch-logout-and-restore/README.md) |
 | Guest project rail remains absent and a browser update retains the old reader | [guest-contextual-access](guest-contextual-access/README.md) |
 | Opaque floating Bevy panels interleave rails, text, commands and footers | [panel-window-stack](panel-window-stack/README.md) |
@@ -40,7 +41,7 @@ the established solution before attempting a new implementation.
 | A recorded video or audio shows no Play in the contextual rail or Mystic menu | [recorded-media-contextual-play](recorded-media-contextual-play/README.md) |
 | Panel/list rows flash while scrolling, or a panel row shows pointer hover paint | [panel-scroll-hover-flicker](panel-scroll-hover-flicker/README.md) |
 | A scrolled panel row is hidden but its avatar/icon reappears over fixed actions below | [panel-scroll-composite-overflow](panel-scroll-composite-overflow/README.md) |
-| The device heats up or the GPU stays busy while the app sits idle | [idle-render-loop-heat](idle-render-loop-heat/README.md) |
+| The device heats up or the GPU stays busy while the app sits idle — or zoom, rotation and Mystic stutter at ~2 frames/s | [idle-render-loop-heat](idle-render-loop-heat/README.md) |
 
 ## Maintenance rules
 

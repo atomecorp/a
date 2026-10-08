@@ -106,8 +106,8 @@ pub(super) async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
                     continue;
                 }
 
-                if msg_type == "youtube-search" {
-                    let response = super::youtube_search_relay::search(&data).await;
+                if super::public_relay::PUBLIC_TYPES.contains(&msg_type) {
+                    let response = super::public_relay::relay(&data).await;
                     if socket.send(Message::Text(response.to_string())).await.is_err() { break; }
                     continue;
                 }

@@ -1,4 +1,3 @@
-import { handleAuthenticatedTvOperation } from './tvDistribution.js';
 import db from '../database/adole.js';
 import { buildStateSnapshotRestoreEvents } from '../database/state_snapshot_restore.js';
 import {
@@ -460,7 +459,6 @@ export async function handleWsAtomeOperation(message, connection) {
         || type === 'history'
         || type === 'conditions'
         || type === 'directory'
-        || type === 'tv'
         || (type === 'atome' && action === 'history');
     if (!supported) return null;
     const cached = cachedMutation(connection, message);
@@ -469,8 +467,7 @@ export async function handleWsAtomeOperation(message, connection) {
     if (auth.error) return auth.error;
     try {
         let result;
-        if (type === 'tv') result = await handleAuthenticatedTvOperation(message, connection, auth.userId);
-        else if (type === 'events') result = await handleEvents(message, connection, auth.userId);
+        if (type === 'events') result = await handleEvents(message, connection, auth.userId);
         else if (type === 'state-current') result = await handleStateCurrent(message, auth.userId, connection);
         else if (type === 'snapshot') result = await handleSnapshot(message, auth.userId);
         else if (type === 'user-data') result = await handleUserData(message, auth.userId);

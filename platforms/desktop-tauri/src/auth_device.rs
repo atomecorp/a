@@ -75,23 +75,48 @@ pub async fn auth_development_request(message: Value) -> Result<Value, String> {
     let action = message["action"].as_str().unwrap_or_default();
     if !matches!(
         action,
-        "phone-link-start" | "phone-link-challenge" | "phone-link-consume" | "phone-link-resume"
+        "phone-link-start"
+            | "phone-link-challenge"
+            | "phone-link-simulate-payment"
+            | "phone-link-resend"
+            | "phone-link-consume"
+            | "phone-link-resume"
+            | "phone-link-cancel"
+            | "session-challenge"
+            | "session-renew"
+            | "session-logout"
     ) {
         return Err("auth_development_action_forbidden".into());
     }
     let base = std::env::var("SQUIRREL_FASTIFY_URL")
         .or_else(|_| std::env::var("FASTIFY_URL"))
         .map_err(|_| "auth_development_server_missing")?;
-    let trimmed = base.trim().trim_end_matches('/');
-    let authority = if let Some(rest) = trimmed.strip_prefix("http://127.0.0.1") {
-        format!("ws://127.0.0.1{rest}/ws/api")
-    } else if let Some(rest) = trimmed.strip_prefix("http://localhost") {
-        format!("ws://localhost{rest}/ws/api")
-    } else {
-        return Err("auth_development_server_forbidden".into());
-    };
+    let authority = development_auth_authority(&base)?;
     auth_ws_request(authority, message, "auth_development_server_unavailable").await
 }
+
+fn development_auth_authority(base: &str) -> Result<String, String> {
+    let mut url =
+        reqwest::Url::parse(base.trim()).map_err(|_| "auth_development_server_forbidden")?;
+    if url.scheme() != "http"
+        || !matches!(url.host_str(), Some("127.0.0.1" | "localhost"))
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.path() != "/"
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err("auth_development_server_forbidden".into());
+    }
+    url.set_scheme("ws")
+        .map_err(|_| "auth_development_server_forbidden")?;
+    url.set_path("/ws/api");
+    Ok(url.into())
+}
+
+#[cfg(test)]
+#[path = "../../../tests/native/auth_development_request.rs"]
+mod tests;
 
 #[tauri::command]
 pub fn auth_device_key(

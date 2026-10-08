@@ -168,14 +168,18 @@ export async function lockLocalAuthorization() {
     } else record = await store.read('local-grant');
     if (!record) return;
     if (isTauriRuntime() && !record.locked) {
-        const device = await store.forPhone(record.phone);
+        const device = record.scope ? await store.forScope(record.scope) : await store.forPhone(record.phone);
+        if (device.keyId !== record.keyId) throw new Error('auth_device_binding_mismatch');
         const { challenge } = await localRequest('local-session-challenge', { grantId: record.localSession.id, purpose: 'local-lock' });
         if (challenge?.purpose !== 'local-lock' || challenge.reference !== `${record.localSession.id}:${record.localSession.generation}`) {
             throw new Error('auth_challenge_invalid');
         }
         await localRequest('local-session-lock', { grantId: record.localSession.id, ...await device.sign(challenge) });
     }
-    await store.put('local-grant', { ...record, locked: true });
+    if (isTauriRuntime()) {
+        // SQLite already locked the grant; WebView storage remains an optional cache.
+        try { await store.put('local-grant', { ...record, locked: true }); } catch (_) { /* optional native cache */ }
+    } else await store.put('local-grant', { ...record, locked: true });
     await setBrowserWorkspaceIdentity(null);
     localExpiresAt = 0;
 }
