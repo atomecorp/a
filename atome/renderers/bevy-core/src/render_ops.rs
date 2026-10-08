@@ -214,7 +214,11 @@ pub fn apply_surface(world: &mut World, patch: AtomeSurfacePatch) -> Result<(), 
         *projection = atome_camera_projection(width, height);
     }
     resize_workspace_backdrop(world, Vec2::new(width, height), UVec2::new(pixel_width, pixel_height))?;
-    refresh_backdrop_blur_metrics(world, device_pixel_ratio);
+    // Touching every glass material re-prepares its bind group: during a window
+    // drag that ran on every resized frame although only a DPR change moves the LOD.
+    if (device_pixel_ratio - current_dpr).abs() > f32::EPSILON {
+        refresh_backdrop_blur_metrics(world, device_pixel_ratio);
+    }
     let ids: Vec<String> = world.resource::<AtomeEntityTable>().by_id.keys().cloned().collect();
     for id in ids {
         let entity = entity_for(world, &id)?;

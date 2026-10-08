@@ -12,10 +12,26 @@ use crate::{
         WORKSPACE_CAPTURE_LAYER,
     },
     workspace_blur::{
-        backdrop_blur_lod, backdrop_capture_pixel_size, backdrop_mip_level_count, AssistantOpticsSettings,
-        WORKSPACE_BACKDROP_DOWNSCALE,
+        backdrop_blur_lod, backdrop_capture_pixel_size, backdrop_mip_level_count, workspace_blur_mip_pass,
+        AssistantOpticsSettings, WORKSPACE_BACKDROP_DOWNSCALE,
     },
 };
+
+#[test]
+fn blur_pyramid_copies_the_capture_after_this_frame_was_written() {
+    use bevy::core_pipeline::{upscaling::upscaling, Core2d, Core2dSystems};
+    // Same wiring as Bevy's Core2d plugin: `upscaling` blits the camera's view
+    // target into its output image only after the post-process sets.
+    let mut schedule = Core2d::base_schedule();
+    schedule.add_systems((upscaling.after(Core2dSystems::PostProcess), workspace_blur_mip_pass()));
+    let mut world = World::new();
+    schedule.initialize(&mut world).unwrap();
+    // System names need Bevy's debug feature: tell the two apart by type.
+    let upscaling_type = IntoSystem::into_system(upscaling).type_id();
+    let order: Vec<bool> =
+        schedule.systems().unwrap().map(|(_, system)| system.type_id() == upscaling_type).collect();
+    assert_eq!(order, vec![true, false], "the pyramid must copy the capture written this frame, not the previous one");
+}
 
 #[test]
 fn assistant_optics_settings_are_bounded() {

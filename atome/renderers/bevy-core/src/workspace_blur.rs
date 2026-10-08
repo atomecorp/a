@@ -1,8 +1,10 @@
 use bevy::{
     core_pipeline::{
         mip_generation::{generate_mips_for_phase, MipGenerationJobs, MipGenerationPhaseId, MipGenerationPipelines},
-        Core2d, Core2dSystems,
+        upscaling::upscaling,
+        Core2d,
     },
+    ecs::schedule::ScheduleConfigs,
     prelude::*,
     render::{
         extract_component::ExtractComponentPlugin,
@@ -118,8 +120,17 @@ impl Plugin for WorkspaceBlurPlugin {
         ));
         app.sub_app_mut(RenderApp)
             .add_systems(ExtractSchedule, enqueue_workspace_blur_mips)
-            .add_systems(Core2d, generate_workspace_blur_mips.in_set(Core2dSystems::PostProcess));
+            .add_systems(Core2d, workspace_blur_mip_pass());
     }
+}
+
+/// The capture camera draws into its intermediate view target; `upscaling` is
+/// what blits that frame into the capture image, after every post-process
+/// pass. Copying any earlier read the PREVIOUS frame's capture: one frame of
+/// lag always, and right after a resize a freshly allocated, zeroed capture,
+/// so every glass surface turned opaque dark while the window was resized.
+pub(crate) fn workspace_blur_mip_pass() -> ScheduleConfigs<bevy::ecs::system::ScheduleSystem> {
+    generate_workspace_blur_mips.after(upscaling)
 }
 
 fn enqueue_workspace_blur_mips(backdrop: Extract<Res<AtomeWorkspaceBackdrop>>, mut jobs: ResMut<MipGenerationJobs>) {

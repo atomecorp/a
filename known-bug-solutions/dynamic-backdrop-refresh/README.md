@@ -69,3 +69,40 @@ and were invalidated by a later user reproduction. The final binary, shared
 core, Web renderer, Tauri backend, and redraw-prime contracts pass, but this
 exact visual sequence remains required after the macOS control session exposes
 the native window again. Browser and iOS are outside this acceptance campaign.
+
+## Opaque dark glass while the window is resized (2026-10-08)
+
+### Symptom
+
+While a window edge is dragged (Tauri, reproduced in Chromium), every glass
+card turns opaque dark gray for one or more frames, then returns to blurred
+glass once the size settles. The thin gaps between cards keep showing the
+colored workspace.
+
+### Confirmed cause
+
+`generate_workspace_blur_mips` copied the capture image into the blur pyramid
+inside `Core2dSystems::PostProcess`. A Bevy camera draws into its intermediate
+`ViewTarget`; the `upscaling` system blits that frame into the camera output
+(the capture image) only after the post-process sets. The copy therefore always
+read the previous frame's capture. Every resize allocates a new, zero-filled
+capture, so the first frame sampled a black pyramid and the shader drew
+`mix(black, tint)` at full alpha. Pixel proof: card top 34/255 and bottom
+25/255, exactly the tint (16/255, alpha 0.26, fade 0.45) over black after sRGB
+encoding.
+
+This was not a double render or a DOM layer.
+
+### Durable correction
+
+- `workspace_blur_mip_pass()` schedules the copy and mip generation
+  `.after(upscaling)`, so the pyramid always holds the frame captured in the
+  same render. This also removes the permanent one-frame lag of the glass.
+- `apply_surface` refreshes the per-material blur LOD only when the DPR
+  changes. Before, every resized frame marked every glass and SDF material as
+  modified and rebuilt its bind group.
+- Guard: `blur_pyramid_copies_the_capture_after_this_frame_was_written` builds
+  the real `Core2d` schedule with Bevy's `upscaling` and fails on the old
+  `in_set(PostProcess)` wiring.
+- Repro probe: `temp/glass_resize_dark/probe.mjs` (headed off-screen Chromium,
+  24 resize steps). Before: 9/24 dark frames. After: 0/72 over three runs.
