@@ -129,8 +129,8 @@ extension AppNativeAudioController {
                         onBus: 0,
                         bufferSize: 1024,
                         format: format
-                    ) { [weak self] buffer, _ in
-                        self?.pushRecordingBuffer(buffer)
+                    ) { [weak controller = self] buffer, _ in
+                        controller?.pushRecordingBuffer(buffer)
                     }
                     self.recordingEngine.prepare()
                     do {

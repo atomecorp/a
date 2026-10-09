@@ -93,10 +93,11 @@ extension AiSRuntime {
         return filtered
     }
 
-    static func appendEvent(_ db: OpaquePointer?, event: [String: Any]) throws {
-        let eventId = stringValue(event["id"])
+    static func appendEvent(_ db: OpaquePointer?, event incoming: [String: Any]) throws {
+        let eventId = stringValue(incoming["id"])
         let existing = try query(db, "SELECT id FROM events WHERE id = ? LIMIT 1", [.text(eventId)])
         if !existing.isEmpty { return }
+        let event = try withoutUnchangedProperties(db, event: incoming)
         try execute(db, "SAVEPOINT ais_event")
         var committed = false
         defer {
@@ -140,6 +141,29 @@ extension AiSRuntime {
         try applyEventToStateCurrent(db, event: event)
         try execute(db, "RELEASE ais_event")
         committed = true
+    }
+
+    // A property rewritten identically is not a change (Fastify `adole_event_mutation`):
+    // a profile save used to re-emit its unchanged photo in every event. Dropping
+    // such keys is neutral for replay, conflicts and the projected state.
+    private static func withoutUnchangedProperties(_ db: OpaquePointer?, event: [String: Any]) throws -> [String: Any] {
+        guard stringValue(event["kind"]) == "set", let atomeId = normalizedOptionalString(event["atome_id"]),
+              var payload = event["payload"] as? [String: Any],
+              let patchKey = ["props", "properties", "patch", "delta"].first(where: { payload[$0] is [String: Any] }),
+              let patch = payload[patchKey] as? [String: Any] else { return event }
+        let stored = try query(db, "SELECT particle_key, particle_value FROM particles WHERE atome_id = ?", [.text(atomeId)])
+        var storedByKey: [String: String] = [:]
+        for row in stored {
+            if let key = row["particle_key"] as? String, let value = row["particle_value"] as? String { storedByKey[key] = value }
+        }
+        let kept = try patch.filter { key, value in
+            try eventMetaParticleKeys.contains(key) || storedByKey[key] != jsonString(value)
+        }
+        if kept.count == patch.count { return event }
+        payload[patchKey] = kept
+        var reduced = event
+        reduced["payload"] = payload
+        return reduced
     }
 
     static func appendEvents(_ db: OpaquePointer?, events: [[String: Any]]) throws {

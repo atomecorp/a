@@ -55,9 +55,34 @@ extension AppNativeVideoRecorder {
     }
 
     func inspectAndComplete(fileURL: URL, error: Error?) {
+        if discardOnStop {
+            cancelPendingStart()
+            return
+        }
+        let generation = lifecycleGeneration
+        Task {
+            let result: Result<AppNativeVideoAssetInspection, Error>
+            do { result = .success(try await self.inspectAsset(fileURL: fileURL)) }
+            catch { result = .failure(error) }
+            self.sessionQueue.async {
+                guard self.lifecycleGeneration == generation, self.movieOutput != nil else { return }
+                if self.discardOnStop {
+                    self.cancelPendingStart()
+                    return
+                }
+                switch result {
+                case .success(let inspection):
+                    self.finishInspection(fileURL: fileURL, error: error, inspection: inspection)
+                case .failure(let loadingError):
+                    self.failActiveLifecycle(code: "video_recording_inspection_failed:\(loadingError.localizedDescription)")
+                }
+            }
+        }
+    }
+
+    private func finishInspection(fileURL: URL, error: Error?, inspection: AppNativeVideoAssetInspection) {
         let attrs = (try? FileManager.default.attributesOfItem(atPath: fileURL.path)) ?? [:]
         let size = (attrs[.size] as? NSNumber)?.intValue ?? 0
-        let inspection = inspectAsset(fileURL: fileURL)
         let duration = inspection.duration
         let resolvedFileName = fileName ?? fileURL.lastPathComponent
         let resolvedRelativePath = relativePath ?? ""
@@ -116,24 +141,6 @@ extension AppNativeVideoRecorder {
             startCompletion = nil
             stopCompletions.removeAll()
             cleanupSessionOnly()
-        }
-
-        if discardOnStop {
-            do {
-                try removeFileIfPresent(at: fileURL.path)
-                FileSyncCoordinator.shared.syncAll(force: true)
-                finishTerminal(discardedPayload(from: successPayload), acknowledged: true,
-                               pendingStart: pendingStart, pendingStops: pendingStops)
-            } catch {
-                let failure = cleanupFailurePayload(
-                    base: successPayload,
-                    code: "video_recording_discard_failed",
-                    error: error
-                )
-                finishTerminal(failure, acknowledged: false,
-                               pendingStart: pendingStart, pendingStops: pendingStops)
-            }
-            return
         }
 
         guard success else {

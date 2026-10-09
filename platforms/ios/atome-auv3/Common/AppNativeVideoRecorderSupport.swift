@@ -134,16 +134,16 @@ extension AppNativeVideoRecorder {
         return "\(Int(frame.minX)),\(Int(frame.minY)),\(Int(frame.width)),\(Int(frame.height))"
     }
 
-    func videoOrientation(from raw: String) -> AVCaptureVideoOrientation {
+    func videoRotationAngle(from raw: String) -> CGFloat {
         switch raw {
         case "landscape-left":
-            return .landscapeLeft
+            return 180
         case "landscape-right":
-            return .landscapeRight
+            return 0
         case "portrait-upside-down", "portrait_upsidedown", "portrait-upsidedown":
-            return .portraitUpsideDown
+            return 270
         default:
-            return .portrait
+            return 90
         }
     }
 
@@ -155,21 +155,23 @@ extension AppNativeVideoRecorder {
         return device.activeFormat.videoSupportedFrameRateRanges.first?.maxFrameRate ?? 0
     }
 
-    func inspectAsset(fileURL: URL) -> AppNativeVideoAssetInspection {
+    func inspectAsset(fileURL: URL) async throws -> AppNativeVideoAssetInspection {
         let asset = AVURLAsset(url: fileURL)
-        let durationSeconds = asset.duration.seconds
+        let (assetDuration, isReadable, isPlayable) = try await asset.load(.duration, .isReadable, .isPlayable)
+        let durationSeconds = assetDuration.seconds
         let duration = durationSeconds.isFinite && durationSeconds > 0 ? durationSeconds : 0
-        let videoTracks = asset.tracks(withMediaType: .video)
-        let audioTracks = asset.tracks(withMediaType: .audio)
-        let display = displayMetadata(for: videoTracks.first)
-        let nominalFPS = videoTracks
-            .map { Double($0.nominalFrameRate) }
-            .filter { $0.isFinite && $0 > 0 }
-            .max() ?? 0
+        let videoTracks = try await asset.loadTracks(withMediaType: .video)
+        let audioTracks = try await asset.loadTracks(withMediaType: .audio)
+        let display = try await displayMetadata(for: videoTracks.first)
+        var nominalFPS: Double = 0
+        for track in videoTracks {
+            let rate = Double(try await track.load(.nominalFrameRate))
+            if rate.isFinite && rate > nominalFPS { nominalFPS = rate }
+        }
         return AppNativeVideoAssetInspection(
             duration: duration,
-            isReadable: asset.isReadable,
-            isPlayable: asset.isPlayable,
+            isReadable: isReadable,
+            isPlayable: isPlayable,
             videoTrackCount: videoTracks.count,
             audioTrackCount: audioTracks.count,
             width: display.width,
@@ -179,12 +181,12 @@ extension AppNativeVideoRecorder {
             mirrored: display.mirrored,
             preferredTransform: display.transform,
             nominalFPS: nominalFPS,
-            videoCodecs: codecs(for: videoTracks),
-            audioCodecs: codecs(for: audioTracks)
+            videoCodecs: try await codecs(for: videoTracks),
+            audioCodecs: try await codecs(for: audioTracks)
         )
     }
 
-    private func displayMetadata(for track: AVAssetTrack?) -> (
+    private func displayMetadata(for track: AVAssetTrack?) async throws -> (
         width: Int,
         height: Int,
         orientation: String,
@@ -195,8 +197,8 @@ extension AppNativeVideoRecorder {
         guard let track else {
             return (0, 0, "unknown", 0, false, [:])
         }
-        let transform = track.preferredTransform
-        let displayRect = CGRect(origin: .zero, size: track.naturalSize)
+        let (transform, naturalSize) = try await track.load(.preferredTransform, .naturalSize)
+        let displayRect = CGRect(origin: .zero, size: naturalSize)
             .applying(transform)
             .standardized
         let width = max(0, Int(displayRect.width.rounded()))
@@ -238,12 +240,10 @@ extension AppNativeVideoRecorder {
         )
     }
 
-    private func codecs(for tracks: [AVAssetTrack]) -> [String] {
+    private func codecs(for tracks: [AVAssetTrack]) async throws -> [String] {
         var codecs: [String] = []
         for track in tracks {
-            for description in track.formatDescriptions {
-                // AVAssetTrack guarantees CMFormatDescription values in this collection.
-                let formatDescription = description as! CMFormatDescription
+            for formatDescription in try await track.load(.formatDescriptions) {
                 let subtype = CMFormatDescriptionGetMediaSubType(formatDescription)
                 let codec = fourCC(subtype)
                 if !codec.isEmpty, !codecs.contains(codec) {

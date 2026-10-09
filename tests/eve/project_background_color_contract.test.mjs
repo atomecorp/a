@@ -1,3 +1,5 @@
+import { projectCreationViewProperties } from '../../eVe/domains/rendering/project_creation_view_properties.js';
+import { normalizeVisualPreferences } from '../../eVe/intuition/tools/user_visual_preferences_model.js';
 import {test} from 'vitest';
 import assert from 'node:assert/strict';
 import {CONTEXT_MENUS} from '../../eVe/intuition/menu/context_menus_loader.js';
@@ -241,4 +243,24 @@ test('a colour committed outside the project surface never repaints it', async (
         harness.runtime.stop();
         harness.restore();
     }
+});
+
+
+test('new projects capture the user default once without changing legacy project rendering', () => {
+    const windowRef = { __eveProfilePreferences: { visual: { masteryLevel: 'advanced' } } };
+    const first = projectCreationViewProperties({ name: 'First' }, { windowRef });
+    assert.equal(first.background, '#272727');
+    windowRef.__eveProfilePreferences.visual.newProjectBackgroundColor = '#123456';
+    const second = projectCreationViewProperties({ name: 'Second' }, { windowRef });
+    assert.equal(second.background, '#123456'); assert.equal(first.background, '#272727');
+    const template = { background: '#abcdef', view_mode: 'natural' };
+    assert.equal(projectCreationViewProperties(template, { windowRef }), template);
+    for (const key of ['backgroundColor', 'bg']) {
+        const explicit = { [key]: '#abcdef' };
+        assert.equal(projectCreationViewProperties(explicit, { windowRef }), explicit);
+    }
+    assert.equal(normalizeVisualPreferences({ masteryLevel: 'beginner' }).newProjectBackgroundColor, '#272727');
+    assert.equal(normalizeVisualPreferences({ newProjectBackgroundColor: '#abc' }).newProjectBackgroundColor, '#aabbcc');
+    assert.throws(() => normalizeVisualPreferences({ newProjectBackgroundColor: 'invalid' }), /new_project_background_color_invalid/);
+    assert.deepEqual(readDefaultSurfaceBackgroundRgba(), [169 / 255, 169 / 255, 169 / 255, 1]);
 });

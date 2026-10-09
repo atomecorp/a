@@ -52,7 +52,7 @@ test('shared panel input builder owns geometry, state paint, and selection proje
     assert.equal(focused.kind, 'text_input');
     assert.deepEqual(focused.style.size, [BEVY_PANEL_TOKENS.inputWidthPx, BEVY_PANEL_TOKENS.inputHeightPx]);
     assert.equal(focused.style.radius, BEVY_PANEL_TOKENS.radiusPx);
-    assert.deepEqual(focused.style.background, BEVY_PANEL_TOKENS.surfaces.input.background);
+    assert.deepEqual(focused.style.background, BEVY_PANEL_TOKENS.input.focusBackground);
     assert.deepEqual(focused.style.shadow, BEVY_PANEL_TOKENS.input.focusShadow);
     assert.equal(findNode([focused], 'field_text').text, 'Hello');
     assert.deepEqual(findNode([focused], 'field_text').style.position, [10, 0]);
@@ -212,4 +212,27 @@ test('IME composition publishes the composed value through the shared panel sess
         assert.equal(fixture.records().find(record=>record.id.endsWith('_input_text_text')).properties.text,'日本');
         assert.equal(fixture.dom.window.document.activeElement,fixture.editor);
     } finally { fixture.close(); }
+});
+
+
+test('empty and populated fields have an inset tint without a permanent outline', () => {
+    for (const value of ['', '0612345678']) {
+        const idle = textInputNode({ id: 'phone', value, placeholder: 'Phone' });
+        const focused = textInputNode({ id: 'phone', value, focused: true });
+        assert.deepEqual(idle.style.background, [0, 0, 0, .14]);
+        assert.deepEqual(focused.style.background, [0, 0, 0, .20]);
+        assert.equal(idle.style.backdrop, null);
+        assert.equal(idle.style.surfacePaint.border.color[3], 0);
+        assert.equal(idle.style.border, undefined);
+        assert.deepEqual(idle.style.size, focused.style.size);
+    }
+});
+
+test('disabled placeholders remain at 63 percent while entered values stay opaque', () => {
+    for (const disabled of [false, true]) {
+        const hint = textInputNode({ id: 'hint', placeholder: 'Type text', value: '', disabled });
+        const value = textInputNode({ id: 'value', placeholder: 'Type text', value: 'Entered text', disabled });
+        assert.equal(findNode([hint], 'hint_text').style.opacity, 0.63);
+        assert.equal(findNode([value], 'value_text').style.opacity, 1);
+    }
 });

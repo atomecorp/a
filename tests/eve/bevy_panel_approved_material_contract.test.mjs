@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { buttonNode, panelIconButtonNode } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tree.js';
+import { buildBevyPanelTree, buttonNode, panelIconButtonNode } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tree.js';
 import { toggleableRowNode } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_choice.js';
 import { segmentedControlNode } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_segmented_control.js';
 import { BEVY_PANEL_TOKENS as T } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
@@ -18,11 +18,11 @@ test('panel material leaves the shared icon source, tint and geometry intact in 
     }
 });
 
-test('action states have one rounded surface, no coloured outline, and disabled actions cannot activate', () => {
+test('action states have one common rounded surface, an explicit selection outline, and disabled actions cannot activate', () => {
     for (const state of ['idle','primary','hovered','pressed','focused','disabled']) {
         const tree=buttonNode({id:'action',text:'Valider',width:120,[state]:true,onActivate:()=>{}});
         assert.equal(tree.style.surfacePaint.border.color[3],0);
-        assert.equal(tree.style.border,undefined);
+        assert.deepEqual(tree.style.border,['primary','hovered'].includes(state)?[1,1,1,1]:undefined);
         const records=projectBevyUiTreeRecords({tree:{root:tree},treeId:'state',workspaceLayer:'panel'});
         const surface=records.find(record=>record.id==='__eve_bevy_ui_state_action');
         assert.equal(surface.properties.width,120);
@@ -54,4 +54,24 @@ test('segmented selection has an inset rounded surface within the original inter
     assert.ok(surface.style.size[0]+surface.style.position[0]*2<=segment.style.size[0]);
     assert.ok(surface.style.size[1]+surface.style.position[1]*2<=segment.style.size[1]);
     assert.ok(tree.children.every(child=>child.children.every(node=>node.kind!=='divider')));
+});
+
+// Exercise projected paint: partial corner geometry alone cannot round glass.
+test('every panel paints one complete glass silhouette with the Dashboard cell radius', () => {
+    for (const options of [{}, {footerVisible:false}, {hideFooter:true},
+        {fixedChildren:[buttonNode({id:'fixed',text:'OK'})]},
+        {footerVisible:false,fixedChildren:[buttonNode({id:'fixed',text:'OK'})]}]) {
+        const tree=buildBevyPanelTree({id:'rounded',title:'Panel',
+            geometry:{x:24,y:30,width:320,height:360},surfaceSize:{width:800,height:600},
+            bodyChildren:[buttonNode({id:'body_action',text:'OK'})],...options});
+        const records=projectBevyUiTreeRecords({tree,treeId:'rounded',workspaceLayer:'panel'});
+        const shell=records.find(record=>record.id==='__eve_bevy_ui_rounded_rounded_panel');
+        assert.equal(shell.properties.corner_radius,8);
+        assert.equal(shell.properties.shape,'rounded_rect');
+        assert.equal(shell.properties.material.backdrop.blur_px,T.material.backdrop.blurPx);
+        assert.deepEqual(shell.properties.material.backdrop.tint,T.material.backdrop.tint);
+        assert.equal(records.some(record=>/rounded_(body|footer|fixed_actions)$/.test(record.id)
+            && record.properties.material?.backdrop),false);
+        assert.equal(records.find(record=>record.id==='__eve_bevy_ui_rounded_body_action').properties.corner_radius,T.actionButton.radiusPx);
+    }
 });

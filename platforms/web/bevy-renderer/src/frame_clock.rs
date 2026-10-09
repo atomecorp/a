@@ -5,11 +5,14 @@
 //! by requesting the window's next animation frame — input and decoder-paced
 //! video frames alike — so each frame costs exactly one render.
 
+use atome_bevy_renderer_core::AtomeRendererDiagnostics;
+use bevy::platform::time::Instant;
 use bevy::{
     prelude::*,
+    window::WindowResized,
     winit::{EventLoopProxy, EventLoopProxyWrapper, UpdateMode, WinitSettings, WinitUserEvent},
 };
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::time::Duration;
 
 use super::WEB_DIAGNOSTICS;
@@ -19,6 +22,7 @@ thread_local! {
     pub(crate) static WEB_WAKE_PENDING: RefCell<bool> = const { RefCell::new(false) };
     pub(crate) static WEB_FRAME_REQUESTED: RefCell<bool> = const { RefCell::new(false) };
     pub(crate) static WEB_WAKE_COALESCED: RefCell<bool> = const { RefCell::new(false) };
+    pub(crate) static WEB_LAST_ACTIVITY: Cell<Option<Instant>> = const { Cell::new(None) };
 }
 
 /// Interval of the idle heartbeat, *not* a frame budget.
@@ -41,10 +45,70 @@ thread_local! {
 /// to a display-rate idle loop.
 pub(crate) const WEB_IDLE_HEARTBEAT_MS: u64 = 500;
 
+/// Quiet time after the last wake before the heartbeat stretches.
+///
+/// The 500 ms failsafe still matters right after work stops: work that
+/// completes over later updates without waking (a pipeline first needed by
+/// the last frame, a GPU readback) lands on those ticks. Once nothing has
+/// woken the renderer for this long, the workspace is settled.
+pub(crate) const WEB_IDLE_SETTLE_MS: u64 = 3_000;
+
+/// Heartbeat of a settled workspace: one full render every 10 s instead of two
+/// per second (measured on iPhone 2026-10-09: 2 renders/s with no input).
+/// Every source of change wakes the renderer itself, which renders at once
+/// whatever this wait is.
+pub(crate) const WEB_SETTLED_HEARTBEAT_MS: u64 = 10_000;
+
 pub(crate) fn web_winit_settings() -> WinitSettings {
     WinitSettings {
         focused_mode: UpdateMode::reactive(Duration::from_millis(WEB_IDLE_HEARTBEAT_MS)),
         unfocused_mode: UpdateMode::reactive(Duration::from_millis(WEB_IDLE_HEARTBEAT_MS)),
+    }
+}
+
+fn note_web_activity() {
+    WEB_LAST_ACTIVITY.with(|cell| cell.set(Some(Instant::now())));
+}
+
+/// Chooses the idle wait at the end of each tick: the failsafe heartbeat while
+/// work is recent, the settled heartbeat once the workspace has been quiet for
+/// `WEB_IDLE_SETTLE_MS`. A playing animated PNG shortens the wait itself
+/// (`animated_png::advance_animations`) and keeps that control until it ends.
+pub(crate) fn adapt_web_idle_heartbeat(
+    mut settings: ResMut<WinitSettings>,
+    diagnostics: Option<Res<AtomeRendererDiagnostics>>,
+    mut resized: MessageReader<WindowResized>,
+) {
+    if resized.read().count() > 0 {
+        note_web_activity();
+    }
+    if diagnostics.is_some_and(|diagnostics| diagnostics.apng_active > 0) {
+        return;
+    }
+    let now = Instant::now();
+    let last_activity = WEB_LAST_ACTIVITY.with(|cell| {
+        cell.get().unwrap_or_else(|| {
+            cell.set(Some(now));
+            now
+        })
+    });
+    let wait = Duration::from_millis(
+        if now.duration_since(last_activity) >= Duration::from_millis(WEB_IDLE_SETTLE_MS) {
+            WEB_SETTLED_HEARTBEAT_MS
+        } else {
+            WEB_IDLE_HEARTBEAT_MS
+        },
+    );
+    let with_wait = |mut mode: UpdateMode| {
+        if let UpdateMode::Reactive { wait: ref mut current, .. } = mode {
+            *current = wait;
+        }
+        mode
+    };
+    let (focused, unfocused) = (with_wait(settings.focused_mode), with_wait(settings.unfocused_mode));
+    if focused != settings.focused_mode || unfocused != settings.unfocused_mode {
+        settings.focused_mode = focused;
+        settings.unfocused_mode = unfocused;
     }
 }
 
@@ -99,6 +163,7 @@ pub(crate) fn remember_event_loop_proxy(proxy: Option<Res<EventLoopProxyWrapper>
 // frame itself (`continue_merged_wake`), which pipelines one frame ahead while
 // work keeps arriving and costs a single idle frame once it stops.
 pub(crate) fn wake_web_renderer() {
+    note_web_activity();
     WEB_DIAGNOSTICS.with(|cell| {
         cell.borrow_mut().wake_calls += 1;
     });

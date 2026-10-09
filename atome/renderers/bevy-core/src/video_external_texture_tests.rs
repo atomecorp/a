@@ -14,7 +14,7 @@ use bevy::{
     math::EulerRot, mesh::VertexAttributeValues, prelude::*, render::batching::NoAutomaticBatching,
 };
 
-fn video_node(id: &str) -> AtomeRenderNode {
+pub(crate) fn video_node(id: &str) -> AtomeRenderNode {
     AtomeRenderNode {
         project_space: false,
         id: id.to_string(),
@@ -57,7 +57,7 @@ fn video_node(id: &str) -> AtomeRenderNode {
     }
 }
 
-fn world_with_video_assets() -> World {
+pub(crate) fn world_with_video_assets() -> World {
     let mut world = World::new();
     world.insert_resource(AtomeEntityTable::default());
     world.insert_resource(AtomeBevyRendererConfig::empty(640.0, 480.0));
@@ -67,7 +67,7 @@ fn world_with_video_assets() -> World {
     world
 }
 
-fn video_mesh_uvs(world: &World, entity: Entity) -> Vec<[f32; 2]> {
+pub(crate) fn video_mesh_uvs(world: &World, entity: Entity) -> Vec<[f32; 2]> {
     let mesh_handle = &world.get::<Mesh2d>(entity).unwrap().0;
     let mesh = world
         .resource::<Assets<Mesh>>()

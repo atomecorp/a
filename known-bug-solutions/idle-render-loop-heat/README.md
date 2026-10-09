@@ -70,11 +70,54 @@ at tick start); a merged wake makes its tick request the next frame at `Last`
 Result: gestures 50-61 renders/s, Mystic 60/s after the first opening, idle
 still 2/s. Measure **Bevy ticks and presents**, never JavaScript rAF alone.
 
+## Second pass on the physical iPhone (2026-10-09)
+
+Measured in the real WKWebView of an iPhone 17 Pro (Web Inspector driven from
+Node, see `reference_ios_device_webview_js_via_appium_debugger`), Dashboard,
+no finger on the screen for 8.7 min:
+
+- Bevy: 2 renders/s (500 ms heartbeat), 0 wakes, wallpaper `<video>` paused.
+- **The real continuous work was a profile poll**: `eVe/user/background.js`
+  re-read the owner's whole profile every 1.2 s to notice a wallpaper change —
+  `state-current/get` of the user atome, **214 KB per read because the
+  `user_face` photo travels with it**, through the local Swift server (SQLite
+  read + JSON encode, WebSocket, `JSON.parse` + GC). 94 MB moved in 8.7 min,
+  ≈ 180 KB/s, forever. For an account without a photo on iOS (backend
+  `tauri`), each read additionally ran the legacy-profile repair against
+  atome.one (`auth.me` + remote read).
+- No 5-minute import-cycle burst and no other timer appeared in that window;
+  idle commits were three isolated bursts.
+
+Corrections:
+
+- The wallpaper follows the profile through events only:
+  `squirrel:auth-checked` (every session change publishes the owner first),
+  `eve:user-profile-updated` (save on this device), the synchronized
+  `squirrel:atome-updated`/`-restored` of the owner's profile (applied from the
+  patch itself, so the local store is never raced) and one re-read when the page
+  becomes visible. Covered by `tests/eve/background_default_wallpaper_contract.test.mjs`
+  (red on the polling watcher, green after).
+- Settled workspace: `frame_clock.rs` keeps the 500 ms failsafe heartbeat for
+  3 s after the last wake (work that completes without waking, e.g. a pipeline
+  first needed by the last frame), then stretches it to 10 s; any wake still
+  renders on the next frame. A playing APNG keeps control of the wait.
+
+Still open: the logged-out login screen loops its logo light sweep
+(`user_login_light_runtime.js`) at 60 renders/s forever; it should pause with
+the wallpaper's inactivity freeze.
+
+Not measurable here: native CPU per process on the device (`xctrace` lists the
+iOS 27.2 phone as offline with Xcode 27.0). **To verify** on device: Xcode
+Energy gauge on an idle Dashboard and project after rebuilding the app.
+
 ## Regression checks
 
 - `tests/probes/bevy_web_frame_clock_cadence.probe.mjs` (real browser loop,
   quiet scene, rAF-driven wakes: one render per frame, idle ≤ 4 ticks/s; red on
-  the 2-frames/s build, green after).
+  the 2-frames/s build, green after; since 2026-10-09 also a settled workspace
+  renders ≤ 2 times in 10 s and a wake still renders within 100 ms).
+- `tests/eve/background_default_wallpaper_contract.test.mjs` (no profile read
+  on a timer; a synchronized profile patch applies without a read).
 - `temp/perf_regression_2026-10-07/gestures.probe.mjs` (media-heavy project:
   ticks, presents and present gaps per gesture).
 

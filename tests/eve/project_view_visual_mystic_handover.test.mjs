@@ -14,6 +14,8 @@ import {
 import { openProjectViewAtomeMenu } from '../../eVe/domains/rendering/project_view_item_actions.js';
 import { createBevyUiMysticRuntime } from '../../eVe/intuition/ribbon/bevy_ui_mystic_runtime.js';
 import { setMysticRuntime } from '../../eVe/intuition/ribbon/bevy_ui_product_registry.js';
+import { projectViewVisualPanel } from '../../eVe/domains/rendering/project_view_visual_panel.js';
+import { installIntuitionXMysticContextRuntime } from '../../eVe/intuition/mystic/context.js';
 import { closeMysticMenu } from '../../eVe/intuition/mystic/index.js';
 
 // The project Visual preview is a BevyUI node, so its press is owned by the
@@ -49,7 +51,7 @@ const tick = () => delay(8);
 
 afterAll(() => window.close());
 
-const createHarness = () => {
+const createHarness = ({ visualPanel = null, type = 'video', composite = false } = {}) => {
     const canvas = document.getElementById('eve_surface_project');
     canvas.getBoundingClientRect = () => RECT;
     canvas.setPointerCapture = () => {};
@@ -60,7 +62,7 @@ const createHarness = () => {
 
     const record = {
         atome_id: 'media_atom',
-        type: 'video',
+        type,
         properties: { left: 40, top: 40, width: 200, height: 150, media_url: '/v.mp4' }
     };
     const intents = [];
@@ -85,9 +87,14 @@ const createHarness = () => {
     };
 
     const handlers = new Map();
+    if (visualPanel) visualPanel.setSubject(record, { records: composite ? [
+        { atome_id: 'page_frame', type: 'group', properties: { left: 40, top: 40, width: 200, height: 150, container_kind: 'page' } },
+        record, { ...record, atome_id: 'front_text', type: 'text', properties: { ...record.properties, text: 'Welcome', z_index: 2 } }
+    ] : [] });
+    const preview = visualPanel?.build({ width: PANEL_W, height: PANEL_H });
     const root = normalizeBevyUiTree({
         id: TREE_ID,
-        tree: {
+        tree: preview ? { ...preview, style: { ...preview.style, position: [30, 25] } } : {
             id: PANEL_ID, kind: 'pointer_capture',
             style: { position: [0, 0], size: [PANEL_W, PANEL_H], overflow: 'hidden' },
             on: interaction
@@ -129,8 +136,9 @@ const createHarness = () => {
         unmountTree: async (id) => { mounted.delete(id); },
         hitTestAtClientPoint: ({ clientX, clientY }) => {
             const hit = hitAt({ x: clientX - RECT.left, y: clientY - RECT.top });
-            return hit ? { treeId: TREE_ID, nodeId: hit.nodeId } : null;
+            return hit ? { treeId: TREE_ID, nodeId: hit.nodeId, box: hit.box } : null;
         },
+        surfacePointFromEvent: (_surface, event) => ({ x: event.clientX, y: event.clientY }),
         // The real BevyUI owner of the captured pointer.
         cancelPointerGesture: pointerRuntime.cancelPointerGesture
     };
@@ -214,4 +222,43 @@ test('a long press hands the visual preview gesture over to the Flower', { timeo
     harness.route('pointerup', { x: MEDIA_POINT.x + 60, y: MEDIA_POINT.y + 30 });
     await wait(30);
     assert.ok(harness.moveIntents().length >= 1, 'the panel is not left frozen after the hand-over');
+});
+
+test.each([['video', false, 'media_atom', 'video'], ['text', false, 'media_atom', 'text'], ['video', true, 'front_text', 'text']])('right-click opens Mystic once on the displayed %s preview (composite=%s)', async (type, composite, expectedId, expectedKind) => {
+    const harness = createHarness({ visualPanel: projectViewVisualPanel, type, composite });
+    closeMysticMenu();
+    await wait(30);
+    const contexts = [];
+    const dispose = installIntuitionXMysticContextRuntime({ resolveItems: context => { contexts.push(context); return []; } });
+    const canvas = document.getElementById('eve_surface_project');
+    const send = (type) => canvas.dispatchEvent(new window.MouseEvent(type, {
+        bubbles: true, cancelable: true, button: 2, clientX: MEDIA_POINT.x, clientY: MEDIA_POINT.y
+    }));
+    try {
+        send('pointerdown');
+        send('pointerup');
+        send('contextmenu');
+        const deadline = Date.now() + 4000;
+        while (Date.now() < deadline && !harness.mysticRuntime.isOpen()) await wait(2);
+        assert.equal(harness.mysticRuntime.isOpen(), true);
+        assert.equal(contexts.length, 1);
+        assert.equal(contexts[0].type, 'atome');
+        assert.equal(contexts[0].atomeId, expectedId);
+        assert.equal(contexts[0].kind, expectedKind);
+        assert.equal(harness.moveIntents().length, 0);
+        assert.equal(harness.endIntents().length, 0);
+        send('pointerdown'); send('pointerup'); send('contextmenu');
+        await wait(30);
+        assert.equal(harness.mysticRuntime.isOpen(), false, 'another right-click closes Mystic');
+        assert.equal(contexts.length, 1, 'closing does not reopen or dispatch twice');
+        const hitTest = window.eveBevyUiRuntime.hitTestAtClientPoint;
+        window.eveBevyUiRuntime.hitTestAtClientPoint = args => ({ ...hitTest(args), treeId: 'ordinary_panel' });
+        send('pointerdown'); send('pointerup'); send('contextmenu');
+        await wait(30);
+        assert.equal(harness.mysticRuntime.isOpen(), false, 'an ordinary control still owns its point');
+        assert.equal(contexts.length, 1);
+        window.eveBevyUiRuntime.hitTestAtClientPoint = hitTest;
+    } finally {
+        dispose(); closeMysticMenu(); projectViewVisualPanel.reset();
+    }
 });

@@ -8,17 +8,25 @@ vi.mock('../../eVe/intuition/runtime/project_media_import_runtime.js', () => ({ 
 import { createFirstLaunchRuntime } from '../../eVe/domains/user/first_launch_runtime.js';
 import { FIRST_LAUNCH_TEMPLATES } from '../../eVe/domains/templates/first_launch_template_catalog.js';
 import { buildMatrixToolDefinitions } from '../../eVe/intuition/tools/core/tool_runtime_bootstrap_matrix_defs.js';
+import { setSessionState } from '../../atome/src/squirrel/apis/unified/adole_api/session.js';
 const user = { id: 'new', first_launch_version: 1 };
 const fixture = (initial = { preferences: { visual: { masteryLevel: 'advanced' }, custom: 'preserved' } }) => {
     let profile = structuredClone(initial), current = user, fields;
     const renders = [], saves = [], finish = vi.fn(async () => ({ ok: true })), createTemplate = vi.fn(async () => ({ ok: true, project_id: 'basic' }));
+    const guest = vi.fn(async () => {
+        const user = { id: 'guest' };
+        setSessionState({ mode: 'anonymous', user }, { persist: false, silent: true });
+        return { ok: true, user };
+    });
+    const loadProfile = vi.fn(async () => ({ ok: true, profile }));
+    const installTemplate = vi.fn(async key => ({ ok: true, project_id: key }));
     window.Atome = { listStateCurrent: async key => FIRST_LAUNCH_TEMPLATES[key].atoms.map(a => ({ id: a.ref, type: a.type, properties: a.props })) };
     const flow = createFirstLaunchRuntime({ currentUser: () => current,
-        loadProfile: async () => ({ ok: true, profile }), saveProfile: async next => { profile = structuredClone(next); saves.push(profile); return { ok: true }; },
-        installTemplate: async key => ({ ok: true, project_id: key }), createTemplate, finish,
-        guest: async () => ({ ok: true }), submit: async () => ({ ok: true, paymentRequired: true }),
+        loadProfile, saveProfile: async next => { profile = structuredClone(next); saves.push(profile); return { ok: true }; },
+        installTemplate, createTemplate, finish,
+        guest, submit: async () => ({ ok: true, paymentRequired: true }),
         createPresentation: options => { fields = options; return { open: async () => { renders.push(flow.state.stage); return { ok: true }; }, destroy: async () => {}, render: async () => ({ ok: true }) }; } });
-    return { flow, saves, renders, finish, createTemplate, profile: () => profile, draft: (key, value) => fields.writeDraft(key, value), switchUser: () => { current = { id: 'other' }; } };
+    return { flow, saves, renders, finish, createTemplate, guest, loadProfile, installTemplate, profile: () => profile, draft: (key, value) => fields.writeDraft(key, value), submitField: key => fields.onSubmit(key), switchUser: () => { current = { id: 'other' }; } };
 };
 beforeEach(() => {
     globalThis.window = { dispatchEvent: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn(), __eveProfilePreferences: {}, AdoleAPI: { sync: { flushWorkspace: vi.fn(async () => ({ ok: true })) }, auth: {
@@ -27,8 +35,32 @@ beforeEach(() => {
     owners.gateway.mockReset().mockResolvedValue({ ok: true }); owners.create.mockReset().mockResolvedValue({ ok: true, project_id: 'sleep-project' });
     owners.media.mockReset().mockResolvedValue({ ok: false, cancelled: true });
     owners.readFile.mockReset().mockResolvedValue({ type: 'image/png' }); owners.readImage.mockReset().mockResolvedValue('data:image/png;base64,selected');
+    setSessionState({ mode: 'logged_out', user: null }, { persist: false, silent: true });
 });
 describe('first-launch canonical lifecycle', () => {
+    it('edits the optional nickname without exposing or replacing the technical username', async () => {
+        const username = 'user_a143b08c-54bd-430c-a5ac';
+        const f = fixture({ username, nickname: '', preferences: { first_launch: { version: 1, step: 'profile' } } });
+        await f.flow.authenticated({ user });
+        expect(f.flow.state.fields.nickname).toBe('');
+        expect(Object.values(f.flow.state.fields)).not.toContain(username);
+        f.draft('nickname', '  Eve  ');
+        expect(await f.flow.handle({ operation: 'save_profile' })).toMatchObject({ ok: true });
+        expect(f.profile()).toMatchObject({ username, nickname: 'Eve' });
+        const resumed = fixture(f.profile());
+        await resumed.flow.authenticated({ user });
+        expect(resumed.flow.state.fields.nickname).toBe('Eve');
+    });
+    it('allows an empty nickname and preserves the account username and photo', async () => {
+        const f = fixture({ username: 'existing-login', nickname: 'Old nickname', user_face: 'saved.png',
+            preferences: { first_launch: { version: 1, step: 'profile' } } });
+        await f.flow.authenticated({ user });
+        expect(f.flow.state.fields.nickname).toBe('Old nickname');
+        f.draft('nickname', '  ');
+        expect(await f.flow.handle({ operation: 'save_profile' })).toMatchObject({ ok: true });
+        expect(f.profile()).toMatchObject({ username: 'existing-login', nickname: '', user_face: 'saved.png' });
+        expect(f.flow.state.stage).toBe('goals');
+    });
     it('shares one pending opening across the menu and Home entry points', async () => {
         const f = fixture(); let resolve;
         window.AdoleAPI.auth.getPendingPhoneLogin.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
@@ -76,10 +108,84 @@ describe('first-launch canonical lifecycle', () => {
         expect(f.flow.state.fields.phone).toBe('+33612345678'); expect(f.saves).toHaveLength(0);
         if (!paymentRequired) { await f.flow.handle({ operation: 'resend' }); expect(window.AdoleAPI.auth.resendPhoneLogin).toHaveBeenCalledTimes(1); }
     });
-    it('reopens with live controls after guest entry closed the previous generation', async () => {
+    it('opens Goals as a beginner without loading or writing an account profile', async () => {
+        window.__eveProfilePreferences = { visual: { masteryLevel: 'advanced' }, first_launch: { version: 1, step: 'complete' }, custom: 'account-only' };
         const f = fixture(); await f.flow.open(); await f.flow.handle({ operation: 'guest' });
-        expect(f.saves).toHaveLength(0); expect(f.flow.isOpen()).toBe(false);
+        expect(f.flow.state.stage).toBe('goals'); expect(f.flow.isOpen()).toBe(true);
+        expect(f.renders).toEqual(['access', 'goals']); expect(f.guest).toHaveBeenCalledTimes(1);
+        expect(window.__eveProfilePreferences.visual.masteryLevel).toBe('beginner');
+        expect(window.__eveProfilePreferences.custom).toBeUndefined();
+        expect(f.loadProfile).not.toHaveBeenCalled(); expect(f.saves).toHaveLength(0);
+        expect(window.AdoleAPI.auth.simulatePhonePayment).not.toHaveBeenCalled();
+        expect(window.AdoleAPI.auth.resendPhoneLogin).not.toHaveBeenCalled();
+        expect(f.createTemplate).not.toHaveBeenCalled(); expect(owners.create).not.toHaveBeenCalled();
+        await f.flow.close();
         await f.flow.open(); expect(f.flow.state.busy).toBe(false); expect(f.flow.state.stage).toBe('access');
+    });
+    it.each(['nutrition', 'movement', 'journal'])('finishes the guest %s goal through the canonical project and home owners', async goal => {
+        const f = fixture(); await f.flow.open(); await f.flow.handle({ operation: 'guest' });
+        expect(await f.flow.handle({ operation: 'goal', value: goal })).toMatchObject({ ok: true });
+        expect(owners.create).toHaveBeenCalledWith({ family: 'health', goal });
+        expect(f.finish).toHaveBeenCalledWith({ projectId: 'sleep-project', homeId: 'basic' });
+        expect(f.flow.state.progress.step).toBe('complete'); expect(f.flow.isOpen()).toBe(false);
+        expect(f.flow.state.profile.preferences.visual.masteryLevel).toBe('beginner');
+        expect(f.loadProfile).not.toHaveBeenCalled(); expect(f.saves).toHaveLength(0);
+    });
+    it('keeps guest sleep configuration and programme controls on the shared tool path', async () => {
+        const f = fixture(); await f.flow.open(); await f.flow.handle({ operation: 'guest' });
+        await f.flow.handle({ operation: 'goal', value: 'sleep' }); expect(f.flow.state.stage).toBe('sleep');
+        f.draft('hours', 7); f.draft('weight', '72');
+        expect(await f.flow.handle({ operation: 'configure_sleep' })).toMatchObject({ ok: true });
+        expect(f.flow.state.stage).toBe('program');
+        expect(owners.gateway).toHaveBeenCalledWith(expect.objectContaining({ tool_id: 'project.program.commit',
+            input: expect.objectContaining({ project_id: 'sleep-project', sleep_preferences: expect.objectContaining({ hours: 7 }) }) }));
+        await f.flow.handle({ operation: 'brick', value: 'nap' });
+        expect(f.flow.state.bricks).toEqual(['meditation', 'nutrition']);
+        await f.flow.handle({ operation: 'finish' });
+        expect(f.finish).toHaveBeenCalledWith({ projectId: 'basic', homeId: 'basic' });
+        expect(f.saves).toHaveLength(0); expect(f.loadProfile).not.toHaveBeenCalled();
+    });
+    it('serializes guest entry and keeps failed entry retryable on Access', async () => {
+        const f = fixture(); await f.flow.open(); let release;
+        f.guest.mockImplementationOnce(() => new Promise(done => { release = done; }));
+        const first = f.flow.handle({ operation: 'guest' });
+        expect(await f.flow.handle({ operation: 'guest' })).toMatchObject({ ok: true, pending: true });
+        release({ ok: false, error: 'anonymous_session_start_failed' });
+        expect(await first).toMatchObject({ ok: false, error: 'anonymous_session_start_failed' });
+        expect(f.flow.state).toMatchObject({ stage: 'access', busy: false, guest: false });
+        expect((await f.flow.handle({ operation: 'guest' })).ok).toBe(true);
+        expect(f.flow.state.stage).toBe('goals');
+    });
+    it('rejects a different guest before creation and after an in-flight creation', async () => {
+        const f = fixture(); await f.flow.open(); await f.flow.handle({ operation: 'guest' });
+        setSessionState({ mode: 'anonymous', user: { id: 'other' } }, { persist: false, silent: true });
+        expect(await f.flow.handle({ operation: 'goal', value: 'sleep' })).toMatchObject({ ok: false, error: 'first_launch_context_changed' });
+        expect(owners.create).not.toHaveBeenCalled();
+        setSessionState({ mode: 'anonymous', user: { id: 'guest' } }, { persist: false, silent: true });
+        let release; owners.create.mockImplementationOnce(() => new Promise(done => { release = done; }));
+        const pending = f.flow.handle({ operation: 'goal', value: 'sleep' });
+        await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+        setSessionState({ mode: 'authenticated', user }, { persist: false, silent: true });
+        release({ ok: true, project_id: 'outgoing' });
+        expect(await pending).toMatchObject({ ok: false, error: 'first_launch_context_changed' });
+        expect(f.flow.state.progress.program_id).toBe(''); expect(f.finish).not.toHaveBeenCalled();
+    });
+    it('restores actionable Access choices when the guest goal template cannot open', async () => {
+        const f = fixture(); await f.flow.open();
+        f.installTemplate.mockResolvedValueOnce({ ok: false, error: 'template_install_failed' });
+        expect(await f.flow.handle({ operation: 'guest' })).toMatchObject({ ok: false, error: 'template_install_failed' });
+        expect(f.flow.state).toMatchObject({ active: true, stage: 'access', busy: false, guest: true, guestId: '' });
+        expect(f.renders).toEqual(['access', 'access']);
+        expect((await f.flow.handle({ operation: 'guest' })).ok).toBe(true);
+        expect(f.flow.state.stage).toBe('goals');
+    });
+    it('does not remount Goals when guest entry settles after logout', async () => {
+        const f = fixture(); await f.flow.open(); let release;
+        f.guest.mockImplementationOnce(() => new Promise(done => { release = done; }));
+        const pending = f.flow.handle({ operation: 'guest' }); await f.flow.close();
+        release({ ok: true, user: { id: 'guest' } });
+        expect(await pending).toMatchObject({ ok: true, cancelled: true });
+        expect(f.renders).toEqual(['access']); expect(f.flow.isOpen()).toBe(false);
     });
     it('serializes SMS resend, displays rate limits and never creates a profile before proof', async () => {
         const f = fixture(); window.AdoleAPI.auth.getPendingPhoneLogin.mockResolvedValue({ phone: '+33612345678', paymentRequired: false });
@@ -239,4 +345,20 @@ describe('first-launch canonical lifecycle', () => {
         await f.flow.handle({ operation: 'goal', value: goal }); expect(owners.create).toHaveBeenCalledWith({ family: 'health', goal });
         expect(f.finish).toHaveBeenCalledWith({ projectId: 'sleep-project', homeId: 'basic' }); expect(f.profile().preferences.first_launch.step).toBe('complete');
     });
+});
+
+
+it('phone Enter invokes the same registered authentication action as Continue', async () => {
+    const f = fixture(); await f.flow.open({ credentials: true });
+    f.draft('phone', '0612345678');
+    await f.submitField('phone');
+    expect(owners.gateway).toHaveBeenLastCalledWith({ tool_id: 'ui.first_launch.auth', action: 'pointer.click',
+        input: { operation: 'authenticate' }, source: { type: 'ui' } });
+    expect((await f.flow.handle({ operation: 'authenticate' })).ok).toBe(true);
+    expect(f.flow.state.stage).toBe('billing');
+    const calls = owners.gateway.mock.calls.length;
+    await f.submitField('phone'); expect(owners.gateway.mock.calls).toHaveLength(calls);
+    const invalid = fixture(); await invalid.flow.open({ credentials: true }); invalid.draft('phone', 'abc');
+    expect(await invalid.flow.handle({ operation: 'authenticate' })).toMatchObject({ ok: false, error: 'auth_phone_e164_required' });
+    expect(invalid.flow.state.stage).toBe('phone');
 });

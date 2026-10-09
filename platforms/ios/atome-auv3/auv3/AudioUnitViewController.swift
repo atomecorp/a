@@ -39,6 +39,10 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
         
         // Ensure the host view background is black to match the WebView
         view.backgroundColor = .black
+        registerForTraitChanges([UITraitHorizontalSizeClass.self, UITraitVerticalSizeClass.self]) {
+            (controller: AudioUnitViewController, _: UITraitCollection) in
+            controller.view.setNeedsLayout()
+        }
         
     log.info("Startup AUv3 AudioUnitViewController")
         assert(ExternalDisplayGuards.isRunningInExtension, "AudioUnitViewController must run inside extension")
@@ -403,12 +407,6 @@ extension AudioUnitViewController {
         }
         webView.frame = b
         maybeScheduleInitialLoad()
-    }
-
-    public override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-        super.traitCollectionDidChange(previousTraitCollection)
-        log.debug("Traits changed h=\(self.traitCollection.horizontalSizeClass.rawValue) v=\(self.traitCollection.verticalSizeClass.rawValue)")
-        view.setNeedsLayout()
     }
 
     public override func viewDidAppear(_ animated: Bool) {

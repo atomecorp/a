@@ -23,6 +23,20 @@ const moleculeOwner = {
 
 const flatten = (node) => [node, ...(node?.children || []).flatMap(flatten)];
 
+test('Molecule disclosure includes canonical members beyond the first store page', async () => {
+    const records = [moleculeOwner, ...Array.from({ length: 199 }, (_, index) => ({
+        id: `root_${index}`, project_id: 'project_list', type: 'shape', properties: { name: `Root ${index}` }
+    })), { id: 'late_member', project_id: 'project_list', parent_id: 'molecule_owner',
+        type: 'text', properties: { name: 'Later page', text: 'Member' } }];
+    const content = createProjectViewListContent({ requestRefresh: () => {} });
+    await content.load({ projectId: 'project_list', readList: async (_id, options) => ({
+        records: records.slice(options.offset, options.offset + options.limit), totalCount: records.length
+    }) });
+    assert.equal(content.readState().entries.find(entry => entry.id === 'molecule_owner').hasChildren, true);
+    await content.handleEvent({ type: 'project_view.list.toggle', id: 'molecule_owner' });
+    assert.equal(content.readState().entries.find(entry => entry.id === 'late_member')?.depth, 1);
+});
+
 test('Molecule List expands a schema-v2 Molecule to its direct Atomes only', async () => {
     const content = createProjectViewListContent({ requestRefresh: () => {} });
     await content.load({

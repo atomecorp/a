@@ -7,7 +7,9 @@ use bevy::prelude::*;
 use bevy::window::{CompositeAlphaMode, RequestRedraw, WindowResized, WindowResolution};
 use bevy::winit::UpdateMode;
 use std::time::Duration;
-use crate::frame_clock::{WEB_IDLE_HEARTBEAT_MS, WEB_WAKE_COALESCED};
+use crate::frame_clock::{
+    WEB_IDLE_HEARTBEAT_MS, WEB_IDLE_SETTLE_MS, WEB_LAST_ACTIVITY, WEB_SETTLED_HEARTBEAT_MS, WEB_WAKE_COALESCED,
+};
 
 use super::*;
 
@@ -770,6 +772,29 @@ fn idle_heartbeat_is_far_slower_than_the_display_so_a_static_workspace_stops_red
         WEB_IDLE_HEARTBEAT_MS >= 500,
         "the idle wait must not approach a frame period, got {WEB_IDLE_HEARTBEAT_MS}ms"
     );
+}
+
+fn focused_wait(app: &App) -> Duration {
+    match app.world().resource::<bevy::winit::WinitSettings>().focused_mode {
+        UpdateMode::Reactive { wait, .. } => wait,
+        other => panic!("expected a reactive update mode, got {other:?}"),
+    }
+}
+
+#[test]
+fn settled_workspace_stretches_the_idle_heartbeat_and_a_wake_restores_it() {
+    let mut app = bench_app();
+    app.update();
+    assert_eq!(focused_wait(&app), Duration::from_millis(WEB_IDLE_HEARTBEAT_MS));
+
+    let quiet_since = Instant::now() - Duration::from_millis(WEB_IDLE_SETTLE_MS + 50);
+    WEB_LAST_ACTIVITY.with(|cell| cell.set(Some(quiet_since)));
+    app.update();
+    assert_eq!(focused_wait(&app), Duration::from_millis(WEB_SETTLED_HEARTBEAT_MS));
+
+    wake_web_renderer();
+    app.update();
+    assert_eq!(focused_wait(&app), Duration::from_millis(WEB_IDLE_HEARTBEAT_MS));
 }
 
 fn bench_app() -> App {

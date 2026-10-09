@@ -12,10 +12,9 @@ const home = createUserHomePanelRuntime({ getAdoleApi: () => api,
 const result = await home.enterAnonymousWorkspace();
 assert.equal(result.ok, true);
 assert.deepEqual(starts, [{ force: true }], 'free access delegates once to the existing local guest owner');
-assert.equal(workspaces.length, 1);
-assert.equal(workspaces[0].source, 'anonymous');
-assert.equal(await workspaces[0].ensureProjectReady(), 'guest-project', 'existing project bootstrap stays authoritative');
-assert.equal(window.__eveProfilePreferences?.first_launch, undefined, 'guest entry never installs onboarding progress');
+assert.equal(workspaces.length, 0, 'free access keeps the shared Goals flow instead of opening a workspace');
+assert.deepEqual(result.user, { id: 'guest' });
+assert.equal(window.__eveProfilePreferences?.first_launch, undefined, 'Home delegates session progress to first launch');
 console.log('user_login_choice_anonymous_project_contract.test: PASS');
 // Framework imports retain process-wide watchers; this isolated owner probe is finished.
 process.exit(0);

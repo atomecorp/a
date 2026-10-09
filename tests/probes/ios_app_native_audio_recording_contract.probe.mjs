@@ -11,7 +11,8 @@ const sources = await Promise.all([
     '../../platforms/ios/atome-auv3/application/AppNativeAudioRecording.swift',
     '../../platforms/ios/atome-auv3/application/AppNativeAudioRecordingScope.swift',
     '../../platforms/ios/atome-auv3/application/ViewController.swift',
-    '../../platforms/ios/atome-auv3/Common/AUv3NativeRecorderBackend.mm'
+    '../../platforms/ios/atome-auv3/Common/AUv3NativeRecorderBackend.mm',
+    '../../platforms/ios/atome-auv3/application/AppNativeAudioSessionCoordinator.swift'
 ].map(readSource));
 
 const [
@@ -21,7 +22,8 @@ const [
     recordingSource,
     scopeSource,
     viewControllerSource,
-    backendSource
+    backendSource,
+    sessionCoordinatorSource
 ] = sources;
 
 test('standalone iOS audio responsibilities remain bounded', () => {
@@ -43,7 +45,7 @@ test('standalone iOS audio responsibilities remain bounded', () => {
 test('standalone iOS microphone tap only forwards preallocated Float32 PCM', () => {
     assert.match(recordingSource, /nativeRecorderBackend\.start\(/);
     assert.match(recordingSource, /source: "mic"/);
-    assert.match(recordingSource, /self\?\.pushRecordingBuffer\(buffer\)/);
+    assert.match(recordingSource, /\[weak \w+(?: = self)?\] buffer, _ in\s+\w+\?\.pushRecordingBuffer\(buffer\)/);
     assert.match(recordingSource, /recordingChannelPointers\.withUnsafeBufferPointer/);
     assert.match(recordingSource, /pushPlanarFloat32/);
     assert.match(recordingSource, /pushInterleavedFloat32/);
@@ -105,7 +107,7 @@ test('standalone iOS stop finalizes exact frame counts and releases recording re
     assert.match(recordingSource, /"peaks": waveformPeaks/);
     assert.match(recordingSource, /"waveform_peaks": waveformPeaks/);
     assert.match(recordingSource, /func shutdownAudioRecording\(\)/);
-    assert.match(commandsSource, /case "audio_shutdown":\s+self\.shutdownAudioRecording\(\)/);
+    assert.match(commandsSource, /case "audio_shutdown":\s+self\.captureGate\.cancel\(\)\s+self\.stopWakeCapture\(\)\s+self\.shutdownAudioRecording\(\)/);
 });
 
 test('AUv3 post-stop analysis emits a bounded waveform payload outside the render callback', async () => {
@@ -128,7 +130,7 @@ test('standalone iOS playback reactivates the session and recovers after route c
     assert.match(controllerSource, /AVAudioSession\.interruptionNotification/);
     assert.match(controllerSource, /AVAudioSession\.routeChangeNotification/);
     assert.match(controllerSource, /AVAudioSession\.mediaServicesWereResetNotification/);
-    assert.match(controllerSource, /try session\.setActive\(true\)/);
+    assert.match(sessionCoordinatorSource, /try session\.setActive\(true\)/);
     assert.match(playbackSource, /func preparePlaybackEngine/);
     assert.match(playbackSource, /engine\.stop\(\)/);
     assert.match(playbackSource, /engine\.reset\(\)/);

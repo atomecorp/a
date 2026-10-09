@@ -2,230 +2,198 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleDevelopmentRegion</key>
-    <string>$(DEVELOPMENT_LANGUAGE)</string>
-    <key>CFBundleExecutable</key>
-    <string>$(EXECUTABLE_NAME)</string>
-    <key>CFBundleIdentifier</key>
-    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-    <key>CFBundleInfoDictionaryVersion</key>
-    <string>6.0</string>
-    <key>CFBundleName</key>
-    <string>$(PRODUCT_NAME)</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleShortVersionString</key>
-    <string>$(MARKETING_VERSION)</string>
-    <key>CFBundleVersion</key>
-    <string>$(CURRENT_PROJECT_VERSION)</string>
-
-    <key>CFBundleDisplayName</key>
-    <string>$(PRODUCT_NAME)</string>
-    <key>LSSupportsOpeningDocumentsInPlace</key>
-    <true/>
-    <key>UIFileSharingEnabled</key>
-    <true/>
-    <key>UISupportsDocumentBrowser</key>
-    <true/>
-    
-    <key>UTExportedTypeDeclarations</key>
-    <array>
-        <dict>
-            <key>UTTypeIdentifier</key>
-            <string>one.atome.app.atome-project</string>
-            <key>UTTypeDescription</key>
-            <string>Atome Project File</string>
-            <key>UTTypeTagSpecification</key>
-            <dict>
-                <key>public.filename-extension</key>
-                <array>
-                    <string>atome</string>
-                </array>
-                <key>public.mime-type</key>
-                <array>
-                    <string>application/json</string>
-                </array>
-            </dict>
-            <key>UTTypeConformsTo</key>
-            <array>
-                <string>public.json</string>
-                <string>public.data</string>
-                <string>public.content</string>
-            </array>
-        </dict>
-    </array>
-    
-    <key>NSCameraUsageDescription</key>
-    <string>Atome utilise la caméra pour capturer des photos et enregistrer des vidéos dans vos projets.</string>
-    <key>NSMicrophoneUsageDescription</key>
-    <string>Atome utilise le microphone pour enregistrer du son et l'audio des vidéos.</string>
-    <key>NSLocationWhenInUseUsageDescription</key>
-    <string>Atome utilise votre position uniquement lorsque vous demandez la météo locale.</string>
-    <key>NSHealthShareUsageDescription</key>
-    <string>Atome lit uniquement les données de santé que vous choisissez d'afficher dans vos moniteurs (rubrique Moniteur du Dashboard) et dans vos critères dynamiques. Ces données restent sur cet appareil.</string>
-    <key>NSHealthUpdateUsageDescription</key>
-    <string>Atome n'enregistre rien dans l'app Santé. Cette autorisation accompagne l'accès HealthKit, utilisé uniquement en lecture pour vos moniteurs et vos critères dynamiques, et est requise pour que l'app puisse demander l'autorisation Santé. Vos données restent sur cet appareil.</string>
-    <key>NSMotionUsageDescription</key>
-    <string>Atome compte les pas mesurés par cet iPhone pour le moniteur « Pas de cet iPhone » que vous avez choisi.</string>
-    <key>NSAppleMusicUsageDescription</key>
-    <string>Atome accède à votre bibliothèque Musique pour importer les titres que vous choisissez.</string>
-    <key>NSPhotoLibraryUsageDescription</key>
-    <string>Atome peut accéder aux photos pour charger des samples audio</string>
-    <key>NSPhotoLibraryAddUsageDescription</key>
-    <string>Atome peut ajouter les captures créées à votre photothèque si vous le demandez.</string>
-    <key>NSDocumentsFolderUsageDescription</key>
-    <string>Atome a besoin d'accéder aux documents pour sauvegarder et charger vos projets</string>
-    <key>NSFileProviderDomainUsageDescription</key>
-    <string>Atome utilise le système de fichiers iOS pour gérer vos projets</string>
-    
-    <key>CFBundleDocumentTypes</key>
-    <array>
-        <dict>
-            <key>CFBundleTypeExtensions</key>
-            <array>
-                <string>atome</string>
-            </array>
-            <key>CFBundleTypeIconFiles</key>
-            <array/>
-            <key>CFBundleTypeName</key>
-            <string>Atome Project</string>
-            <key>CFBundleTypeRole</key>
-            <string>Editor</string>
-            <key>LSHandlerRank</key>
-            <string>Owner</string>
-            <key>LSTypeIsPackage</key>
-            <false/>
-        </dict>
-        <dict>
-            <key>CFBundleTypeExtensions</key>
-            <array>
-                <string>json</string>
-            </array>
-            <key>CFBundleTypeName</key>
-            <string>JSON Document</string>
-            <key>CFBundleTypeRole</key>
-            <string>Editor</string>
-            <key>LSHandlerRank</key>
-            <string>Alternate</string>
-        </dict>
-    </array>
-    
-    <key>LSHasLocalizedDisplayName</key>
-    <true/>
-    <key>LSApplicationCategoryType</key>
-    <string>public.app-category.music</string>
-    
-
-    <key>UISupportedInterfaceOrientations</key>
-    <array>
-        <string>UIInterfaceOrientationPortrait</string>
-        <string>UIInterfaceOrientationLandscapeLeft</string>
-        <string>UIInterfaceOrientationLandscapeRight</string>
-        <string>UIInterfaceOrientationPortraitUpsideDown</string>
-    </array>
-    <key>UISupportedInterfaceOrientations~ipad</key>
-    <array>
-        <string>UIInterfaceOrientationPortrait</string>
-        <string>UIInterfaceOrientationPortraitUpsideDown</string>
-        <string>UIInterfaceOrientationLandscapeLeft</string>
-        <string>UIInterfaceOrientationLandscapeRight</string>
-    </array>
-
-    <key>UIApplicationSupportsIndirectInputEvents</key>
-    <true/>
-
-    <key>UIRequiredDeviceCapabilities</key>
-    <array>
-    <string>arm64</string>
-    </array>
-
-    <key>UIRequiresFullScreen</key>
-    <false/>
-    <key>UIViewControllerBasedStatusBarAppearance</key>
-    <true/>
-    <!-- Use storyboard-based launch screen to allow logo -->
-    <key>UILaunchStoryboardName</key>
-    <string>LaunchScreen</string>
-    <key>UIUserInterfaceStyle</key>
-    <string>Dark</string>
-    <key>UIStatusBarHidden</key>
-    <true/>
-    
-    <!-- Register custom activation scheme used by AUv3 to foreground the app -->
-    <key>CFBundleURLTypes</key>
-    <array>
-        <dict>
-            <key>CFBundleURLName</key>
-            <string>one.atome.app.activate</string>
-            <key>CFBundleURLSchemes</key>
-            <array>
-                <string>atomeapp</string>
-            </array>
-        </dict>
-    </array>
-
-    <!-- Schemes the app may query/open from container when relayed by AUv3 -->
-    <key>LSApplicationQueriesSchemes</key>
-    <array>
-        <string>shortcuts</string>
-        <string>pdparty</string>
-        <string>ibooks</string>
-    <string>https</string>
-    </array>
-    
-    <!-- Background audio to keep the container app eligible while hosted by AUM -->
-    <key>UIBackgroundModes</key>
-    <array>
-        <string>audio</string>
-    </array>
-
-    <!-- Enable single-scene support so we can request scene activation when needed -->
-    <key>UIApplicationSceneManifest</key>
-    <dict>
-        <key>UIApplicationSupportsMultipleScenes</key>
-        <false/>
-        <key>UISceneConfigurations</key>
-        <dict>
-            <key>UIWindowSceneSessionRoleApplication</key>
-            <array>
-                <dict>
-                    <key>UISceneConfigurationName</key>
-                    <string>Default Configuration</string>
-                    <key>UISceneDelegateClassName</key>
-                    <string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
-                </dict>
-            </array>
-        </dict>
-    </dict>
-
-    <key>NSUserActivityTypes</key>
-    <array>
-        <string>group.atome.one.openurl.activate</string>
-    </array>
-
-    <!-- The app's own backend is a loopback server, which App Transport
-         Security has always exempted, so no ATS entry was ever needed. A
-         DEVICE cannot use a developer's Fastify on the LAN that way: an
-         `http://192.168.x.x:3001` load is a non-loopback insecure load and ATS
-         refuses it outright, with no error the web layer can see. That is why
-         choosing a custom server on the phone could not work at all.
-
-         `NSAllowsLocalNetworking` is the narrow key for exactly this: it permits
-         insecure loads to local-network hosts (private IPv4 ranges, `.local`)
-         and leaves ATS fully in force for every public host. It is NOT
-         `NSAllowsArbitraryLoads`. -->
-    <key>NSAppTransportSecurity</key>
-    <dict>
-        <key>NSAllowsLocalNetworking</key>
-        <true/>
-    </dict>
-    <key>NSContactsUsageDescription</key>
-    <string>Import selected contacts into your private Atome workspace.</string>
-    <key>NSCalendarsFullAccessUsageDescription</key>
-    <string>Read selected calendars into your private Atome workspace.</string>
-    <key>NSCalendarsUsageDescription</key>
-    <string>Read selected calendars into your private Atome workspace.</string>
-    <key>NSAlarmKitUsageDescription</key>
-    <string>Atome utilise les alarmes pour déclencher, à l'heure prévue, les alarmes que vous programmez dans votre calendrier, même lorsque l'application ne tourne pas.</string>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeExtensions</key>
+			<array>
+				<string>atome</string>
+			</array>
+			<key>CFBundleTypeIconFiles</key>
+			<array/>
+			<key>CFBundleTypeName</key>
+			<string>Atome Project</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSTypeIsPackage</key>
+			<false/>
+		</dict>
+		<dict>
+			<key>CFBundleTypeExtensions</key>
+			<array>
+				<string>json</string>
+			</array>
+			<key>CFBundleTypeName</key>
+			<string>JSON Document</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+		</dict>
+	</array>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>one.atome.app.activate</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>atomeapp</string>
+			</array>
+		</dict>
+	</array>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.music</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>shortcuts</string>
+		<string>pdparty</string>
+		<string>ibooks</string>
+		<string>https</string>
+	</array>
+	<key>LSHasLocalizedDisplayName</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
+	<key>NSAlarmKitUsageDescription</key>
+	<string>Atome utilise les alarmes pour déclencher, à l'heure prévue, les alarmes que vous programmez dans votre calendrier, même lorsque l'application ne tourne pas.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSAppleMusicUsageDescription</key>
+	<string>Atome accède à votre bibliothèque Musique pour importer les titres que vous choisissez.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Read selected calendars into your private Atome workspace.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Read selected calendars into your private Atome workspace.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Atome utilise la caméra pour capturer des photos et enregistrer des vidéos dans vos projets.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Import selected contacts into your private Atome workspace.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>Atome a besoin d'accéder aux documents pour sauvegarder et charger vos projets</string>
+	<key>NSFileProviderDomainUsageDescription</key>
+	<string>Atome utilise le système de fichiers iOS pour gérer vos projets</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Atome lit uniquement les données de santé que vous choisissez d'afficher dans vos moniteurs (rubrique Moniteur du Dashboard) et dans vos critères dynamiques. Ces données restent sur cet appareil.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Atome n'enregistre rien dans l'app Santé. Cette autorisation accompagne l'accès HealthKit, utilisé uniquement en lecture pour vos moniteurs et vos critères dynamiques, et est requise pour que l'app puisse demander l'autorisation Santé. Vos données restent sur cet appareil.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Atome utilise votre position uniquement lorsque vous demandez la météo locale.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Atome utilise le microphone pour enregistrer du son et l'audio des vidéos.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>Atome compte les pas mesurés par cet iPhone pour le moniteur « Pas de cet iPhone » que vous avez choisi.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Atome peut ajouter les captures créées à votre photothèque si vous le demandez.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Atome peut accéder aux photos pour charger des samples audio</string>
+	<key>NSUserActivityTypes</key>
+	<array>
+		<string>group.atome.one.openurl.activate</string>
+	</array>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneConfigurationName</key>
+					<string>Default Configuration</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>arm64</string>
+	</array>
+	<key>UIRequiresFullScreen</key>
+	<false/>
+	<key>UIStatusBarHidden</key>
+	<true/>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportsDocumentBrowser</key>
+	<true/>
+	<key>UIUserInterfaceStyle</key>
+	<string>Dark</string>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<true/>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.json</string>
+				<string>public.data</string>
+				<string>public.content</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Atome Project File</string>
+			<key>UTTypeIdentifier</key>
+			<string>one.atome.app.atome-project</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>atome</string>
+				</array>
+				<key>public.mime-type</key>
+				<array>
+					<string>application/json</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
 </dict>
 </plist>

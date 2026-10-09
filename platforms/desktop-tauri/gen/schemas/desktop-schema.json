@@ -357,10 +357,10 @@
           "markdownDescription": "Allows the main webview to use the native Bevy renderer commands.\n#### This permission set includes:\n\n- `allow-bevy-native-start`\n- `allow-bevy-native-apply-ops`\n- `allow-bevy-native-resize`"
         },
         {
-          "description": "Allows the main webview to read and write the host system clipboard.\n#### This permission set includes:\n\n- `allow-clipboard-write-text`\n- `allow-clipboard-read-text`\n- `allow-clipboard-has-text`",
+          "description": "Allows the main webview to read and write the host system clipboard.\n#### This permission set includes:\n\n- `allow-clipboard-write-text`\n- `allow-clipboard-read-text`\n- `allow-clipboard-has-text`\n- `allow-clipboard-read-items`",
           "type": "string",
           "const": "clipboard-bridge",
-          "markdownDescription": "Allows the main webview to read and write the host system clipboard.\n#### This permission set includes:\n\n- `allow-clipboard-write-text`\n- `allow-clipboard-read-text`\n- `allow-clipboard-has-text`"
+          "markdownDescription": "Allows the main webview to read and write the host system clipboard.\n#### This permission set includes:\n\n- `allow-clipboard-write-text`\n- `allow-clipboard-read-text`\n- `allow-clipboard-has-text`\n- `allow-clipboard-read-items`"
         },
         {
           "description": "Allows the main webview to save an exported file into the Downloads folder.\n#### This permission set includes:\n\n- `allow-export-file-save`",
@@ -499,6 +499,12 @@
           "type": "string",
           "const": "allow-clipboard-has-text",
           "markdownDescription": "Enables the clipboard_has_text command."
+        },
+        {
+          "description": "Reads typed host clipboard contents after an explicit paste gesture.",
+          "type": "string",
+          "const": "allow-clipboard-read-items",
+          "markdownDescription": "Reads typed host clipboard contents after an explicit paste gesture."
         },
         {
           "description": "Enables the clipboard_read_text command.",

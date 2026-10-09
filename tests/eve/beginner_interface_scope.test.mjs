@@ -3,10 +3,11 @@ import { resolveMainMenuVisibility, resolveViewOptions, resolveLevelBehaviors } 
 import { buildBevyMainMenuItems } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
 import { createProjectViewListView } from '../../eVe/domains/rendering/project_view_list_view.js';
 import { projectCreationViewProperties } from '../../eVe/domains/rendering/project_creation_view_properties.js';
+import { BEGINNER_LIST_RAIL_KEYS, projectViewListRailToolKeys } from '../../eVe/domains/rendering/project_view_list_options.js';
 
 afterEach(() => vi.unstubAllGlobals());
 
-const roots = ['organize', 'capture', 'create', 'find', 'communicate', 'calendar', 'view', 'help', 'contact'];
+const roots = ['capture', 'create', 'find', 'communicate', 'calendar', 'view', 'help', 'contact'];
 const content = { toolbox: { children: roots }, ...Object.fromEntries(roots.map(key => [key, {
     type: 'tool', tool_id: `tool.main.${key}`, label: key, icon: key
 }])) };
@@ -23,8 +24,7 @@ const listTree = (level, mixed) => {
     return view.build({ width: 900, height: 380, emit: () => {}, playingIds: ['audio'] });
 };
 
-// Generated BEFORE the beginner changes. These full projections retain layout,
-// node types, controls and event names for the two protected expertise levels.
+// Full projections cover the requested List cleanup at both expertise levels.
 for (const level of ['intermediate', 'advanced']) {
     test(`${level} preserves its existing toolbar, options and List projection`, () => {
         expect({
@@ -57,9 +57,24 @@ test('beginner List hides Mute even on muted or soloed rows, preserving playback
         };
         visit(tree);
         expect(nodes.some(node => node.id?.endsWith('_mute'))).toBe(false);
+        expect(nodes.some(node => node.id?.endsWith('_hierarchy'))).toBe(false);
+        expect(nodes.some(node => node.id?.endsWith('_play'))).toBe(true);
         expect(nodes.some(node => node.id?.endsWith('_preview'))).toBe(true);
         expect(nodes.some(node => node.id === 'project_view_list_entry_0_name_name')).toBe(true);
         expect(nodes.some(node => node.overlayRecord?.properties?.mute === mixed)).toBe(true);
+    }
+});
+
+test('beginner List composes only requested tools, including Import, without widening permissions', () => {
+    const context = { level: 'beginner', selected: true, records: [{ properties: {}, capabilities: { write: true, delete: true } }],
+        projectRecord: { capabilities: { create: true } } };
+    expect(projectViewListRailToolKeys({ context })).toEqual(BEGINNER_LIST_RAIL_KEYS);
+    expect(projectViewListRailToolKeys({ context: { ...context, records: [{ capabilities: { write: false, delete: false } }],
+        projectRecord: { capabilities: { create: false } } } })).toEqual([]);
+    expect(projectViewListRailToolKeys({ context: { ...context, type: 'project' } })).not.toContain('delete');
+    for (const level of ['intermediate', 'advanced']) {
+        expect(projectViewListRailToolKeys({ context: { level }, toolKeys: ['delete', 'copy', 'paste', 'size', 'info', 'teleport', 'play', 'couleur'] }))
+            .toEqual(['play', 'couleur']);
     }
 });
 

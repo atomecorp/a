@@ -64,37 +64,38 @@ extension AppNativeMediaCaptureController {
         return DispatchQueue.main.sync(execute: resolveOrientation)
     }
 
-    private func currentVideoOrientation() -> AVCaptureVideoOrientation {
+    private func currentVideoRotationAngle() -> CGFloat {
         if let orientation = currentInterfaceOrientation() {
             switch orientation {
             case .landscapeLeft:
-                return .landscapeLeft
+                return 180
             case .landscapeRight:
-                return .landscapeRight
+                return 0
             case .portraitUpsideDown:
-                return .portraitUpsideDown
+                return 270
             default:
-                return .portrait
+                return 90
             }
         }
 
         switch UIDevice.current.orientation {
         case .landscapeLeft:
-            return .landscapeRight
+            return 0
         case .landscapeRight:
-            return .landscapeLeft
+            return 180
         case .portraitUpsideDown:
-            return .portraitUpsideDown
+            return 270
         default:
-            return .portrait
+            return 90
         }
     }
 
     func configureVideoConnection(_ connection: AVCaptureConnection?,
                                           position: AVCaptureDevice.Position) {
         guard let connection else { return }
-        if connection.isVideoOrientationSupported {
-            connection.videoOrientation = currentVideoOrientation()
+        let angle = currentVideoRotationAngle()
+        if connection.isVideoRotationAngleSupported(angle) {
+            connection.videoRotationAngle = angle
         }
         if connection.isVideoMirroringSupported {
             connection.automaticallyAdjustsVideoMirroring = false

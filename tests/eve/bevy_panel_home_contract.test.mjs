@@ -1,3 +1,5 @@
+import { createHomePreferencesRuntime } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_preferences.js';
+import { createHomeProfileEditor } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_profile_editor.js';
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { test } from "vitest";
@@ -100,7 +102,7 @@ test('Home is the card of the current user with a collapsed Settings accordion b
     assert.equal(initialProjection.some((entry) => entry.id === 'home_display_source'), false, 'Display lives in the privacy rules');
     const settings = flatten(buildHomeContent({ ...state, expanded: 'settings' }, { emit: () => {}, bodyWidth: 452, editing }))
         .find((entry) => entry.id === 'home_settings_content');
-    assert.deepEqual(settings.children.map((entry) => entry.id), [
+    assert.deepEqual(settings.children.filter((entry) => entry.kind !== 'divider').map((entry) => entry.id), [
         'home_settings_preferences_accordion',
         'home_settings_level_accordion',
         'home_settings_passkeys_accordion',
@@ -271,15 +273,20 @@ test('Passwords and keys expose direct AI provider settings without a vault unlo
     });
     const all = flatten(buildHomeContent(state, { emit: () => {}, bodyWidth: 452, editing }));
     const credentials = all.find((entry) => entry.id === 'home_credentials');
+    const credentialRows = credentials.children.filter((entry) => entry.kind !== 'divider');
 
-    assert.equal(credentials.children.at(-1).id, 'home_credentials_add');
-    assert.equal(credentials.children.at(-2).id, 'home_credentials_credential-1');
+    assert.equal(credentialRows.at(-1).id, 'home_credentials_add');
+    assert.equal(credentialRows.at(-2).id, 'home_credentials_credential-1');
+    assert.equal(credentials.children.at(-2).kind, 'divider', 'a credential block is a rubric');
     providers.forEach(({ id }) => {
-        assert.equal(all.some((entry) => entry.id === `home_key_${id}_model`), true, id);
-        assert.ok(all.some((entry) => entry.id === `home_key_${id}_api`), id);
-        assert.equal(all.some((entry) => entry.id === `home_key_${id}_save`), false, id);
-        assert.equal(all.some((entry) => entry.id === `home_key_${id}_status`), true, id);
+        // A provider block is its name, its key and its model — nothing else.
+        assert.deepEqual(all.find((entry) => entry.id === `home_key_${id}`).children.map((entry) => entry.id),
+            [`home_key_${id}_title`, `home_key_${id}_api`, `home_key_${id}_model`], id);
     });
+    assert.equal(all.some((entry) => entry.id === 'home_ai_budget'), false);
+    const providerRows = all.find((entry) => entry.id === 'home_provider_keys').children;
+    assert.deepEqual(providerRows.map((entry) => entry.kind === 'divider' ? '|' : entry.id),
+        providers.flatMap(({ id }, index) => index ? ['|', `home_key_${id}`] : [`home_key_${id}`]));
     assert.ok(all.some((entry) => entry.id === 'home_ai_keys_accordion'));
     assert.equal(all.some((entry) => /home_vault_|locked_notice/i.test(entry.id || '')), false);
 });
@@ -305,10 +312,11 @@ test('the credential plus creates a stable draft above itself without touching p
         emit: () => {}, bodyWidth: 452, editing
     }));
     const credentials = all.find((entry) => entry.id === 'home_credentials');
+    const credentialRows = credentials.children.filter((entry) => entry.kind !== 'divider');
 
     assert.equal(result.revealNodeId, 'home_credentials_draft_1');
-    assert.equal(credentials.children.at(-2).id, result.revealNodeId);
-    assert.equal(credentials.children.at(-1).id, 'home_credentials_add');
+    assert.equal(credentialRows.at(-2).id, result.revealNodeId);
+    assert.equal(credentialRows.at(-1).id, 'home_credentials_add');
     assert.equal(persisted, false);
 });
 
@@ -474,7 +482,7 @@ test('Home opening geometry follows handedness, side centering and compact mobil
     }
 });
 
-test('stored provider keys show a fixed mask without repopulating the editor or hiding status errors', () => {
+test('stored provider keys show a fixed mask, a missing key asks for it, and no status line is drawn', () => {
     const render = provider => flatten(buildHomeContent(baseState({ expanded: 'settings', vault: {
         credentials: [], providers: [{ id: 'openai', label: 'OpenAI', models: [], ...provider }] }
     }), { emit() {}, bodyWidth: 452, editing }));
@@ -484,7 +492,8 @@ test('stored provider keys show a fixed mask without repopulating the editor or 
     assert.equal(editing.displayValue('security.aiKeys.openai'), '');
     const unknown = render({ configured: null, error: 'provider_connection_failed' });
     assert.equal(JSON.stringify(unknown).includes('••••••••'), false);
-    assert.notDeepEqual(unknown.find(node => node.id === 'home_key_openai_status'), render({ configured: false }).find(node => node.id === 'home_key_openai_status'));
+    assert.match(JSON.stringify(unknown.find(node => node.id === 'home_key_openai_api_input')), /Enter your key|Saisissez votre clé/);
+    assert.equal(unknown.some(node => /^home_key_openai_(status|status_detail|active)$/.test(node.id)), false);
 });
 
 test('Home keeps all section headers available while the profile is pending or timed out', () => {
@@ -499,18 +508,19 @@ test('Home keeps all section headers available while the profile is pending or t
 });
 
 
-test('Home exposes explicit activation for a configured provider without requesting its secret', () => {
-    const intents = [];
-    const state = baseState({ expanded: 'settings', vault: { credentials: [],
-        providers: [{ id: 'openai', label: 'OpenAI', models: [], configured: true }] } });
-    const render = () => flatten(buildHomeContent(state, { emit: intent => intents.push(intent), bodyWidth: 452, editing }));
-    const button = render().find(node => node.id === 'home_key_openai_active');
-    assert.equal(typeof button.on.activate, 'function');
-    button.on.activate();
-    assert.deepEqual(intents, [{ type: 'home.key.active.set', provider: 'openai' }]);
-    state.profile.passkeys.keys = [{ provider: 'openai', model: 'gpt-5.6-sol', active: true }];
-    render().find(node => node.id === 'home_key_openai_active').on?.activate?.();
-    assert.equal(intents.length, 1);
+test('choosing the model of a configured chat provider makes it the active one', async () => {
+    const state = baseState({ expanded: 'settings', vault: { credentials: [], providers: [
+        { id: 'openai', label: 'OpenAI', models: ['gpt-5.6-sol'], configured: true },
+        { id: 'anthropic', label: 'Anthropic', models: ['claude-sonnet-4'], configured: false }
+    ] } });
+    state.profile.passkeys.keys = [{ provider: 'anthropic', model: 'claude-sonnet-4', active: true }];
+    const run = intent => handleHomeVaultEvent({ intent, state, persist: async () => ({ ok: true }),
+        refreshVault: async () => state.vault, setNotice() {}, clearSecrets() {}, newRowKey: () => 'k', refresh() {} });
+    await run({ type: 'home.key.model.set', provider: 'openai', value: 'gpt-5.6-sol' });
+    assert.deepEqual(state.profile.passkeys.keys.filter(entry => entry.active).map(entry => entry.provider), ['openai']);
+    // A provider without a key never steals the active slot by a model choice.
+    await run({ type: 'home.key.model.set', provider: 'anthropic', value: 'claude-sonnet-4' });
+    assert.deepEqual(state.profile.passkeys.keys.filter(entry => entry.active).map(entry => entry.provider), ['openai']);
 });
 
 test('a Home section request lands the card there before the profile answer', () => {
@@ -521,4 +531,31 @@ test('a Home section request lands the card there before the profile answer', ()
     assert.equal(snapshot.subsections['settings.passkeys'], true);
     assert.equal(snapshot.subsections['settings.preferences'], false);
     assert.equal(snapshot.subsections['passkeys.keys'], true);
+});
+
+
+test('the shared colour control persists the new-project default and retains beginner preferences', async () => {
+    const state = baseState({ expanded: 'settings', profile: normalizeHomeProfile({ name: 'Ada', preferences: {
+        visual: { masteryLevel: 'beginner', newProjectBackgroundColor: '#272727' },
+        workspace: { startup_view: 'dashboard', home_template_project_id: 'home' },
+        background: { backgroundSource: 'image', backgroundImageUrl: '/wallpaper.png' }
+    } }), subsections: { 'settings.preferences': true, 'preferences.visual': true, 'visual.project_background': true } });
+    const saves = [];
+    const editor = createHomeProfileEditor({ state, setNotice: () => {}, save: async profile => {
+        saves.push(profile); return { ok: true, profile };
+    } });
+    editor.adoptProfile(state.profile);
+    const preferences = createHomePreferencesRuntime({ state, setNotice: () => {}, updateAndPersist: editor.updateAndPersist });
+    const pending = [];
+    const emit = intent => { pending.push(preferences(intent, () => {})); };
+    const nodes = flatten(buildHomeContent(state, { emit, bodyWidth: 452, editing, preferences }));
+    const swatch = nodes.find(node => node.id === 'home_project_background_swatch_0_2');
+    assert.ok(swatch, 'the existing colour picker is embedded in wallpaper preferences');
+    assert.ok(nodes.some(node => node.id === 'home_project_background_hex'));
+    swatch.on.activate(); await Promise.all(pending);
+    assert.equal(saves.at(-1).preferences.visual.newProjectBackgroundColor, '#f44336');
+    assert.equal(saves.at(-1).preferences.visual.masteryLevel, 'beginner');
+    assert.equal(saves.at(-1).preferences.workspace.home_template_project_id, 'home');
+    assert.equal(saves.at(-1).preferences.background.backgroundImageUrl, '/wallpaper.png');
+    preferences.stopProjectBackground();
 });

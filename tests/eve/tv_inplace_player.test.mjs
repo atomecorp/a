@@ -3,9 +3,12 @@ import { JSDOM } from 'jsdom';
 const panels = vi.hoisted(() => ({ state: { mounted: new Map(), geometryBySurfaceKey: new Map() } }));
 vi.mock('../../eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js', () => ({ bevyPanelRuntimeState: panels.state }));
 vi.mock('../../eVe/domains/rendering/project_view_records.js', () => ({ currentProjectId: () => 'project' }));
+vi.mock('../../eVe/domains/rendering/surface_runtime.js', () => ({ setRenderSurfaceInteractionInterceptorLayer: () => null }));
+vi.mock('../../eVe/domains/rendering/project_scene_runtime.js', () => ({ updateProjectSceneRecordByAtomeId: async () => {}, updateProjectSceneRecords: async () => {}, readProjectSceneAtomClientPlacement: () => null }));
 vi.mock('../../eVe/core/atome_commit.js', () => ({ getStateCurrent: async () => null }));
 vi.mock('../../eVe/intuition/tools/tv_catalog_client.js', () => ({ readTvChannelsById: async () => [], resolveTvYoutubeLive: async () => '' }));
 import { createTvInPlacePlayer, playableTvStreams } from '../../eVe/intuition/tools/tv_inplace_player.js';
+import { getSelectedProjectMediaPlayback, stopSelectedProjectMediaPlayback } from '../../eVe/domains/media/selected_project_media_playback_state.js';
 
 const tvAtome = { id: 'tv1', properties: { media_source: 'tv', tv_channel_id: 'TF1.fr', tv_channel_name: 'TF1' } };
 const setup = ({ streams, origin = 'https://atome.one', canPlayHls = true } = {}) => {
@@ -63,11 +66,33 @@ test('a channel falls through failing streams and plays the first working one in
     expect([video.style.left, video.style.top, video.style.width, video.style.height]).toEqual(['40px', '30px', '320px', '180px']);
     expect(video.crossOrigin).toBeNull();
     expect(video.style.pointerEvents).toBe('none');
-    expect((await player.transport('toggle', 'tv1')).action).toBe('pause');
-    expect(player.snapshot().playback).toBe('paused');
-    await player.transport('stop', 'tv1');
+    // The shared playback registry carries it, lit, like any playing video (the rail reads it).
+    expect(getSelectedProjectMediaPlayback('tv1')).toMatchObject({ kind: 'video', playing: true });
+    video.dispatchEvent(new win.Event('pause'));
+    expect(getSelectedProjectMediaPlayback('tv1').playing).toBe(false);
+    // A live channel: Play / Stop stops it (the next Play tunes in live again).
+    expect((await player.transport('toggle', 'tv1')).action).toBe('stop');
     expect(win.document.querySelector('video')).toBeNull();
     expect(player.snapshot().operation).toBe('closed');
+    expect(getSelectedProjectMediaPlayback('tv1')).toBeUndefined();
+});
+
+test('the registry or leaving the project stops the channel', async () => {
+    for (const leave of [
+        (win) => stopSelectedProjectMediaPlayback(win, 'tv1'),
+        (win) => win.dispatchEvent(new win.CustomEvent('eve:workspace-mode-changed', { detail: { mode: 'dashboard' } }))
+    ]) {
+        const { win, player, attempts, settle } = setup({ streams: [{ kind: 'hls', url: 'https://live.test/x.m3u8', secure: true }] });
+        const playing = player.play('tv1');
+        await settle(); await settle();
+        attempts[0].dispatchEvent(new win.Event('playing'));
+        await playing;
+        await leave(win);
+        await settle();
+        expect(win.document.querySelector('video')).toBeNull();
+        expect(player.snapshot().operation).toBe('closed');
+        expect(getSelectedProjectMediaPlayback('tv1')).toBeUndefined();
+    }
 });
 
 test('YouTube and YouTube live streams play through the YouTube player on the same Atome', async () => {

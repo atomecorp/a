@@ -106,7 +106,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-    // Stop the real visibility-aware profile watcher before replacing its page.
+    // Hide the page so no catch-up read starts while it is replaced.
     if (restoreGlobals && globalThis.document) {
         Object.defineProperty(document, 'visibilityState', {configurable: true, value: 'hidden'});
         document.dispatchEvent(new window.Event('visibilitychange'));
@@ -203,9 +203,9 @@ test('another owner without a stored background resolves back to the bundled def
 
     profileApi.loadUserProfile.mockResolvedValue({ ok: true, profile: { preferences: {} } });
     window.__currentUser = { id: 'user-grace' };
-    // The profile watcher polls every 1200 ms, so the owner switch is observed by
-    // advancing one real virtual tick instead of waiting a real second.
-    await vi.advanceTimersByTimeAsync(1200);
+    // Every session change publishes the new owner, then `squirrel:auth-checked`.
+    window.dispatchEvent(new window.CustomEvent('squirrel:auth-checked'));
+    await vi.advanceTimersByTimeAsync(0);
     assert.equal(profileApi.loadUserProfile.mock.calls.at(-1)[0], 'user-grace');
     await vi.advanceTimersByTimeAsync(0);
     assert.equal(window.eveBackground.getParams().backgroundImageUrl, DEFAULT_BACKGROUND_URL);
@@ -213,6 +213,37 @@ test('another owner without a stored background resolves back to the bundled def
     assert.equal(window.eveBackground.getParams().backgroundSource, 'image');
     assert.equal(window.eveBackground.getParams().backgroundImageFileName, 'eVe.mp4');
     assert.equal(profileApi.upsertUserProfile.mock.calls.length, 0, 'switching owner must not write a background');
+});
+
+test('a settled session never re-reads the profile on a timer', async () => {
+    vi.useFakeTimers();
+    profileApi.loadUserProfile.mockResolvedValue({ ok: true, profile: { preferences: {} } });
+    await bootBackgroundRuntime({ currentUser: { id: 'user-ada' } });
+    await vi.advanceTimersByTimeAsync(0);
+    const reads = profileApi.loadUserProfile.mock.calls.length;
+    assert.equal(reads, 1, 'the owner profile is read once at start');
+    // The former watcher read the whole profile (photo included) every 1.2 s.
+    await vi.advanceTimersByTimeAsync(60000);
+    assert.equal(profileApi.loadUserProfile.mock.calls.length, reads);
+});
+
+test('a background saved on another device applies from the synchronized profile patch', async () => {
+    profileApi.loadUserProfile.mockResolvedValue({ ok: true, profile: { preferences: {} } });
+    const { window } = await bootBackgroundRuntime({ currentUser: { id: 'user-ada' } });
+    await vi.waitFor(() => assert.equal(profileApi.loadUserProfile.mock.calls.length, 1));
+    const remotePreferences = {
+        background: { backgroundSource: 'image', backgroundImageUrl: STORED_BACKGROUND_URL, backgroundImageFileName: 'ada.png' }
+    };
+    const patch = (atomeId) => new window.CustomEvent('squirrel:atome-updated', { detail: {
+        atome_id: atomeId, source: 'realtime',
+        properties: { eve_profile: JSON.stringify({ name: 'Ada', preferences: remotePreferences }) }
+    } });
+    window.dispatchEvent(patch('someone-else'));
+    assert.equal(window.eveBackground.getParams().backgroundImageUrl, DEFAULT_BACKGROUND_URL, 'another atome is ignored');
+    window.dispatchEvent(patch('user-ada'));
+    assert.equal(window.eveBackground.getParams().backgroundImageUrl, STORED_BACKGROUND_URL);
+    assert.equal(profileApi.loadUserProfile.mock.calls.length, 1, 'the patch is applied without a profile read');
+    assert.equal(profileApi.upsertUserProfile.mock.calls.length, 0);
 });
 
 test('a pattern or colour edit takes the render back from the selected image', async () => {
@@ -426,7 +457,7 @@ test('logout authentication remains paintable while the video decoder is waiting
 });
 
 
-test('logout immediately restores the public bundled video before any profile poll', async () => {
+test('logout immediately restores the public bundled video before any profile read', async () => {
     const { window } = await bootBackgroundRuntime();
     window.eveBackground.setParams({ backgroundSource: 'image', backgroundMediaKind: 'image', backgroundImageUrl: '/custom.png' });
     window.dispatchEvent(new window.CustomEvent('squirrel:user-logged-out'));

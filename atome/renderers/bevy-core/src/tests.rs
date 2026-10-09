@@ -216,7 +216,7 @@ fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_pr
         mask: None,
         mask_source: false,
         surface_paint: None,
-        backdrop: Some(AtomeBackdropStyle { blur_px: 12.0, tint: [0.36, 0.4, 0.47, 0.58], tint_fade: 0.3 }),
+        backdrop: Some(AtomeBackdropStyle { blur_px: 12.0, tint: [0.36, 0.4, 0.47, 0.58], tint_fade: 0.3, corner_cut_px: 0.0 }),
         presentation: true,
         menu_plane: 0,
         ..shape_node("backdrop_fixture_circle")
@@ -243,7 +243,7 @@ fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_pr
     assert_eq!(material.uniform.blur.z, crate::workspace_blur::backdrop_blur_lod(12.0, 1.0));
     // The tint fade reaches the shader untouched, and is clamped like the tint.
     assert_eq!(material.uniform.blur.w, 0.3);
-    let excessive = AtomeBackdropStyle { blur_px: 8.0, tint: [0.0, 0.0, 0.0, 0.5], tint_fade: 4.0 };
+    let excessive = AtomeBackdropStyle { blur_px: 8.0, tint: [0.0, 0.0, 0.0, 0.5], tint_fade: 4.0, corner_cut_px: 0.0 };
     assert_eq!(excessive.normalized().unwrap().tint_fade, 1.0);
     let circle_layers = app.world().get::<bevy::camera::visibility::RenderLayers>(circle_entity).unwrap();
     assert!(circle_layers.intersects(&bevy::camera::visibility::RenderLayers::layer(
@@ -289,7 +289,7 @@ fn backdrop_style_patch_updates_the_resident_material_without_reallocation() {
     let glass = AtomeRenderNode {
         project_space: false,
         surface_paint: None,
-        backdrop: Some(AtomeBackdropStyle { blur_px: 9.0, tint: [0.03, 0.06, 0.09, 0.52], tint_fade: 0.0 }),
+        backdrop: Some(AtomeBackdropStyle { blur_px: 9.0, tint: [0.03, 0.06, 0.09, 0.52], tint_fade: 0.0, corner_cut_px: 0.0 }),
         presentation: true,
         menu_plane: 0,
         ..shape_node("backdrop_patch_fixture")
@@ -324,7 +324,7 @@ fn backdrop_style_patch_updates_the_resident_material_without_reallocation() {
             color: None,
             shadow: None,
             surface_paint: None,
-            backdrop: Some(Some(AtomeBackdropStyle { blur_px: 18.0, tint: [0.24, 0.29, 0.37, 1.0], tint_fade: 0.0 })),
+            backdrop: Some(Some(AtomeBackdropStyle { blur_px: 18.0, tint: [0.24, 0.29, 0.37, 1.0], tint_fade: 0.0, corner_cut_px: 0.0 })),
             selected: None,
             opacity: None,
             playback_progress: None,
@@ -359,7 +359,7 @@ fn backdrop_glass_follows_record_opacity_and_releases_the_capture_when_hidden() 
     let glass = AtomeRenderNode {
         project_space: false,
         surface_paint: None,
-        backdrop: Some(AtomeBackdropStyle { blur_px: 18.0, tint: [0.0, 0.0, 0.0, 0.84], tint_fade: 0.0 }),
+        backdrop: Some(AtomeBackdropStyle { blur_px: 18.0, tint: [0.0, 0.0, 0.0, 0.84], tint_fade: 0.0, corner_cut_px: 0.0 }),
         presentation: true,
         menu_plane: 0,
         ..shape_node("backdrop_opacity_fixture")
@@ -503,7 +503,7 @@ fn backdrop_clip_crops_the_resident_mesh_without_stretching_or_accumulating_asse
         backdrop: Some(AtomeBackdropStyle {
             blur_px: 12.0,
             tint: [0.2, 0.3, 0.4, 0.5],
-            tint_fade: 0.0,
+            tint_fade: 0.0, corner_cut_px: 0.0,
         }),
         ..shape_node("clipped_backdrop")
     };
@@ -1348,7 +1348,7 @@ fn backdrop_surface_resize_keeps_the_corner_radius_instead_of_stretching_it() {
         mask: None,
         mask_source: false,
         surface_paint: None,
-        backdrop: Some(AtomeBackdropStyle { blur_px: 12.0, tint: [0.0, 0.0, 0.0, 0.84], tint_fade: 0.0 }),
+        backdrop: Some(AtomeBackdropStyle { blur_px: 12.0, tint: [0.0, 0.0, 0.0, 0.84], tint_fade: 0.0, corner_cut_px: 0.0 }),
         presentation: true,
         menu_plane: 0,
         ..shape_node("backdrop_resize_tool")

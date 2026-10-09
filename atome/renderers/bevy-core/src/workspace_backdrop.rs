@@ -64,7 +64,7 @@ fn blur_pyramid_image(width: u32, height: u32) -> Image {
     let mut image = capture_image(width, height);
     image.texture_descriptor.mip_level_count = backdrop_mip_level_count(UVec2::new(width.max(1), height.max(1)));
     image.texture_descriptor.usage =
-        TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST | TextureUsages::STORAGE_BINDING;
+        TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST | TextureUsages::STORAGE_BINDING | TextureUsages::RENDER_ATTACHMENT;
     // A storage texture can never be viewed as sRGB, and the mip generation writes
     // every level through that same storage view. The view is therefore pinned to
     // the texture's own linear format here, in the one place that knows this image

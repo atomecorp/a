@@ -12,10 +12,6 @@ const cases = [
         importPattern: /from '#shared\/atome_contract\.js'/
     },
     {
-        path: 'eVe/intuition/tools/clipboard/paste_events.js',
-        importPattern: /from '#shared\/atome_contract\.js'/
-    },
-    {
         path: 'eVe/intuition/tools/selection_style_atome.js',
         importPattern: /from '#shared\/atome_contract\.js'/
     }

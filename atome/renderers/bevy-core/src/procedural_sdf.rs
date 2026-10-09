@@ -196,6 +196,8 @@ pub fn insert_procedural_sdf(
     world.entity_mut(entity).insert((
         Mesh2d(mesh),
         MeshMaterial2d(material),
+        // Sampling boundaries must remain separate sorted-phase draws.
+        bevy::render::batching::NoAutomaticBatching,
         bevy::camera::visibility::RenderLayers::layer(if normalized.mode > 2.5 {
             crate::mystic_capture::MENU_OVERLAY_LAYER
         } else { MENU_PRESENTATION_LAYER }),

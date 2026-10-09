@@ -15,14 +15,11 @@ const findNode = (node, id) => {
     return (node.children || []).map((child) => findNode(child, id)).find(Boolean) || null;
 };
 
-// The single disclosure caret is two oriented strokes: `>` closed, then `v` or
-// `^` toward the side the body opened on. The container itself stays unturned,
-// so the shape is read from the strokes, not from a container rotation.
+// Only the filled glyph rotates; the existing control box stays unturned.
 const caretShapeOf = (chevron) => {
-    const [upper, lower] = chevron?.children || [];
-    if (!upper || !lower) return 'missing';
-    if (upper.style.position[0] === lower.style.position[0]) return 'right';
-    return upper.style.rotation === 45 ? 'down' : 'up';
+    const glyph = chevron?.children?.[0];
+    if (glyph?.kind !== 'image') return 'missing';
+    return { 0: 'right', 180: 'left', 90: 'down', '-90': 'up' }[glyph.style.rotation];
 };
 
 test('shared panel accordion has one native header and no hidden body when closed', () => {
@@ -48,11 +45,10 @@ test('shared panel accordion has one native header and no hidden body when close
     assert.equal(typeof header.on.activate, 'function');
     assert.deepEqual(chevron.style.size, [BEVY_PANEL_TOKENS.accordion.chevronSizePx, BEVY_PANEL_TOKENS.accordion.chevronSizePx]);
     assert.equal(chevron.style.rotation, undefined);
-    assert.equal(caretShapeOf(chevron), 'right');
-    assert.deepEqual(chevron.children.map((stroke) => stroke.style.size), [
-        [BEVY_PANEL_TOKENS.accordion.chevronStrokeLengthPx, BEVY_PANEL_TOKENS.accordion.chevronStrokeThicknessPx],
-        [BEVY_PANEL_TOKENS.accordion.chevronStrokeLengthPx, BEVY_PANEL_TOKENS.accordion.chevronStrokeThicknessPx]
-    ]);
+    assert.equal(caretShapeOf(chevron), 'left');
+    assert.equal(chevron.children.length, 1);
+    assert.equal(chevron.children[0].image.source, './assets/images/icons/disclosure.svg');
+    assert.ok(chevron.children[0].style.size.every(size => size <= chevron.style.size[0]));
     assert.equal(findNode(closed, 'accordion_fixture_body'), null);
     const closedRecords = projectBevyUiTreeRecords({ tree: { root: closed }, treeId: 'accordion_closed', workspaceLayer: 'panel' });
     assert.deepEqual(
@@ -152,8 +148,7 @@ test('left and right accordion controls reserve symmetric space and closed chevr
         assert.ok(avatar.style.position[0]+avatar.style.size[0]<=label.style.position[0]);
         if(handedness==='right') assert.ok(label.style.position[0]+label.style.size[0]<=caret.style.position[0]);
         else assert.ok(label.style.position[0]>=caret.style.position[0]+caret.style.size[0]);
-        const [upper,lower]=caret.children;
-        if(!expanded) assert.deepEqual([upper.style.rotation,lower.style.rotation],handedness==='left'?[45,-45]:[-45,45]);
+        if(!expanded) assert.equal(caretShapeOf(caret),handedness==='left'?'right':'left');
         else assert.equal(caretShapeOf(caret),direction);
         if(expanded) assert.equal(findNode(tree,'inner_chevron').style.position[0],handedness==='left'?tokens.contentPaddingPx:(width-24)-tokens.contentPaddingPx-tokens.chevronSizePx);
     }

@@ -8,7 +8,7 @@
 //
 // Drives wakes exactly as the JS runtime does — one per animation frame, from
 // a requestAnimationFrame callback — and asserts one render per frame, while
-// the idle loop stays at the heartbeat.
+// the idle loop stays at the heartbeat and stops once the workspace settles.
 //   node tests/probes/bevy_web_frame_clock_cadence.probe.mjs
 //   [ADOLE_TEST_URL=http://127.0.0.1:3001] [HEADLESS=0] [PROBE_WASM_DIR=dir]
 import assert from 'node:assert/strict';
@@ -90,9 +90,30 @@ try {
         return { frames, ticks: bevy.read_atome_bevy_web_diagnostics().update_ticks - t0 };
     });
     const ratio = burst.ticks / burst.frames;
-    console.log(JSON.stringify({ idleTicksPerSecond, burst, ratio: +ratio.toFixed(2) }));
+
+    // Settled workspace (2026-10-09): 3 s after the last wake the failsafe
+    // heartbeat stretches from 500 ms to 10 s, so a motionless screen stops
+    // rendering — while a wake still renders on the very next frame.
+    await page.waitForTimeout(4000);
+    const settled0 = await diagnostics();
+    await page.waitForTimeout(10000);
+    const settledTicks = (await diagnostics()).ticks - settled0.ticks;
+    const wakeLatencyMs = await page.evaluate(async () => {
+        const { ensureBevyModule } = await import('/eVe/domains/rendering/bevy_web_renderer_module_loader.js');
+        const bevy = await ensureBevyModule();
+        const t0 = bevy.read_atome_bevy_web_diagnostics().update_ticks;
+        const started = performance.now();
+        bevy.request_atome_bevy_redraw();
+        while (bevy.read_atome_bevy_web_diagnostics().update_ticks === t0 && performance.now() - started < 3000) {
+            await new Promise((resolve) => requestAnimationFrame(resolve));
+        }
+        return Math.round(performance.now() - started);
+    });
+    console.log(JSON.stringify({ idleTicksPerSecond, burst, ratio: +ratio.toFixed(2), settledTicks, wakeLatencyMs }));
     assert.ok(idleTicksPerSecond <= 4, `idle loop must stay at the heartbeat, got ${idleTicksPerSecond} ticks/s`);
     assert.ok(ratio >= 0.8, `one render per woken animation frame expected, got ${burst.ticks} ticks for ${burst.frames} frames`);
+    assert.ok(settledTicks <= 2, `a settled workspace must stop rendering, got ${settledTicks} ticks in 10 s`);
+    assert.ok(wakeLatencyMs <= 100, `a wake on a settled workspace must render on the next frame, took ${wakeLatencyMs} ms`);
     console.log('PASS bevy_web_frame_clock_cadence');
 } finally {
     await browser.close();

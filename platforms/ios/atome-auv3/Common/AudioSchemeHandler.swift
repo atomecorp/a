@@ -19,8 +19,11 @@ class AudioSchemeHandler: NSObject, WKURLSchemeHandler {
     private static var startedAt = CACurrentMediaTime()
     private static let streamThreshold = 512 * 1024
     private static let streamChunkSize = 256 * 1024
-    private let taskLock = NSLock()
-    private var closedTaskIds = Set<ObjectIdentifier>()
+    // WebKit calls `stop` on the main thread. Every task call therefore runs on
+    // the main thread too, so "still open?" and "deliver" cannot be split by a
+    // stop: WebKit raises NSInternalInconsistencyException ("This task has
+    // already been stopped") when a stopped task receives anything.
+    private var openTaskIds = Set<ObjectIdentifier>()
 
     static func resetBootMetrics() {
         metricsQueue.sync {
@@ -66,49 +69,42 @@ class AudioSchemeHandler: NSObject, WKURLSchemeHandler {
         ObjectIdentifier(task as AnyObject)
     }
 
+    private func onMain<T>(_ body: () -> T) -> T {
+        Thread.isMainThread ? body() : DispatchQueue.main.sync(execute: body)
+    }
+
     private func register(_ task: WKURLSchemeTask) {
-        taskLock.lock()
-        closedTaskIds.remove(taskId(task))
-        taskLock.unlock()
+        onMain { _ = openTaskIds.insert(taskId(task)) }
     }
 
     private func close(_ task: WKURLSchemeTask) {
-        taskLock.lock()
-        closedTaskIds.insert(taskId(task))
-        taskLock.unlock()
+        onMain { _ = openTaskIds.remove(taskId(task)) }
     }
 
     private func deliver(_ task: WKURLSchemeTask, _ body: () -> Void) -> Bool {
-        taskLock.lock()
-        let isOpen = !closedTaskIds.contains(taskId(task))
-        taskLock.unlock()
-        guard isOpen else { return false }
-        body()
-        return true
+        onMain {
+            guard openTaskIds.contains(taskId(task)) else { return false }
+            body()
+            return true
+        }
     }
 
     private func complete(_ task: WKURLSchemeTask, response: URLResponse, data: Data) -> Bool {
-        taskLock.lock()
-        let id = taskId(task)
-        let isOpen = !closedTaskIds.contains(id)
-        if isOpen { closedTaskIds.insert(id) }
-        taskLock.unlock()
-        guard isOpen else { return false }
-        task.didReceive(response)
-        task.didReceive(data)
-        task.didFinish()
-        return true
+        onMain {
+            guard openTaskIds.remove(taskId(task)) != nil else { return false }
+            task.didReceive(response)
+            task.didReceive(data)
+            task.didFinish()
+            return true
+        }
     }
 
     private func finish(_ task: WKURLSchemeTask) -> Bool {
-        taskLock.lock()
-        let id = taskId(task)
-        let isOpen = !closedTaskIds.contains(id)
-        if isOpen { closedTaskIds.insert(id) }
-        taskLock.unlock()
-        guard isOpen else { return false }
-        task.didFinish()
-        return true
+        onMain {
+            guard openTaskIds.remove(taskId(task)) != nil else { return false }
+            task.didFinish()
+            return true
+        }
     }
     
     func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
@@ -182,27 +178,6 @@ class AudioSchemeHandler: NSObject, WKURLSchemeHandler {
             let attr = try fileManager.attributesOfItem(atPath: locatedURL.path)
             let fileSize = (attr[.size] as? NSNumber)?.int64Value ?? 0
             let mime = mimeType(for: locatedURL.pathExtension.lowercased())
-            // Check for Range header
-            if let rangeHeader = task.request.value(forHTTPHeaderField: "Range"),
-               let range = parseRange(rangeHeader: rangeHeader, fileLength: fileSize) {
-                // Partial response
-                let handle = try FileHandle(forReadingFrom: locatedURL)
-                try handle.seek(toOffset: UInt64(range.lowerBound))
-                let length = range.count
-                let data = handle.readData(ofLength: length)
-                handle.closeFile()
-                
-                let response = HTTPURLResponse(url: task.request.url!, statusCode: 206, httpVersion: "HTTP/1.1", headerFields: [
-                    "Content-Type": mime,
-                    "Content-Length": String(data.count),
-                    "Content-Range": "bytes \(range.lowerBound)-\(range.upperBound - 1)/\(fileSize)",
-                    "Accept-Ranges": "bytes"
-                ])!
-                if complete(task, response: response, data: data) {
-                    Self.recordResponse(bytes: data.count)
-                }
-                return
-            }
             try respondFile(locatedURL, fileSize: fileSize, mime: mime, immutable: false, task: task)
         } catch {
             log.error("File response failed for \(label, privacy: .public): \(error.localizedDescription, privacy: .public)")
@@ -240,7 +215,7 @@ class AudioSchemeHandler: NSObject, WKURLSchemeHandler {
         let start = Int(parts[0]) ?? 0
         let endPart = String(parts[1])
         let end = Int(endPart.isEmpty ? String(fileLength - 1) : endPart) ?? (Int(fileLength) - 1)
-        if start >= end || start < 0 { return nil }
+        if start > end || start < 0 || Int64(start) >= fileLength { return nil }
         return start..<min(end + 1, Int(fileLength))
     }
     
@@ -323,6 +298,26 @@ class AudioSchemeHandler: NSObject, WKURLSchemeHandler {
                              mime: String,
                              immutable: Bool,
                              task: WKURLSchemeTask) throws {
+        // Media players (the wallpaper video, audio) ask for byte ranges.
+        // Answering them with the whole file made WebKit cancel and re-request
+        // it in a loop: about 2 GB for a 6 MB bundled video in two minutes.
+        if let rangeHeader = task.request.value(forHTTPHeaderField: "Range"),
+           let range = parseRange(rangeHeader: rangeHeader, fileLength: fileSize) {
+            let handle = try FileHandle(forReadingFrom: fileURL)
+            defer { try? handle.close() }
+            try handle.seek(toOffset: UInt64(range.lowerBound))
+            let data = try handle.read(upToCount: range.count) ?? Data()
+            let response = HTTPURLResponse(url: task.request.url!, statusCode: 206, httpVersion: "HTTP/1.1", headerFields: [
+                "Content-Type": mime,
+                "Content-Length": String(data.count),
+                "Content-Range": "bytes \(range.lowerBound)-\(range.lowerBound + data.count - 1)/\(fileSize)",
+                "Accept-Ranges": "bytes"
+            ])!
+            if complete(task, response: response, data: data) {
+                Self.recordResponse(bytes: data.count)
+            }
+            return
+        }
         var headers = [
             "Content-Type": mime,
             "Content-Length": String(fileSize),

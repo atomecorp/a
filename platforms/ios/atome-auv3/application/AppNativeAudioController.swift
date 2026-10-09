@@ -2,7 +2,9 @@ import AVFoundation
 import Foundation
 import UIKit
 
-final class AppNativeAudioController: NSObject {
+// Control state is confined to queue. While running, only the audio tap owns its
+// preallocated PCM pointers; the native backend synchronizes recording snapshots.
+final class AppNativeAudioController: NSObject, @unchecked Sendable {
     static let shared = AppNativeAudioController()
 
     struct ClipEntry {
@@ -14,6 +16,7 @@ final class AppNativeAudioController: NSObject {
         let isAudioFile: Bool
         let processingFormat: AVAudioFormat?
         let asset: AVURLAsset?
+        let audioTrack: AVAssetTrack?
         let cachedBuffer: AVAudioPCMBuffer?
     }
 
@@ -44,6 +47,7 @@ final class AppNativeAudioController: NSObject {
     let recordingScopeBinCount = 64
 
     var clips: [String: ClipEntry] = [:]
+    var pendingClipLoads: [String: UUID] = [:]
     var voices: [String: VoiceEntry] = [:]
     var audioSessionConsumers = AppNativeAudioConsumerRegistry()
     var captureGate = AppNativeAudioCaptureGate()
@@ -263,15 +267,14 @@ final class AppNativeAudioController: NSObject {
     }
 
     func requestMicrophonePermission(_ completion: @escaping (Bool) -> Void) {
-        let session = AVAudioSession.sharedInstance()
-        switch session.recordPermission {
+        switch AVAudioApplication.shared.recordPermission {
         case .granted:
             completion(true)
         case .denied:
             completion(false)
         case .undetermined:
             DispatchQueue.main.async {
-                session.requestRecordPermission { granted in
+                AVAudioApplication.requestRecordPermission { granted in
                     completion(granted)
                 }
             }

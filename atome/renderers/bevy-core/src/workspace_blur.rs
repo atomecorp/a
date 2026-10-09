@@ -106,6 +106,9 @@ pub fn refresh_backdrop_blur_metrics(world: &mut World, device_pixel_ratio: f32)
     }
 }
 
+#[path = "workspace_blur_composition.rs"]
+pub(crate) mod composition;
+
 pub struct WorkspaceBlurPlugin;
 
 impl Plugin for WorkspaceBlurPlugin {
@@ -121,6 +124,7 @@ impl Plugin for WorkspaceBlurPlugin {
         app.sub_app_mut(RenderApp)
             .add_systems(ExtractSchedule, enqueue_workspace_blur_mips)
             .add_systems(Core2d, workspace_blur_mip_pass());
+        composition::install(app);
     }
 }
 

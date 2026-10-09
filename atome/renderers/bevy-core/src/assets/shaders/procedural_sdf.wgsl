@@ -558,8 +558,8 @@ fn intuition_mystic_plate(box_distance: f32, screen_uv: vec2<f32>, family: vec4<
     let original = textureSampleLevel(backdrop_texture, backdrop_sampler, screen_uv, 0.0).rgb;
     let blurred = sample_aligned_mip(screen_uv, material.shape.w);
     var plate = mix(original, blurred, glass_mix);
-    plate = mix(plate, tint.rgb, tint.a);
-    plate = mix(plate, family.rgb, family.a);
+    // Family hue belongs inside the tint; preserve the common live-backdrop share.
+    plate = mix(plate, mix(tint.rgb, family.rgb, family.a), tint.a);
     return plate;
 }
 

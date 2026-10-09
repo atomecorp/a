@@ -38,7 +38,7 @@ struct atomeApp: App {
                 }
         }
         // React to scene lifecycle to flush inbox only when foregroundActive
-        .onChange(of: scenePhase) { newPhase in
+        .onChange(of: scenePhase) { _, newPhase in
             switch newPhase {
             case .active:
                 break
@@ -53,6 +53,7 @@ struct atomeApp: App {
 
 struct ContentView: View {
     var body: some View {
-    WebViewContainer()
+        WebViewContainer()
+            .ignoresSafeArea(.container, edges: .all)
     }
 }

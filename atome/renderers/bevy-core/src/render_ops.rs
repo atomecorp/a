@@ -150,6 +150,10 @@ pub fn apply_transform(world: &mut World, patch: AtomeTransformPatch) -> Result<
                 .unwrap_or_else(default_uv_rect);
             insert_video_quad_mesh(world, entity, [width, height], uv_rect)?;
         }
+        // A media window follows the Atome's size (pinch, resize) like a video.
+        if world.get::<crate::media_window::AtomeMediaWindow>(entity).is_some() {
+            insert_video_quad_mesh(world, entity, [width, height], [0.0, 0.0, 1.0, 1.0])?;
+        }
         resize_procedural_sdf(world, entity, [width, height])?;
         resize_backdrop_surface(world, entity, [width, height])?;
         // A rounded shape is painted through a cut-out mask rasterised at its
@@ -270,6 +274,10 @@ pub fn apply_layer(world: &mut World, patch: AtomeLayerPatch) -> Result<(), Stri
     next_transform.translation.z = depth_for_layer(patch.layer);
     world.entity_mut(entity).insert(next_transform);
     sync_global_transform(world, entity, next_transform);
+    // Bevy retains mesh phase items: depth changes must requeue their sort key.
+    if let Some(mut mesh) = world.get_mut::<Mesh2d>(entity) {
+        mesh.set_changed();
+    }
     if let Some(mut video) = world.get_mut::<crate::video_external_texture::AtomeVideoExternalTexture>(entity) {
         video.layer = patch.layer;
     }

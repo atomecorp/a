@@ -11,6 +11,7 @@ use crate::{
     spawn::{spawn_node_with_texture_handle, texture_handle_for_node},
     types::*,
     ui::AtomeBevyUiPlugin,
+    media_window::AtomeMediaWindowPlugin,
     video_external_texture::{insert_video_external_texture_component_for_node, AtomeVideoExternalTexturePlugin},
     waveform_playback_overlay::rebuild_waveform_playback_overlay,
     workspace_backdrop::{
@@ -33,6 +34,7 @@ impl Plugin for AtomeBevyRendererPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(self.config.clone())
             .add_plugins(AtomeVideoExternalTexturePlugin)
+            .add_plugins(AtomeMediaWindowPlugin)
             .add_plugins(ProceduralSdfPlugin)
             .add_plugins(BackdropSurfacePlugin)
             .add_plugins(WorkspaceBlurPlugin)

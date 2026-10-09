@@ -1,5 +1,5 @@
 import { JSDOM } from 'jsdom';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { PROJECT_SCENES } from '../../eVe/domains/rendering/project_scene_state.js';
 
 // L'appui long sur Copier (menu Mystic) est un compose, pas un troisieme verbe :
@@ -18,6 +18,8 @@ const setupDom = () => {
     if (sharedDom) return sharedDom;
     const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'https://example.test/' });
     sharedDom = dom;
+    let clipboardText = '';
+    vi.stubGlobal('navigator', { clipboard: { writeText: async text => { clipboardText = text; }, readText: async () => clipboardText } });
     globalThis.window = dom.window;
     globalThis.document = dom.window.document;
     globalThis.HTMLElement = dom.window.HTMLElement;

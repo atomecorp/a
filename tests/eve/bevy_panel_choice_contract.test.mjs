@@ -141,7 +141,8 @@ test('the complete visual-state matrix reuses the approved panel material', () =
     assert.deepEqual(idle.style.background, BEVY_PANEL_TOKENS.colors.transparent);
     assert.deepEqual(pressed.style.translation, BEVY_ICON_BUTTON_TOKENS.pressedTranslation);
     assert.deepEqual(findNode(focused, 'f_indicator').style.shadows.at(-1), BEVY_PANEL_TOKENS.buttonMaterial.focusShadow);
-    assert.notDeepEqual(findNode(pressed, 'p_indicator').style.background, findNode(selected, 's_indicator').style.background);
+    assert.deepEqual(findNode(pressed, 'p_indicator').style.backdrop, findNode(selected, 's_indicator').style.backdrop);
+    assert.deepEqual(findNode(selected, 's_indicator').style.border,[1,1,1,1]);
     assert.equal(findNode(radio, 'r_left_background'), null, 'the approved Radio has no coloured backing plate');
     assert.deepEqual(findNode(radio, 'r_left_indicator').style.background, BEVY_PANEL_TOKENS.buttonMaterial.selected.background);
     assert.deepEqual(findNode(toggle, 't_indicator').style.background, BEVY_PANEL_TOKENS.buttonMaterial.idle.background);
@@ -195,7 +196,7 @@ test('approved Radio paint follows the disc geometry, with no rectangular plate 
         assert.equal(findNode(row,'radio_choice_background'),null);
         const indicator=findNode(row,'radio_choice_indicator');
         assert.equal(indicator.style.radius,tokens.radioSizePx/2);
-        assert.equal(indicator.style.border,undefined);
+        assert.deepEqual(indicator.style.border,['selected','hovered'].includes(state)?[1,1,1,1]:undefined);
         assert.equal(indicator.style.surfacePaint.border.color[3],0);
         const records=projectBevyUiTreeRecords({tree:{root:row},treeId:'radio_states',workspaceLayer:'panel'});
         const disc=records.find(record=>record.id.endsWith('_radio_choice_indicator'));

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createTextEditingSession } from '../../eVe/domains/rendering/text_editing_session.js';
 import { getTextServiceState, mountActiveTextEditor, unmountActiveTextEditor } from '../../eVe/domains/rendering/hidden_text_service_runtime.js';
 import { describe, expect, it } from 'vitest';
+import { EVE_FR_FIRST_LAUNCH_MESSAGES, EVE_EN_FIRST_LAUNCH_MESSAGES } from '../../eVe/i18n/languages_first_launch.js';
 import { FIRST_LAUNCH_TEMPLATES } from '../../eVe/domains/templates/first_launch_template_catalog.js';
 import { firstLaunchRequired, firstLaunchProfile, firstLaunchProgress } from '../../eVe/domains/user/first_launch_model.js';
 import { matrixGridSlotRect } from '../../eVe/domains/matrix/matrix_grid_model.js';
@@ -90,6 +91,22 @@ import { projectBevyUiTreeRecords } from '../../eVe/domains/rendering/bevy_ui_ov
 import { PROJECT_SCENES, sceneState } from '../../eVe/domains/rendering/project_scene_state.js';
 import { readMatrixInstance, syncMatrixModules } from '../../eVe/domains/matrix/matrix_module_runtime.js';
 import { identityMediaFrameNode, IDENTITY_PLACEHOLDER_SOURCE } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_media_card.js';
+import { hydrateImageTree } from '../../eVe/domains/rendering/bevy_ui_image_runtime.js';
+import { clearBevyMediaTextureCache } from '../../eVe/domains/rendering/bevy_media_texture_cache.js';
+
+it('hydrates the default identity SVG in light gray and retains personal photo pixels', async () => {
+    clearBevyMediaTextureCache();
+    const dom = new JSDOM('<canvas id="identity"></canvas>');
+    try {
+        const surface = dom.window.document.getElementById('identity');
+        const imageResolverFactory = () => async () => ({ width: 2, height: 1,
+            rgba: new Uint8ClampedArray([128, 128, 128, 255, 30, 60, 90, 0]) });
+        const placeholder = await hydrateImageTree({ tree: identityMediaFrameNode({ id: 'placeholder', placeholder: true }), surface, imageResolverFactory });
+        expect(Array.from(placeholder.children[0].image.texture.rgba)).toEqual([211, 211, 211, 255, 30, 60, 90, 0]);
+        const photo = await hydrateImageTree({ tree: identityMediaFrameNode({ id: 'photo', source: 'profile.png' }), surface, imageResolverFactory });
+        expect(Array.from(photo.children[0].image.texture.rgba)).toEqual([128, 128, 128, 255, 30, 60, 90, 0]);
+    } finally { dom.window.close(); }
+});
 import { buildDashboardCardRecords } from '../../eVe/domains/dashboard/dashboard_card_records.js';
 import { buildBevyToolSliderNode } from '../../eVe/intuition/shared/bevy_ui_tool_slider.js';
 import { applyTreeScrollLayout } from '../../eVe/domains/rendering/bevy_ui_scroll_layout.js';
@@ -156,6 +173,22 @@ it('projects native panel controls and Dashboard material without a private skin
                     expect(glass.style.radius).toBe(DASHBOARD_VISUAL_TOKENS.metrics.contentRadius);
                     expect(glass.overlayRecord.properties.material.shadow).toBe(EVE_COMMON_SKIN_TOKENS.bevy.systemSurface.shadow);
                 }
+                expect(nodes.some(node => node.id === 'header')).toBe(false);
+                const content = walk(nodes.find(node => node.id === 'actions'));
+                const labels = ['title', 'price', 'simulation', 'pay', 'back'];
+                const boxes = labels.map(id => {
+                    expect(content.some(node => node.id === id)).toBe(true);
+                    return locateBevyUiNode({ node: trees.at(-1).root, nodeId: id }).box;
+                });
+                const panel = locateBevyUiNode({ node: trees.at(-1).root, nodeId: 'actions' }).box;
+                for (const [index, box] of boxes.entries()) {
+                    expect(box.y).toBeGreaterThanOrEqual(panel.y);
+                    expect(box.y + box.height).toBeLessThanOrEqual(panel.y + panel.height);
+                    if (index) expect(box.y).toBeGreaterThanOrEqual(boxes[index - 1].y + boxes[index - 1].height);
+                }
+                expect(EVE_FR_FIRST_LAUNCH_MESSAGES['eve.first_launch.pay']).toBe('Payer');
+                expect(EVE_EN_FIRST_LAUNCH_MESSAGES['eve.first_launch.pay']).toBe('Pay');
+                expect(EVE_FR_FIRST_LAUNCH_MESSAGES['eve.first_launch.price']).toBe('12 € par mois');
                 const pay = nodes.find(node => node.id === 'pay');
                 expect(pay.style.surfacePaint).toBe(BEVY_PANEL_TOKENS.buttonMaterial.idle.surfacePaint);
                 expect(pay.style.shadow).toBe(BEVY_PANEL_TOKENS.buttonMaterial.idle.shadow);
@@ -201,9 +234,13 @@ it('projects native panel controls and Dashboard material without a private skin
                 const standard = identityMediaFrameNode({ id: 'standard', placeholder: true });
                 for (const key of ['size', 'radius', 'background', 'border', 'border_color']) expect(photo.style[key]).toEqual(standard.style[key]);
                 expect(nodes.find(node => node.id === 'photo_image').image.source).toBe(IDENTITY_PLACEHOLDER_SOURCE);
+                expect(nodes.find(node => node.id === 'photo_image').image.tint).toEqual([211 / 255, 211 / 255, 211 / 255, 1]);
                 expect(photo.on.activate).toBeTypeOf('function');
                 const inputs = nodes.filter(node => node.kind === 'text_input');
                 expect(inputs).toHaveLength(3);
+                expect(inputs.map(input => input.id)).toEqual(['name', 'firstname', 'nickname']);
+                expect(EVE_FR_FIRST_LAUNCH_MESSAGES['eve.first_launch.nickname']).toBe('Surnom (facultatif)');
+                expect(EVE_EN_FIRST_LAUNCH_MESSAGES['eve.first_launch.nickname']).toBe('Nickname (optional)');
                 const glass = nodes.find(node => node.overlayRecord?.properties.material?.backdrop);
                 expect(glass.style.radius).toBe(DASHBOARD_VISUAL_TOKENS.metrics.contentRadius);
                 expect(glass.overlayRecord.properties.material.shadow).toBe(EVE_COMMON_SKIN_TOKENS.bevy.systemSurface.shadow);
@@ -276,10 +313,11 @@ it('projects native panel controls and Dashboard material without a private skin
                 const background = projected.find(record => record.id.includes('card_template_controls_form'));
                 const inputText = projected.find(record => record.id.endsWith('_phone_text_text'));
                 expect(inputText.properties.zIndex).toBeGreaterThan(background.properties.zIndex);
-                const draft = [];
+                const draft = [], submitted = [], values = { phone: '', busy: false };
                 const typed = createMatrixTemplateRuntime({ treeId: 'phone_semantics', records, uiRuntime,
                     readBounds: () => ({ x: 0, y: 0, width: 390, height: 844 }),
-                    readValues: () => ({ phone: '' }), writeDraft: (key, value) => draft.push([key, value]), activate: async () => ({ ok: true }) });
+                    readValues: () => values, writeDraft: (key, value) => { values[key] = value; draft.push([key, value]); },
+                    onSubmit: key => submitted.push([key, values[key]]), activate: async () => ({ ok: true }) });
                 await typed.open();
                 const input = walk(trees.at(-1).root).find(node => node.id === 'phone');
                 input.on.focus({});
@@ -287,6 +325,14 @@ it('projects native panel controls and Dashboard material without a private skin
                 expect(editor.type).toBe('tel'); expect(editor.autocomplete).toBe('tel');
                 editor.value = '0612345678'; editor.dispatchEvent(new dom.window.Event('input'));
                 expect(draft.at(-1)).toEqual(['phone', '0612345678']);
+                editor.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', isComposing: true }));
+                editor.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', repeat: true }));
+                expect(submitted).toHaveLength(0);
+                editor.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter' }));
+                expect(submitted).toEqual([['phone', '0612345678']]);
+                input.on.focus({}); values.busy = true;
+                document.querySelector('[data-role="active-text-editor"]').dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter' }));
+                expect(submitted).toHaveLength(1);
                 await typed.destroy();
             }
             if (key === 'first_launch_program') expect(nodes.filter(node => node.kind === 'checkbox')).toHaveLength(3);

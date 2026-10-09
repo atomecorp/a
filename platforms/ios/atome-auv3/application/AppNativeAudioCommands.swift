@@ -58,18 +58,12 @@ extension AppNativeAudioController {
                         )
                         return
                     }
-                    let clip = try self.loadClipEntry(url: url, id: id)
-                    self.clips[id] = clip
-                    print("[AUDIO_NATIVE] audio_load_clip OK id=\(id) input=\(rawPath) path=\(url.path) sample_rate=\(clip.sampleRate) duration=\(clip.durationSeconds) streaming=\(clip.isAudioFile)")
-                    self.complete(completion, payload: [
-                        "success": true,
+                    self.loadAndStoreClip(url: url, id: id, response: [
                         "id": id,
                         "path": url.path,
                         "input_path": rawPath,
-                        "input_path_was_absolute": rawPath.hasPrefix("/"),
-                        "sample_rate": clip.sampleRate,
-                        "duration_seconds": clip.durationSeconds
-                    ])
+                        "input_path_was_absolute": rawPath.hasPrefix("/")
+                    ], completion: completion)
 
                 case "audio_has_clip":
                     let id = self.resolveString(payload, ["id"])
@@ -229,9 +223,11 @@ extension AppNativeAudioController {
                             options: [],
                             completionHandler: nil
                         )
-                    } else if let asset = clip.asset {
+                    } else if let asset = clip.asset, let track = clip.audioTrack {
                         let playBuffer = try self.decodeAssetSegment(
                             asset,
+                            track: track,
+                            assetDuration: clip.durationSeconds,
                             startSeconds: startSeconds,
                             durationSeconds: durationSeconds
                         )
@@ -254,9 +250,9 @@ extension AppNativeAudioController {
                     if let scheduledDuration = scheduledDurationForStop, scheduledDuration > 0 {
                         let safeRate = max(0.0001, Double(rate))
                         let stopDelay = max(0.03, scheduledDuration / safeRate)
-                        let stopWork = DispatchWorkItem { [weak self] in
-                            self?.queue.async {
-                                self?.stopVoiceLocked(voiceId, reason: "scheduled_stop")
+                        let stopWork = DispatchWorkItem { [weak controller = self] in
+                            controller?.queue.async { [weak controller] in
+                                controller?.stopVoiceLocked(voiceId, reason: "scheduled_stop")
                             }
                         }
                         voice.stopWorkItem = stopWork
@@ -300,6 +296,7 @@ extension AppNativeAudioController {
                         return
                     }
                     self.stopVoicesForAssetLocked(id)
+                    self.pendingClipLoads.removeValue(forKey: id)
                     self.clips.removeValue(forKey: id)
                     self.complete(completion, payload: ["success": true, "id": id])
 
@@ -360,6 +357,7 @@ extension AppNativeAudioController {
                     Array(self.voices.keys).forEach { voiceId in
                         self.stopVoiceLocked(voiceId, reason: "audio_shutdown")
                     }
+                    self.pendingClipLoads.removeAll()
                     self.clips.removeAll()
                     self.engine.stop()
                     self.engine.reset()
@@ -392,15 +390,10 @@ extension AppNativeAudioController {
                     let url = directory.appendingPathComponent("\(id).wav")
                     try data.write(to: url, options: [.atomic])
                     self.stopVoicesForAssetLocked(id)
-                    let clip = try self.loadClipEntry(url: url, id: id)
-                    self.clips[id] = clip
-                    self.complete(completion, payload: [
-                        "success": true,
+                    self.loadAndStoreClip(url: url, id: id, response: [
                         "id": id,
-                        "bytes": data.count,
-                        "sample_rate": clip.sampleRate,
-                        "duration_seconds": clip.durationSeconds
-                    ])
+                        "bytes": data.count
+                    ], completion: completion)
 
                 default:
                     self.complete(

@@ -1,4 +1,5 @@
 pub mod mystic_capture;
+pub mod media_window;
 pub mod backdrop_blur;
 pub mod backdrop_surface;
 pub mod background;
@@ -58,6 +59,8 @@ mod tests;
 #[cfg(test)]
 mod texture_sprite_color_tests;
 #[cfg(test)]
+mod media_window_tests;
+#[cfg(test)]
 mod video_external_texture_tests;
 #[cfg(test)]
 mod workspace_blur_tests;
@@ -79,3 +82,7 @@ mod persistent_wallpaper_tests;
 #[cfg(test)]
 #[path = "../../../../tests/rendering/login_light.rs"]
 mod login_light_tests;
+
+#[cfg(test)]
+#[path = "../../../../tests/rendering/backdrop_composition.rs"]
+mod backdrop_composition_tests;

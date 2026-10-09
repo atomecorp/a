@@ -25,7 +25,7 @@ import {
     INTUITION_MYSTIC_MODE, MYSTIC_CENTER_PLATE, MYSTIC_CENTER_TINT,
     MYSTIC_CENTER_SHADOW,
     MYSTIC_EDGE_SOFTNESS_PX, MYSTIC_HOLE_DOSE, MYSTIC_PERSPECTIVE_TILES, 
-    MYSTIC_PLATE_FOND, MYSTIC_SKIN, MYSTIC_SURFACE_TINT, resolveMysticEdgeSoftness,
+    MYSTIC_GLASS_TINT, MYSTIC_SKIN, MYSTIC_SURFACE_TINT, resolveMysticEdgeSoftness,
     resolveMysticFamilyColor, resolveMysticSkin
 } from '../../eVe/intuition/mystic/mystic_tokens.js';
 import { EVE_MYSTIC_SKIN_TOKENS } from '../../eVe/elements/skin/mystic_skin.js';
@@ -36,7 +36,7 @@ import { MYSTIC_GLYPH_START, mysticInteractionReady, mysticMotionTargets, sample
 import { MYSTIC_PHASE, createMysticShadowFade } from '../../eVe/intuition/ribbon/bevy_ui_mystic_motion.js';
 import { buildMysticSurfaceUniforms } from '../../eVe/intuition/mystic/intuition_mystic_menu_renderer.js';
 import {
-    BEVY_MYSTIC_CENTER_ID, buildBevyUiMysticTree, resolveBevyMysticMargin, resolveBevyMysticMarginFor,
+    BEVY_MYSTIC_CENTER_ID, buildBevyUiMysticTree, resolveBevyMysticMargin,
     resolveBevyMysticTreeGeometry
 } from '../../eVe/intuition/ribbon/bevy_ui_mystic_model.js';
 import { mapVirtualSceneStyleToBevyPatch } from '../../eVe/domains/rendering/bevy_projection_adapter.js';
@@ -50,7 +50,9 @@ const RECT = { width: 1200, height: 800 };
 const SURFACE = { getBoundingClientRect: () => ({ ...RECT }) };
 const CENTER = { x: 600, y: 400 };
 const DESKTOP_KEYS = MYSTIC_FIXED_ITEMS.map((entry) => entry.key);
-const items = (...keys) => keys.map((key) => ({ key, icon: key, label: key, type: 'tool', ...(key === 'copy' ? { slot: 'southEast' } : {}) }));
+const items = (...keys) => keys.map((key) => ({ key, icon: key, label: key, type: 'tool',
+    ...(MYSTIC_FIXED_ITEMS.find(entry => entry.key === key)?.slot ? { slot: MYSTIC_FIXED_ITEMS.find(entry => entry.key === key).slot } : {}),
+    ...(key === 'copy' ? { slot: 'southEast' } : {}) }));
 // Eight entries plus the Atom handle: every rung of the 3×3 ring, so a square.
 const RING_KEYS = DESKTOP_KEYS.slice(0, 8);
 const RING_ITEMS = items(...RING_KEYS, 'ai');
@@ -69,21 +71,9 @@ const cellOf = (layout, slot) => {
     return [Math.round((point[0] - layout.center.x) / STEP), Math.round((point[1] - layout.center.y) / STEP)];
 };
 const cells = (layout) => layout.tiles.map((tile) => cellOf(layout, tile.slot).join(',')).sort();
-// The block as the table it is: which columns and which rows it really occupies.
-const blockSpan = (layout) => {
-    const columns = new Set();
-    const rows = new Set();
-    layout.tiles.forEach((tile) => {
-        const [column, row] = cellOf(layout, tile.slot);
-        columns.add(column);
-        rows.add(row);
-    });
-    const ascending = (left, right) => left - right;
-    return { columns: [...columns].sort(ascending), rows: [...rows].sort(ascending) };
-};
 const insideSurface = (layout, surface = RECT) => layout.tiles.every((tile) => (
-    tile.point[0] - (tile.size / 2) >= 0 && tile.point[0] + (tile.size / 2) <= surface.width
-    && tile.point[1] - (tile.size / 2) >= 0 && tile.point[1] + (tile.size / 2) <= surface.height
+    tile.point[0] - (tile.size / 2) >= MYSTIC_SHADOW_PAD_PX && tile.point[0] + (tile.size / 2) <= surface.width - MYSTIC_SHADOW_PAD_PX
+    && tile.point[1] - (tile.size / 2) >= MYSTIC_SHADOW_PAD_PX && tile.point[1] + (tile.size / 2) <= surface.height - MYSTIC_SHADOW_PAD_PX
 ));
 const geometryFor = (list, { mystic = true } = {}) => resolveBevyMysticTreeGeometry({
     surface: SURFACE, center: { ...CENTER }, items: list, mystic
@@ -134,13 +124,15 @@ test('the shape follows the rungs the entries occupy, never their count', () => 
 
 test('the canonical desktop set owns one rung each, and only the Atom sits in the middle', () => {
     assert.deepEqual(DESKTOP_KEYS, [
-        'find', 'capture', 'import', 'communicate', 'dashboard', 'new_project',
+        'capture', 'import', 'communicate', 'create', 'new_project',
         'copy', 'paste', 'delete', 'play', 'utilities', 'info', 'activity'
     ]);
     // The compass anchors the taxonomy declares, word for word: the rest of the
     // list fills the free rungs in the order the list gave them.
     assert.deepEqual(MYSTIC_FIXED_ITEMS.filter(entry => entry.slot).map(entry => `${entry.key}:${entry.slot}`),
-        ['find:north', 'capture:east', 'communicate:west', 'dashboard:south']);
+        ['capture:east', 'import:north', 'communicate:west', 'create:south', 'new_project:southEast',
+            'copy:northWest', 'paste:northEast', 'delete:southWest', 'play:eastOuter',
+            'utilities:northOuter', 'info:westOuter', 'activity:southOuter']);
     MYSTIC_FIXED_ITEMS.filter(entry => entry.slot).forEach((entry) => {
         assert.ok(resolveMysticSlotIndex(entry.slot) >= 0, `${entry.key} -> ${entry.slot}`);
     });
@@ -157,7 +149,7 @@ test('the canonical desktop set owns one rung each, and only the Atom sits in th
     assert.deepEqual([...routed.tiles.map((tile) => tile.slot.name)].sort(), [...MYSTIC_SLOT_NAMES.slice(0, 8)].sort());
     assert.equal(slotOf('capture'), 'east');
     assert.equal(slotOf('communicate'), 'west');
-    assert.equal(slotOf('dashboard'), 'south');
+    assert.equal(slotOf('create'), 'south');
     // The Atom entry is the handle, never a tile.
     assert.equal(routed.center.key, 'ai');
     assert.equal(routed.tiles.some((tile) => tile.item.key === 'ai'), false);
@@ -184,9 +176,9 @@ test('the extras fill the free rungs in the order the context gave them, and the
     assert.equal(duplicated.overflow.length, 0);
 });
 
-test('the table is solidary, three pixels apart, and nothing is ever cut out of it', () => {
+test('the table keeps the common tool seam and its eight canonical cells at the centre', () => {
     const layout = place(8, 600, 400);
-    assert.equal(MYSTIC_TILE_GAP_PX, 3);
+    assert.equal(MYSTIC_TILE_GAP_PX, EVE_SKIN_TOKENS.tool.bevyMenu.toolGapPx);
     const neighbourGap = (slotA, slotB) => {
         const a = pointOf(layout, slotA);
         const b = pointOf(layout, slotB);
@@ -201,41 +193,50 @@ test('the table is solidary, three pixels apart, and nothing is ever cut out of 
     assert.equal(insideSurface(layout), true);
 });
 
-test('edges and corners translate the entire compass without redistributing slots', () => {
-    const centered = place(8, 600, 400);
+test('edges and corners keep the activation point and reorganise whole rows and columns', () => {
     for (const [x, y] of [[0, 400], [1200, 400], [600, 0], [600, 800], [0, 0], [1200, 0], [0, 800], [1200, 800]]) {
         const layout = place(8, x, y);
-        assert.deepEqual(cells(layout), cells(centered));
-        for (const slot of ['north', 'south', 'east', 'west']) assert.deepEqual(cellOf(layout, slot), cellOf(centered, slot));
+        assert.deepEqual(layout.center, { x, y });
+        assert.equal(new Set(cells(layout)).size, 8, 'every tool keeps a distinct cell');
+        for (const axis of ['dx', 'dy']) {
+            const groups = new Map();
+            for (const slot of resolveMysticSlots(8)) {
+                const landed = tileOf(layout, slot.name)[axis];
+                if (groups.has(slot[axis])) assert.equal(landed, groups.get(slot[axis]));
+                groups.set(slot[axis], landed);
+            }
+        }
         assert.equal(insideSurface(layout), true);
         assert.deepEqual(layout, place(8, x, y));
     }
 });
 
-test('outer rings preserve canonical relative positions at the edges', () => {
+test('outer rings retain every tool at its original size in distinct visible cells', () => {
     for (const count of [9, 11, 12, 24]) {
         const center = place(count, 600, 400);
         const edge = place(count, 0, 0);
-        assert.deepEqual(cells(edge), cells(center));
+        assert.deepEqual(edge.center, { x: 0, y: 0 });
+        assert.deepEqual(edge.tiles.map(tile => tile.slot), center.tiles.map(tile => tile.slot));
+        assert.equal(new Set(cells(edge)).size, count);
+        assert.ok(edge.tiles.every(tile => tile.size === TILE && tile.radius === TILE / 2));
         assert.equal(insideSurface(edge), true);
     }
 });
 
-test('the table never leaves the surface, whatever the opening point or the count', () => {
+test('tools stay on the surface while the centre remains exactly at the opening point', () => {
     for (const count of [1, 8, 9, 11, 16, 24]) {
         for (const [x, y] of [[0, 0], [RECT.width, 0], [0, RECT.height], [RECT.width, RECT.height], [15, 785]]) {
             const layout = place(count, x, y);
             assert.equal(insideSurface(layout), true, `${count} tiles opened at ${x},${y}`);
-            // The Atom's own cell is glued to the edge it was pressed against.
-            assert.ok(layout.center.x - (TILE / 2) >= 0 && layout.center.x + (TILE / 2) <= RECT.width);
+            assert.deepEqual(layout.center, { x, y });
         }
     }
     // Oversized input must be paginated by the menu owner before placement.
     assert.throws(() => place(8, 20, 20, { surface: { width: 120, height: 120 } }), /mystic_viewport_capacity_exceeded/);
     // ...and a table that fits is never centred, however tight it is.
-    const tight = place(8, 20, 20, { surface: { width: 240, height: 240 } });
+    const tight = place(8, 20, 20, { surface: { width: 260, height: 260 } });
     assert.deepEqual(tight.centred, { x: false, y: false });
-    assert.equal(insideSurface(tight, { width: 240, height: 240 }), true);
+    assert.equal(insideSurface(tight, { width: 260, height: 260 }), true);
 });
 
 test('the wave is one law: a quarter of a turn between two plates, 800 ms a turn, 600 ms for the nearest', () => {
@@ -665,23 +666,13 @@ test('the material packs the tiles once, in one order, and flips y for the botto
     assert.deepEqual(turning.mystic_tile_colors, uniforms.mystic_tile_colors);
 });
 
-test('a plate carries the shared surface FOND, never its veil of glass', () => {
-    const layout = place(8, 600, 400);
-    const uniforms = buildMysticSurfaceUniforms({ tiles: layout.tiles, width: RECT.width, height: RECT.height });
-    // La face menu d'une tuile est le fond OPAQUE de la surface systeme — le meme
-    // token que le bouton Bevy partage. Le voile de verre (`backdrop.tint`, 0,84)
-    // sert a poser une surface SUR du contenu vivant ; une tuile posee dessus ne
-    // laissait rien voir d'elle, et seule la plaque blanche du centre se lisait
-    // comme une tuile. C'est le defaut que l'utilisateur a vu, et c'est ici qu'il
-    // se repare : la tuile porte un fond, pas un voile.
-    assert.deepEqual(uniforms.assistant_background_tint, [...MYSTIC_PLATE_FOND]);
-    assert.deepEqual(uniforms.assistant_background_tint, [...MYSTIC_SURFACE_TINT.background]);
-    assert.equal(uniforms.assistant_background_tint[3], 1, 'le fond est opaque');
-    assert.notDeepEqual(uniforms.assistant_background_tint, [...MYSTIC_SURFACE_TINT.backdrop.tint]);
-    // Le fond de la famille « cross » est exactement ce fond : dose nulle.
-    assert.deepEqual(resolveMysticFamilyColor('cross'), [
-        ...MYSTIC_SURFACE_TINT.background.slice(0, 3), 0
-    ]);
+test('Mystic plates carry common glass with no second family tint', () => {
+    const layout=place(8,600,400);
+    const uniforms=buildMysticSurfaceUniforms({tiles:layout.tiles,width:RECT.width,height:RECT.height});
+    assert.deepEqual(uniforms.assistant_background_tint,[...MYSTIC_GLASS_TINT]);
+    assert.equal(uniforms.assistant_background_tint[3],.69);
+    assert.equal(uniforms.background_blur_px,16);
+    for(const family of ['cross','orange','blue']) assert.deepEqual(resolveMysticFamilyColor(family),[0,0,0,0]);
 });
 
 test('the projection carries the mystic material and names the array it rejects', () => {
@@ -730,7 +721,7 @@ test('all appearance preferences retain the same Mystic geometry', () => {
  assert.equal(geometry.mystic,true);
  assert.ok(geometry.placements.every(placement=>placement.mystic));
  assert.ok(geometry.centerItem);
- assert.equal(resolveBevyMysticMarginFor({mystic:false}),resolveBevyMysticMarginFor({mystic:true}));
+ assert.deepEqual(geometry,geometryFor(STAR_ITEMS,{mystic:true}));
 });
 
 // The canonical set is content, so it is read through the ONE owner that resolves
@@ -805,7 +796,9 @@ test('Mystic opens the one constant list, whatever the surface it targets', asyn
         assert.ok(of({ type: 'project' }).some(item => item.key === 'paste'));
         // A text field and a surface item get the same list as an object: only
         // the target of a press changes, never the tiles.
-        assert.deepEqual(of({ type: 'text_field', hasValue: true }).map(item => item.key), CONSTANT);
+        const fieldItems = of({ type: 'text_field', hasValue: true });
+        assert.deepEqual(fieldItems.map(item => item.key), ['copy', 'paste']);
+        assert.ok(fieldItems.every(item => !item.onLongPress));
         assert.deepEqual(of({ type: 'surface_item', atomeId: 'surface_a' }).map(item => item.key), CONSTANT);
     });
 });
@@ -1222,44 +1215,29 @@ test('every Mystic element is skinned from the shared Atome tokens', () => {
     assert.equal(EVE_SKIN_TOKENS.mystic, EVE_MYSTIC_SKIN_TOKENS);
     // The design module reads that skin and nothing else.
     assert.equal(MYSTIC_SKIN, EVE_MYSTIC_SKIN_TOKENS);
-    assert.equal(MYSTIC_PLATE_FOND, EVE_MYSTIC_SKIN_TOKENS.plate.background);
+    assert.equal(MYSTIC_GLASS_TINT[3], EVE_MYSTIC_SKIN_TOKENS.plate.backdropTint[3]);
     assert.equal(MYSTIC_CENTER_PLATE, EVE_MYSTIC_SKIN_TOKENS.center.plate);
     assert.equal(MYSTIC_CENTER_TINT, EVE_MYSTIC_SKIN_TOKENS.center.tint);
     assert.equal(MYSTIC_HOLE_DOSE, EVE_MYSTIC_SKIN_TOKENS.hole.dose);
     assert.equal(MYSTIC_EDGE_SOFTNESS_PX, EVE_MYSTIC_SKIN_TOKENS.edge.softnessPx);
-    // The family tints are the semantic families, and the dose is the skin's.
-    const orange = resolveMysticFamilyColor('orange');
-    assert.equal(orange[3], EVE_MYSTIC_SKIN_TOKENS.family.mix.orange);
-    assert.equal(resolveMysticFamilyColor('cross')[3], EVE_MYSTIC_SKIN_TOKENS.family.mix.cross);
-    assert.deepEqual(
-        resolveMysticFamilyColor('blue').slice(0, 3),
-        [EVE_SEMANTIC_COLOR_FAMILIES.blue.surface].map((hex) => {
-            const value = hex.replace('#', '');
-            return [
-                Number.parseInt(value.slice(0, 2), 16) / 255,
-                Number.parseInt(value.slice(2, 4), 16) / 255,
-                Number.parseInt(value.slice(4, 6), 16) / 255
-            ];
-        }).flat()
-    );
+    assert.deepEqual(resolveMysticFamilyColor('blue'),[0,0,0,0]);
 });
 
 test('a skin override moves a single element, and the record follows it', () => {
     // The override door is the shared one (`mergeSkinTokens`), so a skin touches
     // the Mystic menu the same way it touches a panel.
     const custom = resolveMysticSkin({
-        plate: { background: [0.5, 0.25, 0.125, 1] },
+        plate: { backdropTint: [0, 0, 0, .5] },
         rim: { widthPx: 3, dose: 0.9 },
         hole: { dose: 0.4 },
         edge: { softnessPx: 0.9 },
         center: { icon: './assets/images/icons/atom.svg' }
     });
     // Only what the skin named moved; everything else is still the shared token.
-    assert.deepEqual(custom.plate.background, [0.5, 0.25, 0.125, 1]);
+    assert.deepEqual(custom.plate.backdropTint, [0,0,0,.5]);
     assert.equal(custom.plate.backdropBlurPx, EVE_MYSTIC_SKIN_TOKENS.plate.backdropBlurPx);
     assert.equal(custom.shadow.blur, EVE_MYSTIC_SKIN_TOKENS.shadow.blur);
     assert.equal(custom.center.icon, './assets/images/icons/atom.svg');
-    assert.equal(custom.family.mix.orange, EVE_MYSTIC_SKIN_TOKENS.family.mix.orange);
     // The base itself is frozen: a skin cannot be edited in place from outside.
     assert.equal(Object.isFrozen(EVE_MYSTIC_SKIN_TOKENS), true);
     assert.equal(Object.isFrozen(EVE_MYSTIC_SKIN_TOKENS.plate), true);
@@ -1273,10 +1251,10 @@ test('a skin override moves a single element, and the record follows it', () => 
     });
     // The record carries the skin, not the default: the plate fond, the contact
     // shadow colour, the hole dose, the rim and the edge softness all moved.
-    assert.deepEqual(uniforms.assistant_background_tint, [0.5, 0.25, 0.125, 1]);
+    assert.deepEqual(uniforms.assistant_background_tint, [0,0,0,.5]);
     assert.deepEqual(uniforms.surface_tint, [...EVE_MYSTIC_SKIN_TOKENS.shadow.color]);
     assert.equal(uniforms.mystic_count[1], 0.4);
-    assert.deepEqual(uniforms.mystic_style.slice(0, 3), [2.5, 0, 0]);
+    assert.deepEqual(uniforms.mystic_style.slice(0, 3), [2.5, 1, 0]);
     // The softness the skin names is honoured while it stays within the seam share:
     // the 3 px seam allows 1.5, so a skin asking for 0.9 gets it.
     assert.equal(uniforms.mystic_style[3], resolveMysticEdgeSoftness(MYSTIC_TILE_GAP_PX, custom));
@@ -1300,4 +1278,13 @@ test('a skin can never blur two plates into one another', () => {
         skin: greedy
     });
     assert.equal(uniforms.mystic_style[3], MYSTIC_TILE_GAP_PX * 0.9);
+});
+
+test('a pre-workspace text field retains its own Copy/Paste menu', async () => {
+    await withMenuWindow(async ({ runtime }) => {
+        const items = runtime.resolveMysticContextItems({ type: 'text_field', hasValue: true, canPaste: true });
+        assert.deepEqual(items.map(item => item.key), ['copy', 'paste']);
+        assert.ok(items.every(item => !item.disabled && !item.onLongPress));
+        assert.deepEqual(runtime.resolveMysticContextItems({ type: 'project' }), []);
+    }, { isWorkspaceActive: () => false });
 });

@@ -7,10 +7,10 @@ const keys = (context, menu = 'mystic') => resolveContextMenu({context, menu}).m
 // The Mystic is not contextual any more (2026-09-29): one constant list, in the
 // order `menus.mystic.fixed` declares. No context may remove an edit tile; the
 // runtime disables unavailable actions. Work modes keep only their switches.
-const MYSTIC_FIXED = ['ai','find','capture','import','communicate','dashboard','new_project','copy','paste','delete','play','utilities','info','activity'];
+const MYSTIC_FIXED = ['ai','capture','import','communicate','create','new_project','copy','paste','delete','play','utilities','info','activity'];
 test('the Mystic keeps its one edit list and the two switches of every other work mode', () => {
  // In edit mode the list is byte-for-byte constant, whatever the target.
- for (const context of [{ activity:'invalid',level:'invalid', selected:true }, { type:'surface_item' }, { type:'text_field' }, { type:'dashboard' }]) {
+ for (const context of [{ activity:'invalid',level:'invalid', selected:true }, { type:'surface_item' }, { type:'dashboard' }]) {
   assert.deepEqual(keys(context), MYSTIC_FIXED);
  }
  // Le fond de projet se lit comme le reste (2026-09-29) : son Play pilote le
@@ -138,10 +138,29 @@ test('both compositions filter canonical object and property grants without conf
  assert.deepEqual(keys({ ...context, projectRecord:{capabilities:{create:false}} }, 'mystic'), MYSTIC_FIXED);
  // The sidebar remains contextual and continues to filter access.
  const result = keys(context, 'sidebar');
- assert.ok(result.includes('copy')); assert.ok(result.includes('paste'));
- assert.ok(!result.includes('delete')); assert.ok(!result.includes('font'));
- assert.ok(!keys({ ...context, projectRecord:{capabilities:{create:false}} }, 'sidebar').includes('paste'));
- assert.ok(keys({ ...context, records:[writable] }, 'sidebar').includes('delete'));
+ assert.ok(!result.includes('font')); assert.ok(!result.includes('size'));
+ assert.ok(keys({ ...context, records:[writable] }, 'sidebar').includes('font'));
+ assert.ok(keys({ ...context, records:[writable] }, 'sidebar').includes('size'));
+});
+
+test('every sidebar object, activity and mastery level omits redundant actions while Mystic retains them', () => {
+ const removed = ['copy', 'cut', 'paste', 'delete', 'record_action', 'draw'];
+ for (const level of CONTEXT_MENUS.vocabulary.levels) {
+  for (const activity of ['', ...CONTEXT_MENUS.vocabulary.activities]) {
+   for (const kind of [...CONTEXT_MENUS.vocabulary.kinds, 'mixed']) {
+    const result = keys({ selected:true, kind, level, activity, capabilities:['playback'] }, 'sidebar');
+    assert.deepEqual(result.filter(key => removed.includes(key)), [], `${kind}/${activity}/${level}`);
+   }
+   for (const type of ['project','surface_item','text_field','dashboard']) {
+    assert.deepEqual(keys({ type, level, activity }, 'sidebar').filter(key => removed.includes(key)), []);
+   }
+  }
+ }
+ assert.ok(keys({type:'project',level:'advanced'}, 'sidebar').includes('record_actions'));
+ for (const tool of CONTEXT_MENUS.vocabulary.tools) {
+  assert.deepEqual(keys({type:'tool',tool,level:'advanced'}, 'sidebar').filter(key => removed.includes(key)), []);
+ }
+ for (const key of ['copy','paste','delete']) assert.ok(keys({}).includes(key));
 });
 
 test('capability filtering also covers configured fixed entries', () => {
@@ -246,5 +265,14 @@ test('the three object effects take their one place: rounding, then shadow, then
    `${kind}: the order comes before the effects`);
   if (rounding >= 0) assert.ok(rounding < list.indexOf('shadow'), `${kind}: rounding, then shadow`);
   assert.ok(list.indexOf('shadow') < list.indexOf('mask') || !list.includes('mask'), `${kind}: the mask closes the group`);
+ }
+});
+
+test('text fields expose only copy and paste, including Dashboard and every work mode', () => {
+ for (const mode of ['edit','consultation','performance']) {
+  assert.deepEqual(keys({ type: 'text_field', mode }), ['copy', 'paste']);
+  const context = resolveContextMenuContext({ type: 'text_field', windowRef: { __eveWorkspaceMode: { mode: 'dashboard' } } });
+  assert.equal(context.type, 'text_field');
+  assert.deepEqual(keys(context), ['copy', 'paste']);
  }
 });

@@ -6,6 +6,7 @@ struct BackdropSurfaceUniform {
     size_radius: vec4<f32>,
     tint: vec4<f32>,
     blur: vec4<f32>,
+    corner_cut: vec4<f32>,
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0) var<uniform> material: BackdropSurfaceUniform;
@@ -70,7 +71,11 @@ fn rounded_rect_distance(point: vec2<f32>, size: vec2<f32>, radius: f32) -> f32 
 fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let size = max(material.size_radius.xy, vec2(1.0));
     let point = mesh.uv * size;
-    let distance = rounded_rect_distance(point, size, material.size_radius.z);
+    var distance = rounded_rect_distance(point, size, material.size_radius.z);
+    let cut = clamp(material.corner_cut.x, 0.0, min(size.x, size.y));
+    if cut > 0.0 {
+        distance = max(distance, (point.x - point.y - (size.x - cut)) * 0.70710678);
+    }
     let edge = 1.0 - smoothstep(-0.6, 0.6, distance);
     // `size_radius.w` is the record opacity. Outside the rounded corners, or
     // while the surface is hidden, nothing is sampled at all.

@@ -19,7 +19,8 @@ mod exports;
 mod frame_clock;
 
 use frame_clock::{
-    continue_merged_wake, remember_event_loop_proxy, wake_web_renderer, web_winit_settings, WEB_FRAME_REQUESTED,
+    adapt_web_idle_heartbeat, continue_merged_wake, remember_event_loop_proxy, wake_web_renderer, web_winit_settings,
+    WEB_FRAME_REQUESTED,
 };
 
 thread_local! {
@@ -501,7 +502,7 @@ impl Plugin for WebBevyRendererPlugin {
                 )
                     .chain(),
             )
-            .add_systems(Last, web_frame_probe_end);
+            .add_systems(Last, (web_frame_probe_end, adapt_web_idle_heartbeat).chain());
     }
 }
 

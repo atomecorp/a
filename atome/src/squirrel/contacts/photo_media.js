@@ -1,5 +1,11 @@
 import { importIdentity } from '../shared/canonical_import.js';
 
+const CONTACT_PHOTO_ID_PREFIX = 'contact_photo_';
+
+/** Contact photos are ordinary image media; listings show them apart from the user's own files. */
+export const isContactPhotoMedia = (file = {}) => [file.id, file.atome_id, file.file_name, file.name]
+    .some(value => String(value || '').startsWith(CONTACT_PHOTO_ID_PREFIX));
+
 /** Embedded images use the existing file/media intake; arbitrary remote images are never fetched. */
 export async function persistContactPhoto(contact, context, signal) {
     const photo = contact.photo ?? contact.raw?.photo;
@@ -8,7 +14,7 @@ export async function persistContactPhoto(contact, context, signal) {
     const match = photo.match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/);
     if (!match || photo.length > 1024 * 1024) throw new Error('contact_photo_payload_invalid');
     context.check(); signal?.throwIfAborted();
-    const id = `contact_photo_${await importIdentity([context.owner, photo])}`;
+    const id = `${CONTACT_PHOTO_ID_PREFIX}${await importIdentity([context.owner, photo])}`;
     let existing;
     try { existing = await context.store.getStateCurrent(id); }
     catch (error) { if (!/atome_not_available_locally|not_found/i.test(error.message)) throw error; }

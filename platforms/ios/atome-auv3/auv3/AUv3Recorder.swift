@@ -49,7 +49,7 @@ extension auv3Utils {
 
 #if os(iOS)
         if normalizedSource == "mic" {
-            let permission = AVAudioSession.sharedInstance().recordPermission
+            let permission = AVAudioApplication.shared.recordPermission
             if permission == .denied {
                 emitRecordingEvent(type: "record_error", payload: [
                     "session_id": sessionId,

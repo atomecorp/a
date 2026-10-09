@@ -278,6 +278,7 @@ pub fn run() {
             bevy_backend::bevy_native_resize,
             native_clipboard::clipboard_write_text,
             native_clipboard::clipboard_read_text,
+            native_clipboard::clipboard_read_items,
             native_clipboard::clipboard_has_text,
             native_file_export::export_file_save,
             native_health::health_invoke,

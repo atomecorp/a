@@ -62,6 +62,8 @@ CREATE TABLE IF NOT EXISTS atomes (
 CREATE INDEX IF NOT EXISTS idx_atomes_type ON atomes(atome_type);
 CREATE INDEX IF NOT EXISTS idx_atomes_parent ON atomes(parent_id);
 CREATE INDEX IF NOT EXISTS idx_atomes_owner ON atomes(owner_id);
+-- Type listings match this expression (and the two below) without decoding every row.
+CREATE INDEX IF NOT EXISTS idx_atomes_type_lower ON atomes(LOWER(COALESCE(atome_type, '')));
 CREATE INDEX IF NOT EXISTS idx_atomes_sync_status ON atomes(sync_status);
 
 -- ============================================================================
@@ -367,6 +369,8 @@ CREATE TABLE IF NOT EXISTS state_current (
 
 CREATE INDEX IF NOT EXISTS idx_state_current_project ON state_current(project_id);
 CREATE INDEX IF NOT EXISTS idx_state_current_owner ON state_current(owner_id);
+CREATE INDEX IF NOT EXISTS idx_state_current_json_type ON state_current(LOWER(COALESCE(json_extract(properties, '$.type'), '')));
+CREATE INDEX IF NOT EXISTS idx_state_current_json_kind ON state_current(LOWER(COALESCE(json_extract(properties, '$.kind'), '')));
 
 -- ============================================================================
 -- 7. TABLE permissions

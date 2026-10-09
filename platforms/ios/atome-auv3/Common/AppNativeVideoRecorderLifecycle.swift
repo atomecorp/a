@@ -114,17 +114,9 @@ extension AppNativeVideoRecorder {
                 ])
                 return
             }
-            guard output.isRecording else {
-                self.complete(completion, payload: [
-                    "success": false,
-                    "terminal": false,
-                    "error": "video_recording_finalizing"
-                ])
-                return
-            }
             self.stopCompletions.append(completion)
             self.discardOnStop = discard
-            self.requestActiveOutputStop(output)
+            if output.isRecording { self.requestActiveOutputStop(output) }
         }
     }
 
@@ -158,7 +150,7 @@ extension AppNativeVideoRecorder {
     func statePayload() -> [String: Any] {
         let status: String
         let recoverable: Bool
-        if !stopCompletions.isEmpty {
+        if !stopCompletions.isEmpty || (movieOutput != nil && movieOutput?.isRecording == false && startCompletion == nil) {
             status = "stopping"
             recoverable = true
         } else if movieOutput?.isRecording == true {

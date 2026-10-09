@@ -65,3 +65,27 @@ Packaged Tauri acceptance on 2026-08-11 passed two fullscreen/restore cycles
 after dragging Panel Lab: surface, right rail, panel and bottom menu remained
 inside the current viewport. Physical-device iOS rotation remains a separate
 required acceptance; native compilation alone does not replace it.
+
+## iOS keyboard opening: transient full-height canvas (2026-10-08)
+
+The user isolated a brief canvas jump to software-keyboard opening. A focused
+executable reproduction established one incorrect sequence: the visual viewport
+shrinks from 390 x 844 to 390 x 463, then text creation calls
+`ensureRenderSurface` against the still-fullscreen host and expands the canvas
+back to 844 before the next visual/settled resize restores 463. Explicit
+window/native source preferences could likewise override the keyboard height.
+
+`surface_size_runtime.js` now reuses `isIOSDevice` and gives the same-width
+contracted visual viewport precedence on every iOS measurement. Initial/repeated
+mounts, silent sizing, and explicit window/native resize signals therefore share
+the visual height; closing the keyboard restores the ordinary full viewport.
+Desktop source preferences are unchanged, including a height-only desktop
+resize with a stale visual viewport. No timeout, scroll reset, zoom, frozen
+viewport, alternate renderer, or mutation path was added.
+
+Regression: `tests/eve/render_surface_resize_reconciliation.test.mjs` covers
+iPhone and iPad desktop-mode detection, the remount, late resize signals, zero
+width/height/style mutations while the keyboard size is unchanged, exactly one
+renderer resize per open/close, and the desktop height-only resize. The keyboard
+cases fail before the source correction. This proves the sizing fault, not
+physical-device pixel acceptance of every keyboard-animation frame.

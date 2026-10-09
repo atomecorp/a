@@ -1,5 +1,25 @@
 # Project View List and Media Regressions
 
+## Molecule disclosure misses members beyond the first store page
+
+Confirmed on 2026-10-08 by a failing-before controller test: the owner and 199
+root objects fill the first 200-record page, while its canonical member is on
+the next page. The List rebuilt a complete-looking hierarchy from that first
+page and cleared `hasNext`; the owner consequently had no children to unfold.
+
+`project_view_list_content.js` now reuses the existing complete canonical page
+reader in `project_view_records.js` before hierarchy projection, including a
+reload after legacy model migration. Shared hierarchy/virtualizer owners still
+project the rows. Beginner visibility masks the expansion set without changing
+the remembered disclosure, so switching back restores it.
+
+The executable reproduction is
+`tests/probes/molecule_list_projection.probe.mjs`; expertise switching is covered
+by `tests/eve/project_view_list_redesign.test.mjs`. **To verify:** actual List
+gestures on Web, Tauri and physical iOS. Current visible Web startup fails before
+List rendering with `ordered_backdrop_pipeline_unavailable`; controller and
+component tests do not replace this blocked pixel acceptance.
+
 ## Video playback stalls after recursive transport refactoring
 
 Confirmed shared-path regressions on 2026-08-27. The new recursive transport

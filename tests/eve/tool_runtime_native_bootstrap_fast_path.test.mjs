@@ -108,3 +108,21 @@ describe('Runtime V2 built-in tool fast path', () => {
     });
 
 });
+
+// Boot reconciliation re-applies every tool: an identical patch must not
+// re-save it with a fresh `updated_at` (one history version per tool and launch).
+it('an update that changes nothing does not re-save the tool', async () => {
+    const { ToolRegistryV2, InMemoryToolRegistryStorage } = await import('../../eVe/intuition/tools/core/tool_registry.js');
+    const storage = new InMemoryToolRegistryStorage();
+    let saves = 0;
+    const save = storage.save.bind(storage);
+    storage.save = async (tool) => { saves += 1; return save(tool); };
+    const registry = new ToolRegistryV2({ storage });
+    await registry.createTool({ id: 'probe_tool', tool_key: 'probe', type: 'tool', schema_version: 2,
+        ui: { label_key: 'eve.probe', label_fallback: 'Probe' }, behavior: {}, capabilities: {}, bindings: {} }, { actor: 'system' });
+    const created = saves;
+    await registry.updateTool('probe', { ui: { label_fallback: 'Probe' } }, { actor: 'system' });
+    expect(saves).toBe(created);
+    await registry.updateTool('probe', { ui: { label_fallback: 'Other' } }, { actor: 'system' });
+    expect(saves).toBe(created + 1);
+});

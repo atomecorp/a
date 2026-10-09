@@ -57,6 +57,10 @@ impl From<WebAtomeRenderOp> for AtomeRenderOp {
     }
 }
 
+// The project canvas composites with premultiplied alpha: its background is a
+// sprite painted at the back (background.rs), and a media window cuts the
+// canvas out down to transparency so a player laid under it shows through
+// (bevy-core media_window.rs). Where nothing is drawn the page shows.
 #[wasm_bindgen]
 pub fn run_atome_bevy_renderer(
     canvas_selector: String,
@@ -71,7 +75,7 @@ pub fn run_atome_bevy_renderer(
         height,
         surface_metrics,
         initial_scene,
-        false,
+        true,
     )
 }
 

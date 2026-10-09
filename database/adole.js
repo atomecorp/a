@@ -1826,8 +1826,9 @@ const stateCurrentListScope = (projectId, options = {}) => {
         params.push(projectId);
     }
     if (atomeType) {
+        // Each term matches one schema expression index: no JSON decode of the whole table.
         conditions.push(`(
-            LOWER(COALESCE(a.atome_type, '')) = ?
+            sc.atome_id IN (SELECT atome_id FROM atomes WHERE LOWER(COALESCE(atome_type, '')) = ?)
             OR LOWER(COALESCE(json_extract(sc.properties, '$.type'), '')) = ?
             OR LOWER(COALESCE(json_extract(sc.properties, '$.kind'), '')) = ?
         )`);
@@ -1870,12 +1871,17 @@ export async function listStateCurrent(projectId, options = {}) {
     const offset = Number(options.offset) || 0;
     const scope = stateCurrentListScope(projectId, options);
 
+    // The page is chosen on ids only: DISTINCT + ORDER BY over whole rows made
+    // SQLite spill OFFSET + LIMIT `properties` blobs to a temporary file per page.
     const rows = await query(
         'all',
-        `SELECT DISTINCT sc.*, a.atome_type AS atome_type, a.parent_id AS parent_id,
+        `SELECT sc.*, a.atome_type AS atome_type, a.parent_id AS parent_id,
                 COALESCE(sc.owner_id, a.owner_id) AS owner_id
-         FROM state_current sc ${scope.join} ${scope.where}
-         ORDER BY sc.updated_at DESC LIMIT ? OFFSET ?`,
+         FROM state_current sc LEFT JOIN atomes a ON a.atome_id = sc.atome_id
+         WHERE sc.atome_id IN (
+             SELECT sc.atome_id FROM state_current sc ${scope.join} ${scope.where}
+             GROUP BY sc.atome_id ORDER BY sc.updated_at DESC, sc.atome_id LIMIT ? OFFSET ?)
+         ORDER BY sc.updated_at DESC, sc.atome_id`,
         [...scope.params, limit, offset]
     );
 

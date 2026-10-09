@@ -336,7 +336,7 @@ extension FileSystemBridge {
     // The Music library cannot be presented from an Audio Unit extension
     // (no library entitlement in a host process): the source is left out there.
     private func availableImportSources(_ requested: [String]) -> [String] {
-        let known = ["files", "photos", "music"]
+        let known = ["files", "photos", "contacts", "music"]
         return requested.filter { source in
             guard known.contains(source) else { return false }
             return source != "music" || !ExternalDisplayGuards.isRunningInExtension
@@ -353,6 +353,7 @@ extension FileSystemBridge {
         let titles = [
             "files": request.label("files", "Fichiers"),
             "photos": request.label("photos", "Pellicule"),
+            "contacts": request.label("contacts", "Contacts"),
             "music": request.label("music", "Musique")
         ]
         for source in sources {
@@ -389,6 +390,10 @@ extension FileSystemBridge {
                     self?.sendLoadedFiles(success: success, results: results, error: error, webView: webView)
                 }
             }
+        case "contacts":
+            // Contact photos already live in the user's library: the web layer
+            // lists them itself, the bridge only reports the chosen source.
+            sendSuccessResponse(to: webView, data: ["source": "contacts", "files": []])
         case "music":
             MusicLibraryImportPicker.loadTracks(
                 allowsMultiple: request.allowsMultiple,

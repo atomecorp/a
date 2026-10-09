@@ -14,14 +14,16 @@ import { reportRuntimeError } from '../runtime_errors.js';
 // token on demand; the native lane had no recovery at all, so the assistant and
 // the AI key status stayed dead until the next manual login — which is exactly
 // the “key status unavailable — check the connection” the iOS app reports.
-// These four are refused BEFORE the frame reaches the provider — the relay had
-// no credential, or the socket to it never carried the request — so replaying
-// them costs nothing.
+// These are refused BEFORE the frame reaches the provider — the relay had no
+// credential, the socket to it never carried the request, or the remote's
+// session gate refused the relay's expired access token (15 min TTL) — so
+// replaying them costs nothing.
 const RELAY_PREFLIGHT_FAILURES = new Set([
     'provider_principal_unavailable',
     'provider_connection_failed',
     'provider_connection_timeout',
-    'not_authenticated'
+    'not_authenticated',
+    'auth_session_invalid'
 ]);
 // A channel that closed while the request was already pending may well have
 // reached the provider. Replaying a completion there would ask — and bill — for

@@ -7,6 +7,7 @@ permissions = [
   "allow-clipboard-write-text",
   "allow-clipboard-read-text",
   "allow-clipboard-has-text",
+  "allow-clipboard-read-items",
 ]
 
 [[permission]]
@@ -23,3 +24,8 @@ commands.allow = ["clipboard_read_text"]
 identifier = "allow-clipboard-has-text"
 description = "Enables the clipboard_has_text command."
 commands.allow = ["clipboard_has_text"]
+
+[[permission]]
+identifier = "allow-clipboard-read-items"
+description = "Reads typed host clipboard contents after an explicit paste gesture."
+commands.allow = ["clipboard_read_items"]

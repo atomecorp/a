@@ -5,7 +5,8 @@
 
 import AVFoundation
 
-final class AppNativeVideoRecorder: NSObject, AVCaptureFileOutputRecordingDelegate {
+// Lifecycle state is confined to sessionQueue; preview frames use their own lock.
+final class AppNativeVideoRecorder: NSObject, AVCaptureFileOutputRecordingDelegate, @unchecked Sendable {
     typealias Completion = ([String: Any], String?) -> Void
 
     let sessionQueue = DispatchQueue(label: "atome.app.native_video_recorder.session", qos: .userInitiated)
@@ -38,14 +39,14 @@ final class AppNativeVideoRecorder: NSObject, AVCaptureFileOutputRecordingDelega
 
     var isRecording: Bool {
         sessionQueue.sync {
-            movieOutput?.isRecording == true || startCompletion != nil || !stopCompletions.isEmpty
+            movieOutput != nil || startCompletion != nil || !stopCompletions.isEmpty
         }
     }
 
     func start(payload: [String: Any],
                completion: @escaping ([String: Any], String?) -> Void) {
         sessionQueue.async {
-            guard self.movieOutput?.isRecording != true,
+            guard self.movieOutput == nil,
                   self.startCompletion == nil,
                   self.stopCompletions.isEmpty else {
                 self.complete(completion, payload: ["success": false], error: "video_recording_in_progress")
@@ -179,8 +180,9 @@ final class AppNativeVideoRecorder: NSObject, AVCaptureFileOutputRecordingDelega
 
     private func configureConnection(_ connection: AVCaptureConnection?) {
         guard let connection else { return }
-        if connection.isVideoOrientationSupported {
-            connection.videoOrientation = videoOrientation(from: requestedOrientation)
+        let angle = videoRotationAngle(from: requestedOrientation)
+        if connection.isVideoRotationAngleSupported(angle) {
+            connection.videoRotationAngle = angle
         }
         if connection.isVideoMirroringSupported {
             connection.automaticallyAdjustsVideoMirroring = false

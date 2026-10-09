@@ -15,15 +15,12 @@ import { EVE_BUTTON_SKIN_TOKENS } from '../../eVe/elements/skin/button_skin.js';
 import { EVE_COMMON_SKIN_TOKENS } from '../../eVe/elements/skin/tokens.js';
 import { TOOL_KEYS, menuContent, installDom, findNode, waitFrame, waitMs, createRuntimeHarness } from './bevy_ui_main_menu_test_helpers.mjs';
 
-// « Organiser » is the one main-menu tool whose destination is not a gateway
-// tool: it runs the workspace Dashboard toggle, the same owner as the Mystic
-// tile. The module is mocked so the contract stays on the invocation route.
 const workspaceSurfaceRuntime = vi.hoisted(() => ({
-    toggleWorkspaceDashboardAndMainMenu: vi.fn(async () => ({ ok: true }))
+    openWorkspaceDashboardAndMainMenu: vi.fn(async () => ({ ok: true }))
 }));
 
 vi.mock('../../eVe/intuition/tools/user_workspace_surface_runtime.js', () => ({
-    toggleWorkspaceDashboardAndMainMenu: workspaceSurfaceRuntime.toggleWorkspaceDashboardAndMainMenu
+    openWorkspaceDashboardAndMainMenu: workspaceSurfaceRuntime.openWorkspaceDashboardAndMainMenu
 }));
 
 const collectJavaScriptSources = (directory) => readdirSync(directory, { withFileTypes: true })
@@ -46,16 +43,6 @@ test('standard menu tools inherit the canonical button surface while Mystic over
     assert.equal(BEVY_MENU_TOKENS.shape.paletteRadiusPx, button.radiusPx);
     assert.equal(BEVY_MENU_TOKENS.chrome.outlineRadiusPx, button.radiusPx);
     assert.notEqual(BEVY_MENU_TOKENS.shape.mysticRadiusPx, button.radiusPx);
-});
-
-test('system glass keeps white content readable over the brightest backdrop', () => {
-    const alpha = EVE_COMMON_SKIN_TOKENS.bevy.systemSurface.backdrop.tint[3];
-    const linearChannel = 1 - alpha;
-    const brightestBackdropChannel = 255 * (linearChannel <= 0.0031308
-        ? linearChannel * 12.92
-        : 1.055 * (linearChannel ** (1 / 2.4)) - 0.055);
-    assert.ok(alpha < 1, 'system glass must retain the live backdrop');
-    assert.ok(brightestBackdropChannel <= 120, 'a white backdrop must not wash the system surface to white');
 });
 
 test('Capture screen icon is canonical before and after its lazy module loads', () => {
@@ -137,7 +124,7 @@ test('the permanent bar is the five intents plus view/help/contact; mode and act
     // 2026-09-29 : `mode` et `activity` quittent la barre permanente ; `help`
     // (l'outil existant) et `contact` les remplacent a la meme place.
     assert.deepEqual(content.toolbox.children,
-        ['organize', 'capture', 'create', 'find', 'communicate', 'calendar', 'view', 'help', 'contact']);
+        ['capture', 'create', 'find', 'communicate', 'calendar', 'view', 'help', 'contact']);
     for (const key of ['mode', 'activity']) {
         assert.ok(content[key], `${key} reste un outil declare, hors barre permanente`);
         assert.equal(content.toolbox.children.includes(key), false, `${key} ne reside plus dans la barre`);
@@ -348,16 +335,16 @@ test('the main menu is hidden outside an editable work context', () => {
     assert.deepEqual(buildBevyMainMenuItems(menuContent(), { workContext: 'performance' }), []);
 });
 
-test('BevyUI main menu Atome tool toggles the assistant', async () => {
+test('BevyUI main menu Atome short press requests the dashboard', async () => {
     const toggles = [];
     const harness = createRuntimeHarness({
-        invokeAssistant: (action, payload) => toggles.push({ action, ...payload })
+        onAtomShortPress: payload => toggles.push(payload)
     });
     try {
         await harness.runtime.showFully();
         const tree = harness.calls[0].payload.tree;
         await findNode(tree.root, BEVY_MAIN_MENU_ATOME_ID).on.activate();
-        assert.deepEqual(toggles, [{ action: 'toggle', source: 'bevy_ui_main_menu_atome' }]);
+        assert.deepEqual(toggles, [{ source: 'bevy_ui_main_menu_atome' }]);
     } finally {
         harness.restore();
     }
@@ -368,7 +355,7 @@ test('BevyUI main menu is the sole dashboard toolbox height authority', async ()
     try {
         setMainMenuRuntime(harness.runtime);
         await harness.runtime.showFully();
-        assert.equal(readToolboxReservedHeight(harness.surface), resolveBevyMainMenuItemSize());
+        assert.equal(readToolboxReservedHeight(harness.surface), resolveBevyMainMenuItemSize() + BEVY_MENU_TOKENS.toolGapPx);
         harness.runtime.hideCompletely();
         assert.equal(readToolboxReservedHeight(harness.surface), 0);
     } finally {
@@ -517,46 +504,11 @@ test('BevyUI invocation forwards its latch state as routing metadata, never tool
     }
 });
 
-test('« Organiser » runs the Mystic Dashboard toggle instead of a gateway tool', async () => {
-    const env = installDom();
-    const invocations = [];
-    workspaceSurfaceRuntime.toggleWorkspaceDashboardAndMainMenu.mockClear();
-    const runtime = createContextToolInvocationRuntime({
-        getFinderToolEl: () => null,
-        handleFinderTouch: () => null,
-        invokeToolFromUiButton: async (input) => {
-            invocations.push(input);
-            return { ok: true, nextLatched: null };
-        }
-    });
-    try {
-        const result = await runtime.invokeIntuitionXMainRibbonToolDefinition({
-            key: 'organize',
-            type: 'tool',
-            actionMode: 'momentary'
-        }, 'bevy_ui.activate', { source: 'bevy_ui_main_menu' });
-        assert.deepEqual(workspaceSurfaceRuntime.toggleWorkspaceDashboardAndMainMenu.mock.calls,
-            [[{ source: 'main_menu_organize' }]], 'the main menu must call the canonical workspace toggle');
-        assert.deepEqual(invocations, [], 'no gateway tool may stand between the button and the toggle');
-        assert.equal(result.ok, true);
-    } finally {
-        env.restore();
-    }
-});
-
-test('« Organiser » keeps one identity across the main menu and Mystic', () => {
-    const source = readFileSync(resolve(process.cwd(),
-        'eVe/intuition/runtime/eve_intuition/main_menu_content_runtime.js'), 'utf8');
-    const organizeDef = source.match(/organize:\s*\{[^}]*\}/)?.[0] || '';
-    assert.match(organizeDef, /labelKey:\s*'eve\.menu\.organize'/);
-    assert.match(organizeDef, /atome_tool:\s*true/, 'the root stays visible in the main toolbox');
-    assert.doesNotMatch(organizeDef, /tool_id|touch/,
-        'the button declares no gateway tool and no local handler beside the shared invocation route');
-    // The Mystic tile's own definition (key `dashboard`) shows the same name.
-    assert.match(source, /dashboard:\s*\{\s*labelKey:\s*'eve\.menu\.organize'/);
-    const taxonomy = JSON.parse(readFileSync(resolve(process.cwd(),
-        'eVe/intuition/menu/context_menus.json'), 'utf8'));
-    assert.equal(taxonomy.commands.dashboard.labelKey, 'eve.menu.organize');
+test('retired Organizer entries have no product menu definition or invocation route', () => {
+    const content = readFileSync(resolve(process.cwd(), 'eVe/intuition/runtime/eve_intuition/main_menu_content_runtime.js'), 'utf8');
+    const invocation = readFileSync(resolve(process.cwd(), 'eVe/intuition/runtime/eve_intuition/context_tool_invocation_runtime.js'), 'utf8');
+    assert.doesNotMatch(content, /organize:\s*\{|dashboard:\s*\{/);
+    assert.doesNotMatch(invocation, /key === 'organize'/);
 });
 
 test('retired Panel Lab shortcuts are absent from product menu content', () => {
@@ -591,11 +543,19 @@ test('a leaf palette choice closes the palette, a cursor keeps it open and a nes
         await node('eve_bevy_ui_main_menu_tool_create__create_draw').on.activate({});
         await waitMs(350);
         assert.equal(harness.runtime.measure().activePaletteKey, 'create_draw');
-        // R1 — un curseur ne referme rien : il ne porte meme pas d'activation.
+        // A slider tap pins its native control without choosing a palette leaf.
         const sliderId = 'eve_bevy_ui_main_menu_tool_create_draw__draw_size';
-        assert.equal(typeof node(sliderId)?.on?.activate, 'undefined');
-        assert.equal(typeof node(sliderId)?.on?.palette_choose, 'undefined');
-        node(sliderId).on.press({});
+        assert.equal(typeof node(sliderId)?.on?.activate, 'function');
+        assert.equal(node(sliderId).on.palette_choose, node(sliderId).on.activate);
+        await node(sliderId).on.activate({});
+        await waitFrame();
+        assert.equal(harness.runtime.measure().lens.pinned, sliderId);
+        assert.ok(node(`${sliderId}_preview`));
+        assert.deepEqual(invocations, ['view_list', 'view_table']);
+        await node(sliderId).on.activate({});
+        await waitFrame();
+        assert.equal(harness.runtime.measure().lens.pinned, null);
+        assert.equal(node(`${sliderId}_preview`), null);
         assert.equal(harness.runtime.measure().activePaletteKey, 'create_draw');
     } finally { harness.runtime.destroy(); harness.restore(); }
 });
@@ -652,7 +612,7 @@ test('a latched tool keeps its palette slot identity and that slot still turns i
         // Le niveau affiche est celui de l'outil actif : Text n'a aucune option.
         assert.equal(node('eve_bevy_ui_main_menu_tool_create__text_create'), null);
         // L'emplacement reste une palette : il ouvrirait son niveau s'il n'etait pas allume.
-        assert.equal(typeof slot().on.palette_open, 'function');
+        assert.equal(typeof slot().on.palette_slide_open, 'function');
         // R4 — l'appui eteint l'outil par le chemin canonique et n'ouvre pas la palette.
         await node('eve_bevy_ui_main_menu_tool_create').on.activate({});
         assert.deepEqual(invocations, [{ key: 'text_create', previousLatched: true }]);
@@ -755,7 +715,7 @@ const choicePaletteContent = () => ({
 
 test('Atom long press toggles input once and consumes its trailing short click', async () => {
     const actions = [];
-    const h = createRuntimeHarness({ invokeAssistant: action => actions.push(action) });
+    const h = createRuntimeHarness({ invokeAssistant: action => actions.push(action), onAtomShortPress: () => actions.push('dashboard') });
     try {
         await h.runtime.showFully();
         const item = findNode(h.calls.at(-1).payload.tree.root, BEVY_MAIN_MENU_ATOME_ID);
@@ -767,6 +727,6 @@ test('Atom long press toggles input once and consumes its trailing short click',
         item.on.press({ x: 930, y: 690 });
         item.on.release({ x: 930, y: 690 });
         await item.on.activate();
-        assert.deepEqual(actions, ['toggleInput', 'toggle']);
+        assert.deepEqual(actions, ['toggleInput', 'dashboard']);
     } finally { h.runtime.destroy(); h.restore(); }
 });

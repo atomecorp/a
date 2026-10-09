@@ -38,13 +38,16 @@ export function createCanonicalImport({ type, api = () => globalThis.window?.Ato
     };
     const list = async (recordType = type, context = capture()) => {
         const rows = [];
-        for (let offset = 0; ; offset += 250) {
+        // Import bookkeeping reaches tens of thousands of rows (contacts and
+        // calendars share the origins): 1000-row pages keep a full read to a few
+        // dozen requests instead of hundreds.
+        for (let offset = 0; ; offset += 1000) {
             context.check();
-            const page = await context.store.listStateCurrent(null, { atomeType: recordType, includeDeleted: true, limit: 250, offset });
+            const page = await context.store.listStateCurrent(null, { atomeType: recordType, includeDeleted: true, limit: 1000, pageSize: 1000, offset });
             context.check();
             if (!Array.isArray(page)) throw new Error('canonical_import_read_invalid');
             rows.push(...page.filter(row => !row.owner_id || String(row.owner_id) === context.owner));
-            if (page.length < 250) return rows;
+            if (page.length < 1000) return rows;
         }
     };
     const write = async (id, recordType, props, context, kind = 'set') => {

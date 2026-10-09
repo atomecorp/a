@@ -469,6 +469,8 @@ pub struct AtomeBackdropStyle {
     pub tint: [f32; 4],
     #[serde(default)]
     pub tint_fade: f32,
+    #[serde(default)]
+    pub corner_cut_px: f32,
 }
 
 impl AtomeBackdropStyle {
@@ -480,6 +482,7 @@ impl AtomeBackdropStyle {
             blur_px: self.blur_px.clamp(0.0, 32.0),
             tint: self.tint.map(|value| value.clamp(0.0, 1.0)),
             tint_fade: if self.tint_fade.is_finite() { self.tint_fade.clamp(0.0, 1.0) } else { 0.0 },
+            corner_cut_px: if self.corner_cut_px.is_finite() { self.corner_cut_px.max(0.0) } else { 0.0 },
         })
     }
 }

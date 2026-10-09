@@ -42,6 +42,7 @@ the established solution before attempting a new implementation.
 | Panel/list rows flash while scrolling, or a panel row shows pointer hover paint | [panel-scroll-hover-flicker](panel-scroll-hover-flicker/README.md) |
 | A scrolled panel row is hidden but its avatar/icon reappears over fixed actions below | [panel-scroll-composite-overflow](panel-scroll-composite-overflow/README.md) |
 | The device heats up or the GPU stays busy while the app sits idle — or zoom, rotation and Mystic stutter at ~2 frames/s | [idle-render-loop-heat](idle-render-loop-heat/README.md) |
+| iOS reports hundreds of GB of disk writes, the first launch is slow, `adole.db` weighs GB or calendars vanish after a contacts import | [local-db-disk-writes-and-slow-listing](local-db-disk-writes-and-slow-listing/README.md) |
 
 ## Maintenance rules
 

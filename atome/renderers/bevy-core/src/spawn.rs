@@ -133,7 +133,7 @@ pub(crate) fn texture_handle_for_node(
     images: &mut Assets<Image>,
     node: &AtomeRenderNode,
 ) -> Result<Option<Handle<Image>>, String> {
-    if node.kind == "video" {
+    if node.kind == "video" || node.kind == "media_window" {
         return Ok(None);
     }
     let mask = node_mask(node);
@@ -344,6 +344,19 @@ pub fn spawn_node_with_texture_handle(
                 [width, height],
                 normalize_uv_rect(node.uv_rect),
             )?;
+            entity
+        }
+        // A media window: the Atome's own quad, cut out of the canvas so the
+        // player laid under it shows through (see media_window.rs).
+        "media_window" => {
+            let entity = world
+                .spawn((
+                    node_base_components(&node, width, height, surface_width, surface_height),
+                    NoAutomaticBatching,
+                    crate::media_window::AtomeMediaWindow { id: node.id.clone() },
+                ))
+                .id();
+            insert_video_quad_mesh(world, entity, [width, height], [0.0, 0.0, 1.0, 1.0])?;
             entity
         }
         "audio_waveform" => {

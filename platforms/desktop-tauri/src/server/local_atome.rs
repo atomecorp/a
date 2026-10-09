@@ -1580,7 +1580,8 @@ async fn handle_update(
                  VALUES (?1, ?2, ?3, ?4)
                  ON CONFLICT(atome_id, particle_key) DO UPDATE SET
                     particle_value = excluded.particle_value,
-                    updated_at = excluded.updated_at",
+                    updated_at = excluded.updated_at
+                 WHERE particles.particle_value IS NOT excluded.particle_value",
                 rusqlite::params![atome_id, key, &value_str, &now],
             );
         }
@@ -1760,6 +1761,10 @@ async fn handle_alter(
                 .ok();
 
             let value_str = serde_json::to_string(value).unwrap_or_default();
+            // A write that changes nothing is not history (Fastify `setParticle`).
+            if old_value.as_deref() == Some(value_str.as_str()) {
+                continue;
+            }
             let value_type = match value {
                 serde_json::Value::String(_) => "string",
                 serde_json::Value::Number(_) => "number",
@@ -2338,7 +2343,8 @@ async fn handle_state_current_list(
     }
     if let Some(kind) = atome_type {
         conditions.push(
-            "(LOWER(COALESCE(a.atome_type, '')) = ? OR LOWER(COALESCE(json_extract(sc.properties, '$.type'), '')) = ? OR LOWER(COALESCE(json_extract(sc.properties, '$.kind'), '')) = ?)".to_string()
+            // Each term matches one schema expression index: no JSON decode of the whole table.
+            "(sc.atome_id IN (SELECT atome_id FROM atomes WHERE LOWER(COALESCE(atome_type, '')) = ?) OR LOWER(COALESCE(json_extract(sc.properties, '$.type'), '')) = ? OR LOWER(COALESCE(json_extract(sc.properties, '$.kind'), '')) = ?)".to_string()
         );
         scope_params.push(rusqlite::types::Value::from(kind.clone()));
         scope_params.push(rusqlite::types::Value::from(kind.clone()));
@@ -2351,8 +2357,10 @@ async fn handle_state_current_list(
         conditions.push("LOWER(sc.atome_id) NOT LIKE 'tool.ui.%' AND LOWER(sc.atome_id) NOT LIKE 'tool_ui.%'".to_string());
     }
     let where_clause = format!(" WHERE {}", conditions.join(" AND "));
+    // The page is chosen on ids only: sorting whole rows spilled OFFSET + LIMIT
+    // `properties` blobs to a temporary file for every page.
     let query = format!(
-        "SELECT sc.atome_id, sc.owner_id, sc.project_id, sc.properties, sc.updated_at, sc.version, a.parent_id FROM state_current sc LEFT JOIN atomes a ON a.atome_id = sc.atome_id{} ORDER BY sc.updated_at DESC LIMIT ? OFFSET ?",
+        "SELECT sc.atome_id, sc.owner_id, sc.project_id, sc.properties, sc.updated_at, sc.version, a.parent_id FROM state_current sc LEFT JOIN atomes a ON a.atome_id = sc.atome_id WHERE sc.atome_id IN (SELECT sc.atome_id FROM state_current sc LEFT JOIN atomes a ON a.atome_id = sc.atome_id{} ORDER BY sc.updated_at DESC, sc.atome_id LIMIT ? OFFSET ?) ORDER BY sc.updated_at DESC, sc.atome_id",
         where_clause
     );
     let mut params = scope_params;
@@ -3519,7 +3527,8 @@ fn apply_event_to_atomes(
              VALUES (?1, ?2, ?3, ?4)
              ON CONFLICT(atome_id, particle_key) DO UPDATE SET
                 particle_value = excluded.particle_value,
-                updated_at = excluded.updated_at",
+                updated_at = excluded.updated_at
+             WHERE particles.particle_value IS NOT excluded.particle_value",
             rusqlite::params![atome_id, key, value_str, event.ts],
         ).map_err(|e| e.to_string())?;
     }

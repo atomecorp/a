@@ -69,7 +69,7 @@ const readMenuAccess = async (context) => ({ ...context,
 test('the pinned zone is glued above the Atome handle and pushes the ordinary level up', () => {
     const baseline = buildRail();
     const bottom = baseline.layout.bottom;
-    assert.equal(bottom, 400 - ITEM_SIZE, 'the rail bottom sits exactly above the main-menu band');
+    assert.equal(bottom, 400 - ITEM_SIZE - baseline.layout.gap, 'the rail leaves the common seam above the Atome handle');
     assert.equal(railOf(baseline).style.size[1], baseline.layout.railHeight);
 
     const tree = buildRail({
@@ -98,11 +98,11 @@ test('the first tool activated is the closest to Atome, the next ones stack abov
                 { key: 'tool_3', label: 'Stop recording', icon: 'stop' }
             ]
         });
-        assert.equal(tree.layout.x, handedness === 'left' ? 0 : 400 - ITEM_SIZE);
+        assert.equal(tree.layout.x, handedness === 'left' ? tree.layout.gap : 400 - ITEM_SIZE - tree.layout.gap);
         const first = findNode(tree.root, 'atome_contextual_tool_tool_0');
         const second = findNode(tree.root, 'atome_contextual_tool_tool_3');
-        assert.deepEqual(first.style.position, [tree.layout.x, tree.layout.bottom - ITEM_SIZE]);
-        assert.deepEqual(second.style.position, [tree.layout.x, tree.layout.bottom - (2 * ITEM_SIZE)]);
+        assert.deepEqual(first.style.position, [tree.layout.x, tree.layout.bottom - tree.layout.itemSize]);
+        assert.deepEqual(second.style.position, [tree.layout.x, tree.layout.bottom - (2 * tree.layout.itemSize) - tree.layout.gap]);
         assert.ok(first.style.position[1] > second.style.position[1]);
         assert.equal(railOf(tree).style.size[1] + (2 * ITEM_SIZE), buildRail().layout.railHeight);
     }
@@ -370,7 +370,7 @@ test('a media record keeps its case above the Atome handle with no rail at all',
         assert.equal(railOf(tree), undefined, 'nothing is selected: no rail is mounted');
         const pinned = findNode(tree.root, 'atome_contextual_tool_record_action');
         assert.ok(pinned, 'the record keeps its case above the Atome handle');
-        assert.deepEqual(pinned.style.position, [tree.layout.x, tree.layout.bottom - ITEM_SIZE]);
+        assert.deepEqual(pinned.style.position, [tree.layout.x, tree.layout.bottom - tree.layout.itemSize]);
         assert.equal(pinned.style.position[1] + ITEM_SIZE, tree.layout.bottom);
         assert.equal(pinned.accessibility.label, eveT('eve.menu.stop', 'Stop'),
             'the case shows the lit stop face');
@@ -435,7 +435,7 @@ test('a record lit by the rail level never duplicates its case and outlives the 
     tree = rendered.at(-1);
     assert.deepEqual(pinnedIds(tree), ['atome_contextual_tool_record_action']);
     assert.deepEqual(findNode(tree.root, 'atome_contextual_tool_record_action').style.position,
-        [tree.layout.x, tree.layout.bottom - ITEM_SIZE]);
+        [tree.layout.x, tree.layout.bottom - tree.layout.itemSize]);
 });
 
 test('the rail record reads the owner of the record that is actually running', () => {
@@ -491,7 +491,7 @@ test('a running playback keeps its case above the Atome handle with nothing sele
         const tree = rendered.at(-1);
         const pinned = findNode(tree.root, 'atome_contextual_tool_play');
         assert.ok(pinned, 'a playback keeps its case above the Atome handle with no rail');
-        assert.deepEqual(pinned.style.position, [tree.layout.x, tree.layout.bottom - ITEM_SIZE]);
+        assert.deepEqual(pinned.style.position, [tree.layout.x, tree.layout.bottom - tree.layout.itemSize]);
         pinned.on.activate();
         await new Promise((resolve) => setTimeout(resolve, 0));
         assert.equal(invocations.at(-1).definition.toolId, 'ui.play');
@@ -571,10 +571,10 @@ test('an armed creation tool keeps its pinned case glued to the rail bottom, and
         const nodes = keys.map((key) => findNode(tree.root, `atome_contextual_tool_${key}`));
         assert.ok(nodes.every(Boolean), 'Code, Page, Placeholder and Generator are all pinned');
         nodes.forEach((node, index) => {
-            assert.deepEqual(node.style.position, [tree.layout.x, tree.layout.bottom - (index + 1) * ITEM_SIZE],
+            assert.deepEqual(node.style.position, [tree.layout.x, tree.layout.bottom - (index + 1) * tree.layout.itemSize - index * tree.layout.gap],
                 `${keys[index]} stacks in the pinned zone`);
         });
-        assert.equal(nodes[0].style.position[1] + ITEM_SIZE, tree.layout.bottom,
+        assert.equal(nodes[0].style.position[1] + tree.layout.itemSize, tree.layout.bottom,
             'the first tool activated is the closest to the Atome handle');
         findNode(tree.root, 'atome_contextual_tool_page_create').on.activate();
         await new Promise((resolve) => setTimeout(resolve, 0));
@@ -984,7 +984,7 @@ test('the rail reserves the band the menu publishes, and re-renders when that ba
         runtime.enter({ atomeId: 'shape', kind: 'image', contextLevel: 'selection', record: records[0] });
         await runtime.render();
         const first = rendered.at(-1);
-        assert.equal(first.layout.bottom, 600 - ITEM_SIZE,
+        assert.equal(first.layout.bottom, 600 - ITEM_SIZE - first.layout.gap,
             'the rail level stops at the band the menu reserves');
 
         // The band moves (an input box is laid out, the Atome slot stays visible):
@@ -996,7 +996,7 @@ test('the rail reserves the band the menu publishes, and re-renders when that ba
         await settle();
         const second = rendered.at(-1);
         assert.notEqual(second, first, 'the rail re-renders on the geometry the menu publishes');
-        assert.equal(second.layout.bottom, 600 - ITEM_SIZE * 2,
+        assert.equal(second.layout.bottom, 600 - ITEM_SIZE * 2 - second.layout.gap,
             'and reserves the band where it is now, never the one it remembered');
 
         globalThis.window.dispatchEvent(new globalThis.window.CustomEvent('eve:intuitionx-state-changed', {

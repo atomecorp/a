@@ -41,8 +41,37 @@ extension AppNativeAudioController {
         try engine.start()
     }
 
+    func loadAndStoreClip(url: URL, id: String, response: [String: Any],
+                          completion: @escaping ([String: Any], String?) -> Void) {
+        let token = UUID()
+        pendingClipLoads[id] = token
+        Task {
+            let result: Result<ClipEntry, Error>
+            do { result = .success(try await self.loadClipEntry(url: url, id: id)) }
+            catch { result = .failure(error) }
+            self.queue.async {
+                guard self.pendingClipLoads[id] == token else {
+                    self.complete(completion, payload: ["success": false, "id": id], error: "audio_clip_load_cancelled")
+                    return
+                }
+                self.pendingClipLoads.removeValue(forKey: id)
+                switch result {
+                case .success(let clip):
+                    self.clips[id] = clip
+                    var payload = response
+                    payload["success"] = true
+                    payload["sample_rate"] = clip.sampleRate
+                    payload["duration_seconds"] = clip.durationSeconds
+                    self.complete(completion, payload: payload)
+                case .failure(let error):
+                    self.complete(completion, payload: ["success": false, "id": id], error: error.localizedDescription)
+                }
+            }
+        }
+    }
+
     // Audio files stay streamed. Short video containers predecode their audio once.
-    func loadClipEntry(url: URL, id: String) throws -> ClipEntry {
+    func loadClipEntry(url: URL, id: String) async throws -> ClipEntry {
         if let audioFile = try? AVAudioFile(forReading: url) {
             let format = audioFile.processingFormat
             let sampleRate = format.sampleRate
@@ -56,6 +85,7 @@ extension AppNativeAudioController {
                 isAudioFile: true,
                 processingFormat: format,
                 asset: nil,
+                audioTrack: nil,
                 cachedBuffer: nil
             )
         }
@@ -64,22 +94,21 @@ extension AppNativeAudioController {
             url: url,
             options: [AVURLAssetPreferPreciseDurationAndTimingKey: false]
         )
-        guard let track = asset.tracks(withMediaType: .audio).first else {
+        guard let track = try await asset.loadTracks(withMediaType: .audio).first else {
             throw NSError(domain: "AppNativeAudioController", code: 3, userInfo: [
                 NSLocalizedDescriptionKey: "No audio track found in \(url.lastPathComponent)"
             ])
         }
-        let duration = max(0, CMTimeGetSeconds(asset.duration))
+        let duration = max(0, CMTimeGetSeconds(try await asset.load(.duration)))
         var sampleRate: Double = 44100
-        if let description = track.formatDescriptions.first {
-            let formatDescription = description as! CMFormatDescription
+        if let formatDescription = try await track.load(.formatDescriptions).first {
             if let streamDescription = CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription)?.pointee {
                 sampleRate = max(1, Double(streamDescription.mSampleRate))
             }
         }
         let cachedBuffer: AVAudioPCMBuffer?
         if duration > 0 && duration <= maxCachedVideoAudioDurationSeconds {
-            cachedBuffer = try decodeAssetSegment(asset, startSeconds: 0, durationSeconds: nil)
+            cachedBuffer = try decodeAssetSegment(asset, track: track, assetDuration: duration, startSeconds: 0, durationSeconds: nil)
         } else {
             cachedBuffer = nil
         }
@@ -92,19 +121,17 @@ extension AppNativeAudioController {
             isAudioFile: false,
             processingFormat: nil,
             asset: asset,
+            audioTrack: track,
             cachedBuffer: cachedBuffer
         )
     }
 
     // Video audio is decoded only for the requested time range.
     func decodeAssetSegment(_ asset: AVURLAsset,
+                            track: AVAssetTrack,
+                            assetDuration: Double,
                             startSeconds: Double,
                             durationSeconds: Double?) throws -> AVAudioPCMBuffer {
-        guard let track = asset.tracks(withMediaType: .audio).first else {
-            throw NSError(domain: "AppNativeAudioController", code: 3, userInfo: [
-                NSLocalizedDescriptionKey: "No audio track in asset"
-            ])
-        }
         let sessionSampleRate = AVAudioSession.sharedInstance().sampleRate
         let outputSampleRate = max(1.0, sessionSampleRate > 0 ? sessionSampleRate : 44100.0)
         let reader = try AVAssetReader(asset: asset)
@@ -118,7 +145,6 @@ extension AppNativeAudioController {
             AVNumberOfChannelsKey: 2
         ])
         output.alwaysCopiesSampleData = false
-        let assetDuration = max(0, CMTimeGetSeconds(asset.duration))
         let safeStart = max(0, min(startSeconds, assetDuration))
         let safeEnd: Double
         if let durationSeconds, durationSeconds > 0 {
@@ -369,15 +395,19 @@ extension AppNativeAudioController {
             } else {
                 voice.playerNode.scheduleBuffer(loopBuffer, at: nil, options: [.loops])
             }
-        } else if let asset = clip.asset {
+        } else if let asset = clip.asset, let track = clip.audioTrack {
             let loopBuffer = try decodeAssetSegment(
                 asset,
+                track: track,
+                assetDuration: clip.durationSeconds,
                 startSeconds: normalizedLoopStart,
                 durationSeconds: normalizedLoopEnd - normalizedLoopStart
             )
             if normalizedStart > normalizedLoopStart {
                 let introBuffer = try decodeAssetSegment(
                     asset,
+                    track: track,
+                    assetDuration: clip.durationSeconds,
                     startSeconds: normalizedStart,
                     durationSeconds: normalizedLoopEnd - normalizedStart
                 )

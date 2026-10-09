@@ -44,7 +44,23 @@ pub(super) fn capture_before(db: &Connection, event: &mut EventRecord) -> Result
         .optional()
         .map_err(|e| e.to_string())?;
     let current = parse_json_map(raw.as_ref());
-    let keys: HashSet<String> = patch.keys().cloned().chain(deleted_keys(event)).collect();
+    // Same rule as Fastify (`database/adole_event_mutation.js`): a property
+    // rewritten identically is not a change. Dropping it is neutral for replay,
+    // conflicts and projection, and keeps unchanged blobs out of history.
+    let unchanged: HashSet<String> = patch
+        .iter()
+        .filter(|(key, value)| {
+            !["parent_id", "parentId", "kind", "type", "atome_type"].contains(&key.as_str())
+                && current.get(key.as_str()) == Some(*value)
+        })
+        .map(|(key, _)| key.clone())
+        .collect();
+    let keys: HashSet<String> = patch
+        .keys()
+        .filter(|key| !unchanged.contains(*key))
+        .cloned()
+        .chain(deleted_keys(event))
+        .collect();
     let mut before = JsonMap::new();
     let mut missing = Vec::new();
     for key in keys {
@@ -75,6 +91,14 @@ pub(super) fn capture_before(db: &Connection, event: &mut EventRecord) -> Result
             _ => None,
         })
         .unwrap_or_default();
+    if !unchanged.is_empty() {
+        for field in ["props", "properties", "patch", "delta"] {
+            if let Some(JsonValue::Object(props)) = payload.get_mut(field) {
+                props.retain(|key, _| !unchanged.contains(key));
+                break;
+            }
+        }
+    }
     payload.insert("before".into(), json!(before));
     payload.insert("before_missing".into(), json!(missing));
     payload.insert(

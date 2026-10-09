@@ -98,9 +98,9 @@ describe('Dashboard WebGPU records', () => {
         ];
         expect(header.properties.material.backdrop.blurPx).toBeGreaterThan(0);
         for (const card of cards) {
-            expect(card.properties.color).toBe(tokens.contentGlass.fillColor);
-            expect(card.properties.material.backdrop.blurPx).toBe(tokens.contentGlass.blurPx);
-            expect(card.properties.material.backdrop.tint[3]).toBe(tokens.contentGlass.tintAlpha);
+            expect(card.properties.color).toBe('rgba(0,0,0,0)');
+            expect(card.properties.material.backdrop.blurPx).toBe(16);
+            expect(card.properties.material.backdrop.tint[3]).toBe(.69);
             expect(card.properties.material.shadow).toBe(EVE_COMMON_SKIN_TOKENS.bevy.systemSurface.shadow);
         }
         expect(header.properties.material.shadow).toBe(EVE_COMMON_SKIN_TOKENS.bevy.systemSurface.shadow);
@@ -317,7 +317,7 @@ describe('Dashboard WebGPU records', () => {
         const projectMedia = record(records, 'card_media_projects_project-one');
         const contactMedia = record(records, 'card_media_contacts_contact-one');
         expect(projectCard.properties.color).toBe('rgba(0,0,0,0)');
-        expect(projectCard.properties.material.backdrop.blurPx).toBe(tokens.contentGlass.blurPx);
+        expect(projectCard.properties.material.backdrop.blurPx).toBe(16);
         expect(projectMedia.properties.opacity).toBe(1);
         expect(contactMedia.properties.opacity).toBe(1);
         expect(projectMedia.properties.media_fit).toBe('contain');
@@ -338,7 +338,7 @@ describe('Dashboard WebGPU records', () => {
         const header = children.find((node) => node.id === dashboardRecordId('header_bg_news'));
         const weatherRoot = children.find((node) => node.id === dashboardRecordId('card_news_dashboard_module_weather'));
         const weatherIcon = children.find((node) => node.id === dashboardRecordId('card_weather_icon_news_dashboard_module_weather'));
-        expect(header.style.backdrop.blur_px).toBeGreaterThan(0);
+        expect(header.style.backdrop.blurPx).toBeGreaterThan(0);
         expect(weatherRoot.on.activate).toBeTypeOf('function');
         expect(weatherIcon.on).toBeUndefined();
     });

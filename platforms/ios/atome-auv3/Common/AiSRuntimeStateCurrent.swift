@@ -9,6 +9,9 @@ import SQLite3
 // local ownership (`canReadState`); the `permissions` table stays unread until
 // iOS serves sharing.
 extension AiSRuntime {
+    // Each term matches one expression index of the schema, so a type listing
+    // never decodes the JSON of the whole table (one page took ~116 ms per scan).
+    private static let stateCurrentTypeFilter = "(sc.atome_id IN (SELECT atome_id FROM atomes WHERE LOWER(COALESCE(atome_type, '')) = ?) OR LOWER(COALESCE(json_extract(sc.properties, '$.type'), '')) = ? OR LOWER(COALESCE(json_extract(sc.properties, '$.kind'), '')) = ?)"
 
     static func handleStateCurrentMessage(_ message: [String: Any]) -> [String: Any] {
         queue.sync {
@@ -151,8 +154,11 @@ extension AiSRuntime {
         atomeType: String? = nil,
         excludingParticleKeys: Set<String> = []
     ) throws -> [[String: Any]] {
+        // The page is chosen on (atome_id, updated_at) only: sorting whole rows
+        // made SQLite spill OFFSET + LIMIT full `properties` blobs to a temporary
+        // file for every page (up to 149 MB written per import_origin page).
         var sql = """
-            SELECT sc.atome_id, sc.owner_id, sc.project_id, sc.properties, sc.updated_at, sc.version
+            SELECT sc.atome_id
             FROM state_current sc
             LEFT JOIN atomes a ON a.atome_id = sc.atome_id
             """
@@ -164,7 +170,7 @@ extension AiSRuntime {
         }
         if let atomeType, !atomeType.isEmpty {
             let normalizedType = atomeType.lowercased()
-            conditions.append("(LOWER(COALESCE(a.atome_type, '')) = ? OR LOWER(COALESCE(json_extract(sc.properties, '$.type'), '')) = ? OR LOWER(COALESCE(json_extract(sc.properties, '$.kind'), '')) = ?)")
+            conditions.append(stateCurrentTypeFilter)
             bindings.append(.text(normalizedType))
             bindings.append(.text(normalizedType))
             bindings.append(.text(normalizedType))
@@ -190,10 +196,15 @@ extension AiSRuntime {
         if !conditions.isEmpty {
             sql += " WHERE " + conditions.joined(separator: " AND ")
         }
-        sql += " ORDER BY sc.updated_at DESC LIMIT ? OFFSET ?"
+        sql += " ORDER BY sc.updated_at DESC, sc.atome_id LIMIT ? OFFSET ?"
         bindings.append(.int(limit))
         bindings.append(.int(offset))
-        let rows = try query(db, sql, bindings)
+        let rows = try query(db, """
+            SELECT sc.atome_id, sc.owner_id, sc.project_id, sc.properties, sc.updated_at, sc.version
+            FROM state_current sc
+            WHERE sc.atome_id IN (\(sql))
+            ORDER BY sc.updated_at DESC, sc.atome_id
+            """, bindings)
         return try rows.map { try serializeStateCurrentRow(db, row: $0, excludingParticleKeys: excludingParticleKeys) }
     }
 
@@ -213,7 +224,7 @@ extension AiSRuntime {
         }
         if let atomeType, !atomeType.isEmpty {
             let normalizedType = atomeType.lowercased()
-            conditions.append("(LOWER(COALESCE(a.atome_type, '')) = ? OR LOWER(COALESCE(json_extract(sc.properties, '$.type'), '')) = ? OR LOWER(COALESCE(json_extract(sc.properties, '$.kind'), '')) = ?)")
+            conditions.append(stateCurrentTypeFilter)
             bindings.append(.text(normalizedType))
             bindings.append(.text(normalizedType))
             bindings.append(.text(normalizedType))

@@ -149,6 +149,26 @@ test('the type chips and the sortable header drive the same list without a secon
     assert.equal(surface.readState().entries.length, 3);
 });
 
+test('contact photos stay out of the base listing and open through the Contacts import source', async () => {
+    const contactPhoto = { id: 'contact_photo_ab12', name: 'contact_photo_ab12.jpg', file_name: 'contact_photo_ab12.jpg',
+        kind: 'image', mime_type: 'image/jpeg', modified: '2026-10-08T10:00:00Z', owner_id: 'u1' };
+    const { surface, closes, draw } = harness({ files: [...FILES, contactPhoto], systemResult: () => ({ ok: true, source: 'contacts' }) });
+    await open(surface);
+    assert.deepEqual(surface.readState().entries.map((entry) => entry.label), ['bande', 'montage', 'affiche']);
+    await surface.handleEvent({ type: 'media.scope.activate', value: 'images' });
+    assert.deepEqual(surface.readState().entries.map((entry) => entry.label), ['affiche']);
+
+    await surface.handleEvent({ type: 'media.import.system' });
+    assert.equal(closes.length, 0, 'choosing the Contacts source keeps the panel open on their photos');
+    assert.deepEqual(surface.readState().entries.map((entry) => entry.label), ['contact_photo_ab12.jpg']);
+    const scopes = visit(draw().content, (node) => node.id === 'media_scopes');
+    assert.equal(scopes.children.length, 5, 'the Contacts chip appears only to leave that list');
+
+    await surface.handleEvent({ type: 'media.scope.activate', value: 'all' });
+    assert.equal(surface.readState().entries.some((entry) => entry.label.startsWith('contact_photo_')), false);
+    assert.equal(visit(draw().content, (node) => node.id === 'media_scopes').children.length, 4);
+});
+
 test('a click imports the media at the current level, with no system window', async () => {
     const { surface, imported, closes, draw } = harness();
     await open(surface);
@@ -798,4 +818,40 @@ test('both recording types come from one state listing, published wave by wave',
         globalThis.window = previousWindow;
         globalThis.fetch = previousFetch;
     }
+});
+
+// The iOS « Ajouter depuis » sheet lists the Contacts source next to Files,
+// Camera roll and Music for pictures; choosing it returns no file, only the
+// source, so the Media panel can list the contact photos it already owns.
+const installNativeSheet = (answer) => {
+    const requests = [];
+    globalThis.window = {
+        __HOST_ENV: 'app',
+        AtomeFileSystem: {
+            loadFilesWithDocumentPicker(fileTypes, callback, multiple, options) {
+                requests.push(options);
+                callback(answer);
+            }
+        }
+    };
+    return requests;
+};
+
+
+test('a picture import offers the Contacts source and reports it without files', async () => {
+    const requests = installNativeSheet({ success: true, data: { source: 'contacts', files: [] } });
+    const { requestProjectImportFiles } = await import('../../eVe/intuition/runtime/project_media_import_runtime.js');
+    const selection = await requestProjectImportFiles({ kinds: ['image'] });
+    assert.deepEqual(requests[0].sources, ['files', 'photos', 'contacts']);
+    assert.equal(requests[0].labels.contacts, 'Contacts');
+    assert.deepEqual(selection, { ok: true, source: 'contacts', files: [] });
+    delete globalThis.window;
+});
+
+test('a sound-only import never offers contact photos', async () => {
+    const requests = installNativeSheet({ success: false, error: 'User cancelled' });
+    const { requestProjectImportFiles } = await import('../../eVe/intuition/runtime/project_media_import_runtime.js');
+    await requestProjectImportFiles({ kinds: ['audio'] });
+    assert.deepEqual(requests[0].sources, ['files', 'music']);
+    delete globalThis.window;
 });

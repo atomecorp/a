@@ -61,12 +61,11 @@ final class FullscreenWebViewController: UIViewController {
         webView.scrollView.backgroundColor = .clear
         webView.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(webView)
-        let guide = root.safeAreaLayoutGuide
         NSLayoutConstraint.activate([
-            webView.topAnchor.constraint(equalTo: guide.topAnchor),
-            webView.bottomAnchor.constraint(equalTo: guide.bottomAnchor),
-            webView.leadingAnchor.constraint(equalTo: guide.leadingAnchor),
-            webView.trailingAnchor.constraint(equalTo: guide.trailingAnchor)
+            webView.topAnchor.constraint(equalTo: root.topAnchor),
+            webView.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            webView.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: root.trailingAnchor)
         ])
         installBootOverlay(in: root)
     }
@@ -120,7 +119,7 @@ final class FullscreenWebViewController: UIViewController {
             UIApplication.shared.open(url)
         })
         view.insetsLayoutMarginsFromSafeArea = true
-        webView.scrollView.contentInsetAdjustmentBehavior = .automatic
+        webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.scrollView.contentInset = .zero
         webView.scrollView.verticalScrollIndicatorInsets = .zero
         webView.scrollView.horizontalScrollIndicatorInsets = .zero

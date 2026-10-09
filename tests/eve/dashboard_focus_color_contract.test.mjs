@@ -82,7 +82,9 @@ describe('Dashboard fixed grid and visual focus', () => {
         const active = records.find((record) => record.id === dashboardRecordId('header_bg_projects'));
         const inactive = records.find((record) => record.id === dashboardRecordId('header_bg_news'));
         expect(active.properties.material.backdrop.blurPx).toBeGreaterThan(0);
-        expect(active.properties.material.backdrop.tint[3]).toBeGreaterThan(inactive.properties.material.backdrop.tint[3]);
+        expect(active.properties.material.backdrop).toEqual(inactive.properties.material.backdrop);
+        expect(active.properties.material.surfacePaint.border).toEqual({width:2,color:[1,1,1,1]});
+        expect(inactive.properties.material.surfacePaint.border).toBeUndefined();
     });
 
     it('keeps the canonical 2x unit at every width and scrolls the lane instead of shrinking it', () => {

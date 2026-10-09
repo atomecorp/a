@@ -409,6 +409,10 @@ final class LocalHTTPServer {
         guard let obj = try? JSONSerialization.jsonObject(with: data, options: []),
               let payload = obj as? [String: Any] else { print("❌ WS text: invalid JSON"); return }
         let type = (payload["type"] as? String) ?? ""
+        #if DEBUG
+        DiskWriteProbe.beginActivity(payload) // TEMPORARY diagnostic
+        defer { DiskWriteProbe.endActivity() }
+        #endif
         let connectionId = ObjectIdentifier(connection)
         guard var connectionState = wsStates[connectionId] else { return }
         if connectionState.route == "/ws/sync" {
@@ -1761,6 +1765,7 @@ enum AiSRuntime {
     CREATE INDEX IF NOT EXISTS idx_atomes_type ON atomes(atome_type);
     CREATE INDEX IF NOT EXISTS idx_atomes_parent ON atomes(parent_id);
     CREATE INDEX IF NOT EXISTS idx_atomes_owner ON atomes(owner_id);
+    CREATE INDEX IF NOT EXISTS idx_atomes_type_lower ON atomes(LOWER(COALESCE(atome_type, '')));
     CREATE TABLE IF NOT EXISTS principal_phone_credentials (
         credential_id INTEGER PRIMARY KEY AUTOINCREMENT,
         principal_id TEXT NOT NULL,
@@ -1834,6 +1839,8 @@ enum AiSRuntime {
     );
     CREATE INDEX IF NOT EXISTS idx_state_current_project ON state_current(project_id);
     CREATE INDEX IF NOT EXISTS idx_state_current_owner ON state_current(owner_id);
+    CREATE INDEX IF NOT EXISTS idx_state_current_json_type ON state_current(LOWER(COALESCE(json_extract(properties, '$.type'), '')));
+    CREATE INDEX IF NOT EXISTS idx_state_current_json_kind ON state_current(LOWER(COALESCE(json_extract(properties, '$.kind'), '')));
     CREATE TABLE IF NOT EXISTS permissions (
         permission_id INTEGER PRIMARY KEY AUTOINCREMENT,
         atome_id TEXT NOT NULL,
@@ -2467,6 +2474,10 @@ enum AiSRuntime {
 
     static func persistRemoteSyncEnvelope(_ envelope: [String: Any], principalId: String) throws -> Bool {
         try queue.sync {
+            #if DEBUG
+            DiskWriteProbe.setActivity("remote-sync:persist") // TEMPORARY diagnostic
+            defer { DiskWriteProbe.endActivity() }
+            #endif
             let db = try openDatabase()
             let eventId = stringValue(envelope["event_id"] ?? envelope["id"])
             let streamId = stringValue(envelope["stream"] ?? envelope["stream_id"])
@@ -2605,6 +2616,8 @@ enum AiSRuntime {
         let oldValue = previousRows.first?["particle_value"] as? String
         let particleId = previousRows.first?["particle_id"] as? Int64 ?? 0
         let version = previousRows.first?["version"] as? Int64 ?? 0
+        // A write that changes nothing is not history (same rule as Fastify `setParticle`).
+        if let oldValue, oldValue == newValue { return }
         let valueType = sqliteValueType(value)
         try execute(db, """
             INSERT INTO particles (atome_id, particle_key, particle_value, value_type, version, created_at, updated_at)
@@ -2743,6 +2756,14 @@ enum AiSRuntime {
     }
 
     static func execute(_ db: OpaquePointer?, _ sql: String, _ bindings: [SQLiteBinding] = []) throws {
+        #if DEBUG
+        try DiskWriteProbe.measure(sql) { try executeStatement(db, sql, bindings) } // TEMPORARY diagnostic
+        #else
+        try executeStatement(db, sql, bindings)
+        #endif
+    }
+
+    private static func executeStatement(_ db: OpaquePointer?, _ sql: String, _ bindings: [SQLiteBinding]) throws {
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
             throw AiSError(lastError(db))
@@ -2756,6 +2777,14 @@ enum AiSRuntime {
     }
 
     static func query(_ db: OpaquePointer?, _ sql: String, _ bindings: [SQLiteBinding] = []) throws -> [[String: Any]] {
+        #if DEBUG
+        return try DiskWriteProbe.measure(sql) { try queryStatement(db, sql, bindings) } // TEMPORARY diagnostic
+        #else
+        return try queryStatement(db, sql, bindings)
+        #endif
+    }
+
+    private static func queryStatement(_ db: OpaquePointer?, _ sql: String, _ bindings: [SQLiteBinding]) throws -> [[String: Any]] {
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
             throw AiSError(lastError(db))
@@ -2898,7 +2927,9 @@ enum AiSRuntime {
             }
             throw AiSError("Unsupported JSON value")
         }
-        let data = try JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed])
+        // Sorted keys make equal values serialize identically, so an unchanged
+        // property can be recognised by its stored text.
+        let data = try JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed, .sortedKeys])
         return String(decoding: data, as: UTF8.self)
     }
 

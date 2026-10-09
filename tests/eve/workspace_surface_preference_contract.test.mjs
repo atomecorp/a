@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test, vi } from 'vitest';
 import { installMockBrowserEnv } from '../strangler_v2/_env.mjs';
+// Compile the real dependency graph before timed per-test module resets.
+import '../../eVe/domains/dashboard/dashboard_workspace_mode.js';
+import '../../eVe/domains/dashboard/workspace_surface_preference.js';
 
 const profileApi = vi.hoisted(() => ({
     loadUserProfile: vi.fn(),

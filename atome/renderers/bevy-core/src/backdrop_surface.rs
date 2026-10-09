@@ -30,6 +30,8 @@ pub struct BackdropSurfaceUniform {
     /// x: public logical radius, y: device pixel ratio, z: sampled mip level,
     /// w: tint fade (share of the tint alpha removed at the bottom edge).
     pub blur: Vec4,
+    /// x: existing palette top-right cut, in logical pixels. Zero keeps ordinary glass.
+    pub corner_cut: Vec4,
 }
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
@@ -93,6 +95,7 @@ fn material_from_contract(
                 backdrop_blur_lod(style.blur_px, device_pixel_ratio),
                 style.tint_fade,
             ),
+            corner_cut: Vec4::new(style.corner_cut_px, 0.0, 0.0, 0.0),
         },
         backdrop,
     }
@@ -129,6 +132,8 @@ pub fn insert_backdrop_surface(
     world.entity_mut(entity).insert((
         Mesh2d(mesh),
         MeshMaterial2d(material),
+        // Sampling boundaries must remain separate sorted-phase draws.
+        bevy::render::batching::NoAutomaticBatching,
         bevy::camera::visibility::RenderLayers::layer(MENU_PRESENTATION_LAYER),
     ));
     refresh_workspace_backdrop_enabled(world)
@@ -206,6 +211,7 @@ pub fn patch_backdrop_surface(world: &mut World, entity: Entity, contract: Atome
     let mut material =
         materials.get_mut(&handle).ok_or_else(|| "bevy_backdrop_surface_material_missing".to_string())?;
     material.uniform.tint = Vec4::from_array(style.tint);
+    material.uniform.corner_cut.x = style.corner_cut_px;
     material.uniform.blur =
         Vec4::new(style.blur_px, device_pixel_ratio, backdrop_blur_lod(style.blur_px, device_pixel_ratio), style.tint_fade);
     Ok(())

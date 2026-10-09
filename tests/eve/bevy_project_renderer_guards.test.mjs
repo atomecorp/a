@@ -845,7 +845,7 @@ test('cropped images keep one source-aspect texture across frame and crop previe
         content: { ...node.content, sourceRect: { x: 160, y: 0, width: 480, height: 400 } }
     });
 
-    assert.deepEqual([first.width, first.height], [800, 400]);
+    assert.deepEqual([first.width, first.height], [400, 200]);
     assert.equal(first.width / first.height, 2);
     assert.deepEqual(preview, first);
     assert.equal(canvases.length, 1);
@@ -925,7 +925,7 @@ test('Bevy media texture resolver bounds oversized cover textures without changi
             throw new Error(`unexpected_element:${tagName}`);
         }
     };
-    const resolver = createBrowserBevyMediaTextureResolver({ documentRef, maxTextureSize: 1024 });
+    const resolver = createBrowserBevyMediaTextureResolver({ documentRef, maxTextureSize: 1024, imageMaxTextureSize: 1024 });
     const texture = await resolver({
         id: 'wide_cover',
         kind: 'image',

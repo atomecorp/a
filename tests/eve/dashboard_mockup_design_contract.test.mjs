@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'vitest';
 import { DASHBOARD_VISUAL_TOKENS } from '../../eVe/domains/dashboard/dashboard_tokens.js';
+import { EVE_COMMON_SKIN_TOKENS } from '../../eVe/elements/skin/tokens.js';
 import { readDashboardDefaults } from '../../eVe/domains/dashboard/dashboard_defaults.js';
 import { normalizeDashboardCategories } from '../../eVe/domains/dashboard/dashboard_model.js';
 
@@ -22,10 +23,8 @@ test('dashboard Bevy defaults keep the approved glass-grid override over the his
     assert.equal(DASHBOARD_VISUAL_TOKENS.metrics.contentRadius, 8);
     assert.equal(DASHBOARD_VISUAL_TOKENS.metrics.gap, 8);
     assert.equal(DASHBOARD_VISUAL_TOKENS.metrics.laneGap, 8);
-    assert.ok(DASHBOARD_VISUAL_TOKENS.contentGlass.tintAlpha > 0);
-    assert.ok(DASHBOARD_VISUAL_TOKENS.contentGlass.tintAlpha < 0.5);
-    assert.ok(DASHBOARD_VISUAL_TOKENS.contentGlass.blurPx > 0);
-    assert.equal(DASHBOARD_VISUAL_TOKENS.contentGlass.mediaOpacity, undefined);
+    assert.equal(DASHBOARD_VISUAL_TOKENS.contentGlass, undefined);
+    assert.deepEqual(EVE_COMMON_SKIN_TOKENS.bevy.systemSurface.backdrop,{blurPx:16,tint:[4/255,9/255,26/255,.69]});
 });
 
 test('dashboard JSON palette mirrors the R&D mockup category palette', async () => {

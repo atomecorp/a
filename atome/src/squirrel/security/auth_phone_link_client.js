@@ -1,5 +1,9 @@
 import { parseAuthLink } from '../../shared/auth_link_contract.js';
 
+// `auth_session_invalid` is deliberately absent: a session sent to another
+// server than the one that issued it is "invalid" there yet alive at home.
+const DEAD_SESSION_ERRORS = new Set(['auth_session_stale', 'auth_session_reused']);
+
 // Owns proof exchange and persistent, non-bearer descriptors. Application session
 // projection and native local authorization remain the auth facade's owners.
 export function createPhoneLinkClient({ devices, send, installSession, locks = globalThis.navigator?.locks,
@@ -158,10 +162,20 @@ export function createPhoneLinkClient({ devices, send, installSession, locks = g
             if (!record) throw new Error('auth_session_required');
             const device = await devices.forPhone(record.phone);
             const fields = { sessionId: record.session.id, generation: record.session.generation };
-            const { challenge } = await request('session-challenge', { ...fields, purpose: 'renew' });
-            const signed = await sign(device, challenge, 'renew', `${fields.sessionId}:${fields.generation}`);
-            const result = await request('session-renew', { ...fields, ...signed });
-            return accept(result, record.phone);
+            try {
+                const { challenge } = await request('session-challenge', { ...fields, purpose: 'renew' });
+                const signed = await sign(device, challenge, 'renew', `${fields.sessionId}:${fields.generation}`);
+                const result = await request('session-renew', { ...fields, ...signed });
+                return accept(result, record.phone);
+            } catch (error) {
+                // The server's own verdict that this session can never renew again
+                // (a generation it already moved past, or a reuse it revoked).
+                // Keeping the record would replay the same refusal forever while
+                // the app looks signed in; only a new sign-in can relink it.
+                if (!DEAD_SESSION_ERRORS.has(error?.message)) throw error;
+                await devices.remove('session');
+                throw new Error('auth_remote_relogin_required');
+            }
         }),
         revoke: (purpose = 'logout', targetKeyId) => exclusive(async () => {
             if (!['logout', 'logout-all', 'revoke-device'].includes(purpose)) throw new Error('auth_request_invalid');

@@ -7,9 +7,12 @@ import { createUserHomePanelRuntime } from '../../eVe/intuition/tools/user_home_
 import { getFirstLaunchRuntime } from '../../eVe/domains/user/first_launch_runtime.js';
 import * as panelRuntime from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js';
 import { buildHomeFixedContent } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_view.js';
-import { setSessionState, clearSessionState, resetWorkspaceForNextUser } from '../../atome/src/squirrel/apis/unified/adole_api/session.js';
+import { getSessionState, setSessionState, clearSessionState, resetWorkspaceForNextUser } from '../../atome/src/squirrel/apis/unified/adole_api/session.js';
 
-const transport = vi.hoisted(() => ({ presentations: [], cleanup: null }));
+const transport = vi.hoisted(() => ({ presentations: [], cleanup: null, install: vi.fn(async () => ({ ok: true, project_id: 'goals' })) }));
+vi.mock('../../eVe/domains/templates/system_template_runtime.js', async importOriginal => ({
+    ...await importOriginal(), ensureSystemTemplate: transport.install
+}));
 vi.mock('../../eVe/domains/matrix/matrix_template_runtime.js', () => ({
     createMatrixTemplateRuntime: options => {
         const presentation = {
@@ -31,6 +34,7 @@ const setup = async () => {
     dom = new JSDOM('<div id="view"></div>', { pretendToBeVisual: true, url: 'http://localhost/' });
     const win = dom.window;
     vi.stubGlobal('window', win); vi.stubGlobal('document', win.document); vi.stubGlobal('CustomEvent', win.CustomEvent);
+    setSessionState({ mode: 'logged_out', user: null }, { persist: false, silent: true });
     const api = { auth: { getPendingPhoneLogin: vi.fn(async () => null) }, security: { isAuthenticated: () => false, isAnonymous: () => false } };
     win.AdoleAPI = api; win.__authCheckComplete = true;
     win.__authCheckResult = { complete: true, authenticated: false, anonymous: false };
@@ -101,6 +105,29 @@ describe('logout first-launch ownership', () => {
         expect(f.flow().state.stage).toBe('phone');
         expect(f.api.auth.simulatePhonePayment).toHaveBeenCalledWith('card'); expect(f.api.auth.cancelPhoneLogin).toHaveBeenCalledTimes(1);
         await f.flow().close();
+    });
+    it('keeps the guest goal selector open across the real session and main-menu events', async () => {
+        const f = await setup(); transport.cleanup = null;
+        f.api.security.isAnonymous = () => getSessionState().mode === 'anonymous';
+        f.api.security.startGuest = vi.fn(async () => {
+            const user = { id: 'local-guest' };
+            setSessionState({ mode: 'anonymous', user }, { persist: false });
+            return { ok: true, user };
+        });
+        await f.home.openLoginSequenceAfterAuthCheck();
+        // Use the public catalogue for this session-coordinator test; template
+        // installation and durable guest projects are exercised by real Web UI.
+        f.win.Atome = { listStateCurrent: vi.fn(async () => []) };
+        const result = await transport.presentations.at(-1).activate({ operation: 'guest', value: '' });
+        expect(result).toMatchObject({ ok: true });
+        expect(f.api.security.startGuest).toHaveBeenCalledTimes(1);
+        expect(f.flow().state).toMatchObject({ stage: 'goals', guest: true, guestId: 'local-guest', accountId: '' });
+        expect(f.win.__eveProfilePreferences.visual.masteryLevel).toBe('beginner');
+        expect(f.gate.isWorkspaceActiveForMainMenu()).toBe(false);
+        f.gate.syncMainMenuAuthContent({ force: true });
+        expect(f.flow().isOpen()).toBe(true); expect(transport.presentations.at(-1).destroy).not.toHaveBeenCalled();
+        expect(f.failures).toEqual([]); await f.flow().close();
+        expect(f.gate.isWorkspaceActiveForMainMenu()).toBe(true);
     });
     it('serializes the authenticated logout and auth-checked events before remounting Access', async () => {
         const f = await setup(); let release;
