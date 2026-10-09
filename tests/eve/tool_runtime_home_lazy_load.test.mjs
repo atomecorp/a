@@ -6,7 +6,7 @@ import { buildPanelRuntimeConfigByToolId } from '../../eVe/intuition/panel_defin
 import { createToolRuntimeBootstrapPanelHandlers } from '../../eVe/intuition/tools/core/tool_runtime_bootstrap_panel_handlers.js';
 import { createMainMenuContentRuntime } from '../../eVe/intuition/runtime/eve_intuition/main_menu_content_runtime.js';
 import { createMainToolCatalogRuntime } from '../../eVe/intuition/runtime/eve_intuition/main_tool_interaction_runtime.js';
-import { createRuntimeHarness } from './bevy_ui_main_menu_test_helpers.mjs';
+import { createRuntimeHarness, findNode } from './bevy_ui_main_menu_test_helpers.mjs';
 import { eveT } from '../../eVe/i18n/i18n.js';
 
 const ensureString = (value, fallback = '') => {
@@ -225,7 +225,7 @@ describe('Home long-press session feedback', () => {
         const hold = createBevyMainMenuHoldRuntime();
         const interactions = createBevyMainMenuInteractions({
             state: { latchedByToolId: new Map(), sliderStateByKey: new Map(), activePaletteKey: '', pressedId: '', hoveredId: '' },
-            inlineSearch: {}, scroll: { press: () => {}, release: () => {}, consumeActivation: () => false }, hold,
+            inlineSearch: {}, scroll: { press: () => {}, release: () => {}, consumeActivation: () => false }, hold, countdown: { cancel: vi.fn() },
             onInvoke: async (...args) => { invoked.push(args); return { ok: true }; },
             scheduleVisualRender: () => {}, runtimeResolver: () => null
         });
@@ -311,5 +311,34 @@ describe('shared User disconnect owner', () => {
             vi.doUnmock('../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_actions.js');
             vi.resetModules();
         }
+    });
+});
+
+
+describe('User ribbon countdown gesture lifetime', () => {
+    it.each(['release', 'cancel'].flatMap(phase => [100, 1200, 2250].map(elapsed => [phase, elapsed])))('stops a User countdown on %s at %i ms and allows another hold', async (phase, elapsed) => {
+        vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout', 'performance'] });
+        const complete = vi.fn(async () => ({ ok: true }));
+        let h;
+        const content = { toolbox: { children: ['contact'] }, contact: { atome_tool: true,
+            label: 'User', icon: 'contact', tool_id: 'ui.contact.panel', long_press_action: 'pointer.long' } };
+        h = createRuntimeHarness({ content, onInvoke: () => h.runtime.startToolCountdown({ toolId: 'ui.contact.panel', complete }) });
+        h.window.eveBevyUiRuntime.updateTreeMotion = vi.fn();
+        try {
+            await h.runtime.showFully();
+            const tool = () => findNode(h.calls.filter(call => call.payload?.tree).at(-1).payload.tree.root, 'eve_bevy_ui_main_menu_tool_contact');
+            tool().on.press({ x: 20, y: 20 });
+            const pending = tool().on.long_press();
+            await vi.advanceTimersByTimeAsync(elapsed);
+            tool().on[phase]({ x: 20, y: 20 });
+            await vi.advanceTimersByTimeAsync(4000);
+            expect(await pending).toMatchObject({ cancelled: true });
+            expect(complete).not.toHaveBeenCalled();
+            tool().on.press({ x: 20, y: 20 });
+            const next = tool().on.long_press();
+            await vi.advanceTimersByTimeAsync(2600);
+            expect(await next).toMatchObject({ ok: true });
+            expect(complete).toHaveBeenCalledOnce();
+        } finally { h.runtime.destroy(); h.restore(); vi.useRealTimers(); }
     });
 });

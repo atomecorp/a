@@ -12,8 +12,9 @@ import { createProjectRecord } from '../../eVe/intuition/matrix/core/project_dat
 import { eveT, setEveLocale } from '../../eVe/i18n/i18n.js';
 import { buildProjectViewSurfaceTree } from '../../eVe/domains/rendering/project_view_surface_tree.js';
 import { createProjectViewListContent } from '../../eVe/domains/rendering/project_view_list_content.js';
+import { projectViewVisualPanel } from '../../eVe/domains/rendering/project_view_visual_panel.js';
 
-afterEach(() => { vi.unstubAllGlobals(); setEveLocale('fr'); });
+afterEach(() => { projectViewVisualPanel.reset(); projectViewVisualPanel.setEnabled(true); vi.unstubAllGlobals(); setEveLocale('fr'); });
 
 vi.mock('../../eVe/domains/templates/system_template_runtime.js', () => ({ createFromSystemTemplate: vi.fn() }));
 
@@ -172,29 +173,33 @@ test('a rejected canonical creation fails before ordering or opening a project',
     expect(commitBatch).toHaveBeenCalledTimes(1);
 });
 
-test.each(['beginner', 'intermediate', 'advanced'])('the %s List composes its intended workspace layout', level => {
+test.each(['beginner', 'intermediate', 'advanced'])('the %s List composes the shared upper preview and splitter', level => {
     projectStore(level);
+    const record = { id: 'welcome', type: 'text', project_id: 'new', properties: { text: 'Shared preview', color: '#ffffff' } };
     const tree = buildProjectViewSurfaceTree({
         surface: { getBoundingClientRect: () => ({ width: 1200, height: 800 }) },
         state: { mode: 'list', projectId: 'new', playingIds: [], playingRecords: [] },
         activeContent: () => ({ build: () => [{ id: 'real_list', type: 'panel', style: { size: [1000, 64] } }],
             recordsFor: () => [], contextualTarget: () => null }),
-        syncVisualSubject: () => null, contextualState: {}, emit: () => {},
+        syncVisualSubject: () => { projectViewVisualPanel.setSubject(record); return { record }; }, contextualState: {}, emit: () => {},
         footer: { setLevel() {}, setTransport() {}, build: () => ({ id: 'project_footer', style: {} }) },
         navigation: { depth: 0 }, currentProjectName: () => 'QA'
     });
     const nodes = [];
     const visit = node => { nodes.push(node); node.children?.forEach(visit); };
     visit(tree.root);
-    expect(nodes.some(node => node.id === 'project_view_visual')).toBe(level !== 'beginner');
-    expect(nodes.some(node => node.id === 'project_view_separator')).toBe(level !== 'beginner');
+    const visual = nodes.find(node => node.id === 'project_view_visual');
+    const separator = nodes.find(node => node.id === 'project_view_separator');
+    expect(visual).toBeDefined();
+    expect(separator).toBeDefined();
+    expect(nodes.some(node => node.id === 'project_view_visual_preview')).toBe(true);
+    expect(nodes.some(node => node.text === 'Shared preview')).toBe(true);
+    expect(visual.style.position[1] + visual.style.size[1]).toBe(separator.style.position[1]);
     expect(nodes.some(node => node.id === 'real_list')).toBe(true);
-    if (level === 'beginner') {
-        const body = nodes.find(node => node.id.endsWith('_body'));
-        const content = nodes.find(node => node.id.endsWith('_content'));
-        expect(body.style.position[1] + body.style.size[1]).toBe(content.style.size[1]);
-        expect(nodes.find(node => node.id.endsWith('_content')).style.position[1]).toBeLessThan(20);
-    }
+    const body = nodes.find(node => node.id.endsWith('_body'));
+    const content = nodes.find(node => node.id.endsWith('_content'));
+    expect(body.style.position[1] + body.style.size[1]).toBe(content.style.size[1]);
+    expect(content.style.position[1]).toBeGreaterThan(separator.style.position[1]);
 });
 
 for (const level of ['beginner', 'intermediate', 'advanced']) {

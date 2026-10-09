@@ -38,6 +38,7 @@ use std::ops::Range;
 pub(crate) struct SampleRegion {
     pub paint: Rect,
     pub sample: Rect,
+    pub depth: f32,
 }
 
 /// Disposable render extraction, derived from actual clipped meshes/materials.
@@ -117,6 +118,7 @@ pub(crate) fn mesh_region(
         + refraction.abs() / dpr.max(1.0);
     Some(SampleRegion {
         paint,
+        depth: transform.translation().z,
         sample: Rect {
             min: min - Vec2::splat(padding),
             max: max + Vec2::splat(padding),
@@ -225,7 +227,8 @@ fn overlaps(a: Rect, b: Rect) -> bool {
     a.min.x < b.max.x && a.max.x > b.min.x && a.min.y < b.max.y && a.max.y > b.min.y
 }
 
-/// Only consecutive surfaces with independent sample footprints share a capture.
+/// Disjoint coplanar glass shares the backdrop below its plane, independently of
+/// tied phase order. Overlapping paint and different-depth sampling stay ordered.
 pub(crate) fn composition_ranges(
     items: impl IntoIterator<Item = (usize, Option<SampleRegion>)>,
     len: usize,
@@ -233,10 +236,13 @@ pub(crate) fn composition_ranges(
     let mut result = Vec::new();
     let mut start = 0;
     let mut glass_group = false;
-    let mut painted: Vec<Rect> = Vec::new();
+    let mut painted: Vec<SampleRegion> = Vec::new();
     for (index, sample) in items {
         let split = match sample {
-            Some(region) => !glass_group || painted.iter().any(|p| overlaps(region.sample, *p)),
+            Some(region) => !glass_group || painted.iter().any(|p| {
+                let footprint = if region.depth == p.depth { region.paint } else { region.sample };
+                overlaps(footprint, p.paint)
+            }),
             None => glass_group,
         };
         if split {
@@ -248,7 +254,7 @@ pub(crate) fn composition_ranges(
         }
         glass_group = sample.is_some();
         if let Some(region) = sample {
-            painted.push(region.paint);
+            painted.push(region);
         }
     }
     if start < len {

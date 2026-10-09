@@ -96,8 +96,8 @@ test('virtual List retains an offscreen parent rail without changing scroll exte
         assert.equal(hex(start.style.background), '#2a80ed');
         assert.equal(hex(end.style.background), '#2a80ed');
         assert.ok(end.style.position[1] > start.style.position[1]);
-        near(start.style.position[1], direction === 'up' ? 0 : 29);
-        near(end.style.position[1], 39 * 64 + (direction === 'up' ? 29 : 58));
+        near(start.style.position[1], direction === 'up' ? -3 : 29);
+        near(end.style.position[1], 39 * 64 + (direction === 'up' ? 29 : 61));
         assert.deepEqual(find(list.node, `window_entry_${visibleStart}`).style.size, [400, 60]);
         const scrollEntries = new Map([['window_tree:window_virtual_list', { offsetY: visibleStart * 64 }]]);
         const scrolled = applyTreeScrollLayout({ tree: list.node, treeId: 'window_tree', entries: scrollEntries });
@@ -157,7 +157,7 @@ test('List project header reuses row material and root rail while keeping its ex
                 const body = find(tree.root, 'eve_bevy_ui_project_view_body');
                 const content = find(tree.root, 'eve_bevy_ui_project_view_content');
                 near(childReturn.style.position[1] + root.style.position[1],
-                    content.style.position[1] + body.style.position[1] + (direction === 'up' ? 0 : 118));
+                    content.style.position[1] + body.style.position[1] + (direction === 'up' ? -3 : 121));
                 assert.ok(childReturn.style.size[0] > band.style.size[0] / 2);
             }
             if (!collapsed) assert.deepEqual(marks[0].style.background, glyph.image.tint);
@@ -386,7 +386,7 @@ test('rail limits connect header centre to revealed content in either direction'
         near((direction==='up'?end:start).style.position[1]+T.hierarchy.lineWidthPx/2,
             header.style.position[1]+header.style.size[1]/2);
         near((direction==='up'?start:end).style.position[1]+T.hierarchy.lineWidthPx/2,
-            direction==='up'?1:accordion.style.size[1]-1);
+            direction==='up'?-T.gapPx/2:accordion.style.size[1]+T.gapPx/2);
     }
 });
 
@@ -402,7 +402,7 @@ test('production projection gives all content the complete symmetric body width'
             buildContent:(_,{bodyWidth})=>{widths.push(bodyWidth);return [accordionNode({id:'width_header',width:bodyWidth,label:'Section'})];}},
             refresh:()=>{},closeBevyPanelSurface:()=>{},getPanelRuntime:()=>null,treeIdFor:key=>'eve_bevy_panel_'+key,
             surfaceSize:()=>({width:surfaceWidth,height:surfaceHeight}),pinnedAccordionAlign:()=>'',
-            applyHeaderPinShift:({geometry})=>geometry,warnDuplicateNodeIds:(_,tree)=>tree,decoratePanelSweepTree:({tree})=>tree});
+            warnDuplicateNodeIds:(_,tree)=>tree,decoratePanelSweepTree:({tree})=>tree});
         const shell=find(tree.root,'eve_bevy_panel_width_fixture_panel');
         const header=find(tree.root,'width_header_header');
         near(header.style.size[0],shell.style.size[0]-2*T.paddingPx);

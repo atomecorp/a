@@ -9,6 +9,8 @@ vi.mock('../../eVe/core/atome_commit.js', () => ({ getStateCurrent: async () => 
 vi.mock('../../eVe/intuition/tools/tv_catalog_client.js', () => ({ readTvChannelsById: async () => [], resolveTvYoutubeLive: async () => '' }));
 import { createTvInPlacePlayer, playableTvStreams } from '../../eVe/intuition/tools/tv_inplace_player.js';
 import { getSelectedProjectMediaPlayback, stopSelectedProjectMediaPlayback } from '../../eVe/domains/media/selected_project_media_playback_state.js';
+import { createEveBevyUiRuntime } from '../../eVe/domains/rendering/bevy_ui_runtime.js';
+import { BEVY_MAIN_MENU_TREE_ID } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
 
 const tvAtome = { id: 'tv1', properties: { media_source: 'tv', tv_channel_id: 'TF1.fr', tv_channel_name: 'TF1' } };
 const setup = ({ streams, origin = 'https://atome.one', canPlayHls = true } = {}) => {
@@ -17,6 +19,11 @@ const setup = ({ streams, origin = 'https://atome.one', canPlayHls = true } = {}
     const frames = new Map(); let seq = 0;
     win.requestAnimationFrame = fn => { frames.set(++seq, fn); return seq; }; win.cancelAnimationFrame = id => frames.delete(id);
     const tick = () => { const current = [...frames]; frames.clear(); for (const [, fn] of current) fn(); };
+    const menu = createEveBevyUiRuntime({ overlayProjector: { project: async () => [] } });
+    win.eveBevyUiRuntime = menu;
+    const menuReady = menu.mountTree({ id: BEVY_MAIN_MENU_TREE_ID, surface: win.document.querySelector('canvas'),
+        tree: { root: { id: 'menu_tool', kind: 'button', style: { position: [0, 0], size: [60, 60] },
+            on: { activate() {} }, children: [] } } });
     // Media elements: jsdom has none, so each attempt is driven by the test.
     const attempts = [];
     win.HTMLMediaElement.prototype.canPlayType = () => (canPlayHls ? 'maybe' : '');
@@ -35,7 +42,7 @@ const setup = ({ streams, origin = 'https://atome.one', canPlayHls = true } = {}
         loadPlacement: async () => () => ({ left: 40, top: 30, width: 320, height: 180, rotation: 0 }),
         notify: message => notices.push(message), startTimeoutMs: 50 });
     const settle = () => new Promise(resolve => setTimeout(resolve, 0));
-    return { win, player, attempts, youtubeCalls, notices, tick, settle };
+    return { win, player, attempts, youtubeCalls, notices, tick, settle, menu, menuReady };
 };
 
 test('only streams the page can open are tried: plain http is skipped on https and iOS pages', () => {
@@ -121,4 +128,31 @@ test('an idle TV Atome starts from the media reader Play; Pause on it does nothi
     await settle(); await settle();
     attempts[0].dispatchEvent(new win.Event('playing'));
     expect(await pending).toMatchObject({ ok: true, handled: true, action: 'play', latched: true });
+});
+
+test('TV fullscreen hides the menu, restores the original video size, and releases it on Stop', async () => {
+    const { win, player, attempts, settle, menu, menuReady } = setup({
+        streams: [{ kind: 'hls', url: 'https://live.test/x.m3u8', secure: true }] });
+    await menuReady;
+    const playing = player.play('tv1');
+    await settle(); await settle();
+    attempts[0].dispatchEvent(new win.Event('playing'));
+    await playing;
+    const video = win.document.querySelector('video');
+    const canvas = win.document.querySelector('canvas');
+    const hit = () => menu.hitTestAtClientPoint({ surface: canvas, clientX: 30, clientY: 30 });
+    const size = [video.style.width, video.style.height];
+    expect(hit()?.treeId).toBe(BEVY_MAIN_MENU_TREE_ID);
+    await player.setFullscreen(true); await settle();
+    expect(menu.state.treeOpacities.get(BEVY_MAIN_MENU_TREE_ID)).toBe(0);
+    expect(hit()).toBeNull();
+    expect([video.style.width, video.style.height]).toEqual(['800px', '600px']);
+    await player.setFullscreen(false); await settle();
+    expect([video.style.width, video.style.height]).toEqual(size);
+    expect(hit()?.treeId).toBe(BEVY_MAIN_MENU_TREE_ID);
+    await player.setFullscreen(true); await settle();
+    await player.stop(); await settle();
+    expect(menu.state.suspendedTrees.has(BEVY_MAIN_MENU_TREE_ID)).toBe(false);
+    expect(hit()?.treeId).toBe(BEVY_MAIN_MENU_TREE_ID);
+    win.close();
 });

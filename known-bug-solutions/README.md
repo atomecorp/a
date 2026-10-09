@@ -10,7 +10,9 @@ the established solution before attempting a new implementation.
 
 | Symptom | Folder |
 | --- | --- |
+| Nested User accordions shift or lose their open anchor; List Play covers the hierarchy cap | [nested-panel-anchor-and-row-seams](nested-panel-anchor-and-row-seams/README.md) |
 | Native builds repeatedly fill the disk with Rust objects and per-run Xcode caches | [build-cache-disk-exhaustion](build-cache-disk-exhaustion/README.md) |
+| Edges between adjacent blurred glass cards flicker over an animated wallpaper | [coplanar-glass-flicker](coplanar-glass-flicker/README.md) |
 | Logout loses the welcome screen; Billing actions stall; Dashboard restoration flashes gray | [first-launch-logout-and-restore](first-launch-logout-and-restore/README.md) |
 | Guest project rail remains absent and a browser update retains the old reader | [guest-contextual-access](guest-contextual-access/README.md) |
 | Expert List opens without its main menu while catalog registration replaces the first render | [main-menu-projection-admission](main-menu-projection-admission/README.md) |

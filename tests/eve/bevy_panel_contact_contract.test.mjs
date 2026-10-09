@@ -94,6 +94,7 @@ test('Contact exposes its shell before slow directory hydration and ignores a cl
         assert.equal(typeof cleanup, 'function', 'mounting the panel must not wait for remote contacts');
         assert.equal(contactSurface.readState().loading, true);
         assert.ok(visit(contactSurface.buildContent(contactSurface.readState(), { emit: () => {}, bodyWidth: 388 }), node => node.id === 'contact_loading'));
+        await vi.waitFor(() => assert.equal(typeof resolveDirectory, 'function'));
         cleanup(); const refreshed = refresh.mock.calls.length;
         resolveDirectory({ entries: [{ principal_id: 'late', display_name: 'Late' }] });
         await new Promise(resolve => setTimeout(resolve, 20));
@@ -133,6 +134,9 @@ test('Contact lists the authenticated profile once at the top and one folded acc
 
         const emitted = [];
         const content = contactSurface.buildContent(snapshot, { emit: (intent) => emitted.push(intent), bodyWidth: 388 });
+        assert.equal(visit(content, (node) => String(node.id || '').startsWith('contact_conditions')), null,
+            'User/Contacts must not assemble the Finder Conditions editor');
+        assert.equal(snapshot.conditions, undefined);
         assert.equal(visitAll(content, (node) => node.id === 'contact_accordion_current_user').length, 1);
         assert.equal(visit(content, (node) => node.id === 'contact_select_current_user_protected').kind, 'panel');
         assert.equal(visit(content, (node) => node.id === 'contact_select_local_ada').kind, 'checkbox');

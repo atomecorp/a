@@ -19,19 +19,23 @@ use bevy::{
     winit::WinitPlugin,
 };
 
-fn region(x: f32, y: f32, width: f32, height: f32, halo: f32) -> SampleRegion {
+#[path = "backdrop_temporal_order.rs"]
+mod temporal_order;
+
+fn region(x: f32, y: f32, width: f32, height: f32, halo: f32, depth: f32) -> SampleRegion {
     let paint = Rect::from_corners(Vec2::new(x, y), Vec2::new(x + width, y + height));
     SampleRegion {
         paint,
+        depth,
         sample: Rect::from_corners(paint.min - Vec2::splat(halo), paint.max + Vec2::splat(halo)),
     }
 }
 
 #[test]
 fn overlapping_glass_and_intervening_content_require_fresh_snapshots() {
-    let panel = region(0.0, 0.0, 300.0, 200.0, 32.0);
-    let button = region(20.0, 20.0, 60.0, 30.0, 32.0);
-    let third = region(30.0, 24.0, 20.0, 20.0, 32.0);
+    let panel = region(0.0, 0.0, 300.0, 200.0, 32.0, 10.0);
+    let button = region(20.0, 20.0, 60.0, 30.0, 32.0, 20.0);
+    let third = region(30.0, 24.0, 20.0, 20.0, 32.0, 30.0);
     assert_eq!(
         composition_ranges(
             [
@@ -59,9 +63,9 @@ fn overlapping_glass_and_intervening_content_require_fresh_snapshots() {
 
 #[test]
 fn grouping_checks_sampling_halo_and_every_previous_surface() {
-    let first = region(0.0, 0.0, 20.0, 20.0, 2.0);
-    let distant = region(200.0, 0.0, 20.0, 20.0, 2.0);
-    let near_first = region(30.0, 0.0, 20.0, 20.0, 16.0);
+    let first = region(0.0, 0.0, 20.0, 20.0, 2.0, 10.0);
+    let distant = region(200.0, 0.0, 20.0, 20.0, 2.0, 10.0);
+    let near_first = region(30.0, 0.0, 20.0, 20.0, 16.0, 20.0);
     assert_eq!(
         composition_ranges(
             [(0, Some(first)), (1, Some(distant)), (2, Some(near_first))],

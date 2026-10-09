@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 
 import { createPanelTextEditingRuntime } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_text_editing.js';
 import { getTextServiceState } from '../../eVe/domains/rendering/hidden_text_service_runtime.js';
 import { createBevyUiPointerRuntime } from '../../eVe/domains/rendering/bevy_ui_pointer_runtime.js';
 import { setMysticRuntime } from '../../eVe/intuition/ribbon/bevy_ui_product_registry.js';
+
+// Retention tests own the menu boundary; application bootstrap is tested separately.
+vi.mock('../../eVe/intuition/eVeIntuition.js', () => ({ ensureMysticContextItemsRuntime: async () => {} }));
 
 // iOS ends a long press by blurring the hidden editor. The field session is
 // allowed to survive that blur, but only while its Mystic menu really stands:
@@ -13,7 +16,7 @@ import { setMysticRuntime } from '../../eVe/intuition/ribbon/bevy_ui_product_reg
 // takes focus back on every tap, and the bottom tool band stops answering.
 
 const installDom = () => {
-    const dom = new JSDOM('<!doctype html><html><body></body></html>', { pretendToBeVisual: true });
+    const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost', pretendToBeVisual: true });
     globalThis.window = dom.window;
     globalThis.document = dom.window.document;
     return dom;

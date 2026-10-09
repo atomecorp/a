@@ -252,10 +252,10 @@ test('nested Molecules resolve only their local playback mode and normalize lega
     const readRecord = async (id) => records.get(id) || null;
     assert.deepEqual(await resolvePlaybackRule({
         level: { entity: 'molecule', id: 'song', ownerId: 'song' }, stack, readRecord
-    }), { mode: 'simultaneous', loop: false, source: 'override', from: 'song' });
+    }), { mode: 'simultaneous', loop: false, repeat: 'off', source: 'override', from: 'song' });
     assert.deepEqual(await resolvePlaybackRule({
         level: { entity: 'molecule', id: 'plain_song', ownerId: 'plain_song' }, stack, readRecord
-    }), { mode: 'simultaneous', loop: false, source: 'default', from: 'plain_song' });
+    }), { mode: 'simultaneous', loop: false, repeat: 'off', source: 'default', from: 'plain_song' });
 });
 
 test('Playback rules no longer persist child performance ownership', async () => {

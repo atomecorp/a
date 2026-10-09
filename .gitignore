@@ -95,6 +95,7 @@ tests/shared/*
 !tests/shared/semantic_rename_contract.test.mjs
 !tests/eve/
 tests/eve/*
+!tests/eve/assistant_startup.test.mjs
 !tests/eve/last_creation_tool_shortcut.test.mjs
 !tests/eve/tv_inplace_player.test.mjs
 !tests/eve/dashboard_creation_contract.test.mjs
@@ -112,6 +113,7 @@ tests/eve/*
 !tests/eve/bevy_ui_rounded_overflow.test.mjs
 !tests/eve/bevy_panel_contact_contract.test.mjs
 !tests/eve/dashboard_basic_runtime.test.mjs
+!tests/eve/dashboard_basic_template_sync.test.mjs
 !tests/eve/home_hydration_lifecycle.test.mjs
 !tests/eve/bevy_panel_contact_pick_contract.test.mjs
 !tests/eve/bevy_panel_input_contract.test.mjs
@@ -139,6 +141,7 @@ tests/rendering/*
 !tests/rendering/animated_png_tests.rs
 !tests/rendering/panel_surface_paint.rs
 !tests/rendering/panel_overflow_clip.rs
+!tests/rendering/backdrop_temporal_order.rs
 !tests/eve/project_view_playback_regressions.test.mjs
 !tests/eve/project_workspace_activation_contract.test.mjs
 !tests/eve/project_view_mode_state.test.mjs
@@ -379,3 +382,14 @@ tests/native/*
 !tests/eve/text_tool_background_runtime_contract.test.mjs
 # In-place media Stop: incremental scene updates run in the direct-mutation queue
 !tests/eve/project_scene_incremental_queue_contract.test.mjs
+
+# User/List shared-owner regressions
+!tests/eve/panel_nested_scroll.test.mjs
+!tests/eve/text_field_mystic.test.mjs
+!tests/eve/dashboard_data_adapters.test.mjs
+
+!tests/eve/beginner_capture_visual.test.mjs
+!tests/eve/system_ui_base_unit_contract.test.mjs
+!tests/eve/system_ui_base_resize_contract.test.mjs
+!tests/eve/system_ui_base_wiring_guard.test.mjs
+!tests/eve/capture_single_session.test.mjs

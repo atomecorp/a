@@ -4,7 +4,7 @@ const panels = vi.hoisted(() => ({ open: new Set(),
     state: { mounted: new Map(), geometryBySurfaceKey: new Map(), detachedSurfaceKeys: new Set() } }));
 vi.mock('../../eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js', () => ({
     bevyPanelRuntimeState: panels.state,
-    isBevyPanelSurfaceOpen: key => panels.open.has(key), refreshBevyPanelSurface() {}
+    isBevyPanelSurfaceOpen: key => panels.open.has(key), refreshBevyPanelSurface() {}, treeIdFor: key => `panel_${key}`
 }));
 vi.mock('../../eVe/domains/rendering/project_view_records.js', () => ({ currentProjectId: () => 'project' }));
 // The scene only receives re-projections (the Atome becomes / stops being a media window).
@@ -18,22 +18,34 @@ import { isInPlaceMediaWindowOpen } from '../../eVe/domains/media/inplace_media_
 import { getSelectedProjectMediaPlayback, stopSelectedProjectMediaPlayback } from '../../eVe/domains/media/selected_project_media_playback_state.js';
 const surface = vi.hoisted(() => ({ layers: new Map() }));
 vi.mock('../../eVe/domains/rendering/surface_runtime.js', () => ({
+    subscribeRenderSurfaceSize: () => () => {},
     setRenderSurfaceInteractionInterceptorLayer: (zone, key, interceptor) => {
         if (interceptor) surface.layers.set(key, interceptor); else surface.layers.delete(key);
     }
 }));
 vi.mock('../../eVe/intuition/runtime/selection.js', () => ({ getCurrentSelectionIds: () => [], applySelectionIntent() {} }));
-vi.mock('../../eVe/intuition/ribbon/bevy_ui_product_registry.js', () => ({ getMainMenuRuntime: () => null }));
+vi.mock('../../eVe/intuition/ribbon/bevy_ui_product_registry.js', async (importOriginal) => ({
+    ...await importOriginal(), getMainMenuRuntime: () => null
+}));
 import { createYoutubeToolRuntime, resolveYoutubePlayerHost } from '../../eVe/intuition/tools/youtube_tool_runtime.js';
+import { createEveBevyUiRuntime } from '../../eVe/domains/rendering/bevy_ui_runtime.js';
+import { BEVY_MAIN_MENU_TREE_ID } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
+import { suspendGestureChrome, restoreGestureChrome } from '../../eVe/domains/rendering/gesture_chrome_suspension.js';
+import { createBevyUiMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_runtime.js';
 
 const HOST = 'https://player.test';
-const setup = ({ commit = async () => ({ ok: true }) } = {}) => {
+const setup = ({ commit = async () => ({ ok: true }), menuOpacity = 1 } = {}) => {
     panels.open.clear(); panels.state.mounted.clear(); panels.state.geometryBySurfaceKey.clear();
     const win = new JSDOM('<canvas id="eve_surface_project"></canvas>', { url: 'http://127.0.0.1:3001' }).window;
     win.document.querySelector('canvas').getBoundingClientRect = () => ({ left: 10, top: 20, width: 900, height: 600 });
     const frames = new Map(); let seq = 0;
     win.requestAnimationFrame = fn => { frames.set(++seq, fn); return seq; }; win.cancelAnimationFrame = id => frames.delete(id);
     const tick = () => { const current = [...frames]; frames.clear(); for (const [, fn] of current) fn(); };
+    const menu = createEveBevyUiRuntime({ overlayProjector: { project: async () => [] } });
+    win.eveBevyUiRuntime = menu;
+    const menuReady = menu.mountTree({ id: BEVY_MAIN_MENU_TREE_ID, opacity: menuOpacity, surface: win.document.querySelector('canvas'),
+        tree: { root: { id: 'menu_tool', kind: 'button', style: { position: [0, 0], size: [60, 60] },
+            on: { activate() {} }, children: [] } } });
     let placement = { left: 110, top: 70, width: 480, height: 270, rotation: 0 };
     const notices = []; const history = [];
     const runtime = createYoutubeToolRuntime({ win, commit,
@@ -45,7 +57,7 @@ const setup = ({ commit = async () => ({ ok: true }) } = {}) => {
     const fromHost = (payload) => win.dispatchEvent(new win.MessageEvent('message', { origin: HOST,
         source: iframe().contentWindow, data: { source: 'eve-youtube-player', videoId: 'abcDEFghi12', ...payload } }));
     const watchCommands = () => { iframe().contentWindow.postMessage = (message, origin) => posted.push({ ...message, origin }); };
-    return { win, frames, tick, runtime, iframe, fromHost, watchCommands, posted, notices, history,
+    return { win, frames, tick, runtime, iframe, fromHost, watchCommands, posted, notices, history, menu, menuReady,
         movePlacement: next => { placement = next; } };
 };
 
@@ -185,4 +197,123 @@ test('the playing video is a shared playback entry; leaving the project stops it
     await stopSelectedProjectMediaPlayback(win, 'video');
     expect(iframe()).toBeNull();
     win.close();
+});
+
+test('YouTube fullscreen suspends the actual menu tree and its hit targets until the second double-click', async () => {
+    const { runtime, iframe, menu, menuReady, win } = setup();
+    await menuReady;
+    await runtime.transport('play', 'video');
+    await new Promise(resolve => setTimeout(resolve, 30));
+    const canvas = win.document.querySelector('canvas');
+    const hit = () => menu.hitTestAtClientPoint({ surface: canvas, clientX: 30, clientY: 40 });
+    const layer = surface.layers.get('inplace_media_window:video');
+    const originalSize = [iframe().style.width, iframe().style.height];
+    expect(hit()?.treeId).toBe(BEVY_MAIN_MENU_TREE_ID);
+    layer({ phase: 'double_click', target: { id: 'video' } });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(menu.state.treeOpacities.get(BEVY_MAIN_MENU_TREE_ID)).toBe(0);
+    expect(hit()).toBeNull();
+    layer({ phase: 'click', target: null });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(menu.state.suspendedTrees.has(BEVY_MAIN_MENU_TREE_ID)).toBe(true);
+    layer({ phase: 'double_click', target: null });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(menu.state.suspendedTrees.has(BEVY_MAIN_MENU_TREE_ID)).toBe(false);
+    expect(menu.state.treeOpacities.get(BEVY_MAIN_MENU_TREE_ID)).toBe(1);
+    expect(hit()?.treeId).toBe(BEVY_MAIN_MENU_TREE_ID);
+    expect([iframe().style.width, iframe().style.height]).toEqual(originalSize);
+    await runtime.setActive(false);
+    win.close();
+});
+
+test('rapid fullscreen toggles and closing restore the menu opacity without stopping playback', async () => {
+    const { runtime, menu, menuReady, iframe, win } = setup({ menuOpacity: 0.6 });
+    await menuReady;
+    await runtime.transport('play', 'video');
+    runtime.toggleFullscreen(); runtime.toggleFullscreen(); runtime.toggleFullscreen();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(menu.state.suspendedTrees.has(BEVY_MAIN_MENU_TREE_ID)).toBe(true);
+    expect(iframe()).not.toBeNull();
+    await runtime.setActive(false);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(menu.state.suspendedTrees.has(BEVY_MAIN_MENU_TREE_ID)).toBe(false);
+    expect(menu.state.treeOpacities.get(BEVY_MAIN_MENU_TREE_ID)).toBe(0.6);
+    win.close();
+});
+
+test('fullscreen preserves an existing menu suspension and does not release a Dashboard suspension', async () => {
+    for (const previouslySuspended of [true, false]) {
+        const { runtime, menu, menuReady, win } = setup();
+        await menuReady;
+        await runtime.transport('play', 'video');
+        if (previouslySuspended) await menu.setTreeSuspended({ id: BEVY_MAIN_MENU_TREE_ID, suspended: true });
+        runtime.toggleFullscreen();
+        await new Promise(resolve => setTimeout(resolve, 0));
+        if (!previouslySuspended) win.__eveDashboardMainMenuSuspended = true;
+        await runtime.setActive(false);
+        await new Promise(resolve => setTimeout(resolve, 0));
+        expect(menu.state.suspendedTrees.has(BEVY_MAIN_MENU_TREE_ID)).toBe(true);
+        win.close();
+    }
+});
+
+test('a held gesture leaves the fullscreen menu suspended after release', async () => {
+    const { runtime, menu, menuReady, win } = setup();
+    const previousWindow = globalThis.window;
+    globalThis.window = win;
+    try {
+        await menuReady;
+        await runtime.transport('play', 'video');
+        runtime.toggleFullscreen();
+        await new Promise(resolve => setTimeout(resolve, 0));
+        await suspendGestureChrome();
+        await restoreGestureChrome();
+        expect(menu.state.sourceTrees.has(BEVY_MAIN_MENU_TREE_ID)).toBe(true);
+        expect(menu.state.suspendedTrees.has(BEVY_MAIN_MENU_TREE_ID)).toBe(true);
+        expect(win.__eveDashboardMainMenuSuspended).not.toBe(true);
+        runtime.toggleFullscreen();
+        await new Promise(resolve => setTimeout(resolve, 0));
+        expect(menu.state.suspendedTrees.has(BEVY_MAIN_MENU_TREE_ID)).toBe(false);
+    } finally {
+        await runtime.setActive(false);
+        globalThis.window = previousWindow;
+        win.close();
+    }
+});
+
+test('the main menu glow stops painting while YouTube fullscreen holds its suspension', async () => {
+    const { runtime, menu, menuReady, win } = setup();
+    const previousWindow = globalThis.window;
+    globalThis.window = win;
+    const patches = [];
+    const menuRuntime = createBevyUiMainMenuRuntime({
+        content: { toolbox: { children: ['find'] }, find: { atome_tool: true,
+            tool_id: 'tool.main.find', action: 'toggle', label: 'Find', icon: 'find' } },
+        surfaceResolver: () => win.document.querySelector('canvas'),
+        runtimeResolver: () => ({
+            state: menu.state, mountTree: async payload => payload.tree, updateTree: async payload => payload.tree,
+            updateTreeMotion: async payload => { patches.push(payload); }, unmountTree: async () => null
+        })
+    });
+    try {
+        await menuReady;
+        menuRuntime.setToolLatchedState({ tool_id: 'tool.main.find', latched: true });
+        await menuRuntime.showFully();
+        await new Promise(resolve => setTimeout(resolve, 100));
+        expect(patches.length).toBeGreaterThan(0);
+        await runtime.transport('play', 'video');
+        runtime.toggleFullscreen();
+        await new Promise(resolve => setTimeout(resolve, 0));
+        const count = patches.length;
+        await new Promise(resolve => setTimeout(resolve, 100));
+        expect(patches).toHaveLength(count);
+        runtime.toggleFullscreen();
+        await new Promise(resolve => setTimeout(resolve, 100));
+        expect(patches.length).toBeGreaterThan(count);
+    } finally {
+        menuRuntime.destroy();
+        await runtime.setActive(false);
+        globalThis.window = previousWindow;
+        win.close();
+    }
 });

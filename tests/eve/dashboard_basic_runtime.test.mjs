@@ -4,9 +4,8 @@ import { FIRST_LAUNCH_TEMPLATES } from '../../eVe/domains/templates/first_launch
 import { setHandedness } from '../../eVe/intuition/core/state.js';
 import { initialProgram } from '../../eVe/domains/programs/project_program_model.js';
 import { DASHBOARD_VISUAL_TOKENS } from '../../eVe/domains/dashboard/dashboard_tokens.js';
-import { dashboardContentGlassStyle } from '../../eVe/domains/dashboard/dashboard_glass_material.js';
-import { panelIconButtonNode } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tree.js';
-import { ICON_BASE } from '../../eVe/intuition/ribbon/tokens.js';
+import { dashboardContentGlassStyle, dashboardGlassMaterial } from '../../eVe/domains/dashboard/dashboard_glass_material.js';
+import { buildDashboardCardRecords } from '../../eVe/domains/dashboard/dashboard_card_records.js';
 import { authorizeProjectTool, restoreProjectWorkModeValue } from '../../eVe/domains/rendering/project_work_mode_state.js';
 
 const owners = vi.hoisted(() => ({ session: { mode: 'authenticated', user: { id: 'qa' } }, profile: null,
@@ -34,6 +33,8 @@ let dom, previousWindow, previousDocument, previousCustomEvent, runtime, trees, 
 const nodes = () => walk(trees.filter(tree => tree.id === 'basic_test').at(-1).root);
 const collectionNodes = () => walk(trees.filter(tree => tree.id === 'basic_test_collection').at(-1).root);
 const text = () => nodes().filter(node => node.kind === 'text').map(node => node.text).join('\n');
+const cardFor = id => [...nodes(), ...(runtime.state.filteredCategoryId ? collectionNodes() : [])]
+    .find(node => node.id.startsWith('__eve_dashboard_card_') && node.id.endsWith('_' + id) && !node.id.includes('label_backdrop'));
 const createRuntime = () => createBasicDashboardRuntime({ projectId: 'home', treeId: 'basic_test', records, readBounds: () => viewport,
     uiRuntime: { mountTree: async ({ tree }) => { trees.push(tree); }, unmountTree: vi.fn(), updateTreeMotion: owners.motion } });
 it.each(['consultation', 'performance'])('allows Basic Dashboard navigation in %s while scene edits remain blocked', async mode => {
@@ -106,7 +107,7 @@ it('cancels Profile countdown on account change before disconnecting', async () 
     expect(owners.logout).not.toHaveBeenCalled(); expect(vi.getTimerCount()).toBe(0);
 });
 
-it('uses the Dashboard glass/font, wide weather and native compact plus buttons', async () => {
+it('uses the professional light glass, native labelled add cards and Dashboard font', async () => {
     expect((await runtime.open()).ok).toBe(true);
     for (const width of [390, 1024]) {
         viewport.width = width; await runtime.render();
@@ -114,7 +115,7 @@ it('uses the Dashboard glass/font, wide weather and native compact plus buttons'
         const native = dashboardContentGlassStyle('#73777e', DASHBOARD_VISUAL_TOKENS);
         for (const card of cards.filter(node => !node.id.includes('label_backdrop'))) {
             expect(card.style.radius).toBe(DASHBOARD_VISUAL_TOKENS.metrics.contentRadius);
-            expect([native.material, dashboardContentGlassStyle(DASHBOARD_VISUAL_TOKENS.background, DASHBOARD_VISUAL_TOKENS).material])
+            expect([native.material, dashboardGlassMaterial({ settings: DASHBOARD_VISUAL_TOKENS.headerBand, shadow: false })])
                 .toContainEqual(card.overlayRecord.properties.material);
         }
         for (const node of current.filter(node => node.overlayRecord?.type === 'text'))
@@ -124,21 +125,22 @@ it('uses the Dashboard glass/font, wide weather and native compact plus buttons'
         expect(slots[1].size[0]).toBe(2 * slots[0].size[0]);
         expect(slots[4].position[0] - slots[5].position[0] - slots[5].size[0]).toBeCloseTo(DASHBOARD_VISUAL_TOKENS.metrics.gap);
         for (const id of ['new_monitor', 'new_program']) {
-            const actual = current.find(node => node.id === id), standard = panelIconButtonNode({ id, icon: `${ICON_BASE}add.svg` });
-            expect(actual.style.size).toEqual(standard.style.size);
-            const appearance = node => { const { z_index, ...style } = node.style; return style; };
-            expect(actual.children.map(appearance)).toEqual(standard.children.map(appearance));
-            expect(actual.children[1].style.z_index - actual.children[0].style.z_index).toBe(1);
+            const actual = cardFor(id), control = records.find(record => record.id === id).properties.template_control;
+            const size = current.find(node => node.id === id + '_slot').style.size;
+            const standard = buildDashboardCardRecords({ entry: { item: { id }, category: { id: 'template_controls' },
+                rect: { x: 0, y: 0, width: size[0], height: size[1] } }, lane: {}, tokens: DASHBOARD_VISUAL_TOKENS,
+                content: { label: actual.accessibility.label, icon: control.icon_source, layout: 'label_band' } });
+            expect(actual.overlayRecord.properties.material).toEqual(standard[0].properties.material);
+            expect(size).toEqual(slots[0].size);
             expect(current.find(node => node.id === id + '_slot').style.position[0]).toBeGreaterThan(0);
             expect(actual.accessibility.label).toBeTruthy();
         }
-        expect(current.filter(node => node.id.includes('card_label_backdrop_'))).toHaveLength(4);
+        expect(current.filter(node => node.id.includes('card_label_backdrop_'))).toHaveLength(6);
         const tree = trees.at(-1), content = current.find(node => node.id === 'matrix_content');
         const contentBottom = tree.root.style.position[1] + tree.root.children[0].style.position[1] + content.style.size[1];
         expect(viewport.height - contentBottom).toBe(30);
         const addSlot = current.find(node => node.id === 'new_program_slot').style;
-        expect(addSlot.size).toEqual(current.find(node => node.id === 'new_program').style.size);
-        expect(current.find(node => node.id === 'programs_title_group_slot').style.size[1]).toBe(addSlot.size[1]);
+        expect(addSlot.size[1]).toBeGreaterThan(current.find(node => node.id === 'programs_title_group_slot').style.size[1]);
     }
     expect(text()).toContain('Sommeil'); expect(text()).toContain('Aucune donnée'); expect(text()).not.toContain('Proposition');
     expect(text()).not.toContain('Indisponible'); expect(text()).not.toContain('86%'); expect(text()).not.toContain('26°');
@@ -148,8 +150,7 @@ it('dispatches Profile, Calendar, New monitor and New programme through the regi
     await runtime.open();
     for (const [id, operation, project_id] of [['profile', 'profile_home', 'sleep'], ['calendar', 'agenda', 'sleep'],
         ['new_monitor', 'new_monitor', 'home'], ['new_program', 'new_program', 'sleep']]) {
-        const card = id.startsWith('new_') ? nodes().find(node => node.id === id)
-            : nodes().find(node => node.id.startsWith('__eve_dashboard_card_') && node.id.endsWith('_' + id) && !node.id.includes('label_backdrop'));
+        const card = cardFor(id);
         card.on.activate();
         await vi.waitFor(() => expect(owners.gateway).toHaveBeenLastCalledWith({ tool_id: 'ui.first_launch.home', action: 'pointer.click',
             input: { operation, project_id }, source: { type: 'ui' } }));
@@ -228,7 +229,7 @@ it('releases source owners when opening rejects the home or its read fails', asy
 it.each([[1680, 1050], [1024, 768], [390, 844], [390, 650], [320, 480]])('anchors and mirrors the layout at %i × %i', async (width, height) => {
     viewport = { x: 11, y: 17, width, height };
     await runtime.open();
-    const slots = ['clock', 'weather', 'programs_title_group', 'program', 'monitors_title_group', 'monitor', 'calendar', 'profile',
+    const slots = ['clock', 'weather', 'programs_background', 'monitors_background', 'programs_title_group', 'program', 'monitors_title_group', 'monitor', 'calendar', 'profile',
         'programs_title', 'new_program', 'monitors_title', 'new_monitor'];
     const styles = () => Object.fromEntries(slots.map(id => [id, structuredClone(nodes().find(node => node.id === id + '_slot').style)]));
     const right = styles(), frame = nodes().find(node => node.id === 'matrix_content').style;
@@ -237,11 +238,18 @@ it.each([[1680, 1050], [1024, 768], [390, 844], [390, 650], [320, 480]])('anchor
     expect(right.clock.position).toEqual([0, 0]);
     expect(right.weather.position[0]).toBeCloseTo(right.clock.size[0] + 8);
     expect(right.weather.size[0]).toBe(2 * right.clock.size[0]);
-    expect(right.programs_title_group.position[1]).toBeCloseTo(right.clock.size[1] + 8);
-    expect(right.program.position[1]).toBe(right.programs_title_group.position[1] + right.programs_title_group.size[1] + DASHBOARD_VISUAL_TOKENS.metrics.gap);
-    expect(right.monitor.position[1]).toBe(right.monitors_title_group.position[1] + right.monitors_title_group.size[1] + DASHBOARD_VISUAL_TOKENS.metrics.gap);
-    expect(right.monitors_title_group.position[1]).toBeGreaterThanOrEqual(height / 2 - 30);
-    expect(right.monitors_title_group.position[1]).toBeGreaterThanOrEqual(right.program.position[1] + right.program.size[1] + 8);
+    expect(right.programs_background.position[1]).toBeCloseTo(right.clock.size[1] + 8);
+    expect(right.programs_background.size).toEqual(right.monitors_background.size);
+    expect(right.monitors_background.position[1]).toBeCloseTo(right.programs_background.position[1] + right.programs_background.size[1] + 8);
+    for (const [background, footer, item, add] of [['programs_background', 'programs_title_group', 'program', 'new_program'],
+        ['monitors_background', 'monitors_title_group', 'monitor', 'new_monitor']]) {
+        expect(right[item].position[1]).toBeCloseTo(right[background].position[1] + 8);
+        expect(right[item].position[0]).toBe(8);
+        expect(right[add].position[1]).toBe(right[item].position[1]);
+        expect(right[add].position[0] + right[add].size[0]).toBeCloseTo(frame.size[0] - 8);
+        expect(right[footer].position[1] + right[footer].size[1]).toBeCloseTo(right[background].position[1] + right[background].size[1]);
+        expect(right[footer].position[1]).toBeGreaterThanOrEqual(right[item].position[1] + right[item].size[1] + 8 - .001);
+    }
     for (const [section, title] of [['programs_title_group', 'programs_title'], ['monitors_title_group', 'monitors_title']]) {
         expect(right[section].position[0]).toBe(0);
         expect(right[section].size[0]).toBe(frame.size[0]);
@@ -257,8 +265,8 @@ it.each([[1680, 1050], [1024, 768], [390, 844], [390, 650], [320, 480]])('anchor
     await vi.waitFor(() => expect(styles().profile.position[0]).toBeCloseTo(0));
     const left = styles();
     for (const id of slots) {
-        const parentWidth = ['programs_title', 'new_program'].includes(id) ? right.programs_title_group.size[0]
-            : ['monitors_title', 'new_monitor'].includes(id) ? right.monitors_title_group.size[0] : frame.size[0];
+        const parentWidth = id === 'programs_title' ? right.programs_title_group.size[0]
+            : id === 'monitors_title' ? right.monitors_title_group.size[0] : frame.size[0];
         expect(left[id].position[0]).toBeCloseTo(parentWidth - right[id].position[0] - right[id].size[0]);
         expect(left[id].position[1]).toBe(right[id].position[1]); expect(left[id].size).toEqual(right[id].size);
     }
@@ -295,7 +303,7 @@ it('toggles native rubans, keeps chrome and add action, lists all actual program
     collectionNodes().find(node => node.id.startsWith('__eve_dashboard_card_') && node.id.endsWith('_second') && !node.id.includes('label_backdrop')).on.activate();
     await vi.waitFor(() => expect(owners.gateway).toHaveBeenLastCalledWith({ tool_id: 'ui.first_launch.home', action: 'pointer.click',
         input: { operation: 'program', project_id: 'second' }, source: { type: 'ui' } }));
-    nodes().find(node => node.id === 'new_program').on.activate();
+    cardFor('new_program').on.activate();
     await vi.waitFor(() => expect(owners.gateway).toHaveBeenLastCalledWith({ tool_id: 'ui.first_launch.home', action: 'pointer.click',
         input: { operation: 'new_program', project_id: 'sleep' }, source: { type: 'ui' } }));
     expect(runtime.state.filteredCategoryId).toBe('projects');
@@ -305,7 +313,7 @@ it('toggles native rubans, keeps chrome and add action, lists all actual program
     expect(chrome()).toEqual(initialChrome); expect(JSON.stringify(records)).toBe(canonical);
 });
 
-it('expands monitor data at the first ribbon, preserves the standard gap and mirrors the collection', async () => {
+it('expands monitor data above its footer, preserves the standard gap and mirrors the collection', async () => {
     viewport = { x: 11, y: 17, width: 1024, height: 768 };
     owners.monitorItems = [{ id: 'dashboard_health_steps', title: 'Pas', metadata: { health_monitor: { monitorId: 'steps', label: 'Pas', value: '2500', unit: 'pas', detail: '' } } }];
     const generic = { id: 'generic-monitor', properties: { source_domain: 'eve.dashboard', category_id: 'monitor', title: 'Moniteur personnel' } };
@@ -315,18 +323,21 @@ it('expands monitor data at the first ribbon, preserves the standard gap and mir
     expect(text()).toContain('Vos moniteurs'); expect(text()).not.toContain('Vos programmes');
     const clock = nodes().find(node => node.id === 'clock_slot').style;
     const heading = nodes().find(node => node.id === 'monitors_title_group_slot').style;
-    expect(heading.position[1]).toBe(clock.size[1] + 8);
+    const background = nodes().find(node => node.id === 'monitors_background_slot').style;
+    expect(background.position[1]).toBe(clock.size[1] + 8);
+    expect(heading.position[1] + heading.size[1]).toBeCloseTo(background.position[1] + background.size[1]);
     const collectionTree = trees.filter(tree => tree.id === 'basic_test_collection').at(-1);
-    expect(collectionTree.root.style.position[1]).toBe(viewport.y + 30 + heading.position[1] + heading.size[1] + 8);
+    expect(collectionTree.root.style.position[1]).toBe(viewport.y + 30 + background.position[1] + 8);
+    expect(collectionTree.root.style.size[1]).toBeCloseTo(heading.position[1] - background.position[1] - 16);
     const labels = collectionNodes().filter(node => node.kind === 'text').map(node => node.text).join(' ');
     expect(labels).toContain('Sommeil'); expect(labels).toContain('Aucune donnée'); expect(labels).toContain('2500');
-    expect(collectionNodes().filter(node => node.id.endsWith('_slot'))).toHaveLength(3);
+    expect(collectionNodes().filter(node => node.id.endsWith('_slot'))).toHaveLength(4);
     const right = collectionNodes().find(node => node.id === 'dashboard_health_steps_slot').style;
     setHandedness('left', { source: 'test' }); await runtime.render();
     const left = collectionNodes().find(node => node.id === 'dashboard_health_steps_slot').style;
-    expect(left.position[0]).toBeCloseTo(964 - right.position[0] - right.size[0]);
+    expect(left.position[0]).toBeCloseTo(948 - right.position[0] - right.size[0]);
     expect(nodes().find(node => node.id === 'profile_slot').style.position[0]).toBe(0);
-    nodes().find(node => node.id === 'new_monitor').on.activate();
+    cardFor('new_monitor').on.activate();
     await vi.waitFor(() => expect(owners.gateway).toHaveBeenLastCalledWith({ tool_id: 'ui.first_launch.home', action: 'pointer.click',
         input: { operation: 'new_monitor', project_id: 'home' }, source: { type: 'ui' } }));
     expect(runtime.state.filteredCategoryId).toBe('monitor');
@@ -340,7 +351,7 @@ it('scrolls a long collection independently between the ribbon and footer, witho
     await runtime.open(); await runtime.toggleCategoryFilter('projects');
     const tree = trees.filter(tree => tree.id === 'basic_test_collection').at(-1), scroll = collectionNodes().find(node => node.kind === 'scroll_area');
     const body = collectionNodes().find(node => node.id === 'matrix_collection_content');
-    const footerY = viewport.y + 30 + nodes().find(node => node.id === 'profile_slot').style.position[1];
+    const footerY = viewport.y + 30 + nodes().find(node => node.id === 'programs_title_group_slot').style.position[1];
     expect(tree.root.style.position[1] + scroll.style.size[1]).toBeCloseTo(footerY - 8);
     expect(scroll.style.overflow).toBe('scroll_y'); expect(body.style.size[1]).toBeGreaterThan(scroll.style.size[1]);
     expect(collectionNodes().some(node => node.text === 'Programme 299')).toBe(true);
@@ -374,4 +385,33 @@ it('an anonymous session cannot open a home owned by another principal', async (
     window.Atome.getStateCurrent.mockResolvedValue({ owner_id: 'other', properties: {} });
     expect(await runtime.open()).toMatchObject({ ok: false, error: 'program_owner_required' });
     expect(trees).toHaveLength(0);
+});
+
+
+it.each(['release', 'cancel'].flatMap(phase => [100, 1200, 2250].map(elapsed => [phase, elapsed])))('stops Profile countdown on %s at %i ms and restores the card', async (phase, elapsed) => {
+    await runtime.destroy(); vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout', 'performance'] });
+    runtime = createRuntime(); await runtime.open();
+    const profile = () => nodes().find(node => node.on?.long_press);
+    const appearance = structuredClone(profile().style);
+    profile().on.press(); profile().on.long_press();
+    await vi.waitFor(() => expect(owners.countdownStart).toHaveBeenCalledOnce());
+    await vi.advanceTimersByTimeAsync(elapsed);
+    profile().on[phase]();
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(owners.logout).not.toHaveBeenCalled();
+    expect(nodes().some(node => node.id.endsWith('_countdown'))).toBe(false);
+    expect(profile().style).toEqual(appearance);
+    expect(owners.gateway).not.toHaveBeenCalled();
+    profile().on.press(); profile().on.long_press();
+    await vi.advanceTimersByTimeAsync(2600);
+    expect(owners.logout).toHaveBeenCalledOnce();
+});
+
+it('does not start Profile countdown when released before the async action arrives', async () => {
+    await runtime.destroy(); vi.useFakeTimers(); runtime = createRuntime(); await runtime.open();
+    const profile = nodes().find(node => node.on?.long_press);
+    profile.on.press(); profile.on.long_press(); profile.on.release();
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(owners.logout).not.toHaveBeenCalled();
+    expect(nodes().some(node => node.id.endsWith('_countdown'))).toBe(false);
 });
