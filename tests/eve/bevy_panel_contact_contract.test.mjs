@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 
 import { contactSurface } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_contact_runtime.js';
 
@@ -81,6 +81,30 @@ const installContactEnvironment = ({
     } };
     return dom;
 };
+
+test('Contact exposes its shell before slow directory hydration and ignores a closed opening', async () => {
+    const previousWindow = globalThis.window, previousDocument = globalThis.document;
+    const dom = installContactEnvironment({ items: [], current: { id: 'self', name: 'Self' } });
+    let resolveDirectory;
+    dom.window.AdoleAPI.directory.list = () => new Promise(resolve => { resolveDirectory = resolve; });
+    const refresh = vi.fn();
+    let cleanup;
+    try {
+        cleanup = contactSurface.onOpen({ context: {}, refresh });
+        assert.equal(typeof cleanup, 'function', 'mounting the panel must not wait for remote contacts');
+        assert.equal(contactSurface.readState().loading, true);
+        assert.ok(visit(contactSurface.buildContent(contactSurface.readState(), { emit: () => {}, bodyWidth: 388 }), node => node.id === 'contact_loading'));
+        cleanup(); const refreshed = refresh.mock.calls.length;
+        resolveDirectory({ entries: [{ principal_id: 'late', display_name: 'Late' }] });
+        await new Promise(resolve => setTimeout(resolve, 20));
+        assert.equal(contactSurface.readState().entries.some(entry => entry.id === 'late'), false);
+        assert.equal(refresh.mock.calls.length, refreshed);
+    } finally {
+        if (typeof cleanup === 'function') cleanup();
+        else { resolveDirectory?.({ entries: [] }); (await cleanup)?.(); }
+        await contactSurface.onClose(); dom.window.close(); globalThis.window = previousWindow; globalThis.document = previousDocument;
+    }
+});
 
 test('Contact lists the authenticated profile once at the top and one folded accordion per stable identity', async () => {
     const previousWindow = globalThis.window;
@@ -371,19 +395,22 @@ test('Dashboard and panel readers share slow hydration, never read a stale cache
     await assert.rejects(readLocalContacts(failed), /permission_denied/);
 });
 
-test('direct contact opening waits for hydration, reopens the same card without toggling it, and reports a vanished contact', async () => {
+test('direct contact opening paints before hydration, then reveals the requested card and reports a vanished contact', async () => {
     const previousWindow=globalThis.window, previousDocument=globalThis.document;
     const dom=installContactEnvironment({items:[{id:'ada',name:'Ada',source_provider:'eve_contacts_local',source_writable:true}],current:{id:'self',name:'Self'}});
     let release;const ready=new Promise(resolve=>{release=resolve;});
     dom.window.Squirrel.contacts.ensureReady=async()=>{await ready;return {ok:true};};
-    let revealed='';let settled=false;
+    let revealed='';
     try {
-        const opening=contactSurface.onOpen({context:{contactId:'ada'},refresh:()=>{},reveal:id=>{revealed=id;}}).then(cleanup=>{settled=true;return cleanup;});
-        await Promise.resolve();assert.equal(settled,false);release();const cleanup=await opening;
+        const cleanup=contactSurface.onOpen({context:{contactId:'ada'},refresh:()=>{},reveal:id=>{revealed=id;}});
+        assert.equal(typeof cleanup,'function');assert.equal(revealed,'');assert.equal(contactSurface.readState().loading,true);release();
+        await vi.waitFor(()=>assert.equal(revealed,'contact_accordion_ada_header'));
         assert.equal(contactSurface.readState().expandedId,'ada');assert.equal(revealed,'contact_accordion_ada_header');cleanup();
         const cleanupAgain=await contactSurface.onOpen({context:{contactId:'ada'},refresh:()=>{},reveal:()=>{}});
+        await vi.waitFor(()=>assert.equal(contactSurface.readState().expandedId,'ada'));
         assert.equal(contactSurface.readState().expandedId,'ada');cleanupAgain();
         const missing=await contactSurface.onOpen({context:{contactId:'deleted'},refresh:()=>{}});
+        await vi.waitFor(()=>assert.equal(contactSurface.readState().error,true));
         assert.equal(contactSurface.readState().error,true);assert.match(contactSurface.readState().notice,/introuvable|not found/i);missing();
     } finally { await contactSurface.onClose();dom.window.close();globalThis.window=previousWindow;globalThis.document=previousDocument; }
 });

@@ -6,7 +6,6 @@ import { buildAtomeContextualEditTree } from '../../eVe/intuition/runtime/eve_in
 import { createAtomeContextualEditRuntime } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_runtime.js';
 import { createAtomeContextualEditHandlers } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_handlers.js';
 import { normalizeBevyUiTree } from '../../eVe/domains/rendering/bevy_ui_tree_normalization.js';
-import { resolveBevyMainMenuLitToolIconIds } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
 import { createBevyUiScrollRuntime } from '../../eVe/domains/rendering/bevy_ui_scroll_runtime.js';
 import { hitTestBevyUiNode } from '../../eVe/domains/rendering/bevy_ui_hit_test_runtime.js';
 import { createBevyUiPointerRuntime } from '../../eVe/domains/rendering/bevy_ui_pointer_runtime.js';
@@ -48,6 +47,9 @@ const collectIds = (node, ids = []) => {
     (node?.children || []).forEach((child) => collectIds(child, ids));
     return ids;
 };
+// The tools whose halo the tree paints (`lit` in bevy_ui_menu_surface.js).
+const glowingIds = (tree) => collectIds(tree.root).filter((id) => String(id).endsWith('_glow')
+    && !String(id).endsWith('_icon_glow')).map((id) => id.slice(0, -'_glow'.length)).sort();
 const railOf = (tree) => tree.root.children.find((node) => node.id === RAIL_ID);
 const levelIds = (tree) => new Set(collectIds(railOf(tree)?.children?.[0]));
 const pinnedIds = (tree) => tree.root.children
@@ -185,47 +187,38 @@ test('a lit rail tool is pinned on every rail that publishes one, and a ribbon t
     assert.equal(isActiveToolId('ui.font.panel'), false);
 });
 
-test('a ribbon-resident lit tool pulses in its own slot and takes no rail case', () => {
-    const items = [
-        { id: 'eve_bevy_ui_main_menu_tool_create', key: 'create', toolId: '', entry: { isExpandable: true },
-            activeChild: { toolId: 'ui.text.create' } },
-        { id: 'eve_bevy_ui_main_menu_tool_fonts', key: 'fonts', toolId: 'ui.font.panel', entry: {} },
-        { id: 'eve_bevy_ui_main_menu_tool_draw', key: 'draw', toolId: 'tool.main.draw', entry: {} }
-    ];
-    const ids = resolveBevyMainMenuLitToolIconIds({
-        items,
-        latchedByToolId: new Map([['tool.main.draw', true], ['ui.font.panel', true]]),
-        isStayLitTool: isActiveToolId
-    });
-    assert.deepEqual(ids, ['eve_bevy_ui_main_menu_tool_create_icon', 'eve_bevy_ui_main_menu_tool_draw_icon']);
+test('a ribbon-resident lit tool takes no rail case', () => {
     const rail = buildRail({ activeSlots: [] });
     assert.deepEqual(pinnedIds(rail), []);
+    assert.deepEqual(glowingIds(rail), [], 'nothing engaged, nothing glows');
 });
 
-test('a lit tool pulses in its ribbon slot and a latched panel never does', async () => {
+test('an engaged ribbon tool glows in its slot, a palette showing a value never does', async () => {
     const content = {
-        toolbox: { children: ['create', 'mode'] },
+        toolbox: { children: ['create', 'contact', 'view'] },
         create: { atome_tool: true, label: 'Creer', icon: 'create', type: 'palette', children: ['text'] },
         text: { atome_tool: true, label: 'Texte', icon: 'edit', tool_id: 'ui.text.create', action: 'toggle' },
-        mode: { atome_tool: true, label: 'mode', icon: 'mode', tool_id: 'tool.main.mode', action: 'toggle' }
+        contact: { atome_tool: true, label: 'Contacts', icon: 'contact', tool_id: 'ui.contact.panel', action: 'toggle' },
+        // View only shows its current mode: its choices are momentary.
+        view: { atome_tool: true, label: 'Vue', icon: 'view', type: 'palette', children: ['view_list'] },
+        view_list: { atome_tool: true, label: 'Liste', icon: 'list', tool_id: 'ui.view.mode.list', action: 'momentary' }
     };
     const harness = createRuntimeHarness({ content });
-    const motions = [];
-    harness.dom.window.eveBevyUiRuntime.updateTreeMotion = ({ updates }) => {
-        motions.push(updates.map((update) => update.nodeId));
-    };
+    const lastTree = () => harness.calls.filter((call) => call.payload?.tree).at(-1).payload.tree;
     try {
         await harness.runtime.showFully();
+        assert.deepEqual(glowingIds(lastTree()), [], 'nothing engaged: no halo');
         harness.runtime.setToolLatchedState({ tool_id: 'ui.text.create', latched: true });
-        harness.runtime.setToolLatchedState({ tool_id: 'tool.main.mode', latched: true });
+        harness.runtime.setToolLatchedState({ tool_id: 'ui.contact.panel', latched: true });
         await waitFrame();
-        const lit = motions.at(-1) || [];
-        assert.deepEqual(lit, ['eve_bevy_ui_main_menu_tool_create_icon'],
-            'the slot standing for the locked Text pulses; a latched mode panel never does');
-        const settled = motions.length;
+        assert.deepEqual(glowingIds(lastTree()), ['eve_bevy_ui_main_menu_tool_contact', 'eve_bevy_ui_main_menu_tool_create'],
+            'the slot standing for the locked Text and the open Contacts panel glow; View does not');
+        const create = findNode(lastTree().root, 'eve_bevy_ui_main_menu_tool_create');
+        assert.ok(findNode(create, 'eve_bevy_ui_main_menu_tool_create_icon_glow'), 'the icon carries its own halo');
         harness.runtime.setToolLatchedState({ tool_id: 'ui.text.create', latched: false });
         await waitFrame();
-        assert.equal(motions.length, settled, 'the stopped tool stops pulsing');
+        const fading = findNode(lastTree().root, 'eve_bevy_ui_main_menu_tool_create_glow');
+        assert.ok(fading && fading.style.opacity < 1, 'a stopped tool keeps its halo only while it fades out');
     } finally {
         harness.runtime.destroy();
         harness.restore();
@@ -296,9 +289,8 @@ test('the rail pins what is lit in activation order, drops the level entry and p
     assert.deepEqual(pinnedIds(tree), ['atome_contextual_tool_play']);
     assert.equal(levelIds(tree).has('atome_contextual_tool_play'), false, 'the moved tool leaves the level');
     assert.equal(JSON.stringify(findNode(tree.root, 'atome_contextual_tool_play')).includes('Stop'), true);
-    assert.deepEqual(motions.at(-1).sort(),
-        ['atome_contextual_tool_create_icon', 'atome_contextual_tool_play_icon'],
-    'the pinned case pulses, and so does the slot that stands for the armed ribbon tool');
+    assert.deepEqual(glowingIds(tree), ['atome_contextual_tool_create', 'atome_contextual_tool_play'],
+        'the pinned case glows, and so does the slot that stands for the armed ribbon tool');
     findNode(tree.root, 'atome_contextual_tool_play').on.activate();
     await flushPulse();
     assert.equal(invocations.at(-1).key, 'play');
@@ -312,8 +304,8 @@ test('the rail pins what is lit in activation order, drops the level entry and p
     assert.ok(findNode(tree.root, 'atome_contextual_tool_play').style.position[1]
         > findNode(tree.root, 'atome_contextual_tool_record_action').style.position[1],
     'the first tool activated stays the closest to the Atome handle');
-    assert.deepEqual(motions.at(-1).sort(), ['atome_contextual_tool_create_icon',
-        'atome_contextual_tool_play_icon', 'atome_contextual_tool_record_action_icon']);
+    assert.deepEqual(glowingIds(tree), ['atome_contextual_tool_create',
+        'atome_contextual_tool_play', 'atome_contextual_tool_record_action']);
     assert.equal(levelIds(tree).has('atome_contextual_tool_create'), true, 'the palette keeps its own level place');
 
     lit.play = false;
@@ -321,9 +313,10 @@ test('the rail pins what is lit in activation order, drops the level entry and p
     await flushPulse();
     tree = rendered.at(-1);
     assert.deepEqual(pinnedIds(tree), ['atome_contextual_tool_record_action']);
-    assert.deepEqual(motions.at(-1).sort(),
-        ['atome_contextual_tool_create_icon', 'atome_contextual_tool_record_action_icon'],
-        'the stopped case stops pulsing and only the remaining lit tools keep their own');
+    assert.ok(['atome_contextual_tool_create', 'atome_contextual_tool_record_action'].every((id) => glowingIds(tree).includes(id)),
+        'the remaining engaged tools keep their halo');
+    assert.ok(glowingIds(tree).every((id) => id !== 'atome_contextual_tool_play'
+        || findNode(tree.root, `${id}_glow`).style.opacity < 1), 'the stopped case only fades out');
 
     lit.record = false;
     lit.create = false;
@@ -333,9 +326,9 @@ test('the rail pins what is lit in activation order, drops the level entry and p
     assert.deepEqual(pinnedIds(tree), [], 'the rail stack returns to its ordinary level');
     assert.equal(levelIds(tree).has('atome_contextual_tool_play'), true);
     assert.equal(levelIds(tree).has('atome_contextual_tool_record_action'), true);
-    const motionCount = motions.length;
-    await flushPulse();
-    assert.equal(motions.length, motionCount, 'nothing lit means no pulse left running');
+    assert.ok(glowingIds(tree).every((id) => findNode(tree.root, `${id}_glow`).style.opacity < 1),
+        'what is still drawn only fades out');
+    runtime.destroy?.();
 });
 
 test('a media record keeps its case above the Atome handle with no rail at all', async () => {
@@ -379,8 +372,8 @@ test('a media record keeps its case above the Atome handle with no rail at all',
             .endsWith('icons/stop.svg'), true, 'the case carries the stop icon');
         assert.equal(findNode(tree.root, `${TREE_ID}_pinned_shadow`)?.id, `${TREE_ID}_pinned_shadow`,
             'the case keeps the rail exterior depth even with no viewport');
-        assert.deepEqual(motions.at(-1), ['atome_contextual_tool_record_action_icon'],
-            'the case pulses so the user sees the record is still running');
+        assert.deepEqual(glowingIds(tree), ['atome_contextual_tool_record_action'],
+            'the case glows so the user sees the record is still running');
         pinned.on.activate();
         await flushPulse();
         assert.equal(invocations.at(-1).definition.toolId, 'ui.detail.record.toggle');

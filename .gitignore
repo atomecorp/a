@@ -111,6 +111,8 @@ tests/eve/*
 !tests/eve/bevy_panel_dark_skin_contract.test.mjs
 !tests/eve/bevy_ui_rounded_overflow.test.mjs
 !tests/eve/bevy_panel_contact_contract.test.mjs
+!tests/eve/dashboard_basic_runtime.test.mjs
+!tests/eve/home_hydration_lifecycle.test.mjs
 !tests/eve/bevy_panel_contact_pick_contract.test.mjs
 !tests/eve/bevy_panel_input_contract.test.mjs
 !tests/eve/bevy_panel_approved_material_contract.test.mjs
@@ -374,3 +376,6 @@ tests/native/*
 !tests/eve/project_view_list_redesign.test.mjs
 !tests/eve/bevy_panel_selectable_list_contract.test.mjs
 !tests/eve/project_background_pen_draw.test.mjs
+!tests/eve/text_tool_background_runtime_contract.test.mjs
+# In-place media Stop: incremental scene updates run in the direct-mutation queue
+!tests/eve/project_scene_incremental_queue_contract.test.mjs

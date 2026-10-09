@@ -12,6 +12,8 @@ vi.mock('../../eVe/intuition/runtime/tool.js', () => ({ registerUiAction: vi.fn(
 
 let dom, layer, text, focus, selections, batches;
 beforeEach(() => {
+    // Product timers (click suppression, deferred background selection) must settle before teardown.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
     dom = new JSDOM('<main id="project_view_pen_qa"><canvas id="eve_surface_project"></canvas></main>');
     vi.stubGlobal('window', dom.window);
     vi.stubGlobal('document', dom.window.document);
@@ -26,7 +28,7 @@ beforeEach(() => {
     restoreProjectWorkModeValue('pen_qa', 'edit');
     vi.mocked(invokeToolGateway).mockReset().mockResolvedValue({ ok: true });
 });
-afterEach(() => { restoreProjectWorkModeValue('pen_qa', 'edit'); dom.window.close(); vi.unstubAllGlobals(); });
+afterEach(() => { vi.runOnlyPendingTimers(); vi.useRealTimers(); restoreProjectWorkModeValue('pen_qa', 'edit'); dom.window.close(); vi.unstubAllGlobals(); });
 
 const bind = ({ hit = null, uiHit = null, locked = () => false, textActive = false } = {}) => {
     createProjectLayerRuntime({
@@ -238,4 +240,52 @@ test('the reused native brush creates only on travel and commits the same SVG ge
         expect(events[0].gesture_id).toBe(events[1].gesture_id);
         expect(events.every(event => event.atome_id === 'native_stroke' && event.project_id === 'pen_qa')).toBe(true);
     } finally { draw.deactivate(); }
+});
+
+// Recorded on iPad Pro (iPadOS 27.2): the second Pencil tip contact dispatches no
+// pointer event, only a mouse-typed click (detail 2) and a dblclick.
+const webkitPenDoubleTap = ({ drift = 7 } = {}) => {
+    pointer('pointerdown', 'pen', { id: 11, x: 830, y: 103 });
+    pointer('pointermove', 'pen', { id: 11, x: 830 - drift, y: 103, canvasTarget: true });
+    pointer('pointerup', 'pen', { id: 11, x: 830 - drift, y: 99, canvasTarget: true });
+    for (const [type, detail] of [['click', 1], ['click', 2], ['dblclick', 2]]) {
+    document.querySelector('canvas').dispatchEvent(new window.MouseEvent(type, { bubbles: true, cancelable: true, clientX: 829, clientY: 102, detail }));
+    }
+};
+
+test.each([0, 7, 14])('WebKit Pencil double-tap (%i px tip slide) arms Draw and never toggles the background selection', drift => {
+    bind({ textActive: drift === 7 }); webkitPenDoubleTap({ drift });
+    expect(invokeToolGateway).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(1000);
+    expect(selections).not.toHaveBeenCalled(); expect(batches).not.toHaveBeenCalled();
+    expect(text).not.toHaveBeenCalled(); expect(focus).not.toHaveBeenCalled();
+});
+
+test('a lone dblclick, a mouse dblclick or a stale pen tap never arms Draw', () => {
+    bind();
+    document.querySelector('canvas').dispatchEvent(new window.MouseEvent('dblclick', { bubbles: true, clientX: 100, clientY: 100, detail: 2 }));
+    tap('mouse', 1);
+    document.querySelector('canvas').dispatchEvent(new window.MouseEvent('dblclick', { bubbles: true, clientX: 100, clientY: 100, detail: 2 }));
+    tap('pen', 2); vi.advanceTimersByTime(600);
+    document.querySelector('canvas').dispatchEvent(new window.MouseEvent('dblclick', { bubbles: true, clientX: 100, clientY: 100, detail: 2 }));
+    expect(invokeToolGateway).not.toHaveBeenCalled();
+});
+
+test.each(['pen', 'touch', 'mouse'])('a single %s background tap selects the project only after the double-tap window', kind => {
+    bind(); tap(kind, 1);
+    expect(selections).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(520);
+    expect(selections).toHaveBeenCalledExactlyOnceWith('pen_qa', 'replace');
+});
+
+test.each(['touch', 'mouse'])('a %s double-tap creates text without first selecting the background', kind => {
+    bind(); tap(kind, 1); tap(kind, 2); vi.advanceTimersByTime(1000);
+    expect(text).toHaveBeenCalledTimes(1); expect(selections).not.toHaveBeenCalled();
+});
+
+test('a pending background selection yields to a press on an object', () => {
+    bind(); tap('touch', 1);
+    window.dispatchEvent(new window.MouseEvent('pointerdown'));
+    vi.advanceTimersByTime(1000);
+    expect(selections).not.toHaveBeenCalled();
 });

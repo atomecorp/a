@@ -219,6 +219,17 @@ fn gpu_pixels_compose_depth_without_self_capture_or_foreground_leakage() {
         .entity_mut(camera)
         .insert(RenderTarget::Image(target.clone().into()));
     let image = frame(&mut app, &target);
+    // Web loads blit shaders asynchronously; invalidation must pause, then resume.
+    let shader = app.sub_app(bevy::render::RenderApp).world()
+        .resource::<bevy::core_pipeline::blit::BlitPipeline>().fragment_shader.clone();
+    let removed = app.world_mut().resource_mut::<Assets<bevy::shader::Shader>>()
+        .remove(shader.id()).unwrap();
+    for _ in 0..4 {
+        app.update();
+    }
+    app.world_mut().resource_mut::<Assets<bevy::shader::Shader>>()
+        .insert(shader.id(), removed).unwrap();
+    assert_eq!(rgb(&frame(&mut app, &target), 80, 96), rgb(&image, 80, 96));
     let one = rgb(&image, 16, 96)[0];
     let two = rgb(&image, 32, 96)[0];
     let three = rgb(&image, 80, 96)[0];

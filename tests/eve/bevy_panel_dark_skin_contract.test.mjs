@@ -32,7 +32,7 @@ test('filled disclosure colours match their own branch, including closed nested 
         const parent = accordionNode({ id: 'coloured_parent', label: 'Parent', width: 340, direction, handedness,
             expanded: true, bodyHeight: child.style.size[1], bodyChildren: [child] });
         const rail = panelHierarchyNode({ id: 'coloured', width: 340, children: [parent], handedness });
-        assert.equal(T.hierarchy.lineWidthPx, 6);
+        assert.equal(T.hierarchy.lineWidthPx, 2);
         assert.equal(T.hierarchy.returnLengthPx, 2);
         const rootGlyph = find(rail, 'coloured_parent_chevron_triangle');
         near(rootGlyph.style.size[1] * (direction === "up" || direction === "down" ? 10 : 12) / 14, T.accordion.headerHeightPx * 0.28);
@@ -45,7 +45,7 @@ test('filled disclosure colours match their own branch, including closed nested 
         const glyph = records.find(record => record.id.endsWith('_coloured_parent_chevron_triangle_image'));
         assert.equal(glyph.type, 'image');
         assert.equal(glyph.properties.rotate, direction === 'up' ? -90 : 90);
-        assert.ok(walk(rail).filter(n => n.id.includes('_return_')).every(n => n.style.size[0] === 8 && !n.on));
+        assert.ok(walk(rail).filter(n => n.id.includes('_return_')).every(n => n.paintOnly === true && !n.on));
     }
 });
 
@@ -96,8 +96,8 @@ test('virtual List retains an offscreen parent rail without changing scroll exte
         assert.equal(hex(start.style.background), '#2a80ed');
         assert.equal(hex(end.style.background), '#2a80ed');
         assert.ok(end.style.position[1] > start.style.position[1]);
-        near(start.style.position[1] + 3, 30);
-        near(end.style.position[1] + 3, 39 * 64 + 30);
+        near(start.style.position[1], direction === 'up' ? 0 : 29);
+        near(end.style.position[1], 39 * 64 + (direction === 'up' ? 29 : 58));
         assert.deepEqual(find(list.node, `window_entry_${visibleStart}`).style.size, [400, 60]);
         const scrollEntries = new Map([['window_tree:window_virtual_list', { offsetY: visibleStart * 64 }]]);
         const scrolled = applyTreeScrollLayout({ tree: list.node, treeId: 'window_tree', entries: scrollEntries });
@@ -108,9 +108,9 @@ test('virtual List retains an offscreen parent rail without changing scroll exte
         const records = projectBevyUiTreeRecords({ tree: { root: scrolled }, treeId: 'window_tree', workspaceLayer: 'projectView' });
         const segment = records.find(record => record.id.includes('window_hierarchy_segment_'));
         assert.ok(segment);
-        assert.equal(segment.properties.width, 6);
+        assert.equal(segment.properties.width, 2);
         const clip = segment.properties.clip;
-        assert.ok(segment.properties.left >= clip.x && segment.properties.left + 6 <= clip.x + clip.width);
+        assert.ok(segment.properties.left >= clip.x && segment.properties.left + 2 <= clip.x + clip.width);
     }
 });
 
@@ -149,16 +149,16 @@ test('List project header reuses row material and root rail while keeping its ex
                 const end = find(root, 'project_view_footer_band_return_end');
                 const top = marks[0].style.position[1], bottom = top + marks[0].style.size[1];
                 near(start.style.position[1], top); near(end.style.position[1] + end.style.size[1], bottom);
-                const innerEdge = handedness === 'left' ? -8 : band.style.size[0];
-                near(start.style.position[0], innerEdge); near(end.style.position[0], innerEdge);
-                near(start.style.size[0], 8); near(end.style.size[0], 8);
                 const headerReturn = direction === 'up' ? end : start;
-                near(headerReturn.style.position[1] + 3, band.style.size[1] / 2);
+                near(headerReturn.style.position[0], handedness === 'left' ? -4 : band.style.size[0]);
+                near(headerReturn.style.size[0], 4);
+                near(headerReturn.style.position[1] + 1, band.style.size[1] / 2);
                 const childReturn = direction === 'up' ? start : end;
                 const body = find(tree.root, 'eve_bevy_ui_project_view_body');
                 const content = find(tree.root, 'eve_bevy_ui_project_view_content');
-                near(childReturn.style.position[1] + 3 + root.style.position[1],
-                    content.style.position[1] + body.style.position[1] + (direction === 'up' ? 30 : 90));
+                near(childReturn.style.position[1] + root.style.position[1],
+                    content.style.position[1] + body.style.position[1] + (direction === 'up' ? 0 : 118));
+                assert.ok(childReturn.style.size[0] > band.style.size[0] / 2);
             }
             if (!collapsed) assert.deepEqual(marks[0].style.background, glyph.image.tint);
         }
@@ -234,17 +234,20 @@ for (const direction of ['up','down']) for (const handedness of ['left','right']
     }
     const segments=walk(rail).filter(node=>node.id.includes('_segment_'));
     assert.equal(new Set(segments.map(segment=>segment.style.position[0])).size,1);
-    const axis=handedness==='left'?-5:width+5;
+    const axis=handedness==='left'?-3:width+3;
     segments.forEach(segment=>{
         near(segment.style.position[0]+segment.style.size[0]/2,axis);
         assert.equal(segment.on,undefined);
     });
     const returns=walk(rail).filter(node=>node.id.includes('_return_'));
-    assert.equal(returns.length,8);
+    assert.equal(returns.length,12);
     returns.forEach(ret=>{
         assert.equal(ret.on,undefined);
-        if(handedness==='left') near(ret.style.position[0]+ret.style.size[0],0);
-        else near(ret.style.position[0],width);
+        assert.equal(ret.paintOnly,true);
+        if(ret.id.endsWith('_hook')) assert.deepEqual(ret.style.size,[2,6]);
+        else { near(ret.style.size[1],2);
+            if(handedness==='left') near(ret.style.position[0],-4);
+            else near(ret.style.position[0]+ret.style.size[0],width+4); }
     });
     const normalized=normalizeBevyUiTree({id:'hierarchy_tree',tree:rail});
     assert.ok(projectBevyUiTreeRecords({tree:normalized,treeId:'hierarchy_tree',workspaceLayer:'panel'}).length);
@@ -311,7 +314,7 @@ test('flat hierarchical lists use real depths without consuming another indentat
     const shared=walk(rail).find(node=>node.id.includes('_segment_')&&node.style.position[1]<=childMid
         &&node.style.position[1]+node.style.size[1]>=childMid);
     assert.equal(hex(shared.style.background),'#2a80ed');
-    near(shared.style.position[0]+T.hierarchy.lineWidthPx/2,handedness==='left'?-5:345);
+    near(shared.style.position[0]+T.hierarchy.lineWidthPx/2,handedness==='left'?-3:343);
     }
 });
 
@@ -383,7 +386,7 @@ test('rail limits connect header centre to revealed content in either direction'
         near((direction==='up'?end:start).style.position[1]+T.hierarchy.lineWidthPx/2,
             header.style.position[1]+header.style.size[1]/2);
         near((direction==='up'?start:end).style.position[1]+T.hierarchy.lineWidthPx/2,
-            direction==='up'?0:accordion.style.size[1]);
+            direction==='up'?1:accordion.style.size[1]-1);
     }
 });
 

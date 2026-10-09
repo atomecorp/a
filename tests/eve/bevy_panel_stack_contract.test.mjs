@@ -41,6 +41,29 @@ const separated = mounted => {
 };
 const noRender = { mountTree: async ({ tree }) => tree, updateTree: async ({ tree }) => tree };
 
+test('a background hydration can reveal its requested node after the first mount', async () => {
+    const previousWindow = globalThis.window, previousDocument = globalThis.document, previousRuntime = bevyPanelRuntimeState.runtime;
+    const dom = new JSDOM('<canvas id="eve_surface_project"></canvas>');
+    globalThis.window = dom.window; globalThis.document = dom.window.document;
+    dom.window.__eveWorkspaceMode = { mode: 'dashboard' }; dom.window.__eveDashboardMainMenuSuspended = true;
+    dom.window.document.querySelector('canvas').getBoundingClientRect = () => ({ width: 800, height: 600 });
+    const reveals = []; let reveal;
+    bevyPanelRuntimeState.runtime = { ...noRender, unmountTree: async () => {}, revealTreeNode: async request => { reveals.push(request); } };
+    registerBevyPanelSurface({ surfaceKey: 'late_reveal_fixture', title: 'Contact',
+        onOpen: options => { reveal = options.reveal; }, buildContent: () => [textNode('hydrated_card', 'Card', { size: [140, 30] })] });
+    try {
+        await openBevyPanelSurface('late_reveal_fixture');
+        await reveal('hydrated_card');
+        assert.equal(reveals.length, 1); assert.equal(reveals[0].nodeId, 'hydrated_card');
+        assert.equal(reveals[0].id, 'eve_bevy_panel_late_reveal_fixture');
+        await closeBevyPanelSurface('late_reveal_fixture');
+        await reveal('hydrated_card'); assert.equal(reveals.length, 1, 'a closed opening must not reveal into another surface');
+    } finally {
+        await closeBevyPanelSurface('late_reveal_fixture'); bevyPanelRuntimeState.definitions.delete('late_reveal_fixture');
+        bevyPanelRuntimeState.runtime = previousRuntime; globalThis.window = previousWindow; globalThis.document = previousDocument; dom.window.close();
+    }
+});
+
 test('all paints including sparse popup layers, media and footer belong to disjoint panel bands', async () => {
     const mounted = new Map([['contact', fixture('contact', 1, { overlay: true })], ['info', fixture('info', 2)]]);
     await projectPanelStack({ mounted, runtime: noRender, changedKey: 'info' });

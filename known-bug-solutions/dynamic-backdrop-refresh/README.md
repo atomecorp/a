@@ -106,3 +106,34 @@ This was not a double render or a DOM layer.
   `in_set(PostProcess)` wiring.
 - Repro probe: `temp/glass_resize_dark/probe.mjs` (headed off-screen Chromium,
   24 resize steps). Before: 9/24 dark frames. After: 0/72 over three runs.
+
+## Web startup panic while blit shaders load (2026-10-09)
+
+The ordered transparent pass treated an unavailable cached pipeline as a fatal
+error, including Bevy’s retryable ShaderNotLoaded/ShaderImportNotYetAvailable
+states. Asynchronously loaded embedded shaders therefore caused
+`ordered_backdrop_pipeline_unavailable`, followed by Winit borrow panics and
+WebAssembly traps after the aborted frame. Safari can also report the old
+module’s borrow panic during its unload on the first reload.
+
+The existing composition owner now uses Bevy’s compilation queue without
+forcing it during bind-group preparation, and waits for snapshot readiness
+before issuing a glass pass. Real shader compilation failures still report
+`ordered_backdrop_pipeline_failed` with their cause. No blur, blending, depth,
+redraw clock or native adapter implementation changes.
+
+The existing GPU regression in `tests/rendering/backdrop_composition.rs` now
+removes the embedded blit shader for four updates, restores it, and checks that
+composition resumes with identical pixels. It fails with the original panic
+before correction and passes afterward. All five composition tests, including
+real Metal pixels, pass. Final WASM `7ac7d4a4400b07e3` paints the real welcome
+screen on three fresh Chromium navigations with mobile/desktop resizes, zero
+console errors/warnings or failed requests. Safari’s second reload and inspector
+resize paint the animated wallpaper and glass without new panics. The real
+frame-clock probe retains one tick per requested frame and the settled idle
+heartbeat. Physical iOS and a rebuilt native Tauri UI remain To verify.
+
+Compatibility checks for this repair: Web Rust 28/28, Tauri backend 14/14,
+and release type checking for aarch64-apple-ios-sim pass. The iOS crate also
+compiles on the host but defines no unit tests. The unchanged full-core Mystic
+source-string assertion remains outside this correction.

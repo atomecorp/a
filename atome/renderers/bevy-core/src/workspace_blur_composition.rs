@@ -21,15 +21,16 @@ use bevy::{
         render_asset::RenderAssets,
         render_phase::{PhaseItem, ViewSortedRenderPhases},
         render_resource::{
-            BindGroup, CachedRenderPipelineId, LoadOp, Operations, PipelineCache,
-            RenderPassColorAttachment, RenderPassDescriptor, SpecializedRenderPipelines, StoreOp,
-            TextureView, TextureViewDescriptor, TextureViewId,
+            BindGroup, CachedPipelineState, CachedRenderPipelineId, LoadOp, Operations,
+            PipelineCache, RenderPassColorAttachment, RenderPassDescriptor,
+            SpecializedRenderPipelines, StoreOp, TextureView, TextureViewDescriptor, TextureViewId,
         },
         renderer::{RenderContext, RenderDevice, ViewQuery},
         texture::GpuImage,
         view::{ExtractedView, ViewDepthTexture, ViewTarget},
         Extract, ExtractSchedule, Render, RenderApp, RenderSystems,
     },
+    shader::ShaderCacheError,
 };
 use std::ops::Range;
 
@@ -182,7 +183,7 @@ fn prepare_snapshots(
     gpu_images: Res<RenderAssets<GpuImage>>,
     blit: Res<BlitPipeline>,
     device: Res<RenderDevice>,
-    mut cache: ResMut<PipelineCache>,
+    cache: Res<PipelineCache>,
     mut pipelines: ResMut<SpecializedRenderPipelines<BlitPipeline>>,
     views: Query<(Entity, &ViewTarget, Option<&SnapshotPipeline>)>,
 ) {
@@ -203,7 +204,6 @@ fn prepare_snapshots(
             continue;
         }
         let pipeline = pipelines.specialize(&cache, &blit, key);
-        cache.block_on_render_pipeline(pipeline);
         let mip_zero = pyramid.texture.create_view(&TextureViewDescriptor {
             label: Some("ordered_backdrop_mip_zero"),
             base_mip_level: 0,
@@ -288,6 +288,35 @@ fn compose_transparent_pass(
             .map(|(i, item)| (i, regions.0.get(&item.main_entity().id()).copied())),
         phase.items.len(),
     );
+    // Compilation belongs to Bevy's pipeline queue. Embedded shaders may not
+    // have reached the render world yet, including after asset invalidation.
+    // Wait for a complete snapshot before drawing any glass; genuine shader
+    // failures remain explicit instead of being confused with pending work.
+    let capture_resources = if ranges.iter().any(|(_, capture)| *capture) {
+        let Some(snapshot) = snapshot else {
+            return Ok(());
+        };
+        match cache.get_render_pipeline_state(snapshot.pipeline) {
+            CachedPipelineState::Queued
+            | CachedPipelineState::Creating(_)
+            | CachedPipelineState::Err(
+                ShaderCacheError::ShaderNotLoaded(_)
+                | ShaderCacheError::ShaderImportNotYetAvailable,
+            ) => return Ok(()),
+            CachedPipelineState::Err(error) => {
+                return Err(format!("ordered_backdrop_pipeline_failed: {error}").into());
+            }
+            CachedPipelineState::Ok(_) => {}
+        }
+        Some((
+            snapshot,
+            cache
+                .get_render_pipeline(snapshot.pipeline)
+                .ok_or("ordered_backdrop_pipeline_unavailable")?,
+        ))
+    } else {
+        None
+    };
     if ranges.is_empty() || ranges.first().is_some_and(|(_, capture)| *capture) {
         // Preserve Bevy's camera clear even when no transparent items remain.
         // When glass is the first draw, commit this frame's camera clear before
@@ -305,10 +334,8 @@ fn compose_transparent_pass(
     }
     for (range, capture) in ranges {
         if capture {
-            let snapshot = snapshot.ok_or("ordered_backdrop_snapshot_unavailable")?;
-            let pipeline = cache
-                .get_render_pipeline(snapshot.pipeline)
-                .ok_or("ordered_backdrop_pipeline_unavailable")?;
+            let (snapshot, pipeline) =
+                capture_resources.ok_or("ordered_backdrop_snapshot_unavailable")?;
             {
                 let attachments = [Some(RenderPassColorAttachment {
                     view: &snapshot.mip_zero,
