@@ -12,6 +12,7 @@ import {createUserSurfaceBackgroundTextureRuntime} from '../../eVe/domains/rende
 import eventBus from '../../eVe/core/event_bus.js';
 import {installDom} from './unified_rendering_test_helpers.mjs';
 import {PROJECT_SCENES, sceneState} from '../../eVe/domains/rendering/project_scene_state.js';
+import { applyEveCssVars } from '../../eVe/elements/look/tokens.js';
 
 const PROJECT_ID = 'project_surface_color';
 const PROJECT_RED = 'rgba(244, 67, 54, 1.00)';
@@ -125,7 +126,7 @@ test('the project rail resolves the colour tool and keeps the sibling project ac
         const keys = projectRailKeys(level);
         assert.ok(keys.includes('couleur'), `the ${level} project rail exposes the colour tool`);
         assert.ok(keys.includes('select_all'), `the ${level} project rail keeps its previous rail-only tool`);
-        assert.ok(keys.includes('paste') && keys.includes('import'), `the ${level} project rail keeps its earlier actions`);
+        assert.ok(keys.includes('photo') && keys.includes('import'), `the ${level} project rail keeps its declared capture/import actions`);
     }
 });
 
@@ -182,8 +183,7 @@ test('surface background colours convert to the RGBA floats the Bevy patch consu
     for (const invalid of [null, '', 'red', '#12345', 'color(display-p3 1 0 0)']) {
         assert.equal(readSurfaceBackgroundRgba(invalid), null, `${String(invalid)} is not a surface colour`);
     }
-    assert.deepEqual(readDefaultSurfaceBackgroundRgba(), [169 / 255, 169 / 255, 169 / 255, 1],
-        'the shared default surface colour the project falls back to is unchanged');
+    assert.deepEqual(readDefaultSurfaceBackgroundRgba(), [39 / 255, 39 / 255, 39 / 255, 1]);
 });
 
 test('the project surface paints the committed project colour and the default without one', async () => {
@@ -246,7 +246,7 @@ test('a colour committed outside the project surface never repaints it', async (
 });
 
 
-test('new projects capture the user default once without changing legacy project rendering', () => {
+test('new projects capture the user default once and share the uncoloured project default', () => {
     const windowRef = { __eveProfilePreferences: { visual: { masteryLevel: 'advanced' } } };
     const first = projectCreationViewProperties({ name: 'First' }, { windowRef });
     assert.equal(first.background, '#272727');
@@ -262,5 +262,24 @@ test('new projects capture the user default once without changing legacy project
     assert.equal(normalizeVisualPreferences({ masteryLevel: 'beginner' }).newProjectBackgroundColor, '#272727');
     assert.equal(normalizeVisualPreferences({ newProjectBackgroundColor: '#abc' }).newProjectBackgroundColor, '#aabbcc');
     assert.throws(() => normalizeVisualPreferences({ newProjectBackgroundColor: 'invalid' }), /new_project_background_color_invalid/);
-    assert.deepEqual(readDefaultSurfaceBackgroundRgba(), [169 / 255, 169 / 255, 169 / 255, 1]);
+    assert.deepEqual(readDefaultSurfaceBackgroundRgba(), [39 / 255, 39 / 255, 39 / 255, 1]);
+});
+
+test('shell and every project view use the shared dark default while stored colours survive remount', async () => {
+    for (const view_mode of ['natural', 'list', 'matrix']) {
+        for (const background of [undefined, '#a9a9a9', '#123456', 'rgba(169,169,169,0.5)']) {
+            const properties = { view_mode, ...(background ? { background } : {}) };
+            const expected = background ? readSurfaceBackgroundRgba(background) : [39/255,39/255,39/255,1];
+            for (let mount = 0; mount < 2; mount++) {
+                const harness = createProjectSurfaceHarness({projectState: { properties }});
+                try {
+                    applyEveCssVars(harness.windowRef.document.documentElement);
+                    assert.equal(harness.windowRef.document.documentElement.style.getPropertyValue('--eve-default-surface-background'), '#272727');
+                    harness.runtime.start(); await nextTick();
+                    assert.deepEqual(harness.latest().cover, expected);
+                    assert.deepEqual(properties, { view_mode, ...(background ? { background } : {}) });
+                } finally { harness.runtime.stop(); harness.restore(); }
+            }
+        }
+    }
 });

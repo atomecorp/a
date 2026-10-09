@@ -393,3 +393,5 @@ tests/native/*
 !tests/eve/system_ui_base_resize_contract.test.mjs
 !tests/eve/system_ui_base_wiring_guard.test.mjs
 !tests/eve/capture_single_session.test.mjs
+
+!tests/eve/background_home_persistence.test.mjs

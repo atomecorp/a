@@ -10,6 +10,7 @@ the established solution before attempting a new implementation.
 
 | Symptom | Folder |
 | --- | --- |
+| Dashboard wallpaper returns to a default or previous choice; project default greys diverge | [wallpaper-selection-races](wallpaper-selection-races/README.md) |
 | Nested User accordions shift or lose their open anchor; List Play covers the hierarchy cap | [nested-panel-anchor-and-row-seams](nested-panel-anchor-and-row-seams/README.md) |
 | Native builds repeatedly fill the disk with Rust objects and per-run Xcode caches | [build-cache-disk-exhaustion](build-cache-disk-exhaustion/README.md) |
 | Edges between adjacent blurred glass cards flicker over an animated wallpaper | [coplanar-glass-flicker](coplanar-glass-flicker/README.md) |

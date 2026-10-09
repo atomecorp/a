@@ -3,10 +3,6 @@
     -webkit-tap-highlight-color: transparent;
 }
 
-:root {
-    --eve-default-surface-background: #a9a9a9;
-}
-
 html,
 body {
     font-family: system-ui, -apple-system, 'Segoe UI', 'Roboto', sans-serif;

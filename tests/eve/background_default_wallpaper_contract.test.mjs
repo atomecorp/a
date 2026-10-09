@@ -2,12 +2,6 @@ import assert from 'node:assert/strict';
 import { readdirSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
 import { afterEach, beforeEach, test, vi } from 'vitest';
-
-// The wallpaper resolution lives in the real user background runtime, so this
-// suite boots that runtime against a JSDOM page with its `#view` host instead of
-// guessing the behaviour from the source text. profile_api and asset_box are the
-// only mocked transports; the workspace mode scoping is covered by
-// tests/probes/bevy_surface_background_runtime.probe.mjs.
 const profileApi = vi.hoisted(() => ({
     loadUserProfile: vi.fn(),
     upsertUserProfile: vi.fn()
@@ -16,23 +10,18 @@ const assetBox = vi.hoisted(() => ({
     sendFileToServer: vi.fn(),
     downloadRemoteWallpaper: vi.fn()
 }));
-
 vi.mock('../../eVe/domains/user/profile_api.js', () => profileApi);
 vi.mock('../../eVe/domains/media/asset_box.js', () => assetBox);
-
 const mediaAuth = vi.hoisted(() => ({
     buildUserHeaders: vi.fn(), getCloudToken: vi.fn(), getLocalToken: vi.fn()
 }));
 vi.mock('../../eVe/domains/media/asset_box_auth.js', () => mediaAuth);
-
 const videoSource = vi.hoisted(() => ({ register: vi.fn() }));
 vi.mock('../../eVe/domains/rendering/bevy_video_stream_source_runtime.js', () => ({
     registerBevyVideoStreamSource: videoSource.register
 }));
-
 const DEFAULT_BACKGROUND_URL = '/assets/videos/eVe.mp4';
 const STORED_BACKGROUND_URL = '/api/uploads/ada.png';
-
 const createCanvasContext = () => ({
     clearRect() {},
     fillRect() {},
@@ -46,21 +35,21 @@ const createCanvasContext = () => ({
         return { data: new Uint8ClampedArray(4) };
     }
 });
-
 let restoreGlobals = null;
 let fetchMock = null;
-
-const bootBackgroundRuntime = async ({ currentUser = null, embedded = false } = {}) => {
+const bootBackgroundRuntime = async ({ currentUser = null, embedded = false, preferences = null } = {}) => {
     const dom = new JSDOM('<!doctype html><html><body><div id="view"></div></body></html>', {
         url: 'http://127.0.0.1:3001/'
     });
     const { window } = dom;
+    if (preferences) window.__eveProfilePreferences = preferences;
+    const surfaces = [];
+    window.addEventListener('eve:surface-background-changed', event => surfaces.push(event.detail));
     if (embedded) window.__HOST_ENV = 'app';
     window.HTMLCanvasElement.prototype.getContext = () => createCanvasContext();
     window.requestAnimationFrame = (callback) => window.setTimeout(() => callback(0), 0);
     window.cancelAnimationFrame = () => {};
     if (currentUser) window.__currentUser = currentUser;
-
     const previous = {
         window: globalThis.window,
         document: globalThis.document,
@@ -78,7 +67,6 @@ const bootBackgroundRuntime = async ({ currentUser = null, embedded = false } = 
         });
         restoreGlobals = null;
     };
-
     fetchMock = vi.fn(async () => ({ ok: false, status: 401 }));
     globalThis.window = window;
     globalThis.document = window.document;
@@ -87,13 +75,11 @@ const bootBackgroundRuntime = async ({ currentUser = null, embedded = false } = 
     globalThis.fetch = fetchMock;
     globalThis.requestAnimationFrame = window.requestAnimationFrame;
     globalThis.cancelAnimationFrame = window.cancelAnimationFrame;
-
     vi.resetModules();
     const background = await import('../../eVe/user/background.js');
     background.startUserBackgroundRuntime();
-    return { window, background };
+    return { window, background, surfaces };
 };
-
 beforeEach(() => {
     mediaAuth.buildUserHeaders.mockReset().mockResolvedValue({ 'X-User-Id': 'wallpaper-owner' });
     mediaAuth.getCloudToken.mockReset().mockReturnValue('cloud-memory-session');
@@ -104,9 +90,7 @@ beforeEach(() => {
     assetBox.sendFileToServer.mockReset();
     assetBox.downloadRemoteWallpaper.mockReset();
 });
-
 afterEach(async () => {
-    // Hide the page so no catch-up read starts while it is replaced.
     if (restoreGlobals && globalThis.document) {
         Object.defineProperty(document, 'visibilityState', {configurable: true, value: 'hidden'});
         document.dispatchEvent(new window.Event('visibilitychange'));
@@ -117,12 +101,10 @@ afterEach(async () => {
     vi.restoreAllMocks();
     vi.useRealTimers();
 });
-
 test('a session without a stored background paints the bundled eVe.mp4 without touching the profile', async () => {
     const { window, background } = await bootBackgroundRuntime();
     const api = window.eveBackground;
     const params = api.getParams();
-
     assert.equal(typeof background.defaultUserBackgroundParams, 'function');
     assert.equal(params.backgroundSource, 'image');
     assert.equal(params.backgroundImageUrl, DEFAULT_BACKGROUND_URL);
@@ -131,26 +113,19 @@ test('a session without a stored background paints the bundled eVe.mp4 without t
     assert.equal(api.defaults.backgroundSource, 'image');
     assert.equal(api.defaults.backgroundImageUrl, DEFAULT_BACKGROUND_URL);
     assert.equal(api.defaults.backgroundImageFileName, 'eVe.mp4');
-
     const published = window.__eveSurfaceBackground;
     assert.equal(published.signature, `video:cover:${DEFAULT_BACKGROUND_URL}`);
     assert.equal(published.mode, 'image');
     assert.equal(published.mediaKind, 'video');
     assert.equal(published.sourceUrl, DEFAULT_BACKGROUND_URL);
-
-    // The bundled asset is a public document path, not protected media, so the
-    // runtime must publish it as-is instead of fetching a blob for it.
     assert.equal(fetchMock.mock.calls.length, 0);
     assert.equal(profileApi.loadUserProfile.mock.calls.length, 0, 'a guest session has no profile to read');
     assert.equal(profileApi.upsertUserProfile.mock.calls.length, 0, 'the resolution default is never persisted');
 });
-
-
 test('a fresh iOS installation publishes the exact bundled wallpaper path with a cover crop', async () => {
     const { window, background } = await bootBackgroundRuntime({ embedded: true });
     const { DEFAULT_BACKGROUND_MEDIA_ASSET } = await import('../../eVe/domains/rendering/user_background_image_fit.js');
     const fileName = DEFAULT_BACKGROUND_MEDIA_ASSET.split('/').pop();
-    // existsSync alone cannot catch the wrong case on a macOS filesystem.
     const bundledFiles = readdirSync(new URL('../../atome/src/assets/videos/', import.meta.url));
     assert.ok(bundledFiles.includes(fileName), 'the URL must match the bundled filename case exactly');
     const params = background.defaultUserBackgroundParams();
@@ -161,7 +136,6 @@ test('a fresh iOS installation publishes the exact bundled wallpaper path with a
     assert.equal(window.__eveSurfaceBackground.fit, 'cover');
     assert.equal(profileApi.upsertUserProfile.mock.calls.length, 0);
 });
-
 test('a stored profile background wins over the bundled default and is left untouched', async () => {
     profileApi.loadUserProfile.mockResolvedValue({
         ok: true,
@@ -176,9 +150,7 @@ test('a stored profile background wins over the bundled default and is left unto
             }
         }
     });
-
     const { window, background } = await bootBackgroundRuntime({ currentUser: { id: 'user-ada' } });
-
     await vi.waitFor(() => assert.equal(window.eveBackground.getParams().backgroundImageUrl, STORED_BACKGROUND_URL));
     assert.equal(window.eveBackground.getParams().backgroundImageFileName, 'ada.png');
     assert.equal(window.eveBackground.getParams().backgroundMediaKind, '', 'legacy saved images keep their kind');
@@ -186,7 +158,6 @@ test('a stored profile background wins over the bundled default and is left unto
     assert.equal(fetchMock.mock.calls[0][0], `http://127.0.0.1:3001${STORED_BACKGROUND_URL}`);
     assert.equal(profileApi.upsertUserProfile.mock.calls.length, 0);
 });
-
 test('another owner without a stored background resolves back to the bundled default', async () => {
     vi.useFakeTimers();
     profileApi.loadUserProfile.mockResolvedValue({
@@ -197,24 +168,19 @@ test('another owner without a stored background resolves back to the bundled def
             }
         }
     });
-
     const { window } = await bootBackgroundRuntime({ currentUser: { id: 'user-ada' } });
     await vi.waitFor(() => assert.equal(window.eveBackground.getParams().backgroundImageUrl, STORED_BACKGROUND_URL));
-
     profileApi.loadUserProfile.mockResolvedValue({ ok: true, profile: { preferences: {} } });
     window.__currentUser = { id: 'user-grace' };
-    // Every session change publishes the new owner, then `squirrel:auth-checked`.
     window.dispatchEvent(new window.CustomEvent('squirrel:auth-checked'));
     await vi.advanceTimersByTimeAsync(0);
     assert.equal(profileApi.loadUserProfile.mock.calls.at(-1)[0], 'user-grace');
     await vi.advanceTimersByTimeAsync(0);
     assert.equal(window.eveBackground.getParams().backgroundImageUrl, DEFAULT_BACKGROUND_URL);
-
     assert.equal(window.eveBackground.getParams().backgroundSource, 'image');
     assert.equal(window.eveBackground.getParams().backgroundImageFileName, 'eVe.mp4');
     assert.equal(profileApi.upsertUserProfile.mock.calls.length, 0, 'switching owner must not write a background');
 });
-
 test('a settled session never re-reads the profile on a timer', async () => {
     vi.useFakeTimers();
     profileApi.loadUserProfile.mockResolvedValue({ ok: true, profile: { preferences: {} } });
@@ -222,11 +188,9 @@ test('a settled session never re-reads the profile on a timer', async () => {
     await vi.advanceTimersByTimeAsync(0);
     const reads = profileApi.loadUserProfile.mock.calls.length;
     assert.equal(reads, 1, 'the owner profile is read once at start');
-    // The former watcher read the whole profile (photo included) every 1.2 s.
     await vi.advanceTimersByTimeAsync(60000);
     assert.equal(profileApi.loadUserProfile.mock.calls.length, reads);
 });
-
 test('a background saved on another device applies from the synchronized profile patch', async () => {
     profileApi.loadUserProfile.mockResolvedValue({ ok: true, profile: { preferences: {} } });
     const { window } = await bootBackgroundRuntime({ currentUser: { id: 'user-ada' } });
@@ -245,7 +209,6 @@ test('a background saved on another device applies from the synchronized profile
     assert.equal(profileApi.loadUserProfile.mock.calls.length, 1, 'the patch is applied without a profile read');
     assert.equal(profileApi.upsertUserProfile.mock.calls.length, 0);
 });
-
 test('a pattern or colour edit takes the render back from the selected image', async () => {
     const { window } = await bootBackgroundRuntime();
     const backgroundState = {
@@ -258,27 +221,21 @@ test('a pattern or colour edit takes the render back from the selected image', a
         saved: [],
         profileUserId: null,
         profile: null,
-        lastSavedSignature: null,
         saveTimer: null
     };
     const setParams = vi.fn();
     window.eveBackground.setParams = setParams;
     vi.useFakeTimers();
-
     const { createBackgroundPrefs } = await import('../../eVe/intuition/tools/background_prefs.js');
     const prefs = createBackgroundPrefs({ backgroundState });
-
     prefs.applyBackgroundParams({ backgroundColorR: 12 });
     assert.equal(backgroundState.params.backgroundSource, 'generated');
     assert.deepEqual(setParams.mock.calls[0][0], { backgroundColorR: 12, backgroundSource: 'generated' });
     assert.equal(backgroundState.params.backgroundImageUrl, DEFAULT_BACKGROUND_URL, 'the last image stays reusable');
-
     prefs.applyBackgroundParams({ backgroundSource: 'image', backgroundImageUrl: STORED_BACKGROUND_URL });
     assert.equal(backgroundState.params.backgroundSource, 'image');
     assert.equal(backgroundState.params.backgroundImageUrl, STORED_BACKGROUND_URL);
 });
-
-
 test.each(['tile', 'contain'])('a legacy %s preference keeps the media and uses cover without rewriting the profile', async (backgroundImageFit) => {
     const { window } = await bootBackgroundRuntime();
     window.eveBackground.applyPreferences({
@@ -292,8 +249,6 @@ test.each(['tile', 'contain'])('a legacy %s preference keeps the media and uses 
     assert.equal(Object.hasOwn(window.eveBackground.getParams(), 'backgroundImageFit'), false);
     assert.equal(profileApi.upsertUserProfile.mock.calls.length, 0);
 });
-
-
 const installCoverCanvasHarness = (window) => {
     const draws = [];
     window.ImageData = class { constructor(data, width, height) { Object.assign(this, { data, width, height }); } };
@@ -306,7 +261,6 @@ const installCoverCanvasHarness = (window) => {
     window.document.body.appendChild(surface);
     return { draws, surface };
 };
-
 test('the video background waits for metadata before applying its natural dimensions', async () => {
     const { window } = await bootBackgroundRuntime();
     const { surface } = installCoverCanvasHarness(window);
@@ -328,7 +282,6 @@ test('the video background waits for metadata before applying its natural dimens
     video.dispatchEvent(new window.Event('loadedmetadata'));
     await vi.waitFor(() => assert.ok(applied.some(patch => patch.video?.width === 1920 && patch.video?.height === 1080)));
 });
-
 test.each([false, true])('a protected video uses its current session before starting a muted cover loop (native=%s)', async (embedded) => {
     const { window } = await bootBackgroundRuntime({ embedded });
     const { surface } = installCoverCanvasHarness(window);
@@ -340,7 +293,6 @@ test.each([false, true])('a protected video uses its current session before star
     const blobUrl = 'blob:authorized-wallpaper-video';
     vi.spyOn(URL, 'createObjectURL').mockReturnValue(blobUrl);
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
-    // Stored credentials must never override the current in-memory session.
     window.localStorage.setItem('local_auth_token', 'obsolete-local');
     window.localStorage.setItem('cloud_auth_token', 'obsolete-cloud');
     if (embedded) {
@@ -358,8 +310,6 @@ test.each([false, true])('a protected video uses its current session before star
     }));
     const video = { videoWidth: 1920, videoHeight: 1080, readyState: 2, seeking: false };
     videoSource.register.mockResolvedValue({ ok: true, video, dispose() {} });
-    // A real panel selection declares its pending profile choice. Raw preview
-    // params alone intentionally remain replaceable by profile reconciliation.
     window.dispatchEvent(new window.CustomEvent('eve:profile-preferences-updated', {detail: {
         source: 'background_panel', preferences: {background: {
             backgroundSource: 'image', backgroundMediaKind: 'video',
@@ -378,9 +328,7 @@ test.each([false, true])('a protected video uses its current session before star
     assert.equal(options.loop, true);
     assert.equal(options.muted, true);
 });
-
 const { createBackgroundImage } = await import('../../eVe/intuition/tools/background_image.js');
-
 test.each([{ name: 'wallpaper.mov', type: 'video/quicktime' }, { name: 'wallpaper.WEBM', type: '' }])('a video import uses the canonical local upload without forcing cloud ($name)', async (file) => {
     assetBox.sendFileToServer.mockResolvedValue({ ok: true, mediaUrl: '/api/uploads/wallpaper.mov', fileName: file.name });
     const patches = [];
@@ -391,7 +339,6 @@ test.each([{ name: 'wallpaper.mov', type: 'video/quicktime' }, { name: 'wallpape
     assert.equal(patches[0].backgroundMediaKind, 'video');
     assert.equal(patches[0].backgroundImageUrl, '/api/uploads/wallpaper.mov');
 });
-
 test.each(['video', 'image'])('use selection preserves the selected %s kind without uploading it again', async (kind) => {
     const previousWindow = globalThis.window;
     const extension = kind === 'video' ? 'mp4' : 'png';
@@ -408,8 +355,6 @@ test.each(['video', 'image'])('use selection preserves the selected %s kind with
         assert.equal(assetBox.sendFileToServer.mock.calls.length, 0);
     } finally { globalThis.window = previousWindow; }
 });
-
-
 test('authentication paints the bundled default video from the Dashboard playback owner', async () => {
     const { window } = await bootBackgroundRuntime();
     const { surface } = installCoverCanvasHarness(window);
@@ -430,8 +375,6 @@ test('authentication paints the bundled default video from the Dashboard playbac
         assert.equal(patches.at(-1).video.width, 1920);
     } finally { /* The canonical background owner releases its decoder at teardown. */ }
 });
-
-
 test('logout authentication remains paintable while the video decoder is waiting', async () => {
     const { window } = await bootBackgroundRuntime();
     const { surface } = installCoverCanvasHarness(window);
@@ -455,8 +398,6 @@ test('logout authentication remains paintable while the video decoder is waiting
         assert.equal(videoSource.register.mock.calls.length, 1, 'pending frames share the same decoder');
     } finally { /* Decoder release belongs to the background owner. */ }
 });
-
-
 test('logout immediately restores the public bundled video before any profile read', async () => {
     const { window } = await bootBackgroundRuntime();
     window.eveBackground.setParams({ backgroundSource: 'image', backgroundMediaKind: 'image', backgroundImageUrl: '/custom.png' });
@@ -466,4 +407,88 @@ test('logout immediately restores the public bundled video before any profile re
     assert.equal(window.__eveSurfaceBackground.sourceUrl, DEFAULT_BACKGROUND_URL);
     assert.equal(window.__eveSurfaceBackground.mediaKind, 'video');
     assert.equal(profileApi.upsertUserProfile.mock.calls.length, 0);
+});
+
+const stored = url => ({ok: true, profile: {preferences: {background: {backgroundSource: 'image', backgroundImageUrl: url}}}});
+const publishProfile = (win, url, source = '') => win.dispatchEvent(new win.CustomEvent('eve:profile-preferences-updated', {detail: {source, preferences: stored(url).profile.preferences}}));
+const flush = () => new Promise(resolve => setTimeout(resolve, 0));
+test.each(['unreadable profile', 'unreadable identity'])('%s retains the resolved wallpaper instead of restoring the default', async scenario => {
+    profileApi.loadUserProfile.mockResolvedValue(stored('/chosen.png'));
+    const {window: win} = await bootBackgroundRuntime({currentUser: {id: 'owner'}});
+    await vi.waitFor(() => assert.equal(win.eveBackground.getParams().backgroundImageUrl, '/chosen.png'));
+    if (scenario === 'unreadable profile') profileApi.loadUserProfile.mockResolvedValue({ok: false, error: 'offline'});
+    else delete win.__currentUser;
+    win.dispatchEvent(new win.CustomEvent('squirrel:auth-checked'));
+    await flush();
+    assert.equal(win.eveBackground.getParams().backgroundImageUrl, '/chosen.png');
+});
+test.each(['new profile event', 'logout', 'owner change'])('a delayed profile read cannot replace a %s', async scenario => {
+    let release;
+    profileApi.loadUserProfile.mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+    const {window: win} = await bootBackgroundRuntime({currentUser: {id: 'owner'}});
+    await vi.waitFor(() => assert.equal(typeof release, 'function'));
+    const visible = [];
+    win.addEventListener('eve:surface-background-changed', event => visible.push(event.detail.sourceUrl));
+    if (scenario === 'new profile event') publishProfile(win, '/latest.png');
+    else if (scenario === 'logout') { delete win.__currentUser; win.dispatchEvent(new win.CustomEvent('squirrel:user-logged-out')); }
+    else {
+        win.__currentUser = {id: 'other'};
+        profileApi.loadUserProfile.mockResolvedValue(stored('/other.png'));
+        win.dispatchEvent(new win.CustomEvent('squirrel:auth-checked'));
+    }
+    release(stored('/old.png')); await flush(); await flush();
+    assert.ok(!visible.includes('/old.png'), 'the superseded owner/read must never paint');
+    assert.equal(win.eveBackground.getParams().backgroundImageUrl,
+        scenario === 'new profile event' ? '/latest.png' : scenario === 'logout' ? DEFAULT_BACKGROUND_URL : '/other.png');
+});
+test('an unrelated preference event cannot replace a pending local wallpaper selection', async () => {
+    profileApi.loadUserProfile.mockResolvedValue(stored('/old.png'));
+    const {window: win} = await bootBackgroundRuntime({currentUser: {id: 'owner'}});
+    await vi.waitFor(() => assert.equal(win.eveBackground.getParams().backgroundImageUrl, '/old.png'));
+    publishProfile(win, '/picked.png', 'background_panel');
+    publishProfile(win, '/old.png', 'weather_preferences');
+    assert.equal(win.eveBackground.getParams().backgroundImageUrl, '/picked.png');
+});
+test('an older protected media fetch cannot revoke the current background blob', async () => {
+    const {window: win} = await bootBackgroundRuntime();
+    const releases = new Map();
+    fetchMock.mockImplementation(url => new Promise(resolve => releases.set(url, resolve)));
+    const revoke = vi.spyOn(URL, 'revokeObjectURL');
+    win.eveBackground.setParams({backgroundImageUrl: '/api/uploads/old.png'});
+    await vi.waitFor(() => assert.equal(releases.size, 1));
+    win.eveBackground.setParams({backgroundImageUrl: '/api/uploads/new.png'});
+    await vi.waitFor(() => assert.equal(releases.size, 2));
+    releases.get('http://127.0.0.1:3001/api/uploads/new.png')({ok: true, blob: async () => new Blob(['new'])});
+    await vi.waitFor(() => assert.ok(win.__eveSurfaceBackground.sourceUrl.startsWith('blob:')));
+    const current = win.__eveSurfaceBackground.sourceUrl;
+    releases.get('http://127.0.0.1:3001/api/uploads/old.png')({ok: true, blob: async () => new Blob(['old'])});
+    await flush();
+    assert.ok(!revoke.mock.calls.some(([url]) => url === current));
+    assert.equal(win.__eveSurfaceBackground.sourceUrl, current);
+});
+test('a partial stored background is resolved from defaults without inheriting the previous image', async () => {
+    profileApi.loadUserProfile.mockResolvedValue(stored('/old.png'));
+    const {window: win} = await bootBackgroundRuntime({currentUser: {id: 'owner'}});
+    await vi.waitFor(() => assert.equal(win.eveBackground.getParams().backgroundImageUrl, '/old.png'));
+    win.dispatchEvent(new win.CustomEvent('eve:profile-preferences-updated', {detail: {preferences: {
+        background: {backgroundSource: 'generated', backgroundColorR: 100, backgroundColorG: 120, backgroundColorB: 140}
+    }}}));
+    assert.equal(win.eveBackground.getParams().backgroundImageUrl, '');
+    assert.equal(win.eveBackground.getParams().backgroundColorR, 100);
+    assert.equal(profileApi.upsertUserProfile.mock.calls.length, 0);
+});
+test('a stored image URL without a source discriminator still paints the explicit user image', async () => {
+    profileApi.loadUserProfile.mockResolvedValue({ok: true, profile: {preferences: {
+        background: {backgroundImageUrl: '/legacy-user.png'}
+    }}});
+    const {window: win} = await bootBackgroundRuntime({currentUser: {id: 'owner'}});
+    await vi.waitFor(() => assert.equal(win.__eveSurfaceBackground.sourceUrl, '/legacy-user.png'));
+    assert.equal(win.eveBackground.getParams().backgroundSource, 'image');
+    assert.equal(profileApi.upsertUserProfile.mock.calls.length, 0);
+});
+test('startup paints the published user wallpaper before any bundled default frame', async () => {
+    const preferences = stored('/published.png').profile.preferences;
+    profileApi.loadUserProfile.mockResolvedValue({ok: true, profile: {preferences}});
+    const {surfaces} = await bootBackgroundRuntime({currentUser: {id: 'owner'}, preferences});
+    assert.equal(surfaces[0].sourceUrl, '/published.png');
 });

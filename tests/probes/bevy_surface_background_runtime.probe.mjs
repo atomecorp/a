@@ -357,14 +357,16 @@ test('surface background resize path coalesces and avoids repeated image emissio
 
 test('default surface background color is shared by HTML and generated Bevy background payloads', async () => {
     const cssSource = fs.readFileSync(path.join(repoRoot, 'atome/src/css/squirrel.css'), 'utf8');
-    assert.match(cssSource, /--eve-default-surface-background:\s*#a9a9a9;/);
+    const { eveCssVars } = await import('../../eVe/elements/look/tokens.js');
+    assert.equal(eveCssVars['--eve-default-surface-background'], '#272727');
+    assert.doesNotMatch(cssSource, /--eve-default-surface-background:\s*#/);
     assert.match(cssSource, /background:\s*var\(--eve-default-surface-background\);/);
 
     const defaultsUrl = `${pathToFileUrl(path.join(repoRoot, 'eVe/domains/rendering/user_background_pattern_renderer.js'))}?default_color=${Date.now()}`;
     const { DEFAULT_USER_BACKGROUND_PARAMS } = await import(defaultsUrl);
-    assert.equal(DEFAULT_USER_BACKGROUND_PARAMS.backgroundColorR, 169);
-    assert.equal(DEFAULT_USER_BACKGROUND_PARAMS.backgroundColorG, 169);
-    assert.equal(DEFAULT_USER_BACKGROUND_PARAMS.backgroundColorB, 169);
+    assert.equal(DEFAULT_USER_BACKGROUND_PARAMS.backgroundColorR, 39);
+    assert.equal(DEFAULT_USER_BACKGROUND_PARAMS.backgroundColorG, 39);
+    assert.equal(DEFAULT_USER_BACKGROUND_PARAMS.backgroundColorB, 39);
 
     const previousWindow = globalThis.window;
     const previousDocument = globalThis.document;
@@ -416,7 +418,7 @@ test('default surface background color is shared by HTML and generated Bevy back
         };
         const getComputedStyle = (target) => ({
             position: target === view ? 'relative' : '',
-            getPropertyValue: (name) => (name === '--eve-default-surface-background' ? '#a9a9a9' : '')
+            getPropertyValue: (name) => (name === '--eve-default-surface-background' ? '#272727' : '')
         });
         globalThis.getComputedStyle = getComputedStyle;
         globalThis.window = {
@@ -444,7 +446,7 @@ test('default surface background color is shared by HTML and generated Bevy back
 
         runtime.start();
 
-        assert.deepEqual(emittedDetail.color, [169 / 255, 169 / 255, 169 / 255, 1]);
+        assert.deepEqual(emittedDetail.color, [39 / 255, 39 / 255, 39 / 255, 1]);
         assert.equal(Object.hasOwn(emittedDetail, 'texture'), false);
     } finally {
         if (previousWindow === undefined) {
@@ -482,7 +484,7 @@ test('workspace navigation covers and reveals the same wallpaper', async () => {
     const previousGetComputedStyle = globalThis.getComputedStyle;
     const getComputedStyle = () => ({
         position: 'relative',
-        getPropertyValue: (name) => (name === '--eve-default-surface-background' ? '#a9a9a9' : '')
+        getPropertyValue: (name) => (name === '--eve-default-surface-background' ? '#272727' : '')
     });
     globalThis.getComputedStyle = getComputedStyle;
     globalThis.window.getComputedStyle = getComputedStyle;
@@ -526,7 +528,7 @@ test('workspace navigation covers and reveals the same wallpaper', async () => {
         assert.equal(project.sourceUrl, dashboard.sourceUrl);
         assert.equal(project.mode, 'image');
         assert.equal(project.fit, 'cover');
-        assert.deepEqual(project.cover, [169 / 255, 169 / 255, 169 / 255, 1]);
+        assert.deepEqual(project.cover, [39 / 255, 39 / 255, 39 / 255, 1]);
         assert.equal(Object.hasOwn(project, 'texture'), false);
         assert.equal(Object.hasOwn(project, 'sourceUrl'), true);
 
