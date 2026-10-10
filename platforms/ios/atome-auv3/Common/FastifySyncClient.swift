@@ -3,26 +3,32 @@ import Foundation
 final class FastifySyncClient {
     static let shared = FastifySyncClient()
 
-    private struct Configuration: Equatable {
+    struct Configuration: Equatable {
         let apiURL: URL
         let syncURL: URL
         let token: String
         let principalId: String
         let localPrincipalId: String
+        let environmentFingerprint: String
+        func sameIdentity(as other: Configuration) -> Bool {
+            apiURL == other.apiURL && syncURL == other.syncURL && principalId == other.principalId
+                && localPrincipalId == other.localPrincipalId && environmentFingerprint == other.environmentFingerprint
+        }
     }
 
     private final class ProviderChannel {
         let task: URLSessionWebSocketTask
-        let principal: String
-        let token: String
+        let session: URLSession
+        let configuration: Configuration
         let reply: ([String: Any]) -> Void
         var pending: Set<String> = []
         var voices: Set<String> = []
-        init(task: URLSessionWebSocketTask, principal: String, token: String, reply: @escaping ([String: Any]) -> Void) {
-            self.task = task; self.principal = principal; self.token = token; self.reply = reply
+        init(task: URLSessionWebSocketTask, session: URLSession, configuration: Configuration, reply: @escaping ([String: Any]) -> Void) {
+            self.session = session; self.task = task; self.configuration = configuration; self.reply = reply
         }
         func close() {
             task.cancel(with: .goingAway, reason: nil)
+            session.invalidateAndCancel()
             for id in pending { reply(["type":"ai-provider-response", "requestId":id, "ok":false,
                 "success":false, "error":"provider_connection_closed"]) }
             for id in voices { reply(["type":"ai-realtime-event", "session_id":id,
@@ -31,12 +37,16 @@ final class FastifySyncClient {
         }
     }
     private var providerChannels: [ObjectIdentifier: ProviderChannel] = [:]
-    private let queue = DispatchQueue(label: "ais.fastify.sync.queue")
-    private var session: URLSession?
-    private var syncTask: URLSessionWebSocketTask?
-    private var configuration: Configuration?
+    let queue = DispatchQueue(label: "ais.fastify.sync.queue")
+    var session: URLSession?
+    var syncTask: URLSessionWebSocketTask?
+    var configuration: Configuration?
     private var remoteAccessToken = ""
     private var activePrincipalId = ""
+    var outboxTask: URLSessionWebSocketTask?
+    var outboxSession: URLSession?
+    var outboxRows: [[String: Any]] = []
+    var outboxRetry: DispatchWorkItem?
     private var subscribedStreams: Set<String> = []
     private var connecting = false
     private var connected = false
@@ -50,12 +60,17 @@ final class FastifySyncClient {
     // authenticated request. Tearing the client down each time also closed the
     // provider channels, so the socket carrying an assistant request died of the
     // very call that prepared it, and the user read `provider_connection_closed`.
-    // Only a configuration that actually changed justifies a disconnect.
+    // Token renewal reconnects sync only. Account, server or environment changes
+    // still disconnect provider channels.
     func reloadConfiguration() {
         queue.async { [weak self] in
             guard let self else { return }
             let next = self.resolveConfiguration()
-            if let next, let current = self.configuration, current == next, self.connected { return }
+            if let next, let current = self.configuration, current.sameIdentity(as: next) {
+                if current.token != next.token { self.cancelOutbox(); self.scheduleReconnectLocked() }
+                self.configuration = next
+                self.connectLocked(); return
+            }
             self.disconnectLocked()
             self.connectLocked()
         }
@@ -71,16 +86,19 @@ final class FastifySyncClient {
         if let event = response["event"] as? [String: Any] { events.append(event) }
         if let batch = response["events"] as? [[String: Any]] { events.append(contentsOf: batch) }
         guard !events.isEmpty else { return }
-        queue.async { [weak self] in self?.pushLocked(events: events) }
+        queue.async { [weak self] in self?.drainOutbox() }
     }
 
     private func connectLocked() {
         guard !connecting, !connected, let config = resolveConfiguration() else { return }
+        do { try AiSRuntime.prepareRemoteSync(principalId: config.principalId, localPrincipalId: config.localPrincipalId) }
+        catch { notifyLocal(["type":"sync:persistence-error", "error":error.localizedDescription]); return }
         connecting = true
         configuration = config
         activePrincipalId = config.principalId
         let session = URLSession(configuration: .default)
         let task = session.webSocketTask(with: config.syncURL)
+        task.maximumMessageSize = 28_000_000
         self.session = session
         syncTask = task
         task.resume()
@@ -130,7 +148,15 @@ final class FastifySyncClient {
             if let principal = payload["principal_id"] as? String, !principal.isEmpty {
                 activePrincipalId = principal
             }
+            guard activePrincipalId == configuration?.principalId else { disconnectLocked(); return }
             subscribeAvailableStreams(task, announced: payload["streams"] as? [String] ?? [])
+            drainOutbox()
+            return
+        }
+        if type == "replay-complete", let stream = payload["stream"] as? String {
+            do { try AiSRuntime.completeRemoteReplay(principalId: activePrincipalId, streamId: stream) }
+            catch { notifyLocal(["type":"sync:persistence-error", "error":error.localizedDescription]) }
+            notifyLocal(["type":"sync:projection-ready", "stream":stream, "replay":true])
             return
         }
         if type == "stream-available", let stream = payload["stream"] as? String {
@@ -161,16 +187,19 @@ final class FastifySyncClient {
               let sequence = number(payload["sequence"]), sequence > 0 else { return }
         do {
             let inserted = try AiSRuntime.persistRemoteSyncEnvelope(
-                payload, principalId: activePrincipalId
+                payload, principalId: activePrincipalId, localPrincipalId: configuration?.localPrincipalId
             )
-            if inserted { notifyLocal(payload) }
+            if inserted && payload["replay"] as? Bool != true && payload["source"] as? String != deviceSource() {
+                notifyLocal(["type":"sync:projection-ready", "stream":stream, "replay":false])
+            }
             sendJSON(["type":"ack", "stream":stream, "sequence":sequence], task: task)
         } catch {
-            notifyLocal(["type":"sync:persistence-error", "stream":stream])
+            notifyLocal(["type":"sync:persistence-error", "stream":stream, "error":error.localizedDescription])
+            scheduleReconnectLocked()
         }
     }
 
-    private func subscribeAvailableStreams(
+    func subscribeAvailableStreams(
         _ task: URLSessionWebSocketTask, announced: [String] = []
     ) {
         guard !activePrincipalId.isEmpty else { return }
@@ -185,46 +214,6 @@ final class FastifySyncClient {
         }
     }
 
-    private func pushLocked(events: [[String: Any]]) {
-        guard let config = resolveConfiguration() else { return }
-        let task = URLSession(configuration: .ephemeral).webSocketTask(with: config.apiURL)
-        task.resume()
-        let requestId = UUID().uuidString.lowercased()
-        sendJSON([
-            "type":"sync", "action":"push", "requestId":requestId,
-            "token":config.token, "source":deviceSource(), "events":events
-        ], task: task)
-        task.receive { [weak self] result in
-            self?.queue.async {
-                guard case .success(let message) = result else {
-                    task.cancel(with: .goingAway, reason: nil)
-                    return
-                }
-                let data: Data?
-                switch message {
-                case .string(let text): data = text.data(using: .utf8)
-                case .data(let bytes): data = bytes
-                @unknown default: data = nil
-                }
-                if let data,
-                   let value = try? JSONSerialization.jsonObject(with: data),
-                   let response = value as? [String: Any],
-                   response["requestId"] as? String == requestId,
-                   response["success"] as? Bool == true,
-                   let changes = response["changes"] as? [[String: Any]] {
-                    for change in changes {
-                        guard let stream = (change["stream_id"] ?? change["stream"]) as? String else { continue }
-                        try? AiSRuntime.registerRemoteSyncStream(
-                            principalId: config.principalId, streamId: stream
-                        )
-                    }
-                    if let persistent = self?.syncTask { self?.subscribeAvailableStreams(persistent) }
-                }
-                task.cancel(with: .normalClosure, reason: nil)
-            }
-        }
-    }
-
     private func sendJSON(_ payload: [String: Any], task: URLSessionWebSocketTask) {
         guard JSONSerialization.isValidJSONObject(payload),
               let data = try? JSONSerialization.data(withJSONObject: payload) else { return }
@@ -233,7 +222,7 @@ final class FastifySyncClient {
         }
     }
 
-    private func notifyLocal(_ payload: [String: Any]) {
+    func notifyLocal(_ payload: [String: Any]) {
         guard let data = try? JSONSerialization.data(withJSONObject: payload) else { return }
         LocalHTTPServer.shared.handleFastifySyncMessage(String(decoding: data, as: UTF8.self))
         NotificationCenter.default.post(
@@ -246,6 +235,7 @@ final class FastifySyncClient {
             guard let self, self.syncTask === task, self.connected else { return }
             self.sendJSON(["type":"ping"], task: task)
             self.subscribeAvailableStreams(task)
+            self.drainOutbox()
             self.scheduleHeartbeat(task)
         }
     }
@@ -265,6 +255,7 @@ final class FastifySyncClient {
     }
 
     private func disconnectLocked() {
+        cancelOutbox()
         providerChannels.values.forEach { $0.close() }
         providerChannels.removeAll()
         connected = false
@@ -279,7 +270,7 @@ final class FastifySyncClient {
         reconnectDelay = 1
     }
 
-    private func resolveConfiguration() -> Configuration? {
+    func resolveConfiguration() -> Configuration? {
         let defaults = UserDefaults(suiteName: SharedBus.appGroupSuite) ?? .standard
         let base = firstValue(defaults, keys: ["SQUIRREL_FASTIFY_URL", "SQUIRREL_TAURI_FASTIFY_URL"])
         let explicitSync = firstValue(defaults, keys: ["SQUIRREL_FASTIFY_WS_SYNC_URL"])
@@ -294,10 +285,11 @@ final class FastifySyncClient {
         guard let syncURL = URL(string: explicitSync.isEmpty ? wsBase + "/ws/sync" : explicitSync),
               let apiURL = URL(string: wsBase + "/ws/api") else { return nil }
         return Configuration(apiURL: apiURL, syncURL: syncURL, token: token, principalId: principal,
-            localPrincipalId: firstValue(defaults, keys: ["SQUIRREL_FASTIFY_LOCAL_PRINCIPAL_ID"]))
+            localPrincipalId: firstValue(defaults, keys: ["SQUIRREL_FASTIFY_LOCAL_PRINCIPAL_ID"]),
+            environmentFingerprint: firstValue(defaults, keys: ["SQUIRREL_SYNC_ENVIRONMENT_FINGERPRINT"]))
     }
 
-    private func firstValue(_ defaults: UserDefaults, keys: [String]) -> String {
+    func firstValue(_ defaults: UserDefaults, keys: [String]) -> String {
         for key in keys {
             let value = defaults.string(forKey: key)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             if !value.isEmpty { return value }
@@ -305,7 +297,7 @@ final class FastifySyncClient {
         return ""
     }
 
-    private func deviceSource() -> String {
+    func deviceSource() -> String {
         let defaults = UserDefaults(suiteName: SharedBus.appGroupSuite) ?? .standard
         let key = "SQUIRREL_SYNC_DEVICE_ID"
         if let current = defaults.string(forKey: key), !current.isEmpty { return "ios:\(current)" }
@@ -331,17 +323,20 @@ final class FastifySyncClient {
                        "ok":false, "success":false, "error":"provider_principal_unavailable"])
                 return
             }
-            if let current = self.providerChannels[connectionId], current.principal != localUserId || current.token != config.token {
+            if let current = self.providerChannels[connectionId], !current.configuration.sameIdentity(as: config) {
                 current.close()
                 self.providerChannels.removeValue(forKey: connectionId)
             }
             if self.providerChannels[connectionId] == nil {
-                if self.session == nil { self.session = URLSession(configuration: .ephemeral) }
-                guard let task = self.session?.webSocketTask(with: config.apiURL) else { return }
+                // Sync reconnect invalidates its URLSession. The provider channel owns
+                // its session so pending voice/media work survives that recovery.
+                let providerSession = URLSession(configuration: .ephemeral)
+                let task = providerSession.webSocketTask(with: config.apiURL)
                 task.maximumMessageSize = 28_000_000
-                let channel = ProviderChannel(task: task, principal: localUserId, token: config.token, reply: reply)
+                let channel = ProviderChannel(task: task, session: providerSession, configuration: config, reply: reply)
                 self.providerChannels[connectionId] = channel
                 task.resume(); self.receiveProvider(connectionId, channel: channel)
+                self.scheduleProviderHeartbeat(connectionId, channel: channel)
             }
             guard let channel = self.providerChannels[connectionId] else { return }
             if let id = payload["requestId"] as? String { channel.pending.insert(id) }
@@ -363,12 +358,26 @@ final class FastifySyncClient {
         }
     }
 
+    private func scheduleProviderHeartbeat(_ id: ObjectIdentifier, channel: ProviderChannel) {
+        // Realtime audio bypasses this control socket. Keep it alive even while
+        // no tool call is pending, just as the application transport does.
+        queue.asyncAfter(deadline: .now() + 20) { [weak self, weak channel] in
+            guard let self, let channel, self.providerChannels[id] === channel else { return }
+            channel.task.sendPing { [weak self, weak channel] error in
+                self?.queue.async {
+                    guard let self, let channel, self.providerChannels[id] === channel else { return }
+                    if error != nil { self.providerChannels.removeValue(forKey: id)?.close(); return }
+                    self.scheduleProviderHeartbeat(id, channel: channel)
+                }
+            }
+        }
+    }
+
     private func receiveProvider(_ id: ObjectIdentifier, channel: ProviderChannel) {
         channel.task.receive { [weak self] result in
             self?.queue.async {
                 guard let self, self.providerChannels[id]?.task === channel.task else { return }
-                guard let config = self.resolveConfiguration(), config.localPrincipalId == channel.principal,
-                      config.token == channel.token else {
+                guard let config = self.resolveConfiguration(), config.sameIdentity(as: channel.configuration) else {
                     self.providerChannels.removeValue(forKey: id)?.close(); return
                 }
                 switch result {
@@ -392,73 +401,6 @@ final class FastifySyncClient {
                 case .failure:
                     self.providerChannels.removeValue(forKey: id)?.close()
                 }
-            }
-        }
-    }
-
-    // Public, unauthenticated /ws/api operations owned by Fastify (YouTube search,
-    // television catalogue, YouTube live resolution). The phone has no copy of
-    // them: the frame is forwarded, without any credential, to the configured
-    // Fastify server and its single reply is returned.
-    static let publicTypes: Set<String> = ["youtube-search", "tv-catalog", "tv-resolve"]
-
-    func relayPublic(_ payload: [String: Any], reply: @escaping ([String: Any]) -> Void) {
-        let requestId = payload["requestId"] ?? NSNull()
-        let requestType = payload["type"] as? String ?? ""
-        let responseType = requestType + "-response"
-        let unavailable = requestType == "youtube-search" ? "youtube_search_unavailable" : "PROVIDER_UNAVAILABLE"
-        let failure: (String) -> Void = { error in
-            reply(["type":responseType, "requestId":requestId,
-                "ok":false, "success":false, "error":error])
-        }
-        let defaults = UserDefaults(suiteName: SharedBus.appGroupSuite) ?? .standard
-        let configured = firstValue(defaults, keys: ["SQUIRREL_FASTIFY_URL", "SQUIRREL_TAURI_FASTIFY_URL"])
-        let base = configured.isEmpty ? "https://atome.one" : configured
-        guard var components = URLComponents(string: base),
-              let host = components.host,
-              components.scheme == "https" || (components.scheme == "http" && ["localhost", "127.0.0.1"].contains(host)) else {
-            failure("service_invalid"); return
-        }
-        components.scheme = components.scheme == "https" ? "wss" : "ws"
-        components.path = "/ws/api"
-        components.query = nil
-        components.fragment = nil
-        guard let url = components.url else { failure("service_invalid"); return }
-        let config = URLSessionConfiguration.ephemeral
-        // The catalogue may be built on the first request.
-        config.timeoutIntervalForRequest = 60
-        let session = URLSession(configuration: config)
-        let task = session.webSocketTask(with: url)
-        // A country's catalogue can exceed the 1 MB default.
-        task.maximumMessageSize = 8 * 1024 * 1024
-        task.resume()
-        var outgoing = payload
-        outgoing.removeValue(forKey: "token")
-        guard let bytes = try? JSONSerialization.data(withJSONObject: outgoing) else {
-            task.cancel(with: .goingAway, reason: nil); session.invalidateAndCancel()
-            failure("INVALID_ARGUMENT"); return
-        }
-        task.send(.data(bytes)) { sendError in
-            guard sendError == nil else {
-                task.cancel(with: .goingAway, reason: nil); session.invalidateAndCancel()
-                failure(unavailable); return
-            }
-            task.receive { result in
-                defer { task.cancel(with: .goingAway, reason: nil); session.invalidateAndCancel() }
-                guard case .success(let message) = result else { failure(unavailable); return }
-                let received: Data?
-                switch message {
-                case .data(let data): received = data
-                case .string(let text): received = text.data(using: .utf8)
-                @unknown default: received = nil
-                }
-                guard let received,
-                      let response = (try? JSONSerialization.jsonObject(with: received)) as? [String: Any],
-                      response["type"] as? String == responseType,
-                      String(describing: response["requestId"] ?? "") == String(describing: requestId) else {
-                    failure(unavailable); return
-                }
-                reply(response)
             }
         }
     }

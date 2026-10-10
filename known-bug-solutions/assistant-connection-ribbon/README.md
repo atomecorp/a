@@ -39,3 +39,55 @@ The native provider relay formerly compared token bytes before forwarding respon
 Regression evidence: tests/server/provider_relay_contract.rs uses a real local WebSocket to rotate the token during a pending request and verify that logout blocks subsequent events. tests/eve/assistant_visual_contract.test.mjs verifies ribbon displacement, Atom replacement, input focus and teardown; tests/eve/assistant_session_controller.test.mjs covers stale startup cancellation.
 
 Required native acceptance remains separate: real Atom click, capture permission if requested, connected plus live microphone state, spoken response, real long press, field displacement, focus/pause, close/resume and final release. Current record: eVe/documentations/MYSTIC_ASSISTANT_VALIDATION_2026-09-21.md.
+
+## iOS sync cancellation and catalog startup delay — 2026-10-10
+
+Physical iPhone traces and a compiled-production Swift regression confirmed that
+the provider socket borrowed the sync URLSession. Sync recovery invalidated that
+session and cancelled pending voice requests. Identical configuration reloads
+also disconnected provider channels while sync was reconnecting. ProviderChannel
+now owns its ephemeral URLSession; sync recovery preserves it, while logout and
+configuration changes still close it. The real local-WebSocket regression fails
+before the repair and passes afterwards, with one provider connection and no
+operation replay: `tests/probes/ios_provider_recovery.probe.mjs`.
+
+A second physical trace stopped at runtime.tools.list: discovery awaited the
+complete bootstrap reconciliation, including writes, before voice contacted
+OpenAI. ToolRuntimeV2.listTools now reads the same canonical registry and built-in
+resolver directly. It still loads stored custom tools and honors disabling.
+The pending-bootstrap regression fails before repair and passes afterwards:
+`tests/eve/tool_runtime_native_bootstrap_fast_path.test.mjs`. No MCP handler,
+contextual instruction, permission or tool execution path is changed.
+
+The existing Realtime owner keeps provider_connection_closed when remote cleanup
+also fails, instead of replacing it with a missing-session/provider error.
+Regression: `tests/eve/realtime_link_recovery.test.mjs`. Temporary stage traces
+are removed from production. Physical spoken-response acceptance and repeat
+opening results are recorded separately in FRAMEWORK_STATE; generated provider
+audio alone does not establish audible phone playback.
+
+The prolonged physical run additionally reproduced an idle control-socket closure
+(NSPOSIXErrorDomain 57, with no intervening configuration change). The existing
+NGINX configuration bounds idle WebSockets at 75 seconds; Web application sockets
+already send keepalives, while the native provider relay did not. ProviderChannel
+now sends WebSocket ping frames every 20 seconds with weak ownership and stops
+when disposed. The real-Swift idle regression fails before repair and passes
+afterwards. This does not change authentication or replay paid calls.
+
+The same native regression confirmed token renewal also closed pending voice.
+The relay now compares verified local/remote principal, server URLs and environment
+fingerprint, matching the existing desktop relay identity contract. Requests use
+the latest token; server validation is unchanged. Native tests verify the pending
+reply survives renewal without reconnect/replay, while logout and an environment
+change still dispose voice.
+
+A later full-relaunch acceptance twice stopped after startup with the generic
+request error. The existing inspectable runtime reported the same
+`JSON Parse error: Unterminated string` in conversation and voice states. A
+regression reproduced it at run's JSON.parse of voice function arguments. The
+conversation owner now returns `conversation_tool_arguments_invalid` as a tool
+result before invoking any MCP, delivers it through the existing voice result
+route, and accepts a later valid call. No malformed arguments are executed or
+logged, and no tool mutation is replayed. The before-test fails and the repaired
+regression passes. This is input validation at the voice conversation boundary,
+not a change to MCP handlers, permissions or contextual instructions.

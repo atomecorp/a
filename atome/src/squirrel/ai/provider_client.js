@@ -57,6 +57,7 @@ export const resolveOpenAiCredentialStatus = async ({
     const entryId = aiProviderVaultEntryId({ userId, providerId: 'openai' });
     const options = { expectedPrincipal: userId };
     let status = await providerRequest('credential.status', {}, options);
+    if (typeof status?.configured !== 'boolean') throw new Error('provider_credential_status_invalid');
     const vault = securityApi || resolveSecurityApi(env);
     if (!(vault.listTokens?.()?.items || []).some(item => item.entry_id === entryId)) return status;
     const requireSameAccount = () => {

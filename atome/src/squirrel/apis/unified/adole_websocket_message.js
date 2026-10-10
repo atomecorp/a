@@ -10,6 +10,8 @@ import { reportRuntimeError } from '../../runtime_errors.js';
 // Server pushes with no request id: re-emitted on `window` as `squirrel:<type>`.
 // Value = how to build the event detail from the message.
 const PUSH_EVENTS = {
+    // Native SQLite has committed the cloud projection; consumers re-read the canonical API.
+    'sync:projection-ready': message => ({ stream: message.stream, replay: message.replay === true }),
     'phone-link-ready': message => ({ attemptId: message.attemptId }),
     'ai-realtime-event': message => ({ session_id: message.session_id, event: message.event }),
     'surface-presence': (message) => ({

@@ -39,7 +39,7 @@ const separated = mounted => {
         highest = span.max;
     });
 };
-const noRender = { mountTree: async ({ tree }) => tree, updateTree: async ({ tree }) => tree };
+const noRender = { treeScrollRevision: () => 0, captureTreeScroll: () => ({ userRevision: 0, offsets: [] }), mountTree: async ({ tree }) => tree, updateTree: async ({ tree }) => tree };
 
 test('a background hydration can reveal its requested node after the first mount', async () => {
     const previousWindow = globalThis.window, previousDocument = globalThis.document, previousRuntime = bevyPanelRuntimeState.runtime;
@@ -48,7 +48,12 @@ test('a background hydration can reveal its requested node after the first mount
     dom.window.__eveWorkspaceMode = { mode: 'dashboard' }; dom.window.__eveDashboardMainMenuSuspended = true;
     dom.window.document.querySelector('canvas').getBoundingClientRect = () => ({ width: 800, height: 600 });
     const reveals = []; let reveal;
-    bevyPanelRuntimeState.runtime = { ...noRender, unmountTree: async () => {}, revealTreeNode: async request => { reveals.push(request); } };
+    let revision = 0;
+    bevyPanelRuntimeState.runtime = { ...noRender, treeScrollRevision: () => revision, unmountTree: async () => {},
+        updateTree: async ({ id, tree, scrollIntent }) => {
+            if (scrollIntent?.valid?.() !== false) (scrollIntent?.reveals || []).forEach(request => reveals.push({ id, ...request }));
+            return tree;
+        } };
     registerBevyPanelSurface({ surfaceKey: 'late_reveal_fixture', title: 'Contact',
         onOpen: options => { reveal = options.reveal; }, buildContent: () => [textNode('hydrated_card', 'Card', { size: [140, 30] })] });
     try {
@@ -56,6 +61,9 @@ test('a background hydration can reveal its requested node after the first mount
         await reveal('hydrated_card');
         assert.equal(reveals.length, 1); assert.equal(reveals[0].nodeId, 'hydrated_card');
         assert.equal(reveals[0].id, 'eve_bevy_panel_late_reveal_fixture');
+        revision++;
+        await reveal('hydrated_card');
+        assert.equal(reveals.length, 1, 'late hydration must not override a manual gesture');
         await closeBevyPanelSurface('late_reveal_fixture');
         await reveal('hydrated_card'); assert.equal(reveals.length, 1, 'a closed opening must not reveal into another surface');
     } finally {
@@ -224,7 +232,7 @@ test('data arriving during the first GPU mount is painted without another user g
     surface.getBoundingClientRect = () => ({ width: 800, height: 600 });
     let value = 'Loading', requestRefresh;
     const painted = [];
-    bevyPanelRuntimeState.runtime = {
+    bevyPanelRuntimeState.runtime = { ...noRender,
         mountTree: async ({ tree }) => {
             painted.push(tree);
             value = 'Loaded image'; requestRefresh(); requestRefresh();

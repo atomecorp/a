@@ -106,8 +106,18 @@ export const createConversationSession = ({
             while (work.calls.length) {
                 const call = work.calls.shift();
                 if (++work.count > maxToolCalls) throw new Error('conversation_tool_limit');
+                let args;
+                try {
+                    args = JSON.parse(call.arguments);
+                    if (!args || typeof args !== 'object' || Array.isArray(args)) throw new Error('conversation_tool_arguments_invalid');
+                } catch (error) {
+                    if (work.source?.type !== 'voice') throw error;
+                    appendResult(work, call, work.toolMap.get(call.name)?.name || call.name,
+                        { ok: false, error: 'conversation_tool_arguments_invalid' });
+                    continue;
+                }
                 if (call.name === 'atome_tool_search') {
-                    const query = String(JSON.parse(call.arguments).query || '').toLowerCase();
+                    const query = String(args.query || '').toLowerCase();
                     const terms = query.split(/\s+/).filter(Boolean);
                     const matches = work.catalog.map(tool => {
                         const description = tool.description.toLowerCase(), name = description.split(':')[0];
@@ -122,7 +132,6 @@ export const createConversationSession = ({
                 }
                 const tool = work.toolMap.get(call.name);
                 if (!tool) throw new Error('conversation_unknown_tool');
-                const args = JSON.parse(call.arguments);
                 if (work.source?.type === 'voice' && ['tv.open_channel', 'youtube.play'].includes(tool.name)) {
                     const input = tool.method === 'ai.tools.call' ? args : args.input || (args.input = {});
                     if (!Object.hasOwn(input, 'fullscreen')) input.fullscreen = true;

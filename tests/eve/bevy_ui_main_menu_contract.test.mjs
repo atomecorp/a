@@ -328,11 +328,9 @@ test('BevyUI main menu model keeps the required item order and fixed dashboard h
     assert.equal(items.some((item) => item.key === 'legacy_menu'), false);
 });
 
-test('the main menu is hidden outside an editable work context', () => {
-    const legacy = buildBevyMainMenuItems(menuContent());
-    assert.deepEqual(buildBevyMainMenuItems(menuContent(), { workContext: 'edit' }), legacy);
-    assert.deepEqual(buildBevyMainMenuItems(menuContent(), { workContext: 'consultation' }), []);
-    assert.deepEqual(buildBevyMainMenuItems(menuContent(), { workContext: 'performance' }), []);
+test('the main menu composition is independent of project work context', () => {
+    for (const workContext of ['edit', 'consultation', 'performance'])
+        assert.deepEqual(buildBevyMainMenuItems(menuContent(), { workContext }), buildBevyMainMenuItems(menuContent()));
 });
 
 test('BevyUI main menu Atome short press requests the dashboard', async () => {

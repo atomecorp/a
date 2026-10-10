@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import { updateBevyUiTreeMotion } from '../../eVe/domains/rendering/bevy_ui_tree_motion_runtime.js';
 import { intersectBoxes, overflowClipForNode } from '../../eVe/domains/rendering/bevy_ui_layout_runtime.js';
 import { readBevyProjectionRoundedClips } from '../../eVe/domains/rendering/bevy_projection_clip_contract.js';
 import { scaleTreeForRender } from '../../eVe/domains/rendering/bevy_ui_render_scale.js';
@@ -77,4 +78,32 @@ test('nested rounded viewports retain both original boundaries', () => {
     const outer = overflowClipForNode(viewport, box);
     const inner = overflowClipForNode({style:{overflow:'hidden',radius:5}}, {x:12,y:20,width:196,height:160}, outer);
     assert.deepEqual(inner.roundedRects, [[10,20,200,180,15,15,0,0],[12,20,196,160,5,5,5,5]]);
+});
+
+
+test('caret blink cannot revive a retained field outside nested scroll clips', async () => {
+    const dom = installDom('<html><body><main id="project"></main></body></html>');
+    dom.window.__ATOME_COMPOSITOR__ = createTestCompositor([]);
+    try {
+        await clearAllProjectScenes({ documentRef: dom.window.document });
+        await renderProjectScene({ projectId: '__eve_dashboard_workspace__', records: [], host: dom.window.document.getElementById('project'), compositor: createTestCompositor([]), documentRef: dom.window.document });
+        const source = tree();
+        source.root.children[0].children[0].children.push({ id: 'field', kind: 'panel', style: { position: [0, 220], size: [180, 30], overflow: 'hidden' }, children: [{ id: 'caret', kind: 'panel', style: { size: [1, 16], background: [1, 1, 1, 1], opacity: 0 } }] });
+        const state = { nativeUiEnabled: true, trees: new Map([[source.id, { tree: source }]]), sourceTrees: new Map([[source.id, { tree: source }]]), renderScales: new Map() };
+        const ops = [];
+        const blink = () => updateBevyUiTreeMotion({ treeId: source.id, updates: [{ nodeId: 'caret', opacity: 1 }], state, moduleProvider: async () => ({}), wasmForSurface: async () => ({}), callUiOps: (_, batch) => ops.push(...batch), documentRef: dom.window.document });
+        await projectBevyUiTreeOverlay({ tree: source, documentRef: dom.window.document });
+        await blink();
+        const caret = () => getProjectSceneState('__eve_dashboard_workspace__').records.find(record => record.id.endsWith('_caret'));
+        assert.equal(caret().properties.opacity, 0);
+        assert.equal(ops.at(-1).style.opacity, 0);
+        assert.equal(state.sourceTrees.get(source.id).tree.root.children[0].children[0].children.at(-1).children[0].style.opacity, 1);
+        const visible = structuredClone(source);
+        visible.root.children[0].style.scroll = [0, 100];
+        state.trees.set(source.id, { tree: visible });
+        await projectBevyUiTreeOverlay({ tree: visible, documentRef: dom.window.document });
+        await blink();
+        assert.equal(caret().properties.opacity, 1);
+        assert.equal(ops.at(-1).style.opacity, 1);
+    } finally { await clearAllProjectScenes({ documentRef: dom.window.document }); }
 });

@@ -60,7 +60,8 @@ test.each([['up', false], ['down', false], ['up', true], ['down', true]])('openi
     const projected = [], reveals = [];
     dom.window.eveBevyUiRuntime = {
         mountTree: async ({ tree }) => { projected.push(tree); return tree; },
-        updateTree: async ({ tree }) => { projected.push(tree); return tree; },
+        updateTree: async ({ tree, scrollIntent }) => { projected.push(tree); reveals.push(...(scrollIntent?.reveals || [])); scrollIntent?.onApplied?.(); return tree; },
+        treeScrollRevision: () => 0, captureTreeScroll: () => ({ userRevision: 0, offsets: [] }),
         unmountTree: async () => {}, revealTreeNode: async options => { reveals.push(options); }
     };
     setMainMenuRuntime({ showFully: async () => true, getReservedHeight: () => 74 }, dom.window);
@@ -99,15 +100,21 @@ test.each([['up', false], ['down', false], ['up', true], ['down', true]])('openi
         vi.spyOn(Date, 'now').mockReturnValue(later);
         bodyHeight = 450;
         await bevyPanelRuntimeState.mounted.get('nested_anchor').refresh();
-        expect(reveals.at(-1)).toMatchObject({ nodeId: 'nested_section_header', align: direction === 'up' ? 'end' : 'start' });
+        expect(reveals).toEqual([]); // Later content must never re-pin an already opened section.
         reveals.length = 0;
         await bevyPanelRuntimeState.mounted.get('nested_anchor').refresh();
         expect(reveals).toEqual([]); // A repaint alone must not undo deliberate user scrolling.
+        const mounted = bevyPanelRuntimeState.mounted.get('nested_anchor');
+        const beforeClose = projected.length;
         locateBevyUiNode({ node: projected.at(-1).root, nodeId: 'nested_section_header' }).node.on.activate();
-        await vi.waitFor(() => expect(reveals.at(-1)?.nodeId).toBe('outer_section_header'));
-        expect(bevyPanelRuntimeState.mounted.get('nested_anchor').pinWindow.nodeId).toBe('outer_section_header');
+        await vi.waitFor(() => expect(projected.length).toBeGreaterThan(beforeClose));
+        await mounted.refreshPromise;
+        expect(reveals).toEqual([]);
+        expect(mounted.openingRequest).toBeNull();
+        const beforeOuterClose = projected.length;
         locateBevyUiNode({ node: projected.at(-1).root, nodeId: 'outer_section_header' }).node.on.activate();
-        await vi.waitFor(() => expect(bevyPanelRuntimeState.mounted.get('nested_anchor').pinWindow).toBeNull());
+        await vi.waitFor(() => expect(projected.length).toBeGreaterThan(beforeOuterClose));
+        expect(reveals).toEqual([]);
     } finally {
         await closeBevyPanelSurface('nested_anchor');
         bevyPanelRuntimeState.definitions.delete('nested_anchor');

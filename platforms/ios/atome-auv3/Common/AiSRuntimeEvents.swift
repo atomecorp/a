@@ -3,6 +3,97 @@ import SQLite3
 
 // Journal and projection share one transaction, including inside remote sync.
 extension AiSRuntime {
+    private static func eventPatchObject(_ event: [String: Any]) -> [String: Any]? {
+        let payload = event["payload"] as? [String: Any]
+        return (event["props"] ?? event["properties"] ?? payload?["props"] ?? payload?["properties"]) as? [String: Any]
+    }
+
+    // Autorise un evenement emis par le WebView pour le compte du jeton, avec le meme contrat
+    // qu'Axum (`authorize_event`) : ecrire un atome existant exige d'en etre proprietaire ou
+    // createur et ne change jamais son proprietaire ; creer exige que le proprietaire demande
+    // soit le compte lui-meme et que le parent (ou projet) existant lui appartienne. L'acteur
+    // est toujours celui du jeton. Tous les comptes de l'appareil partagent une seule base.
+    private static func authorizedWebViewEvent(_ raw: [String: Any], db: OpaquePointer?, actorId: String, createdInBatch: Set<String> = []) throws -> [String: Any] {
+        let atomeId = stringValue(raw["atome_id"] ?? raw["atomeId"])
+        let patch = eventPatchObject(raw)
+        let requestedOwner = normalizedOptionalString(raw["owner_id"] ?? raw["ownerId"] ?? raw["owner"]
+            ?? patch?["owner_id"] ?? patch?["ownerId"] ?? patch?["owner"])
+        if !atomeId.isEmpty, let record = try findAnyAtomeMeta(db, atomeId: atomeId) {
+            guard canWrite(record: record, userId: actorId) else { throw AiSError("Access denied") }
+            // Seule exception : un atome herite sans proprietaire, cree par ce compte, peut etre revendique.
+            if let requestedOwner, requestedOwner != record.ownerId, !(record.ownerId.isEmpty && requestedOwner == actorId) {
+                throw AiSError("owner_change_denied")
+            }
+        } else {
+            if let requestedOwner, requestedOwner != actorId { throw AiSError("create_owner_mismatch") }
+            let payload = raw["payload"] as? [String: Any]
+            let parentId = normalizedOptionalString(raw["parent_id"] ?? raw["parentId"] ?? payload?["parent_id"] ?? payload?["parentId"]
+                ?? patch?["parent_id"] ?? patch?["parentId"] ?? raw["project_id"] ?? raw["projectId"])
+            if let parentId, parentId != atomeId, !createdInBatch.contains(parentId),
+               let parent = try findAnyAtomeMeta(db, atomeId: parentId),
+               !canWrite(record: parent, userId: actorId) {
+                throw AiSError("parent_create_denied")
+            }
+        }
+        var event = raw
+        event["actor"] = ["type": "user", "id": actorId]
+        return event
+    }
+
+
+    private static func resolveEventUserId(_ message: [String: Any]) -> String? {
+        let token = stringValue(message["token"])
+        if !token.isEmpty, let claims = try? verifyToken(token) {
+            let sub = normalizedOptionalString(claims["sub"])
+            if let sub, !sub.isEmpty { return sub }
+        }
+        return nil
+    }
+
+    static func handleEventCommit(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
+        guard let actorId = resolveEventUserId(message) else {
+            return eventsResponse(requestId: requestId, success: false, error: "Access denied")
+        }
+        guard let rawEvent = message["event"] as? [String: Any] else {
+            return eventsResponse(requestId: requestId, success: false, error: "Invalid event payload")
+        }
+        let authorized: [String: Any]
+        do { authorized = try authorizedWebViewEvent(rawEvent, db: db, actorId: actorId) }
+        catch { return eventsResponse(requestId: requestId, success: false, error: error.localizedDescription) }
+        let event = try normalizeEventInput(authorized, defaultActorId: actorId)
+        try appendEvent(db, event: event, enqueueRemote: true)
+        return eventsResponse(requestId: requestId, success: true, event: event)
+    }
+
+    static func handleEventCommitBatch(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
+        guard let defaultActorId = resolveEventUserId(message) else {
+            return eventsResponse(requestId: requestId, success: false, error: "Access denied")
+        }
+        let txId = stringValue(message["tx_id"] ?? message["txId"])
+        guard let rawEvents = message["events"] as? [[String: Any]] else {
+            return eventsResponse(requestId: requestId, success: false, error: "Missing events array")
+        }
+        // Un parent cree plus tot dans le meme lot est autorise (contrat Axum `batch_create_ids`).
+        var createdInBatch = Set<String>()
+        let events: [[String: Any]]
+        do {
+            events = try rawEvents.map { raw -> [String: Any] in
+                var event = try authorizedWebViewEvent(raw, db: db, actorId: defaultActorId, createdInBatch: createdInBatch)
+                let atomeId = stringValue(raw["atome_id"] ?? raw["atomeId"])
+                if !atomeId.isEmpty, try findAnyAtomeMeta(db, atomeId: atomeId) == nil { createdInBatch.insert(atomeId) }
+                if !txId.isEmpty, event["tx_id"] == nil, event["txId"] == nil {
+                    event["tx_id"] = txId
+                }
+                return try normalizeEventInput(event, defaultActorId: defaultActorId)
+            }
+        } catch {
+            return eventsResponse(requestId: requestId, success: false, error: error.localizedDescription)
+        }
+        try appendEvents(db, events: events, enqueueRemote: true)
+        return eventsResponse(requestId: requestId, success: true, events: events)
+    }
+
+
     static func normalizeEventInput(_ event: [String: Any], defaultActorId: String?) throws -> [String: Any] {
         let kind = normalizedOptionalString(event["kind"] ?? event["event"]) ?? ""
         if kind.isEmpty {
@@ -57,11 +148,13 @@ extension AiSRuntime {
         if kind == "delete" {
             return ["__deleted": true, "deleted_at": ts]
         }
+        if kind == "restore" { return ["__deleted": false, "deleted_at": NSNull()] }
         guard let payloadObj = payload as? [String: Any] else { return nil }
         if let patch = payloadObj["props"] as? [String: Any] { return patch }
         if let patch = payloadObj["properties"] as? [String: Any] { return patch }
         if let patch = payloadObj["patch"] as? [String: Any] { return patch }
         if let patch = payloadObj["delta"] as? [String: Any] { return patch }
+        if payloadObj["delete_keys"] is [String] { return [:] }
         return nil
     }
 
@@ -93,11 +186,12 @@ extension AiSRuntime {
         return filtered
     }
 
-    static func appendEvent(_ db: OpaquePointer?, event incoming: [String: Any]) throws {
+    static func appendEvent(_ db: OpaquePointer?, event incoming: [String: Any], enqueueRemote: Bool = false, projectionEvent: [String: Any]? = nil) throws {
         let eventId = stringValue(incoming["id"])
         let existing = try query(db, "SELECT id FROM events WHERE id = ? LIMIT 1", [.text(eventId)])
         if !existing.isEmpty { return }
-        let event = try withoutUnchangedProperties(db, event: incoming)
+        // Remote history must retain the server's exact intent; localization is projection-only.
+        let event = enqueueRemote ? try withoutUnchangedProperties(db, event: incoming) : incoming
         try execute(db, "SAVEPOINT ais_event")
         var committed = false
         defer {
@@ -138,7 +232,8 @@ extension AiSRuntime {
             .text(try jsonString(event["lww_decisions"] ?? NSNull())),
             .text(try jsonString(event["projection"] ?? NSNull()))
         ])
-        try applyEventToStateCurrent(db, event: event)
+        try applyEventToStateCurrent(db, event: projectionEvent ?? event)
+        if enqueueRemote { try enqueueSyncEvent(db, event: event) }
         try execute(db, "RELEASE ais_event")
         committed = true
     }
@@ -166,13 +261,19 @@ extension AiSRuntime {
         return reduced
     }
 
-    static func appendEvents(_ db: OpaquePointer?, events: [[String: Any]]) throws {
-        for event in events {
-            try appendEvent(db, event: event)
+    static func appendEvents(_ db: OpaquePointer?, events: [[String: Any]], enqueueRemote: Bool = false) throws {
+        try execute(db, "SAVEPOINT ais_event_batch")
+        do {
+            for event in events { try appendEvent(db, event: event, enqueueRemote: enqueueRemote) }
+            try execute(db, "RELEASE ais_event_batch")
+        } catch {
+            try execute(db, "ROLLBACK TO ais_event_batch")
+            try execute(db, "RELEASE ais_event_batch")
+            throw error
         }
     }
 
-    private static func applyEventToStateCurrent(_ db: OpaquePointer?, event: [String: Any]) throws {
+    static func applyEventToStateCurrent(_ db: OpaquePointer?, event: [String: Any]) throws {
         let atomeId = stringValue(event["atome_id"])
         if atomeId.isEmpty { return }
         let ts = normalizedOptionalString(event["ts"]) ?? isoNow()
@@ -188,7 +289,7 @@ extension AiSRuntime {
             event["parent_id"] ?? event["parentId"]
             ?? payloadObject?["parent_id"] ?? payloadObject?["parentId"]
         ) ?? resolveEventParentId(patch)
-        let deleted = boolValue(patch["__deleted"])
+        let deleted: Bool? = patch["__deleted"].map { boolValue($0) }
         let particlePatch = stripEventMetaPatch(patch)
         let existingMeta = try findAnyAtomeMeta(db, atomeId: atomeId)
 
@@ -217,6 +318,11 @@ extension AiSRuntime {
         let existingState = try loadStateCurrentEntry(db, atomeId: atomeId)
         var nextProps = existingState?.properties ?? [:]
         for (key, value) in patch { nextProps[key] = value }
+        for key in (payloadObject?["delete_keys"] as? [String] ?? []) {
+            nextProps.removeValue(forKey: key)
+            try upsertParticle(db, atomeId: atomeId, key: key, value: NSNull(), changedBy: changedBy, now: ts)
+            try execute(db, "DELETE FROM particles WHERE atome_id = ? AND particle_key = ?", [.text(atomeId), .text(key)])
+        }
         if nextProps["type"] == nil, let patchType { nextProps["type"] = patchType }
         if nextProps["type"] == nil, let existingType = existingMeta?.atomeType, !existingType.isEmpty { nextProps["type"] = existingType }
         // Structural parentage lives in `atomes.parent_id`; remove stale legacy
@@ -230,6 +336,7 @@ extension AiSRuntime {
             normalizedOptionalString(patch["project_id"] ?? patch["projectId"]),
             existingState?.projectId
         ])
+        if globalScope { nextProps.removeValue(forKey: "project_id"); nextProps.removeValue(forKey: "projectId") }
         if let projectId {
             if nextProps["project_id"] == nil { nextProps["project_id"] = projectId }
             if nextProps["projectId"] == nil { nextProps["projectId"] = projectId }
@@ -243,7 +350,7 @@ extension AiSRuntime {
         try upsertStateCurrent(db, atomeId: atomeId, ownerId: stateOwnerId, projectId: projectId, clearProjectId: globalScope, properties: nextProps, now: ts)
     }
 
-    private static func upsertAtomeFromEvent(_ db: OpaquePointer?, atomeId: String, atomeType: String?, parentId: String?, ownerId: String?, creatorId: String?, deleted: Bool, now: String) throws {
+    private static func upsertAtomeFromEvent(_ db: OpaquePointer?, atomeId: String, atomeType: String?, parentId: String?, ownerId: String?, creatorId: String?, deleted: Bool?, now: String) throws {
         let existing = try findAnyAtomeMeta(db, atomeId: atomeId)
         if existing == nil {
             try execute(db, """
@@ -257,13 +364,17 @@ extension AiSRuntime {
                 (creatorId ?? ownerId).map(SQLiteBinding.text) ?? .null,
                 .text(now),
                 .text(now),
-                deleted ? .text(now) : .null
+                deleted == true ? .text(now) : .null
             ])
             return
         }
 
-        var updates: [String] = ["updated_at = ?", "deleted_at = ?", "sync_status = 'local'"]
-        var bindings: [SQLiteBinding] = [.text(now), deleted ? .text(now) : .null]
+        var updates: [String] = ["updated_at = ?", "sync_status = 'local'"]
+        var bindings: [SQLiteBinding] = [.text(now)]
+        if let deleted {
+            updates.append("deleted_at = ?")
+            bindings.append(deleted ? .text(now) : .null)
+        }
         if let atomeType, !atomeType.isEmpty {
             updates.append("atome_type = ?")
             bindings.append(.text(atomeType))

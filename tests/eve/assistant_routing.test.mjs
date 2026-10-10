@@ -32,3 +32,29 @@ test('shared instructions describe intent and enforce specialized providers in t
  const owner=fs.readFileSync(new URL('../../eVe/intuition/tools/ai_generators/assistant_generation.js',import.meta.url),'utf8');
  expect(owner).toContain("createVideoRun({ provider: 'runway' })"); expect(owner).toContain("createAudioRun({ provider: 'musicgpt' })");
 });
+
+for (const status of [null, {}, { configured: null }, { configured: 'true' }]) test('unreadable credential status is distinct from a missing OpenAI key: ' + JSON.stringify(status), async () => {
+ const result = await resolveAssistantProviderConfig({ loadProfile: async () => ({ ok: true, userId: 'u' }), credentialStatus: async () => status });
+ expect(result).toMatchObject({ ok: false, error: 'provider_credential_status_invalid' });
+});
+for (const error of ['provider_connection_failed', 'ai_vault_unlock_failed', 'invalid_api_key']) test('assistant preserves credential failure category: ' + error, async () => {
+ const result = await resolveAssistantProviderConfig({ loadProfile: async () => ({ ok: true, userId: 'u' }), credentialStatus: async () => { throw new Error(error); } });
+ expect(result).toMatchObject({ ok: false, error });
+});
+test('a profile load failure without detail never asks for a new key', async () => {
+ const status = vi.fn();
+ expect(await resolveAssistantProviderConfig({ loadProfile: async () => ({ ok: false }), credentialStatus: status }))
+  .toMatchObject({ ok: false, error: 'profile_loader_failed' });
+ expect(status).not.toHaveBeenCalled();
+});
+test('assistant awaits credential loading and recognizes a stored key on every fresh initialization without provider metadata', async () => {
+ let complete;
+ const status = vi.fn(() => new Promise(resolve => { complete = resolve; }));
+ const options = { loadProfile: async () => ({ ok: true, userId: 'u', profile: {} }), credentialStatus: status };
+ for (let cycle = 0; cycle < 2; cycle++) {
+  const pending = resolveAssistantProviderConfig(options);
+  await vi.waitFor(() => expect(status).toHaveBeenCalledTimes(cycle + 1));
+  complete({ configured: true });
+  expect(await pending).toMatchObject({ ok: true, serverManaged: true, providerId: 'openai' });
+ }
+});

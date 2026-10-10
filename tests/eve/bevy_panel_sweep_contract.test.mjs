@@ -80,6 +80,7 @@ const installPanelEnv = () => {
     globalThis.CustomEvent = window.CustomEvent;
     const mounted = [];
     window.eveBevyUiRuntime = {
+        treeScrollRevision: () => 0, captureTreeScroll: () => ({ userRevision: 0, offsets: [] }),
         mountTree: async ({ tree }) => { mounted.push(tree); return tree; },
         updateTree: async ({ tree }) => { mounted.push(tree); return tree; },
         unmountTree: async (id) => ({ id })

@@ -99,3 +99,23 @@ field and paste into another writes the value through the menu.
 **Known limitation:** the keyboard is still dismissed by iOS at the lift; only the
 editing session survives. `paste()` raises it again inside its own tap gesture, which
 is the only moment iOS allows it.
+
+## 2026-10-10: the field menu existed behind the User panel
+
+Two physical-iPhone holds on the empty OpenAI field showed no menu, while the
+shared Bevy diagnostics contained exactly Copy/Paste. The captured menu faces
+were at 2602, but their procedural quad was at 1300; User panel records reached
+2357–2363. A correct hit-test alone could therefore activate invisible tools.
+
+The existing menu_surface_record_runtime.js now resolves Mystic's quad depth
+from normalized lower-layer scene records and includes it in its mount signature.
+Own Mystic records are excluded, so animation frames cannot ratchet the depth.
+The same surface is reprojected when the panel stack changes.
+
+Physical acceptance in the signed Debug update: first hold shows the two tools;
+a real Paste tap fills OpenAI immediately; a real Copy tap replaces a sentinel
+with the exact fictive 30-character value. The field was cleared using real iOS
+Delete keys and Done. tests/eve/menu_surface_depth.test.mjs covers real panel
+projection, several panels, repeated frames, removal and the unchanged main-menu
+ground. Existing field/menu/session tests pass. The broader panel shell-opacity
+assertion and unsupported native taxonomy_read remain outside this correction.

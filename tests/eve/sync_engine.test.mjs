@@ -1,12 +1,27 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { SyncEngine } from '../../atome/src/squirrel/apis/unified/sync_engine.js';
+import { messageHandlerMixin } from '../../atome/src/squirrel/apis/unified/adole_websocket_message.js';
 
 class MemoryStorage {
     constructor() { this.values = new Map(); }
     getItem(key) { return this.values.has(key) ? this.values.get(key) : null; }
     setItem(key, value) { this.values.set(key, String(value)); }
 }
+
+test('native projection completion only invalidates consumers and never carries business state', () => {
+    const previousWindow = globalThis.window, previousEvent = globalThis.CustomEvent;
+    const dispatched = [];
+    globalThis.window = { dispatchEvent: event => dispatched.push(event) };
+    globalThis.CustomEvent = class { constructor(type, options) { this.type = type; this.detail = options.detail; } };
+    try {
+        messageHandlerMixin.handleMessage.call({}, JSON.stringify({ type: 'sync:projection-ready', stream: 'own-stream', replay: true,
+            properties: { name: 'must not be projected here' }, atome_id: 'private-object' }));
+        assert.equal(dispatched.length, 1);
+        assert.equal(dispatched[0].type, 'squirrel:sync:projection-ready');
+        assert.deepEqual(dispatched[0].detail, { stream: 'own-stream', replay: true });
+    } finally { globalThis.window = previousWindow; globalThis.CustomEvent = previousEvent; }
+});
 
 class FakeSocket {
     static OPEN = 1;

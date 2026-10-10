@@ -68,3 +68,5 @@ the established solution before attempting a new implementation.
 - [Live Mute canonical event](live-mute-canonical-event/README.md)
 
 - [End-anchored List loses visible rows after scrub](project-list-virtual-window/README.md): retain the shared virtualizer window when consuming the end anchor.
+
+- [iOS restore identity, durable retry and Dashboard error recovery](ios-sync-restoration/README.md): actual-owner regressions; full physical-account recovery remains a separate acceptance check.

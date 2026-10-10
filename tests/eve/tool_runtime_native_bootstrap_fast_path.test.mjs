@@ -96,6 +96,27 @@ describe('Runtime V2 built-in tool fast path', () => {
             boot.mockRestore();
         }
     });
+    it('discovers tools without waiting for bootstrap writes and retains stored disabling', async () => {
+        const { toolRegistryV2 } = await import('../../eVe/intuition/tools/core/tool_registry.js');
+        const boot = vi.spyOn(toolRuntimeV2, 'bootstrap').mockImplementation(() => new Promise(() => {}));
+        const list = vi.spyOn(toolRegistryV2, 'listTools').mockResolvedValue([
+            { id: 'ui.draw.edit', capabilities: { disabled: true } },
+            { id: 'custom_tool', tool_key: 'custom', type: 'tool', capabilities: {} }
+        ]);
+        try {
+            const tools = await Promise.race([
+                toolRuntimeV2.listTools(),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('catalog_waited_for_bootstrap_writes')), 100))
+            ]);
+            expect(tools.some(tool => tool.id === 'ui.draw.edit')).toBe(false);
+            expect(tools.some(tool => tool.id === 'ui.ai.image.generate')).toBe(true);
+            expect(tools.some(tool => tool.id === 'custom_tool')).toBe(true);
+            expect(boot).not.toHaveBeenCalled();
+            const all = await toolRuntimeV2.listTools({ includeDisabled: true });
+            expect(all.find(tool => tool.id === 'ui.draw.edit')?.capabilities?.disabled).toBe(true);
+        } finally { boot.mockRestore(); list.mockRestore(); }
+    });
+
     it('discovers graphical built-ins even when the persisted native catalog is empty', async () => {
         const { toolRegistryV2 } = await import('../../eVe/intuition/tools/core/tool_registry.js');
         const boot = vi.spyOn(toolRuntimeV2, 'bootstrap').mockResolvedValue({ ok: true });

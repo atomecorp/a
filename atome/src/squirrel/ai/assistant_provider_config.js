@@ -7,12 +7,13 @@ export const resolveAssistantProviderConfig = async ({
     credentialStatus = resolveOpenAiCredentialStatus, ...options
 } = {}) => {
     const profile = await loadProfile();
-    if (!profile?.ok) return { ok: false, providerId: 'openai', error: profile?.error || 'no_ai_key_configured' };
+    if (!profile?.ok) return { ok: false, providerId: 'openai', error: profile?.error || 'profile_loader_failed' };
     const userId = String(profile.userId || profile.user_id || '').trim();
     if (!userId) return { ok: false, providerId: 'openai', error: 'ai_profile_user_id_missing' };
     try {
         const status = await credentialStatus({ ...options, env, userId });
-        if (!status?.configured) return { ok: false, providerId: 'openai', error: 'no_ai_key_configured' };
+        if (typeof status?.configured !== 'boolean') throw new Error('provider_credential_status_invalid');
+        if (status.configured === false) return { ok: false, providerId: 'openai', error: 'no_ai_key_configured' };
         const metadata = profile.profile?.passkeys?.keys?.find(entry => entry.provider === 'openai');
         return { ok: true, providerId: 'openai', provider: AI_PROVIDER_DEFINITIONS.openai,
             serverManaged: true, model: metadata?.model || AI_PROVIDER_DEFINITIONS.openai.models[0],

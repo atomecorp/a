@@ -406,7 +406,7 @@ test('direct contact opening paints before hydration, then reveals the requested
     dom.window.Squirrel.contacts.ensureReady=async()=>{await ready;return {ok:true};};
     let revealed='';
     try {
-        const cleanup=contactSurface.onOpen({context:{contactId:'ada'},refresh:()=>{},reveal:id=>{revealed=id;}});
+        const cleanup=contactSurface.onOpen({context:{contactId:'ada'},refresh:options=>{if(options?.pinNodeId)revealed=options.pinNodeId;}});
         assert.equal(typeof cleanup,'function');assert.equal(revealed,'');assert.equal(contactSurface.readState().loading,true);release();
         await vi.waitFor(()=>assert.equal(revealed,'contact_accordion_ada_header'));
         assert.equal(contactSurface.readState().expandedId,'ada');assert.equal(revealed,'contact_accordion_ada_header');cleanup();
@@ -417,4 +417,25 @@ test('direct contact opening paints before hydration, then reveals the requested
         await vi.waitFor(()=>assert.equal(contactSurface.readState().error,true));
         assert.equal(contactSurface.readState().error,true);assert.match(contactSurface.readState().notice,/introuvable|not found/i);missing();
     } finally { await contactSurface.onClose();dom.window.close();globalThis.window=previousWindow;globalThis.document=previousDocument; }
+});
+
+
+test('requested-contact hydration preserves manual virtual-list position', async () => {
+    const previousWindow = globalThis.window, previousDocument = globalThis.document;
+    const dom = installContactEnvironment({ items: [{ id: 'ada', name: 'Ada', source_provider: 'eve_contacts_local', source_writable: true }], current: { id: 'self', name: 'Self' } });
+    let release;
+    const ready = new Promise(resolve => { release = resolve; });
+    dom.window.Squirrel.contacts.ensureReady = async () => { await ready; return { ok: true }; };
+    const requests = [];
+    const refresh = options => { if (options?.pinNodeId) requests.push(options); };
+    refresh.canReveal = () => false;
+    let cleanup;
+    try {
+        cleanup = contactSurface.onOpen({ context: { contactId: 'ada' }, refresh });
+        await contactSurface.handleEvent({ type: 'contact.list.scroll', offset: 65 });
+        release();
+        await vi.waitFor(() => assert.equal(contactSurface.readState().expandedId, 'ada'));
+        assert.equal(contactSurface.readState().listScrollOffset, 65);
+        assert.equal(requests.length, 0);
+    } finally { cleanup?.(); globalThis.window = previousWindow; globalThis.document = previousDocument; dom.window.close(); }
 });

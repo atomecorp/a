@@ -6,8 +6,9 @@ import { buildPanelRuntimeConfigByToolId } from '../../eVe/intuition/panel_defin
 import { createToolRuntimeBootstrapPanelHandlers } from '../../eVe/intuition/tools/core/tool_runtime_bootstrap_panel_handlers.js';
 import { createMainMenuContentRuntime } from '../../eVe/intuition/runtime/eve_intuition/main_menu_content_runtime.js';
 import { createMainToolCatalogRuntime } from '../../eVe/intuition/runtime/eve_intuition/main_tool_interaction_runtime.js';
-import { createRuntimeHarness, findNode } from './bevy_ui_main_menu_test_helpers.mjs';
+import { createRuntimeHarness, findNode, waitFrame } from './bevy_ui_main_menu_test_helpers.mjs';
 import { eveT } from '../../eVe/i18n/i18n.js';
+import { restoreProjectWorkModeValue } from '../../eVe/domains/rendering/project_work_mode_state.js';
 
 const ensureString = (value, fallback = '') => {
     const normalized = String(value == null ? '' : value).trim();
@@ -111,11 +112,30 @@ describe('User tool canonical command', () => {
             expect(h.runtime.measure().reservedHeight).toBeGreaterThan(0);
             expect(content.contact).toMatchObject({ tool_id: 'ui.contact.panel', icon: 'contacts', longPressAction: 'pointer.long' });
             expect(content.contact.longPressActive).toBeUndefined();
-            h.window.__eveProfilePreferences.visual.masteryLevel = 'beginner'; await h.runtime.refresh();
-            expect(h.runtime.measure().itemCount).toBe(1);
-            h.window.__eveProfilePreferences.visual.masteryLevel = 'advanced'; await h.runtime.refresh();
-            expect(h.runtime.measure().itemCount).toBe(expected.length + 1);
-        } finally { h.runtime.destroy(); h.restore(); h.dom.window.close(); }
+            for (const view of ['natural', 'list', 'table', 'mix', 'timeline']) {
+                h.window.__currentProject = { id: 'expert-toolbar', properties: { view_mode: view } };
+                for (const mode of ['edit', 'consultation', 'performance']) {
+                    restoreProjectWorkModeValue('expert-toolbar', mode, { windowRef: h.window });
+                    await waitFrame();
+                    expect(h.runtime.measure().workContext).toBe(mode);
+                    expect(h.runtime.state.lastTree.items.map(item => item.key)).toEqual(['atome', ...expected]);
+                    for (const level of ['advanced', 'beginner', 'advanced']) {
+                        const preferences = { visual: { masteryLevel: level } };
+                        h.window.__eveProfilePreferences = preferences;
+                        h.window.dispatchEvent(new h.window.CustomEvent('eve:profile-preferences-updated', {
+                            detail: { preferences }
+                        }));
+                        const keys = level === 'beginner' ? ['atome'] : ['atome', ...expected];
+                        expect(h.runtime.state.lastTree.items.map(item => item.key), `${view}/${mode}/${level}`).toEqual(keys);
+                        expect(h.runtime.measure().itemCount).toBe(keys.length);
+                        expect(h.runtime.measure().reservedHeight).toBeGreaterThan(0);
+                    }
+                }
+            }
+        } finally {
+            restoreProjectWorkModeValue('expert-toolbar', 'edit', { windowRef: h.window });
+            h.runtime.destroy(); h.restore(); h.dom.window.close();
+        }
     });
     it('keeps Contact opening on the panel command and routes only a long press to disconnect', async () => {
         const disconnect = vi.fn(async () => ({ ok: true, counted: true }));

@@ -2279,58 +2279,6 @@ enum AiSRuntime {
         }
     }
 
-    private static func resolveEventUserId(_ message: [String: Any]) -> String? {
-        let token = stringValue(message["token"])
-        if !token.isEmpty, let claims = try? verifyToken(token) {
-            let sub = normalizedOptionalString(claims["sub"])
-            if let sub, !sub.isEmpty { return sub }
-        }
-        return nil
-    }
-
-    private static func handleEventCommit(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
-        guard let actorId = resolveEventUserId(message) else {
-            return eventsResponse(requestId: requestId, success: false, error: "Access denied")
-        }
-        guard let rawEvent = message["event"] as? [String: Any] else {
-            return eventsResponse(requestId: requestId, success: false, error: "Invalid event payload")
-        }
-        let authorized: [String: Any]
-        do { authorized = try authorizedWebViewEvent(rawEvent, db: db, actorId: actorId) }
-        catch { return eventsResponse(requestId: requestId, success: false, error: error.localizedDescription) }
-        let event = try normalizeEventInput(authorized, defaultActorId: actorId)
-        try appendEvent(db, event: event)
-        return eventsResponse(requestId: requestId, success: true, event: event)
-    }
-
-    private static func handleEventCommitBatch(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
-        guard let defaultActorId = resolveEventUserId(message) else {
-            return eventsResponse(requestId: requestId, success: false, error: "Access denied")
-        }
-        let txId = stringValue(message["tx_id"] ?? message["txId"])
-        guard let rawEvents = message["events"] as? [[String: Any]] else {
-            return eventsResponse(requestId: requestId, success: false, error: "Missing events array")
-        }
-        // Un parent cree plus tot dans le meme lot est autorise (contrat Axum `batch_create_ids`).
-        var createdInBatch = Set<String>()
-        let events: [[String: Any]]
-        do {
-            events = try rawEvents.map { raw -> [String: Any] in
-                var event = try authorizedWebViewEvent(raw, db: db, actorId: defaultActorId, createdInBatch: createdInBatch)
-                let atomeId = stringValue(raw["atome_id"] ?? raw["atomeId"])
-                if !atomeId.isEmpty, try findAnyAtomeMeta(db, atomeId: atomeId) == nil { createdInBatch.insert(atomeId) }
-                if !txId.isEmpty, event["tx_id"] == nil, event["txId"] == nil {
-                    event["tx_id"] = txId
-                }
-                return try normalizeEventInput(event, defaultActorId: defaultActorId)
-            }
-        } catch {
-            return eventsResponse(requestId: requestId, success: false, error: error.localizedDescription)
-        }
-        try appendEvents(db, events: events)
-        return eventsResponse(requestId: requestId, success: true, events: events)
-    }
-
     private static func handleEventList(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
         let token = stringValue(message["token"])
         guard let claims = try verifyToken(token), let userId = normalizedOptionalString(claims["sub"]) else {
@@ -2411,115 +2359,6 @@ enum AiSRuntime {
         return opened
     }
 
-    private static func ensureSyncSchema(_ db: OpaquePointer?) throws {
-        // `schemaSQL` already creates `events` on fresh databases; this only
-        // backfills legacy ones. Guarding with PRAGMA keeps the migration
-        // idempotent (no more "duplicate column name") and, crucially, lets a
-        // genuine failure surface instead of being swallowed by `_ = sqlite3_exec`.
-        let eventsExists = try !query(
-            db,
-            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'events' LIMIT 1",
-            []
-        ).isEmpty
-        if eventsExists {
-            let existingColumns = Set(
-                try query(db, "PRAGMA table_info(events)", []).compactMap { $0["name"] as? String }
-            )
-            for (column, ddl) in [
-                ("stream_id", "ALTER TABLE events ADD COLUMN stream_id TEXT"),
-                ("sequence", "ALTER TABLE events ADD COLUMN sequence INTEGER"),
-                ("source", "ALTER TABLE events ADD COLUMN source TEXT"),
-                ("lww_decisions", "ALTER TABLE events ADD COLUMN lww_decisions TEXT"),
-                ("projection", "ALTER TABLE events ADD COLUMN projection TEXT")
-            ] where !existingColumns.contains(column) {
-                try execute(db, ddl)
-            }
-        }
-        try execute(db, """
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_events_stream_sequence
-            ON events(stream_id, sequence) WHERE stream_id IS NOT NULL AND sequence IS NOT NULL
-            """)
-        try execute(db, """
-            CREATE TABLE IF NOT EXISTS remote_sync_stream_cursors (
-                principal_id TEXT NOT NULL, stream_id TEXT NOT NULL,
-                last_sequence INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL,
-                PRIMARY KEY (principal_id, stream_id)
-            )
-            """)
-    }
-
-    static func registerRemoteSyncStream(principalId: String, streamId: String) throws {
-        try queue.sync {
-            let db = try openDatabase()
-            try execute(db, """
-                INSERT INTO remote_sync_stream_cursors (principal_id, stream_id, last_sequence, updated_at)
-                VALUES (?, ?, 0, ?)
-                ON CONFLICT(principal_id, stream_id) DO UPDATE SET updated_at = excluded.updated_at
-                """, [.text(principalId), .text(streamId), .text(isoNow())])
-        }
-    }
-
-    static func remoteSyncCursors(principalId: String) -> [(String, Int64)] {
-        (try? queue.sync {
-            let db = try openDatabase()
-            return try query(db, """
-                SELECT stream_id, last_sequence FROM remote_sync_stream_cursors
-                WHERE principal_id = ? ORDER BY stream_id
-                """, [.text(principalId)]).compactMap { row in
-                guard let stream = row["stream_id"] as? String else { return nil }
-                return (stream, row["last_sequence"] as? Int64 ?? 0)
-            }
-        }) ?? []
-    }
-
-    static func persistRemoteSyncEnvelope(_ envelope: [String: Any], principalId: String) throws -> Bool {
-        try queue.sync {
-            #if DEBUG
-            DiskWriteProbe.setActivity("remote-sync:persist") // TEMPORARY diagnostic
-            defer { DiskWriteProbe.endActivity() }
-            #endif
-            let db = try openDatabase()
-            let eventId = stringValue(envelope["event_id"] ?? envelope["id"])
-            let streamId = stringValue(envelope["stream"] ?? envelope["stream_id"])
-            let sequence = intValue(envelope["sequence"], defaultValue: 0)
-            guard !eventId.isEmpty, !streamId.isEmpty, sequence > 0 else {
-                throw AiSError("Invalid remote sync envelope")
-            }
-            let duplicate = !(try query(db, "SELECT id FROM events WHERE id = ? LIMIT 1", [.text(eventId)])).isEmpty
-            var event: [String: Any] = [
-                "id": eventId,
-                "ts": stringValue(envelope["timestamp"] ?? envelope["ts"]),
-                "kind": stringValue(envelope["kind"]),
-                "payload": envelope["patch"] ?? [:],
-                "actor": ["type": "user", "id": principalId],
-                "stream_id": streamId,
-                "sequence": sequence,
-                "source": envelope["source"] ?? NSNull(),
-                "lww_decisions": envelope["lww_decisions"] ?? NSNull(),
-                "projection": envelope["projection"] ?? NSNull()
-            ]
-            for key in ["atome_id", "project_id", "tx_id", "gesture_id"] {
-                if let value = envelope[key] { event[key] = value }
-            }
-            try execute(db, "BEGIN IMMEDIATE")
-            do {
-                if !duplicate { try appendEvent(db, event: event) }
-                try execute(db, """
-                    INSERT INTO remote_sync_stream_cursors (principal_id, stream_id, last_sequence, updated_at)
-                    VALUES (?, ?, ?, ?)
-                    ON CONFLICT(principal_id, stream_id) DO UPDATE SET
-                      last_sequence = MAX(remote_sync_stream_cursors.last_sequence, excluded.last_sequence),
-                      updated_at = excluded.updated_at
-                    """, [.text(principalId), .text(streamId), .int(sequence), .text(isoNow())])
-                try execute(db, "COMMIT")
-            } catch {
-                _ = try? execute(db, "ROLLBACK")
-                throw error
-            }
-            return !duplicate
-        }
-    }
-
     private static func serializeAtome(
         _ db: OpaquePointer?,
         atomeId: String,
@@ -2567,47 +2406,10 @@ enum AiSRuntime {
         )
     }
 
-    private static func canWrite(record: AtomeMeta, userId: String) -> Bool {
+    static func canWrite(record: AtomeMeta, userId: String) -> Bool {
         if record.ownerId == userId { return true }
         if record.creatorId == userId { return true }
         return false
-    }
-
-    private static func eventPatchObject(_ event: [String: Any]) -> [String: Any]? {
-        let payload = event["payload"] as? [String: Any]
-        return (event["props"] ?? event["properties"] ?? payload?["props"] ?? payload?["properties"]) as? [String: Any]
-    }
-
-    // Autorise un evenement emis par le WebView pour le compte du jeton, avec le meme contrat
-    // qu'Axum (`authorize_event`) : ecrire un atome existant exige d'en etre proprietaire ou
-    // createur et ne change jamais son proprietaire ; creer exige que le proprietaire demande
-    // soit le compte lui-meme et que le parent (ou projet) existant lui appartienne. L'acteur
-    // est toujours celui du jeton. Tous les comptes de l'appareil partagent une seule base.
-    private static func authorizedWebViewEvent(_ raw: [String: Any], db: OpaquePointer?, actorId: String, createdInBatch: Set<String> = []) throws -> [String: Any] {
-        let atomeId = stringValue(raw["atome_id"] ?? raw["atomeId"])
-        let patch = eventPatchObject(raw)
-        let requestedOwner = normalizedOptionalString(raw["owner_id"] ?? raw["ownerId"] ?? raw["owner"]
-            ?? patch?["owner_id"] ?? patch?["ownerId"] ?? patch?["owner"])
-        if !atomeId.isEmpty, let record = try findAnyAtomeMeta(db, atomeId: atomeId) {
-            guard canWrite(record: record, userId: actorId) else { throw AiSError("Access denied") }
-            // Seule exception : un atome herite sans proprietaire, cree par ce compte, peut etre revendique.
-            if let requestedOwner, requestedOwner != record.ownerId, !(record.ownerId.isEmpty && requestedOwner == actorId) {
-                throw AiSError("owner_change_denied")
-            }
-        } else {
-            if let requestedOwner, requestedOwner != actorId { throw AiSError("create_owner_mismatch") }
-            let payload = raw["payload"] as? [String: Any]
-            let parentId = normalizedOptionalString(raw["parent_id"] ?? raw["parentId"] ?? payload?["parent_id"] ?? payload?["parentId"]
-                ?? patch?["parent_id"] ?? patch?["parentId"] ?? raw["project_id"] ?? raw["projectId"])
-            if let parentId, parentId != atomeId, !createdInBatch.contains(parentId),
-               let parent = try findAnyAtomeMeta(db, atomeId: parentId),
-               !canWrite(record: parent, userId: actorId) {
-                throw AiSError("parent_create_denied")
-            }
-        }
-        var event = raw
-        event["actor"] = ["type": "user", "id": actorId]
-        return event
     }
 
     static func upsertParticle(_ db: OpaquePointer?, atomeId: String, key: String, value: Any, changedBy: String, now: String) throws {
@@ -2851,7 +2653,7 @@ enum AiSRuntime {
         return response
     }
 
-    private static func eventsResponse(requestId: String?, success: Bool, error: String? = nil, event: [String: Any]? = nil, events: [[String: Any]]? = nil) -> [String: Any] {
+    static func eventsResponse(requestId: String?, success: Bool, error: String? = nil, event: [String: Any]? = nil, events: [[String: Any]]? = nil) -> [String: Any] {
         var response: [String: Any] = [
             "type": "events-response",
             "success": success

@@ -1,3 +1,4 @@
+import { writeVoiceDiagnostic } from './telemetry.js';
 import { validateParams } from '../ai/agent_gateway_normalize.js';
 import { requestProviderService } from '../ai/provider_broker.js';
 import { OPENAI_MODALITY_MODELS, OPENAI_VAD_SCHEMA } from '../ai/model_catalog_registry.js';
@@ -63,7 +64,8 @@ export const createRealtimeSession = ({
     };
     const handleEvent = async (event, token) => {
         if (token !== generation) return;
-        if (event.type === 'error') throw new Error('realtime_provider_error');
+        if (event.type === 'error') throw new Error(event.code === 'provider_connection_closed'
+            ? 'provider_connection_closed' : 'realtime_provider_error');
         if (event.type === 'input_audio_buffer.speech_started' && listening) emit({ phase: 'listening' });
         if (event.type === 'response.created' && listening) emit({ phase: 'responding' });
         if (event.type === 'conversation.item.input_audio_transcription.completed' && listening) {
@@ -100,7 +102,7 @@ export const createRealtimeSession = ({
         if (token !== generation) return;
         const closing = close(), closedGeneration = generation;
         try { await closing; }
-        catch (cleanupError) { error = cleanupError; }
+        catch { writeVoiceDiagnostic(env, 'voice.realtime.cleanup.failed', { error: 'realtime_cleanup_failed' }); }
         if (closedGeneration === generation) emit({ phase: 'error', error: error.message });
     };
     const pause = async () => {
