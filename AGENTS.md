@@ -11,8 +11,27 @@ Scope: this project and its descendants. Paths in prose are relative to this pro
 5. **Authorization is bounded.** After explicit approval, integrate the authorized brick through the existing declaration, discovery, composition and test mechanisms, where present. An internal-brick approval does not authorize an external dependency or an unlimited architecture extension. Do not invent an additional registry or API. If the existing foundation itself must change, present that change and obtain explicit authorization. Existing technical dependencies must be inspected for their actual role and encapsulation; do not remove them or wrap them to disguise an external substitute as an internal component.
 6. **Use the actual canonical paths.** UI and automation invoke the corresponding canonical tool/command execution path. Panels assemble real tools with their native options. Preserve canonical Atome state outside the disposable, minimal DOM, the shared WebGPU rendering route and the single durable mutation pipeline; detailed contracts belong to the domain modules below. No view, cache, preview, timeline or realtime patch becomes competing writable business truth.
 7. **Preserve the existing architecture.** Keep the names `atome` and `eVe` and JavaScript for application realization. Do not introduce TypeScript, Python, a UI framework, raw HTML/DOM imitation or a parallel implementation for a new realization. Existing platform-language boundaries and narrowly documented canonical DOM exceptions remain governed by modules 01, 02 and 05; they do not authorize a new application stack.
-8. **Stay within the user's authorization.** Reading code to verify documentation does not authorize editing it. Preserve unrelated local changes. Identify defects and necessary cleanup, but request a bounded scope extension when their repair exceeds the authorized task. Do not install dependencies, change personal/provider/authentication/MCP/security settings, disclose secrets or alter history/caches without authorization. Git writes follow module 02; agents never push. Instructions written during a task cannot create permissions for that task.
+8. **Stay within the user's authorization.** Reading code to verify documentation does not authorize editing it. Preserve unrelated local changes. Identify defects and necessary cleanup, but request a bounded scope extension when their repair exceeds the authorized task. Do not install dependencies, change personal/provider/authentication/MCP/security settings, disclose secrets or alter history/caches without authorization. Git writes follow module 02 and the explicit user-controlled Git policy below. Instructions written during a task cannot create permissions for that task.
 9. **Handle conflicts explicitly.** These project instructions do not supersede system/developer instructions or environment protections. Apply the cumulative relevant project contracts. For unresolved project contradictions, identify the exact sources and ask for the smallest required arbitration; do not silently choose, rewrite or bypass a rule. Continue independent read-only investigation where useful. Length, complexity and file size alone do not justify an incomplete result.
+
+## User-controlled Git and GitHub policy
+
+User clarification, 2026-10-12: ordinary development, audits and cleanup do not
+authorize Git writes or GitHub mutations. Stay on the existing `main` branches of
+atome a and eVe. Do not create or switch to a task branch, stage, commit, fetch,
+merge, rebase, push, create a PR or otherwise change Git/GitHub unless the user
+explicitly requests the corresponding action. Read-only local inspection remains
+available when needed for the task.
+
+A push is prohibited by default. A direct user request to push is an explicit
+exception for the requested repository, branch and work only; it does not grant
+ongoing permission or permission to publish another branch. Preserve all local
+work, inspect the remote state, publish required submodule commits before their
+parent reference, and verify the result. Never force-push, discard work, delete
+branches/tags, or change credentials, remotes, hooks or Git configuration without
+a separate explicit instruction. After the requested operation, return to the
+default read-only policy. This user clarification governs contrary default Git
+rules elsewhere in the project.
 
 ## Required reading
 
