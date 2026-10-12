@@ -10,6 +10,7 @@ import { reportRuntimeError } from '../../runtime_errors.js';
 // Server pushes with no request id: re-emitted on `window` as `squirrel:<type>`.
 // Value = how to build the event detail from the message.
 const PUSH_EVENTS = {
+    'visio-event': message => ({ roomId: message.room_id, event: message.data }),
     // Native SQLite has committed the cloud projection; consumers re-read the canonical API.
     'sync:projection-ready': message => ({ stream: message.stream, replay: message.replay === true }),
     'phone-link-ready': message => ({ attemptId: message.attemptId }),
@@ -182,7 +183,10 @@ const RESPONSE_PAYLOADS = {
         request: message.request ?? message.data?.request,
         revoked: message.revoked ?? message.data?.revoked
     }),
-    'direct-message-response': (message) => ({ delivered: message.delivered })
+    'direct-message-response': (message) => ({ delivered: message.delivered, receiver_id: message.receiver_id,
+        message_id: message.message_id, queued: message.queued, duplicate: message.duplicate }),
+    'conversation-response': message => ({ items: message.items, nextCursor: message.nextCursor }),
+    'visio-response': message => ({ data: message })
 };
 
 // Data-plane replies that may carry their payload either inline or under `data`.

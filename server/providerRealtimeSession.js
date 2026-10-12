@@ -1,5 +1,6 @@
 import WebSocket from 'ws';
 import { createHash } from 'node:crypto';
+import { openAiFailure } from '../atome/src/squirrel/ai/openai_stream.js';
 
 const sessions = new WeakMap();
 const principals = new Map();
@@ -57,7 +58,7 @@ export const controlProviderRealtime = async ({ action, payload, connection, pri
     const response = await fetchImpl(ROOT, { method: 'POST', redirect: 'error', signal,
         headers: { Authorization: `Bearer ${key}`, 'OpenAI-Safety-Identifier': createHash('sha256').update(principal).digest('hex') }, body: form });
     if (!response.ok) {
-        const error = new Error('provider_realtime_connect_failed'); error.http_status = response.status; throw error;
+        throw openAiFailure(await response.json().catch(() => ({})), 'provider_realtime_connect_failed', response.status);
     }
     const callId = response.headers.get('location')?.split('/').pop();
     if (!/^rtc_[a-zA-Z0-9_-]+$/.test(callId || '')) throw new Error('provider_realtime_call_invalid');
@@ -89,9 +90,11 @@ export const controlProviderRealtime = async ({ action, payload, connection, pri
             if (session.seen.has(event.call_id)) return;
             if (session.seen.size >= 1024 || session.pending.size >= 16) { closeDetached(session); return; }
             session.seen.add(event.call_id); session.pending.add(event.call_id);
-        } else if (event.type !== 'error') return;
+        } else if (!['error', 'response.done'].includes(event.type)) return;
+        if (event.type === 'response.done' && event.response?.status !== 'failed') return;
         connection.send(JSON.stringify({ type: 'ai-realtime-event', session_id: id,
-            event: event.type === 'error' ? { type: 'error', code: 'provider_realtime_error' } : event }));
+            event: event.type === 'response.function_call_arguments.done' ? event
+                : { type: 'error', code: openAiFailure(event, 'provider_realtime_error').message } }));
     });
     socket.on('close', () => { if (active.get(id) === session) closeDetached(session); });
     socket.on('error', () => { closeDetached(session); });

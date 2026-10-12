@@ -72,6 +72,7 @@ export const createCalendarApiSource = ({
         async listEvents(options = {}) {
             const api = await requireApi();
             const response = await api.listEvents(options);
+            if (response?.ok !== true) return { ok: false, source_id, error: response?.error || 'calendar_source_read_failed' };
             const items = Array.isArray(response?.items) ? response.items : [];
             return {
                 ok: true,

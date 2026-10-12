@@ -99,3 +99,66 @@ test('capability discovery retries technical and unknown-status failures', async
     expect(count).toBe(2);
     owner.seal();
 });
+
+test.each(['heart_rate', 'exercise_minutes', 'oxygen_saturation', 'steps'])('an invalidation during a pending %s read is drained without waiting for polling', async id => {
+    let complete, count = 0;
+    const target = new EventTarget();
+    const channel = { host: 'ios', isOpen: () => true, call: async command => {
+        if (command === 'health_link_status') return { ok: true, result: { linked: true } };
+        if (command !== 'health_read') return { ok: true, result: {} };
+        count++;
+        const reply = value => ({ ok: true, result: { results: { [id]: {
+            status: 'ok', hasData: true, value,
+            samples: [{ value, start: 1000, end: 2000 + value }]
+        } } } });
+        return count === 1 ? new Promise(resolve => { complete = () => resolve(reply(60)); }) : reply(90);
+    } };
+    const owner = createHealthOwner({ channel, eventTarget: target, getAccountId: () => 'A', pollMs: 1e9 });
+    const release = owner.subscribe(id, () => {});
+    try {
+        await settle();
+        for (let i = 0; i < 3; i++) target.dispatchEvent(Object.assign(new Event('atome:native-health-invalidated'), { detail: { monitors: [id] } }));
+        await settle();
+        expect(count).toBe(1);
+        complete(); await settle();
+        expect(count).toBe(2);
+        expect(owner.reading(id)).toMatchObject({ state: 'value', value: 90 });
+    } finally { release(); owner.seal(); }
+});
+
+test('foreground return retries a read still pending from the background', async () => {
+    let complete, count = 0;
+    const doc = new EventTarget(); doc.visibilityState = 'visible';
+    const channel = { host: 'ios', isOpen: () => true, call: async command => {
+        if (command === 'health_link_status') return { ok: true, result: { linked: true } };
+        if (command !== 'health_read') return { ok: true, result: {} };
+        count++;
+        const reply = value => ({ ok: true, result: { results: { exercise_minutes: { status: 'ok', hasData: true, value } } } });
+        return count === 1 ? new Promise(resolve => { complete = () => resolve(reply(12)); }) : reply(18);
+    } };
+    const owner = createHealthOwner({ channel, documentRef: doc, getAccountId: () => 'A', pollMs: 1e9 });
+    const release = owner.subscribe('exercise_minutes', () => {});
+    try {
+        await settle();
+        doc.visibilityState = 'hidden'; doc.dispatchEvent(new Event('visibilitychange'));
+        expect(owner.stats().polling).toBe(false);
+        doc.visibilityState = 'visible'; doc.dispatchEvent(new Event('visibilitychange'));
+        await settle(); complete(); await settle();
+        expect(count).toBe(2);
+        expect(owner.reading('exercise_minutes')).toMatchObject({ state: 'value', value: 18 });
+    } finally { release(); owner.seal(); }
+});
+
+test('re-reading an unchanged SpO2 sample preserves its measurement date until the source provides a new one', async () => {
+    let sample = { value: .97, start: 1000, end: 2000 };
+    const {owner} = setup(command => command === 'health_read' && ({ok:true,result:{results:{oxygen_saturation:{status:'ok',scale:'fraction',samples:[sample]}}}}));
+    const release = owner.subscribe('oxygen_saturation',()=>{});
+    try {
+        await settle();
+        expect(owner.reading('oxygen_saturation')).toMatchObject({state:'value',value:97,measuredTo:2000});
+        owner.refresh(); await settle();
+        expect(owner.reading('oxygen_saturation')).toMatchObject({value:97,measuredTo:2000});
+        sample={value:.98,start:3000,end:4000};owner.refresh();await settle();
+        expect(owner.reading('oxygen_saturation')).toMatchObject({value:98,measuredTo:4000});
+    } finally {release();owner.seal();}
+});

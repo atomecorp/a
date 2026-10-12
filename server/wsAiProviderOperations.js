@@ -1,3 +1,4 @@
+import { listProviderModelCatalog } from './providerModelCatalog.js';
 import { prepareHostedMcp } from './providerHostedSession.js';
 import { validateParams } from '../atome/src/squirrel/ai/agent_gateway_normalize.js';
 import { OPENAI_SERVICE_TOOLS, OPENAI_MODEL_PROFILES } from '../atome/src/squirrel/ai/model_catalog_registry.js';
@@ -5,7 +6,7 @@ import { controlProviderRealtime } from './providerRealtimeSession.js';
 import { resolveWsApiPrincipal, isWsApiPrincipalProvisioned } from './wsApiIdentity.js';
 import { wsResponse } from './wsResponse.js';
 import { resolveProviderCredentialVault } from './providerCredentialVault.js';
-import { readOpenAiEvents, readProviderBytes } from '../atome/src/squirrel/ai/openai_stream.js';
+import { openAiFailure, readOpenAiEvents, readProviderBytes } from '../atome/src/squirrel/ai/openai_stream.js';
 import { getAudioAiService } from './ai_audio/index.js';
 import { AUDIO_AI_ERRORS } from './ai_audio/service.js';
 import { getVideoAiService } from './ai_video/index.js';
@@ -14,7 +15,7 @@ import { handleSocialAction } from './social/social_operations.js';
 import { readSocialConfig } from './social/social_sessions.js';
 
 const operations = new WeakMap();
-const SOCIAL_TIMEOUT_MS = Object.freeze({ 'social.connect.await': 11 * 60_000, 'social.publish': 20 * 60_000, 'social.status': 5 * 60_000 });
+const SOCIAL_TIMEOUT_MS = Object.freeze({ models: 15000, 'social.connect.await': 11 * 60_000, 'social.publish': 20 * 60_000, 'social.status': 5 * 60_000 });
 const ROOT = 'https://api.openai.com/v1';
 const ROUTES = Object.freeze({
     models: ['GET', '/models'],
@@ -48,11 +49,7 @@ const activeFor = (connection) => {
 
 const providerError = async (response) => {
     const body = await response.json().catch(() => ({}));
-    // Never forward provider messages: authentication failures may quote the key.
-    const code = String(body?.error?.code || body?.error?.type || `http_${response.status}`);
-    const error = new Error(/^[a-zA-Z0-9_]+$/.test(code) ? code : 'provider_request_failed');
-    error.http_status = response.status;
-    return error;
+    return openAiFailure(body, `provider_http_${response.status}`, response.status);
 };
 
 // Provider-neutral audio generation: the client never names an endpoint, only
@@ -155,11 +152,12 @@ export const handleWsAiProviderOperation = async (message, connection, {
             return reply(true, { cancelled: Boolean(pending?.principal === principal) });
         }
         if (action === 'realtime-connect' && [...active.values()].some(item => item.action === action)) throw new Error('provider_realtime_connect_pending');
-        if (active.size >= 4) throw new Error('provider_concurrency_limit');
+        const catalogs = [...active.values()].filter(item => item.action === 'models').length;
+        if (action === 'models' ? catalogs >= 8 : active.size - catalogs >= 4) throw new Error('provider_concurrency_limit');
         requestId = String(message.requestId || message.request_id || '');
         if (!requestId || active.has(requestId)) throw new Error('provider_request_id_invalid');
         const controller = new AbortController();
-        entry = { controller, principal, action };
+        entry = { controller, principal, action, provider: String(message.provider || message.payload?.provider || 'openai') };
         active.set(requestId, entry);
         // Waiting for the user on the official login page, or for a provider to
         // process a long video, legitimately outlasts a model call.
@@ -179,6 +177,13 @@ export const handleWsAiProviderOperation = async (message, connection, {
             await audioCredential.validateKey?.(candidate, { fetchImpl, signal: controller.signal });
             if (resolvePrincipal(connection, message) !== principal) throw new Error('provider_principal_changed');
             return reply(true, await vault.store(credentialProvider, candidate));
+        }
+        if (action === 'models') {
+            const key = credentialProvider === 'openai' ? await vault.read('openai') : message.payload?.key;
+            if (!key) throw new Error('no_ai_key_configured');
+            const data = await listProviderModelCatalog({ provider: credentialProvider, key, fetchImpl, signal: controller.signal });
+            if (resolvePrincipal(connection, message) !== principal) throw new Error('provider_principal_changed');
+            return reply(true, { data });
         }
         if (action.startsWith('social.')) {
             const data = await handleSocialAction(action, message.payload || {}, {
@@ -204,12 +209,12 @@ export const handleWsAiProviderOperation = async (message, connection, {
             if (resolvePrincipal(connection, message) !== principal) throw new Error('provider_principal_changed');
             const stored = await vault.store('openai', message.key);
             await realtime({ action: 'realtime-close-all', payload: {}, connection, principal });
-            active.forEach(pending => { if (pending !== entry && pending.principal === principal) pending.controller.abort(); });
+            active.forEach(pending => { if (pending !== entry && pending.principal === principal && pending.provider === 'openai') pending.controller.abort(); });
             return reply(true, stored);
         }
         if (action === 'credential.remove') {
             await realtime({ action: 'realtime-close-all', payload: {}, connection, principal });
-            active.forEach(pending => { if (pending !== entry && pending.principal === principal) pending.controller.abort(); });
+            active.forEach(pending => { if (pending !== entry && pending.principal === principal && pending.provider === 'openai') pending.controller.abort(); });
             return reply(true, vault.remove('openai'));
         }
         const key = await vault.read('openai');
@@ -249,7 +254,7 @@ export const handleWsAiProviderOperation = async (message, connection, {
             let result = null;
             for await (const event of readOpenAiEvents(upstream.body, { signal: controller.signal })) {
                 if (connection._wsApiUserId !== principal) throw new Error('provider_principal_changed');
-                if (event.type === 'error' || event.type === 'response.failed') throw new Error('provider_response_failed');
+                if (event.type === 'error' || event.type === 'response.failed') throw openAiFailure(event, 'provider_response_failed');
                 if (event.type === 'response.completed') result = event.response;
                 // Error messages and reasoning text are not exposed as transcript.
                 if (['response.output_text.delta', 'response.output_item.done', 'response.completed'].includes(event.type)) {
@@ -271,7 +276,7 @@ export const handleWsAiProviderOperation = async (message, connection, {
     } catch (error) {
         const known = /^(?:provider_|social_|not_authenticated|no_ai_key_configured|invalid_api_key|insufficient_quota|rate_limit_exceeded)/;
         const code = entry?.controller.signal.aborted ? 'provider_cancelled'
-            : known.test(error.message) || AUDIO_AI_ERRORS.includes(error.message) || VIDEO_AI_ERRORS.includes(error.message) ? error.message : 'provider_operation_failed';
+            : error.provider_code || (known.test(error.message) || AUDIO_AI_ERRORS.includes(error.message) || VIDEO_AI_ERRORS.includes(error.message) ? error.message : 'provider_operation_failed');
         return reply(false, { error: code, http_status: error.http_status || error.httpStatus || null,
             ...(code.startsWith('social_') ? { detail: error.detail || null, provider_code: error.providerCode || null } : {}) });
     } finally {

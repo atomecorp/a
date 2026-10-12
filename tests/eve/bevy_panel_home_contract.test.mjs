@@ -2,7 +2,7 @@ import { createHomePreferencesRuntime } from '../../eVe/intuition/runtime/bevy_p
 import { createHomeProfileEditor } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_profile_editor.js';
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { test } from "vitest";
+import { test, vi } from "vitest";
 import { buildUserProperties, resolveUsername, sanitizeProfileForPersistence } from "../../eVe/domains/user/profile_api_support.js";
 import { upsertUserProfile } from "../../eVe/domains/user/profile_api.js";
 import { normalizeHomeProfile, mergeHomeProfileUpdate, profileDisplayName } from "../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_actions.js";
@@ -279,9 +279,9 @@ test('Passwords and keys expose direct AI provider settings without a vault unlo
     assert.equal(credentialRows.at(-2).id, 'home_credentials_credential-1');
     assert.equal(credentials.children.at(-2).kind, 'divider', 'a credential block is a rubric');
     providers.forEach(({ id }) => {
-        // A provider block is its name, its key and its model — nothing else.
+        // The key receipt and catalog verification are visible beside the provider settings.
         assert.deepEqual(all.find((entry) => entry.id === `home_key_${id}`).children.map((entry) => entry.id),
-            [`home_key_${id}_title`, `home_key_${id}_api`, `home_key_${id}_model`], id);
+            [`home_key_${id}_title`, `home_key_${id}_api`, `home_key_${id}_status`, `home_key_${id}_catalog_status`, `home_key_${id}_model`], id);
     });
     assert.equal(all.some((entry) => entry.id === 'home_ai_budget'), false);
     const providerRows = all.find((entry) => entry.id === 'home_provider_keys').children;
@@ -482,7 +482,7 @@ test('Home opening geometry follows handedness, side centering and compact mobil
     }
 });
 
-test('stored provider keys show a fixed mask, a missing key asks for it, and no status line is drawn', () => {
+test('stored provider keys show a fixed mask and a durable receipt; unavailable status is distinct from a missing key', () => {
     const render = provider => flatten(buildHomeContent(baseState({ expanded: 'settings', vault: {
         credentials: [], providers: [{ id: 'openai', label: 'OpenAI', models: [], ...provider }] }
     }), { emit() {}, bodyWidth: 452, editing }));
@@ -492,8 +492,9 @@ test('stored provider keys show a fixed mask, a missing key asks for it, and no 
     assert.equal(editing.displayValue('security.aiKeys.openai'), '');
     const unknown = render({ configured: null, error: 'provider_connection_failed' });
     assert.equal(JSON.stringify(unknown).includes('••••••••'), false);
-    assert.match(JSON.stringify(unknown.find(node => node.id === 'home_key_openai_api_input')), /Enter your key|Saisissez votre clé/);
-    assert.equal(unknown.some(node => /^home_key_openai_(status|status_detail|active)$/.test(node.id)), false);
+    assert.match(JSON.stringify(unknown.find(node => node.id === 'home_key_openai_api_input')), /Status unavailable|Statut indisponible/);
+    assert.match(JSON.stringify(saved.find(node => node.id === 'home_key_openai_status')), /Key saved|Clé enregistrée/);
+    assert.match(JSON.stringify(unknown.find(node => node.id === 'home_key_openai_status')), /unavailable|indisponible/);
 });
 
 test('Home keeps all section headers available while the profile is pending or timed out', () => {
@@ -558,4 +559,20 @@ test('the shared colour control persists the new-project default and retains beg
     assert.equal(saves.at(-1).preferences.workspace.home_template_project_id, 'home');
     assert.equal(saves.at(-1).preferences.background.backgroundImageUrl, '/wallpaper.png');
     preferences.stopProjectBackground();
+});
+
+test('profile receipts wait for newer queued key metadata and report its failure', async()=>{
+    const state=baseState({userId:'qa-owner',rowKeys:{},rowSerial:0});
+    const jobs=[];
+    const editor=createHomeProfileEditor({state,setNotice(){},save:profile=>new Promise(resolve=>jobs.push({profile,resolve}))});
+    editor.adoptProfile(state.profile);state.profile.name='Changed';
+    const first=editor.persist();await vi.waitFor(()=>assert.equal(jobs.length,1));
+    state.profile.passkeys.keys=[{provider:'openai',model:'qa-model',active:true}];
+    const second=editor.persist();assert.equal(first,second);
+    let finished=false;void second.then(()=>{finished=true;});
+    jobs[0].resolve({ok:true,profile:jobs[0].profile});await vi.waitFor(()=>assert.equal(jobs.length,2));
+    assert.equal(finished,false);assert.equal(jobs[1].profile.passkeys.keys[0].model,'qa-model');
+    jobs[1].resolve({ok:false,error:'qa-metadata-failure'});
+    assert.equal((await first).ok,false);assert.equal(state.profile.passkeys.keys[0].model,'qa-model');
+    assert.equal(state.persistPromise,null);
 });

@@ -97,8 +97,16 @@ export function createCanonicalImport({ type, api = () => globalThis.window?.Ato
             const old = byOrigin.get(originId);
             // Deterministic reservation also survives simultaneous observations on two devices.
             const recordId = old?.canonical_id || `${type}_${originId.slice(7)}`;
-            const record = byId.get(recordId);
-            if (old?.suppressed || importRecordDeleted(record)) { skipped += 1; continue; }
+            let record = byId.get(recordId);
+            // Seule une suppression demandee par l'utilisateur fait foi. Une
+            // reecriture globale (`replace`) sur un cache incomplet a supprime des
+            // contacts a tort : une recuperation explicite les restaure.
+            const userDeleted = old?.suppressed_reason === 'user_delete';
+            if ((old?.suppressed || importRecordDeleted(record)) && (userDeleted || meta.restore_suppressed !== true)) { skipped += 1; continue; }
+            if (record && importRecordDeleted(record)) {
+                await write(recordId, type, null, context, 'restore');
+                record = { ...record, deleted: false, deleted_at: null, properties: { ...importRecordProps(record), __deleted: false } };
+            }
             const normalized = importData(normalize(input));
             const suppliedVersion = input.version ?? input.raw?.version;
             const modifiedAt = Date.parse(input.updatedAt || input.raw?.updatedAt || '');
@@ -170,7 +178,7 @@ export function createCanonicalImport({ type, api = () => globalThis.window?.Ato
             const id = importRecordId(row), input = next.get(id);
             if (!input) {
                 for (const origin of origins.filter(entry => importRecordProps(entry).canonical_id === id)) {
-                    await write(importRecordId(origin), IMPORT_ORIGIN_TYPE, { ...importRecordProps(origin), suppressed: true }, context);
+                    await write(importRecordId(origin), IMPORT_ORIGIN_TYPE, { ...importRecordProps(origin), suppressed: true, suppressed_reason: 'replace' }, context);
                 }
                 await write(id, type, null, context, 'delete');
             } else {
@@ -180,13 +188,25 @@ export function createCanonicalImport({ type, api = () => globalThis.window?.Ato
         }
         return { ok: true };
     };
-    const suppress = async id => {
+    const suppress = async (id, { reason = 'user_delete' } = {}) => {
         const context = capture();
         for (const origin of await list(IMPORT_ORIGIN_TYPE, context)) {
             const props = importRecordProps(origin);
             if (props.domain_type === type && props.canonical_id === id && !props.suppressed)
-                await write(importRecordId(origin), IMPORT_ORIGIN_TYPE, { ...props, suppressed: true }, context);
+                await write(importRecordId(origin), IMPORT_ORIGIN_TYPE, { ...props, suppressed: true, suppressed_reason: reason }, context);
         }
     };
-    return { list, collect, create, replace, capture, write, suppress, resolveIds };
+    // Ecriture d'un seul enregistrement : jamais de reecriture globale depuis une
+    // edition unitaire (un cache partiel supprimerait tout ce qui y manque).
+    const update = async (id, input) => {
+        const context = capture();
+        await write(id, type, importData(normalize(input)), context);
+        return { ok: true };
+    };
+    const remove = async (id, { reason = 'user_delete' } = {}) => {
+        await suppress(id, { reason });
+        await write(id, type, null, capture(), 'delete');
+        return { ok: true };
+    };
+    return { list, collect, create, replace, update, remove, capture, write, suppress, resolveIds };
 }

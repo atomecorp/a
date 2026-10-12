@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
+vi.mock('../../eVe/intuition/matrix/core/project_data.js', () => ({ activateProjectWorkspace: vi.fn(async () => ({ ok: true })) }));
 import { installMockBrowserEnv } from '../strangler_v2/_env.mjs';
 import { createToolRuntimeBootstrapTransportHandlers } from '../../eVe/intuition/tools/core/tool_runtime_bootstrap_transport_handlers.js';
 
@@ -47,6 +48,23 @@ describe('Runtime V2 built-in tool fast path', () => {
         storageList = vi.spyOn(registryModule.toolRegistryV2.storage, 'list')
             .mockImplementation(() => new Promise(() => {}));
         ({ toolRuntimeV2 } = await import('../../eVe/intuition/tools/core/tool_runtime.js'));
+    });
+
+
+    it.each([{ type: 'project' }, { atome_type: 'project' }, { properties: { kind: 'project' } }])('opens a canonical project representation %j through the registered handler', async shape => {
+        const { activateProjectWorkspace } = await import('../../eVe/intuition/matrix/core/project_data.js');
+        await toolRuntimeV2.resolveTool('ui.project.open');
+        const handler = window.atome.tools.handlers.get('ui.project.open'), previous = window.Atome;
+        const project = { id: 'canonical-project', properties: { name: 'Visible programme' }, ...shape };
+        window.Atome = { getStateCurrent: vi.fn(async () => project) };
+        try {
+            expect(await handler({ input: { project_id: project.id } })).toMatchObject({ ok: true, project_id: project.id });
+            expect(activateProjectWorkspace).toHaveBeenLastCalledWith({ ...project, name: project.properties.name });
+            const count = activateProjectWorkspace.mock.calls.length;
+            window.Atome.getStateCurrent.mockResolvedValue({ properties: { kind: 'text' } });
+            expect(await handler({ input: { project_id: 'text' } })).toMatchObject({ ok: false, error: 'project_not_found' });
+            expect(activateProjectWorkspace).toHaveBeenCalledTimes(count);
+        } finally { window.Atome = previous; }
     });
 
     it('resolves Home from the canonical in-memory definitions while auth persistence is pending', async () => {

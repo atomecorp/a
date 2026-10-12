@@ -536,6 +536,13 @@ pub async fn handle_sync_message(
                     Some("Database unavailable".into()),
                 );
             };
+            let pending_delivery_count = match db.query_row(
+                "SELECT COUNT(*) FROM sync_queue WHERE target_server = 'fastify'
+                 AND json_extract(payload, '$.actor.id') = ?1", [user_id], |row| row.get::<_, i64>(0)
+            ) {
+                Ok(count) => count,
+                Err(error) => return response("sync", &message, false, None, Some(error.to_string())),
+            };
             let mut stmt = match db.prepare(
                 "SELECT atome_id, atome_type, parent_id, owner_id, updated_at FROM atomes
                  WHERE owner_id = ?1 AND sync_status = 'pending' AND deleted_at IS NULL ORDER BY updated_at ASC"
@@ -557,7 +564,7 @@ pub async fn handle_sync_message(
                     "sync",
                     &message,
                     true,
-                    Some(json!({"changes": rows.filter_map(Result::ok).collect::<Vec<_>>()})),
+                    Some(json!({"changes": rows.filter_map(Result::ok).collect::<Vec<_>>(), "pending_delivery_count": pending_delivery_count})),
                     None,
                 ),
                 Err(error) => response("sync", &message, false, None, Some(error.to_string())),

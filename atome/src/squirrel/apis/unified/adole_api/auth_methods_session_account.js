@@ -39,8 +39,7 @@ export const sessionAccountMethods = {
                 new Promise((resolve) => setTimeout(resolve, LOGOUT_WORKSPACE_FLUSH_BUDGET_MS))
             ]);
         }
-        await lockLocalAuthorization();
-        const revoked = await phoneLinkClient().revoke();
+        const revoked = await phoneLinkClient().revoke('logout', undefined, lockLocalAuthorization);
         TauriAdapter.clearToken();
         FastifyAdapter.clearToken();
         clearSessionState();
@@ -205,6 +204,7 @@ export const sessionAccountMethods = {
         }
         if (guest.adoptionAccountId && guest.adoptionAccountId !== state.user.id) return { ok: false, error: 'guest_adoption_account_mismatch' };
         const persistedOperationId = guest.adoptionOperationId || null;
+        if (persistedOperationId && operationId && operationId !== persistedOperationId) return { ok: false, error: 'guest_adoption_operation_conflict' };
         const resolvedOperationId = operationId || persistedOperationId || globalThis.crypto?.randomUUID?.();
         if (!resolvedOperationId) return { ok: false, error: 'secure_random_unavailable' };
         setGuestWorkspace({ ...guest, adoptionOperationId: resolvedOperationId, adoptionDecision: 'accepted', adoptionAccountId: state.user.id });

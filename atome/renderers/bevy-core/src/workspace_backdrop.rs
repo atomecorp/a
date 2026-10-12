@@ -40,14 +40,10 @@ pub struct AtomeWorkspaceBackdrop {
 
 /// The workspace capture, and the ONLY colour space of the whole backdrop chain.
 ///
-/// It is deliberately created WITHOUT an sRGB view. `blur_pyramid_image` derives
-/// from this image and turns it into a STORAGE texture, and WebGPU refuses an
-/// sRGB view on a texture that carries `STORAGE_BINDING` — creating that view
-/// fails, which made every `ProceduralSdfMaterial` and `BackdropSurfaceMaterial`
-/// bind group invalid and killed the entire presentation frame with no Rust-side
-/// error at all. The capture, the pyramid and the two shaders that sample it now
-/// all speak the same colour space, linear `Rgba8Unorm`: nothing encodes, nothing
-/// decodes, and the mip pass averages real light instead of encoded bytes.
+/// It is deliberately created WITHOUT an sRGB view. The capture, the pyramid and
+/// the two shaders that sample it all speak the same colour space, linear
+/// `Rgba8Unorm`: nothing encodes, nothing decodes, and the downsample passes
+/// average real light instead of encoded bytes.
 fn capture_image(width: u32, height: u32) -> Image {
     let mut image = Image::new_target_texture(
         width.max(1),
@@ -63,12 +59,10 @@ fn capture_image(width: u32, height: u32) -> Image {
 fn blur_pyramid_image(width: u32, height: u32) -> Image {
     let mut image = capture_image(width, height);
     image.texture_descriptor.mip_level_count = backdrop_mip_level_count(UVec2::new(width.max(1), height.max(1)));
+    // Every level is a colour attachment of the downsample chain: no storage
+    // binding, which A12-class WebGPU adapters cannot provide in sufficient number.
     image.texture_descriptor.usage =
-        TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST | TextureUsages::STORAGE_BINDING | TextureUsages::RENDER_ATTACHMENT;
-    // A storage texture can never be viewed as sRGB, and the mip generation writes
-    // every level through that same storage view. The view is therefore pinned to
-    // the texture's own linear format here, in the one place that knows this image
-    // is written by a compute pass.
+        TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST | TextureUsages::RENDER_ATTACHMENT;
     image.texture_descriptor.view_formats = &[];
     image.texture_view_descriptor = None;
     image.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor::linear());

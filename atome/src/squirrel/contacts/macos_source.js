@@ -139,7 +139,11 @@ export const createMacosContactsSource = ({
         }
         if (response.mode !== 'delta') contactsById.clear();
         for (const id of response.removed_ids || []) contactsById.delete(String(id));
-        const normalized = (Array.isArray(response.contacts) ? response.contacts : []).map((entry) => normalizeMacosContact(entry));
+        // Une fiche native sans identifiant est ignoree seule : elle ne doit pas
+        // faire echouer tout l'instantane.
+        const normalized = (Array.isArray(response.contacts) ? response.contacts : []).flatMap((entry) => {
+            try { return [normalizeMacosContact(entry)]; } catch (_) { return []; }
+        });
         normalized.forEach((entry) => {
             contactsById.set(entry.source_contact_id, entry);
         });

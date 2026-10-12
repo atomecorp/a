@@ -14,6 +14,8 @@
 
 import db, { withTransaction } from '../database/adole.js';
 import { v4 as uuidv4 } from 'uuid';
+import { findUserByPhone } from './auth_users.js';
+import { contactBookPhone } from '../atome/src/shared/contact_book_hash.js';
 import { pushNotificationToUserStack } from './notificationStack.js';
 import { getABoxEventBus } from './aBoxServer.js';
 import { wsSendJsonToUser } from './wsApiState.js';
@@ -355,23 +357,14 @@ export async function resolveProjectIdForAtome(atomeId, maxDepth = 16) {
     return null;
 }
 
+// Le proprietaire canonique du « numero -> compte » (meme normalisation que la
+// messagerie). L'ancienne lecture de la table `particles` ne trouvait plus aucun
+// compte : un partage adresse par numero repondait `contact_required`.
 async function lookupUserByPhone(phone) {
     const clean = String(phone || '').trim();
     if (!clean) return null;
-    const raw = clean.replace(/\s+/g, '');
-    const jsonValue = JSON.stringify(raw);
-
-    const row = await db.query('get', `
-        SELECT a.atome_id
-        FROM atomes a
-        JOIN particles p ON a.atome_id = p.atome_id
-        WHERE a.atome_type = 'user'
-          AND p.particle_key = 'phone'
-          AND (p.particle_value = ? OR p.particle_value = ?)
-        LIMIT 1
-    `, [jsonValue, raw]);
-
-    return row?.atome_id || null;
+    const user = await findUserByPhone(db.getDataSourceAdapter(), contactBookPhone(clean));
+    return user?.user_id ? String(user.user_id) : null;
 }
 
 export async function resolveTargetUserId({ targetUserId, targetPhone }) {

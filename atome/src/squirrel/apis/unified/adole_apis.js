@@ -177,6 +177,16 @@ export const AdoleAPI = {
     }
   },
   communication: {
+    readConversation: async ({ contactId, targetPhone = '', cursor = null, limit = 30 } = {}) => {
+      const result = await fastifyCall({ type: 'conversation', contactId, targetPhone, cursor, limit }, 'communication_auth_unavailable');
+      if (!result.ok) throw new Error(result.error || 'conversation_read_failed');
+      return result;
+    },
+    visio: async ({ action, input = {} } = {}) => {
+      const result = await fastifyCall({ type: 'visio', action, input }, 'communication_auth_unavailable');
+      if (!result.ok) throw new Error(result.error || 'visio_command_failed');
+      return result.data;
+    },
     send: async ({ targetUserId = null, targetPhone = null, message = '' } = {}) => {
       const prepared = await auth.ensureFastifyToken();
       if (!prepared?.ok) throw new Error(prepared?.error || prepared?.reason || 'communication_auth_unavailable');

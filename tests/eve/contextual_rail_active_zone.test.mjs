@@ -193,7 +193,7 @@ test('a ribbon-resident lit tool takes no rail case', () => {
     assert.deepEqual(glowingIds(rail), [], 'nothing engaged, nothing glows');
 });
 
-test('an engaged ribbon tool glows in its slot, a palette showing a value never does', async () => {
+test('only the engaged ribbon tool itself glows, never a palette — not even the one its locked child stands in', async () => {
     const content = {
         toolbox: { children: ['create', 'contact', 'view'] },
         create: { atome_tool: true, label: 'Creer', icon: 'create', type: 'palette', children: ['text'] },
@@ -211,13 +211,13 @@ test('an engaged ribbon tool glows in its slot, a palette showing a value never 
         harness.runtime.setToolLatchedState({ tool_id: 'ui.text.create', latched: true });
         harness.runtime.setToolLatchedState({ tool_id: 'ui.contact.panel', latched: true });
         await waitFrame();
-        assert.deepEqual(glowingIds(lastTree()), ['eve_bevy_ui_main_menu_tool_contact', 'eve_bevy_ui_main_menu_tool_create'],
-            'the slot standing for the locked Text and the open Contacts panel glow; View does not');
-        const create = findNode(lastTree().root, 'eve_bevy_ui_main_menu_tool_create');
-        assert.ok(findNode(create, 'eve_bevy_ui_main_menu_tool_create_icon_glow'), 'the icon carries its own halo');
-        harness.runtime.setToolLatchedState({ tool_id: 'ui.text.create', latched: false });
+        assert.deepEqual(glowingIds(lastTree()), ['eve_bevy_ui_main_menu_tool_contact'],
+            'the open Contacts panel glows; neither Create (Text is locked inside it) nor View does');
+        const contact = findNode(lastTree().root, 'eve_bevy_ui_main_menu_tool_contact');
+        assert.ok(findNode(contact, 'eve_bevy_ui_main_menu_tool_contact_icon_glow'), 'the icon carries its own halo');
+        harness.runtime.setToolLatchedState({ tool_id: 'ui.contact.panel', latched: false });
         await waitFrame();
-        const fading = findNode(lastTree().root, 'eve_bevy_ui_main_menu_tool_create_glow');
+        const fading = findNode(lastTree().root, 'eve_bevy_ui_main_menu_tool_contact_glow');
         assert.ok(fading && fading.style.opacity < 1, 'a stopped tool keeps its halo only while it fades out');
     } finally {
         harness.runtime.destroy();
@@ -289,8 +289,8 @@ test('the rail pins what is lit in activation order, drops the level entry and p
     assert.deepEqual(pinnedIds(tree), ['atome_contextual_tool_play']);
     assert.equal(levelIds(tree).has('atome_contextual_tool_play'), false, 'the moved tool leaves the level');
     assert.equal(JSON.stringify(findNode(tree.root, 'atome_contextual_tool_play')).includes('Stop'), true);
-    assert.deepEqual(glowingIds(tree), ['atome_contextual_tool_create', 'atome_contextual_tool_play'],
-        'the pinned case glows, and so does the slot that stands for the armed ribbon tool');
+    assert.deepEqual(glowingIds(tree), ['atome_contextual_tool_play'],
+        'the pinned case glows; the Create palette lit by its locked Text never does');
     findNode(tree.root, 'atome_contextual_tool_play').on.activate();
     await flushPulse();
     assert.equal(invocations.at(-1).key, 'play');
@@ -304,8 +304,7 @@ test('the rail pins what is lit in activation order, drops the level entry and p
     assert.ok(findNode(tree.root, 'atome_contextual_tool_play').style.position[1]
         > findNode(tree.root, 'atome_contextual_tool_record_action').style.position[1],
     'the first tool activated stays the closest to the Atome handle');
-    assert.deepEqual(glowingIds(tree), ['atome_contextual_tool_create',
-        'atome_contextual_tool_play', 'atome_contextual_tool_record_action']);
+    assert.deepEqual(glowingIds(tree), ['atome_contextual_tool_play', 'atome_contextual_tool_record_action']);
     assert.equal(levelIds(tree).has('atome_contextual_tool_create'), true, 'the palette keeps its own level place');
 
     lit.play = false;
@@ -313,8 +312,8 @@ test('the rail pins what is lit in activation order, drops the level entry and p
     await flushPulse();
     tree = rendered.at(-1);
     assert.deepEqual(pinnedIds(tree), ['atome_contextual_tool_record_action']);
-    assert.ok(['atome_contextual_tool_create', 'atome_contextual_tool_record_action'].every((id) => glowingIds(tree).includes(id)),
-        'the remaining engaged tools keep their halo');
+    assert.ok(glowingIds(tree).includes('atome_contextual_tool_record_action') && !glowingIds(tree).includes('atome_contextual_tool_create'),
+        'the remaining engaged tool keeps its halo; the palette still never glows');
     assert.ok(glowingIds(tree).every((id) => id !== 'atome_contextual_tool_play'
         || findNode(tree.root, `${id}_glow`).style.opacity < 1), 'the stopped case only fades out');
 

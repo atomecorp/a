@@ -1,4 +1,13 @@
-import { getAtome, updateAtome } from '../database/adole.js';
+import { getAtome } from '../database/adole.js';
+import { commitAtomeEvent } from './atomeRoutes.orm.js';
+
+const writeStack = async (userId, stack) => {
+    const result = await commitAtomeEvent({ authenticatedUserId: userId, event: {
+        atome_id: userId, kind: 'set', payload: { scope: 'global', props: { message_stack: stack, notification_stack: stack } },
+        actor: { type: 'user', id: userId }, source: 'communication.notifications'
+    } });
+    if (!result.ok) throw new Error(result.error || 'notification_commit_failed');
+};
 
 const normalizeStackValue = (value) => {
     if (!value) return [];
@@ -61,6 +70,8 @@ const normalizeNotification = (input = {}) => {
         // Visio : la salle a rejoindre et la raison d'un refus survivent au rechargement.
         room_id: input.room_id || input.roomId || null,
         reason: input.reason || null,
+        call_mode: input.call_mode || null,
+        expires_at: input.expires_at || null,
         starts_at: input.starts_at || input.startsAt || null,
         ends_at: input.ends_at || input.endsAt || null
     };
@@ -87,10 +98,7 @@ export async function pushNotificationToUserStack({
     deduped.push(normalized);
     const trimmed = deduped.length > maxKeep ? deduped.slice(deduped.length - maxKeep) : deduped;
 
-    await updateAtome(userId, {
-        message_stack: trimmed,
-        notification_stack: trimmed
-    }, authorId || userId);
+    await writeStack(userId, trimmed);
     return { ok: true, count: trimmed.length, stack: trimmed };
 }
 
@@ -128,10 +136,7 @@ export async function updateNotificationInUserStack({
         return updatedItem;
     });
     if (!updatedItem) return { ok: false, error: 'notification_not_found' };
-    await updateAtome(userId, {
-        message_stack: next,
-        notification_stack: next
-    }, authorId || userId);
+    await writeStack(userId, next);
     return { ok: true, count: next.length, stack: next, notification: updatedItem };
 }
 
@@ -151,9 +156,6 @@ export async function removeNotificationFromUserStack({
         return !itemId || String(itemId) !== String(notificationId);
     });
     if (next.length === stack.length) return { ok: false, error: 'notification_not_found' };
-    await updateAtome(userId, {
-        message_stack: next,
-        notification_stack: next
-    }, authorId || userId);
+    await writeStack(userId, next);
     return { ok: true, count: next.length, stack: next, removed_id: notificationId };
 }

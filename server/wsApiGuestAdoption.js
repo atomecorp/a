@@ -1,4 +1,6 @@
 import crypto from 'crypto';
+import { mergeGuestProfileProperties, personalProfileFromProperties } from '../atome/src/shared/profile_sharing.js';
+import { handleWsAtomeOperation } from './wsAtomeOperations.js';
 import { withTransaction } from '../database/adole.js';
 import { isWsApiPrincipalProvisioned, resolveWsApiPrincipal } from './wsApiIdentity.js';
 import { adoptionFiles, completeAdoptionFiles, declareAdoptionFiles, ensureAdoptionFilesStaged, stageAdoptionFile } from './wsApiGuestAdoptionFiles.js';
@@ -37,7 +39,9 @@ function parsePayload(payload) {
     if (!atomes.length && (events.length || snapshots.length || queue.length || permissions.length || files.length)) {
         throw new Error('guest_adoption_atomes_required');
     }
-    return { atomes, events, snapshots, sync_queue: queue, permissions, files: adoptionFiles(files) };
+    if (payload.profile != null && (typeof payload.profile !== 'object' || Array.isArray(payload.profile))) throw new Error('guest_adoption_profile_invalid');
+    return { atomes, events, snapshots, sync_queue: queue, permissions, files: adoptionFiles(files),
+        profile: payload.profile ? personalProfileFromProperties({ eve_profile: payload.profile }) : null };
 }
 
 function normalizeAtome(record, guestPrincipalId, targetPrincipalId) {
@@ -120,6 +124,8 @@ async function prepare(message, context, targetPrincipalId) {
         if (existing.target_principal_id !== targetPrincipalId || existing.guest_principal_id !== guestPrincipalId || existing.manifest_digest !== manifestDigest) {
             return response(message, false, { error: 'guest_adoption_operation_conflict' });
         }
+        if (!['committed', 'completed'].includes(existing.status)) await context.dataSource.query(
+            'UPDATE guest_adoption_operations SET expires_at = ? WHERE operation_digest = ?', [expiresAt, existing.operation_digest]);
         return response(message, true, { status: existing.status, replayed: true });
     }
     try {
@@ -141,7 +147,7 @@ async function importPayload(message, context, targetPrincipalId) {
     const operationId = String(message.operation_id || message.operationId || '').trim();
     const operation = await loadOperation(context.dataSource, operationId);
     if (!operation || operation.target_principal_id !== targetPrincipalId) return response(message, false, { error: 'guest_adoption_not_prepared' });
-    if (Date.parse(operation.expires_at) < Date.now()) return response(message, false, { error: 'guest_adoption_expired' });
+    if (!['committed', 'completed'].includes(operation.status) && Date.parse(operation.expires_at) < Date.now()) return response(message, false, { error: 'guest_adoption_expired' });
     if (operation.status === 'completed' || operation.status === 'committed') {
         return response(message, true, { status: operation.status, replayed: true });
     }
@@ -173,8 +179,8 @@ async function stageFile(message, context, targetPrincipalId) {
     const operationId = String(message.operation_id || message.operationId || '').trim();
     const operation = await loadOperation(context.dataSource, operationId);
     if (!operation || operation.target_principal_id !== targetPrincipalId) return response(message, false, { error: 'guest_adoption_not_prepared' });
+    if (['committed', 'completed'].includes(operation.status)) return response(message, true, { status: operation.status, replayed: true });
     if (Date.parse(operation.expires_at) < Date.now()) return response(message, false, { error: 'guest_adoption_expired' });
-    if (operation.status === 'committed') return response(message, true, { status: 'committed', replayed: true });
     if (operation.status !== 'importing') return response(message, false, { error: 'guest_adoption_payload_missing' });
     try {
         await stageAdoptionFile({
@@ -194,76 +200,55 @@ async function finalize(message, context, targetPrincipalId) {
     const operationId = String(message.operation_id || message.operationId || '').trim();
     const operation = await loadOperation(context.dataSource, operationId);
     if (!operation || operation.target_principal_id !== targetPrincipalId) return response(message, false, { error: 'guest_adoption_not_prepared' });
-    if (operation.status === 'completed') return response(message, true, { status: 'completed', replayed: true });
-    const stored = await one(context.dataSource, `SELECT payload_json, payload_digest FROM guest_adoption_payloads WHERE operation_digest = ?`, [operation.operation_digest]);
+    if (operation.status === 'completed') {
+        const saved = await one(context.dataSource, 'SELECT profile_event_json FROM guest_adoption_payloads WHERE operation_digest = ?', [operation.operation_digest]);
+        return response(message, true, { status: 'completed', replayed: true, profile_event: saved?.profile_event_json ? JSON.parse(saved.profile_event_json) : null });
+    }
+    const stored = await one(context.dataSource, `SELECT payload_json, payload_digest, profile_event_json FROM guest_adoption_payloads WHERE operation_digest = ?`, [operation.operation_digest]);
     if (!stored) return response(message, false, { error: 'guest_adoption_payload_missing' });
     let payload;
     try { payload = parsePayload(JSON.parse(stored.payload_json)); } catch (error) { return response(message, false, { error: error.message }); }
-    const atomes = sortAtomes(payload.atomes.map((record) => normalizeAtome(record, operation.guest_principal_id, targetPrincipalId)));
+    let atomes;
     try {
+        atomes = sortAtomes(payload.atomes.map(record => normalizeAtome(record, operation.guest_principal_id, targetPrincipalId)));
+        if (operation.status !== 'committed') {
+            await ensureAdoptionFilesStaged(context.dataSource, operation.operation_digest);
+            await importWorkspaceEvents(context, operation, payload, atomes, targetPrincipalId);
+        }
         if (operation.status !== 'committed') await withTransaction(async () => {
             const current = await loadOperation(context.dataSource, operationId);
             if (!current || current.target_principal_id !== targetPrincipalId) throw new Error('guest_adoption_not_prepared');
             if (current.status === 'completed' || current.status === 'committed') return;
             if (current.status !== 'importing') throw new Error('guest_adoption_payload_missing');
             await ensureAdoptionFilesStaged(context.dataSource, operation.operation_digest);
-            for (const record of atomes) {
-                const exists = await one(context.dataSource, `SELECT atome_id FROM atomes WHERE atome_id = ?`, [record.atomeId]);
-                if (exists) throw new Error('guest_adoption_atome_collision');
-                await context.dataSource.query(`INSERT INTO atomes
-                    (atome_id, atome_type, parent_id, owner_id, creator_id, created_at, updated_at, created_source, sync_status)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, 'guest_adoption', 'pending')`,
-                [record.atomeId, record.atomeType, record.parentId, targetPrincipalId, targetPrincipalId, record.createdAt, record.updatedAt]);
-                for (const [key, value] of Object.entries(record.properties)) {
-                    await context.dataSource.query(`INSERT INTO particles
-                        (atome_id, particle_key, particle_value, value_type, version, created_at, updated_at)
-                        VALUES (?, ?, ?, 'json', 1, ?, ?)`,
-                    [record.atomeId, key, JSON.stringify(value), record.createdAt, record.updatedAt]);
+            // Vault events reconstruct adopted state. Original guest checkpoints
+            // and owner grants stay in the immutable operation payload; writing
+            // central copies would create a second business-data authority.
+            if (!context.connection?._wsApiVaultRouter) {
+                for (const snapshot of payload.snapshots) {
+                    if (!snapshot?.atome_id || !atomes.some((record) => record.atomeId === String(snapshot.atome_id))) throw new Error('guest_adoption_snapshot_invalid');
+                    await context.dataSource.query(`INSERT INTO snapshots
+                        (atome_id, project_id, snapshot_data, state_blob, label, snapshot_type, actor, created_by, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [snapshot.atome_id, snapshot.project_id || null, snapshot.snapshot_data || '{}', snapshot.state_blob || null, snapshot.label || null, snapshot.snapshot_type || 'guest_adoption', JSON.stringify(snapshot.actor || { type: 'guest', id: operation.guest_principal_id }), operation.guest_principal_id, snapshot.created_at || new Date().toISOString()]);
                 }
-                await context.dataSource.query(`INSERT INTO state_current
-                    (atome_id, owner_id, project_id, properties, updated_at, version) VALUES (?, ?, ?, ?, ?, 1)`,
-                [record.atomeId, targetPrincipalId, record.projectId, JSON.stringify(record.properties), record.updatedAt]);
-            }
-            for (const event of payload.events) {
-                if (!event?.id || !event?.atome_id || !atomes.some((record) => record.atomeId === String(event.atome_id))) throw new Error('guest_adoption_event_invalid');
-                const actor = event.actor && typeof event.actor === 'object' ? event.actor : {};
-                if (String(actor.id || actor.user_id || '') !== operation.guest_principal_id) throw new Error('guest_adoption_actor_invalid');
-                await context.dataSource.query(`INSERT INTO events (id, ts, atome_id, project_id, kind, payload, actor, tx_id, gesture_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [event.id, event.ts || new Date().toISOString(), event.atome_id, event.project_id || null, event.kind || 'set', JSON.stringify(event.payload || {}), JSON.stringify(actor), event.tx_id || null, event.gesture_id || null]);
-            }
-            for (const snapshot of payload.snapshots) {
-                if (!snapshot?.atome_id || !atomes.some((record) => record.atomeId === String(snapshot.atome_id))) throw new Error('guest_adoption_snapshot_invalid');
-                await context.dataSource.query(`INSERT INTO snapshots
-                    (atome_id, project_id, snapshot_data, state_blob, label, snapshot_type, actor, created_by, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [snapshot.atome_id, snapshot.project_id || null, snapshot.snapshot_data || '{}', snapshot.state_blob || null, snapshot.label || null, snapshot.snapshot_type || 'guest_adoption', JSON.stringify(snapshot.actor || { type: 'guest', id: operation.guest_principal_id }), operation.guest_principal_id, snapshot.created_at || new Date().toISOString()]);
-            }
-            for (const entry of payload.sync_queue) {
-                if (!entry?.payload?.atome_id || !atomes.some((record) => record.atomeId === String(entry.payload.atome_id))) {
-                    throw new Error('guest_adoption_queue_invalid');
+                for (const permission of payload.permissions) {
+                    const atomeId = String(permission?.atome_id || '').trim();
+                    const principalId = String(permission?.principal_id || '').trim();
+                    const grantedBy = String(permission?.granted_by || '').trim();
+                    if (!atomes.some((record) => record.atomeId === atomeId)) throw new Error('guest_adoption_permission_invalid');
+                    if (principalId && principalId !== operation.guest_principal_id && principalId !== targetPrincipalId) throw new Error('guest_adoption_acl_ambiguous');
+                    if (grantedBy && grantedBy !== operation.guest_principal_id && grantedBy !== targetPrincipalId) throw new Error('guest_adoption_acl_ambiguous');
+                    await context.dataSource.query(`INSERT INTO permissions
+                        (atome_id, particle_key, principal_id, can_read, can_write, can_delete, can_share, can_create, share_mode, conditions, granted_by, granted_at, expires_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [atomeId, permission.particle_key || null, targetPrincipalId,
+                        permission.can_read === false ? 0 : 1, permission.can_write === true ? 1 : 0,
+                        permission.can_delete === true ? 1 : 0, permission.can_share === true ? 1 : 0,
+                        permission.can_create === true ? 1 : 0, permission.share_mode || 'real-time',
+                        permission.conditions ? JSON.stringify(permission.conditions) : null, targetPrincipalId,
+                        permission.granted_at || new Date().toISOString(), permission.expires_at || null]);
                 }
-                await context.dataSource.query(`INSERT INTO sync_queue
-                    (atome_id, operation, payload, target_server, status, attempts, max_attempts, created_at)
-                    VALUES (?, ?, ?, 'fastify', 'pending', 0, 5, ?)`,
-                [entry.payload.atome_id, entry.operation || 'commit', JSON.stringify(entry.payload), entry.created_at || new Date().toISOString()]);
-            }
-            for (const permission of payload.permissions) {
-                const atomeId = String(permission?.atome_id || '').trim();
-                const principalId = String(permission?.principal_id || '').trim();
-                const grantedBy = String(permission?.granted_by || '').trim();
-                if (!atomes.some((record) => record.atomeId === atomeId)) throw new Error('guest_adoption_permission_invalid');
-                if (principalId && principalId !== operation.guest_principal_id && principalId !== targetPrincipalId) throw new Error('guest_adoption_acl_ambiguous');
-                if (grantedBy && grantedBy !== operation.guest_principal_id && grantedBy !== targetPrincipalId) throw new Error('guest_adoption_acl_ambiguous');
-                await context.dataSource.query(`INSERT INTO permissions
-                    (atome_id, particle_key, principal_id, can_read, can_write, can_delete, can_share, can_create, share_mode, conditions, granted_by, granted_at, expires_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [atomeId, permission.particle_key || null, targetPrincipalId,
-                    permission.can_read === false ? 0 : 1, permission.can_write === true ? 1 : 0,
-                    permission.can_delete === true ? 1 : 0, permission.can_share === true ? 1 : 0,
-                    permission.can_create === true ? 1 : 0, permission.share_mode || 'real-time',
-                    permission.conditions ? JSON.stringify(permission.conditions) : null, targetPrincipalId,
-                    permission.granted_at || new Date().toISOString(), permission.expires_at || null]);
             }
             await context.dataSource.query(`INSERT OR IGNORE INTO guest_workspace_principals
                 (guest_principal_id, status, adopted_principal_id, adoption_operation_digest, classified_at, adopted_at)
@@ -277,6 +262,7 @@ async function finalize(message, context, targetPrincipalId) {
             operationDigest: operation.operation_digest,
             targetPrincipalId
         });
+        await adoptProfile(message, context, operation, stored, payload.profile, targetPrincipalId);
         await context.dataSource.query(`UPDATE guest_adoption_operations SET status = 'completed', completed_at = datetime('now'), updated_at = datetime('now') WHERE operation_digest = ?`, [operation.operation_digest]);
     } catch (error) {
         const current = await one(context.dataSource, `SELECT status FROM guest_adoption_operations WHERE operation_digest = ?`, [operation.operation_digest]);
@@ -285,7 +271,81 @@ async function finalize(message, context, targetPrincipalId) {
         }
         return response(message, false, { error: error.message || 'guest_adoption_failed' });
     }
-    return response(message, true, { status: 'completed', replayed: false });
+    return response(message, true, { status: 'completed', replayed: false, profile_event: stored.profile_event_json ? JSON.parse(stored.profile_event_json) : null });
+}
+
+// Adopted project writes use the same event owner as ordinary commands. The
+// original guest events remain unchanged in the adoption journal and local
+// source history; these authorized account events get canonical stream metadata.
+async function importWorkspaceEvents(context, operation, payload, atomes, targetId) {
+    for (const snapshot of payload.snapshots) {
+        if (!snapshot?.atome_id || !atomes.some(record => record.atomeId === String(snapshot.atome_id))) throw new Error('guest_adoption_snapshot_invalid');
+    }
+    for (const permission of payload.permissions) {
+        if (!atomes.some(record => record.atomeId === String(permission?.atome_id))) throw new Error('guest_adoption_permission_invalid');
+        for (const principal of [permission.principal_id, permission.granted_by]) {
+            if (principal && principal !== operation.guest_principal_id && principal !== targetId) throw new Error('guest_adoption_acl_ambiguous');
+        }
+    }
+    const batch = [];
+
+    for (const event of payload.events) {
+        if (!event?.id || !atomes.some(record => record.atomeId === String(event.atome_id))) throw new Error('guest_adoption_event_invalid');
+        if (String(event.actor?.id || event.actor?.user_id || '') !== operation.guest_principal_id) throw new Error('guest_adoption_actor_invalid');
+    }
+    for (const entry of payload.sync_queue) {
+        if (!atomes.some(record => record.atomeId === String(entry?.payload?.atome_id))) throw new Error('guest_adoption_queue_invalid');
+    }
+    for (const record of atomes) {
+        const source = payload.events.filter(event => String(event.atome_id) === record.atomeId);
+        const inputs = source.length ? source : [{ id: 'guest-import:' + operation.operation_digest + ':' + record.atomeId,
+            kind: 'set', atome_id: record.atomeId, payload: { props: record.properties } }];
+        const existing = await handleWsAtomeOperation({ type: 'state-current', action: 'get', atome_id: record.atomeId }, context.connection);
+        if (existing?.success) {
+            const prior = await handleWsAtomeOperation({ type: 'events', action: 'list', atome_id: record.atomeId, limit: 10000 }, context.connection);
+            if (!prior?.events?.some(event => inputs.some(input => input.id === event.id))) throw new Error('guest_adoption_atome_collision');
+        } else if (existing?.error !== 'State not found') throw new Error(existing?.error || 'guest_adoption_state_read_failed');
+        const lastSet = inputs.findLastIndex(event => event.kind === 'set');
+        const events = inputs.map((input, index) => ({ ...input, type: record.atomeType,
+            ts: input.ts || operation.created_at, actor: { type: 'user', id: targetId },
+            tx_id: input.tx_id || 'guest-import:' + operation.operation_digest,
+            project_id: record.projectId, ...(record.parentId ? { parent_id: record.parentId } : {}),
+            payload: { ...(input.payload || {}), ...(record.projectId ? {} : { scope: 'global' }),
+                ...(input.kind === 'set' ? { props: { ...(input.payload?.props || {}),
+                    ...(index === lastSet ? record.properties : {}), type: record.atomeType } } : {}) } }));
+        batch.push(...events);
+    }
+    if (batch.length) {
+        const committed = await handleWsAtomeOperation({ type: 'events', action: 'commit-batch', events: batch, source: 'guest-adoption' }, context.connection);
+        if (!committed?.success) throw new Error(committed?.error || 'guest_adoption_events_commit_failed');
+    }
+}
+
+// The journal stores the exact intent before the canonical account commit, so a
+// lost reply or restart retries the same event without re-merging changed data.
+async function adoptProfile(message, context, operation, stored, profile, targetId) {
+    if (!profile) return;
+    if (!stored.profile_event_json) {
+        const loaded = await handleWsAtomeOperation({ type: 'state-current', action: 'get', atome_id: targetId }, context.connection);
+        if (!loaded?.success && loaded?.error !== 'State not found') throw new Error(loaded?.error || 'guest_adoption_profile_read_failed');
+        const props = mergeGuestProfileProperties(loaded?.state?.properties || {}, profile);
+        if (!props) return;
+        const versions = loaded?.state?.property_versions;
+        const event = { id: 'guest-profile:' + operation.operation_digest, kind: 'set', type: 'user', atome_id: targetId, scope: 'global',
+            project_id: null, actor: { type: 'user', id: targetId }, tx_id: 'guest-profile:' + operation.operation_digest,
+            ts: new Date().toISOString(), payload: { scope: 'global', props,
+                ...(versions ? { expected_versions: Object.fromEntries(Object.keys(props).map(key => [key, versions[key] || 0])) } : {}) } };
+        stored.profile_event_json = JSON.stringify(event);
+        await context.dataSource.query('UPDATE guest_adoption_payloads SET profile_event_json = ? WHERE operation_digest = ?',
+            [stored.profile_event_json, operation.operation_digest]);
+    }
+    const committed = await handleWsAtomeOperation({ type: 'events', action: 'commit', event: JSON.parse(stored.profile_event_json) }, context.connection);
+    if (!committed?.success) {
+        if (committed?.error === 'property_version_conflict') {
+            await context.dataSource.query('UPDATE guest_adoption_payloads SET profile_event_json = NULL WHERE operation_digest = ?', [operation.operation_digest]);
+        }
+        throw new Error(committed?.error || 'guest_adoption_profile_commit_failed');
+    }
 }
 
 export async function handleWsApiGuestAdoption(message, context) {

@@ -9,6 +9,7 @@ const WORD_EXCEPTIONS = Object.freeze({
     femme: ['f', 'a', 'm'],
     les: ['l', 'e'],
     monsieur: ['m', 'ə', 's', 'j', 'ø'],
+    patientez: ['p', 'a', 's', 'j', 'ɑ', '̃', 't', 'e'],
     plus: ['p', 'l', 'y'],
     que: ['k', 'ə'],
     salut: ['s', 'a', 'l', 'y'],

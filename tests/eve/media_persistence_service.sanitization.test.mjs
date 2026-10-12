@@ -257,7 +257,7 @@ assert.equal(commits[0].props.left, 33);
 assert.equal(commits[0].props.top, 44);
 assert.equal(commits[0].props.order, 67);
 assert.equal(commits[0].props.render_order, 67);
-assert.equal(commits[0].props.renderOrder, 67);
+assert.equal(Object.hasOwn(commits[0].props, 'renderOrder'), false);
 assert.equal(sceneRecords().some((atom) => atom.id === 'audio_recording_pending'), true);
 assert.equal(latestSceneAtom().type, 'audio_waveform');
 assert.deepEqual(latestSceneAtom().content.peaks, [0.1, 0.25, 1]);
@@ -353,11 +353,32 @@ assert.equal(sceneRecords().some((atom) => atom.id === 'video_recording_pending'
 assert.equal(dom.window.document.querySelectorAll('.eve-atome,img,audio,svg').length, 0);
 assert.equal(dom.window.document.querySelectorAll('video:not(#eve_bevy_video_decode_root video)').length, 0);
 
+commits.length = 0;
+const previousSceneCount = sceneRecords().length;
+const previousReloadCount = projectReloadCount;
+delete window.__currentProject;
+window.AdoleAPI.projects.getCurrentId = () => null;
+const conversationAudio = await ensureProjectMediaAtome({
+    kind: 'sound', fileName: 'conversation.wav',
+    result: { file_path: 'data/users/user_a/recordings/conversation.wav', duration_sec: 1, peaks: [0.2] },
+    accessToken: true, requireAdoleApi: true, reloadProjectAtomes: true,
+    destination: { scope: 'global', contactId: 'contact_b', messageId: 'conversation_message' }
+});
+assert.equal(conversationAudio.ok, true);
+assert.equal(conversationAudio.projectId, null);
+assert.equal(commits.length, 1);
+assert.equal(commits[0].scope, 'global');
+assert.equal(commits[0].props.conversation_contact_id, 'contact_b');
+assert.equal(commits[0].props.conversation_send_status, 'draft');
+assert.equal(Object.hasOwn(commits[0], 'project_id'), false);
+assert.equal(sceneRecords().length, previousSceneCount);
+assert.equal(projectReloadCount, previousReloadCount);
+
 }, 30000);
 
 test('media persistence uses the shared Atome property sanitizer', () => {
     const source = fs.readFileSync('eVe/domains/media/api/media_persistence_service.js', 'utf8');
-    assert.match(source, /from '\.\.\/\.\.\/\.\.\/\.\.\/atome\/src\/shared\/atome_contract\.js'/);
+    assert.match(source, /from '#shared\/atome_contract\.js'/);
     assert.doesNotMatch(source, /RESERVED_ATOME_PROPERTY_KEYS/);
     assert.doesNotMatch(source, /const sanitizeAtomeProperties = \(/);
 });

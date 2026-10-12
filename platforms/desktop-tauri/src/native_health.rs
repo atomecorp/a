@@ -77,7 +77,9 @@ fn requests_payload(payload: &Value) -> Value {
                 .iter()
                 .filter(|item| item["id"].is_string() && item["from"].is_number() && item["to"].is_number())
                 .take(32)
-                .map(|item| json!({ "id": item["id"], "from": item["from"], "to": item["to"] }))
+                .map(|item| json!({ "id": item["id"], "from": item["from"], "to": item["to"],
+                    "key": item["key"].as_str().unwrap_or_else(|| item["id"].as_str().unwrap_or_default()),
+                    "history": item["history"].as_bool().unwrap_or(false) }))
                 .collect()
         })
         .unwrap_or_default();

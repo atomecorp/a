@@ -91,3 +91,30 @@ route, and accepts a later valid call. No malformed arguments are executed or
 logged, and no tool mutation is replayed. The before-test fails and the repaired
 regression passes. This is input validation at the voice conversation boundary,
 not a change to MCP handlers, permissions or contextual instructions.
+
+## Prerequisite navigation — 2026-10-11
+
+The capture's provider_principal_unavailable was absent from the assistant settings
+classification. Existing consumers rendered manual Home/Server instructions and a
+settings CTA instead of opening the available destination. The existing settings
+owner now routes typed errors through declared Home/Matrix tools. Home accepts the
+authorized focusField and waits for loading, section expansion and real projection
+before revealing OpenAI and selecting its canonical masked editor.
+
+One destination per explicit attempt, generation/session checks and listening/TTS
+pause prevent repeated and obsolete navigation. Conversation, attachment and
+request data remain intact; no automatic resume or paid-operation replay occurs.
+Tests: assistant_settings_navigation, assistant_startup, required_panel_consumers,
+openai_key_editing. A false revealTreeNode result means no scrolling occurred, not
+that the target is absent; validate the projected node independently.
+
+Source and executable navigation evidence pass. Real Web/Tauri/physical-iOS
+acceptance remains **To verify**; Web QA admission stayed on Goals. Three
+concurrent autosave/beforeClose editing tests fail and are preserved. Legacy aBox
+migration and canonical phone-input focus are awaiting bounded authorization.
+See the dated FRAMEWORK_STATE record for the platform matrix and exact limitations.
+## Message feedback and precise provider failures — 2026-10-11
+
+The pre-repair provider owner reduced a simulated HTTP 404 model_not_found to provider_operation_failed; the isolated pre-task-owner probe confirms that category loss. HTTP, Responses failure and Realtime response.done/error now preserve allowlisted categories while dropping arbitrary/raw provider text. This explains lost diagnostic precision, not the still-unreproduced cause of the user's three requests.
+
+Preparation precedes async startup, with one cancellable local Patientez announcement after 500 ms and packaged beep fallback through the canonical audio owner. Floating errors/progress are removed in favor of the existing Message field and an explicit recovery link; focusing restores the draft. Both dock and procedural scene use published ribbon geometry. Targeted run: 120/123 pass; three existing color/filename assertions remain red. Syntax and component guards pass. Signed iPad build succeeds. Physical acceptance now targets only Ipad atomic per user instruction; WDA installation succeeds but its first launch times out enabling UI automation. Required setting and microphone/spoken acceptance remain pending.

@@ -177,9 +177,12 @@ export function createPhoneLinkClient({ devices, send, installSession, locks = g
                 throw new Error('auth_remote_relogin_required');
             }
         }),
-        revoke: (purpose = 'logout', targetKeyId) => exclusive(async () => {
+        revoke: (purpose = 'logout', targetKeyId, beforeRevoke) => exclusive(async () => {
             if (!['logout', 'logout-all', 'revoke-device'].includes(purpose)) throw new Error('auth_request_invalid');
             const record = await devices.read('session');
+            // Capture the descriptor before the local lock clears its durable
+            // native copy. A failed local lock must not silently revoke remotely.
+            if (purpose === 'logout') await beforeRevoke?.();
             if (!record && purpose === 'logout') return { ok: true };
             if (!record) throw new Error('auth_session_required');
             const device = await devices.forPhone(record.phone);

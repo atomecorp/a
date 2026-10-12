@@ -50,7 +50,8 @@ const draw = () => {
     const snapshot = contactSurface.readState();
     const content = contactSurface.buildContent(snapshot, { emit: (intent) => emitted.push(intent), bodyWidth: 388 });
     const fixed = contactSurface.buildFixedContent(contactSurface.readState(), { emit: (intent) => emitted.push(intent), bodyWidth: 388 });
-    return { content, fixed, emitted };
+    const footer = contactSurface.buildFooterContent(snapshot, { emit: intent => emitted.push(intent) });
+    return { content, fixed, footer, emitted };
 };
 
 test('the pick mode of the Contact panel is the Communication picker, not a second surface', async () => {
@@ -84,7 +85,7 @@ test('the pick footer chooses the checked people and stays inert without a selec
         let { fixed } = draw();
         const actions = visit(fixed, (node) => node.id === 'contact_pick_actions_row');
         assert.deepEqual(actions.children.map((child) => child.id),
-            ['contact_create_user', 'contact_pick_choose']);
+            ['contact_pick_choose']);
         assert.equal(visit(fixed, (node) => node.id === 'contact_pick_choose_label').text, 'Choisir');
         assert.equal(visit(fixed, (node) => node.id === 'contact_pick_choose').style.opacity,
             BEVY_PANEL_TOKENS.actionButton.disabledOpacity, 'without a selection the button is inert');
@@ -95,7 +96,7 @@ test('the pick footer chooses the checked people and stays inert without a selec
         ({ fixed } = draw());
         assert.equal(visit(fixed, (node) => node.id === 'contact_pick_choose_label').text, 'Choisir (2)');
         assert.equal(typeof visit(fixed, (node) => node.id === 'contact_pick_choose').on.activate, 'function');
-        assert.equal(contactSurface.buildFooterContent, undefined, 'Pick mode does not add a select-all footer action');
+        assert.equal(visit(draw().footer, node => node.id === 'contact_select_all'), null);
         assert.equal(visit(fixed, (node) => node.id === 'contact_delete'), null);
 
         const result = await contactSurface.handleEvent({ type: 'contact.pick.selection' });
@@ -191,14 +192,12 @@ test('a contact row is doubled and its face follows the shared row density', asy
 test('account creation is offered by the list itself, in both modes', async () => {
     const { dom, release } = await openPanel();
     try {
-        const { fixed, emitted } = draw();
-        const createUser = visit(fixed, (node) => node.id === 'contact_create_user');
-        assert.equal(createUser.accessibility.label, 'creer un user',
+        const { fixed, footer, emitted } = draw();
+        const createUser = visit(footer, (node) => node.id === 'contact_create_user');
+        assert.equal(createUser.accessibility.label, 'Créer un utilisateur',
             'the label is the canonical account label, not a second wording');
         const addContact = visit(fixed, (node) => node.id === 'contact_add');
-        assert.notEqual(addContact, createUser, 'adding a local contact and creating an account stay two actions');
-        addContact.on.activate();
-        assert.deepEqual(emitted.at(-1), { type: 'contact.add' }, 'the Add button keeps adding a local contact');
+        assert.equal(addContact, null, 'local creation is no longer a permanent action');
         createUser.on.activate();
         assert.deepEqual(emitted.at(-1), { type: 'contact.create_user' });
     } finally {
@@ -209,9 +208,8 @@ test('account creation is offered by the list itself, in both modes', async () =
 
     const picker = await openPanel({ mode: 'pick', onPick: () => {} });
     try {
-        const { fixed } = draw();
-        const row = visit(fixed, (node) => node.id === 'contact_pick_actions_row');
-        assert.ok(row.children.some((child) => child.id === 'contact_create_user'),
+        const { footer } = draw();
+        assert.ok(footer.some((child) => child.id === 'contact_create_user'),
             'the Communication user list offers it too, it is the same panel');
     } finally {
         picker.release?.();

@@ -117,7 +117,9 @@ function parseVcardData(vcard = '') {
         } else if (name === 'ADR') state.addresses.push({ label: normalizeCarddavLabel(params), params, values: splitContentValue(value).map(decodeContentText) });
         else if (name === 'CATEGORIES') state.categories = splitContentValue(value, ',').map(decodeContentText);
         else if (name === 'PHOTO') state.photo = String(params.ENCODING || '').toLowerCase() === 'b'
-            ? 'data:image/' + String(params.TYPE || 'jpeg').toLowerCase() + ';base64,' + value : value;
+            // TYPE vaut `JPEG` (vCard 3) ou `image/jpeg` ; le base64 peut etre replie.
+            ? 'data:image/' + String(params.TYPE || 'jpeg').toLowerCase().replace(/^image\//, '').replace(/^jpg$/, 'jpeg')
+                + ';base64,' + String(value).replace(/\s+/g, '') : value;
         else if (!MANAGED.has(name) && !PRIVATE_EXTRA.test(name)) state.extra_properties.push(property);
     }
     if (!state.name) state.name = [state.first_name,state.middle_name,state.last_name].filter(Boolean).join(' ') || 'Contact';

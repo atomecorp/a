@@ -1,6 +1,6 @@
 //! Ordered snapshots inside the shared 2D pass. A material never samples the
 //! attachment it is drawing into, itself, or a later item in the sorted phase.
-use super::{backdrop_blur_lod, WORKSPACE_BACKDROP_DOWNSCALE, WORKSPACE_BLUR_MIP_PHASE};
+use super::{backdrop_blur_lod, pyramid::BlurPyramid, WORKSPACE_BACKDROP_DOWNSCALE};
 use crate::{
     backdrop_surface::BackdropSurfaceMaterial, procedural_sdf::ProceduralSdfMaterial,
     workspace_backdrop::AtomeWorkspaceBackdrop,
@@ -9,7 +9,6 @@ use bevy::{
     core_pipeline::{
         blit::{BlitPipeline, BlitPipelineKey},
         core_2d::{main_opaque_pass_2d, main_transparent_pass_2d, Transparent2d},
-        mip_generation::{generate_mips_for_phase, MipGenerationJobs, MipGenerationPipelines},
         Core2d, Core2dSystems,
     },
     ecs::schedule::ScheduleCleanupPolicy,
@@ -274,10 +273,8 @@ fn compose_transparent_pass(
     )>,
     phases: Res<ViewSortedRenderPhases<Transparent2d>>,
     regions: Res<SampleRegions>,
-    jobs: Res<MipGenerationJobs>,
     cache: Res<PipelineCache>,
-    mip_pipelines: Res<MipGenerationPipelines>,
-    gpu_images: Res<RenderAssets<GpuImage>>,
+    pyramid: BlurPyramid,
     mut ctx: RenderContext,
 ) -> Result<(), BevyError> {
     let view_entity = view.entity();
@@ -302,6 +299,9 @@ fn compose_transparent_pass(
         let Some(snapshot) = snapshot else {
             return Ok(());
         };
+        if !pyramid.ready()? {
+            return Ok(());
+        }
         match cache.get_render_pipeline_state(snapshot.pipeline) {
             CachedPipelineState::Queued
             | CachedPipelineState::Creating(_)
@@ -366,14 +366,7 @@ fn compose_transparent_pass(
                 pass.set_bind_group(0, &snapshot.bind_group, &[]);
                 pass.draw(0..3, 0..1);
             }
-            generate_mips_for_phase(
-                WORKSPACE_BLUR_MIP_PHASE,
-                &jobs,
-                &cache,
-                &mip_pipelines,
-                &gpu_images,
-                &mut ctx,
-            );
+            pyramid.downsample(&mut ctx)?;
         }
         let attachments = [Some(target.get_color_attachment())];
         let mut pass = ctx.begin_tracked_render_pass(RenderPassDescriptor {

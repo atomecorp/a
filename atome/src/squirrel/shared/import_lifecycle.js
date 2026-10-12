@@ -5,7 +5,7 @@ import { sameImportValue } from './import_reconciliation.js';
 
 /** One cancellable, serialized collector per configured source and account. */
 export function createImportLifecycle({ domain, run, restore, env = globalThis, api, session = getSessionState,
-    device = getLocalSurfaceId, intervalMs = 300000 } = {}) {
+    device = getLocalSurfaceId, intervalMs = 300000, recoveryVersion = '' } = {}) {
     const store = createCanonicalImport({ type: domain, api, session });
     const active = new Map();
     let timer = null, generation = 0, disposed = false, resuming = null;
@@ -21,19 +21,32 @@ export function createImportLifecycle({ domain, run, restore, env = globalThis, 
         if (entry.running) return entry.running;
         const currentGeneration = generation;
         entry.running = (async () => {
-            let result;
+            let result, recovering = null;
             while (entry.pending && currentGeneration === generation && !entry.controller.signal.aborted) {
                 entry.pending = false;
                 const context = store.capture();
                 const checkpoints = await store.list(IMPORT_SOURCE_TYPE, context);
                 const checkpoint = checkpoints.find(row => importRecordId(row) === entry.checkpointId);
                 const props = importRecordProps(checkpoint);
+                // Recuperation unique (par version) : relecture complete sans curseur
+                // et restauration de ce qu'une reecriture globale avait supprime.
+                const startRecovery = recovering === null && Boolean(recoveryVersion) && props.recovery !== recoveryVersion;
+                if (recovering === null) recovering = startRecovery;
+                const cursor = startRecovery ? null : (props.cursor ?? null);
                 result = await run(id, { ...entry.config, ...options, source_key: entry.sourceKey,
-                    device_id: entry.deviceId, cursor: props.cursor ?? null, incremental: props.cursor != null,
+                    device_id: entry.deviceId, cursor, incremental: cursor != null,
+                    ...(recovering ? { restore_suppressed: true } : {}),
                     signal: entry.controller.signal, checkSession: context.check });
                 context.check();
                 if (currentGeneration === generation) notify(id, result);
                 if (result?.ok === true && result.more === true) entry.pending = true;
+                else if (result?.ok === true && recovering) {
+                    const rows = await store.list(IMPORT_SOURCE_TYPE, context);
+                    const latest = importRecordProps(rows.find(row => importRecordId(row) === entry.checkpointId));
+                    await store.write(entry.checkpointId, IMPORT_SOURCE_TYPE, { ...latest, domain_type: domain, source_key: entry.sourceKey,
+                        device_id: entry.deviceId, recovery: recoveryVersion }, context);
+                    recovering = false;
+                }
             }
             return result;
         })().catch(async error => {

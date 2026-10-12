@@ -6,9 +6,14 @@ const CONTACT_PHOTO_ID_PREFIX = 'contact_photo_';
 export const isContactPhotoMedia = (file = {}) => [file.id, file.atome_id, file.file_name, file.name]
     .some(value => String(value || '').startsWith(CONTACT_PHOTO_ID_PREFIX));
 
+// Variantes rencontrees a l'import (vCard, carnets natifs) ramenees a la forme acceptee.
+const normalizeEmbeddedPhoto = (photo) => (typeof photo === 'string' && photo.startsWith('data:')
+    ? photo.replace(/\s+/g, '').replace(/^data:image\/(?:image\/)?jpg;/i, 'data:image/jpeg;').replace(/^data:image\/image\//i, 'data:image/')
+    : photo);
+
 /** Embedded images use the existing file/media intake; arbitrary remote images are never fetched. */
 export async function persistContactPhoto(contact, context, signal) {
-    const photo = contact.photo ?? contact.raw?.photo;
+    const photo = normalizeEmbeddedPhoto(contact.photo ?? contact.raw?.photo);
     if (photo === '') return { ...contact, photo: '', user_face: '', photo_asset_id: '' };
     if (!photo || !photo.startsWith('data:')) return contact;
     const match = photo.match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/);

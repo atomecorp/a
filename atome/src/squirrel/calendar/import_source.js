@@ -19,6 +19,8 @@ export function normalizeImportedEvent(input) {
     }
     output.all_day = source.all_day ?? source.allDay ?? false;
     output.calendar_id = source.calendar_id || source.calendarId;
+    const calendarType = String(source.calendar_source_type || source.calendarType || '').trim();
+    if (calendarType) output.calendar_source_type = calendarType;
     output.recurrence = source.recurrence ? JSON.stringify(source.recurrence) : null;
     // Imported alarm payloads cannot execute tool commands or invite attendees.
     output.alarms = JSON.stringify((source.alarms || []).map(alarm => ({ enabled: false, message: alarm.message || '',

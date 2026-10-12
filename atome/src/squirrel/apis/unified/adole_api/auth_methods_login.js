@@ -38,7 +38,11 @@ function deviceStore() {
             signature: fields.signature ?? null
         });
     } : null;
-    devices = createAuthDeviceStore({ nativeKey });
+    const nativeSession = (typeof env.__ATOME_IOS_NATIVE_INVOKE === 'function' || isTauriRuntime()) ? {
+        read: readNativeSessionGrant,
+        clear: clearNativeRemoteSession
+    } : null;
+    devices = createAuthDeviceStore({ nativeKey, nativeSession });
     return devices;
 }
 
@@ -64,6 +68,24 @@ async function localRequest(action, fields = {}) {
             : await TauriAdapter.ws.send(message);
     if (!result?.ok) throw new Error(result?.error || 'local_auth_unavailable');
     return result;
+}
+
+async function readNativeSessionGrant() {
+    let cached;
+    try { cached = await deviceStore().read('local-grant'); } catch (_) { /* optional WebView cache */ }
+    return (await localRequest('local-session-describe', { grantId: cached?.localSession?.id, includeLocked: true })).localGrant;
+}
+
+async function clearNativeRemoteSession() {
+    const record = await readNativeSessionGrant();
+    if (!record || record.locked || !record.remoteSessionKnown || !record.remoteSession) return;
+    const device = await deviceStore().forScope(record.scope);
+    if (device.keyId !== record.keyId) throw new Error('auth_device_binding_mismatch');
+    const { challenge } = await localRequest('local-session-challenge', { grantId: record.localSession.id, purpose: 'local-lock' });
+    if (challenge?.purpose !== 'local-lock' || challenge.reference !== `${record.localSession.id}:${record.localSession.generation}`) {
+        throw new Error('auth_challenge_invalid');
+    }
+    await localRequest('local-session-lock', { grantId: record.localSession.id, remoteOnly: true, ...await device.sign(challenge) });
 }
 
 function installLocal(result, backend) {

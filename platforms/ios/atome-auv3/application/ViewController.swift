@@ -32,8 +32,9 @@ final class FullscreenWebViewController: UIViewController {
             config.setURLSchemeHandler(AudioSchemeHandler(), forURLScheme: "atome")
         }
         config.allowsInlineMediaPlayback = true
+        // Media requested by the user or the assistant (TV, YouTube) starts with sound, without waiting for a tap.
         if #available(iOS 10.0, *) {
-            config.mediaTypesRequiringUserActionForPlayback = [.audio]
+            config.mediaTypesRequiringUserActionForPlayback = []
         }
         let paintBlack = "(function(){try{var d=document; if(d.documentElement){d.documentElement.style.background='#000';d.documentElement.style.color='#ccc';} if(d.body){d.body.style.background='#000';d.body.style.color='#ccc';}}catch(e){}})();"
         let preScript = WKUserScript(
@@ -113,6 +114,10 @@ final class FullscreenWebViewController: UIViewController {
             }
         }
         AppNativeMediaCaptureController.shared.attachPreviewHost(webView: webView)
+        NativePersonalImport.shared.openSettings = {
+            guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+            UIApplication.shared.open(url)
+        }
         AppNativeHealthController.shared.attach(webView: webView, openSettings: {
             // This app's page in Settings: Motion & Fitness and Health access.
             guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
@@ -131,6 +136,16 @@ final class FullscreenWebViewController: UIViewController {
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         WebViewManager.triggerMainLoadNow()
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        if let webView { WebViewManager.publishSafeAreaViewport(for: webView) }
+    }
+
+    override func viewSafeAreaInsetsDidChange() {
+        super.viewSafeAreaInsetsDidChange()
+        if let webView { WebViewManager.publishSafeAreaViewport(for: webView) }
     }
 
     override var prefersStatusBarHidden: Bool { true }

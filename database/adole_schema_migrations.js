@@ -387,10 +387,12 @@ async function ensurePrincipalIdentityTables(query) {
         operation_digest TEXT PRIMARY KEY,
         payload_json TEXT NOT NULL,
         payload_digest TEXT NOT NULL,
+        profile_event_json TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now')),
         FOREIGN KEY(operation_digest) REFERENCES guest_adoption_operations(operation_digest) ON DELETE CASCADE
     )`);
+    await ensureColumn({ query, table: 'guest_adoption_payloads', column: 'profile_event_json', ddl: 'ALTER TABLE guest_adoption_payloads ADD COLUMN profile_event_json TEXT' });
     await query('run', `CREATE TABLE IF NOT EXISTS guest_adoption_files (
         operation_digest TEXT NOT NULL,
         file_id TEXT NOT NULL,
@@ -407,7 +409,6 @@ async function ensurePrincipalIdentityTables(query) {
         CHECK(status IN ('declared', 'staged', 'moved'))
     )`);
 }
-
 async function refreshUsersView(query) {
     // DROP then CREATE used to run as two awaited statements outside any
     // transaction: between them `users_view` -- the view every auth lookup goes
@@ -425,7 +426,6 @@ async function refreshUsersView(query) {
         GROUP BY a.atome_id;
     COMMIT;`);
 }
-
 async function prepareAdoleSchemaColumns(query) {
     await ensurePermissionsColumns(query);
     await ensureSnapshotColumns(query);

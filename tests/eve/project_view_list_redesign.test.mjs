@@ -100,7 +100,7 @@ test('first beginner List mount resolves and invokes native catalog capture tool
         openDeletePanel openFinderPanel openFontPanel openInfoPanel openLayerPanel openMatrixView openMediaPanel
         openPastePanel openTimelinePanel openUndoPanel orientationChanged`.split(/\s+/).filter(Boolean);
     const intuitionContent = createMainMenuContentRuntime({ ...Object.fromEntries(callbackNames.map(name => [name, vi.fn()])),
-        mainToolIdByKey: { create: 'tool.main.create', draw: 'tool.main.draw', play: 'tool.main.play' },
+        mainToolIdByKey: { create: 'tool.main.create', draw: 'tool.main.draw', play: 'tool.main.play', delete: 'ui.delete.selection' },
         translate, directionValues: [], directionValueToLabel: {}, defaultOrientation: 0 });
     const invoke = vi.fn(async () => ({ ok: true }));
     const runtime = createAtomeContextualRailRuntime({ intuitionContent, mainToolIdByKey: {}, translate,
@@ -111,9 +111,15 @@ test('first beginner List mount resolves and invokes native catalog capture tool
         isSelectionRequiredToolKey: () => false, readSelectionSnapshot: () => ({ ids: [] }) });
     const definitions = runtime.resolveAtomeContextualRailToolDefinitionsForOptions({ atomeId: owner.id,
         kind: 'group', railOnly: true, record: { ...owner, structured_context: true },
-        projectRecord: { capabilities: { create: true } } });
-    expect(definitions.map(definition => definition.key)).toEqual(BEGINNER_LIST_RAIL_KEYS);
-    expect(definitions.map(definition => definition.key)).toEqual(['couleur', 'import', 'photo', 'audio', 'video', 'text_create', 'shape_create']);
+        projectRecord: { id: projectId, type: 'project', properties: {}, capabilities: { create: true } } });
+    expect(definitions.map(definition => definition.key)).toEqual(['delete', ...BEGINNER_LIST_RAIL_KEYS]);
+    expect(definitions.map(definition => definition.key)).toEqual(['delete', 'couleur', 'import', 'photo', 'audio', 'video', 'text_create', 'shape_create']);
+    expect(definitions[0]).toMatchObject({ toolId: 'ui.delete.selection', icon: 'delete', actionMode: 'momentary' });
+    await runtime.invokeAtomeContextualRailToolDefinitionWithContext(definitions[0], {
+        atomeId: owner.id, record: { ...owner, structured_context: true }, railOnly: true
+    });
+    expect(invoke.mock.calls.at(-1)[0]).toMatchObject({ key: 'delete', toolId: 'ui.delete.selection',
+        extraInput: { selection_ids: [owner.id], atome_id: owner.id } });
     expect(definitions.find(definition => definition.key === 'audio')).toMatchObject({ toolId: 'ui.capture.audio' });
     expect(definitions.find(definition => definition.key === 'video')).toMatchObject({ toolId: 'ui.capture.video' });
     for (const key of ['audio', 'video']) {
@@ -238,7 +244,7 @@ test('first beginner List mount resolves and invokes native catalog capture tool
         openDeletePanel openFinderPanel openFontPanel openInfoPanel openLayerPanel openMatrixView openMediaPanel
         openPastePanel openTimelinePanel openUndoPanel orientationChanged`.split(/\s+/).filter(Boolean);
     const intuitionContent = createMainMenuContentRuntime({ ...Object.fromEntries(callbackNames.map(name => [name, vi.fn()])),
-        mainToolIdByKey: { create: 'tool.main.create', draw: 'tool.main.draw', play: 'tool.main.play' },
+        mainToolIdByKey: { create: 'tool.main.create', draw: 'tool.main.draw', play: 'tool.main.play', delete: 'ui.delete.selection' },
         translate, directionValues: [], directionValueToLabel: {}, defaultOrientation: 0 });
     const invoke = vi.fn(async () => ({ ok: true }));
     const runtime = createAtomeContextualRailRuntime({ intuitionContent, mainToolIdByKey: {}, translate,
@@ -249,9 +255,15 @@ test('first beginner List mount resolves and invokes native catalog capture tool
         isSelectionRequiredToolKey: () => false, readSelectionSnapshot: () => ({ ids: [] }) });
     const definitions = runtime.resolveAtomeContextualRailToolDefinitionsForOptions({ atomeId: owner.id,
         kind: 'group', railOnly: true, record: { ...owner, structured_context: true },
-        projectRecord: { capabilities: { create: true } } });
-    expect(definitions.map(definition => definition.key)).toEqual(BEGINNER_LIST_RAIL_KEYS);
-    expect(definitions.map(definition => definition.key)).toEqual(['couleur', 'import', 'photo', 'audio', 'video', 'text_create', 'shape_create']);
+        projectRecord: { id: projectId, type: 'project', properties: {}, capabilities: { create: true } } });
+    expect(definitions.map(definition => definition.key)).toEqual(['delete', ...BEGINNER_LIST_RAIL_KEYS]);
+    expect(definitions.map(definition => definition.key)).toEqual(['delete', 'couleur', 'import', 'photo', 'audio', 'video', 'text_create', 'shape_create']);
+    expect(definitions[0]).toMatchObject({ toolId: 'ui.delete.selection', icon: 'delete', actionMode: 'momentary' });
+    await runtime.invokeAtomeContextualRailToolDefinitionWithContext(definitions[0], {
+        atomeId: owner.id, record: { ...owner, structured_context: true }, railOnly: true
+    });
+    expect(invoke.mock.calls.at(-1)[0]).toMatchObject({ key: 'delete', toolId: 'ui.delete.selection',
+        extraInput: { selection_ids: [owner.id], atome_id: owner.id } });
     expect(definitions.find(definition => definition.key === 'audio')).toMatchObject({ toolId: 'ui.capture.audio' });
     expect(definitions.find(definition => definition.key === 'video')).toMatchObject({ toolId: 'ui.capture.video' });
     for (const key of ['audio', 'video']) {

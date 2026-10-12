@@ -72,7 +72,19 @@ export function createLocalContactsSource({ source_id = 'eve_contacts_local', ro
         syncStatus() { return { persisted, hydrated: persisted, durability: persisted ? 'canonical_commit' : null }; },
         async importContacts(items, meta) {
             const context = store.capture(), prepared = [];
-            for (const item of items) prepared.push(await persistContactPhoto(item, context, meta.signal));
+            for (const item of items) {
+                // Une photo illisible ou un envoi refuse ne doit jamais annuler
+                // l'import du carnet entier : le contact entre sans photo.
+                try { prepared.push(await persistContactPhoto(item, context, meta.signal)); }
+                catch (error) {
+                    if (meta.signal?.aborted || /import_(cancelled|session_changed)/.test(error?.message || '')) throw error;
+                    const { photo: _photo, user_face: _face, ...rest } = item;
+                    const raw = item.raw ? { ...item.raw } : null;
+                    if (raw) { delete raw.photo; delete raw.user_face; }
+                    prepared.push(raw ? { ...rest, raw } : rest);
+                    globalThis.console?.warn?.('[contacts] photo ignored', { contact: item.source_contact_id || item.id, error: error?.message || String(error) });
+                }
+            }
             items = prepared;
             const contactIds = await store.resolveIds(items, meta.source_key || meta.imported_from_source);
             const groupItems = (meta.groups || []).map(group => ({ ...group,
@@ -95,12 +107,12 @@ export function createLocalContactsSource({ source_id = 'eve_contacts_local', ro
             if (Object.hasOwn(changes, 'user_face') && !Object.hasOwn(changes, 'photo')) {
                 next.photo = changes.user_face || ''; next.photo_asset_id = '';
             }
-            await store.replace(cache.map(row => row.id === id ? next : row)); await hydrate();
+            await store.update(id, next); await hydrate();
             return { ok: true, updated: true, contact: cache.find(row => row.id === id), items: cache };
         },
         async deleteContact(id) {
             await hydrate(); if (!cache.some(row => row.id === id)) return { ok: false, error: 'contacts_not_found' };
-            await store.replace(cache.filter(row => row.id !== id)); await hydrate(); return { ok: true, deleted: true, contact_id: id, items: cache };
+            await store.remove(id, { reason: 'user_delete' }); await hydrate(); return { ok: true, deleted: true, contact_id: id, items: cache };
         },
         async importLegacy(items, { owner_id } = {}) {
             if (owner_id !== store.capture().owner) throw new Error('legacy_contact_owner_confirmation_required');

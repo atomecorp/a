@@ -17,6 +17,29 @@ extension WebViewManager {
         return json
     }
 
+    static func publishSafeAreaViewport(for webView: WKWebView) {
+        guard webView.bounds.width > 0, webView.bounds.height > 0 else { return }
+        let insets = webView.safeAreaInsets
+        let viewport: [String: Any] = [
+            "width": Double(webView.bounds.width), "height": Double(webView.bounds.height),
+            "safeAreaInsets": ["top": Double(insets.top), "right": Double(insets.right),
+                               "bottom": Double(insets.bottom), "left": Double(insets.left)]
+        ]
+        guard let payload = jsonLiteral(viewport) else {
+            shared.log.error("Unable to serialize native safe-area viewport")
+            return
+        }
+        let script = """
+        (function(){
+            const next=\(payload), previous=window.__EVE_NATIVE_VIEWPORT__;
+            window.__EVE_NATIVE_VIEWPORT__=next;
+            if(JSON.stringify(previous)!==JSON.stringify(next))
+                window.dispatchEvent(new CustomEvent('eve:native-viewport-resize',{detail:next}));
+        })();
+        """
+        evaluateJS(script, label: "viewport.safeArea", priority: .high, targetWebView: webView)
+    }
+
     // Scrub and playback fire these several times per frame: three log lines
     // each flood the console (and slow the app while Xcode is attached).
     // Their failures are still logged.
@@ -38,7 +61,7 @@ extension WebViewManager {
                                                   command: String,
                                                   payload: [String: Any]) {
         guard !requestId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        if ["macos_contacts_snapshot", "native_calendar_snapshot", "export_file_save", "export_file_share"].contains(command) {
+        if ["macos_contacts_snapshot", "native_calendar_snapshot", "export_file_save", "export_file_share", "contacts_open_settings"].contains(command) {
             NativePersonalImport.shared.handle(command, payload: payload) { response, error in
                 sendNativeInvokeResponse(requestId: requestId, payload: response, error: error)
             }

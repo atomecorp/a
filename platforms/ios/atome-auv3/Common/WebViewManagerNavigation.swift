@@ -23,6 +23,12 @@ extension WebViewManager {
 
     // MARK: - WKNavigationDelegate
 
+    public func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        if !Bundle.main.bundlePath.hasSuffix(".appex") {
+            WebViewManager.publishSafeAreaViewport(for: webView)
+        }
+    }
+
     public func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         WebViewManager.markBootMilestone("navigation_started")
         WebViewManager.markPageLoading()
@@ -52,6 +58,7 @@ extension WebViewManager {
         }
     // Inject AUv3 / App context flag early for JS platform detection
     let isExtension: Bool = Bundle.main.bundlePath.hasSuffix(".appex")
+    if !isExtension { WebViewManager.publishSafeAreaViewport(for: webView) }
     if isExtension {
         FileSyncCoordinator.shared.setWebViewReady(true)
     }

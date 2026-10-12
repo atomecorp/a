@@ -19,7 +19,7 @@ final class LocalHTTPServer {
 extension AiSRuntime {
     static func prepareDeliveryFixture() throws {
         let db = try openDatabase()
-        try execute(db, "INSERT INTO auth_local_grants VALUES ('grant','local','remote','device','app',0,0)")
+        try execute(db, "INSERT INTO auth_local_grants (grant_id,local_principal,remote_principal,key_id,key_scope,generation,locked) VALUES ('grant','local','remote','device','app',0,0)")
         let event = try normalizeEventInput(["id":"durable-event", "atome_id":"offline-project", "kind":"set",
             "props":["type":"project", "name":"Offline"]], defaultActorId:"local")
         try appendEvent(db, event:event, enqueueRemote:true)

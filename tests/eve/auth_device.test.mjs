@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, test, expect } from 'vitest';
 import { IDBFactory } from 'fake-indexeddb';
 import crypto from 'node:crypto';
 import { createAuthDeviceStore } from '../../atome/src/squirrel/security/auth_device.js';
@@ -73,4 +73,33 @@ describe('device authentication keys', () => {
         expect(device.scope).toBe('a'.repeat(64));
         expect(device.keyId).toMatch(/^[a-f0-9]{64}$/);
     });
+});
+
+for (const unavailable of [false, true]) test(`native descriptor survives missing WebKit session storage (${unavailable}) without caching a bearer`, async () => {
+ const session={phone:'+33612345678',userId:'qa-remote',session:{id:'qa-session',generation:3,keyId:'qa-device'}};
+ const grant={remoteSessionKnown:true,remoteSession:session,remotePrincipal:session.userId,keyId:'qa-device',locked:false};
+ const store=createAuthDeviceStore({indexedDB:unavailable?null:new IDBFactory(),crypto:crypto.webcrypto,nativeSession:{read:async()=>grant,clear:async()=>{grant.remoteSession=null;}}});
+ expect(await store.read('session')).toEqual(session);expect(JSON.stringify(await store.read('session'))).not.toContain('token');
+ await store.remove('session');expect(await store.read('session')).toBeUndefined();await store.close();
+});
+test('a durable tombstone or local lock overrides an older cached session; another account cannot take its place',async()=>{
+ const session={phone:'+33612345678',userId:'qa-A',session:{id:'qa-session-A',generation:7,keyId:'qa-device-A'}};
+ const grant={remoteSessionKnown:true,remoteSession:session,remotePrincipal:'qa-A',keyId:'qa-device-A',locked:false};
+ const store=createAuthDeviceStore({indexedDB:new IDBFactory(),crypto:crypto.webcrypto,nativeSession:{read:async()=>grant,clear:async()=>{grant.remoteSession=null;}}});
+ await store.put('session',session);grant.remoteSession=null;expect(await store.read('session')).toBeUndefined();
+ grant.remoteSessionKnown=false;grant.locked=true;expect(await store.read('session')).toBeUndefined();
+ grant.locked=false;grant.remotePrincipal='qa-B';grant.keyId='qa-device-B';expect(await store.read('session')).toBeUndefined();await store.close();
+});
+test('only a newer generation of the same account, key and session can bridge an interrupted native bind',async()=>{
+ const durable={phone:'+33612345678',userId:'qa-A',session:{id:'qa-session',generation:3,keyId:'qa-device'}};
+ const grant={remoteSessionKnown:true,remoteSession:durable,remotePrincipal:'qa-A',keyId:'qa-device',locked:false};
+ const store=createAuthDeviceStore({indexedDB:new IDBFactory(),crypto:crypto.webcrypto,nativeSession:{read:async()=>grant,clear:async()=>{}}});
+ await store.put('session',{...durable,session:{...durable.session,generation:4}});expect((await store.read('session')).session.generation).toBe(4);
+ await store.put('session',{...durable,userId:'qa-B'});expect(await store.read('session')).toEqual(durable);
+ await store.put('session',{...durable,session:{...durable.session,id:'foreign-session'}});expect(await store.read('session')).toEqual(durable);await store.close();
+});
+test('native clear failure retains both descriptors rather than falsely reporting logout',async()=>{
+ const record={phone:'+33612345678',userId:'qa-A',session:{id:'qa-session',generation:3,keyId:'qa-device'}};
+ const store=createAuthDeviceStore({indexedDB:new IDBFactory(),crypto:crypto.webcrypto,nativeSession:{read:async()=>({remoteSessionKnown:true,remoteSession:record,remotePrincipal:'qa-A',keyId:'qa-device'}),clear:async()=>{throw new Error('auth_proof_invalid');}}});
+ await store.put('session',record);await expect(store.remove('session')).rejects.toThrow('auth_proof_invalid');expect(await store.read('session')).toEqual(record);await store.close();
 });

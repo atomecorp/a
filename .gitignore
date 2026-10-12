@@ -95,7 +95,17 @@ tests/shared/*
 !tests/shared/semantic_rename_contract.test.mjs
 !tests/eve/
 tests/eve/*
+!tests/eve/calendar_next_events.test.mjs
+!tests/eve/dashboard_upcoming_calendar.test.mjs
+!tests/eve/dashboard_confirmed_overview.test.mjs
+!tests/eve/calendar_alarm_actions.test.mjs
+!tests/eve/dashboard_bevy_ui_lifecycle_contract.test.mjs
+!tests/eve/dashboard_contract.probe.mjs
 !tests/eve/assistant_startup.test.mjs
+!tests/eve/assistant_settings_navigation.test.mjs
+!tests/eve/assistant_dock_lifecycle.test.mjs
+!tests/eve/assistant_visual_contract.test.mjs
+!tests/eve/required_panel_consumers.test.mjs
 !tests/eve/last_creation_tool_shortcut.test.mjs
 !tests/eve/tv_inplace_player.test.mjs
 !tests/eve/dashboard_creation_contract.test.mjs
@@ -411,3 +421,18 @@ tests/native/*
 !tests/probes/ios_provider_recovery_fixture.swift
 !tests/eve/realtime_link_recovery.test.mjs
 !tests/probes/ios_runtime_probe_support.mjs
+
+!tests/eve/dashboard_health_authorization.test.mjs
+
+!tests/probes/health_history.test.mjs
+!tests/eve/health_detail_panel.test.mjs
+!tests/eve/panel_cell_presentation.test.mjs
+
+!tests/eve/contact_favorites.test.mjs
+!tests/eve/communication_call_session.test.mjs
+!tests/server/visio_commands.test.mjs
+!tests/server/communication_history.test.mjs
+
+# Local guest profile regression suites
+!tests/eve/guest_profile.test.mjs
+!tests/eve/guest_profile_native.test.mjs

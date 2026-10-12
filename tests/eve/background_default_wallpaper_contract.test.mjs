@@ -492,3 +492,30 @@ test('startup paints the published user wallpaper before any bundled default fra
     const {surfaces} = await bootBackgroundRuntime({currentUser: {id: 'owner'}, preferences});
     assert.equal(surfaces[0].sourceUrl, '/published.png');
 });
+// iPad 2026-10-11: a profile without wallpaper published only `workspace` at
+// boot, so the Dashboard lost its saved health monitors after every relaunch.
+const monitorsProfile = {ok: true, profile: {preferences: {
+    workspace: {startup_view: 'dashboard'}, dashboard: {health_monitors: {ids: ['steps', 'heart_rate']}}
+}}};
+test('a partial publication during the profile read keeps its keys and receives the others', async () => {
+    let release;
+    profileApi.loadUserProfile.mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+    const {window: win} = await bootBackgroundRuntime({currentUser: {id: 'owner'}});
+    await vi.waitFor(() => assert.equal(typeof release, 'function'));
+    win.__eveProfilePreferences = {workspace: {startup_view: 'project'}};
+    win.dispatchEvent(new win.CustomEvent('eve:profile-preferences-updated', {detail: {source: 'workspace_surface', preferences: win.__eveProfilePreferences}}));
+    release(monitorsProfile); await flush(); await flush();
+    assert.deepEqual(win.__eveProfilePreferences.dashboard, {health_monitors: {ids: ['steps', 'heart_rate']}});
+    assert.equal(win.__eveProfilePreferences.workspace.startup_view, 'project');
+});
+test('an unchanged wallpaper signature still publishes the other profile preferences', async () => {
+    profileApi.loadUserProfile.mockResolvedValue(monitorsProfile);
+    const {window: win} = await bootBackgroundRuntime({currentUser: {id: 'owner'}});
+    await vi.waitFor(() => assert.ok(win.__eveProfilePreferences?.dashboard));
+    win.__eveProfilePreferences = {workspace: {startup_view: 'dashboard'}};
+    const events = [];
+    win.addEventListener('eve:profile-preferences-updated', event => events.push(event.detail.preferences));
+    win.dispatchEvent(new win.CustomEvent('squirrel:auth-checked'));
+    await vi.waitFor(() => assert.deepEqual(win.__eveProfilePreferences.dashboard?.health_monitors?.ids, ['steps', 'heart_rate']));
+    assert.ok(events.some(prefs => prefs.dashboard), 'consumers must be told about the published preferences');
+});

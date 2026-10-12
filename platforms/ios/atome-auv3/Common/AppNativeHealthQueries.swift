@@ -29,11 +29,11 @@ extension AppNativeHealthController {
         healthStore.execute(query)
     }
 
-    func readLatest(_ spec: HealthMonitorSpec, from: Date, to: Date, coverage: [String: Any], completion: @escaping ([String: Any]) -> Void) {
+    func readLatest(_ spec: HealthMonitorSpec, from: Date, to: Date, coverage: [String: Any], limit: Int = 20, completion: @escaping ([String: Any]) -> Void) {
         guard let type = spec.sampleType(), let unit = spec.unit else { return completion(["status": "error", "reason": "health_spec_invalid"]) }
         let predicate = HKQuery.predicateForSamples(withStart: from, end: to, options: [])
         let sort = [NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)]
-        let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: 20, sortDescriptors: sort) { _, samples, error in
+        let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: limit, sortDescriptors: sort) { _, samples, error in
             if error != nil { return completion(self.failure(error)) }
             let rows: [[String: Any]] = (samples ?? []).compactMap { sample in
                 guard let quantity = sample as? HKQuantitySample, quantity.quantityType.is(compatibleWith: unit) else { return nil }
@@ -45,14 +45,16 @@ extension AppNativeHealthController {
                 }
                 return row
             }
-            completion(["status": "ok", "samples": rows, "scale": spec.fraction ? "fraction" : "absolute", "coverage": coverage])
+            var cover = coverage
+            if rows.count >= limit { cover["partial"] = true; cover["reason"] = "read_limit" }
+            completion(["status": "ok", "samples": rows, "scale": spec.fraction ? "fraction" : "absolute", "coverage": cover])
         }
         healthStore.execute(query)
     }
 
     // Each blood-pressure correlation is one measurement: systolic and
     // diastolic are taken from the SAME correlation, never paired across.
-    func readPressure(_ spec: HealthMonitorSpec, from: Date, to: Date, coverage: [String: Any], completion: @escaping ([String: Any]) -> Void) {
+    func readPressure(_ spec: HealthMonitorSpec, from: Date, to: Date, coverage: [String: Any], limit: Int = 20, completion: @escaping ([String: Any]) -> Void) {
         guard let type = HKCorrelationType.correlationType(forIdentifier: .bloodPressure),
               let systolicType = HKQuantityType.quantityType(forIdentifier: .bloodPressureSystolic),
               let diastolicType = HKQuantityType.quantityType(forIdentifier: .bloodPressureDiastolic) else {
@@ -61,7 +63,7 @@ extension AppNativeHealthController {
         let unit = HKUnit.millimeterOfMercury()
         let predicate = HKQuery.predicateForSamples(withStart: from, end: to, options: [])
         let sort = [NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)]
-        let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: 20, sortDescriptors: sort) { _, samples, error in
+        let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: limit, sortDescriptors: sort) { _, samples, error in
             if error != nil { return completion(self.failure(error)) }
             let rows: [[String: Any]] = (samples ?? []).compactMap { sample in
                 guard let correlation = sample as? HKCorrelation,
@@ -71,7 +73,9 @@ extension AppNativeHealthController {
                         "start": self.dateMs(correlation.startDate), "end": self.dateMs(correlation.endDate),
                         "source": ["name": correlation.sourceRevision.source.name]]
             }
-            completion(["status": "ok", "samples": rows, "coverage": coverage])
+            var cover = coverage
+            if rows.count >= limit { cover["partial"] = true; cover["reason"] = "read_limit" }
+            completion(["status": "ok", "samples": rows, "coverage": cover])
         }
         healthStore.execute(query)
     }

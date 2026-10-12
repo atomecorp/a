@@ -12,6 +12,7 @@
 import { getHealthMonitor, healthMonitorsForHost } from './health_catalog.js';
 import { normalizeHealthResult, requestRangeFor } from './health_values.js';
 import { buildLogEnvelope } from '../../shared/logging.js';
+import { createHealthHistoryReader } from './health_history_reader.js';
 
 const DEFAULT_POLL_MS = 60000;
 const INVALIDATION_EVENT = 'atome:native-health-invalidated';
@@ -44,6 +45,10 @@ export function createHealthOwner({
     let generation = 0;
     let sealed = false;
     let accountId = getAccountId() || null;
+    // Tant que l'authentification n'a pas repondu, l'absence de compte n'est pas
+    // encore un etat : on reste en `loading` au lieu d'afficher « Association
+    // requise » une fraction de seconde avant que le compte n'arrive.
+    let authResolved = Boolean(accountId);
     let capabilities = null;
     let capabilitiesPromise = null;
     let linkState = null;
@@ -157,6 +162,7 @@ export function createHealthOwner({
         if (reply.stale) return loadLinkStatus();
         const status = Object.freeze({
             accountId,
+            answered: reply.ok === true,
             linked: reply.ok && reply.result?.linked === true,
             reason: reply.ok ? (reply.result?.reason || null) : reply.error
         });
@@ -229,10 +235,19 @@ export function createHealthOwner({
         readTimer = null;
         if (sealed || !family) return;
         const ids = Array.from(pendingReads).filter((id) => consumers.has(id) && !inflight.has(id));
-        pendingReads = new Set();
+        // Keep invalidations received while a native read is in flight.
+        ids.forEach(id => pendingReads.delete(id));
         if (!ids.length) return;
+        if (!accountId && !authResolved) return;
         const link = await loadLinkStatus();
         if (!link.linked) {
+            if (accountId && link.answered === false) {
+                // Statut d'association non obtenu (jeton, transport) : garder la
+                // derniere lecture connue ; le sondage suivant redemandera.
+                ids.filter((id) => (readings.get(id)?.state || 'loading') === 'loading')
+                    .forEach((id) => publish(id, readingOf(id, 'temporarily_unavailable', link.reason || 'health_link_status_unavailable')));
+                return;
+            }
             const state = String(link.reason || '').startsWith('health_host') ? 'unsupported' : 'needs_link';
             ids.forEach((id) => publish(id, readingOf(id, state, link.reason || 'health_link_required')));
             return;
@@ -269,11 +284,12 @@ export function createHealthOwner({
             });
         }
         syncObservers(ctx);
+        scheduleRead([]);
     };
 
     const scheduleRead = (ids) => {
         (Array.isArray(ids) ? ids : [ids]).forEach((id) => pendingReads.add(id));
-        if (readTimer !== null || sealed) return;
+        if (readTimer !== null || sealed || !Array.from(pendingReads).some(id => consumers.has(id) && !inflight.has(id))) return;
         readTimer = setTimer(() => { void flushReads(); }, 0);
     };
 
@@ -331,6 +347,7 @@ export function createHealthOwner({
     // Account change / logout: invalidate first, then purge and stop.
     const resetContext = (nextAccountId) => {
         generation += 1;
+        authResolved = true;
         accountId = nextAccountId || null;
         capabilities = null;
         capabilitiesPromise = null;
@@ -339,12 +356,16 @@ export function createHealthOwner({
         accessPending = null;
         inflight.clear();
         pendingReads = new Set();
+        const previousStates = new Map(Array.from(readings, ([id, reading]) => [id, reading.state]));
         readings.clear();
         const ctx = context();
         if (observed.size && family && !sealed) void channel.call('health_context_reset', {});
         observed.clear();
         consumers.forEach((set, id) => {
             const reading = readingOf(id, accountId ? 'loading' : 'needs_link', accountId ? 'loading' : 'health_account_required');
+            // Deja en chargement : ne pas renotifier (chaque notification redessine le Dashboard).
+            if (accountId && (previousStates.get(id) || 'loading') === 'loading') return;
+            readings.set(id, reading);
             set.forEach((listener) => { try { listener(reading); } catch (_) { /* isolated */ } });
         });
         if (accountId && consumers.size) scheduleRead(Array.from(consumers.keys()));
@@ -397,6 +418,14 @@ export function createHealthOwner({
         schedulePoll();
     };
     const onLoggedOut = () => resetContext(null);
+    // Reponse d'authentification sans compte : l'absence de compte devient un etat.
+    const onAuthChecked = (event) => {
+        if (authResolved) return;
+        const next = event?.detail?.authenticated && !event?.detail?.anonymous ? (event.detail.userId || getAccountId() || null) : (getAccountId() || null);
+        if (next) { resetContext(next); return; }
+        authResolved = true;
+        if (consumers.size) scheduleRead(Array.from(consumers.keys()));
+    };
     const onLoggedIn = (event) => {
         const next = event?.detail?.anonymous ? null : (event?.detail?.userId || getAccountId() || null);
         if (next !== accountId) resetContext(next);
@@ -405,8 +434,10 @@ export function createHealthOwner({
     eventTarget?.addEventListener?.(INVALIDATION_EVENT, onInvalidated);
     eventTarget?.addEventListener?.('squirrel:user-logged-out', onLoggedOut);
     eventTarget?.addEventListener?.('squirrel:user-logged-in', onLoggedIn);
+    eventTarget?.addEventListener?.('squirrel:auth-checked', onAuthChecked);
     documentRef?.addEventListener?.('visibilitychange', onVisibility);
 
+    const readHistory = createHealthHistoryReader({ call, context, isCurrent, loadLinkStatus, accessEpoch: () => accessEpoch, now, describe });
     return Object.freeze({
         describe,
         capabilities: loadCapabilities,
@@ -421,6 +452,7 @@ export function createHealthOwner({
             return () => statusListeners.delete(listener);
         },
         subscribe,
+        readHistory,
         refresh: (ids) => scheduleRead(ids || Array.from(consumers.keys())),
         reading: (monitorId) => readings.get(monitorId) || null,
         resetContext,

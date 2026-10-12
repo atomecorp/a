@@ -408,25 +408,25 @@ final class AppNativeHealthController {
     // MARK: - Reads
 
     private func read(requests: [[String: Any]], generation: UInt64, reply: @escaping ([String: Any]) -> Void, fail: @escaping (String) -> Void) {
-        let valid = requests.prefix(Self.maxRequests).compactMap { request -> (String, Date, Date)? in
+        let valid = requests.prefix(Self.maxRequests).compactMap { request -> (String, String, Date, Date, Bool)? in
             guard let id = request["id"] as? String, HealthMonitorTable.spec(id) != nil,
                   let from = request["from"] as? Double, let to = request["to"] as? Double, to >= from else { return nil }
             // Bounded window: at most ten years, never in the future.
             let end = min(Date(timeIntervalSince1970: to / 1000), Date())
             let start = max(Date(timeIntervalSince1970: from / 1000), end.addingTimeInterval(-3650 * 86400))
-            return (id, start, end)
+            return (id, String((request["key"] as? String ?? id).prefix(100)), start, end, request["history"] as? Bool == true)
         }
         guard !valid.isEmpty else { return fail("health_request_invalid") }
         let group = DispatchGroup()
         let lock = NSLock()
         var results: [String: Any] = [:]
-        for (id, start, end) in valid {
+        for (id, key, start, end, history) in valid {
             guard let spec = HealthMonitorTable.spec(id) else { continue }
             group.enter()
             Self.log.debug("Health read started monitor=\(id, privacy: .public)")
-            readOne(spec, from: start, to: end) { result in
+            readOne(spec, from: start, to: end, history: history) { result in
                 Self.log.debug("Health read reply monitor=\(id, privacy: .public) status=\(result["status"] as? String ?? "error", privacy: .public)")
-                lock.lock(); results[id] = result; lock.unlock()
+                lock.lock(); results[key] = result; lock.unlock()
                 group.leave()
             }
         }
@@ -436,7 +436,7 @@ final class AppNativeHealthController {
         }
     }
 
-    private func readOne(_ spec: HealthMonitorSpec, from: Date, to: Date, completion: @escaping ([String: Any]) -> Void) {
+    private func readOne(_ spec: HealthMonitorSpec, from: Date, to: Date, history: Bool = false, completion: @escaping ([String: Any]) -> Void) {
         if spec.kind == .pedometer {
             #if canImport(CoreMotion)
             guard CMPedometer.isStepCountingAvailable() else { return completion(["status": "unavailable", "reason": "health_sensor_unavailable"]) }
@@ -466,8 +466,8 @@ final class AppNativeHealthController {
                                        "partial": start > from, "reason": start > from ? "platform_earliest_permitted" : NSNull()]
         switch spec.kind {
         case .dailySum: readSum(spec, from: start, to: to, coverage: coverage, completion: completion)
-        case .latest: readLatest(spec, from: start, to: to, coverage: coverage, completion: completion)
-        case .pressure: readPressure(spec, from: start, to: to, coverage: coverage, completion: completion)
+        case .latest: readLatest(spec, from: start, to: to, coverage: coverage, limit: history ? 1000 : 20, completion: completion)
+        case .pressure: readPressure(spec, from: start, to: to, coverage: coverage, limit: history ? 1000 : 20, completion: completion)
         case .sleep: readSleep(spec, from: start, to: to, coverage: coverage, completion: completion)
         case .sessions: readSessions(spec, from: start, to: to, coverage: coverage, completion: completion)
         case .pedometer: break

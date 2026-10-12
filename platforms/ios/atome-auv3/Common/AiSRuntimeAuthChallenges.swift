@@ -11,20 +11,26 @@ extension AiSRuntime {
 
     static func localAuthDescriptor(_ message: [String: Any], db: OpaquePointer?) throws -> [String: Any] {
         let requested = stringValue(message["grantId"])
+        let unlocked = message["includeLocked"] as? Bool == true ? "1=1" : "locked=0"
         let requestedRows = requested.isEmpty ? []
-            : try query(db, "SELECT * FROM auth_local_grants WHERE grant_id=? AND locked=0 LIMIT 1", [.text(requested)])
+            : try query(db, "SELECT * FROM auth_local_grants WHERE grant_id=? AND \(unlocked) LIMIT 1", [.text(requested)])
         let row: [String: Any]?
         if let requestedRow = requestedRows.first {
             row = requestedRow
         } else {
-            row = try query(db, "SELECT * FROM auth_local_grants WHERE locked=0 ORDER BY rowid DESC LIMIT 1", []).first
+            row = try query(db, "SELECT * FROM auth_local_grants WHERE \(unlocked) ORDER BY rowid DESC LIMIT 1", []).first
         }
         guard let row else { return ["localGrant": NSNull()] }
         let principal = stringValue(row["local_principal"])
         let user = try loadUserInfo(db, userId: principal)
-        return ["localGrant": [
+        let remoteId = row["remote_session_id"] as? String
+        let remote: Any = (remoteId?.isEmpty == false) ? ["phone": stringValue(user["phone"]),
+            "userId": stringValue(row["remote_principal"]), "session": ["id": remoteId!,
+            "keyId": stringValue(row["key_id"]), "generation": intValue(row["remote_session_generation"], defaultValue: 0)]] : NSNull()
+        return ["localGrant": ["remoteSession": remote, "remoteSessionKnown": remoteId != nil,
+            "remotePrincipal": stringValue(row["remote_principal"]),
             "phone": stringValue(user["phone"]), "keyId": stringValue(row["key_id"]),
-            "scope": stringValue(row["key_scope"]), "user": user, "locked": false,
+            "scope": stringValue(row["key_scope"]), "user": user, "locked": intValue(row["locked"], defaultValue: 0) != 0,
             "localSession": ["id": stringValue(row["grant_id"]),
                 "generation": intValue(row["generation"], defaultValue: 0)]
         ]]
@@ -62,7 +68,12 @@ extension AiSRuntime {
             guard let signed = String(data: data, encoding: .utf8),
                 try AuthDeviceKey.verify(scope: stringValue(row["key_scope"]), message: signed, signature: signature) else { throw AiSError("auth_proof_invalid") }
             try execute(db, "UPDATE auth_local_challenges SET consumed_ms=? WHERE challenge_id=?", [.int(now),.text(challenge)])
-            if locking { try execute(db, "UPDATE auth_local_grants SET locked=1,generation=generation+1 WHERE grant_id=?", [.text(grant)]) }
+            if locking {
+                let sql = message["remoteOnly"] as? Bool == true
+                    ? "UPDATE auth_local_grants SET remote_session_id='',remote_session_generation=NULL WHERE grant_id=?"
+                    : "UPDATE auth_local_grants SET locked=1,generation=generation+1,remote_session_id='',remote_session_generation=NULL WHERE grant_id=?"
+                try execute(db, sql, [.text(grant)])
+            }
             try execute(db, "COMMIT", [])
             return locking ? [:] : try localAuthSession(db, principal: stringValue(row["local_principal"]), grant: grant, generation: generation)
         } catch {

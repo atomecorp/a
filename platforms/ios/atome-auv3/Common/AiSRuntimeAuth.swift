@@ -9,6 +9,9 @@ extension AiSRuntime {
                 key_id TEXT NOT NULL, key_scope TEXT NOT NULL, generation INTEGER NOT NULL DEFAULT 0,
                 locked INTEGER NOT NULL DEFAULT 0, UNIQUE(remote_principal,key_id))
             """, [])
+        let columns = try query(db, "PRAGMA table_info(auth_local_grants)", []).compactMap { $0["name"] as? String }
+        if !columns.contains("remote_session_id") { try execute(db, "ALTER TABLE auth_local_grants ADD COLUMN remote_session_id TEXT", []) }
+        if !columns.contains("remote_session_generation") { try execute(db, "ALTER TABLE auth_local_grants ADD COLUMN remote_session_generation INTEGER", []) }
         try execute(db, """
             CREATE TABLE IF NOT EXISTS auth_local_challenges (
                 challenge_id TEXT PRIMARY KEY, grant_id TEXT NOT NULL, purpose TEXT NOT NULL,
@@ -46,7 +49,7 @@ extension AiSRuntime {
                         result = ["challenge": proof]
                     } else {
                         guard remote["keyId"] as? String == keyId, let user = remote["user"] as? [String: Any] else { throw AiSError("auth_device_binding_mismatch") }
-                        result = try queue.sync { try bindRemoteIdentity(user, scope: scope, keyId: keyId) }
+                        result = try queue.sync { try bindRemoteIdentity(user, scope: scope, keyId: keyId, sessionId: stringValue(message["sessionId"]), sessionGeneration: intValue(message["generation"], defaultValue: -1)) }
                     }
                     completion(authResponse(requestId: requestId, success: true).merging(result) { _, new in new })
                 } catch { completion(authResponse(requestId: requestId, success: false, error: "auth_remote_proof_rejected")) }
@@ -102,13 +105,18 @@ extension AiSRuntime {
         }
     }
 
-    private static func bindRemoteIdentity(_ remote: [String: Any], scope: String, keyId: String) throws -> [String: Any] {
+    private static func bindRemoteIdentity(_ remote: [String: Any], scope: String, keyId: String, sessionId: String, sessionGeneration: Int64) throws -> [String: Any] {
+        guard !sessionId.isEmpty, sessionGeneration >= 0 else { throw AiSError("auth_session_invalid") }
         let remoteId = stringValue(remote["id"]), phone = stringValue(remote["phone"]), username = stringValue(remote["username"])
         guard !remoteId.isEmpty, !phone.isEmpty else { throw AiSError("auth_remote_response_invalid") }
         let db = try openDatabase()
         try execute(db, "BEGIN IMMEDIATE", [])
         do {
             let previous = try query(db, "SELECT * FROM auth_local_grants WHERE remote_principal=? AND key_id=?", [.text(remoteId), .text(keyId)]).first
+            if rowString(previous, "remote_session_id") == sessionId,
+               intValue(previous?["remote_session_generation"], defaultValue: -1) > sessionGeneration {
+                throw AiSError("auth_session_stale")
+            }
             let existing = try findUserRecordByPhone(db, phone)
             guard existing?.deletedAt == nil else { throw AiSError("local_account_unavailable") }
             let principal = rowString(previous, "local_principal") ?? existing?.userId ?? UUID().uuidString.lowercased()
@@ -129,8 +137,8 @@ extension AiSRuntime {
                 try upsertStateCurrent(db, atomeId: principal, ownerId: principal, properties: ["type":"user", "username":username, "visibility":"private"], now: now)
             }
             try assignVerifiedPhone(db, principalId: principal, phone: phone, now: now)
-            try execute(db, "INSERT INTO auth_local_grants VALUES (?,?,?,?,?,?,0) ON CONFLICT(remote_principal,key_id) DO UPDATE SET locked=0,generation=excluded.generation",
-                [.text(grant),.text(principal),.text(remoteId),.text(keyId),.text(scope),.int(generation)])
+            try execute(db, "INSERT INTO auth_local_grants (grant_id,local_principal,remote_principal,key_id,key_scope,generation,locked,remote_session_id,remote_session_generation) VALUES (?,?,?,?,?,?,0,?,?) ON CONFLICT(remote_principal,key_id) DO UPDATE SET locked=0,generation=excluded.generation,remote_session_id=excluded.remote_session_id,remote_session_generation=excluded.remote_session_generation",
+                [.text(grant),.text(principal),.text(remoteId),.text(keyId),.text(scope),.int(generation),.text(sessionId),.int(sessionGeneration)])
             try execute(db, "COMMIT", [])
             return try localAuthSession(db, principal: principal, grant: grant, generation: generation)
         } catch {

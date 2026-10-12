@@ -1,0 +1,80 @@
+import { chromium } from 'playwright';
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import { PNG } from 'pngjs';
+import { waitFor, awaitBevyUiNodeTarget, clickCanvasTarget } from './molecule_ui_acceptance_support.mjs';
+fs.mkdirSync('temp/guest_profile', { recursive: true });
+const fixture = new PNG({ width: 64, height: 64 });
+for(let i=0;i<fixture.data.length;i+=4){fixture.data[i]=40;fixture.data[i+1]=200;fixture.data[i+2]=100;fixture.data[i+3]=255;}
+fs.writeFileSync('temp/guest_profile/photo.png', PNG.sync.write(fixture));
+const profileDirectory = fs.mkdtempSync('temp/guest_profile/browser-');
+const options = { headless: false, viewport: { width: 1280, height: 1000 }, args: ['--enable-unsafe-webgpu', '--ignore-gpu-blocklist', '--disable-gpu-sandbox', '--window-position=-32000,-32000'] };
+let browser = await chromium.launchPersistentContext(profileDirectory, options);
+let page = browser.pages()[0];
+const errors=[];
+const collectErrors = page => { page.on('pageerror', e=>errors.push(e.message));page.on('console',m=>{if(['error','warning'].includes(m.type()))errors.push(m.text());}); };
+collectErrors(page);
+try {
+ await page.goto('http://127.0.0.1:3001', { waitUntil: 'commit' });
+ await waitFor(page, () => !!window.eveBevyUiRuntime?.state?.trees?.size, null, 45000);
+ await new Promise(resolve => setTimeout(resolve, 1500));
+ const access = await awaitBevyUiNodeTarget(page, { nodeId: '__eve_dashboard_card_template_controls___first_launch_first_launch_access_free' });
+ await clickCanvasTarget(page, access);
+ await new Promise(resolve => setTimeout(resolve, 2500));
+ const movement = await page.evaluate(() => {const all=[];const visit=n=>{if(n)all.push(n);for(const c of n?.children||[])visit(c);};for(const e of window.eveBevyUiRuntime.state.trees.values())visit(e.tree.root);const title=all.find(n=>n.text==='Bougez plus');const id=title?.id?.replace('__eve_dashboard_content_title_', '__eve_dashboard_card_');return all.find(n=>n.id===id)?.id;});
+ await clickCanvasTarget(page, await awaitBevyUiNodeTarget(page, { nodeId: movement }));
+ await waitFor(page, async () => {const { getMainMenuRuntime } = await import('/eVe/intuition/ribbon/bevy_ui_product_registry.js');return getMainMenuRuntime()?.measure?.().treeMounted === true;}, null, 45000);
+ await new Promise(resolve=>setTimeout(resolve,1000));
+ await new Promise(resolve => setTimeout(resolve, 1500));
+ const opened = await page.evaluate(async()=>{const {open_home_panel}=await import('/eVe/intuition/tools/user.js');return open_home_panel({section:'identity'});});
+ console.log('open',JSON.stringify(opened));
+ await waitFor(page,()=>!!window.eveBevyUiRuntime?.state?.trees?.has('eve_bevy_panel_home'),null,15000);
+ const name = await awaitBevyUiNodeTarget(page,{nodeId:'home_identity_name_input'});
+ await clickCanvasTarget(page,name);
+ await page.keyboard.insertText('Profil QA invité'); await page.keyboard.press('Enter');
+ await waitFor(page,async()=>{const {loadUserProfile}=await import('/eVe/domains/user/profile_api.js');return (await loadUserProfile()).profile?.name === 'Profil QA invité';},null,15000);
+ const first = await awaitBevyUiNodeTarget(page,{nodeId:'home_identity_first_name_input'});
+ await clickCanvasTarget(page,first);await page.keyboard.insertText('Ada');await page.keyboard.press('Enter');
+ await waitFor(page,async()=>{const {loadUserProfile}=await import('/eVe/domains/user/profile_api.js');return (await loadUserProfile()).profile?.first_name === 'Ada';},null,15000);
+ console.log('typed_and_persisted',true);
+ // Photo fixture is prepared through the public profile owner. Removal below
+ // is a real UI gesture; OS picker selection is recorded separately as unavailable.
+ await page.evaluate(async photo=>{const {upsertUserProfile,loadUserProfile}=await import('/eVe/domains/user/profile_api.js');const current=await loadUserProfile();const saved=await upsertUserProfile({...current.profile,user_face:photo});if(!saved.ok)throw new Error(saved.error);},'data:image/png;base64,'+fs.readFileSync('temp/guest_profile/photo.png').toString('base64'));
+ await waitFor(page,()=>{const visit=n=>n?.id==='home_profile_photo_remove'||(n?.children||[]).some(visit);return [...window.eveBevyUiRuntime.state.trees.values()].some(e=>visit(e.tree.root));},null,15000);
+ await page.screenshot({path:'temp/guest_profile/ui-photo.png'});
+ await page.evaluate(async()=>{const {close_home_panel,open_home_panel}=await import('/eVe/intuition/tools/user.js');await close_home_panel();await open_home_panel({section:'identity'});});
+ await clickCanvasTarget(page,await awaitBevyUiNodeTarget(page,{nodeId:'home_profile_photo_remove'}));
+ await waitFor(page,async()=>{const {loadUserProfile}=await import('/eVe/domains/user/profile_api.js');return (await loadUserProfile()).profile?.user_face==='';},null,15000);
+ console.log('photo_removed_after_reopen',true);
+ await page.evaluate(async()=>{const {close_home_panel}=await import('/eVe/intuition/tools/user.js');await close_home_panel();const {openContactPanel}=await import('/eVe/intuition/tools/contact.js');await openContactPanel();});
+ await waitFor(page,()=>{const visit=n=>String(n?.text||'').includes('Profil QA invité')||(n?.children||[]).some(visit);return [...window.eveBevyUiRuntime.state.trees.values()].some(e=>visit(e.tree.root));},null,15000);
+ await page.screenshot({path:'temp/guest_profile/ui-contact-row.png'});
+ const principal=await page.evaluate(async()=>{const {loadUserProfile}=await import('/eVe/domains/user/profile_api.js');return (await loadUserProfile()).userId;});
+ await clickCanvasTarget(page,await awaitBevyUiNodeTarget(page,{nodeId:'contact_accordion_'+principal+'_header'}));
+ await waitFor(page,async()=>{const {readHomePanelState}=await import('/eVe/intuition/runtime/bevy_panel/bevy_panel_home_runtime.js');return readHomePanelState().loading===false;},null,15000);
+ await clickCanvasTarget(page,await awaitBevyUiNodeTarget(page,{nodeId:'home_identity_nickname_input'}));
+ await page.keyboard.insertText('Invité QA');await page.keyboard.press('Enter');
+ await waitFor(page,async()=>{const {loadUserProfile}=await import('/eVe/domains/user/profile_api.js');return (await loadUserProfile()).profile?.nickname==='Invité QA';},null,15000);
+ console.log('contact_card_edit_persisted',true);
+ await page.screenshot({ path: 'temp/guest_profile/ui-guest.png' });
+ for (const level of ['beginner','intermediate','advanced']) {
+    await page.evaluate(async level=>{const {closeContactPanel}=await import('/eVe/intuition/tools/contact.js');await closeContactPanel();const {setUserMasteryLevel}=await import('/eVe/intuition/tools/user_mastery_level_preference.js');const result=await setUserMasteryLevel(level);if(!result.ok)throw new Error(result.error);const {open_home_panel}=await import('/eVe/intuition/tools/user.js');await open_home_panel({section:'identity'});}, level);
+    await clickCanvasTarget(page,await awaitBevyUiNodeTarget(page,{nodeId:'home_identity_name_input'}));
+    await page.keyboard.press('ControlOrMeta+A');await page.keyboard.insertText('QA '+level);await page.keyboard.press('Enter');
+    await waitFor(page,async level=>{const {loadUserProfile}=await import('/eVe/domains/user/profile_api.js');return (await loadUserProfile()).profile?.name==='QA '+level;},level,15000);
+    await page.screenshot({path:'temp/guest_profile/ui-'+level+'.png'});
+    console.log('level_edit_persisted',level);
+ }
+ await browser.close();
+ browser = await chromium.launchPersistentContext(profileDirectory, options); page = browser.pages()[0];collectErrors(page);
+ await page.goto('http://127.0.0.1:3001',{waitUntil:'commit'});
+ await waitFor(page,()=>!!window.eveBevyUiRuntime?.state?.trees?.size,null,45000);
+ const restored = await page.evaluate(async()=>{const {open_home_panel}=await import('/eVe/intuition/tools/user.js');await open_home_panel({section:'identity'});const {loadUserProfile}=await import('/eVe/domains/user/profile_api.js');return loadUserProfile();});
+ assert.equal(restored.userId,principal);assert.equal(restored.profile.name,'QA advanced');assert.equal(restored.profile.nickname,'Invité QA');assert.equal(restored.profile.user_face,'');
+ await page.screenshot({path:'temp/guest_profile/ui-restarted.png'});
+ console.log('browser_restart_persisted',true);
+ const state = await page.evaluate(()=>{const nodes=[];const visit=n=>{if(n?.id)nodes.push({id:n.id,kind:n.kind,text:n.text});for(const c of n?.children||[])visit(c);};for(const [id,e] of window.eveBevyUiRuntime.state.trees){nodes.push({tree:id});visit(e.tree.root);}return nodes;});
+ fs.writeFileSync('temp/guest_profile/ui-state.json',JSON.stringify({state,errors},null,2));
+ console.log(JSON.stringify({state:state.filter(n=>n.tree || n.id?.startsWith('contact_') || n.text?.includes('Profil QA')),errors},null,2));
+ assert.deepEqual(errors,[]);
+} finally { await browser.close();fs.rmSync(profileDirectory,{recursive:true,force:true}); }

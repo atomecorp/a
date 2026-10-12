@@ -71,3 +71,8 @@ export function tvPage(items, { cursor = '0', limit = 50 } = {}) {
     if (!Number.isSafeInteger(offset) || offset > items.length) return { ok: false, error: 'INVALID_ARGUMENT' };
     return { ok: true, items: items.slice(offset, offset + limit), cursor: offset + limit < items.length ? String(offset + limit) : null };
 }
+// What a page can actually play: an `atome:` (iOS) or https page refuses plain
+// http media, so a channel offered only over http is never listed or played there.
+export const tvPageAcceptsHttp = (win = globalThis.window) => win?.location?.protocol === 'http:';
+export const playableTvStreams = (streams = [], { acceptHttp = false } = {}) => (Array.isArray(streams) ? streams : [])
+    .filter((stream) => ['hls', 'video', 'youtube', 'youtube_live'].includes(stream?.kind) && (acceptHttp || stream.secure === true));

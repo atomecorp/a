@@ -11,6 +11,8 @@ final class NativePersonalImport {
     private let queue = DispatchQueue(label: "atome.personal.import", qos: .utility)
     private var observers: [NSObjectProtocol] = []
     private let iso = ISO8601DateFormatter()
+    // Injecte par la cible de l'app (UIApplication.shared est indisponible dans l'extension).
+    var openSettings: (() -> Void)?
 
     private func watch() {
         guard observers.isEmpty else { return }
@@ -27,6 +29,14 @@ final class NativePersonalImport {
         guard !WebViewManager.runningInExtension else { completion(nil, "personal_import_app_required"); return }
         if command == "export_file_save" { save(payload, completion: completion); return }
         if command == "export_file_share" { share(payload, completion: completion); return }
+        if command == "contacts_open_settings" {
+            // Page de l'app dans Reglages : c'est la que l'acces limite aux contacts s'elargit.
+            DispatchQueue.main.async {
+                guard let open = self.openSettings else { completion(nil, "settings_unavailable"); return }
+                open(); completion(["ok": true], nil)
+            }
+            return
+        }
         watch()
         let read = { self.queue.async {
             do {
@@ -90,16 +100,41 @@ final class NativePersonalImport {
                 ["name": "IMPP", "value": entry.value.service + ":" + entry.value.username,
                  "params": ["TYPE": entry.label ?? "other"]] as [String: Any]
             }
-            if let data = contact.thumbnailImageData {
-                if let jpeg = UIImage(data: data)?.jpegData(compressionQuality: 0.85), jpeg.count <= 512 * 1024 {
-                    item["photo"] = "data:image/jpeg;base64," + jpeg.base64EncodedString()
-                }
-            } else { item["photo"] = "" }
+            // Miniature d'abord ; sans elle, l'image complete (lue seulement pour ce
+            // contact). Toujours reduite : une photo trop lourde n'est plus abandonnee.
+            let source = contact.thumbnailImageData ?? self.fullImageData(contact.identifier)
+            if let data = source { if let photo = Self.photoDataURL(data) { item["photo"] = photo } }
+            else { item["photo"] = "" }
             return item
         }
-        return ["ok": true, "complete": true, "permission": "authorized", "contacts": items,
+        return ["ok": true, "complete": true, "permission": Self.contactsPermission(), "contacts": items,
                 "groups": groups.map { ["id": $0.identifier, "name": $0.name, "members": groupMembers[$0.identifier] ?? []] as [String: Any] }, "cursor": history["cursor"] ?? "",
                 "mode": history["mode"] ?? "snapshot", "removed_ids": history["removed_ids"] ?? []]
+    }
+
+    private func fullImageData(_ identifier: String) -> Data? {
+        let keys = [CNContactImageDataAvailableKey, CNContactImageDataKey] as [CNKeyDescriptor]
+        guard let contact = try? contacts.unifiedContact(withIdentifier: identifier, keysToFetch: keys),
+              contact.imageDataAvailable else { return nil }
+        return contact.imageData
+    }
+
+    private static func photoDataURL(_ data: Data) -> String? {
+        guard let image = UIImage(data: data), image.size.width > 0, image.size.height > 0 else { return nil }
+        let scale = min(1, 256 / max(image.size.width, image.size.height))
+        let size = CGSize(width: max(1, (image.size.width * scale).rounded()), height: max(1, (image.size.height * scale).rounded()))
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        let resized = UIGraphicsImageRenderer(size: size, format: format).image { _ in image.draw(in: CGRect(origin: .zero, size: size)) }
+        guard let jpeg = resized.jpegData(compressionQuality: 0.85), jpeg.count <= 512 * 1024 else { return nil }
+        return "data:image/jpeg;base64," + jpeg.base64EncodedString()
+    }
+
+    // iOS 18 : l'utilisateur peut n'autoriser que quelques contacts ; le carnet
+    // parait alors « incomplet ». Le statut est remonte pour le dire.
+    private static func contactsPermission() -> String {
+        if #available(iOS 18.0, *), CNContactStore.authorizationStatus(for: .contacts) == .limited { return "limited" }
+        return "authorized"
     }
 
     private static func contactDate(_ date: DateComponents?) -> String {
@@ -128,7 +163,7 @@ final class NativePersonalImport {
             let occurrence = event.occurrenceDate ?? event.startDate!
             let id = event.calendar.calendarIdentifier + "/" + external
                 + (event.hasRecurrenceRules || event.isDetached ? "/" + iso.string(from: occurrence) : "")
-            return ["id": id, "uid": id, "calendarId": event.calendar.calendarIdentifier,
+            return ["id": id, "uid": id, "calendarId": event.calendar.calendarIdentifier, "calendarType": Self.calendarType(event.calendar),
                     "title": event.title ?? "", "description": event.notes ?? "", "location": event.location ?? "",
                     "start": eventDate(event.startDate, event), "end": eventDate(event.endDate, event),
                     "allDay": event.isAllDay, "timezone": event.timeZone?.identifier ?? "UTC",
@@ -139,9 +174,21 @@ final class NativePersonalImport {
         let upcoming = next == nil ? earliest : endYear
         let more = upcoming <= latest
         return ["ok": true, "complete": true, "more": more, "items": items,
-                "calendars": collections.map { ["id": $0.calendarIdentifier, "name": $0.title] },
+                "calendars": collections.map { ["id": $0.calendarIdentifier, "name": $0.title, "type": Self.calendarType($0)] },
                 "coverage": ["start": iso.string(from: start), "end": iso.string(from: end)],
                 "cursor": more ? ["next_year": upcoming] : ["completed": true]]
+    }
+
+    // Anniversaires et calendriers abonnes (jours feries…) ne sont pas des rendez-vous.
+    private static func calendarType(_ calendar: EKCalendar) -> String {
+        switch calendar.type {
+        case .birthday: return "birthday"
+        case .subscription: return "subscription"
+        case .calDAV: return "caldav"
+        case .exchange: return "exchange"
+        case .local: return "local"
+        @unknown default: return "other"
+        }
     }
 
     private func eventDate(_ date: Date, _ event: EKEvent) -> String {

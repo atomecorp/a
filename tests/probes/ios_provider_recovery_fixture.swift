@@ -28,7 +28,7 @@ final class ProviderFixture {
 extension AiSRuntime {
     static func prepareProviderFixture() throws {
         let db = try openDatabase()
-        try execute(db, "INSERT INTO auth_local_grants VALUES ('grant','local','remote','device','app',0,0)")
+        try execute(db, "INSERT INTO auth_local_grants (grant_id,local_principal,remote_principal,key_id,key_scope,generation,locked) VALUES ('grant','local','remote','device','app',0,0)")
     }
 }
 try AiSRuntime.prepareProviderFixture()

@@ -30,7 +30,7 @@ const RELAY_PREFLIGHT_FAILURES = new Set([
 // the same answer twice, so only the credential actions, which are idempotent,
 // are retried on it.
 const RELAY_CLOSED_FAILURE = 'provider_connection_closed';
-const IDEMPOTENT_PROVIDER_ACTIONS = new Set(['credential.status', 'credential.store', 'credential.remove']);
+const IDEMPOTENT_PROVIDER_ACTIONS = new Set(['models', 'credential.status', 'credential.store', 'credential.remove']);
 const isRelinkable = (action, error) => RELAY_PREFLIGHT_FAILURES.has(error)
     || (error === RELAY_CLOSED_FAILURE && IDEMPOTENT_PROVIDER_ACTIONS.has(action));
 
@@ -40,6 +40,7 @@ const isRelinkable = (action, error) => RELAY_PREFLIGHT_FAILURES.has(error)
 // remote never answers the route at all, and then reported nothing better than
 // “check the connection”.
 const PROVIDER_ACTION_TIMEOUT_MS = Object.freeze({
+    models: 15000,
     'credential.status': 15000,
     'credential.store': 25000,
     'credential.remove': 15000,

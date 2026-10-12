@@ -172,7 +172,8 @@ export const createContactsService = ({
             source_key: options.source_key || source.source_key || source.source_id,
             cursor: sourcePull.cursor, complete: sourcePull.complete === true,
             removed_ids: sourcePull.removed_ids || [], removed_hrefs: sourcePull.removed_hrefs || [], groups: sourcePull.groups || [],
-            device_id: options.device_id, signal: options.signal, checkSession
+            device_id: options.device_id, signal: options.signal, checkSession,
+            restore_suppressed: options.restore_suppressed === true
         });
         if (imported?.ok !== true) {
             return imported || { ok: false, error: 'contacts_import_store_failed', source_id: normalizedSourceId };
@@ -185,6 +186,7 @@ export const createContactsService = ({
             ok: refreshed?.ok === true,
             imported: imported.imported || 0,
             source_id: normalizedSourceId,
+            permission: sourcePull.permission || null,
             target_source_id: primarySourceEntry.source_id,
             items: refreshed?.items || [],
             stats: refreshed?.stats || null,

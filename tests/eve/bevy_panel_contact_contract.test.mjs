@@ -239,7 +239,7 @@ test('Contact selection rail supports additive drag and cancellation', async () 
     }
 });
 
-test('Contact fixed actions expose Import, Add, and conditional multi-delete with partial-failure recovery', async () => {
+test('Contact compact footer preserves conditional multi-delete and partial-failure recovery', async () => {
     const previousWindow = globalThis.window;
     const previousDocument = globalThis.document;
     const deleteCalls = [];
@@ -267,13 +267,11 @@ test('Contact fixed actions expose Import, Add, and conditional multi-delete wit
         await contactSurface.handleEvent({ type: 'contact.refresh' });
         let snapshot = contactSurface.readState();
         let fixed = contactSurface.buildFixedContent(snapshot, { emit: () => {}, bodyWidth: 388 });
-        let actionRow = visit(fixed, (node) => node.id === 'contact_fixed_actions');
-        assert.deepEqual(
-            actionRow.children.flatMap(row => row.children.map(child => child.id)),
-            ['contact_import', 'contact_add', 'contact_create_user']
-        );
+        assert.deepEqual(fixed, []);
+        const footer = contactSurface.buildFooterContent(snapshot, { emit: () => {} });
+        assert.deepEqual(footer.map(child => child.id), ['contact_transfer_toggle', 'contact_create_user', 'contact_search']);
         assert.equal(visit(fixed, (node) => node.id === 'contact_delete'), null, 'Delete is absent at zero selection');
-        assert.equal(contactSurface.buildFooterContent, undefined, 'Contacts has no select-all footer action');
+        assert.equal(visit(footer, node => node.id === 'contact_select_all'), null);
 
         contactSurface.buildContent(snapshot, { emit: () => {}, bodyWidth: 388 });
         await contactSurface.handleEvent({ type: 'contact.selection.press', id: 'local_a', event: { y: 8 } });
@@ -282,11 +280,7 @@ test('Contact fixed actions expose Import, Add, and conditional multi-delete wit
         await contactSurface.handleEvent({ type: 'contact.selection.release', id: 'local_b' });
         snapshot = contactSurface.readState();
         fixed = contactSurface.buildFixedContent(snapshot, { emit: () => {}, bodyWidth: 388 });
-        actionRow = visit(fixed, (node) => node.id === 'contact_fixed_actions');
-        assert.deepEqual(
-            actionRow.children.flatMap(row => row.children.map(child => child.id)),
-            ['contact_import', 'contact_add', 'contact_create_user', 'contact_delete']
-        );
+        assert.deepEqual(fixed[0].children.map(child => child.id), ['contact_delete']);
         assert.equal(visit(fixed, (node) => node.id === 'contact_delete').accessibility.label, 'Supprimer (2)');
 
         await contactSurface.handleEvent({ type: 'contact.delete.request' });
@@ -339,7 +333,7 @@ test('Contact filters headless sources and handles zero, one, or multiple intera
         assert.equal(visit(chooser, (node) => node.id === 'contact_import_source_icloud_contacts'), null);
         await contactSurface.handleEvent({ type: 'contact.import.source', sourceId: 'device' });
         assert.deepEqual(imports, ['device']);
-        assert.match(contactSurface.readState().notice, /2 contacts importés/i);
+        assert.match(contactSurface.readState().transferNotice, /2 contacts importés/i);
     } finally {
         await contactSurface.onClose?.();
         globalThis.window = previousWindow;
@@ -349,10 +343,10 @@ test('Contact filters headless sources and handles zero, one, or multiple intera
     const emptyDom = installContactEnvironment({ items: [], current: { id: 'current_user', name: 'Current user' } });
     try {
         await contactSurface.handleEvent({ type: 'contact.refresh' });
-        const fixed = contactSurface.buildFixedContent(contactSurface.readState(), { emit: () => {}, bodyWidth: 388 });
-        assert.equal(visit(fixed, (node) => node.id === 'contact_import').on, undefined);
+        await contactSurface.handleEvent({ type: 'contact.transfer.toggle' });
         const content = contactSurface.buildContent(contactSurface.readState(), { emit: () => {}, bodyWidth: 388 });
         assert.ok(visit(content, (node) => node.id === 'contact_import_unavailable_notice'));
+        assert.equal(visit(content, node => node.id === 'contact_import').on, undefined);
         assert.equal((await contactSurface.handleEvent({ type: 'contact.import.request' })).ok, false);
     } finally {
         await contactSurface.onClose?.();
@@ -374,9 +368,10 @@ test('Contact reports denied interactive import permission without blocking the 
 
     try {
         await contactSurface.handleEvent({ type: 'contact.refresh' });
-        const result = await contactSurface.handleEvent({ type: 'contact.import.request' });
+        await contactSurface.handleEvent({ type: 'contact.import.request' });
+        const result = await contactSurface.handleEvent({ type: 'contact.import.source', sourceId: 'apple' });
         assert.equal(result.ok, false);
-        assert.match(contactSurface.readState().notice, /pas été autorisé/i);
+        assert.match(contactSurface.readState().transferNotice, /pas été autorisé/i);
         assert.equal(contactSurface.readState().entries[0].id, 'current_user', 'permission refusal leaves the Contact panel usable');
     } finally {
         await contactSurface.onClose?.();
@@ -438,4 +433,44 @@ test('requested-contact hydration preserves manual virtual-list position', async
         assert.equal(contactSurface.readState().listScrollOffset, 65);
         assert.equal(requests.length, 0);
     } finally { cleanup?.(); globalThis.window = previousWindow; globalThis.document = previousDocument; dom.window.close(); }
+});
+
+test('Contact footer searches live through the shared editor and contact matcher', async () => {
+    const previousWindow = globalThis.window, previousDocument = globalThis.document;
+    const dom = installContactEnvironment({ items: [
+        { id: 'ada', name: 'Ada', email: 'ada@example.test', source_provider: 'eve_contacts_local', source_writable: true },
+        { id: 'grace', name: 'Grace', phone: '+33612345678', source_provider: 'eve_contacts_local', source_writable: true }
+    ], current: { id: 'self', name: 'Self' }, directory: [{ principal_id: 'remote', display_name: 'Remote' }] });
+    const refresh = vi.fn();
+    try {
+        await contactSurface.handleEvent({ type: 'contact.refresh' });
+        const footer = contactSurface.buildFooterContent(contactSurface.readState(), { emit: () => {}, bodyWidth: 388 });
+        assert.equal(footer.find(child => child.id === 'contact_search').kind, 'text_input');
+        await contactSurface.handleEvent({ type: 'contact.search.field.focus', key: 'query' }, { refresh });
+        const { getActiveTextEditor } = await import('../../eVe/domains/rendering/hidden_text_service_runtime.js');
+        const editor = getActiveTextEditor();
+        const type = value => {
+            editor.value = value; editor.setSelectionRange(value.length, value.length);
+            editor.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+        };
+        await contactSurface.handleEvent({ type: 'contact.list.scroll', offset: 400 });
+        type('gRaCe');
+        assert.deepEqual(contactSurface.readState().entries.map(entry => entry.id), ['grace']);
+        assert.equal(contactSurface.readState().listScrollOffset, 0);
+        type('0612345678');
+        assert.deepEqual(contactSurface.readState().entries.map(entry => entry.id), ['grace']);
+        type('ada@example');
+        assert.deepEqual(contactSurface.readState().entries.map(entry => entry.id), ['ada']);
+        type('remote');
+        assert.deepEqual(contactSurface.readState().entries.map(entry => entry.id), ['remote']);
+        type('no-match');
+        assert.equal(contactSurface.readState().entries.length, 0);
+        type('');
+        assert.equal(contactSurface.readState().entries.length, 4);
+        assert.ok(refresh.mock.calls.length > 0);
+        await contactSurface.onClose();
+        assert.equal(contactSurface.readState().query, '');
+    } finally {
+        await contactSurface.onClose(); dom.window.close(); globalThis.window = previousWindow; globalThis.document = previousDocument;
+    }
 });

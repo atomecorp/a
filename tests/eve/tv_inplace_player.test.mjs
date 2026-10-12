@@ -7,7 +7,8 @@ vi.mock('../../eVe/domains/rendering/surface_runtime.js', () => ({ setRenderSurf
 vi.mock('../../eVe/domains/rendering/project_scene_runtime.js', () => ({ updateProjectSceneRecordByAtomeId: async () => {}, updateProjectSceneRecords: async () => {}, readProjectSceneAtomClientPlacement: () => null }));
 vi.mock('../../eVe/core/atome_commit.js', () => ({ getStateCurrent: async () => null }));
 vi.mock('../../eVe/intuition/tools/tv_catalog_client.js', () => ({ readTvChannelsById: async () => [], resolveTvYoutubeLive: async () => '' }));
-import { createTvInPlacePlayer, playableTvStreams } from '../../eVe/intuition/tools/tv_inplace_player.js';
+import { createTvInPlacePlayer } from '../../eVe/intuition/tools/tv_inplace_player.js';
+import { playableTvStreams } from '../../atome/src/squirrel/tv/contracts.js';
 import { getSelectedProjectMediaPlayback, stopSelectedProjectMediaPlayback } from '../../eVe/domains/media/selected_project_media_playback_state.js';
 import { createEveBevyUiRuntime } from '../../eVe/domains/rendering/bevy_ui_runtime.js';
 import { BEVY_MAIN_MENU_TREE_ID } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';

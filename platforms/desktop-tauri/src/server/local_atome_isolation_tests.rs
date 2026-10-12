@@ -114,3 +114,29 @@ async fn explicit_permission_opens_only_the_shared_object_and_revocation_closes_
     assert!(get(&state, BOB, "a1").await.is_none(), "revocation immediate");
     assert!(list(&state, BOB, json!({})).await.iter().all(|id| id != "a1"));
 }
+
+#[tokio::test]
+async fn sync_pending_delivery_is_principal_bound() {
+    let workspace = tempfile::tempdir().expect("temporary workspace");
+    let state = create_state(workspace.path().join("state"), workspace.path().to_path_buf());
+    seed_users(&state);
+    {
+        let db = state.db.lock().expect("database lock");
+        for (user, status) in [(ALICE, "pending"), (ALICE, "error"), (BOB, "pending")] {
+            db.execute(
+                "INSERT INTO sync_queue (atome_id, operation, payload, target_server, status, attempts, max_attempts, created_at)
+                 VALUES (?1, 'events:commit', ?2, 'fastify', ?3, 0, 5, datetime('now'))",
+                rusqlite::params![user, json!({"actor":{"id":user}}).to_string(), status],
+            ).expect("queued delivery");
+        }
+    }
+    let request = json!({"action":"get-pending"});
+    let first = super::local_atome_extended::handle_sync_message(request.clone(), ALICE, &state).await;
+    assert!(first.success);
+    assert_eq!(first.data.unwrap()["pending_delivery_count"], 2);
+    state.db.lock().unwrap().execute("DELETE FROM sync_queue WHERE json_extract(payload, '$.actor.id') = ?1", [ALICE]).unwrap();
+    let completed = super::local_atome_extended::handle_sync_message(request.clone(), ALICE, &state).await;
+    assert_eq!(completed.data.unwrap()["pending_delivery_count"], 0);
+    let isolated = super::local_atome_extended::handle_sync_message(request, BOB, &state).await;
+    assert_eq!(isolated.data.unwrap()["pending_delivery_count"], 1);
+}

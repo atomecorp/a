@@ -36,7 +36,8 @@ describe('first launch canonical composition', () => {
         const access = FIRST_LAUNCH_TEMPLATES.first_launch_access.atoms.filter(atom => atom.props.template_control?.kind === 'button');
         expect(access[0].props.width).toBe(access[1].props.width); expect(access[0].props.height).toBe(access[1].props.height);
         const controls = FIRST_LAUNCH_TEMPLATES.dashboard_basic.atoms.map(atom => atom.props.template_control).filter(c => c?.kind === 'button');
-        expect(controls.map(c => c.operation).sort()).toEqual(['agenda', 'new_monitor', 'new_program', 'profile_home']);
+        expect(controls.filter(c => c.operation).map(c => c.operation).sort()).toEqual(['agenda', 'new_monitor', 'new_program', 'profile_home']);
+        expect(controls.filter(c => !c.operation).map(c => c.value).sort()).toEqual(['discussion', 'new_discussion']);
     });
     it('remaps cell parents and preserves a user control value when a linked template changes', () => {
         const source = [{ id: 'matrix', type: 'group', parent_id: 'source', properties: { matrix_grid: { rows: 1, columns: 1 } } },

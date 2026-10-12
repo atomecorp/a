@@ -44,7 +44,7 @@ export const AI_MODEL_PROVIDER_REGISTRY = freeze({
         filter: {
             exclude_preview: true,
             exclude_deprecated: true,
-            exclude_modalities: ['audio', 'image', 'embedding', 'moderation', 'realtime'],
+            exclude_modalities: ['audio', 'image', 'embedding', 'moderation', 'realtime', 'whisper', 'tts', 'sora', 'dall-e', 'babbage', 'davinci'],
             prefer_general_purpose: true
         }
     }),

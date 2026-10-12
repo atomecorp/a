@@ -7,7 +7,7 @@ const utf8 = (value) => new TextEncoder().encode(value);
 // IndexedDB can persist non-exportable CryptoKeys without exporting private bytes.
 // Native consumers inject the platform key capability; they never use browser keys.
 export function createAuthDeviceStore({ indexedDB = globalThis.indexedDB, crypto = globalThis.crypto,
-    nativeKey = null, databaseName = 'atome_auth_device_v1' } = {}) {
+    nativeKey = null, nativeSession = null, databaseName = 'atome_auth_device_v1' } = {}) {
     let opening = null;
     const open = () => {
         if (!indexedDB || !crypto?.subtle) throw new Error('auth_protected_storage_unavailable');
@@ -28,9 +28,36 @@ export function createAuthDeviceStore({ indexedDB = globalThis.indexedDB, crypto
             transaction.onerror = transaction.onabort = () => reject(new Error('auth_storage_write_failed'));
         });
     }
-    const read = (key) => storage('readonly', (store) => store.get(key));
-    const put = (key, value) => storage('readwrite', (store) => store.put(value, key));
-    const remove = (key) => storage('readwrite', (store) => store.delete(key));
+    const cacheRead = (key) => storage('readonly', (store) => store.get(key));
+    const cachePut = (key, value) => storage('readwrite', (store) => store.put(value, key));
+    async function read(key) {
+        if (key !== 'session' || !nativeSession) return cacheRead(key);
+        let cached;
+        try { cached = await cacheRead(key); } catch (_) { /* optional WebView cache */ }
+        const grant = await nativeSession.read();
+        if (!grant) return cached; // An interrupted first bind still requires server proof.
+        if (grant.locked) return undefined;
+        if (grant.remoteSessionKnown && !grant.remoteSession) return undefined;
+        const durable = grant.remoteSession;
+        const sameOwner = cached?.userId === grant.remotePrincipal && cached?.session?.keyId === grant.keyId;
+        // A crash between renewal and native bind may leave the same session's
+        // newer generation in IndexedDB. Never accept a different account/key.
+        if (sameOwner && (!durable || (cached.session.id === durable.session.id
+            && cached.session.generation >= durable.session.generation))) return cached;
+        return durable || undefined;
+    }
+    async function put(key, value) {
+        try { return await cachePut(key, value); } catch (error) {
+            if (key !== 'session' || !nativeSession) throw error;
+            // installRemote must subsequently complete the verified native bind.
+        }
+    }
+    async function remove(key) {
+        if (key === 'session' && nativeSession) await nativeSession.clear();
+        try { return await storage('readwrite', (store) => store.delete(key)); } catch (error) {
+            if (key !== 'session' || !nativeSession) throw error;
+        }
+    }
     // Atomic add chooses the existing record when two tabs initialize concurrently.
     async function insertOnce(key, candidate) {
         const database = await open();
@@ -90,7 +117,11 @@ export function createAuthDeviceStore({ indexedDB = globalThis.indexedDB, crypto
             }
         };
     }
-    async function forPhone(phone) { return forScope(await phoneScope(phone)); }
+    async function forPhone(phone) {
+        const grant = nativeSession ? await nativeSession.read() : null;
+        if (grant?.phone === phone && grant.scope) return forScope(grant.scope);
+        return forScope(await phoneScope(phone));
+    }
     return { forPhone, forScope, read, put, remove,
         async aliasPhone(previousPhone, nextPhone) {
             const previous = await read(`key:${await phoneScope(previousPhone)}`);

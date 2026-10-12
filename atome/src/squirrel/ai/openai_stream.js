@@ -1,5 +1,17 @@
 // Shared incremental SSE decoder. Transport chunk boundaries are unrelated to
 // UTF-8 characters, SSE lines and provider events.
+// Decode failure categories at the same boundary as events and bytes. Provider
+// messages and arbitrary codes can contain credentials; only known codes travel.
+export const openAiFailure = (body, defaultCode = 'provider_request_failed', httpStatus = null) => {
+    const failure = body?.response?.status_details?.error || body?.response?.error || body?.error || body;
+    const known = ['invalid_api_key', 'insufficient_quota', 'rate_limit_exceeded', 'model_not_found',
+        'invalid_request_error', 'permission_denied', 'server_error', 'context_length_exceeded',
+        'session_expired', 'provider_connection_closed'];
+    const code = [failure?.code, failure?.type].find(value => known.includes(value));
+    const error = new Error(code || defaultCode);
+    error.provider_code = code || ''; error.http_status = httpStatus;
+    return error;
+};
 export async function* readOpenAiEvents(body, { signal, maxEventBytes = 4_000_000 } = {}) {
     if (!body?.getReader) throw new Error('provider_stream_required');
     const reader = body.getReader();

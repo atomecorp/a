@@ -69,11 +69,13 @@ fn capture_and_blur_pyramid_are_downscaled_gpu_targets() {
     let image = app.world().resource::<Assets<Image>>().get(&state.image).unwrap();
     assert_eq!((image.texture_descriptor.size.width, image.texture_descriptor.size.height), (expected.x, expected.y));
     assert_eq!(image.texture_descriptor.mip_level_count, backdrop_mip_level_count(expected));
-    assert!(image.texture_descriptor.usage.contains(TextureUsages::STORAGE_BINDING));
+    // WebGPU guarantees only four storage textures per shader stage; the A12Z
+    // iPad exposes exactly four and a storage-based pyramid quit the renderer.
+    // Every level is written as a colour attachment instead.
+    assert!(!image.texture_descriptor.usage.contains(TextureUsages::STORAGE_BINDING));
+    assert!(image.texture_descriptor.usage.contains(TextureUsages::RENDER_ATTACHMENT));
     assert!(image.data.is_none());
-    // A texture that carries `STORAGE_BINDING` may not expose an sRGB view: the
-    // bind group of the mip pass — and of every material that samples the pyramid
-    // — is rejected outright. The whole chain therefore stays linear.
+    // The capture, the pyramid and the materials sampling it share one linear format.
     assert_eq!(image.texture_descriptor.format, TextureFormat::Rgba8Unorm);
     assert!(image.texture_descriptor.view_formats.is_empty());
     assert!(image.texture_view_descriptor.is_none());

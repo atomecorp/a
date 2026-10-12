@@ -3,8 +3,13 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 
+#[cfg(test)]
+#[path = "../../../../tests/native/local_auth_device.rs"]
+mod tests;
+
 pub(super) fn ensure_schema(state: &LocalAuthState) -> Result<(), String> {
-    state.db.lock().map_err(|_| "local_database_unavailable")?.execute_batch(
+    let db = state.db.lock().map_err(|_| "local_database_unavailable")?;
+    db.execute_batch(
         "CREATE TABLE IF NOT EXISTS auth_local_grants (
             grant_id TEXT PRIMARY KEY, local_principal TEXT NOT NULL, remote_principal TEXT NOT NULL,
             key_id TEXT NOT NULL, key_scope TEXT NOT NULL, generation INTEGER NOT NULL DEFAULT 0,
@@ -13,7 +18,17 @@ pub(super) fn ensure_schema(state: &LocalAuthState) -> Result<(), String> {
             challenge_id TEXT PRIMARY KEY, grant_id TEXT NOT NULL, purpose TEXT NOT NULL,
             reference_id TEXT NOT NULL, nonce TEXT NOT NULL, issued_ms INTEGER NOT NULL,
             expires_ms INTEGER NOT NULL, consumed_ms INTEGER);"
-    ).map_err(|_| "local_auth_schema_unavailable".into())
+    ).map_err(|_| "local_auth_schema_unavailable".to_string())?;
+    let mut statement = db.prepare("PRAGMA table_info(auth_local_grants)").map_err(|_| "local_auth_schema_unavailable")?;
+    let columns = statement.query_map([], |row| row.get::<_, String>(1)).map_err(|_| "local_auth_schema_unavailable")?
+        .collect::<Result<Vec<_>, _>>().map_err(|_| "local_auth_schema_unavailable")?;
+    for (name, kind) in [("remote_session_id", "TEXT"), ("remote_session_generation", "INTEGER")] {
+        if !columns.iter().any(|column| column == name) {
+            db.execute_batch(&format!("ALTER TABLE auth_local_grants ADD COLUMN {name} {kind}"))
+                .map_err(|_| "local_auth_schema_unavailable")?;
+        }
+    }
+    Ok(())
 }
 
 fn field<'a>(message: &'a JsonValue, name: &str) -> Result<&'a str, String> {
@@ -110,7 +125,9 @@ pub(super) async fn handle(
             if response["keyId"] != key_id {
                 return Err("auth_device_binding_mismatch".into());
             }
-            bind(state, &response["user"], scope, &key_id)
+            let session_id = field(message, "sessionId")?;
+            let generation = message["generation"].as_i64().filter(|value| *value >= 0).ok_or("auth_request_invalid")?;
+            bind(state, &response["user"], scope, &key_id, session_id, generation)
         }
         "local-session-describe" => describe(message, state),
         "local-session-challenge" => challenge(message, state),
@@ -126,22 +143,27 @@ fn describe(message: &JsonValue, state: &LocalAuthState) -> Result<JsonValue, St
     let db = state.db.lock().map_err(|_| "local_database_unavailable")?;
     let select = |sql: &str, parameter: &str| {
         db.query_row(sql, [parameter], |r| {
-            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?))
         })
         .optional()
         .map_err(|_| "local_database_unavailable".to_string())
     };
-    let row: Option<(String,String,String,String,i64)> = match requested {
-        Some(grant) => select("SELECT grant_id,local_principal,key_id,key_scope,generation FROM auth_local_grants WHERE grant_id=?1 AND locked=0", grant)?,
+    let condition = if message["includeLocked"] == true { "1=1" } else { "locked=0" };
+    let columns = "grant_id,local_principal,key_id,key_scope,generation,remote_principal,remote_session_id,remote_session_generation,locked";
+    let row: Option<(String,String,String,String,i64,String,Option<String>,Option<i64>,i64)> = match requested {
+        Some(grant) => select(&format!("SELECT {columns} FROM auth_local_grants WHERE grant_id=?1 AND {condition}"), grant)?,
         None => None,
-    }.or(select("SELECT grant_id,local_principal,key_id,key_scope,generation FROM auth_local_grants WHERE locked=0 AND ?1='' ORDER BY rowid DESC LIMIT 1", "")?);
-    let Some((grant, principal, key_id, scope, generation)) = row else {
+    }.or(select(&format!("SELECT {columns} FROM auth_local_grants WHERE {condition} AND ?1='' ORDER BY rowid DESC LIMIT 1"), "")?);
+    let Some((grant, principal, key_id, scope, generation, remote_principal, remote_id, remote_generation, locked)) = row else {
         return Ok(json!({"ok":true,"localGrant":null}));
     };
     let user = super::user(&db, &principal)?;
+    let remote_session = remote_id.as_ref().filter(|id| !id.is_empty()).map(|id| json!({"phone":user["phone"],
+        "userId":remote_principal,"session":{"id":id,"generation":remote_generation.unwrap_or(0),"keyId":key_id}}));
     Ok(
-        json!({"ok":true,"localGrant":{"phone":user["phone"],"keyId":key_id,
-        "scope":scope,"user":user,"localSession":{"id":grant,"generation":generation},"locked":false}}),
+        json!({"ok":true,"localGrant":{"remoteSession":remote_session,"remoteSessionKnown":remote_id.is_some(),
+        "remotePrincipal":remote_principal,"phone":user["phone"],"keyId":key_id,
+        "scope":scope,"user":user,"localSession":{"id":grant,"generation":generation},"locked":locked != 0}}),
     )
 }
 
@@ -150,6 +172,8 @@ fn bind(
     remote_user: &JsonValue,
     scope: &str,
     key_id: &str,
+    remote_session_id: &str,
+    remote_session_generation: i64,
 ) -> Result<JsonValue, String> {
     let remote_id = field(remote_user, "id")?;
     let phone = field(remote_user, "phone")?;
@@ -157,6 +181,11 @@ fn bind(
     let (grant, principal, generation) = {
         let mut db = state.db.lock().map_err(|_| "local_database_unavailable")?;
         let tx = db.transaction().map_err(|_| "local_database_unavailable")?;
+        let previous_remote: Option<(Option<String>, Option<i64>)> = tx.query_row(
+            "SELECT remote_session_id,remote_session_generation FROM auth_local_grants WHERE remote_principal=?1 AND key_id=?2",
+            rusqlite::params![remote_id,key_id], |row| Ok((row.get(0)?,row.get(1)?))).optional().map_err(|_| "local_database_unavailable")?;
+        if previous_remote.as_ref().is_some_and(|(id, generation)| id.as_deref() == Some(remote_session_id)
+            && generation.unwrap_or(-1) > remote_session_generation) { return Err("auth_session_stale".into()); }
         let existing: Option<(String, String, i64)> = tx.query_row(
             "SELECT grant_id, local_principal, generation FROM auth_local_grants WHERE remote_principal = ?1 AND key_id = ?2",
             rusqlite::params![remote_id, key_id], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional().map_err(|_| "local_database_unavailable")?;
@@ -221,9 +250,9 @@ fn bind(
                 &JsonMap::new(),
             )?;
         }
-        tx.execute("INSERT INTO auth_local_grants VALUES (?1,?2,?3,?4,?5,?6,0)
-            ON CONFLICT(remote_principal,key_id) DO UPDATE SET locked=0,generation=excluded.generation",
-            rusqlite::params![grant,principal,remote_id,key_id,scope,generation]).map_err(|_| "local_account_write_failed")?;
+        tx.execute("INSERT INTO auth_local_grants (grant_id,local_principal,remote_principal,key_id,key_scope,generation,locked,remote_session_id,remote_session_generation) VALUES (?1,?2,?3,?4,?5,?6,0,?7,?8)
+            ON CONFLICT(remote_principal,key_id) DO UPDATE SET locked=0,generation=excluded.generation,remote_session_id=excluded.remote_session_id,remote_session_generation=excluded.remote_session_generation",
+            rusqlite::params![grant,principal,remote_id,key_id,scope,generation,remote_session_id,remote_session_generation]).map_err(|_| "local_account_write_failed")?;
         tx.commit().map_err(|_| "local_account_write_failed")?;
         (grant, principal, generation)
     };
@@ -331,8 +360,13 @@ fn consume(message: &JsonValue, state: &LocalAuthState) -> Result<JsonValue, Str
         )
         .map_err(|_| "local_database_write_failed")?;
         if locking {
+            let sql = if message["remoteOnly"] == true {
+                "UPDATE auth_local_grants SET remote_session_id='',remote_session_generation=NULL WHERE grant_id=?1"
+            } else {
+                "UPDATE auth_local_grants SET locked=1,generation=generation+1,remote_session_id='',remote_session_generation=NULL WHERE grant_id=?1"
+            };
             tx.execute(
-                "UPDATE auth_local_grants SET locked=1,generation=generation+1 WHERE grant_id=?1",
+                sql,
                 [grant],
             )
             .map_err(|_| "local_database_write_failed")?;

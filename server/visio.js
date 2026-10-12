@@ -8,7 +8,8 @@ import { wsSendJson } from './wsSend.js';
 
 import { DEFAULT_RTC_MIN_PORT, DEFAULT_RTC_MAX_PORT, DEFAULT_LISTEN_IP, DEFAULT_MEDIA_CODECS, nowIso, normalizePhone, makeRequestId, safeParseJson, normalizeVisibility, ensureSet } from './visio_helpers.js';
 import { createWsHandler } from './visio_ws_handler.js';
-import { createVisioRoutes } from './visio_routes.js';
+import { createVisioCommands } from './visio_commands.js';
+import { wsSendJsonToUser, wsApiClientsByUserId } from './wsApiState.js';
 
 export function createVisioService(options = {}) {
   const {
@@ -102,7 +103,7 @@ export function createVisioService(options = {}) {
     if (!room) return;
     for (const peer of room.peers.values()) {
       if (excludePeerId && peer.id === excludePeerId) continue;
-      wsSendJson(peer.connection, payload, { scope: 'ws/visio', op: payload?.type || 'event' });
+      wsSendJson(peer.connection, { type: 'visio-event', room_id: roomId, data: payload }, { scope: 'ws/api', op: 'visio' });
     }
   }
 
@@ -209,11 +210,7 @@ export function createVisioService(options = {}) {
       return null;
     }
 
-    return {
-      id: userId || null,
-      phone: null,
-      username: null
-    };
+    return null;
   }
 
   // `userId` peut joindre `otherUserId` : contact accepte et aucun blocage (D3/D4).
@@ -253,6 +250,8 @@ export function createVisioService(options = {}) {
   async function canJoinRoom(userId, roomId) {
     const meta = await resolveRoomMeta(roomId);
     if (!userId || !meta) return false;
+    if (meta.call_status && !['preparing', 'ringing', 'live'].includes(meta.call_status)) return false;
+    if (meta.call_status === 'ringing' && meta.owner_user_id !== userId) return false;
     if (meta.owner_user_id === userId) return true;
     if (relations && meta.owner_user_id && await relations.blockedEitherWay(meta.owner_user_id, userId)) return false;
     if (meta.invites?.has(userId) || meta.visibility === 'public') return true;
@@ -285,41 +284,29 @@ export function createVisioService(options = {}) {
 
   const handleWsMessage = createWsHandler({ rooms, listenIp, announcedIp, ensureRoom, notifyRoom, closePeer, verifyJwtToken, resolveUserInfo, ensureRoomMeta, canJoinRoom });
 
-  function registerWebsocket(server, options = {}) {
-    const wsPath = options.path || '/ws/visio';
-    server.register(async function (fastify) {
-      fastify.get(wsPath, { websocket: true }, (connection) => {
-        connection.on('message', async (message) => {
-          const data = safeParseJson(message.toString());
-          if (!data) {
-            wsSendJson(connection, { type: 'error', error: 'Invalid JSON' }, { scope: 'ws/visio', op: 'parse' });
-            return;
-          }
-          try {
-            await handleWsMessage(connection, data);
-          } catch (error) {
-            wsSendJson(connection, {
-              type: 'error',
-              error: error?.message || String(error),
-              requestId: data?.requestId || null
-            }, { scope: 'ws/visio', op: 'handler' });
-          }
-        });
-
-        connection.on('close', () => {
-          if (connection._visioRoomId && connection._visioPeerId) {
-            closePeer(connection._visioRoomId, connection._visioPeerId);
-          }
-        });
-      });
-    });
-  }
-
-  const registerRoutes = createVisioRoutes({ rooms, connectionRequests, connections, databaseEnabled, ensureRoom, resolveAuthUserFromRequest, resolveUserInfo, isConnected, addConnection, getRoomMeta, resolveRoomMeta, saveScheduledRoom, ensureRoomMeta, canJoinRoom, relations, notify });
+  const commands = createVisioCommands({ ensureRoomMeta, resolveRoomMeta, resolveUserInfo, relations,
+    notify, saveScheduledRoom, closeRoom,
+    online: userId => Boolean(wsApiClientsByUserId.get(userId)?.size),
+    publish: (userId, data) => wsSendJsonToUser(userId, { type: 'visio-event', room_id: data.roomId, data }, { scope: 'ws/api', op: 'visio' }) });
+  const signaling = new Set(['joinRoom', 'leaveRoom', 'createTransport', 'connectTransport', 'produce', 'consume',
+    'pauseProducer', 'resumeProducer', 'closeProducer', 'resumeConsumer']);
+  const handleCommand = async (userId, action, input, connection) => {
+    if (!signaling.has(action)) return commands.execute(userId, action, input, connection._wsApiVaultRouter);
+    connection._visioUserId = userId;
+    let reply = null;
+    await handleWsMessage(connection, { ...input, type: action }, payload => { reply = payload; });
+    if (reply?.type === 'error') throw new Error(reply.error);
+    // La reponse interne porte `requestId: null` et son propre `type` : etales
+    // dans la reponse /ws/api, ils ecrasaient l'identifiant de la requete et le
+    // client ne la reconnaissait jamais (joinRoom/leaveRoom en « Request timeout »).
+    const { requestId: _requestId, request_id: _requestIdAlt, type: signal, ...result } = reply || {};
+    return { ...result, signal };
+  };
+  const closeConnection = connection => {
+    if (connection._visioRoomId && connection._visioPeerId) closePeer(connection._visioRoomId, connection._visioPeerId);
+  };
 
   return {
-    registerWebsocket,
-    registerRoutes,
-    ensureRoom
+    handleCommand, closeConnection, dispose: commands.dispose, ensureRoom
   };
 }

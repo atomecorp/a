@@ -4,8 +4,10 @@ import { buildBevyMainMenuItems } from '../../eVe/intuition/ribbon/bevy_ui_main_
 import { createProjectViewListView } from '../../eVe/domains/rendering/project_view_list_view.js';
 import { projectCreationViewProperties } from '../../eVe/domains/rendering/project_creation_view_properties.js';
 import { BEGINNER_LIST_RAIL_KEYS, projectViewListRailToolKeys } from '../../eVe/domains/rendering/project_view_list_options.js';
+import { createAtomeContextualEditRuntime } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_runtime.js';
+import * as surfaceState from '../../eVe/domains/rendering/project_view_surface_runtime.js';
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 const roots = ['capture', 'create', 'find', 'communicate', 'calendar', 'view', 'help', 'contact'];
 const content = { toolbox: { children: roots }, ...Object.fromEntries(roots.map(key => [key, {
@@ -91,4 +93,59 @@ test('only beginner creation receives List and explicit views remain authoritati
             expect(projectCreationViewProperties(explicit, { windowRef })).toBe(explicit);
         }
     }
+});
+
+test('blank beginner List adds native Delete only for a deletable row, preserving the other tool order', () => {
+    const context = { level: 'beginner', selected: true, records: [{ capabilities: { write: true, delete: true } }],
+        projectRecord: { id: 'blank', type: 'project', properties: {}, capabilities: { create: true } } };
+    expect(projectViewListRailToolKeys({ context })).toEqual(['delete', ...BEGINNER_LIST_RAIL_KEYS]);
+    expect(projectViewListRailToolKeys({ context: { ...context, type: 'project' } })).toEqual(BEGINNER_LIST_RAIL_KEYS);
+    expect(projectViewListRailToolKeys({ context: { ...context, records: [{ capabilities: { write: true, delete: false } }] } }))
+        .toEqual(BEGINNER_LIST_RAIL_KEYS);
+    for (const properties of [{ project_intent: { family: 'creation' } }, { project_program: {} },
+        { project_tags: ['news'] }, { project_tags: ['template'] }, { system_template_key: 'sleep' },
+        { template_link: { source_project_id: 'template' } }]) {
+        expect(projectViewListRailToolKeys({ context: { ...context, projectRecord: { ...context.projectRecord, properties } } }))
+            .toEqual(BEGINNER_LIST_RAIL_KEYS);
+    }
+});
+
+test('blank beginner List filters Organizer after canonical access and keeps the shared rail at the bottom', async () => {
+    const projectId = 'blank', row = { id: 'row', project_id: projectId, type: 'text', properties: {} };
+    const projectRecord = { id: projectId, type: 'project', properties: {}, capabilities: { create: true } };
+    const win = { __eveProfilePreferences: { visual: { masteryLevel: 'beginner' } },
+        __eveWorkspaceMode: { mode: 'project', projectId }, __selectedAtomeIds: [row.id],
+        requestAnimationFrame: () => 1, dispatchEvent: vi.fn() };
+    vi.stubGlobal('window', win);
+    const mounted = vi.fn();
+    const surface = { getBoundingClientRect: () => ({ width: 900, height: 720 }) };
+    vi.spyOn(surfaceState, 'readProjectViewSurfaceState').mockReturnValue({ mounted: true, projectId, mode: 'list' });
+    const runtime = createAtomeContextualEditRuntime({ legacyState: {},
+        resolveDefinitions: () => ['delete', ...BEGINNER_LIST_RAIL_KEYS].map((key, index) => ({ key, priority: index + 1 })),
+        invokeDefinition: async () => ({ ok: true }), surfaceResolver: () => surface,
+        bevyRuntimeResolver: () => ({ mountTree: mounted, updateTree: mounted }),
+        readMenuAccess: async () => ({ projectRecord, records: [row] }),
+        readMainMenuHeight: () => 60, findSceneByAtomeId: () => null });
+    runtime.enter({ atomeId: row.id, projectId, record: { ...row, structured_context: true }, railOnly: true,
+        extraDefinitions: [{ key: 'container_dashboard', priority: 10000 }] });
+    await runtime.render();
+    const railKeys = () => mounted.mock.lastCall[0].tree.root.children.find(node => node.kind === 'scroll_area')
+        .children[0].children.map(node => node.id.replace('atome_contextual_tool_', ''));
+    expect(railKeys()).toEqual(['delete', ...BEGINNER_LIST_RAIL_KEYS]);
+    const layout = runtime.readState().railLayout;
+    expect(layout.y + layout.railHeight).toBe(layout.bottom);
+    expect(layout.bottom).toBe(720 - 60 - layout.gap);
+    projectRecord.properties = { project_intent: { family: 'creation' } };
+    await runtime.render();
+    expect(railKeys().at(-1)).toBe('container_dashboard');
+    projectRecord.properties = {};
+    for (const masteryLevel of ['intermediate', 'advanced']) {
+        win.__eveProfilePreferences.visual.masteryLevel = masteryLevel;
+        await runtime.render();
+        expect(railKeys().at(-1)).toBe('container_dashboard');
+    }
+    win.__eveProfilePreferences.visual.masteryLevel = 'beginner';
+    surfaceState.readProjectViewSurfaceState.mockReturnValue({ mounted: true, projectId, mode: 'matrix' });
+    await runtime.render();
+    expect(railKeys().at(-1)).toBe('container_dashboard');
 });

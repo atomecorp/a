@@ -6,11 +6,23 @@ Status on 2026-10-03: existing iOS/Android read-only owners are preserved. iOS H
 
 Dashboard → rubrique **Moniteur** (clé `monitor`) → bande « Nouveau » de l'en-tête → panneau Bevy standard `dashboard_health_monitors` → liste standard (`hierarchicalSelectableListNode`) avec le rail de cases standard (`createListSelectionRuntime`) → cellules de la ligne Moniteur (et sa vue filtrée existante).
 
-- iOS header entry checks capabilities and account association, then requests the available HealthKit catalog only when the system reports a request is necessary. Tile entry only opens the existing panel and never requests HealthKit. Android panel entry still checks status without prompting.
+- iOS header entry checks capabilities and account association, then requests the available HealthKit catalog only when the system reports a request is necessary. Since 2026-10-11 that same gesture associates a signed-in, not-yet-associated device first (`dashboard_health_modules.js::requestAccessFor`): previously it returned silently and no sheet ever appeared. A health tile opens the reusable detail panel and never requests HealthKit. Android panel entry still checks status without prompting.
 - Checking preserves canonical selection, persistence rollback, subscriptions and cells. iOS HealthKit types never request from a checkbox; the direct Motion sensor and Android retain their selected-type requests. Association resumes the central HealthKit initialization.
 - Décocher : la cellule et l'abonnement sont retirés immédiatement. Aucune donnée n'est effacée dans Santé ou Health Connect, et la permission système n'est pas révoquée.
-- The fixed footer shows Associate before any measure is checked when the device/account link is missing, or when an iOS HealthKit request is still unanswered. Its action uses the existing link/request owner. Android retains Allow access; known denied/restricted access retains Open settings. No read refusal is inferred from empty HealthKit data.
+- The fixed footer shows Associate (a retry after a failed automatic association) when the device/account link is missing, or when an iOS HealthKit request is still unanswered. Its action uses the existing link/request owner. Android retains Allow access; known denied/restricted access retains Open settings. No read refusal is inferred from empty HealthKit data.
 - Opening awaits capability/link status before mounting the first tree: the shared shell suppresses refresh while initializing. Help paragraphs are removed, and fixed-row actions share the available width so no action is pushed outside the panel.
+
+## Détail réutilisable (2026-10-11)
+
+Une cellule santé Professional ou Basic ouvre le panneau standard partagé `health_monitor_detail`. Son fond s’agrandit depuis le rectangle réel de la cellule ; les contrôles apparaissent après l’animation. Une rubrique referme le détail avant de sélectionner ses cellules. Moniteur → Nouveau garde le panneau existant `dashboard_health_monitors`, ses cases et son propriétaire de sélection.
+
+Le détail ouvre aujourd’hui, charge 30 résumés civils puis le jour sélectionné. Graphique horodaté, agrégats horaires des cumuls, minimum/maximum/moyenne et moyenne personnelle sur les jours antérieurs complets renseignés. SDNN et RMSSD restent distincts ; aucune note clinique n’est calculée. Le sommeil garde les phases natives et la chronologie nocturne, rattachées au réveil. La récupération cardiaque exige un effort identifié et des mesures d’une même source, avec les délais réels. Les absences ne deviennent pas des zéros. Le compteur Android depuis activation peut afficher sa valeur actuelle mais fournit explicitement aucun historique.
+
+Le propriétaire santé expose en interne `readHistory(monitorId, { from, to, detail, signal })` via le canal scellé existant. Résultats par clés distinctes, lots bornés, quantités historiques limitées à 1000 points par intervalle et signalées partielles à la limite. Aucun stockage ni export de valeurs ; les réponses tardives sont rejetées après compte, accès, capteur, jour ou fermeture. Abort annule les lots suivants, sans nouvelle commande native d’annulation des requêtes déjà en vol.
+
+Les propriétaires réutilisables sont `health_history.js`, `health_history_reader.js`, `bevy_panel_health_detail_runtime.js`, `bevy_panel_health_detail_view.js`, `bevy_panel_history_graph.js` et `bevy_panel_cell_presentation.js`. Ils composent les textes, boutons, listes, états, tokens et primitives Bevy existants, sur le seul canvas du projet. Android factorise ses requêtes dans `HealthReadQueries.kt`, sans modifier les permissions.
+
+Validation : tests persistants et compilations iOS simulateur arm64/app/AUv3 et Kotlin Android réussis. Les lectures natives sur appareils physiques ne sont pas validées par ces compilations. Le placement à 320 px recouvre encore le rail : autorisation de correction partagée en attente. Le clic réel Basic et les pixels finaux du composant (données de test injectées, navigation, fermeture rapide et redimensionnement) passent à 390/1024 px avec les deux dispositions. Les clics Professional cellule/rubrique/Nouveau passent avant les changements concurrents du Dashboard ; la dernière ouverture du Dashboard rencontre `squirrel_action_button_label_required` dans son nouveau bouton latéral, hors de ce détail. **To verify** : largeur 320 px, pixels finaux après résolution de cette ouverture, et lectures réelles HealthKit/Health Connect.
 
 ## Architecture (propriétaires)
 
@@ -148,7 +160,7 @@ Pour l'IMC, seul l'échantillon natif HealthKit est lu ; aucun IMC dérivé n'es
 **iOS (iPhone réel, app `atome`)**
 1. Build signé avec un profil qui inclut la capacité HealthKit.
 2. Open Dashboard → Monitor → New. For an already linked account, verify a single system sheet for the available HealthKit catalog; Motion is excluded.
-3. For an unlinked account, use the visible Associate action before or after choosing monitors. Verify centralized HealthKit initialization, unchanged cells, and no HealthKit request from subsequent checkbox or tile actions.
+3. For an unlinked signed-in account, opening Monitor → New associates the device and shows the sheet directly (verified on the A12Z iPad 2026-10-11); Associate remains the retry. Verify centralized HealthKit initialization, unchanged cells, and no HealthKit request from subsequent checkbox or tile actions.
 4. Refuser l'un des deux. Le moniteur doit rester affiché, avec « Aucune donnée lisible » et non « refusé ».
 5. Ajouter une mesure dans l'app Santé. La cellule doit se mettre à jour au retour.
 6. Se déconnecter puis se connecter avec un autre compte : aucune valeur, « Association requise ».

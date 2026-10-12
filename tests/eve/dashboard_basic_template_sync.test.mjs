@@ -37,7 +37,7 @@ beforeEach(() => {
         system_template_key: 'dashboard_basic', system_template_version: 5 } });
     store.records.set('home', { id: 'home', type: 'project', properties: {
         template_link: { source_project_id: 'source' }, personal_preference: 'keep' } });
-    const old = FIRST_LAUNCH_TEMPLATES.dashboard_basic.atoms.filter(atom => !atom.ref.endsWith('_background')).map(atom => {
+    const old = FIRST_LAUNCH_TEMPLATES.dashboard_basic.atoms.filter(atom => !atom.ref.endsWith('_background') && !atom.ref.startsWith('discussions') && !['discussion', 'new_discussion'].includes(atom.ref)).map(atom => {
         const isAdd = ['new_program', 'new_monitor'].includes(atom.ref);
         return { id: 'source-' + atom.ref, type: atom.type, project_id: 'source',
             parent_id: 'source-' + (isAdd ? atom.ref === 'new_program' ? 'programs_title_group' : 'monitors_title_group' : atom.parent_ref || '').replace(/^$/, 'root'),
@@ -63,8 +63,8 @@ afterEach(() => { dom.window.close(); vi.unstubAllGlobals(); });
 it('updates the installed v5 source and existing home through canonical commits, retaining identities and values', async () => {
     const identities = [...store.records.values()].filter(record => record.project_id === 'home').map(record => record.id);
     const migrated = await syncTemplateInstance('home');
-    expect(migrated.ok).toBe(true); expect(migrated.created).toHaveLength(2);
-    expect(store.records.get('source').properties.system_template_version).toBe(6);
+    expect(migrated.ok).toBe(true); expect(migrated.created).toHaveLength(7);
+    expect(store.records.get('source').properties.system_template_version).toBe(7);
     for (const id of identities) {
         expect(store.records.get(id).deleted).not.toBe(true);
         if (store.records.get(id).properties.template_control) expect(store.records.get(id).properties.template_value).toBe('user-value');
@@ -77,7 +77,7 @@ it('updates the installed v5 source and existing home through canonical commits,
         expect(store.records.get(cell.parent_id).properties.matrix_template).toBe('dashboard_basic');
     }
     expect(homeCells.filter(record => record.properties.template_control?.kind === 'group'
-        && !record.properties.template_control.operation)).toHaveLength(2);
+        && !record.properties.template_control.operation)).toHaveLength(3);
     store.batches = [];
     expect(await syncTemplateInstance('home')).toMatchObject({ ok: true, created: [], updated: [] });
     expect(store.batches).toHaveLength(0);

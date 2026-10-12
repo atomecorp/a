@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, test, vi } from 'vitest';
 import { createPhoneLinkClient } from '../../atome/src/squirrel/security/auth_phone_link_client.js';
 import { messageHandlerMixin } from '../../atome/src/squirrel/apis/unified/adole_websocket_message.js';
 
@@ -132,4 +132,19 @@ describe('phone-link client serialization', () => {
         expect(actions).toEqual([{ type: 'auth', action: 'phone-link-confirm', attemptId, token }]);
         expect(installed).toBe(false);
     });
+});
+
+test('logout captures the durable descriptor before local locking erases it, then proves remote revocation',async()=>{
+ let record={phone:'+33612345678',session:{id:'qa-session',generation:3}};
+ const actions=[];const devices={read:async()=>record,forPhone:async()=>({keyId:'qa-key',sign:async()=>({challengeId:'qa-proof',signature:'qa-signature'})}),remove:async()=>{actions.push('clear');},put:async()=>{}};
+ const client=createPhoneLinkClient({devices,locks:null,installSession:async()=>{},now:()=>1800000000000,send:async message=>{
+ actions.push(message.action);expect(message.sessionId).toBe('qa-session');
+ return message.action==='session-challenge'?{ok:true,challenge:{purpose:'logout',reference:'qa-session:3',issuedAt:1800000000000}}:{ok:true};
+ }});
+ await client.revoke('logout',undefined,async()=>{actions.push('local-lock');record=null;});
+ expect(actions).toEqual(['local-lock','session-challenge','session-logout','clear']);
+});
+test('failed native lock prevents remote logout and leaves the descriptor usable',async()=>{
+ const send=vi.fn();const client=createPhoneLinkClient({devices:{read:async()=>({phone:'+33612345678',session:{id:'qa-session'}})},send,locks:null,installSession:async()=>{}});
+ await expect(client.revoke('logout',undefined,async()=>{throw new Error('auth_proof_invalid');})).rejects.toThrow('auth_proof_invalid');expect(send).not.toHaveBeenCalled();
 });

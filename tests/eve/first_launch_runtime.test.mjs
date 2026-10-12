@@ -9,6 +9,12 @@ import { createFirstLaunchRuntime } from '../../eVe/domains/user/first_launch_ru
 import { FIRST_LAUNCH_TEMPLATES } from '../../eVe/domains/templates/first_launch_template_catalog.js';
 import { buildMatrixToolDefinitions } from '../../eVe/intuition/tools/core/tool_runtime_bootstrap_matrix_defs.js';
 import { setSessionState } from '../../atome/src/squirrel/apis/unified/adole_api/session.js';
+import { JSDOM } from 'jsdom';
+import { bevyPanelRuntimeState } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js';
+import { buildBevyPanelTree, textNode } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tree.js';
+import { projectPanelStack } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_projection.js';
+import { projectBevyUiTreeRecords } from '../../eVe/domains/rendering/bevy_ui_overlay_record_projection.js';
+import { createMatrixTemplateRuntime } from '../../eVe/domains/matrix/matrix_template_runtime.js';
 const user = { id: 'new', first_launch_version: 1 };
 const fixture = (initial = { preferences: { visual: { masteryLevel: 'advanced' }, custom: 'preserved' } }) => {
     let profile = structuredClone(initial), current = user, fields;
@@ -26,7 +32,7 @@ const fixture = (initial = { preferences: { visual: { masteryLevel: 'advanced' }
         installTemplate, createTemplate, finish,
         guest, submit: async () => ({ ok: true, paymentRequired: true }),
         createPresentation: options => { fields = options; return { open: async () => { renders.push(flow.state.stage); return { ok: true }; }, destroy: async () => {}, render: async () => ({ ok: true }) }; } });
-    return { flow, saves, renders, finish, createTemplate, guest, loadProfile, installTemplate, profile: () => profile, draft: (key, value) => fields.writeDraft(key, value), submitField: key => fields.onSubmit(key), switchUser: () => { current = { id: 'other' }; } };
+    return { flow, saves, renders, finish, createTemplate, guest, loadProfile, installTemplate, presentation: () => fields, profile: () => profile, draft: (key, value) => fields.writeDraft(key, value), submitField: key => fields.onSubmit(key), switchUser: () => { current = { id: 'other' }; } };
 };
 beforeEach(() => {
     globalThis.window = { dispatchEvent: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn(), __eveProfilePreferences: {}, AdoleAPI: { sync: { flushWorkspace: vi.fn(async () => ({ ok: true })) }, auth: {
@@ -38,6 +44,40 @@ beforeEach(() => {
     setSessionState({ mode: 'logged_out', user: null }, { persist: false, silent: true });
 });
 describe('first-launch canonical lifecycle', () => {
+    it('paints reconnection above the complete caller while retaining its pending editor', async () => {
+        const oldDocument = globalThis.document, oldMounted = new Map(bevyPanelRuntimeState.mounted);
+        const dom = new JSDOM('<canvas id="eve_surface_project"></canvas>');
+        globalThis.document = dom.window.document;
+        const surface = document.getElementById('eve_surface_project');
+        Object.defineProperties(surface, { clientWidth: { value: 390 }, clientHeight: { value: 844 } });
+        const tree = buildBevyPanelTree({ id: 'qa_pending_vault', geometry: { x: 0, y: 0, width: 390, height: 844 },
+            surfaceSize: { width: 390, height: 844 }, bodyChildren: [textNode('qa_pending_secret', '••••••••', { size: [140, 30] })] });
+        const mounted = new Map([['qa_pending_vault', { openingOrder: 1, relativeTree: tree, tree, surface }]]);
+        const painted = [], uiRuntime = { mountTree: async ({ tree }) => painted.push(tree), updateTree: async () => {},
+            updateTreeMotion: async () => ({ ok: true }), unmountTree: async () => {} };
+        let presentation;
+        const f = fixture();
+        try {
+            await projectPanelStack({ mounted, runtime: uiRuntime });
+            bevyPanelRuntimeState.mounted.clear();
+            for (const [key, value] of mounted) bevyPanelRuntimeState.mounted.set(key, value);
+            const pending = mounted.get('qa_pending_vault');
+            await f.flow.open({ credentials: true });
+            presentation = createMatrixTemplateRuntime({ ...f.presentation(), uiRuntime });
+            await presentation.open();
+            const paints = entry => projectBevyUiTreeRecords({ tree: entry, treeId: entry.id, workspaceLayer: 'panel' });
+            const callerTop = Math.max(...paints(pending.tree).map(record => record.properties.renderLayer));
+            const loginBottom = Math.min(...paints(painted.at(-1)).map(record => record.properties.renderLayer));
+            expect(loginBottom).toBeGreaterThan(callerTop);
+            expect(Math.max(...paints(painted.at(-1)).map(record => record.properties.renderLayer))).toBeLessThan(5000);
+            expect(bevyPanelRuntimeState.mounted.get('qa_pending_vault')).toBe(pending);
+            expect(pending.relativeTree).toBe(tree);
+        } finally {
+            await presentation?.destroy(); await f.flow.close();
+            bevyPanelRuntimeState.mounted.clear(); for (const [key, value] of oldMounted) bevyPanelRuntimeState.mounted.set(key, value);
+            globalThis.document = oldDocument; dom.window.close();
+        }
+    });
     it('edits the optional nickname without exposing or replacing the technical username', async () => {
         const username = 'user_a143b08c-54bd-430c-a5ac';
         const f = fixture({ username, nickname: '', preferences: { first_launch: { version: 1, step: 'profile' } } });
@@ -361,4 +401,18 @@ it('phone Enter invokes the same registered authentication action as Continue', 
     const invalid = fixture(); await invalid.flow.open({ credentials: true }); invalid.draft('phone', 'abc');
     expect(await invalid.flow.handle({ operation: 'authenticate' })).toMatchObject({ ok: false, error: 'auth_phone_e164_required' });
     expect(invalid.flow.state.stage).toBe('phone');
+});
+
+
+it.each([true, false])('publishes the canonical home reference before its activation, finish succeeds: %s', async succeeds => {
+    const f = fixture({ preferences: { visual: { masteryLevel: 'beginner' }, first_launch: { version: 1, step: 'program', program_id: 'sleep-project' } } });
+    await f.flow.authenticated({ user });
+    f.finish.mockImplementation(async ({ homeId }) => {
+        expect(window.__eveProfilePreferences.workspace.home_template_project_id).toBe(homeId);
+        expect(f.profile().preferences.workspace.home_template_project_id).toBe(homeId);
+        expect(f.profile().preferences.first_launch.step).toBe('program');
+        return succeeds ? { ok: true } : { ok: false, error: 'activation_failed' };
+    });
+    expect(await f.flow.handle({ operation: 'finish' })).toMatchObject({ ok: succeeds });
+    expect(f.profile().preferences.first_launch.step).toBe(succeeds ? 'complete' : 'program');
 });

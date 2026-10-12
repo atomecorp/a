@@ -1,19 +1,14 @@
 use bevy::{
-    core_pipeline::{
-        mip_generation::{generate_mips_for_phase, MipGenerationJobs, MipGenerationPhaseId, MipGenerationPipelines},
-        upscaling::upscaling,
-        Core2d,
-    },
+    core_pipeline::{upscaling::upscaling, Core2d},
     ecs::schedule::ScheduleConfigs,
     prelude::*,
     render::{
         extract_component::ExtractComponentPlugin,
         extract_resource::ExtractResourcePlugin,
         render_asset::RenderAssets,
-        render_resource::PipelineCache,
         renderer::{RenderContext, ViewQuery},
         texture::GpuImage,
-        Extract, ExtractSchedule, RenderApp,
+        RenderApp,
     },
 };
 
@@ -23,7 +18,6 @@ use crate::workspace_backdrop::{AtomeWorkspaceBackdrop, AtomeWorkspaceCamera};
 /// quarter resolution removes detail that a backdrop blur would discard while
 /// reducing both capture bandwidth and every following mip level by 16x.
 pub const WORKSPACE_BACKDROP_DOWNSCALE: u32 = 4;
-const WORKSPACE_BLUR_MIP_PHASE: MipGenerationPhaseId = MipGenerationPhaseId(0xA70);
 
 pub fn backdrop_capture_pixel_size(surface_pixel_size: UVec2) -> UVec2 {
     UVec2::new(
@@ -32,9 +26,9 @@ pub fn backdrop_capture_pixel_size(surface_pixel_size: UVec2) -> UVec2 {
     )
 }
 
-/// Full mip count, bounded by Bevy's single-pass downsampler capacity.
+/// Full mip count down to a single texel.
 pub fn backdrop_mip_level_count(pixel_size: UVec2) -> u32 {
-    (u32::BITS - pixel_size.max_element().max(1).leading_zeros()).min(12)
+    u32::BITS - pixel_size.max_element().max(1).leading_zeros()
 }
 
 /// Converts a public logical-pixel radius into an interpolated pyramid level.
@@ -108,6 +102,8 @@ pub fn refresh_backdrop_blur_metrics(world: &mut World, device_pixel_ratio: f32)
 
 #[path = "workspace_blur_composition.rs"]
 pub(crate) mod composition;
+#[path = "workspace_blur_pyramid.rs"]
+pub(crate) mod pyramid;
 
 pub struct WorkspaceBlurPlugin;
 
@@ -121,9 +117,8 @@ impl Plugin for WorkspaceBlurPlugin {
             ExtractResourcePlugin::<AtomeWorkspaceBackdrop>::default(),
             ExtractComponentPlugin::<AtomeWorkspaceCamera>::default(),
         ));
-        app.sub_app_mut(RenderApp)
-            .add_systems(ExtractSchedule, enqueue_workspace_blur_mips)
-            .add_systems(Core2d, workspace_blur_mip_pass());
+        app.sub_app_mut(RenderApp).add_systems(Core2d, workspace_blur_mip_pass());
+        pyramid::install(app);
         composition::install(app);
     }
 }
@@ -137,33 +132,25 @@ pub(crate) fn workspace_blur_mip_pass() -> ScheduleConfigs<bevy::ecs::system::Sc
     generate_workspace_blur_mips.after(upscaling)
 }
 
-fn enqueue_workspace_blur_mips(backdrop: Extract<Res<AtomeWorkspaceBackdrop>>, mut jobs: ResMut<MipGenerationJobs>) {
-    if backdrop.enabled {
-        jobs.add(WORKSPACE_BLUR_MIP_PHASE, backdrop.image.id());
-    }
-}
-
 fn generate_workspace_blur_mips(
     _capture_view: ViewQuery<(), With<AtomeWorkspaceCamera>>,
     backdrop: Res<AtomeWorkspaceBackdrop>,
-    jobs: Res<MipGenerationJobs>,
-    pipeline_cache: Res<PipelineCache>,
-    pipelines: Option<Res<MipGenerationPipelines>>,
+    pyramid: pyramid::BlurPyramid,
     gpu_images: Res<RenderAssets<GpuImage>>,
     mut context: RenderContext,
-) {
-    let Some(pipelines) = pipelines else {
-        return;
-    };
-    let (Some(capture), Some(pyramid)) =
+) -> Result<(), BevyError> {
+    if !backdrop.enabled || !pyramid.ready()? {
+        return Ok(());
+    }
+    let (Some(capture), Some(target)) =
         (gpu_images.get(backdrop.capture_image.id()), gpu_images.get(backdrop.image.id()))
     else {
-        return;
+        return Ok(());
     };
     context.command_encoder().copy_texture_to_texture(
         capture.texture.as_image_copy(),
-        pyramid.texture.as_image_copy(),
+        target.texture.as_image_copy(),
         capture.texture_descriptor.size,
     );
-    generate_mips_for_phase(WORKSPACE_BLUR_MIP_PHASE, &jobs, &pipeline_cache, &pipelines, &gpu_images, &mut context);
+    pyramid.downsample(&mut context)
 }

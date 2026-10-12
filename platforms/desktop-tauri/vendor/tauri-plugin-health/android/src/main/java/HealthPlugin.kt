@@ -20,8 +20,6 @@ import androidx.health.connect.client.HealthConnectFeatures
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.aggregate.AggregateMetric
 import androidx.health.connect.client.records.*
-import androidx.health.connect.client.request.AggregateRequest
-import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import app.tauri.annotation.ActivityCallback
 import app.tauri.annotation.Command
@@ -51,6 +49,7 @@ import kotlin.reflect.KClass
     permissions = [Permission(strings = [Manifest.permission.ACTIVITY_RECOGNITION], alias = "activity")]
 )
 class HealthPlugin(private val activity: Activity) : Plugin(activity) {
+    private val queries = HealthReadQueries()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var webView: WebView? = null
     private var pendingActivityIds: List<String> = emptyList()
@@ -62,7 +61,7 @@ class HealthPlugin(private val activity: Activity) : Plugin(activity) {
     private var stepSince = 0L
     private var lastStepSignal = 0L
 
-    private class Spec(
+    internal class Spec(
         val record: KClass<out Record>,
         val permission: String,
         val kind: String,
@@ -102,9 +101,6 @@ class HealthPlugin(private val activity: Activity) : Plugin(activity) {
             "body_water_mass" to Spec(BodyWaterMassRecord::class, "${HC}READ_BODY_WATER_MASS", "latest"),
             "sleep" to Spec(SleepSessionRecord::class, "${HC}READ_SLEEP", "sleep")
         )
-        private const val PAGE_SIZE = 50
-        private const val MAX_PAGES = 4
-        private const val HISTORY_WINDOW_MS = 30L * 24 * 3600 * 1000
     }
 
     override fun load(webView: WebView) {
@@ -273,7 +269,7 @@ class HealthPlugin(private val activity: Activity) : Plugin(activity) {
                 val from = Instant.ofEpochMilli(request.optLong("from"))
                 val to = minOf(Instant.ofEpochMilli(request.optLong("to")), Instant.now())
                 if (!to.isAfter(from)) continue
-                results.put(id, try { readOne(hc, granted, id, from, to) } catch (error: SecurityException) {
+                results.put(request.optString("key", id).take(100), try { readOne(hc, granted, id, from, to, request.optBoolean("history")) } catch (error: SecurityException) {
                     JSObject().put("status", "permission_required")
                 } catch (error: android.os.RemoteException) {
                     JSObject().put("status", "temporarily_unavailable").put("reason", "health_connect_remote")
@@ -287,153 +283,19 @@ class HealthPlugin(private val activity: Activity) : Plugin(activity) {
         }
     }
 
-    private fun coverage(from: Instant, to: Instant): JSONObject {
-        // Without READ_HEALTH_DATA_HISTORY, data older than 30 days before the
-        // FIRST grant is not readable. The first-grant date is not exposed, so
-        // a range reaching further back is flagged as possibly partial.
-        val maybeLimited = to.toEpochMilli() - from.toEpochMilli() > HISTORY_WINDOW_MS
-        return JSONObject().put("from", from.toEpochMilli()).put("to", to.toEpochMilli())
-            .put("partial", maybeLimited).put("reason", if (maybeLimited) "health_connect_history_window" else JSONObject.NULL)
-    }
-
-    private fun source(record: Record): JSONObject = JSONObject().put("package", record.metadata.dataOrigin.packageName)
-
-    private suspend fun readOne(hc: HealthConnectClient?, granted: Set<String>, id: String, from: Instant, to: Instant): JSObject {
+    private suspend fun readOne(hc: HealthConnectClient?, granted: Set<String>, id: String, from: Instant, to: Instant, history: Boolean): JSObject {
         if (id == STEP_SENSOR_ID) return readStepSensor(from)
         val spec = SPECS[id] ?: return JSObject().put("status", "unsupported")
         if (hc == null) return JSObject().put("status", "unavailable").put("reason", "health_connect_unavailable")
         if (!granted.contains(spec.permission)) return JSObject().put("status", "permission_required")
         val range = TimeRangeFilter.between(from, to)
         return when (spec.kind) {
-            "sum" -> readSum(hc, spec, range, from, to)
-            "sessions" -> readSessions(hc, spec, range, from, to)
-            "sleep" -> readSleep(hc, range, from, to)
-            "pair" -> readPairs(hc, range, from, to)
-            else -> readLatest(hc, id, spec, range, from, to)
+            "sum" -> queries.readSum(hc, spec, range, from, to)
+            "sessions" -> queries.readSessions(hc, spec, range, from, to)
+            "sleep" -> queries.readSleep(hc, range, from, to)
+            "pair" -> queries.readPairs(hc, range, from, to, history)
+            else -> queries.readLatest(hc, id, spec, range, from, to, history)
         }
-    }
-
-    // Native aggregation applies Health Connect's own dedup / priority rules.
-    private suspend fun readSum(hc: HealthConnectClient, spec: Spec, range: TimeRangeFilter, from: Instant, to: Instant): JSObject {
-        val metric = spec.metric ?: return JSObject().put("status", "error")
-        val result = hc.aggregate(AggregateRequest(setOf(metric), range))
-        val raw: Any? = result[metric]
-        val value: Double? = when (raw) {
-            null -> null
-            is Long -> raw.toDouble()
-            is Double -> raw
-            is androidx.health.connect.client.units.Length -> raw.inMeters
-            is androidx.health.connect.client.units.Energy -> raw.inKilocalories
-            is androidx.health.connect.client.units.Volume -> raw.inMilliliters
-            else -> return JSObject().put("status", "error").put("reason", "health_metric_unhandled")
-        }
-        val out = JSObject().put("status", "ok").put("hasData", value != null).put("from", from.toEpochMilli())
-            .put("to", to.toEpochMilli()).put("coverage", coverage(from, to))
-        if (value != null) out.put("value", value)
-        return out
-    }
-
-    private suspend fun <T : Record> readAll(hc: HealthConnectClient, type: KClass<T>, range: TimeRangeFilter, ascending: Boolean): Pair<List<T>, Boolean> {
-        val records = mutableListOf<T>()
-        var token: String? = null
-        var pages = 0
-        do {
-            val response = hc.readRecords(ReadRecordsRequest(type, range, ascendingOrder = ascending, pageSize = PAGE_SIZE, pageToken = token))
-            records.addAll(response.records)
-            token = response.pageToken
-            pages += 1
-        } while (token != null && pages < MAX_PAGES)
-        return records to (token != null)
-    }
-
-    private fun sample(value: Double, start: Instant, end: Instant, record: Record): JSONObject =
-        JSONObject().put("value", value).put("start", start.toEpochMilli()).put("end", end.toEpochMilli()).put("source", source(record))
-
-    private suspend fun readLatest(hc: HealthConnectClient, id: String, spec: Spec, range: TimeRangeFilter, from: Instant, to: Instant): JSObject {
-        // Newest first; one page is enough for "latest" (records sorted by time).
-        val response = hc.readRecords(ReadRecordsRequest(spec.record, range, ascendingOrder = false, pageSize = 20))
-        val samples = JSONArray()
-        for (record in response.records) {
-            when (record) {
-                is HeartRateRecord -> record.samples.forEach { samples.put(sample(it.beatsPerMinute.toDouble(), it.time, it.time, record)) }
-                is SkinTemperatureRecord -> record.deltas.forEach { samples.put(sample(it.delta.inCelsius, it.time, it.time, record)) }
-                is WeightRecord -> samples.put(sample(record.weight.inKilograms, record.time, record.time, record))
-                is HeightRecord -> samples.put(sample(record.height.inMeters * 100.0, record.time, record.time, record))
-                is BodyFatRecord -> samples.put(sample(record.percentage.value, record.time, record.time, record))
-                is LeanBodyMassRecord -> samples.put(sample(record.mass.inKilograms, record.time, record.time, record))
-                is BoneMassRecord -> samples.put(sample(record.mass.inKilograms, record.time, record.time, record))
-                is BodyWaterMassRecord -> samples.put(sample(record.mass.inKilograms, record.time, record.time, record))
-                is BasalMetabolicRateRecord -> samples.put(sample(record.basalMetabolicRate.inKilocaloriesPerDay, record.time, record.time, record))
-                is RestingHeartRateRecord -> samples.put(sample(record.beatsPerMinute.toDouble(), record.time, record.time, record))
-                is HeartRateVariabilityRmssdRecord -> samples.put(sample(record.heartRateVariabilityMillis, record.time, record.time, record))
-                is RespiratoryRateRecord -> samples.put(sample(record.rate, record.time, record.time, record))
-                is OxygenSaturationRecord -> samples.put(sample(record.percentage.value, record.time, record.time, record))
-                is Vo2MaxRecord -> samples.put(sample(record.vo2MillilitersPerMinuteKilogram, record.time, record.time, record)
-                    .put("qualifiers", JSONObject().put("measurement_method", record.measurementMethod)))
-                is BloodGlucoseRecord -> samples.put(sample(record.level.inMilligramsPerDeciliter, record.time, record.time, record)
-                    .put("qualifiers", JSONObject().put("specimen_source", record.specimenSource).put("meal_type", record.mealType).put("relation_to_meal", record.relationToMeal)))
-                is BodyTemperatureRecord -> samples.put(sample(record.temperature.inCelsius, record.time, record.time, record)
-                    .put("qualifiers", JSONObject().put("measurement_location", record.measurementLocation)))
-                is BasalBodyTemperatureRecord -> samples.put(sample(record.temperature.inCelsius, record.time, record.time, record)
-                    .put("qualifiers", JSONObject().put("measurement_location", record.measurementLocation)))
-                else -> return JSObject().put("status", "error").put("reason", "health_record_unhandled_$id")
-            }
-        }
-        // Health Connect percentages are already percentages (98, not 0.98).
-        return JSObject().put("status", "ok").put("samples", samples).put("scale", "percent").put("coverage", coverage(from, to))
-    }
-
-    // One BloodPressureRecord = one measurement: never paired across records.
-    private suspend fun readPairs(hc: HealthConnectClient, range: TimeRangeFilter, from: Instant, to: Instant): JSObject {
-        val response = hc.readRecords(ReadRecordsRequest(BloodPressureRecord::class, range, ascendingOrder = false, pageSize = 20))
-        val samples = JSONArray()
-        response.records.forEach { record ->
-            samples.put(JSONObject().put("systolic", record.systolic.inMillimetersOfMercury).put("diastolic", record.diastolic.inMillimetersOfMercury)
-                .put("start", record.time.toEpochMilli()).put("end", record.time.toEpochMilli()).put("source", source(record))
-                .put("qualifiers", JSONObject().put("body_position", record.bodyPosition).put("measurement_location", record.measurementLocation)))
-        }
-        return JSObject().put("status", "ok").put("samples", samples).put("coverage", coverage(from, to))
-    }
-
-    private fun stageName(type: Int): String = when (type) {
-        SleepSessionRecord.STAGE_TYPE_AWAKE, SleepSessionRecord.STAGE_TYPE_AWAKE_IN_BED -> "awake"
-        SleepSessionRecord.STAGE_TYPE_SLEEPING -> "asleep_unspecified"
-        SleepSessionRecord.STAGE_TYPE_OUT_OF_BED -> "out_of_bed"
-        SleepSessionRecord.STAGE_TYPE_LIGHT -> "asleep_light"
-        SleepSessionRecord.STAGE_TYPE_DEEP -> "asleep_deep"
-        SleepSessionRecord.STAGE_TYPE_REM -> "asleep_rem"
-        else -> "unknown"
-    }
-
-    // Provider sessions are kept as sessions; stages are optional and never
-    // invented. Grouping / union happen in health_values.js.
-    private suspend fun readSleep(hc: HealthConnectClient, range: TimeRangeFilter, from: Instant, to: Instant): JSObject {
-        val (records, truncated) = readAll(hc, SleepSessionRecord::class, range, ascending = false)
-        val sessions = JSONArray()
-        records.forEach { record ->
-            val stages = JSONArray()
-            record.stages.forEach { stage ->
-                stages.put(JSONObject().put("stage", stageName(stage.stage)).put("start", stage.startTime.toEpochMilli()).put("end", stage.endTime.toEpochMilli()))
-            }
-            sessions.put(JSONObject().put("start", record.startTime.toEpochMilli()).put("end", record.endTime.toEpochMilli())
-                .put("stages", stages).put("source", source(record)))
-        }
-        val cover = coverage(from, to)
-        if (truncated) cover.put("partial", true).put("reason", "read_limit")
-        return JSObject().put("status", "ok").put("sessions", sessions).put("coverage", cover)
-    }
-
-    private suspend fun readSessions(hc: HealthConnectClient, spec: Spec, range: TimeRangeFilter, from: Instant, to: Instant): JSObject {
-        val (records, truncated) = readAll(hc, spec.record, range, ascending = true)
-        val sessions = JSONArray()
-        records.forEach { record ->
-            // IntervalRecord is internal in connect-client 1.1.0; the only
-            // "sessions" monitor reads ExerciseSessionRecord.
-            if (record is ExerciseSessionRecord) sessions.put(JSONObject().put("start", record.startTime.toEpochMilli()).put("end", record.endTime.toEpochMilli()))
-        }
-        val cover = coverage(from, to)
-        if (truncated) cover.put("partial", true).put("reason", "read_limit")
-        return JSObject().put("status", "ok").put("sessions", sessions).put("coverage", cover)
     }
 
     private fun readStepSensor(from: Instant): JSObject {

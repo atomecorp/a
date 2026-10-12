@@ -1,4 +1,5 @@
 import { extractEventPatch, eventDeletedPropertyKeys, assertIdempotentEventReplay } from '../../../../shared/adole_event_contract.js';
+import { personalProfileFromProperties } from '../../../../shared/profile_sharing.js';
 import { sanitizeAtomeProperties } from '../../../../shared/atome_contract.js';
 // Installation-scoped browser guest persistence. This is the only local guest
 // authority and keeps append-only events separate from projected current state.
@@ -212,11 +213,15 @@ export async function guestAdoptionPayload(ownerId, targetOwner = null) {
         ]).then(([queued, refused]) => [...queued, ...refused.map(({ refused: _refused, ...row }) => row)])),
         listGuestFiles(ownerId)
     ]);
+    const profileRecord = atomes.find(record => record.atome_id === String(ownerId));
+    const workspaceAtomes = atomes.filter(record => !['user', 'guest_workspace'].includes(record.atome_type));
+    const ids = new Set(workspaceAtomes.map(record => record.atome_id));
     return rebindGuestMedia({
-        atomes,
-        events: (events || []).filter((event) => event.actor?.id === String(ownerId)).map(({ key: _key, ...event }) => event),
-        snapshots: (snapshots || []).filter((snapshot) => snapshot.owner_id === String(ownerId)).map(({ key: _key, owner_id: _ownerId, ...snapshot }) => snapshot),
-        sync_queue: (syncQueue || []).filter((entry) => entry.owner_id === String(ownerId)).map(({ key: _key, ...entry }) => entry),
+        ...(profileRecord ? { profile: personalProfileFromProperties(profileRecord.properties) } : {}),
+        atomes: workspaceAtomes,
+        events: (events || []).filter((event) => event.actor?.id === String(ownerId) && ids.has(event.atome_id)).map(({ key: _key, ...event }) => event),
+        snapshots: (snapshots || []).filter((snapshot) => snapshot.owner_id === String(ownerId) && ids.has(snapshot.atome_id)).map(({ key: _key, owner_id: _ownerId, ...snapshot }) => snapshot),
+        sync_queue: (syncQueue || []).filter((entry) => entry.owner_id === String(ownerId) && ids.has(entry.payload?.atome_id)).map(({ key: _key, ...entry }) => entry),
         permissions: [],
         files: files.map(({ blob: _blob, key: _key, owner_id: _ownerId, created_at: _createdAt, ...file }) => file)
     }, ownerId, targetOwner);
@@ -343,7 +348,10 @@ export async function completeBrowserGuestAdoption(fromOwner, toOwner) {
                     try {
                         for (const row of request.result) {
                             if (!String(row.key).startsWith(String(fromOwner) + ':')) continue;
-                            if (storeName !== STORE_QUEUE && storeName !== STORE_REFUSED) {
+                            const profileRow = row.atome_id === String(fromOwner) || row.id === String(fromOwner)
+                                || row.payload?.atome_id === String(fromOwner);
+                            if (profileRow && ![STORE_QUEUE, STORE_REFUSED].includes(storeName)) continue;
+                            if (!profileRow && storeName !== STORE_QUEUE && storeName !== STORE_REFUSED) {
                                 const adopted = { ...rebindGuestMedia(row, fromOwner, toOwner), key: String(toOwner) + row.key.slice(String(fromOwner).length), owner_id: String(toOwner) };
                                 if (storeName === STORE_FILES) adopted.uploaded = true;
                                 store.add(adopted);

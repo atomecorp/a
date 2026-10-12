@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createDashboardLayout } from '../../eVe/domains/dashboard/dashboard_layout.js';
+import { createDashboardLayout, hitTestDashboardLayout } from '../../eVe/domains/dashboard/dashboard_layout.js';
 import { buildDashboardRecords, dashboardRecordId } from '../../eVe/domains/dashboard/dashboard_records.js';
 import { buildDashboardBevyUiTree, frameRecord } from '../../eVe/domains/dashboard/dashboard_bevy_ui_tree.js';
 import { mergeDashboardTokens } from '../../eVe/domains/dashboard/dashboard_tokens.js';
@@ -35,4 +35,28 @@ describe('Professional Dashboard continuous rail glass', () => {
         expect(mergeDashboardTokens({headerBand:{opacity:25}}).headerBand)
             .toMatchObject({color:'#ffffff',opacity:25,blurPx:16});
     });
+    for (const handedness of ['left', 'right']) for (const [width, height] of [[900, 720], [360, 280]]) {
+        it(`reclaims the rail column and retains row alignment at ${width}×${height}, ${handedness}`, () => {
+            const tokens = mergeDashboardTokens();
+            const opts = { width, height, categories, handedness, tokens, sidebarEnabled: true,
+                itemsByCategory: new Map(categories.map(c => [c.id, [{ id: 'one', category_id: c.id }]])) };
+            const open = createDashboardLayout({ ...opts, sidebarOpen: true });
+            const closed = createDashboardLayout({ ...opts, sidebarOpen: false });
+            expect(closed.sidebar_toggle_rect).toEqual(open.sidebar_toggle_rect);
+            expect(closed.sidebar_toggle_rect.height).toBe(closed.block_unit_size / 2);
+            expect(closed.sidebar_toggle_rect.x).toBe(handedness === 'left' ? tokens.metrics.margin : width - tokens.metrics.margin - closed.block_unit_size);
+            expect(closed.vertical_viewport_rect.y + closed.vertical_viewport_rect.height + tokens.metrics.gap).toBe(closed.sidebar_toggle_rect.y);
+            closed.projection_lanes.forEach((lane, i) => {
+                expect(lane.scroll_clip_rect.width - open.projection_lanes[i].scroll_clip_rect.width).toBe(closed.block_unit_size + tokens.metrics.gap);
+                expect(lane.lane_rect.y).toBe(lane.header_rect.y);
+                expect(lane.lane_rect.y).toBe(open.projection_lanes[i].lane_rect.y);
+                expect(lane.header_visible_rect).toBeNull();
+            });
+            const lane = closed.lanes.at(-1);
+            expect(hitTestDashboardLayout(closed, { x: lane.header_rect.x + 1, y: lane.header_rect.y + 1 }).kind).not.toBe('header');
+            const tree = buildDashboardBevyUiTree({ layout: closed, tokens, sidebarProgress: 0, handlers: { sidebarActivate: () => null } });
+            expect(tree.root.children.some(n => n.id.startsWith('__eve_dashboard_header'))).toBe(false);
+            expect(tree.root.children.find(n => n.id === '__eve_dashboard_sidebar_toggle').on.activate).toBeTypeOf('function');
+        });
+    }
 });

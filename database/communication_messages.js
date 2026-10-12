@@ -1,0 +1,24 @@
+// Queries stay at the database boundary. A participant can only read their
+// own correspondence; cursor ordering is stable even for equal timestamps.
+export async function queryCommunicationMessages({ query, userId, contactId, cursor = null, limit = 30, legacy = false }) {
+    const timestamp = "COALESCE(json_extract(s.properties, '$.timestamp'), s.updated_at)";
+    const params = [userId, userId, userId, contactId, contactId, userId];
+    let where = `(a.owner_id = ? OR a.creator_id = ?)
+        AND ((json_extract(s.properties, '$.from_id') = ? AND json_extract(s.properties, '$.to_user_id') = ?)
+        OR (json_extract(s.properties, '$.from_id') = ? AND json_extract(s.properties, '$.to_user_id') = ?))`;
+    if (!legacy) { where += ' AND a.owner_id = ?'; params.push(userId); }
+    if (cursor) {
+        if (typeof cursor.timestamp !== 'string' || typeof cursor.id !== 'string') throw new Error('conversation_cursor_invalid');
+        where += ` AND (${timestamp} < ? OR (${timestamp} = ? AND s.atome_id < ?))`;
+        params.push(cursor.timestamp, cursor.timestamp, cursor.id);
+    }
+    params.push(limit + 1);
+    const rows = await query('all', `SELECT s.atome_id, s.properties, ${timestamp} AS timestamp
+        FROM state_current s JOIN atomes a ON a.atome_id = s.atome_id
+        WHERE a.atome_type = 'message' AND a.deleted_at IS NULL AND ${where}
+        ORDER BY ${timestamp} DESC, s.atome_id DESC LIMIT ?`, params);
+    const page = rows.slice(0, limit);
+    return { items: page.map(row => ({ id: row.atome_id,
+        ...(typeof row.properties === 'string' ? JSON.parse(row.properties) : row.properties), timestamp: row.timestamp })),
+        nextCursor: rows.length > limit ? { timestamp: page.at(-1).timestamp, id: page.at(-1).atome_id } : null };
+}

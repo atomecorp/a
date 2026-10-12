@@ -217,3 +217,22 @@ test('closing a panel stops its active input session and releases the hidden edi
         'panel teardown must release focus and remove the canonical hidden editor');
     dom.window.close();
 });
+
+test('the native touch guard cancels keyboard-dismissal defaults only on the active field and its menu', async()=>{
+    const {createSurfaceTextFocusGuard}=await import('../../eVe/domains/rendering/surface_ui_pointer.js');
+    const dom=installDom(),{editing}=createRuntime();
+    const canvas=dom.window.document.createElement('canvas');dom.window.document.body.append(canvas);
+    let hit={treeId:'qa-focus',nodeId:'qa-input'};
+    const guard=createSurfaceTextFocusGuard({readFocusTarget:()=>({canvas,treeId:'qa-focus',nodeId:'qa-input'}),hitTestAtClientPoint:()=>hit});
+    const event=(type)=>{const e=new dom.window.Event(type,{bubbles:true,cancelable:true});
+        Object.defineProperties(e,{touches:{value:[{identifier:1,clientX:10,clientY:10}]},changedTouches:{value:[{identifier:1}]}});return e;};
+    try {
+        focusField(editing);guard.ensureSurface(canvas);const editor=hiddenEditor(dom);
+        for(const target of [{treeId:'qa-focus',nodeId:'qa-input'},{layer:'mystic',nodeId:'qa-paste'}]) {
+            hit=target;const start=event('touchstart'),end=event('touchend');canvas.dispatchEvent(start);canvas.dispatchEvent(end);
+            assert.equal(start.defaultPrevented,true);assert.equal(end.defaultPrevented,true);assert.equal(dom.window.document.activeElement,editor);
+        }
+        hit={treeId:'qa-focus',nodeId:'qa-other-input'};const other=event('touchstart');canvas.dispatchEvent(other);assert.equal(other.defaultPrevented,false);
+        guard.releaseSurface(canvas);hit={treeId:'qa-focus',nodeId:'qa-input'};const after=event('touchstart');canvas.dispatchEvent(after);assert.equal(after.defaultPrevented,false);
+    } finally {guard.releaseSurface(canvas);editing.stop();dom.window.close();}
+});

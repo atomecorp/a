@@ -10,8 +10,8 @@ const tokens = mergeDashboardTokens({ metrics: { blockUnitSizePx: 120 } });
 const categories = ['news', 'calendar', 'projects', 'contacts', 'monitor']
     .map((id, order) => ({ id, color: '#245f94', order, icon_id: id, label_key: `eve.dashboard.category.${id}` }));
 const sourceItems = new Map(categories.map((category) => [category.id, [
-    { id: `${category.id}-one`, category_id: category.id, title: category.id },
-    { id: `${category.id}-two`, category_id: category.id, title: category.id }
+    { id: `${category.id}-one`, category_id: category.id, title: category.id, payload: { start: new Date(Date.now() + 86400000) } },
+    { id: `${category.id}-two`, category_id: category.id, title: category.id, payload: { start: new Date(Date.now() + 172800000) } }
 ]]));
 
 const layoutFor = ({ filteredCategoryId = '', activeCategoryId = '' } = {}) => createDashboardLayout({

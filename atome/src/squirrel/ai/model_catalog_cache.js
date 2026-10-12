@@ -62,7 +62,13 @@ const sanitizeEntry = (entry = {}) => ({
     models: Array.isArray(entry.models) ? entry.models.map((item) => toText(item)).filter(Boolean) : [],
     source: toText(entry.source) || 'embedded',
     stale: entry.stale === true,
-    error: toText(entry.error)
+    error: toText(entry.error),
+    configured: typeof entry.configured === 'boolean' ? entry.configured : null,
+    verification: toText(entry.verification) || 'unverified',
+    checked_at: toText(entry.checked_at),
+    last_success_at: toText(entry.last_success_at),
+    credential_verification: toText(entry.credential_verification) || 'unverified',
+    credential_checked_at: toText(entry.credential_checked_at)
 });
 
 const sanitizePayload = (payload = {}) => {

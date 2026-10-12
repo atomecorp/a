@@ -25,7 +25,8 @@ final class WKWebViewFactory {
             config.setURLSchemeHandler(AudioSchemeHandler(), forURLScheme: "atome")
         }
         config.allowsInlineMediaPlayback = true
-        if #available(iOS 10.0, *) { config.mediaTypesRequiringUserActionForPlayback = [.audio] }
+        // Media requested by the user or the assistant (TV, YouTube) starts with sound, without waiting for a tap.
+        if #available(iOS 10.0, *) { config.mediaTypesRequiringUserActionForPlayback = [] }
 
         let webView = WKWebView(frame: frame, configuration: config)
         // FIX: Set isOpaque to true to prevent rendering artifacts/black screens in AUv3

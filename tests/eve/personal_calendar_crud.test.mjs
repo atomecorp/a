@@ -71,21 +71,77 @@ test('canonical event identity lookup is independent of a list page and propagat
     expect((await failed.calendarSearch('')).error).toBe('permission_denied');
 });
 
-test('Dashboard event opening awaits the exact event despite a stale source filter, positions its date, and reports disappearance',async()=>{
+test('Dashboard opens the canonical detail independently of a blocked calendar list and reports disappearance',async()=>{
     const {calendarSurface,calendarRuntimeState}=await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_calendar_runtime.js');
     const event={id:'target',title:'Exact event',start:new Date('2026-12-03T14:00:00Z'),end:new Date('2026-12-03T15:00:00Z'),calendarId:'personal',source_id:'canonical'};
-    let release;const ready=new Promise(resolve=>{release=resolve;});let requestedOptions;
-    globalThis.window={atome:{calendar:{search:async(_,options)=>{requestedOptions=options;await ready;return {ok:true,items:[],sources:[]};},read:async()=>({ok:true,event})}}};
-    calendarRuntimeState.sourceId='other_calendar';let revealed='',settled=false;
-    const opening=calendarSurface.onOpen({context:{eventId:'target'},refresh:()=>{},reveal:id=>{revealed=id;}}).then(cleanup=>{settled=true;return cleanup;});
-    await Promise.resolve();expect(settled).toBe(false);release();const cleanup=await opening;
+    let release; const ready=new Promise(resolve=>{release=resolve;}); let searches=0, revealed='';
+    globalThis.window={atome:{calendar:{search:async()=>{searches++;await ready;return {ok:true,items:[]};},read:async()=>({ok:true,event})}}};
+    calendarRuntimeState.sourceId='other_calendar';
+    const context={eventId:'target',source:{type:'dashboard_calendar_item'}};
+    const cleanup=await calendarSurface.onOpen({context,refresh:()=>{},reveal:id=>{revealed=id;}});
     try {
-        expect(requestedOptions.source_id).toBeUndefined();
-        expect(calendarSurface.readState().selectedEventId).toBe('target');
+        await vi.waitFor(()=>expect(calendarSurface.readState().selectedEventId).toBe('target'));
+        expect(searches).toBe(0);
         expect(calendarSurface.readState().anchor).toEqual(event.start);
-        expect(calendarSurface.readState().draft.title).toBe('Exact event');expect(revealed).toBe('calendar_editor_title');
-    } finally {cleanup();calendarSurface.onClose();}
+        expect(calendarSurface.readState().draft.title).toBe('Exact event');
+        expect(revealed).toBe('calendar_editor_title');
+        const content=calendarSurface.buildContent(calendarSurface.readState(),{bodyWidth:900,emit:()=>{}});
+        expect(content.map(node=>node.id)).toEqual(['calendar_editor']);
+        window.atome.calendar.read=async()=>({ok:false,error:'calendar_event_not_found'});
+        (await import('../../eVe/intuition/tools/calendar_api.js')).emitChange('delete', { id: 'target' });
+        await vi.waitFor(()=>expect(calendarSurface.readState().error).toBe(true));
+        expect(calendarSurface.readState().editorOpen).toBe(false);
+    } finally {release();cleanup();calendarSurface.onClose();}
     window.atome.calendar.read=async()=>({ok:false,error:'calendar_event_not_found'});
-    const missing=await calendarSurface.onOpen({context:{eventId:'deleted'},refresh:()=>{}});
-    try {expect(calendarSurface.readState().error).toBe(true);expect(calendarSurface.readState().notice).toMatch(/introuvable|not found/i);} finally {missing();calendarSurface.onClose();}
+    const missing=await calendarSurface.onOpen({context:{...context,eventId:'deleted'},refresh:()=>{}});
+    try {
+        await vi.waitFor(()=>expect(calendarSurface.readState().error).toBe(true));
+        expect(calendarSurface.readState().notice).toMatch(/introuvable|not found/i);
+        expect(calendarSurface.readState().editorOpen).toBe(false);
+    } finally {missing();calendarSurface.onClose();}
+});
+
+test('late detail reads cannot replace a newly opened event', async () => {
+    const { calendarSurface } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_calendar_runtime.js');
+    let release; const pending = new Promise(resolve => { release = resolve; });
+    const event = id => ({ id, title: id, start: new Date('2026-12-03T14:00:00Z'), alarms: [] });
+    globalThis.window = { atome: { calendar: { read: id => id === 'old' ? pending : Promise.resolve({ ok: true, event: event(id) }) } } };
+    const open = id => calendarSurface.onOpen({ context: { eventId: id, source: { type: 'dashboard_calendar_item' } }, refresh: () => {} });
+    const oldCleanup = await open('old'); oldCleanup();
+    const cleanup = await open('new');
+    try {
+        await vi.waitFor(() => expect(calendarSurface.readState().selectedEventId).toBe('new'));
+        release({ ok: true, event: event('old') }); await pending; await Promise.resolve();
+        expect(calendarSurface.readState().draft.title).toBe('new');
+    } finally { release({ ok: true, event: event('old') }); cleanup(); calendarSurface.onClose(); }
+});
+
+test('detail honors read-only sources, leaves failed saves open and closes after a canonical date update or delete', async () => {
+    const { calendarSurface, calendarRuntimeState } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_calendar_runtime.js');
+    const { registerPanelApi, clearPanelApi } = await import('../../eVe/intuition/runtime/panel_api.js');
+    const event = { id: 'series', title: 'Series', start: new Date('2026-12-03T14:00:00Z'),
+        end: new Date('2026-12-03T15:00:00Z'), alarms: [], recurrence: { freq: 'DAILY' }, source_writable: false };
+    const update = vi.fn(async () => ({ ok: false, error: 'permission_denied' })), remove = vi.fn(async () => ({ ok: true }));
+    globalThis.window = { atome: { calendar: { read: async () => ({ ok: true, event }), update, delete: remove } } };
+    const close = vi.fn(async () => ({ ok: true })); registerPanelApi({ closePanelSurface: close });
+    const context = { eventId: 'series', occurrenceStart: '2026-12-20T14:00:00Z', source: { type: 'dashboard_calendar_item' } };
+    const cleanup = await calendarSurface.onOpen({ context, refresh: () => {} });
+    try {
+        await vi.waitFor(() => expect(calendarSurface.readState().selectedEventId).toBe('series'));
+        expect(calendarSurface.readState()).toMatchObject({ eventWritable: false, seriesScope: true, occurrenceStart: context.occurrenceStart });
+        expect(await calendarSurface.handleEvent({ type: 'calendar.editor.save' })).toMatchObject({ ok: false, error: 'calendar_event_read_only' });
+        expect(await calendarSurface.handleEvent({ type: 'calendar.editor.delete' })).toMatchObject({ ok: false, error: 'calendar_event_read_only' });
+        expect(update).not.toHaveBeenCalled(); expect(remove).not.toHaveBeenCalled();
+        calendarRuntimeState.events[0].source_writable = true;
+        calendarRuntimeState.draft.start = '2026-12-04T14:00'; calendarRuntimeState.draft.end = '2026-12-04T15:00';
+        await calendarSurface.handleEvent({ type: 'calendar.editor.save' });
+        expect(close).not.toHaveBeenCalled(); expect(calendarSurface.readState().editorError).not.toBe('');
+        update.mockResolvedValue({ ok: true });
+        await calendarSurface.handleEvent({ type: 'calendar.editor.save' });
+        expect(update.mock.calls.at(-1)[0]).toBe('series');
+        expect(update.mock.calls.at(-1)[1].start.getDate()).toBe(4);
+        expect(close).toHaveBeenLastCalledWith('calendar', {});
+        await calendarSurface.handleEvent({ type: 'calendar.editor.delete' });
+        expect(remove.mock.calls.at(-1)[0]).toBe('series'); expect(close).toHaveBeenCalledTimes(2);
+    } finally { cleanup(); calendarSurface.onClose(); clearPanelApi(); }
 });

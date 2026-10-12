@@ -102,6 +102,10 @@ export const createGlobalContactsApi = ({
     let lifecycle;
     const imports = () => lifecycle || (lifecycle = createImportLifecycle({
         domain: 'contact', env: env.window || env, api: () => env.Atome || env.window?.Atome,
+        // Oct. 2026 : modifier ou supprimer un contact reecrivait tout le carnet
+        // depuis un cache parfois incomplet et supprimait les absents ; une
+        // relecture complete restaure ces contacts une fois par source.
+        recoveryVersion: 'contacts_replace_loss_2026_10',
         run: async (id, options) => {
             const result = await getOrCreateService(env).importSource(id, options);
             if (result.ok) dispatchPeopleDirectoryUpdated(env);

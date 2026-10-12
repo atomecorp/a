@@ -281,3 +281,40 @@ export function calendarOccurrenceEnd(event, start) {
     const end = new Date(start); end.setDate(end.getDate() + Math.round((day(baseEnd) - day(baseStart)) / 86400000));
     return end;
 }
+
+export function calendarOccurrence(event, start) {
+    return { ...event, occurrenceId: `${event.id}_${start.toISOString()}`, start, end: calendarOccurrenceEnd(event, start) };
+}
+
+// One occurrence owner for agenda projections and next-event queries. Read
+// exceptions before expanding masters, and bound each series, not the input list.
+export function calendarRangeOccurrences(events, range, limit = 800) {
+    const seriesKey = event => `${event.calendarId || ''}|${event.exchange_uid || event.id}`;
+    const masters = new Map((events || []).filter(event => !event.recurrence_id && (event.recurrence || event.rdates?.length)).map(event => [seriesKey(event), event]));
+    const exceptionKey = (event, date) => `${seriesKey(event)}|${date?.getTime()}`;
+    const exceptions = new Set((events || []).filter(event => event.recurrence_id).map(event => {
+        const date = calendarDate({ value: event.recurrence_id, params: event.icalendar?.recurrence_id?.params || {} }, event.icalendar?.timezones || []);
+        return exceptionKey(event, date);
+    }));
+    const occurrences = [];
+    for (const event of events || []) {
+        const baseStart = canonicalCalendarDate(event.start);
+        if (!baseStart || event.status === 'cancelled') continue;
+        if (range.excludeCompleted && event.kind === 'todo' && event.status === 'done') continue;
+        if (event.recurrence_id && !masters.has(seriesKey(event))) continue;
+        if (range.futureOnly && !event.recurrence && !event.rdates?.length && baseStart <= range.start) continue;
+        const starts = event.recurrence || event.rdates?.length
+            ? expandCalendarOccurrences(event, range.futureOnly ? new Date(range.start.getTime() + 1) : range.start, range.end, limit + exceptions.size)
+            : [baseStart];
+        for (const start of starts) {
+            if (!event.recurrence_id && exceptions.has(exceptionKey(event, start))) continue;
+            const occurrence = calendarOccurrence(event, start);
+            occurrence.seriesId = event.recurrence_id ? masters.get(seriesKey(event)).id : event.id;
+            if (range.futureOnly && start <= range.start) continue;
+            if (range.start && (occurrence.end || start) < range.start) continue;
+            if (range.end && start > range.end) continue;
+            occurrences.push(occurrence);
+        }
+    }
+    return occurrences.sort((left, right) => left.start - right.start || String(left.occurrenceId).localeCompare(String(right.occurrenceId))).slice(0, limit);
+}

@@ -1,3 +1,4 @@
+import { getSessionState } from '../apis/unified/adole_api/session.js';
 import {
     buildModelCatalogCacheRecord,
     getEmbeddedModelCatalogPayload,
@@ -5,7 +6,7 @@ import {
     writeModelCatalogCache
 } from './model_catalog_cache.js';
 import {
-    AI_MODEL_PROVIDER_REGISTRY,
+    AI_MODEL_PROVIDER_REGISTRY, listAiKeyProviders,
     getAiModelProviderDefinition
 } from './model_catalog_registry.js';
 import { loadRuntimeUserProfile } from './profile_loader.js';
@@ -22,9 +23,7 @@ const BOOTSTRAP_KEY = '__EVE_AI_MODEL_CATALOG_REFRESH__';
 const unique = (items = []) => Array.from(new Set(items.map((item) => toText(item)).filter(Boolean)));
 
 const createTimeoutController = (timeoutMs) => {
-    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || typeof AbortController !== 'function') {
-        return { controller: null, clear: () => {} };
-    }
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) timeoutMs = DEFAULT_TIMEOUT_MS;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort('model_catalog_timeout'), timeoutMs);
     return {
@@ -44,12 +43,6 @@ const normalizeListedModelId = (value) => {
 const shouldKeepModel = (modelId, filter = {}) => {
     const normalized = toText(modelId).toLowerCase();
     if (!normalized) return false;
-    if (filter.exclude_preview !== false && (normalized.includes('preview') || normalized.includes('experimental'))) {
-        return false;
-    }
-    if (filter.exclude_deprecated !== false && (normalized.includes('deprecated') || normalized.includes('deprecation'))) {
-        return false;
-    }
     const excludedModalities = Array.isArray(filter.exclude_modalities) ? filter.exclude_modalities : [];
     if (excludedModalities.some((token) => normalized.includes(String(token).toLowerCase()))) {
         return false;
@@ -90,113 +83,21 @@ export const resolveConfiguredAiProviderKeys = async (options = {}) => {
     };
 };
 
-const listOpenAiStyleModels = async ({
-    definition,
-    apiKey,
-    fetchImpl,
-    signal
-} = {}) => {
-    const response = await fetchImpl(definition.list_models_endpoint, {
-        method: 'GET',
-        headers: {
-            Authorization: `Bearer ${apiKey}`
-        },
-        ...(signal ? { signal } : {})
-    });
-    if (!response.ok) {
-        throw new Error(`list_models_http_${response.status}`);
-    }
-    const data = await response.json();
-    return unique((Array.isArray(data?.data) ? data.data : []).map((item) => normalizeListedModelId(item?.id)));
-};
-
-const listAnthropicModels = async ({
-    definition,
-    apiKey,
-    fetchImpl,
-    signal
-} = {}) => {
-    const response = await fetchImpl(definition.list_models_endpoint, {
-        method: 'GET',
-        headers: {
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01'
-        },
-        ...(signal ? { signal } : {})
-    });
-    if (!response.ok) {
-        throw new Error(`list_models_http_${response.status}`);
-    }
-    const data = await response.json();
-    return unique((Array.isArray(data?.data) ? data.data : []).map((item) => normalizeListedModelId(item?.id)));
-};
-
-const listGoogleModels = async ({
-    definition,
-    apiKey,
-    fetchImpl,
-    signal
-} = {}) => {
-    const endpoint = `${definition.list_models_endpoint}?key=${encodeURIComponent(apiKey)}`;
-    const response = await fetchImpl(endpoint, {
-        method: 'GET',
-        ...(signal ? { signal } : {})
-    });
-    if (!response.ok) {
-        throw new Error(`list_models_http_${response.status}`);
-    }
-    const data = await response.json();
-    return unique((Array.isArray(data?.models) ? data.models : []).map((item) => normalizeListedModelId(item?.name)));
-};
-
 export const listRemoteProviderModels = async ({
-    providerId,
-    apiKey,
-    fetchImpl = globalThis.fetch?.bind(globalThis),
-    timeoutMs = DEFAULT_TIMEOUT_MS, providerRequest = requestProviderService
+    providerId, apiKey, timeoutMs = DEFAULT_TIMEOUT_MS,
+    providerRequest = requestProviderService, expectedPrincipal = null
 } = {}) => {
     const definition = getAiModelProviderDefinition(providerId);
-    if (!definition) {
-        throw new Error('unknown_provider');
-    }
-    if (typeof fetchImpl !== 'function') {
-        throw new Error('provider_fetch_unavailable');
-    }
-    const merged = createTimeoutController(timeoutMs);
+    if (!definition) throw new Error('unknown_provider');
+    const { controller, clear } = createTimeoutController(timeoutMs);
     try {
-        let models = [];
-        if (definition.id === 'openai') {
-            const result = await providerRequest('models', {}, { signal: merged.controller?.signal });
-            models = unique((result.data || []).map(item => normalizeListedModelId(item.id)));
-        } else if (definition.request_type === 'anthropic') {
-            models = await listAnthropicModels({
-                definition,
-                apiKey: toText(apiKey),
-                fetchImpl,
-                signal: merged.controller?.signal || null
-            });
-        } else if (definition.request_type === 'google') {
-            models = await listGoogleModels({
-                definition,
-                apiKey: toText(apiKey),
-                fetchImpl,
-                signal: merged.controller?.signal || null
-            });
-        } else {
-            models = await listOpenAiStyleModels({
-                definition,
-                apiKey: toText(apiKey),
-                fetchImpl,
-                signal: merged.controller?.signal || null
-            });
-        }
-        return sortModels(
-            models.filter((model) => shouldKeepModel(model, definition.filter)),
-            definition
-        );
-    } finally {
-        merged.clear();
-    }
+        const result = await bound(Promise.resolve(providerRequest('models', {
+            provider: definition.id, ...(definition.id === 'openai' ? {} : { key: toText(apiKey) })
+        }, { signal: controller.signal, expectedPrincipal })), controller.signal);
+        if (!Array.isArray(result?.data)) throw new Error('provider_catalog_response_invalid');
+        return sortModels(unique(result.data.map(item => normalizeListedModelId(item.id)))
+            .filter(model => shouldKeepModel(model, definition.filter)), definition);
+    } finally { clear(); }
 };
 
 const buildCatalogItem = ({
@@ -225,65 +126,97 @@ const buildCatalogItem = ({
     };
 };
 
+const providerJobs = new WeakMap();
+const catalogDefinitions = () => listAiKeyProviders().map(provider => getAiModelProviderDefinition(provider.id) || {
+    ...provider, recommended_models: [], fallback_models: [], refresh_strategy: 'unavailable'
+});
+const jobsFor = scope => {
+    if (!providerJobs.has(scope)) providerJobs.set(scope, new Map());
+    return providerJobs.get(scope);
+};
+const bound = (promise, signal) => new Promise((resolve, reject) => {
+    const aborted = () => reject(new Error('provider_catalog_timeout'));
+    if (signal.aborted) return aborted();
+    signal.addEventListener('abort', aborted, { once: true });
+    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', aborted));
+});
+
 export const refreshAiModelCatalog = async ({
-    storage = null,
-    fetchImpl = globalThis.fetch?.bind(globalThis),
-    loadProfile = loadRuntimeUserProfile,
+    storage = null, fetchImpl, loadProfile = loadRuntimeUserProfile,
     securityApi = null, providerRequest = requestProviderService,
-    env = globalThis,
-    now = () => new Date().toISOString()
+    env = globalThis, now = () => new Date().toISOString(),
+    providers = null, invalidate = false, timeoutMs = DEFAULT_TIMEOUT_MS,
+    principal = () => getSessionState()?.user?.id || null
 } = {}) => {
-    const configured = await resolveConfiguredAiProviderKeys({ loadProfile, securityApi, env, providerRequest });
-    const configuredByProvider = new Map((configured.items || []).map((entry) => [entry.provider, entry]));
-    const previous = readModelCatalogCache({ storage, userId: configured.userId });
-    const previousByProvider = new Map((previous?.payload?.items || []).map((entry) => [entry.provider, entry]));
-    const items = [];
-
-    for (const definition of Object.values(AI_MODEL_PROVIDER_REGISTRY)) {
-        const configuredEntry = configuredByProvider.get(definition.id);
-        if (!configuredEntry?.apiKey && !configuredEntry?.serverManaged) {
-            items.push(buildCatalogItem({
-                definition,
-                detectedModels: [],
-                source: 'embedded',
-                error: 'no_api_key'
-            }));
-            continue;
-        }
-        try {
-            const detectedModels = await listRemoteProviderModels({
-                providerId: definition.id,
-                apiKey: configuredEntry.apiKey,
-                fetchImpl, providerRequest
-            });
-            items.push(buildCatalogItem({
-                definition,
-                detectedModels,
-                source: 'remote'
-            }));
-        } catch (error) {
-            const prior = previousByProvider.get(definition.id);
-            items.push(buildCatalogItem({
-                definition,
-                detectedModels: prior?.detected_models || [],
-                source: prior?.source === 'remote' ? 'remote' : 'embedded',
-                error: toText(error?.message || error),
-                stale: true
-            }));
-        }
-    }
-
-    const payload = buildModelCatalogCacheRecord({
-        items,
-        refreshedAt: toText(now?.()) || new Date().toISOString(),
-        source: 'refresh'
-    });
-    writeModelCatalogCache({ storage, payload, userId: configured.userId });
-    return {
-        ok: true,
-        stale: false,
-        payload: clone(payload)
-    };
+    const profile = await loadProfile();
+    const userId = toText(profile?.userId || profile?.user_id);
+    if (!profile?.ok || !userId) return { ok: false, error: 'ai_profile_user_id_missing' };
+    const owner = principal();
+    if (owner && owner !== userId) return { ok: false, error: 'provider_principal_changed' };
+    const current = () => !owner || principal() === owner;
+    const jobs = jobsFor(storage || env);
+    const selected = catalogDefinitions().filter(def => !providers || providers.includes(def.id));
+    const metadata = profile.profile?.passkeys?.keys || [];
+    const results = await Promise.all(selected.map(definition => {
+        const jobKey = `${userId}:${definition.id}`;
+        const priorJob = jobs.get(jobKey);
+        if (priorJob && !invalidate) return priorJob.promise;
+        priorJob?.controller.abort();
+        const { controller, clear } = createTimeoutController(timeoutMs);
+        const job = { controller, promise: null };
+        const request = (action, payload, options = {}) => providerRequest(action, payload,
+            { ...options, expectedPrincipal: userId, signal: controller.signal });
+        let configured = null;
+        const run = async () => {
+            if (definition.refresh_strategy === 'unavailable') {
+                const status = await request('credential.status', { provider: definition.id });
+                if (typeof status?.configured !== 'boolean') throw new Error('provider_credential_status_invalid');
+                configured = status.configured;
+                throw new Error(configured ? 'provider_catalog_unavailable' : 'no_api_key');
+            }
+            const credential = await resolveConfiguredAiProviderKeys({ securityApi, env, providerRequest: request,
+                loadProfile: async () => ({ ...profile, profile: { ...profile.profile, passkeys: {
+                    ...profile.profile?.passkeys, keys: [metadata.find(item => item.provider === definition.id) || { provider: definition.id }]
+                } } }) });
+            const entry = credential.items?.[0];
+            if (!entry) throw new Error(credential.errors?.[definition.id] || credential.error || 'no_api_key');
+            configured = true;
+            const models = await listRemoteProviderModels({ providerId: definition.id, apiKey: entry.apiKey,
+                providerRequest: request, timeoutMs, expectedPrincipal: userId });
+            return { ...buildCatalogItem({ definition, detectedModels: models }), configured,
+                verification: 'verified', checked_at: toText(now()), last_success_at: toText(now()),
+                credential_verification: 'verified', credential_checked_at: toText(now()) };
+        };
+        job.promise = Promise.resolve().then(async () => {
+            let item;
+            try { item = await bound(run(), controller.signal); }
+            catch (error) {
+                const previous = readModelCatalogCache({ storage, userId }).payload.items.find(entry => entry.provider === definition.id);
+                const code = /^(provider_|no_api_key|ai_vault_)|^(invalid_api_key|authentication_error|permission_denied|rate_limit_exceeded|insufficient_quota)$/.test(error?.message || '') ? error.message : 'provider_catalog_failed';
+                item = { ...buildCatalogItem({ definition, detectedModels: previous?.detected_models,
+                    source: previous?.source === 'remote' ? 'remote' : 'embedded', error: code, stale: true }),
+                    configured: code === 'no_api_key' ? false : configured ?? previous?.configured ?? null,
+                    verification: code === 'no_api_key' ? 'missing' : 'unavailable',
+                    checked_at: toText(now()), last_success_at: previous?.last_success_at || '',
+                    credential_verification: configured !== null || code === 'no_api_key' ? 'verified' : 'unavailable',
+                    credential_checked_at: configured !== null || code === 'no_api_key' ? toText(now()) : previous?.credential_checked_at || '' };
+            }
+            if (!current() || jobs.get(jobKey) !== job) return null;
+            // Each provider publishes independently; a slow sibling cannot delay this cache.
+            const latest = readModelCatalogCache({ storage, userId }).payload.items;
+            const items = latest.some(entry => entry.provider === item.provider)
+                ? latest.map(entry => entry.provider === item.provider ? item : entry) : [...latest, item];
+            const payload = buildModelCatalogCacheRecord({ items, refreshedAt: toText(now()), source: 'refresh' });
+            return { item, cacheSaved: writeModelCatalogCache({ storage, payload, userId }) };
+        }).finally(() => { clear(); if (jobs.get(jobKey) === job) jobs.delete(jobKey); });
+        jobs.set(jobKey, job);
+        return job.promise;
+    }));
+    if (!current()) return { ok: false, error: 'provider_principal_changed' };
+    const cached = readModelCatalogCache({ storage, userId });
+    const cacheSaved = results.every(result => !result || result.cacheSaved);
+    return { ok: cacheSaved, error: cacheSaved ? '' : 'model_catalog_cache_write_failed',
+        stale: results.some(result => result?.item?.stale), payload: clone(cached.payload) };
 };
 
 export const ensureFreshAiModelCatalog = async ({

@@ -1,5 +1,11 @@
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
+import { test, beforeEach, vi } from 'vitest';
+
+const favorites = vi.hoisted(() => ({ ids: null }));
+vi.mock('../../eVe/intuition/tools/contact_favorites_preference.js', () => ({
+    isContactFavorite: id => favorites.ids === null || favorites.ids.has(id)
+}));
+beforeEach(() => { favorites.ids = null; });
 
 import { createDashboardDataAdapters } from '../../eVe/domains/dashboard/dashboard_data_adapters.js';
 import {
@@ -13,7 +19,7 @@ test('dashboard Calendar cards keep canonical title, start, and project scope to
     let requestedProjectId = '';
     const adapters = createDashboardDataAdapters({
         calendarApiLoader: async () => ({
-            listEvents: async ({ projectId } = {}) => {
+            next: async ({ projectId } = {}) => {
                 requestedProjectId = projectId;
                 return {
                     ok: true,
@@ -54,7 +60,7 @@ test('dashboard Calendar reads reject the renderer workspace and use the canonic
     try {
         const adapters = createDashboardDataAdapters({
             calendarApiLoader: async () => ({
-                listEvents: async ({ projectId } = {}) => {
+                next: async ({ projectId } = {}) => {
                     requestedProjectId = projectId;
                     return { ok: true, items: [] };
                 }
@@ -437,4 +443,23 @@ test('anonymous Dashboard treats unavailable authenticated contacts as an empty 
     const items = await adapters.list({ id: 'contacts', data_source: 'contacts' });
 
     assert.deepEqual(items, []);
+});
+
+test('Dashboard contacts require explicit stable favorites and reflect their removal immediately', async () => {
+    const adapters = createDashboardDataAdapters({
+        peopleDirectoryLoader: async () => [
+            { id: 'imported', name: 'Zoe', source_provider: 'macos' },
+            { id: 'public', name: 'Ada', source_provider: 'public' },
+            { id: 'self', name: 'Own', source_provider: 'current_user' }
+        ],
+        contactsApiLoader: async () => ({ ensureReady: async () => ({ ok: true }), list: async () => ({ items: [] }) }),
+        currentUserLoader: async () => ({ id: 'self' })
+    });
+    const list = async () => (await adapters.list({ id: 'contacts', data_source: 'contacts' })).map(item => item.id);
+    favorites.ids = new Set();
+    assert.deepEqual(await list(), []);
+    favorites.ids = new Set(['imported', 'public', 'self']);
+    assert.deepEqual(await list(), ['public', 'imported']);
+    favorites.ids.delete('public');
+    assert.deepEqual(await list(), ['imported']);
 });

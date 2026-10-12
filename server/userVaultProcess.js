@@ -71,6 +71,11 @@ const handleOperation = async (operation, payload = {}) => {
             authenticatedUserId: principalId });
     }
     if (operation === 'state:get') return db.getStateCurrent(payload.atome_id || payload.atomeId);
+    if (operation === 'communication:list') {
+        const { queryCommunicationMessages } = await import('../database/communication_messages.js');
+        // `db` est l'espace de noms du module : `query` n'existe que dans son export par defaut.
+        return queryCommunicationMessages({ query: db.default.query, userId: principalId, ...payload });
+    }
     if (operation === 'state:list') {
         return db.listStateCurrent(payload.project_id || payload.projectId || null, {
             ownerId: principalId,

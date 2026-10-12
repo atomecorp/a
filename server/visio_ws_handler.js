@@ -7,10 +7,14 @@ import { v4 as uuidv4 } from 'uuid';
 import { wsSendJson } from './wsSend.js';
 
 export function createWsHandler({ rooms, listenIp, announcedIp, ensureRoom, notifyRoom, closePeer, verifyJwtToken, resolveUserInfo, ensureRoomMeta, canJoinRoom }) {
-  async function handleWsMessage(connection, data) {
+  async function handleWsMessage(connection, data, reply) {
     const requestId = data?.requestId || data?.request_id || null;
     const safeSend = (payload) => {
-      wsSendJson(connection, payload, { scope: 'ws/visio', op: payload?.type || 'reply' });
+      if (payload.type === 'producerClosed') return wsSendJson(connection, {
+        type: 'visio-event', room_id: connection._visioRoomId, data: payload
+      }, { scope: 'ws/api', op: 'visio' });
+      if (typeof reply === 'function') return reply(payload);
+      wsSendJson(connection, payload, { scope: 'ws/api', op: payload?.type || 'reply' });
     };
 
     if (!data || typeof data !== 'object') {
@@ -51,7 +55,7 @@ export function createWsHandler({ rooms, listenIp, announcedIp, ensureRoom, noti
       }
 
       connection._visioUserId = userInfo.id;
-      connection._visioUserPhone = userInfo.phone || userPhone || null;
+      connection._visioUserPhone = userInfo.phone || null;
       connection._visioUsername = userInfo.username || decoded?.username || null;
 
       safeSend({

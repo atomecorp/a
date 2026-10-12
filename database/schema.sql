@@ -503,6 +503,7 @@ CREATE TABLE IF NOT EXISTS guest_adoption_payloads (
     operation_digest TEXT PRIMARY KEY,
     payload_json TEXT NOT NULL,
     payload_digest TEXT NOT NULL,
+    profile_event_json TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY(operation_digest) REFERENCES guest_adoption_operations(operation_digest) ON DELETE CASCADE

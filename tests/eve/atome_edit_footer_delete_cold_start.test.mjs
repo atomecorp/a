@@ -94,6 +94,41 @@ test('structured row Delete remains scoped to its active canonical record', asyn
     delete globalThis.HTMLElement;
 });
 
+test('native Delete commits the selected row to its recovery owner and preserves other rows', async () => {
+    vi.useFakeTimers();
+    const dom = new JSDOM('<!doctype html>');
+    vi.stubGlobal('window', dom.window);
+    vi.stubGlobal('document', dom.window.document);
+    vi.stubGlobal('CustomEvent', dom.window.CustomEvent);
+    const rows = new Map(['selected_row', 'other_row'].map(id => [id, {
+        id, type: 'text', project_id: 'blank', parent_id: 'blank', properties: { text: id }
+    }]));
+    dom.window.__currentProject = { id: 'blank' };
+    dom.window.__selectedAtomeIds = ['other_row', 'selected_row'];
+    const commit = vi.fn(async event => {
+        const record = rows.get(event.atome_id);
+        if (record) rows.set(event.atome_id, { ...record, project_id: event.project_id,
+            parent_id: event.parent_id, properties: { ...record.properties, ...event.props } });
+        return { ok: true };
+    });
+    dom.window.Atome = { commit, getStateCurrent: async id => rows.get(id) || null,
+        listStateCurrent: async () => [{ id: 'recovery', type: 'blackHole', properties: { kind: 'blackHole' } }] };
+    try {
+        await import('../../eVe/intuition/tools/delete.js');
+        const { TOOL_HANDLER_REGISTRY } = await import('../../eVe/intuition/runtime/tool_state.js');
+        const result = await TOOL_HANDLER_REGISTRY.get('ui.delete.selection')({ input: { selection_ids: ['selected_row'] } });
+        assert.equal(result.ok, true);
+        assert.deepEqual(result.deleted_ids, ['selected_row']);
+        assert.equal(rows.get('selected_row').properties.__deleted, true);
+        assert.equal(rows.get('selected_row').properties.deleted_from_project_id, 'blank');
+        assert.equal(rows.get('selected_row').parent_id, 'recovery');
+        assert.deepEqual(rows.get('other_row').properties, { text: 'other_row' });
+        assert.equal(commit.mock.calls.filter(([event]) => rows.has(event.atome_id)).length, 1);
+    } finally {
+        vi.clearAllTimers(); vi.useRealTimers(); dom.window.close(); vi.unstubAllGlobals();
+    }
+});
+
 test('structured rail Play delegates the exact List or Matrix record to the project playback owner', async () => {
     const dom = new JSDOM('<!doctype html><button id="play"></button>');
     globalThis.window = dom.window;

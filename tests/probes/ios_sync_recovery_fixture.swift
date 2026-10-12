@@ -14,7 +14,7 @@ extension AiSRuntime {
     static func verifySyncRecovery() throws {
         func check(_ condition: Bool, _ reason: String) { precondition(condition, reason) }
         let db = try openDatabase()
-        try execute(db, "INSERT INTO auth_local_grants VALUES ('own-grant','local-account','cloud-account','device','app',0,0)")
+        try execute(db, "INSERT INTO auth_local_grants (grant_id,local_principal,remote_principal,key_id,key_scope,generation,locked) VALUES ('own-grant','local-account','cloud-account','device','app',0,0)")
         let envelope: [String: Any] = ["event_id":"cloud-event", "stream":"own-stream", "sequence":1,
             "timestamp":"2026-10-10T00:00:00Z", "atome_id":"project-restored", "kind":"set",
             "vault_principal_id":"cloud-account", "patch":["props":["type":"project", "name":"Restored"]]]

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { buildBevyPanelTree, node, textNode, panelBodyLayer } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tree.js';
 import { projectPanelStack } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_projection.js';
@@ -78,7 +78,17 @@ test('all paints including sparse popup layers, media and footer belong to disjo
     separated(mounted);
     const shell = records(mounted.get('info')).find(record => record.id.endsWith('_panel'));
     assert.equal(shell.properties.opacity, 1);
-    assert.match(shell.properties.color, /,1\)$/);
+    // The approved common glass paints through its backdrop material, not an
+    // opaque base colour. An absent tint/blur or partial shell would be a bug.
+    assert.equal(shell.properties.width, 200);
+    assert.equal(shell.properties.height, 300);
+    assert.ok(shell.properties.material.backdrop.blur_px > 0);
+    assert.ok(shell.properties.material.backdrop.tint[3] > 0);
+    assert.ok(shell.properties.material.backdrop.tint[3] < 1);
+    for (const suffix of ['_body', '_fixed_actions', '_footer']) {
+        const band = records(mounted.get('info')).find(record => record.id.endsWith(suffix));
+        assert.equal(band?.properties.material?.backdrop, undefined, 'layout bands must not paint a second glass backdrop');
+    }
     const media = records(mounted.get('info')).find(record => record.properties.source === 'fixture.png');
     assert.ok(media.properties.renderLayer >= extent(mounted.get('info')).min);
     assert.ok(media.properties.renderLayer <= extent(mounted.get('info')).max);
@@ -251,5 +261,59 @@ test('data arriving during the first GPU mount is painted without another user g
         await closeBevyPanelSurface('initial_refresh_fixture'); bevyPanelRuntimeState.definitions.delete('initial_refresh_fixture');
         bevyPanelRuntimeState.runtime = previousRuntime;
         globalThis.window = previousWindow; globalThis.document = previousDocument; dom.window.close();
+    }
+});
+
+test('parent closure waits for hosted vault receipts; failed and repeated closes preserve every editor', async()=>{
+    const oldWindow=globalThis.window,oldDocument=globalThis.document,oldRuntime=bevyPanelRuntimeState.runtime;
+    const dom=new JSDOM('<canvas id="eve_surface_project"></canvas>');
+    globalThis.window=dom.window;globalThis.document=dom.window.document;
+    dom.window.__eveWorkspaceMode={mode:'dashboard'};dom.window.__eveDashboardMainMenuSuspended=true;
+    dom.window.document.querySelector('canvas').getBoundingClientRect=()=>({width:800,height:600});
+    bevyPanelRuntimeState.runtime={...noRender,unmountTree:async()=>{}};
+    const events=[];let ok=false,release,emitParent;
+    const pending=new Promise(resolve=>{release=resolve;});
+    registerBevyPanelSurface({surfaceKey:'qa_close_parent',title:'Parent',buildContent:(_, {emit})=>{emitParent=emit;return [];},handleEvent:()=>openBevyPanelSurface('qa_close_child'),onOpen:()=>()=>events.push('parent-cleanup')});
+    registerBevyPanelSurface({surfaceKey:'qa_close_child',title:'Child',buildContent:()=>[],
+        beforeClose:async()=>{events.push('prepare');await pending;return {ok};},onOpen:()=>()=>events.push('child-cleanup')});
+    try {
+        await openBevyPanelSurface('qa_close_parent');
+        const {isBevyPanelSurfaceOpen}=await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js');
+        emitParent({type:'qa.open'});
+        await vi.waitFor(()=>assert.equal(isBevyPanelSurfaceOpen('qa_close_child'),true));
+        const a=closeBevyPanelSurface('qa_close_parent'),b=closeBevyPanelSurface('qa_close_parent');
+        assert.equal(a,b);await Promise.resolve(); assert.ok(!events.includes('parent-cleanup'));
+        release();assert.equal((await a).ok,false);assert.ok(bevyPanelRuntimeState.mounted.has('qa_close_parent'));
+        assert.ok(!events.includes('child-cleanup'));ok=true;
+        assert.equal((await closeBevyPanelSurface('qa_close_parent')).ok,true);
+        assert.ok(events.indexOf('prepare')<events.indexOf('child-cleanup'));assert.ok(events.indexOf('child-cleanup')<events.indexOf('parent-cleanup'));
+    } finally {
+        ok=true;release();await closeBevyPanelSurface('qa_close_parent');await closeBevyPanelSurface('qa_close_child');
+        for(const key of ['qa_close_parent','qa_close_child'])bevyPanelRuntimeState.definitions.delete(key);
+        bevyPanelRuntimeState.runtime=oldRuntime;globalThis.window=oldWindow;globalThis.document=oldDocument;dom.window.close();
+    }
+});
+
+test('Home tool keeps its active state and blocks navigation when its panel refuses close', async()=>{
+    const {createUserHomePanelRuntime}=await import('../../eVe/intuition/tools/user_home_panel_runtime.js');
+    const oldWindow=globalThis.window,oldDocument=globalThis.document,oldRuntime=bevyPanelRuntimeState.runtime;
+    const oldDefinition=bevyPanelRuntimeState.definitions.get('home');
+    const dom=new JSDOM('<canvas id="eve_surface_project"></canvas>');
+    globalThis.window=dom.window;globalThis.document=dom.window.document;
+    dom.window.__eveWorkspaceMode={mode:'dashboard'};dom.window.__eveDashboardMainMenuSuspended=true;
+    dom.window.document.querySelector('canvas').getBoundingClientRect=()=>({width:800,height:600});
+    bevyPanelRuntimeState.runtime={...noRender,unmountTree:async()=>{}};
+    let allow=false,cleanups=0;
+    registerBevyPanelSurface({surfaceKey:'home',title:'QA Home',buildContent:()=>[],beforeClose:()=>({ok:allow,error:'qa_pending_key'}),onOpen:()=>()=>{cleanups++;}});
+    const owner=createUserHomePanelRuntime({getAdoleApi:()=>({auth:{current:async()=>({logged:true,user:{id:'qa-owner'}})},security:{isAnonymous:()=>false}}),openWorkspace:async()=>({ok:true})});
+    try {
+        await openBevyPanelSurface('home');const mounted=bevyPanelRuntimeState.mounted.get('home');
+        assert.deepEqual(await owner.closeHomePanel(),{ok:false,error:'qa_pending_key',closed:false,active:true,latched:true});
+        assert.equal((await owner.openHomePanel({section:'settings'})).ok,false);
+        assert.equal(bevyPanelRuntimeState.mounted.get('home'),mounted);assert.equal(cleanups,0);
+    } finally {
+        allow=true;await closeBevyPanelSurface('home');
+        if(oldDefinition)bevyPanelRuntimeState.definitions.set('home',oldDefinition);else bevyPanelRuntimeState.definitions.delete('home');
+        bevyPanelRuntimeState.runtime=oldRuntime;globalThis.window=oldWindow;globalThis.document=oldDocument;dom.window.close();
     }
 });

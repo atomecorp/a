@@ -95,7 +95,7 @@ try {
     assert.equal((await count(dataSource, 'events', 'atome_id = ?', [interrupted.payload.atomes[0].atome_id])), 1);
     assert.equal((await count(dataSource, 'snapshots', 'atome_id = ?', [interrupted.payload.atomes[0].atome_id])), 1);
     assert.equal((await count(dataSource, 'permissions', 'atome_id = ?', [interrupted.payload.atomes[0].atome_id])), 1);
-    assert.equal((await count(dataSource, 'sync_queue', 'atome_id = ?', [interrupted.payload.atomes[0].atome_id])), 1);
+    assert.equal((await count(dataSource, 'sync_queue', 'atome_id = ?', [interrupted.payload.atomes[0].atome_id])), 0, 'canonical Fastify commits do not requeue the imported guest outbox');
 
     const incomplete = payloadFor('incomplete');
     const incompleteBase = { type: 'guest-adoption', token, operation_id: crypto.randomUUID() };

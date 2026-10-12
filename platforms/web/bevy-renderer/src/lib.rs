@@ -17,6 +17,7 @@ use std::cell::{Cell, RefCell};
 
 mod exports;
 mod frame_clock;
+mod render_error;
 
 use frame_clock::{
     adapt_web_idle_heartbeat, continue_merged_wake, remember_event_loop_proxy, wake_web_renderer, web_winit_settings,
@@ -151,6 +152,8 @@ struct WebRendererDiagnostics {
     ui_viewport_height: u32,
     last_frame: WebFrameTiming,
     recent_slow_frames: Vec<WebFrameTiming>,
+    /// First wgpu error that stopped the renderer; survives diagnostics resets.
+    render_error: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -649,6 +652,7 @@ fn read_web_renderer_diagnostics() -> WebRendererDiagnostics {
         let mut diagnostics = cell.borrow().clone();
         diagnostics.running_apps =
             WEB_RUNNING_APPS.with(|apps_cell| apps_cell.borrow().len() as u32);
+        diagnostics.render_error = render_error::recorded_render_error();
         diagnostics
     })
 }
@@ -692,6 +696,7 @@ fn build_web_bevy_app(config: WebBevyRendererConfig) -> App {
                 ..default()
             }),
     )
+    .insert_resource(render_error::handler())
     .add_plugins(WebBevyRendererPlugin { config });
     app
 }
