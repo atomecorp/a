@@ -5,12 +5,14 @@ import { OPENAI_MODALITY_MODELS, OPENAI_VAD_SCHEMA } from '../ai/model_catalog_r
 import { getAudioPlaybackAPI } from '../../application/audio_runtime/audio_playback_api.js';
 import { openAiFailure } from '../ai/openai_stream.js';
 
+const FAREWELL_DEADLINE_MS = 6000;
+
 // WebRTC owns duplex media delivery. AudioPlaybackAPI owns audible output;
 // the assistant owns focus and the conversation owns public transcript turns.
 export const createRealtimeSession = ({
     env = globalThis, request = requestProviderService,
     playback = getAudioPlaybackAPI(env), onTurn = async () => {}, onTool = async () => {},
-    history = () => [], onUsage = () => {}, tools = [], createTools = null, voice = 'marin', locale = '', readyLine = '', vad = { type: 'server_vad', threshold: 0.5, silence_duration_ms: 500, prefix_padding_ms: 300 }, deviceId = ''
+    history = () => [], onUsage = () => {}, tools = [], createTools = null, voice = 'marin', locale = '', readyLine = '', farewellLine = '', suspendWhenHidden = true, vad = { type: 'server_vad', threshold: 0.5, silence_duration_ms: 500, prefix_padding_ms: 300 }, deviceId = ''
 } = {}) => {
     // Interface language (ISO-639-1): a transcription hint and the reply language,
     // otherwise ambient noise is transcribed and answered in any language.
@@ -27,9 +29,9 @@ export const createRealtimeSession = ({
     let toolSession = null, toolQueue = Promise.resolve();
     let state = { phase: 'closed', sessionId: null, error: '', connected: false };
     const transcripts = new Map(), heardResponses = new Map();
-    // Out-of-band "ready" announcements: spoken, never part of the conversation.
+    // Out-of-band "ready" and "farewell" announcements: spoken, never part of the conversation.
     const announcements = new Set();
-    let currentResponse = null;
+    let currentResponse = null, farewell = null;
     const flushTranscript = async (responseId, heard) => {
         heardResponses.set(responseId, heard);
         if (heardResponses.size > 128) heardResponses.delete(heardResponses.keys().next().value);
@@ -44,6 +46,8 @@ export const createRealtimeSession = ({
     const send = event => {
         if (channel?.readyState === 'open') channel.send(JSON.stringify(event));
     };
+    const announce = (purpose, line) => send({ type: 'response.create', response: { conversation: 'none', input: [],
+        output_modalities: ['audio'], metadata: { purpose }, instructions: `Say exactly this sentence and nothing else: "${line}"` } });
     const stopCapture = () => {
         listening = false;
         stream?.getTracks().forEach(track => track.stop());
@@ -53,6 +57,7 @@ export const createRealtimeSession = ({
         });
     };
     const close = async () => {
+        farewell?.resolve();
         generation++; abort?.abort(); abort = null;
         unsubscribeLifecycle(); unsubscribeLifecycle = () => {};
         stopCapture(); toolSession = null; playback.stopStream({ id: state.sessionId });
@@ -71,10 +76,14 @@ export const createRealtimeSession = ({
     };
     const handleEvent = async (event, token) => {
         if (token !== generation) return;
+        // Cancelling a response that has just finished is a benign race of the protocol.
+        if (event.type === 'error' && event.error?.code === 'response_cancel_not_active') return;
         if (event.type === 'error') throw openAiFailure(event, 'realtime_provider_error');
         if (event.type === 'response.done' && event.response?.status === 'failed') throw openAiFailure(event, 'provider_response_failed');
         if (event.type === 'input_audio_buffer.speech_started' && listening) emit({ phase: 'listening' });
-        if (event.type === 'response.created' && event.response?.metadata?.purpose === 'ready') announcements.add(event.response.id);
+        const purpose = event.type === 'response.created' ? event.response?.metadata?.purpose : '';
+        if (purpose === 'ready' || purpose === 'farewell') announcements.add(event.response.id);
+        if (purpose === 'farewell' && farewell) farewell.id = event.response.id;
         if (event.type === 'response.created' && listening) emit({ phase: 'responding' });
         if (event.type === 'conversation.item.input_audio_transcription.completed' && listening) {
             onUsage(event.usage, OPENAI_MODALITY_MODELS.transcription);
@@ -88,7 +97,9 @@ export const createRealtimeSession = ({
         if (event.type === 'output_audio_buffer.stopped') {
             await flushTranscript(event.response_id, heardResponses.get(event.response_id) !== false);
             currentResponse = null;
+            if (farewell?.id === event.response_id) farewell.resolve();
         }
+        if (event.type === 'response.done' && farewell?.id === event.response?.id && event.response?.status !== 'completed') farewell.resolve();
         if (event.type === 'response.output_audio_transcript.done' && listening && !announcements.has(event.response_id)) {
             const responseId = event.response_id || currentResponse;
             transcripts.set(event.item_id, { id: event.item_id, text: event.transcript, responseId });
@@ -152,7 +163,8 @@ export const createRealtimeSession = ({
             signal.throwIfAborted();
             const failCurrent = error => fail(error, token);
             const doc = env.document, devices = env.navigator.mediaDevices;
-            const suspended = () => { if (doc?.visibilityState === 'hidden') void pause().catch(failCurrent); };
+            // A hands-free host (CarPlay) owns the session while the page is hidden.
+            const suspended = () => { if (suspendWhenHidden && doc?.visibilityState === 'hidden') void pause().catch(failCurrent); };
             const ended = () => { if (token === generation) void failCurrent(new Error('realtime_input_device_lost')); };
             const changed = () => { if (stream?.getAudioTracks().some(track => track.readyState === 'ended')) ended(); };
             const tracks = stream.getAudioTracks();
@@ -190,8 +202,7 @@ export const createRealtimeSession = ({
                 if (token !== generation) return;
                 emit({ phase: listening ? 'listening' : 'idle', connected: true });
                 // Tell the user the wait is over, in the interface language.
-                if (readyLine) send({ type: 'response.create', response: { conversation: 'none', input: [], output_modalities: ['audio'],
-                    metadata: { purpose: 'ready' }, instructions: `Say exactly this sentence and nothing else: "${readyLine}"` } });
+                if (readyLine) announce('ready', readyLine);
             };
             channel.onmessage = event => {
                 // Serialize tool calls while keeping speech and interruption events responsive.
@@ -239,8 +250,22 @@ export const createRealtimeSession = ({
             await fail(error); throw error;
         }
     };
+    // A hang-up stops listening at once, then lets the spoken farewell finish
+    // within a bounded delay before releasing the transport.
+    const end = async ({ speakFarewell = false } = {}) => {
+        if (speakFarewell && farewellLine && state.connected && channel?.readyState === 'open' && !farewell) {
+            listening = false; stopCapture();
+            send({ type: 'response.cancel' }); send({ type: 'output_audio_buffer.clear' }); send({ type: 'input_audio_buffer.clear' });
+            await new Promise(resolve => {
+                const deadline = (env.setTimeout || globalThis.setTimeout)(() => farewell?.resolve(), FAREWELL_DEADLINE_MS);
+                farewell = { id: null, resolve: () => { (env.clearTimeout || globalThis.clearTimeout)(deadline); farewell = null; resolve(); } };
+                announce('farewell', farewellLine);
+            });
+        }
+        return close();
+    };
     return Object.freeze({
-        open, close, pause,
+        open, close: end, pause,
         async configure(options = {}) {
             const nextVad = options.vad === undefined ? turnDetection : validateVad(options.vad);
             const nextDevice = options.deviceId === undefined ? deviceId : String(options.deviceId);

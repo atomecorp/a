@@ -3,6 +3,8 @@ use axum::extract::ws::{Message, WebSocket};
 use futures_util::StreamExt;
 use serde_json::{json, Value as JsonValue};
 use super::provider_relay::ProviderRelay;
+#[path = "file_selection.rs"]
+mod file_selection;
 
 /// A reply the browser is waiting on is matched by `requestId`; a frame without
 /// one is dropped by the transport, which then waits out its full ten-second
@@ -127,6 +129,15 @@ pub(super) async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
                     continue;
                 }
 
+                if msg_type == "file-selection" {
+                    let response = match ws_authenticated_user(&data, &state) {
+                        Ok(_) => file_selection::handle(&data).await,
+                        Err(response) => response,
+                    };
+                    if socket.send(Message::Text(ws_reply_envelope(response, request_id).to_string())).await.is_err() { break; }
+                    continue;
+                }
+                
                 // Route to atome handler
                 if msg_type == "atome" {
                     if let Some(ref atome_state) = state.atome_state {

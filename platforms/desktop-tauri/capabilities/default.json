@@ -19,6 +19,7 @@
     "clipboard-bridge",
     "file-export",
     "taxonomy-editor",
-    "health-bridge"
+    "health-bridge",
+    "assistant-link"
   ]
 }

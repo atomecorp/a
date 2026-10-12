@@ -1,0 +1,34 @@
+{
+  "phrase": "Ève, écoute-moi",
+  "language": "fr-FR",
+  "pipeline": "openWakeWord-compatible: 16 kHz PCM -> melspectrogram.onnx (32 bins, 8 frames per 80 ms) -> embedding_model.onnx (76 frames -> 96 values) -> eve_ecoute_moi.json (16 x 96 window)",
+  "assets": {
+    "melspectrogram.onnx": {
+      "source": "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/melspectrogram.onnx",
+      "license": "Apache-2.0 (openWakeWord code); fixed-parameter transform. To verify: license not stated separately from the CC BY-NC-SA 4.0 notice that covers openWakeWord's pre-trained wake-word models.",
+      "bytes": 1087958,
+      "sha256": "ba2b0e0f8b7b875369a2c89cb13360ff53bac436f2895cced9f479fa65eb176f"
+    },
+    "embedding_model.onnx": {
+      "source": "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/embedding_model.onnx",
+      "license": "Re-implementation of Google's speech_embedding (TFHub, Apache-2.0). To verify: license not stated separately from the CC BY-NC-SA 4.0 notice that covers openWakeWord's pre-trained wake-word models.",
+      "bytes": 1326578,
+      "sha256": "70d164290c1d095d1d4ee149bc5e00543250a7316b59f31d056cff7bd3075c1f"
+    },
+    "eve_ecoute_moi.json": {
+      "source": "Trained for atome/eVe on 2026-10-12 with temp/wake_training (JavaScript, Node, onnxruntime-web 1.27.0), see eVe/documentations/assistant_wake_provisioning.md",
+      "trainingVoices": [
+        "Piper fr_FR-siwis-medium, SIWIS French Speech Synthesis Database, CC BY 4.0, https://datashare.is.ed.ac.uk/handle/10283/2353",
+        "Piper fr_FR-mls-medium, Multilingual LibriSpeech French (openslr.org/94), CC BY 4.0",
+        "FLEURS fr_fr (Google), CC BY 4.0, https://huggingface.co/datasets/google/fleurs — natural speech used as negatives only"
+      ],
+      "negativeText": "French strings of the application's own i18n catalogue and generated syllables",
+      "bytes": 284868,
+      "sha256": "5039027ba3d3ef272f69d083bcb67101da1b12814af2799f1d930468531e6599",
+      "architecture": "1536 -> 32 -> 32 -> 1 (ReLU, sigmoid), inputs standardized; Adam, 20 epochs, batch 128, lr 1e-3, weight decay 1e-4, negative weight 4, seed 11",
+      "trainingData": "11,996 positive windows (siwis + 14 screened mls speakers), 73,924 synthetic negative windows, 43,596 natural-speech windows (FLEURS fr_fr test, CC BY 4.0)",
+      "policy": "threshold 0.99 on 2 consecutive 80 ms frames; personal verifier gated at base >= 0.3, threshold 0.5",
+      "evaluation": "macOS voices never used for training (18 fr_FR/fr_CA voices, 108 phrase clips at 6/15/30 dB SNR, 23 min of continuous read speech): 107/108 detected, 0 false activations in 23 min (threshold 0.98: 108/108, 1 false activation). Same with the silence gate. Real browser chain (Chromium fake microphone): Thomas, Amélie, Jacques detected once per loop, a long negative sentence never."
+    }
+  }
+}

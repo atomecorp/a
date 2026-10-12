@@ -4,15 +4,21 @@ Before starting any implementation, refactor, verification, cleanup, or review w
 
 Read and strictly apply:
 
-- ./.codex/AGENTS.md
+- ../../AGENTS.md
 
-If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGENTS.md has absolute precedence.
+If any instruction in this file conflicts with ../../AGENTS.md, ../../AGENTS.md has absolute precedence.
 
 # User Authentication - Production TODO
 
+## 2026-10-12 tracking clarification
+
+Canonical task: [ATM-2001](../execution_order.md). User-approved distinction: current first connection is SMS phone-link authentication. Optional password authentication is a future evolution for an already verified account: set the password inside that account, then offer password or SMS after entering its phone number. This is the same authentication workstream, not a duplicate implementation task, and the future password feature does not block sharing.
+
+Historic password/OTP descriptions and previous test/deployment claims below are provenance, not fresh acceptance. Qualify the existing Argon2id migration and recovery contracts against the current owners before password implementation; do not re-enable a removed legacy login route as a shortcut. SMS-provider acceptance is not carrier delivery. No authentication code or provider configuration was changed in this triage.
+
 Status: Partiel
 
-Current transport and security notice:
+Historical transport/security inventory — qualify against the current phone-link status:
 
 - The HTTP routes below are historical implementation inventory. Canonical maintained
   authentication operations must migrate to `/ws/api`.

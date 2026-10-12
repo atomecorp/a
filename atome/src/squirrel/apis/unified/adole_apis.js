@@ -47,6 +47,8 @@ import {
   retireSurface,
   setLocalSurfaceLabel
 } from './adole_api/surfaces.js';
+// Also installs the executor that answers commands from the account's other devices.
+import { listRemoteSurfaces, runRemoteCommand } from '../../teleport/remote_command.js';
 import { getSessionState, waitForAuthCheck } from './adole_api/session.js';
 import { FastifyAdapter } from './adole.js';
 
@@ -134,7 +136,9 @@ export const AdoleAPI = {
     ensureAnnounced: ensureSurfaceAnnounced,
     list: listSurfaces,
     ping: pingSurface,
-    retire: retireSurface
+    retire: retireSurface,
+    listRemote: listRemoteSurfaces,
+    run: runRemoteCommand
   },
   sharing: {
     share: share_atome,

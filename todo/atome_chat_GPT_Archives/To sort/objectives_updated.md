@@ -1,0 +1,1787 @@
+# Atome / eVe — Cahier des charges du système d’objectifs et scénarios pré-câblés
+
+## 0. Contexte séparé : modes Liste / Matrice
+
+Un chantier distinct restera à finaliser concernant les **modes de représentation et d’usage**, notamment pour l’audio et les médias :
+
+- mode Liste ;
+- mode Matrice ;
+- comportement spécifique aux sons, morceaux, clips, pistes et autres médias ;
+- règles de lecture, sélection, lancement, regroupement et navigation propres à chaque mode ;
+- cohérence avec les vues Song / Structure / Piste et avec les outils temporels.
+
+Ce sujet doit être traité dans un cahier des charges séparé après discussion détaillée afin de ne pas figer prématurément un comportement encore en réflexion.
+
+**Décision complémentaire du 11 octobre 2026.** Ce chantier séparé concerne les comportements spécialisés Liste/Matrice des médias et de l’audio. Il ne remet pas en cause la décision désormais actée pour les **projets, les objectifs et les activités** : leur création, leur exploration et leurs réglages utilisent une **même grammaire de matrices de carrés imbriquées**. Les règles détaillées et les tests correspondants figurent en section 50.
+
+---
+
+# 1. Vision
+
+Atome/eVe doit proposer un système d’objectifs beaucoup plus large qu’un gestionnaire de projets classique.
+
+L’utilisateur ne crée pas simplement une liste de tâches.
+
+Il exprime un résultat qu’il veut atteindre, par exemple :
+
+- créer un album ;
+- préparer un concert ;
+- réaliser un film ;
+- organiser une grande randonnée ;
+- perdre du poids ;
+- prendre de la masse ;
+- mieux dormir ;
+- courir un marathon ;
+- monter une société ;
+- financer un projet ;
+- organiser un événement ;
+- réunir une équipe ;
+- apprendre une compétence ;
+- trouver des collaborateurs ;
+- préparer un voyage ;
+- lancer un produit ;
+- écrire un livre ;
+- améliorer une habitude ;
+- mener une recherche ;
+- accomplir un objectif libre non prévu à l’avance.
+
+Atome/eVe doit alors transformer cet objectif en **itinéraire structuré, adaptable et suivi dans le temps**.
+
+Le système doit guider l’utilisateur depuis l’intention initiale jusqu’à :
+
+1. la définition ;
+2. la préparation ;
+3. la planification ;
+4. l’exécution ;
+5. le suivi ;
+6. les corrections ;
+7. la validation ;
+8. l’achèvement ;
+9. le maintien éventuel après réussite.
+
+Le système doit pouvoir intégrer :
+
+- tâches ;
+- sous-objectifs ;
+- calendrier ;
+- rappels ;
+- ressources ;
+- documents ;
+- médias ;
+- budget ;
+- financement ;
+- personnes ;
+- équipes ;
+- contacts ;
+- recherche de compétences ;
+- communication ;
+- localisation ;
+- dépendances ;
+- contraintes ;
+- métriques ;
+- preuves d’avancement ;
+- automatisations ;
+- recommandations ;
+- assistant IA ;
+- conditions d’entrée/sortie ;
+- suivi après atteinte de l’objectif.
+
+---
+
+# 2. Principe fondamental : un objectif n’est pas un projet figé
+
+Un objectif doit être représenté comme un **graphe évolutif**, pas comme une simple checklist linéaire.
+
+Un objectif peut comporter :
+
+- plusieurs chemins possibles ;
+- des étapes facultatives ;
+- des étapes conditionnelles ;
+- des dépendances ;
+- des branches ;
+- des retours en arrière ;
+- des validations ;
+- des étapes parallèles ;
+- des personnes différentes ;
+- plusieurs sources de financement ;
+- plusieurs lieux ;
+- plusieurs dates possibles ;
+- plusieurs niveaux de réussite.
+
+Exemple :
+
+> Objectif : sortir un album.
+
+Le chemin peut varier selon que l’utilisateur :
+
+- compose seul ou avec un groupe ;
+- possède déjà les morceaux ;
+- doit trouver un chanteur ;
+- enregistre chez lui ou en studio ;
+- autoproduit ou cherche un label ;
+- prévoit une sortie numérique uniquement ;
+- souhaite presser un vinyle ;
+- dispose déjà du financement ;
+- veut préparer ensuite une tournée.
+
+Le scénario doit donc être **pré-câblé mais jamais rigide**.
+
+---
+
+# 3. Modèle d’un objectif
+
+Chaque objectif doit être un objet structuré contenant au minimum :
+
+## 3.1 Identité
+
+- titre ;
+- description ;
+- catégorie ;
+- type de scénario ;
+- statut ;
+- priorité ;
+- date de création ;
+- date de début ;
+- date cible éventuelle ;
+- horizon temporel ;
+- propriétaire ;
+- participants éventuels.
+
+## 3.2 Résultat attendu
+
+Le système doit demander ou déduire :
+
+- ce que signifie « réussi » ;
+- le niveau minimum acceptable ;
+- le niveau idéal ;
+- les critères mesurables ;
+- les critères qualitatifs ;
+- les preuves nécessaires.
+
+## 3.3 Étapes
+
+Chaque étape peut contenir :
+
+- titre ;
+- explication ;
+- actions ;
+- dépendances ;
+- durée estimative ;
+- dates ;
+- ressources ;
+- contacts ;
+- budget ;
+- conditions ;
+- critères de validation ;
+- livrables ;
+- sous-objectifs ;
+- documents liés ;
+- médias liés ;
+- notes ;
+- risques ;
+- alternatives.
+
+## 3.4 Progression
+
+La progression ne doit pas être calculée uniquement en pourcentage de tâches cochées.
+
+Elle peut prendre en compte :
+
+- étapes obligatoires terminées ;
+- importance relative des étapes ;
+- jalons atteints ;
+- métriques réelles ;
+- validation manuelle ;
+- validation automatique ;
+- temps écoulé ;
+- qualité du résultat ;
+- risques restant ouverts.
+
+Afficher au minimum :
+
+- progression globale ;
+- prochaine étape ;
+- blocages ;
+- retard éventuel ;
+- jalons importants ;
+- date cible ;
+- tendance : en avance / normal / en retard / bloqué.
+
+---
+
+# 4. Cycle de vie générique de tous les objectifs
+
+Tous les scénarios doivent pouvoir s’appuyer sur un cycle commun.
+
+## Phase 1 — Intention
+
+Questions de base :
+
+- Que veux-tu accomplir ?
+- Pourquoi ?
+- Pour quand ?
+- Quel niveau de résultat souhaites-tu ?
+- Est-ce personnel, collectif ou professionnel ?
+- Existe-t-il déjà des éléments réalisés ?
+
+## Phase 2 — Diagnostic initial
+
+Déterminer :
+
+- point de départ ;
+- ressources disponibles ;
+- compétences ;
+- temps disponible ;
+- budget ;
+- contraintes ;
+- personnes déjà impliquées ;
+- matériel ;
+- documents ;
+- risques ;
+- prérequis.
+
+## Phase 3 — Construction du parcours
+
+Le système instancie le scénario choisi et supprime les branches inutiles.
+
+Il propose :
+
+- phases ;
+- jalons ;
+- actions ;
+- ordre logique ;
+- tâches parallèles ;
+- ressources ;
+- personnes à trouver ;
+- budget ;
+- dates.
+
+## Phase 4 — Exécution
+
+L’utilisateur avance dans le scénario.
+
+Le système :
+
+- présente la prochaine action utile ;
+- évite d’afficher inutilement toute la complexité ;
+- suit les dépendances ;
+- détecte les blocages ;
+- adapte les étapes suivantes.
+
+## Phase 5 — Contrôle
+
+À intervalles pertinents :
+
+- comparer prévu / réel ;
+- vérifier les métriques ;
+- vérifier les livrables ;
+- identifier retard ou dérive ;
+- proposer une correction.
+
+## Phase 6 — Validation
+
+Une étape peut être validée par :
+
+- l’utilisateur ;
+- un collaborateur ;
+- une donnée mesurée ;
+- un fichier produit ;
+- une date atteinte ;
+- un événement ;
+- une condition ;
+- une vérification automatique.
+
+## Phase 7 — Achèvement
+
+Le système confirme :
+
+- résultat obtenu ;
+- éléments manquants ;
+- résultat partiel éventuel ;
+- livrables finaux ;
+- archivage ;
+- partage.
+
+## Phase 8 — Maintien
+
+Certains objectifs ne s’arrêtent pas lorsqu’ils sont atteints.
+
+Exemples :
+
+- poids ;
+- forme ;
+- sommeil ;
+- revenus ;
+- apprentissage ;
+- entretien d’un équipement ;
+- communauté ;
+- clientèle ;
+- relation ;
+- habitudes.
+
+Le scénario peut donc basculer vers un **mode maintien** avec une fréquence plus faible de suivi.
+
+---
+
+# 5. Architecture des scénarios pré-câblés
+
+Les scénarios ne doivent pas être codés directement dans l’interface.
+
+Créer un format déclaratif permettant de définir un scénario avec :
+
+- `id`
+- `name`
+- `category`
+- `description`
+- `tags`
+- `goal_type`
+- `questions`
+- `phases`
+- `steps`
+- `dependencies`
+- `conditions`
+- `milestones`
+- `resources`
+- `roles`
+- `metrics`
+- `funding_options`
+- `maintenance`
+- `recommended_tools`
+- `automation_hooks`
+
+Le moteur doit interpréter ces définitions et construire l’objectif.
+
+Avantages :
+
+- ajout d’un scénario sans modifier l’UI ;
+- possibilité de partager des scénarios ;
+- scénarios communautaires ;
+- scénarios privés ;
+- scénarios créés par l’utilisateur ;
+- scénarios générés avec l’assistant ;
+- versionnage ;
+- évolution sans casser les objectifs déjà créés.
+
+---
+
+# 6. Bibliothèque d’objectifs pré-câblés
+
+La bibliothèque initiale doit être large mais organisée.
+
+Chaque entrée ci-dessous doit être considérée comme un **template de scénario**, et non comme une simple phrase.
+
+---
+
+# 7. Musique et audio
+
+Prévoir au minimum :
+
+1. Créer une chanson.
+2. Composer une chanson à plusieurs.
+3. Écrire des paroles.
+4. Composer une musique instrumentale.
+5. Produire un morceau complet.
+6. Enregistrer une démo.
+7. Enregistrer un single.
+8. Mixer un morceau.
+9. Masteriser un morceau.
+10. Finaliser un morceau déjà commencé.
+11. Créer un EP.
+12. Créer un album.
+13. Remixer un morceau.
+14. Préparer une collaboration musicale.
+15. Trouver un chanteur.
+16. Trouver un musicien.
+17. Constituer un groupe.
+18. Répéter un répertoire.
+19. Préparer une setlist.
+20. Préparer un concert.
+21. Organiser un concert.
+22. Préparer une tournée.
+23. Organiser une tournée.
+24. Préparer un live électronique.
+25. Préparer un playback / backing tracks.
+26. Préparer un système de scène audio/MIDI/DMX.
+27. Publier un morceau.
+28. Distribuer un morceau sur les plateformes.
+29. Déclarer et documenter une œuvre.
+30. Préparer une sortie promotionnelle.
+31. Créer un clip musical.
+32. Créer une identité sonore.
+33. Créer une banque de sons.
+34. Créer un sample pack.
+35. Créer un podcast.
+36. Produire un épisode de podcast.
+37. Créer un habillage sonore.
+38. Préparer une session studio.
+39. Préparer un rider technique.
+40. Monter un home-studio.
+
+---
+
+# 8. Vidéo, cinéma et audiovisuel
+
+1. Écrire un scénario.
+2. Développer une idée de film.
+3. Préparer un storyboard.
+4. Réaliser un court métrage.
+5. Réaliser un film.
+6. Réaliser un documentaire.
+7. Réaliser une vidéo YouTube.
+8. Réaliser une publicité.
+9. Réaliser un clip.
+10. Réaliser une interview.
+11. Préparer un tournage.
+12. Constituer une équipe de tournage.
+13. Trouver des acteurs.
+14. Faire un casting.
+15. Trouver des lieux.
+16. Organiser un planning de tournage.
+17. Préparer le matériel.
+18. Monter une vidéo.
+19. Faire l’étalonnage.
+20. Faire le sound design.
+21. Ajouter musique et voix.
+22. Ajouter sous-titres.
+23. Finaliser les exports.
+24. Préparer une diffusion.
+25. Soumettre un film à des festivals.
+26. Chercher un financement audiovisuel.
+27. Organiser une projection.
+28. Créer une série de vidéos.
+29. Créer une chaîne vidéo.
+30. Construire un calendrier éditorial vidéo.
+
+---
+
+# 9. Graphisme, design et création visuelle
+
+1. Créer un logo.
+2. Créer une identité visuelle.
+3. Créer une charte graphique.
+4. Réaliser une affiche.
+5. Réaliser une pochette d’album.
+6. Créer un visuel promotionnel.
+7. Créer un site visuel / maquette.
+8. Créer une interface.
+9. Créer une illustration.
+10. Réaliser une série d’illustrations.
+11. Créer un portfolio.
+12. Préparer une exposition.
+13. Organiser une exposition.
+14. Créer une collection graphique.
+15. Créer des assets pour un jeu.
+16. Créer des visuels pour les réseaux sociaux.
+17. Préparer des fichiers d’impression.
+18. Concevoir un packaging.
+19. Créer une présentation visuelle.
+20. Créer un livre illustré.
+
+---
+
+# 10. Écriture, publication et contenu
+
+1. Écrire un livre.
+2. Écrire une nouvelle.
+3. Écrire un article.
+4. Écrire un essai.
+5. Écrire un scénario.
+6. Écrire une pièce.
+7. Écrire des paroles.
+8. Créer un blog.
+9. Publier régulièrement.
+10. Créer une newsletter.
+11. Créer un dossier de presse.
+12. Créer un communiqué.
+13. Préparer une campagne éditoriale.
+14. Traduire une œuvre.
+15. Corriger un manuscrit.
+16. Préparer l’édition.
+17. Auto-publier un livre.
+18. Chercher un éditeur.
+19. Préparer une campagne de lancement.
+20. Créer une documentation technique.
+
+---
+
+# 11. Logiciel, produit numérique et technologie
+
+1. Créer une application.
+2. Créer un site web.
+3. Créer un prototype.
+4. Finaliser un MVP.
+5. Préparer une bêta.
+6. Lancer un produit numérique.
+7. Débugger un produit.
+8. Optimiser les performances.
+9. Sécuriser un produit.
+10. Préparer un déploiement.
+11. Créer une API.
+12. Créer un plugin.
+13. Créer un jeu.
+14. Créer un outil interne.
+15. Migrer une architecture.
+16. Auditer un codebase.
+17. Documenter un projet.
+18. Organiser les tests.
+19. Préparer une release.
+20. Organiser la maintenance.
+21. Construire une communauté open source.
+22. Recruter des contributeurs.
+23. Chercher des testeurs.
+24. Collecter les retours utilisateurs.
+25. Préparer une roadmap.
+
+---
+
+# 12. Entreprise, activité professionnelle et entrepreneuriat
+
+1. Créer une entreprise.
+2. Lancer une activité indépendante.
+3. Valider une idée de business.
+4. Construire un business model.
+5. Réaliser une étude de marché.
+6. Trouver un nom.
+7. Créer une marque.
+8. Créer une offre.
+9. Fixer un prix.
+10. Trouver ses premiers clients.
+11. Créer une stratégie commerciale.
+12. Créer une stratégie marketing.
+13. Préparer un lancement.
+14. Construire un site commercial.
+15. Mettre en place une facturation.
+16. Mettre en place une comptabilité.
+17. Organiser l’administratif.
+18. Trouver des partenaires.
+19. Recruter.
+20. Constituer une équipe.
+21. Chercher des prestataires.
+22. Trouver un associé.
+23. Préparer une levée de fonds.
+24. Chercher des investisseurs.
+25. Préparer un pitch.
+26. Préparer un dossier financier.
+27. Chercher des subventions.
+28. Organiser une campagne de crowdfunding.
+29. Améliorer la rentabilité.
+30. Réduire les coûts.
+31. Automatiser des opérations.
+32. Développer à l’international.
+33. Préparer une nouvelle offre.
+34. Préparer une fusion ou un partenariat.
+35. Créer un réseau professionnel.
+
+---
+
+# 13. Financement et ressources
+
+Cette catégorie peut être utilisée seule ou comme sous-objectif d’un autre scénario.
+
+1. Évaluer le budget d’un projet.
+2. Construire un plan de financement.
+3. Réduire le coût d’un projet.
+4. Trouver des aides.
+5. Trouver des subventions.
+6. Trouver des sponsors.
+7. Trouver des investisseurs.
+8. Trouver des mécènes.
+9. Lancer un crowdfunding.
+10. Préparer un dossier bancaire.
+11. Trouver des partenaires matériels.
+12. Chercher des dons.
+13. Mutualiser des ressources.
+14. Louer plutôt qu’acheter.
+15. Identifier les dépenses obligatoires.
+16. Prioriser les dépenses.
+17. Suivre budget prévu / réel.
+18. Préparer des échéances de paiement.
+19. Prévoir une réserve.
+20. Clôturer financièrement un projet.
+
+---
+
+# 14. Travail, carrière et compétences
+
+1. Trouver un emploi.
+2. Changer de métier.
+3. Préparer un CV.
+4. Créer un portfolio.
+5. Préparer un entretien.
+6. Chercher des offres.
+7. Organiser des candidatures.
+8. Développer son réseau.
+9. Trouver un mentor.
+10. Apprendre une compétence.
+11. Obtenir une certification.
+12. Préparer un examen.
+13. Préparer un concours.
+14. Construire une formation.
+15. Suivre une formation.
+16. Créer un plan de carrière.
+17. Préparer une promotion.
+18. Négocier une rémunération.
+19. Lancer une activité parallèle.
+20. Passer indépendant.
+21. Reprendre des études.
+22. Créer une réputation professionnelle.
+23. Publier des travaux.
+24. Préparer une conférence.
+25. Faire une présentation publique.
+
+---
+
+# 15. Santé, forme et bien-être
+
+Les scénarios de santé doivent rester des outils d’organisation et de suivi et ne pas remplacer un professionnel de santé.
+
+1. Perdre du poids.
+2. Prendre de la masse.
+3. Prendre du muscle.
+4. Maintenir son poids.
+5. Reprendre le sport.
+6. Améliorer sa condition physique.
+7. Améliorer son endurance.
+8. Améliorer sa force.
+9. Améliorer sa mobilité.
+10. Améliorer sa souplesse.
+11. Mieux dormir.
+12. Stabiliser ses horaires de sommeil.
+13. Améliorer son alimentation.
+14. Boire suffisamment.
+15. Réduire une habitude alimentaire.
+16. Préparer un bilan de santé.
+17. Organiser ses rendez-vous médicaux.
+18. Suivre des mesures de santé.
+19. Suivre un traitement prescrit.
+20. Organiser une rééducation prescrite.
+21. Diminuer le stress.
+22. Introduire une routine de relaxation.
+23. Reprendre une activité après une interruption.
+24. Maintenir une amélioration obtenue.
+
+---
+
+# 16. Sport et performance
+
+1. Courir 5 km.
+2. Courir 10 km.
+3. Courir un semi-marathon.
+4. Courir un marathon.
+5. Préparer un trail.
+6. Faire une grande randonnée.
+7. Préparer une randonnée sur plusieurs jours.
+8. Faire un trek.
+9. Préparer une course cycliste.
+10. Préparer une longue sortie vélo.
+11. Améliorer une performance sportive.
+12. Préparer une compétition.
+13. Reprendre une saison sportive.
+14. Construire un programme d’entraînement.
+15. Organiser le matériel.
+16. Organiser la récupération.
+17. Planifier une progression.
+18. Atteindre un objectif de force.
+19. Atteindre un objectif d’endurance.
+20. Maintenir un niveau après l’objectif.
+
+---
+
+# 17. Voyage, aventure et déplacement
+
+1. Organiser un voyage.
+2. Organiser un road trip.
+3. Préparer un voyage longue durée.
+4. Préparer une expatriation.
+5. Préparer un trek.
+6. Préparer une randonnée.
+7. Organiser un voyage en groupe.
+8. Trouver des participants.
+9. Construire un itinéraire.
+10. Réserver les transports.
+11. Réserver les hébergements.
+12. Préparer un budget.
+13. Préparer les documents.
+14. Préparer le matériel.
+15. Préparer les assurances.
+16. Organiser les étapes.
+17. Partager l’itinéraire.
+18. Suivre les dépenses.
+19. Documenter le voyage.
+20. Archiver souvenirs et médias.
+
+---
+
+# 18. Vie personnelle et organisation
+
+1. Organiser sa semaine.
+2. Organiser son année.
+3. Mettre en place une routine.
+4. Réduire la procrastination.
+5. Trier ses documents.
+6. Organiser ses fichiers.
+7. Faire un déménagement.
+8. Préparer un changement de logement.
+9. Rénover une pièce.
+10. Rénover un logement.
+11. Organiser un budget personnel.
+12. Épargner pour un achat.
+13. Préparer un achat important.
+14. Simplifier son quotidien.
+15. Créer une routine matinale.
+16. Créer une routine du soir.
+17. Réduire une mauvaise habitude.
+18. Installer une nouvelle habitude.
+19. Réaliser une liste de projets personnels.
+20. Atteindre un objectif libre.
+
+---
+
+# 19. Relations, groupe et communauté
+
+1. Organiser une rencontre.
+2. Réunir un groupe.
+3. Constituer une équipe.
+4. Trouver des personnes partageant un intérêt.
+5. Créer une communauté.
+6. Développer une communauté.
+7. Organiser des rencontres régulières.
+8. Organiser un événement.
+9. Organiser une fête.
+10. Organiser une réunion.
+11. Organiser une conférence.
+12. Organiser un atelier.
+13. Trouver des intervenants.
+14. Trouver des bénévoles.
+15. Trouver des participants.
+16. Répartir les rôles.
+17. Organiser les communications.
+18. Maintenir l’engagement du groupe.
+19. Suivre les décisions collectives.
+20. Préparer un projet collaboratif.
+
+---
+
+# 20. Rencontre et vie relationnelle
+
+Ces scénarios doivent rester respectueux de la vie privée, du consentement et des choix individuels.
+
+1. Élargir son cercle social.
+2. Faire de nouvelles rencontres.
+3. Organiser plus de sorties.
+4. Trouver des activités sociales.
+5. Développer une relation.
+6. Préparer une activité à deux.
+7. Organiser un voyage à deux.
+8. Construire un projet commun.
+9. Maintenir du temps de qualité.
+10. Organiser des objectifs communs.
+
+Le système ne doit jamais transformer une personne en « cible » à obtenir ni automatiser des comportements intrusifs.
+
+---
+
+# 21. Maison, matériel et environnement
+
+1. Aménager une pièce.
+2. Créer un studio.
+3. Créer un atelier.
+4. Créer un bureau.
+5. Faire des travaux.
+6. Acheter du matériel.
+7. Comparer des équipements.
+8. Installer un système audio.
+9. Installer un système lumière.
+10. Installer un réseau.
+11. Organiser un inventaire.
+12. Entretenir un équipement.
+13. Préparer une maintenance.
+14. Réduire la consommation.
+15. Organiser un déménagement.
+16. Concevoir un espace.
+17. Planifier une rénovation.
+18. Suivre artisans et prestataires.
+19. Suivre budget travaux.
+20. Valider la fin des travaux.
+
+---
+
+# 22. Recherche, science et invention
+
+1. Explorer une question.
+2. Construire une hypothèse.
+3. Faire un état de l’art.
+4. Organiser une veille.
+5. Concevoir une expérience.
+6. Collecter des données.
+7. Analyser des résultats.
+8. Documenter une découverte.
+9. Créer un prototype.
+10. Tester un prototype.
+11. Améliorer une invention.
+12. Chercher des collaborateurs.
+13. Chercher un laboratoire.
+14. Chercher un financement.
+15. Préparer une publication.
+16. Préparer une présentation.
+17. Déposer une preuve d’antériorité.
+18. Préparer une stratégie de propriété intellectuelle.
+19. Construire une roadmap de recherche.
+20. Transformer une recherche en produit.
+
+---
+
+# 23. Éducation et apprentissage
+
+1. Apprendre une langue.
+2. Apprendre un instrument.
+3. Apprendre à chanter.
+4. Apprendre à coder.
+5. Apprendre le dessin.
+6. Apprendre la vidéo.
+7. Apprendre la photographie.
+8. Apprendre une compétence professionnelle.
+9. Préparer un examen.
+10. Préparer un concours.
+11. Réviser un programme.
+12. Lire une série de livres.
+13. Construire un programme personnel.
+14. Trouver des ressources.
+15. Trouver un professeur.
+16. Trouver un partenaire de pratique.
+17. Suivre ses heures de pratique.
+18. Valider des niveaux.
+19. Produire un projet final.
+20. Maintenir la compétence.
+
+---
+
+# 24. Engagement, association et action collective
+
+1. Créer une association.
+2. Organiser une action locale.
+3. Recruter des bénévoles.
+4. Organiser une collecte.
+5. Trouver des financements.
+6. Préparer une campagne.
+7. Organiser un événement caritatif.
+8. Développer une communauté.
+9. Gérer les participants.
+10. Gérer les ressources.
+11. Mesurer l’impact.
+12. Communiquer les résultats.
+13. Trouver des partenaires.
+14. Organiser une action récurrente.
+15. Maintenir le projet après son lancement.
+
+---
+
+# 25. Objectif libre universel
+
+Il doit toujours exister une entrée :
+
+> **Créer mon propre objectif**
+
+Le système demande alors :
+
+1. Quel résultat veux-tu obtenir ?
+2. Pourquoi ?
+3. Pour quand ?
+4. Comment sauras-tu que c’est réussi ?
+5. Que possèdes-tu déjà ?
+6. Que te manque-t-il ?
+7. As-tu besoin d’autres personnes ?
+8. As-tu besoin d’un budget ?
+9. Existe-t-il des contraintes ?
+10. Quelles sont les premières étapes connues ?
+
+L’assistant peut ensuite proposer un scénario initial en réutilisant les briques génériques.
+
+---
+
+# 26. Sous-objectifs réutilisables
+
+Certaines fonctions doivent exister comme scénarios transverses appelables depuis n’importe quel objectif.
+
+Exemples :
+
+- trouver une personne ;
+- trouver une compétence ;
+- recruter ;
+- trouver un prestataire ;
+- obtenir un avis ;
+- trouver un financement ;
+- trouver du matériel ;
+- acheter ;
+- louer ;
+- réserver ;
+- comparer ;
+- apprendre ;
+- contacter ;
+- demander une autorisation ;
+- obtenir un document ;
+- créer un budget ;
+- créer un planning ;
+- faire une recherche ;
+- organiser une réunion ;
+- faire valider une étape ;
+- publier ;
+- communiquer ;
+- promouvoir ;
+- mesurer ;
+- tester ;
+- corriger ;
+- maintenir.
+
+Ces briques doivent pouvoir être injectées automatiquement dans des scénarios différents.
+
+---
+
+# 27. Personnes, contacts et mise en relation
+
+Le système d’objectifs doit pouvoir dire :
+
+> Pour continuer, il te manque une personne ayant telle compétence.
+
+Il peut alors :
+
+1. chercher dans les contacts existants ;
+2. chercher dans l’équipe du projet ;
+3. chercher dans un annuaire interne si disponible ;
+4. proposer de publier une demande ;
+5. préparer un message ;
+6. suivre les réponses ;
+7. ajouter la personne au projet après accord.
+
+Types de besoins :
+
+- musicien ;
+- ingénieur du son ;
+- graphiste ;
+- développeur ;
+- acteur ;
+- technicien ;
+- coach ;
+- expert ;
+- prestataire ;
+- partenaire ;
+- investisseur ;
+- sponsor ;
+- bénévole ;
+- participant ;
+- mentor ;
+- collaborateur.
+
+La mise en relation doit respecter les permissions, le consentement et les règles de confidentialité.
+
+---
+
+# 28. Financement intégré aux objectifs
+
+Tout scénario pouvant nécessiter de l’argent doit pouvoir activer un module financement.
+
+Fonctions :
+
+- budget estimatif ;
+- budget disponible ;
+- écart ;
+- coûts obligatoires ;
+- coûts optionnels ;
+- échéances ;
+- dépenses réelles ;
+- financement manquant ;
+- sources possibles ;
+- suivi des demandes.
+
+Sources possibles :
+
+- fonds personnels ;
+- revenus du projet ;
+- précommandes ;
+- crowdfunding ;
+- aides ;
+- subventions ;
+- sponsoring ;
+- mécénat ;
+- investisseurs ;
+- partenaires ;
+- prêt ;
+- mutualisation ;
+- apport en nature.
+
+Le système doit pouvoir proposer une action lorsque :
+
+> financement disponible < financement nécessaire.
+
+---
+
+# 29. Ressources et fichiers
+
+Chaque étape doit pouvoir attacher :
+
+- Atomes ;
+- documents ;
+- images ;
+- audio ;
+- vidéo ;
+- liens ;
+- notes ;
+- contacts ;
+- conversations ;
+- rendez-vous ;
+- budgets ;
+- lieux ;
+- équipements ;
+- versions ;
+- livrables.
+
+Le système d’objectifs ne doit pas créer un silo séparé.
+
+Il doit orchestrer les objets déjà présents dans Atome/eVe.
+
+---
+
+# 30. Calendrier
+
+Une étape peut produire :
+
+- une date cible ;
+- une échéance ;
+- un rendez-vous ;
+- une répétition ;
+- une session de travail ;
+- une période de suivi ;
+- un rappel ;
+- un jalon.
+
+Les changements de planning doivent être propagés lorsqu’ils affectent des dépendances.
+
+Exemple :
+
+> Le mixage est retardé de 4 jours → le mastering et la date de livraison doivent être signalés comme potentiellement impactés.
+
+---
+
+# 31. Conditions et automatisations
+
+Le moteur doit pouvoir exploiter des conditions.
+
+Exemples :
+
+- si budget >= montant requis → débloquer réservation ;
+- si tous les morceaux sont validés → proposer mastering ;
+- si une personne accepte l’invitation → l’ajouter à l’étape ;
+- si la date approche → augmenter la priorité ;
+- si un jalon est en retard → proposer replanification ;
+- si la métrique cible est atteinte → passer en maintien ;
+- si une ressource manque → déclencher une recherche ;
+- si un fichier est validé → débloquer l’étape suivante.
+
+Les conditions doivent être séparées des interfaces spécifiques afin de rester réutilisables dans tous les modules.
+
+---
+
+# 32. Assistant IA
+
+L’assistant doit jouer le rôle de guide, mais le moteur d’objectifs ne doit pas dépendre entièrement de lui.
+
+L’assistant peut :
+
+- comprendre un objectif formulé naturellement ;
+- proposer le meilleur scénario ;
+- adapter un scénario ;
+- détecter une étape manquante ;
+- reformuler un objectif trop vague ;
+- proposer une prochaine action ;
+- expliquer un blocage ;
+- aider à chercher une ressource ;
+- proposer des alternatives ;
+- préparer un message ;
+- produire un résumé ;
+- comparer progression réelle et prévue.
+
+Les scénarios fondamentaux doivent rester exploitables sans génération IA.
+
+---
+
+# 33. UX : création d’un objectif
+
+L’expérience doit être très simple.
+
+## Entrée principale
+
+L’utilisateur peut écrire :
+
+> Je veux sortir un album.
+
+ou sélectionner :
+
+> Musique → Créer un album
+
+Le système affiche ensuite quelques questions essentielles seulement.
+
+Ne jamais commencer par un formulaire de 40 champs.
+
+Utiliser une révélation progressive.
+
+**Règle de présentation actée le 11 octobre 2026 :** cette révélation progressive se fait par **matrices de carrés imbriquées** et **extension temporaire d’un carré** pour ses réglages (section 50), et non par un empilement de panneaux ou de formulaires rectangulaires sans cohérence avec la matrice.
+
+### Exemple
+
+**Objectif : créer un album**
+
+Questions initiales :
+
+- Combien de morceaux ?
+- Les morceaux existent-ils déjà ?
+- Seul ou en équipe ?
+- Date cible ?
+- Budget approximatif ?
+
+À partir de ces réponses, le moteur construit le parcours.
+
+---
+
+# 34. UX : écran principal d’un objectif
+
+L’utilisateur doit voir en priorité :
+
+1. objectif ;
+2. progression ;
+3. prochaine action ;
+4. blocages ;
+5. prochain jalon ;
+6. date cible ;
+7. actions urgentes.
+
+Les détails complets doivent rester accessibles sans encombrer l’interface.
+
+**Présentation commune :** les projets, les entrées d’activité et les composants consultables depuis cet écran restent organisés dans la matrice native d’atome ; les sous-niveaux et les paramètres suivent les interactions décrites en section 50. Les vues de travail spécialisées restent possibles si leur fonction le justifie, sans créer un second langage d’interface.
+
+Vues possibles :
+
+- Aujourd’hui ;
+- Prochaines étapes ;
+- Timeline ;
+- Étapes ;
+- Ressources ;
+- Équipe ;
+- Budget ;
+- Notes ;
+- Historique ;
+- Maintien.
+
+---
+
+# 35. Adaptation dynamique
+
+Le scénario doit évoluer.
+
+Exemple :
+
+Objectif initial :
+
+> Organiser un concert.
+
+L’utilisateur indique plus tard :
+
+> La salle est annulée.
+
+Le système doit :
+
+1. rouvrir l’étape lieu ;
+2. marquer les dépendances impactées ;
+3. préserver le travail déjà fait ;
+4. proposer de chercher une autre salle ;
+5. réévaluer budget et planning ;
+6. signaler les actions devenues invalides.
+
+---
+
+# 36. Scénarios composables
+
+Un grand objectif doit pouvoir appeler d’autres scénarios.
+
+Exemple :
+
+## Créer un album
+
+Sous-objectifs possibles :
+
+- composer 10 titres ;
+- trouver un bassiste ;
+- enregistrer ;
+- mixer ;
+- masteriser ;
+- créer la pochette ;
+- financer le mastering ;
+- publier ;
+- promouvoir ;
+- préparer un concert de lancement.
+
+Chaque sous-objectif peut être un scénario autonome réutilisé ailleurs.
+
+---
+
+# 37. Progression intelligente
+
+Ne pas utiliser une progression naïve.
+
+Chaque étape doit pouvoir avoir :
+
+- `weight` ;
+- `required` ;
+- `optional` ;
+- `blocking` ;
+- `validation_mode` ;
+- `progress_metric`.
+
+Exemple :
+
+Pour un album, « choisir une couleur de dossier » ne doit pas compter autant que « terminer le mixage des 10 morceaux ».
+
+---
+
+# 38. Historique et traçabilité
+
+Conserver :
+
+- création ;
+- décisions ;
+- changements de dates ;
+- validations ;
+- annulations ;
+- nouvelles branches ;
+- changements de budget ;
+- personnes ajoutées ;
+- livrables ;
+- changements de statut.
+
+Permettre de comprendre :
+
+> pourquoi le plan actuel est différent du plan initial.
+
+---
+
+# 39. États d’un objectif
+
+Prévoir au minimum :
+
+- idée ;
+- à définir ;
+- préparé ;
+- actif ;
+- en attente ;
+- bloqué ;
+- en pause ;
+- en retard ;
+- presque terminé ;
+- terminé ;
+- partiellement réussi ;
+- abandonné ;
+- archivé ;
+- maintien.
+
+---
+
+# 40. Niveau d’automatisation
+
+Pour chaque scénario, définir ce qui est :
+
+- manuel ;
+- assisté ;
+- automatique ;
+- conditionnel.
+
+Exemple :
+
+### Manuel
+Valider que l’utilisateur aime le mix final.
+
+### Assisté
+Proposer une liste d’ingénieurs du son.
+
+### Automatique
+Calculer le pourcentage de morceaux masterisés.
+
+### Conditionnel
+Débloquer la distribution lorsque tous les masters obligatoires existent.
+
+---
+
+# 41. Notifications intelligentes
+
+Éviter les rappels inutiles.
+
+Notifier principalement lorsque :
+
+- une action devient disponible ;
+- une échéance approche ;
+- une dépendance bloque ;
+- une personne répond ;
+- une condition importante change ;
+- un objectif dérive ;
+- un jalon est atteint ;
+- une validation est nécessaire.
+
+---
+
+# 42. MVP du système d’objectifs
+
+Pour la première version fonctionnelle, prioriser :
+
+1. création d’un objectif ;
+2. choix d’un scénario ;
+3. questions initiales ;
+4. génération des étapes ;
+5. sous-objectifs ;
+6. tâches ;
+7. dépendances ;
+8. jalons ;
+9. progression ;
+10. calendrier ;
+11. pièces jointes / Atomes ;
+12. contacts ;
+13. budget simple ;
+14. blocages ;
+15. validation ;
+16. achèvement ;
+17. maintien ;
+18. objectif libre ;
+19. scénarios composables ;
+20. architecture déclarative extensible.
+
+La recherche externe de financement, l’annuaire public de compétences ou les systèmes avancés de recommandation peuvent être connectés progressivement sans modifier le modèle central.
+
+---
+
+# 43. Premiers scénarios à implémenter réellement
+
+Ne pas essayer d’implémenter immédiatement les centaines de scénarios avec une logique entièrement spécifique.
+
+Créer d’abord environ 15 scénarios exemplaires couvrant des structures différentes :
+
+1. Créer une chanson.
+2. Créer un album.
+3. Préparer un concert.
+4. Réaliser un film.
+5. Finaliser un MVP logiciel.
+6. Créer une entreprise.
+7. Lancer un produit.
+8. Organiser un événement.
+9. Trouver un financement.
+10. Apprendre une compétence.
+11. Perdre du poids.
+12. Prendre de la masse.
+13. Mieux dormir.
+14. Préparer un marathon.
+15. Organiser une grande randonnée.
+16. Objectif libre.
+
+Ces scénarios doivent servir à valider le moteur générique.
+
+Ensuite, enrichir la bibliothèque principalement par données déclaratives, pas par nouvelles architectures.
+
+---
+
+# 44. Critères de validation du moteur
+
+Le moteur est considéré comme valide si l’on peut créer avec la même architecture :
+
+- un album ;
+- un marathon ;
+- un film ;
+- une entreprise ;
+- une randonnée ;
+
+sans créer cinq systèmes différents.
+
+Il doit gérer correctement :
+
+- étapes séquentielles ;
+- étapes parallèles ;
+- conditions ;
+- dépendances ;
+- budget ;
+- personnes ;
+- documents ;
+- calendrier ;
+- progression ;
+- maintien.
+
+---
+
+# 45. Tests obligatoires
+
+## Test 1 — Album
+
+Créer un album avec :
+
+- 10 morceaux ;
+- 2 collaborateurs ;
+- budget ;
+- mixage externe ;
+- date de sortie.
+
+Vérifier que le scénario construit le parcours complet.
+
+## Test 2 — Marathon
+
+Créer un objectif marathon.
+
+Vérifier :
+
+- progression temporelle ;
+- jalons ;
+- séances ;
+- adaptation ;
+- maintien après la course si choisi.
+
+## Test 3 — Film
+
+Créer un film avec :
+
+- scénario ;
+- casting ;
+- budget ;
+- lieux ;
+- tournage ;
+- montage ;
+- diffusion.
+
+## Test 4 — Entreprise
+
+Créer une entreprise avec :
+
+- offre ;
+- administratif ;
+- financement ;
+- site ;
+- clients ;
+- lancement.
+
+## Test 5 — Randonnée
+
+Créer une randonnée longue avec :
+
+- itinéraire ;
+- dates ;
+- transport ;
+- matériel ;
+- participants ;
+- budget ;
+- étapes.
+
+## Test 6 — Objectif non prévu
+
+Entrer un objectif totalement libre.
+
+Vérifier que le système peut construire un plan sans avoir besoin d’un nouveau développement spécifique.
+
+---
+
+# 46. Règle d’architecture essentielle
+
+Le catalogue d’objectifs ne doit pas devenir une énorme collection de code spécifique.
+
+Construire :
+
+> un moteur générique + des briques réutilisables + des scénarios déclaratifs.
+
+Les centaines d’objectifs doivent principalement être des combinaisons de ces briques.
+
+---
+
+# 47. Livrable attendu
+
+À la fin de l’implémentation, produire :
+
+- architecture du moteur ;
+- format de scénario ;
+- catalogue des scénarios ;
+- scénarios effectivement implémentés ;
+- briques transverses disponibles ;
+- intégrations calendrier/contacts/communication/recherche/budget ;
+- tests ;
+- limites ;
+- prochaines extensions.
+
+---
+
+# 48. Definition of Done
+
+Le système est considéré comme prêt lorsque :
+
+- l’utilisateur peut exprimer un objectif en langage naturel ou le choisir dans une bibliothèque ;
+- Atome/eVe transforme l’objectif en parcours ;
+- les étapes sont adaptables ;
+- les dépendances fonctionnent ;
+- les sous-objectifs fonctionnent ;
+- la progression est significative ;
+- le calendrier est relié ;
+- les personnes peuvent être associées ;
+- un besoin de ressource peut être représenté ;
+- un budget peut être suivi ;
+- un besoin de financement peut devenir une action ;
+- les fichiers et Atomes peuvent être liés ;
+- les conditions peuvent déclencher des évolutions ;
+- un objectif peut être validé ;
+- un objectif peut entrer en maintien ;
+- un scénario libre peut être créé ;
+- de nouveaux scénarios peuvent être ajoutés sans modifier le moteur central.
+
+---
+
+# 49. Instruction finale à l’agent de développement
+
+Ne construis pas un simple gestionnaire de tâches.
+
+Construis un **moteur universel de parcours vers un résultat**.
+
+Un scénario pré-câblé doit être une aide de départ, pas une prison.
+
+Le moteur doit pouvoir guider des objectifs aussi différents que :
+
+- créer un album ;
+- réaliser un film ;
+- monter une entreprise ;
+- courir un marathon ;
+- organiser une randonnée ;
+- apprendre une compétence ;
+- réunir une équipe.
+
+Utilise les mêmes primitives fondamentales :
+
+> objectif → phases → étapes → actions → conditions → ressources → personnes → budget → preuves → validation → maintien.
+
+Avant de créer une nouvelle fonctionnalité spécifique à un scénario, vérifier si le besoin peut être exprimé avec une brique transverse existante.
+
+La puissance du système doit venir de la **composition**, pas de l’accumulation de code spécialisé.
+
+---
+
+# 50. Décision du 11 octobre 2026 — Une seule interface matricielle pour tous les projets et activités
+
+**Statut : décision de concept et cahier des charges à mettre en œuvre, pas attestation d'implémentation.** Cette décision précise les sections 0, 33 et 34. Elle concerne **tous** les projets d'atome/eVe (santé ou non), les scénarios proposés et les activités accessibles indépendamment d'un projet. Elle doit s'appuyer sur les vrais composants, objets, outils et comportements d'atome après inventaire de l'existant ; ne pas prétendre qu'un composant ou une API non vérifiés sont disponibles.
+
+## 50.1. Principe visuel universel : la matrice d'atome
+
+- **Une même matrice, faite de carrés**, sert à présenter les projets, à créer un nouveau projet, à choisir un objectif, à sélectionner une brique, à explorer des sous-catégories et à accéder aux activités.
+- Chaque **carré** correspond à un objet ou une action réelle et identifiable : projet, objectif, activité, brique réutilisable, choix ou réglage. Sa position suit la grille, pas un placement arbitraire de cartes, fenêtres ou rectangles.
+- Les **mêmes carrés, proportions, teintes, icônes et composants natifs** sont réutilisés d'un contexte à l'autre. Le contenu change selon l'objectif, mais **pas la grammaire d'interface**.
+- **Une sélection peut ouvrir une nouvelle matrice plus profonde** : objectif → briques proposées → catégorie → activité → paramètres. On doit pouvoir revenir au niveau précédent, reprendre une configuration et retrouver le contexte sans perdre les choix déjà validés.
+- Il ne faut pas substituer une interface de gestion conventionnelle, des panneaux de réglages autonomes ou des formulaires rectangulaires hétérogènes à la matrice. Les autres modes d'affichage spécialisés (Liste, Timeline, etc.) peuvent exister lorsqu'ils remplissent un besoin fonctionnel précis ; **le flux commun de sélection, de composition et de configuration repose sur la matrice**.
+
+## 50.2. Interaction normalisée d'un carré : ouvrir, régler, refermer
+
+Deux comportements complémentaires utilisent **le même élément de matrice**.
+
+**A. Carré de navigation ou de composition**
+
+1. À l'état de repos, l'élément est un **carré de la matrice**.
+2. Un appui sur le carré ouvre la **matrice fille** liée à son véritable objet ou outil (par exemple Sport → Natation).
+3. Les choix sont conservés pendant la navigation ; retour et validation ne créent pas de doublon.
+
+**B. Carré portant une valeur ajustable** (par exemple **Effort souhaité / rythme**, **Temps disponible**, puis durée, fréquence et paramètres pertinents de l'activité)
+
+1. À l'état de repos, le réglage est présenté par **un carré**, cohérent avec toutes les autres briques.
+2. Au toucher/clic, **le carré lui-même s'agrandit dans la grille** et devient temporairement **rectangulaire** en occupant deux, voire **trois emplacements de carrés** selon l'espace nécessaire ; dimensions et alignements restent calculés en unités de la matrice, pas au pixel arbitraire.
+3. **Le curseur (slider) natif** ou le réglage réellement disponible apparaît **à l'intérieur de cette brique agrandie**, sans ouvrir un panneau flottant, une fenêtre modale ni un duplicata du réglage.
+4. L'utilisateur ajuste la valeur, puis valide/termine l'interaction. Le contrôle **enregistre la valeur sur le véritable objet concerné** et **se referme pour redevenir un carré** dans la matrice. La valeur retenue reste consultable lors d'une nouvelle ouverture ; un affichage synthétique peut être présent seulement s'il est utile.
+5. Les autres carrés doivent se **repositionner proprement** lorsque la cellule s'étend et se referme, sans chevauchement, saut incohérent, perte de sélection ou déformation de la grille.
+
+**Règle d'unification :** les carrés ne sont pas des icônes décoratives. Ils contiennent ou ouvrent **les outils et options réels d'atome**. Les paramètres natifs restent associés à leur outil, pas recréés dans une interface parallèle.
+
+Pour un projet, les deux réglages transversaux de départ sont notamment **Effort souhaité / rythme** et **Temps disponible**. Ils emploient la même interaction d'extension du carré ; ne pas créer de troisième curseur obligatoire sans besoin validé. La correspondance exacte des valeurs, des unités (jour/semaine), des bornes et de l'effet du réglage doit être raccordée aux règles communes du projet, puis vérifiée.
+
+## 50.3. Entrée commune : voir ses projets et en créer un
+
+- **Les projets existants sont présentés sous forme de carrés dans une matrice.** Le projet sélectionné permet d'entrer dans sa propre matrice.
+- La **création d'un nouveau projet** emprunte la même matrice que les projets existants ; ses propositions, objectifs, paramètres initiaux et étapes de configuration ne sont pas dispersés en rectangles sur l'écran.
+- La matrice reste la structure perceptible sur téléphone, tablette et ordinateur. L'extension d'un carré s'adapte à la largeur disponible sans abandonner les unités de grille. Les états sélectionné, ouvert, en cours et validé sont explicites sans surcharger l'écran.
+- Navigation et réglages doivent rester accessibles via les moyens d'interaction pris en charge (toucher, souris, clavier et technologies d'assistance selon plateforme). Pas de fonctionnalité réservée à une animation purement visuelle.
+
+## 50.4. Scénarios des objectifs de santé : partir du besoin, composer, puis agir
+
+**Référence de départ : les neuf objectifs de santé convenus dans nos échanges.** Les 24 propositions de la section 15 restent un **catalogue de possibilités** et ne doivent pas être confondues avec cette sélection initiale. La liste de travail est :
+
+1. **Perdre du poids**.
+2. **Mieux dormir et retrouver de l'énergie**.
+3. **Prendre de la masse musculaire**.
+4. **Gérer une douleur**.
+5. **Repérer un trouble et orienter vers un professionnel**, sans diagnostic autonome.
+6. **Préserver du temps pour soi**.
+7. **Retrouver le calme intérieur** (dont méditation).
+8. **Tenir un journal personnel** (expression, ressenti, création).
+9. **Améliorer sa condition physique**.
+
+Pour **chacun** de ces neuf projets-objectifs, le scénario devra préciser les mêmes phases et objets réutilisables, mais des briques, activités et observations adaptées au but :
+
+1. **Entrée dans l'objectif.** Le choix de l'objectif se fait depuis une matrice ; l'utilisateur peut aussi exprimer un besoin libre. Reprendre un projet existant ne le recrée pas.
+2. **Point de départ.** Collecter uniquement les données déjà disponibles et autorisées ; si elles sont insuffisantes pour proposer un programme pertinent, demander progressivement les quelques informations utiles. Ne pas imposer un questionnaire complet.
+3. **Implication.** Proposer les carrés ajustables **Effort souhaité / rythme** et **Temps disponible**, puis leurs curseurs par extension dans la grille. Respecter ce que la personne accepte réellement.
+4. **Composition.** Proposer une **matrice de briques transversales** pertinentes (par exemple détente, méditation, nutrition, mouvement et habitudes pour Mieux dormir), sans déclarer ces activités universellement nécessaires ni cliniquement efficaces.
+5. **Approfondissement.** Un carré sélectionné peut ouvrir une matrice plus précise, jusqu'à une activité concrète et ses paramètres. Exemple : **Mieux dormir → Activité physique → Sport → Natation → Durée / fréquence → Validation**. Les contenus exacts restent dépendants de la situation ; Natation est une démonstration de navigation, pas une recommandation sommeil universelle.
+6. **Validation.** L'utilisateur accepte, modifie ou refuse les briques et la charge. Une brique acceptée devient une activité réelle du programme, avec sa configuration conservée et une identité stable.
+7. **Projet Dashboard.** Une fois le programme validé, le projet se présente dans un **mode Dashboard**, regroupant les activités à réaliser, notamment pour **Aujourd'hui**. Ce n'est ni un deuxième projet sans lien ni une application de santé séparée : il s'agit d'une présentation du projet-objectif et de ses activités.
+8. **Calendrier.** Les occurrences acceptées sont proposées au **calendrier commun d'atome** avec horaires, durées, rappels, récurrences et possibilité de modification ; aucune planification définitive sans choix/autorisation de l'utilisateur. Une action n'existe qu'une fois même si plusieurs objectifs la partagent.
+9. **Au moment de l'activité.** Le rappel doit permettre d'ouvrir le **projet et l'activité concernée au premier plan**. Lorsque le système d'exploitation le permet et après les autorisations requises, déclencher les capteurs pertinents **au démarrage effectif de l'activité** et suivre les données disponibles ; ne pas inventer de mesure. Sur iOS notamment, une notification ne doit pas être documentée comme capable d'ouvrir arbitrairement une app sans action de l'utilisateur si l'OS ne le permet pas.
+10. **Résultat et adaptation.** Enregistrer réalisation, données mesurées autorisées, ressenti et contexte avec leur provenance. Le **Moniteur commun** rapproche ces observations, propose un bilan nuancé et permet d'ajuster, alléger, suspendre ou reprendre le programme sans effacer l'historique.
+
+**État documentaire :** `Scenario_Sommeil.docx` est la référence détaillée du premier scénario (concept, visuels et garde-fous). **Les huit autres scénarios doivent encore être décrits individuellement** en réutilisant le même socle, avec leur logique propre. Les éléments ci-dessus sont une règle transversale, pas une prétention à neuf scénarios complets.
+
+## 50.5. Entrée indépendante « Activités » : mêmes briques, même matrice
+
+- Prévoir un **espace « Activités »** accessible directement, sans obligation de passer par un objectif ou son Dashboard.
+- L'espace présente une **matrice de catégories de briques** : notamment **Sport**, **Nutrition**, **Compléments alimentaires**, **Méditation** et **Relaxation**, selon les activités réellement disponibles. Exemple : **Activités → Sport → Natation → Durée / paramètres → Démarrer**. « Compléments alimentaires » constitue une entrée explicite ; elle peut aussi être atteinte depuis Nutrition sans dupliquer la brique.
+- Chaque niveau ouvre la matrice plus spécifique correspondante ; les valeurs se règlent dans les **carrés temporairement étendus** décrits en 50.2.
+- L'activité **utilise exactement la même brique fonctionnelle** que dans le scénario Mieux dormir, Perdre du poids ou Condition physique. Ne pas créer de version « natation sommeil » et une autre « natation libre » avec deux implémentations.
+- Elle peut être démarrée librement ou associée à un projet après accord. Le suivi et les éventuelles données personnelles suivent les autorisations de l'utilisateur, même hors projet.
+- Les **compléments alimentaires** suivent ce même fonctionnement : choisir une proposition facultative ou **saisir manuellement** un complément, le configurer dans la matrice, puis l'utiliser de manière autonome ou le rattacher à un projet. Les modalités détaillées et les garde-fous figurent en **50.8**.
+
+## 50.6. Transversalité des briques et responsabilité des outils
+
+- **Une bibliothèque de briques fonctionnelles réutilisables** est la source de vérité. Une brique peut servir plusieurs projets, et certaines briques peuvent contenir d'autres briques ; elle n'est jamais une collection de copies d'écrans indépendants.
+- Les **scénarios** sélectionnent, configurent et assemblent ces briques ; la **matrice** les rend accessibles ; les **outils natifs** exécutent l'action ; le **calendrier** possède les occurrences ; le **Moniteur** interprète les observations. Ces responsabilités ne doivent pas être dupliquées.
+- Une activité partagée n'est **réalisée ni comptée deux fois** ; ses relations à plusieurs projets sont explicites et révocables. Deux projets peuvent toutefois conserver des critères de réussite distincts. Ce principe vaut aussi pour le suivi d'un complément alimentaire utilisé dans plusieurs objectifs.
+- Les modules de santé restent privés par défaut ; collecte de capteurs, partage et transmission nécessitent les permissions adaptées. Aucune suggestion d'IA ne vaut validation implicite d'une activité, d'un achat, d'un rendez-vous ou d'un partage.
+- Conserver les composants et connexions réellement présents dans atome/eVe ; inventorier la matrice, les outils, les curseurs, les calendriers, alarmes, capteurs et le Moniteur avant de les connecter. Privilégier **JavaScript** dans le code eVe existant ; ne pas introduire une architecture d'interface concurrente.
+
+## 50.7. Ordre de réalisation et tests de validation
+
+**Ordre de travail :**
+
+1. **Inventaire réel** des composants de matrice, de carrés sélectionnables, de curseurs natifs, de projets, d'activités, du calendrier, des alarmes, des capteurs disponibles et du Moniteur. Noter toute capacité manquante ; ne pas inventer une API.
+2. Définir ou raccorder **une seule interaction matricielle réutilisable** : carré stable, extension sur deux à trois cellules, curseur natif, validation, rétraction, navigation en profondeur et retour.
+3. Raccorder cette interaction à la **matrice des projets** et au parcours de **création d'un projet** ; ne pas conserver un second flux de rectangles dispersés.
+4. Mettre en œuvre et tester le scénario pilote **Mieux dormir**, en préservant le document source et en réutilisant calendrier, activités, alarmes, capteurs autorisés et Moniteur réellement existants.
+5. Exposer les mêmes briques depuis la **matrice autonome Activités**, puis vérifier leur réutilisation dans un deuxième objectif sans duplication d'exécution ou de données.
+6. Détailler et implémenter progressivement les **huit autres scénarios** avec leur configuration propre, sans recréer l'interface ni le moteur à chaque fois.
+7. Réaliser les **tests d'usage et de régression** sur iOS/iPad, web et macOS selon les plateformes prises en charge.
+
+**Critères d'acceptation spécifiques à cette décision :**
+
+- Un carré de réglage **devient temporairement un rectangle aligné** occupant deux ou trois unités de grille ; son slider fonctionne, sa valeur est sauvegardée, puis il **redevient un carré** ; l'ouverture suivante restitue la valeur.
+- Les autres carrés se réorganisent sans chevauchement, déformation, saut intempestif ni perte de focus/sélection, y compris sur petit écran et lors des changements d'orientation.
+- Les carrés de navigation font apparaître la **bonne matrice fille** et permettent retour, reprise et validation sans créer des doublons.
+- La vue de **création de projet**, les projets existants, les neuf objectifs de santé et la bibliothèque **Activités** présentent le **même langage visuel** et des modules réels, non des simulations décoratives.
+- Une même activité (par exemple Natation) fonctionne depuis un projet et depuis **Activités** avec les mêmes paramètres et outils ; sa planification et son suivi ne dupliquent ni occurrence ni comptage.
+- Les rappels ouvrent le contexte pertinent seulement selon les **capacités autorisées de la plateforme** ; aucun capteur indisponible ou non autorisé n'est présenté comme actif.
+- Le Moniteur sépare activité réalisée, bénéfice observé, déclaration utilisateur et mesure instrumentée ; pause, reprise et modifications n'effacent pas l'historique.
+- Depuis **Activités → Compléments alimentaires**, l'utilisateur peut consulter des **suggestions facultatives**, **ajouter manuellement** un produit absent des suggestions, retrouver sa configuration, planifier ou enregistrer une prise s'il le décide, sans création d'un deuxième moteur ni recommandation de dosage automatique.
+
+**Décision de design à conserver : une seule grammaire visuelle matricielle dans atome/eVe, des carrés comme unité de base, des expansions temporaires pour régler, et des matrices imbriquées pour approfondir.**
+
+## 50.8. Compléments alimentaires — brique transversale avec propositions et saisie manuelle
+
+**Décision complémentaire du 11 octobre 2026.** Ajouter « **Compléments alimentaires** » parmi les briques accessibles dans la **matrice du panneau Activités**, au même titre que Sport, Nutrition, Méditation et les autres catégories. Cette brique n'est ni limitée à un objectif de santé ni un outil indépendant recréé pour chaque projet. Une entrée Nutrition peut pointer vers cette **même brique**.
+
+**Deux façons d'entrer dans cette brique :**
+
+1. **Proposition facultative.** eVe peut afficher des compléments à envisager ou à consulter, selon le contexte et les informations disponibles. Une proposition n'est pas une prescription ni un ajout automatique au programme : l'utilisateur choisit de l'examiner, de l'ignorer ou de la valider. Le système ne suppose pas qu'un complément est nécessaire ou bénéfique en l'absence d'éléments suffisants.
+2. **Saisie manuelle.** L'utilisateur peut enregistrer **n'importe quel complément qu'il utilise ou souhaite suivre**, même absent des propositions, en saisissant au minimum son **nom**. Si nécessaire, il peut préciser le produit, la forme, les composants, la quantité réellement prise et son unité, les horaires, la fréquence, les notes et la date de début/fin. Les informations non connues restent facultatives ou « non renseignées » ; ne pas inventer une composition ni une quantité.
+
+**Parcours matriciel commun :** `Activités → Compléments alimentaires → Proposition / Saisie manuelle → Complément choisi → Paramètres → Validation`. Chaque élément part d'un carré de la matrice ; si un réglage nécessite davantage de place, le **carré s'étend sur deux ou trois cellules**, révèle les options **réelles** dans sa surface, puis revient à un carré après validation, comme en 50.2. Pour du texte libre (nom d'un produit), employer le composant de saisie natif existant dans cette même grammaire visuelle ; ne pas forcer un slider pour saisir un nom.
+
+**Après validation**, la brique peut :
+
+- être retrouvée dans les **Activités personnelles**, sans nécessiter la création d'un objectif ;
+- être liée, avec l'accord de l'utilisateur, à un ou plusieurs projets-objectifs pertinents, **sans duplication de la même fiche ni double comptage** ;
+- créer, **uniquement si l'utilisateur le souhaite**, des occurrences dans le calendrier commun, des rappels et un moyen de consigner les **prises effectivement déclarées** (distinctes des prises seulement prévues ou des notifications envoyées) ;
+- faire remonter au Moniteur les déclarations et observations autorisées, en conservant source, date, contexte et incertitudes, **sans attribuer automatiquement un effet positif ou négatif** au complément.
+
+**Limites et sécurité :** ne pas proposer de dosage personnalisé, de traitement, d'augmentation de dose ou d'achat automatisé. Distinguer clairement une fiche enregistrée par l'utilisateur d'une suggestion du système, et les informations établies de celles qui sont incertaines. Lorsqu'un risque de contre-indication, d'interaction avec un médicament, de grossesse ou de maladie est pertinent, inviter à une vérification auprès d'un professionnel de santé plutôt que d'automatiser la décision. Le contenu et les historiques restent **privés par défaut**, avec les mêmes règles de consentement que les autres données de santé. Les connexions à une base de données produits, au calendrier et au Moniteur doivent être **vérifiées** avant de déclarer ces capacités implémentées.
+
+## 50.9. Activités sportives — matrices spécialisées, paramètres et exécution interactive
+
+**Décision complémentaire du 11 octobre 2026.** Le fonctionnement détaillé de « Musculation » n'est **pas une exception ni une démonstration sans suite** : chaque discipline proposée dans **Activités → Sport** doit être déclinée en **matrices de sous-activités réellement configurables**, avec des pictogrammes adaptés et des paramètres spécifiques à sa pratique. Le même modèle s'applique aux activités sportives intégrées à un objectif et à celles démarrées librement. Il faut **décrire et réaliser progressivement chaque discipline**, sans prétendre que le catalogue exhaustif ou les pictogrammes existent déjà.
+
+**Navigation commune, toujours matricielle :**
+
+`Activités / Projet → Sport → Discipline → Séance ou mouvement → Équipement / exercice / variante → Paramètres → Valider / Planifier / Démarrer`
+
+- Chaque niveau part de **carrés alignés dans la matrice d'atome** ; un carré de sélection ouvre la matrice fille. Un carré de paramètre s'étend temporairement en rectangle de **deux ou trois unités de grille**, affiche le véritable contrôle natif (curseur, sélecteur, saisie), enregistre la valeur puis redevient carré.
+- Chaque activité ou mouvement possède un **pictogramme reconnaissable et cohérent** avec le vocabulaire graphique existant ; le pictogramme correspond à l'exercice réel et non à une icône générique décorative. Les ressources visuelles à concevoir sont des livrables, pas des composants supposés déjà disponibles.
+- Les choix de mouvements, de machines et de positions reposent sur des **éléments réutilisables** et des références stables : une séance peut assembler plusieurs exercices et les ordonner, sans créer une copie de l'outil pour chaque usage.
+- Un **socle commun d'activité** conserve identité, objectifs associés, variantes, durée, fréquence/récurrence, horaire, conditions, contraintes, suivi, provenance, historique et paramètres effectivement pertinents. Les **paramètres spécifiques** ne s'affichent que pour les disciplines auxquelles ils s'appliquent. Une mesure facultative inconnue reste « non renseignée ».
+
+**Déclinaison par pratique — première grille de spécifications à approfondir discipline par discipline :**
+
+| Discipline / contexte | Matrices et briques spécialisées | Réglages pertinents, selon la pratique | Suivi d'exécution |
+| --- | --- | --- | --- |
+| **Musculation / machines / poids libres** | Séance (par ex. bras) → groupes musculaires → machine ou mouvement (par ex. triceps) → série. Variantes possibles : appareil, haltères, barre, poids du corps. | Charge et unité (kg), **nombre de séries**, **répétitions par série**, durée de repos, durée totale, périodicité, progression/objectif sur une période. Éventuellement unilatéral/bilatéral, résistance, assistance, tempo si disponibles et utiles. | Afficher le mouvement courant et la série courante. **Un appui tactile valide la série réalisée et affiche la suivante**, sans ressaisie inutile ; possibilité de corriger le nombre réel de répétitions/la charge, de passer, de mettre en pause ou d'annuler. Enregistrer la réalisation effective de chaque série et de la séance. |
+| **Natation / piscine** | Natation → nage / type de séance → bassin / exercice → longueur ou intervalle. | Longueur du bassin (m), **nombre de longueurs**, distance totale, durée, cadence/allure, séries et récupérations, fréquence ; unités explicites. | Avancer à la longueur ou à l'intervalle suivant, consigner longueurs et temps réels, distinguer saisie tactile de données de montre/capteur réellement disponible. |
+| **Course / marche / tapis** | Course ou marche → environnement (extérieur, piste, tapis) → séance / intervalle. | **Distance (km ou m)**, **durée**, vitesse (**km/h**), allure (min/km), fractionnés/répétitions, récupération, fréquence ; GPS facultatif en extérieur, vitesse du tapis déclarée si applicable. | Départ, pause, reprise, arrivée ; distance, durée et allure selon source réelle ; correction manuelle et enregistrement d'un parcours uniquement si autorisé. |
+| **Cyclisme / vélo d'intérieur** | Vélo → extérieur / appareil → séance / segment. | Distance, durée, vitesse, dénivelé, résistance ou puissance uniquement si l'équipement et ses données existent, intervalles et cadence facultatifs. | Suivi des segments, interruptions, provenance des données et bilan. |
+| **Mobilité / étirements / yoga / exercices au sol** | Discipline → zone ou objectif → **position / mouvement**, accompagné de son pictogramme → séquence. | Tenue de position, nombre de passages, côté du corps, répétitions, repos, intensité ressentie et durée, lorsque pertinent. | Passer à la position suivante, enregistrer durée réellement tenue, adaptations et ressenti. |
+| **Autres sports / activités non cataloguées** | Même matrice, discipline configurable par briques disponibles ; extension du catalogue après validation des critères propres. | Paramètres choisis **selon la discipline**, pas formulaire universel imposant charge/séries/distance à tous. | Démarrage et journal d'activité utilisables même sans capteur ni modèle spécialisé ; ne pas afficher une fonctionnalité non implémentée. |
+
+**Exemple musculation demandé, non prescriptif :** `Sport → Musculation → Bras → Triceps → Appareil / mouvement → Charge : 10 kg → 5 séries × 5 répétitions → Programme d'un mois → Valider`. Ces valeurs **illustrent le paramétrage** et ne sont pas des recommandations d'entraînement. Les charges, répétitions, séries, volumes et progressions restent modifiables et enregistrent leurs changements dans le temps.
+
+**Lancement depuis le calendrier et interaction en séance :**
+
+1. Une activité acceptée est reliée à une **occurrence du calendrier commun** (date/heure, durée, récurrence, notification selon les autorisations). Le projet Dashboard affiche la même activité, sans doublon.
+2. Un rappel peut **ouvrir directement l'activité ou son contexte** lorsqu'on l'active ; ne pas promettre qu'une notification iOS impose automatiquement l'ouverture de l'application au premier plan sans intervention de l'utilisateur.
+3. L'**outil réel de séance** se place au premier plan dans l'environnement d'atome avec l'exercice courant, son pictogramme et les réglages déjà validés ; conserver le design natif, sans nouveau logiciel de fitness parallèle.
+4. Pendant la séance, une action **simple et accessible au toucher** fait avancer d'une série, d'une longueur, d'un intervalle, d'une position ou d'une étape à la suivante. Permettre pause, retour/correction et arrêt sans perdre l'historique. L'action tactile ne doit pas valider une réalisation fictive en cas de contact accidentel ; confirmation/annulation ou correction selon les interactions natives.
+5. Si le capteur ou l'appareil associé existe et si les autorisations sont accordées, utiliser ses **données réelles**. Sinon proposer un suivi manuel. Distinguer **planifié, démarré, déclaré accompli et mesuré**.
+6. En fin de séance, conserver les valeurs **prévues et effectivement réalisées** (ex. charge et séries, longueurs, durée, distance), la provenance, la date et le ressenti. Le Moniteur exploite l'évolution sans confondre **activité réalisée** et **bénéfice démontré**.
+
+**Exigence éditoriale pour la suite :** chaque discipline ajoutée doit disposer d'une fiche descriptive de ses **matrices successives, mouvements/positions, pictogrammes, paramètres spécifiques, unités, contrôle en cours d'activité, mesures récupérables, suivi manuel alternatif et tests**. Les pictogrammes et l'inventaire exhaustif des mouvements seront construits et vérifiés par lots, pas inventés comme déjà disponibles.
+
+## 50.10. Examens, bilans et résultats de toute nature — une brique « Résultats » universelle
+
+**Décision complémentaire du 11 octobre 2026 : il ne s'agit pas uniquement de bilans sanguins.** Créer ou raccorder **une brique fonctionnelle transversale « Résultats »**, utilisable par les projets de santé **et, lorsque pertinent, par les autres projets et activités**. Un bilan est un cas particulier d'un résultat, pas une nouvelle base de données propre au sang.
+
+**Exemples non exhaustifs de contenus à mémoriser :** analyses sanguines, urinaires ou autres analyses biologiques ; comptes rendus médicaux ; résultats d'imagerie et documents associés (radiologie, échographie, IRM, etc.) ; explorations cardiaques ou respiratoires ; évaluations physiques et sportives ; poids, tension et autres mesures ponctuelles ; relevés de capteurs ; questionnaires, scores, observations et ressentis ; résultats d'un test, d'un examen, d'une consultation ou de toute autre activité. **Les données qualitatives, les textes et les documents sont aussi des résultats**, même lorsqu'aucune valeur numérique ou tableau CSV n'existe.
+
+**Deux responsabilités distinctes et reliées :**
+
+1. **Agenda** — proposer des dates et rappels pour analyses, examens, bilans périodiques, consultations, bilans avec le médecin et revues de programme ; gérer répétitions, reports et annulations **selon les choix de l'utilisateur**. Un examen planifié **n'est pas** un résultat reçu.
+2. **Résultats** — lorsqu'un document ou une mesure est reçu, **enregistrer et retrouver durablement le contenu et son historique**, qu'il soit lié ou non à un événement du calendrier. Ce stockage ne se réduit pas à l'alarme, au rendez-vous ni au projet Dashboard.
+
+**Parcours matriciel de la brique :**
+
+`Activités / Projet → Examens et résultats → Type de résultat / examen → Planifier OU Ajouter un résultat → Source / fichier / valeurs → Vérifier → Enregistrer → Consulter les évolutions`
+
+- Accès à cette **même brique** depuis plusieurs objectifs (sommeil, condition physique, prise de masse, etc.) et par la matrice autonome Activités ; aucune base de résultats indépendante par scénario.
+- **Import possible d'un fichier reçu** (ex. PDF, CSV, document, image, selon formats réellement pris en charge), ou **saisie manuelle** des valeurs et observations. Conserver **l'original sans altération** en plus de toute extraction structurée. Les documents complexes, visuels et annexes doivent rester consultables, sans tentative de les réduire artificiellement à une cellule CSV.
+- Pour les **données structurables**, mémoriser chaque observation avec au minimum : identifiant stable ; date et heure de mesure ou prélèvement ; date de réception si différente ; type d'examen/activité ; paramètre ou nature du résultat ; **valeur et unité si applicable** ; intervalle de référence et méthode lorsque disponibles ; contexte ; source et auteur/professionnel quand connus ; document d'origine ; type de saisie (manuelle, importée, instrumentée) ; statut de vérification ; rattachement facultatif à un ou plusieurs projets.
+- Pour les **résultats non numériques**, conserver le document, le texte, l'image, la pièce jointe ou la qualification avec ses métadonnées, sans inventer de valeur. Une extraction automatique éventuelle reste une **proposition à vérifier**, jamais une donnée médicale « certifiée » par simple lecture automatique.
+- Offrir un **format structuré exportable en CSV** pour les séries et tableaux qui s'y prêtent, avec colonnes explicites, unités, dates et références de source ; un autre format structuré peut être nécessaire en stockage natif pour préserver les types, métadonnées, références et pièces jointes. **CSV n'est ni le seul format ni un substitut au document original.** Pas de conversion destructive.
+- Conserver **tous les résultats successifs et leurs versions** afin d'afficher l'évolution d'un même paramètre ou d'une même performance dans le temps. Vérifier **unités, méthodes, conditions et comparabilité** avant toute courbe ou comparaison ; présenter une incertitude ou une rupture de série lorsqu'elle existe. Un changement de document ou une correction ne doit pas effacer silencieusement la valeur historique.
+- Le **Moniteur commun** agrège les observations **autorisées**, garde la provenance de chaque donnée et sépare fait observé, ressenti, interprétation et hypothèse. Un résultat hors normes peut justifier une invitation à consulter ; **aucun diagnostic ni changement de traitement ou de complément n'est décidé automatiquement**.
+- **Données privées par défaut** : autorisations de collecte et d'import, contrôle d'accès par document/valeur, partage explicite vers un professionnel ou un proche, traçabilité des corrections et export, respect des capacités et garanties réelles de stockage/chiffrement d'atome à auditer. Une notification ne révèle pas un résultat médical sensible sur écran verrouillé.
+
+**Lien avec les activités sportives :** une séance de natation peut générer des résultats de longueurs, de temps et de distance ; une séance de musculation des séries, répétitions et charges ; un laboratoire un compte rendu et plusieurs paramètres. Ils sont de **natures différentes mais suivent le même principe de traçabilité, d'import éventuel, de stockage et d'historique**. Réutiliser les objets d'observation existants si leur modèle le permet, sans fabriquer une API ou un système concurrent.
+
+## 50.11. Compléments alimentaires, agenda et bilans réguliers — règles de liaison
+
+Cette sous-section complète **50.8** et **50.10** sans créer une troisième application de suivi.
+
+- **Compléments alimentaires** : depuis leur carré dans Activités, l'utilisateur peut sélectionner un produit proposé **ou le saisir manuellement**, renseigner **quantité/dose et unité** telles qu'indiquées par le produit, le prescripteur éventuel ou l'utilisateur, ainsi qu'horaires, jours, fréquence, durée et notes. Distinguer **dose déclarée**, **prise planifiée** et **prise réellement notée** ; pas de posologie imposée par défaut par l'IA.
+- **Calendrier commun** : après accord, créer des occurrences pour les horaires de prise, ainsi que des rendez-vous de suivi, **bilans périodiques et consultations médicales**. Le rappel n'atteste ni la prise d'un complément ni la réalisation d'un examen. Reporter une occurrence modifie les rappels liés sans perdre les prises et bilans antérieurs.
+- **Réception du bilan** : au retour d'un médecin, laboratoire ou autre prestataire, importer le **compte rendu original** et/ou saisir les observations dans la **brique Résultats**, avec date de réalisation, type d'examen, valeurs mesurées, unités et source lorsque disponibles. Le lien avec l'événement du calendrier est facultatif mais conservé s'il existe.
+- **Suivi longitudinal** : le Moniteur peut rapprocher l'historique des prises **déclarées** et celui des résultats (biologiques ou non) pour les présenter côte à côte. **Une concomitance ne démontre pas une causalité** et ne déclenche pas automatiquement une recommandation de dosage ou de traitement. Les professionnels restent responsables des décisions médicales.
+- **Scénarios transversaux** : la même brique Résultats peut documenter une prise de masse, une amélioration du sommeil, une évaluation de douleur, un contrôle périodique ou un projet hors santé, dans les limites des autorisations et sans compter deux fois le même examen.
+
+## 50.12. Ordre de développement et critères d'acceptation complémentaires
+
+1. **Inventorier** les véritables outils atome/eVe : composants carrés/matrice, exercices existants, pictogrammes, contrôles de valeurs, calendrier/rappels, outils d'exécution, capteurs/permissions, stockage de fichiers et mesures, import/export, Moniteur et accès aux données. Documenter leurs API et manques avant développement ; **JavaScript** pour les composants eVe, sans introduire TypeScript par défaut.
+2. **Définir les briques réutilisables** : type de discipline, séance, mouvement, paramètres et unités ; occurrence de calendrier ; résultat typé et source ; référence au fichier d'origine ; liens entre projets. Réutiliser les objets et connexions réels plutôt que dupliquer leurs responsabilités.
+3. **Réaliser les disciplines par lots**, avec au moins les démonstrateurs complets Musculation, Natation et Course : matrices approfondies, pictogrammes adaptés, réglages natifs, planification, lancement, avancement tactile, stockage de réalisations et retour Moniteur. Étendre ensuite sport par sport / position par position selon un inventaire priorisé.
+4. **Réaliser le suivi des compléments** et les rendez-vous de bilan avec données saisies manuellement, horaires et rappels, sans prescrire automatiquement.
+5. **Réaliser la brique Résultats universelle** : saisie manuelle, import d'un document, conservation de l'original, normalisation non destructive des valeurs applicables, historique, export CSV pertinent et réutilisation par plusieurs objectifs ; étendre progressivement les connecteurs réels.
+6. **Valider en conditions réelles sur les plateformes prises en charge**, notamment iPad/iOS, web et macOS, dans le respect des limites des systèmes d'exploitation, capteurs et permissions.
+
+**Tests à passer :**
+
+- **Musculation** : configurer `10 kg, 5 × 5` sur un mouvement, l'insérer dans une séance, exécuter cinq séries avec l'appui tactile, modifier la troisième série réellement accomplie, interrompre/reprendre puis retrouver chaque série et l'historique sans duplication.
+- **Natation** : définir taille du bassin, longueurs et durée cible ; enregistrer longueurs et temps réels sans montre ; associer un capteur seulement si disponible et autorisé ; retrouver unités et distance totale cohérentes.
+- **Course** : afficher et enregistrer durée, distance et vitesse en km/h (ou allure explicitement convertie) ; gérer une mesure GPS absente ou refusée sans inventer de parcours.
+- **Compléments** : choisir un produit proposé puis ajouter un autre produit par saisie libre ; régler une quantité déclarée et les horaires ; vérifier que l'agenda et le Moniteur ne confondent pas rappel, prise déclarée et observation médicale.
+- **Résultats multi-formats** : importer un compte rendu sanguin avec plusieurs mesures, puis un résultat **non sanguin** (par exemple compte rendu d'imagerie ou d'examen fonctionnel), une donnée sportive et un questionnaire qualitatif ; conserver chaque original et ses métadonnées, exporter la série tabulaire en CSV quand possible et restituer correctement les résultats non tabulaires.
+- **Évolution** : enregistrer deux bilans datés d'un même paramètre, gérer des unités non directement comparables, afficher une courbe uniquement après harmonisation validée, conserver provenance, corrections, et lier sans doublon le résultat à deux projets.
+- **Vie privée / limites OS** : pas de partage implicite de bilan, pas de données fictives, pas d'ouverture forcée non autorisée depuis une notification, pas de changement automatisé de dosage ou de prise en charge médicale.
+
+**Statut de ces sections : spécification fonctionnelle, non preuve que les modules, pictogrammes, connecteurs et capteurs sont déjà implémentés.**

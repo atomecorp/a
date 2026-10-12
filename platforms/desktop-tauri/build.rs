@@ -3,13 +3,14 @@ fn main() {
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
         cc::Build::new().file("native/personal_import.m")
             .file("../ios/atome-auv3/Common/AtomeContactHistory.m")
-            .file("native/clipboard.m")
+            .file("native/clipboard.m").file("native/file_selection.m")
             .flag("-fobjc-arc").compile("atome_personal_import");
-        for framework in ["Foundation", "Contacts", "EventKit", "AppKit"] {
+        for framework in ["Foundation", "Contacts", "EventKit", "AppKit", "UniformTypeIdentifiers"] {
             println!("cargo:rustc-link-lib=framework={framework}");
         }
         println!("cargo:rerun-if-changed=native/personal_import.m");
         println!("cargo:rerun-if-changed=native/clipboard.m");
+        println!("cargo:rerun-if-changed=native/file_selection.m");
         println!("cargo:rerun-if-changed=../ios/atome-auv3/Common/AtomeContactHistory.m");
     }
 

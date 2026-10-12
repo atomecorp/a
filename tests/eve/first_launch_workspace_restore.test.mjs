@@ -8,7 +8,8 @@ const owners = vi.hoisted(() => ({ activate: vi.fn(), prepare: vi.fn(), present:
 vi.mock('../../eVe/intuition/matrix/core/project_data.js', () => ({ activateProjectWorkspace: owners.activate }));
 vi.mock('../../eVe/domains/rendering/project_thumbnail_transition.js', () => ({
     beginProjectClosing: async () => null,
-    prepareProjectOpening: owners.prepare, presentOpenedProject: owners.present
+    prepareProjectOpening: owners.prepare, presentOpenedProject: owners.present,
+    revealProjectMainMenu: async () => null, discardProjectOpening: async () => false
 }));
 vi.mock('../../eVe/intuition/tools/workspace_main_menu_visibility.js', () => ({
     setWorkspaceMainMenuDashboardSuspended: async () => ({ ok: true }), ensureWorkspaceMainMenuVisible: async () => ({ ok: true })
@@ -86,7 +87,7 @@ it('fades into a restored ordinary project through the existing thumbnail transi
     await ready;
     expect(window.__eveWorkspaceMode.mode).toBe('transition'); expect(canvas.style.opacity).not.toBe('0');
     release(); expect(await restoring).toMatchObject({ ok: true, route: 'project', resumed: true });
-    expect(owners.prepare).toHaveBeenCalledWith({ projectId: 'saved' }); expect(owners.present).toHaveBeenCalledWith('saved');
+    expect(owners.prepare).toHaveBeenCalledWith(expect.objectContaining({ projectId: 'saved', thumbnailRect: null })); expect(owners.present).toHaveBeenCalledWith('saved');
     expect(window.__eveWorkspaceMode).toMatchObject({ mode: 'project', projectId: 'saved' });
 });
 
@@ -131,4 +132,15 @@ it.each(['intermediate', 'advanced'])('Atom navigation keeps the full dashboard 
     expect(runtime.open).toHaveBeenCalledTimes(1); expect(runtime.close).not.toHaveBeenCalled();
     expect(owners.activate).not.toHaveBeenCalled();
     expect(window.__eveProfilePreferences.visual.masteryLevel).toBe(level);
+});
+
+it('professional Atom keeps the Dashboard visible when no prepared project can be presented', async () => {
+    window.__eveProfilePreferences = { visual: { masteryLevel: 'advanced' } };
+    window.__currentProject = null;
+    const runtime = window.eveDashboardBevyUiRuntime = { state: { active: true }, open: vi.fn(), close: vi.fn() };
+    expect(await toggleWorkspaceDashboardAndMainMenu()).toMatchObject({ ok: true, active: true, unchanged: true });
+    expect(runtime.close).not.toHaveBeenCalled();
+    window.__currentProject = { id: 'missing-host' };
+    expect(await toggleWorkspaceDashboardAndMainMenu()).toMatchObject({ ok: true, active: true, unchanged: true });
+    expect(runtime.close).not.toHaveBeenCalled();
 });

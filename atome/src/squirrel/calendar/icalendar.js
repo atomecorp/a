@@ -19,6 +19,17 @@ export function canonicalCalendarDate(value) {
         && canonicalCalendarDateValueUnchecked(date) !== value) return null;
     return Number.isFinite(date.getTime()) ? date : null;
 }
+
+/** Strict user date search, independent of browser locale date parsing. */
+export function parseCalendarSearchQuery(value = '') {
+    const text = String(value).trim();
+    const french = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(text);
+    const iso = /^\d{4}-\d{2}-\d{2}$/.test(text);
+    if (!french && !iso) return { text, date: null, invalid: /^\d+[\/\-]\d/.test(text) };
+    const normalized = french ? `${french[3]}-${french[2]}-${french[1]}` : text;
+    const date = canonicalCalendarDate(normalized);
+    return { text: '', date, invalid: !date };
+}
 const canonicalCalendarDateValueUnchecked = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
 export function canonicalCalendarDateValue(value, allDay, reference = null) {
     const date = canonicalCalendarDate(value);

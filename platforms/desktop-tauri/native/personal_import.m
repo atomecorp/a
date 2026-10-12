@@ -185,8 +185,10 @@ static NSDictionary *readCalendar(NSDictionary *options) {
     NSInteger latest = year + MAX(1, MIN(20, [options[@"futureYears"] integerValue] ?: 5));
     NSDictionary *cursor = [options[@"cursor"] isKindOfClass:NSDictionary.class] ? options[@"cursor"] : nil;
     NSNumber *next = cursor[@"next_year"];
+    // History already read: later cycles only reread the live window (last year -> horizon).
+    BOOL completed = [cursor[@"completed"] boolValue];
     NSInteger firstYear = next ? next.integerValue : year - 1;
-    NSInteger lastYear = next ? MIN(firstYear + 1, latest + 1) : year + 2;
+    NSInteger lastYear = next ? MIN(firstYear + 1, latest + 1) : (completed ? latest + 1 : year + 2);
     NSDateComponents *components = [NSDateComponents new]; components.month = 1; components.day = 1;
     components.year = firstYear; NSDate *start = [calendar dateFromComponents:components];
     components.year = lastYear; NSDate *end = [calendar dateFromComponents:components];
@@ -208,7 +210,7 @@ static NSDictionary *readCalendar(NSDictionary *options) {
             @"allDay": @(event.allDay), @"timezone": event.timeZone.name ?: @"UTC",
             @"updatedAt": iso(event.lastModifiedDate), @"status": event.status == EKEventStatusCanceled ? @"cancelled" : @"open", @"alarms": @[]}];
     }
-    NSInteger upcoming = next ? lastYear : earliest; BOOL more = upcoming <= latest;
+    NSInteger upcoming = next ? lastYear : earliest; BOOL more = !completed && upcoming <= latest;
     return @{@"ok": @YES, @"complete": @YES, @"more": @(more), @"items": items, @"calendars": collectionItems,
         @"cursor": more ? @{@"next_year": @(upcoming)} : @{@"completed": @YES}, @"coverage": @{@"start": iso(start), @"end": iso(end)}};
 }

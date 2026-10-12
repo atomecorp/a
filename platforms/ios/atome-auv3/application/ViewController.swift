@@ -23,43 +23,10 @@ final class FullscreenWebViewController: UIViewController {
         root.isOpaque = true
         view = root
 
-        let config = WKWebViewConfiguration()
-        let userContentController = config.userContentController
-        if #available(iOS 11.0, *) {
-            config.websiteDataStore = .default()
-        }
-        if FeatureFlags.registerCustomScheme {
-            config.setURLSchemeHandler(AudioSchemeHandler(), forURLScheme: "atome")
-        }
-        config.allowsInlineMediaPlayback = true
-        // Media requested by the user or the assistant (TV, YouTube) starts with sound, without waiting for a tap.
-        if #available(iOS 10.0, *) {
-            config.mediaTypesRequiringUserActionForPlayback = []
-        }
-        let paintBlack = "(function(){try{var d=document; if(d.documentElement){d.documentElement.style.background='#000';d.documentElement.style.color='#ccc';} if(d.body){d.body.style.background='#000';d.body.style.color='#ccc';}}catch(e){}})();"
-        let preScript = WKUserScript(
-            source: paintBlack,
-            injectionTime: .atDocumentStart,
-            forMainFrameOnly: true
-        )
-        userContentController.addUserScript(preScript)
-        config.setValue(false, forKey: "drawsBackground")
-        webView = WKWebView(frame: root.bounds, configuration: config)
-        WebViewManager.markBootMilestone("webview_created")
-        // Same rule as the AUv3 factory: no native long-press link preview, the
-        // product owns every context menu.
-        webView.allowsLinkPreview = false
-        // Same opt-in as the AUv3 factory: inspectable only for a deliberate
-        // diagnostic launch (`-AtomeWebInspector`, Debug builds).
-        if #available(iOS 16.4, *) {
-            webView.isInspectable = FeatureFlags.webInspectorEnabled
-        }
-        webView.isOpaque = false
-        if #available(iOS 15.0, *) {
-            webView.underPageBackgroundColor = .clear
-        }
-        webView.backgroundColor = .clear
-        webView.scrollView.backgroundColor = .clear
+        // The page belongs to the app, not to this window: a CarPlay launch may
+        // already have booted it.
+        webView = AppPageHost.shared.webView
+        webView.frame = root.bounds
         webView.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(webView)
         NSLayoutConstraint.activate([
@@ -78,58 +45,8 @@ final class FullscreenWebViewController: UIViewController {
             onFailure: { [weak self] reason, _ in self?.showBootFailure(reason: reason) }
         )
         WebViewManager.startBootWatchdog()
-        WebViewManager.setNativeInvokeHandler { command, payload, completion in
-            if AppNativeMediaCaptureController.canHandle(command: command) {
-                AppNativeMediaCaptureController.shared.handle(
-                    command: command,
-                    payload: payload,
-                    completion: completion
-                )
-            } else if AppNativeHealthController.canHandle(command: command) {
-                AppNativeHealthController.shared.handle(command: command, payload: payload, completion: completion)
-            } else if AppNativeClipboardController.canHandle(command: command) {
-                AppNativeClipboardController.shared.handle(
-                    command: command,
-                    payload: payload,
-                    completion: completion
-                )
-            } else if AppNativeBevyRendererController.canHandle(command: command) {
-                AppNativeBevyRendererController.shared.handle(
-                    command: command,
-                    payload: payload,
-                    completion: completion
-                )
-            } else if NativeCalendarAlarm.canHandle(command: command) {
-                NativeCalendarAlarm.shared.handle(
-                    command: command,
-                    payload: payload,
-                    completion: completion
-                )
-            } else {
-                AppNativeAudioController.shared.handle(
-                    command: command,
-                    payload: payload,
-                    completion: completion
-                )
-            }
-        }
-        AppNativeMediaCaptureController.shared.attachPreviewHost(webView: webView)
-        NativePersonalImport.shared.openSettings = {
-            guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
-            UIApplication.shared.open(url)
-        }
-        AppNativeHealthController.shared.attach(webView: webView, openSettings: {
-            // This app's page in Settings: Motion & Fitness and Health access.
-            guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
-            UIApplication.shared.open(url)
-        })
         view.insetsLayoutMarginsFromSafeArea = true
-        webView.scrollView.contentInsetAdjustmentBehavior = .never
-        webView.scrollView.contentInset = .zero
-        webView.scrollView.verticalScrollIndicatorInsets = .zero
-        webView.scrollView.horizontalScrollIndicatorInsets = .zero
-        webView.scrollView.scrollIndicatorInsets = .zero
-        WebViewManager.setupWebView(for: webView)
+        AppPageHost.shared.start(windowless: false)
         injectFullscreenFixJS()
     }
 

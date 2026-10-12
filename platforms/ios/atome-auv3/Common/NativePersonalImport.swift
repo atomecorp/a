@@ -149,8 +149,11 @@ final class NativePersonalImport {
         let latest = currentYear + max(1, min(20, payload["futureYears"] as? Int ?? 5))
         let cursor = payload["cursor"] as? [String: Any]
         let next = cursor?["next_year"] as? Int
+        // Historique deja lu : chaque cycle suivant ne relit que la fenetre vivante
+        // (annee passee -> horizon), au lieu de repartir de `earliest`.
+        let completed = cursor?["completed"] as? Bool == true
         let startYear = next ?? currentYear - 1
-        let endYear = next == nil ? currentYear + 2 : min(startYear + 1, latest + 1)
+        let endYear = next != nil ? min(startYear + 1, latest + 1) : (completed ? latest + 1 : currentYear + 2)
         var calendar = Calendar(identifier: .gregorian); calendar.timeZone = TimeZone(secondsFromGMT: 0)!
         let start = calendar.date(from: DateComponents(year: startYear, month: 1, day: 1))!
         let end = calendar.date(from: DateComponents(year: endYear, month: 1, day: 1))!
@@ -172,7 +175,7 @@ final class NativePersonalImport {
                     "alarms": [], "native_series_id": external]
         }
         let upcoming = next == nil ? earliest : endYear
-        let more = upcoming <= latest
+        let more = !completed && upcoming <= latest
         return ["ok": true, "complete": true, "more": more, "items": items,
                 "calendars": collections.map { ["id": $0.calendarIdentifier, "name": $0.title, "type": Self.calendarType($0)] },
                 "coverage": ["start": iso.string(from: start), "end": iso.string(from: end)],

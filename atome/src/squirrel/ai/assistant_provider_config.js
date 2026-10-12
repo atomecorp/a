@@ -19,6 +19,8 @@ export const resolveAssistantProviderConfig = async ({
             serverManaged: true, model: metadata?.model || AI_PROVIDER_DEFINITIONS.openai.models[0],
             source: 'assistant.openai+server_vault' };
     } catch (error) {
-        return { ok: false, providerId: 'openai', error: error.message };
+        // `link_reason` says why the host relay could not relink (a remote
+        // session to sign in again); it is the half the user can act on.
+        return { ok: false, providerId: 'openai', error: error.link_reason || error.message };
     }
 };

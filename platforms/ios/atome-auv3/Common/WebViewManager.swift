@@ -381,14 +381,14 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
 
     // Returns true if a load was initiated or already done
     @discardableResult
-    private static func attemptMainPageLoad(isExtension _: Bool, mainURL: URL?) -> Bool {
+    private static func attemptMainPageLoad(isExtension _: Bool, mainURL: URL?, allowWindowless: Bool = false) -> Bool {
         guard let webView = webView else { return false }
         if mainLoadDone { return true }
         mainLoadAttempts += 1
         // Defer if not in window or zero-size
         let inWindow = (webView.window != nil)
         let size = webView.bounds.size
-        if !inWindow || size.width <= 1 || size.height <= 1 {
+        if (!inWindow && !allowWindowless) || size.width <= 1 || size.height <= 1 {
             shared.log.debug("Attempt #\(mainLoadAttempts) defer: inWindow=\(inWindow) size=\(String(describing: webView.bounds.debugDescription))")
             return false
         }
@@ -441,14 +441,14 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     }
 
     // Public trigger from controllers once view is visible and sized
-    public static func triggerMainLoadNow() {
+    public static func triggerMainLoadNow(allowWindowless: Bool = false) {
         let isExtension: Bool = {
             let path = Bundle.main.bundlePath
             if path.hasSuffix(".appex") { return true }
             if Bundle.main.infoDictionary?["NSExtension"] != nil { return true }
             return false
         }()
-        _ = attemptMainPageLoad(isExtension: isExtension, mainURL: storedMainURL)
+        _ = attemptMainPageLoad(isExtension: isExtension, mainURL: storedMainURL, allowWindowless: allowWindowless)
     }
 
     static func stringifyConsolePayload(_ value: Any) -> String {

@@ -393,7 +393,7 @@ export const createVoiceAssistantSessionController = ({
 // Provider choice shares the assistant lifecycle contract. Only the local
 // speech backend publishes viseme/input frames; Realtime delivers media tracks.
 export const bindVoiceAssistantSession = async ({
-    env, voiceApi, provider, conversation, onSession, onSpeech, onInput, translate, locale = ''
+    env, voiceApi, provider, conversation, onSession, onSpeech, onInput, translate, locale = '', keepWhenHidden = false
 }) => {
     if (provider && provider.ok !== true) throw new Error(provider.error || 'no_active_ai_provider');
     const remote = provider?.ok && provider.providerId === 'openai';
@@ -402,8 +402,9 @@ export const bindVoiceAssistantSession = async ({
             history: () => conversation.contextTurns(),
             onTurn: turn => conversation.appendVoiceTurn(turn),
             createTools: options => conversation.createVoiceTools(options),
-            onUsage: (usage, model) => conversation.recordUsage(usage, model), locale,
-            readyLine: translate('eve.voice.assistant.ready_greeting')
+            onUsage: (usage, model) => conversation.recordUsage(usage, model), locale, suspendWhenHidden: !keepWhenHidden,
+            readyLine: translate('eve.voice.assistant.ready_greeting'),
+            farewellLine: translate('eve.voice.assistant.closing_greeting')
         })
         : createVoiceAssistantSessionController({ voiceApi,
             openingGreeting: translate('eve.voice.assistant.opening_greeting'),

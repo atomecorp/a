@@ -35,7 +35,9 @@ const RAW_SCRIPT_PATHS = new Set([
     'src/js/gsap.min.js',
     'src/wasm/squirrel_audio_wasm.js',
     'src/wasm/squirrel_bevy_renderer.js',
-    'src/wasm/renderer_version.mjs'
+    'src/wasm/renderer_version.mjs',
+    // ONNX Runtime Web imports its wasm factory by URL at runtime (local TTS and wake workers).
+    'src/assets/vendor/onnxruntime-web/ort-wasm-simd-threaded.mjs'
 ]);
 const SKIP_RUNTIME_PATHS = new Set([
     'src/assets/videos/JeezsFire.mp4',
@@ -260,17 +262,20 @@ await writeFile(
     }, null, 2)
 );
 
-await build({
-    entryPoints: [path.join(sourceRoot, 'squirrel/voice/local_tts_worker.js')],
-    bundle: true,
-    format: 'esm',
-    platform: 'browser',
-    target: ['safari16.4'],
-    minifySyntax: true,
-    minifyWhitespace: true,
-    outfile: path.join(outputRoot, 'src/squirrel/voice/local_tts_worker.js'),
-    logLevel: 'warning'
-});
+// Module workers are loaded by URL, outside the shared graph: each is bundled whole.
+for (const worker of ['squirrel/voice/local_tts_worker.js', 'squirrel/voice/wake_detector_worker.js']) {
+    await build({
+        entryPoints: [path.join(sourceRoot, worker)],
+        bundle: true,
+        format: 'esm',
+        platform: 'browser',
+        target: ['safari16.4'],
+        minifySyntax: true,
+        minifyWhitespace: true,
+        outfile: path.join(outputRoot, 'src', worker),
+        logLevel: 'warning'
+    });
+}
 
 const copyRuntimeFiles = async (root, prefix) => {
     await walk(root, async (absolutePath, relativePath) => {

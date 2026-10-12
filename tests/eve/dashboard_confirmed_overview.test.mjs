@@ -14,6 +14,8 @@ import { createDashboardVisibleHydrationScope } from '../../eVe/domains/dashboar
 import { getSessionState, setSessionState } from '../../atome/src/squirrel/apis/unified/adole_api/session.js';
 import { readRenderSurfaceSafeAreaInsets } from '../../eVe/domains/rendering/surface_size_runtime.js';
 import { createDashboardEnvironmentWatcher } from '../../eVe/domains/dashboard/dashboard_environment_watcher.js';
+import { createRuntimeHarness, findNode } from './bevy_ui_main_menu_test_helpers.mjs';
+import { BEVY_MAIN_MENU_ATOME_ID } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
 
 const tokens = mergeDashboardTokens();
 const categories = ['calendar', 'news', 'contacts', 'monitor', 'projects'].map((id, order) => ({ id, order, dock: order < 2 ? 'top' : '', label_key: id, icon_id: id }));
@@ -52,7 +54,7 @@ test.each(['left', 'right'])('top cards align and content stays outside the %s r
         for (const entry of layout.visible_item_rects) {
             expect(entry.rect.x).toBeGreaterThanOrEqual(layout.vertical_viewport_rect.x);
             expect(entry.rect.x + entry.rect.width).toBeLessThanOrEqual(layout.vertical_viewport_rect.x + layout.vertical_viewport_rect.width + 0.001);
-            if (sidebarOpen) expect(handedness === 'right' ? entry.rect.x + entry.rect.width <= layout.header_band_rect.x : entry.rect.x >= layout.header_band_rect.x + layout.header_band_rect.width).toBe(true);
+            if (sidebarOpen) expect(layout.header_side === 'right' ? entry.rect.x + entry.rect.width <= layout.header_band_rect.x : entry.rect.x >= layout.header_band_rect.x + layout.header_band_rect.width).toBe(true);
         }
         const clock = modules.find(entry => entry.item.id === 'clock').rect;
         const weather = modules.find(entry => entry.item.id === 'weather').rect;
@@ -163,21 +165,35 @@ test('long monitor labels and details fit their actual text areas', () => {
     }
 });
 
-test('native toggle samples the same material as the open band', () => {
-    const layout = make();
-    const tree = buildDashboardBevyUiTree({ layout, tokens, handlers: { sidebarReveal: () => {} } });
+test.each(['right', 'left'])('professional %s Dashboard projects its separate band disclosure', async handedness => {
+    const layout = make(0, { handedness });
+    const activate = vi.fn(), reveal = vi.fn();
+    const tree = buildDashboardBevyUiTree({ layout, tokens, handlers: { sidebarActivate: activate, sidebarReveal: reveal } });
     const toggle = projectBevyUiTreeRecords({ tree, treeId: tree.id, workspaceLayer: 'dashboard' }).find(record => record.id.endsWith('__eve_dashboard_sidebar_toggle'));
-    const band = buildDashboardRecords({ layout, tokens }).find(record => record.id === '__eve_dashboard_header_band');
-    expect(toggle.properties.material).toEqual(band.properties.material);
-    expect(toggle.properties.z_index).toBeGreaterThan(band.properties.z_index);
+    expect(toggle).toBeDefined();
+    expect(toggle.properties.left).toBe(layout.sidebar_toggle_rect.x);
+    expect(toggle.properties.width).toBe(layout.sidebar_toggle_rect.width);
+    const control = findNode(tree.root, '__eve_dashboard_sidebar_toggle');
+    expect(findNode(control, '__eve_dashboard_sidebar_toggle_disclosure_triangle').image.source).toContain('disclosure.svg');
+    expect(control.on.palette_slide_open.paletteSlideDirection).toBe('up');
+    await control.on.activate();
+    await control.on.palette_slide_open();
+    expect(activate).toHaveBeenCalledTimes(1);
+    expect(reveal).toHaveBeenCalledTimes(1);
+    expect(findNode(tree.root, BEVY_MAIN_MENU_ATOME_ID)).toBeNull();
+    const legacy = buildDashboardBevyUiTree({ layout: make(0, { overview: false }), tokens });
+    expect(legacy.root.children.some(node => node.id === '__eve_dashboard_sidebar_toggle')).toBe(true);
 });
 
-test.each(['tap', 'up', 'left', 'down', 'cancel'])('shared pointer route handles %s exactly once', gesture => {
+test.each(['tap', 'up', 'left', 'down', 'cancel'])('shared Atom pointer route handles %s exactly once', async gesture => {
     const reveal = vi.fn(), activate = vi.fn();
-    const layout = make();
-    const tree = buildDashboardBevyUiTree({ layout, tokens, handlers: { sidebarReveal: reveal, sidebarActivate: activate } });
-    const toggle = tree.root.children.find(node => node.id === '__eve_dashboard_sidebar_toggle');
-    const target = { treeId: tree.id, nodeId: toggle.id, kind: 'button', box: layout.sidebar_toggle_rect };
+    const h = createRuntimeHarness({ professional: true, onAtomShortPress: activate, onAtomSlide: reveal });
+    h.surface.setProbeRect({ width: 402, height: 874 });
+    await h.runtime.showAtomOnly();
+    const tree = h.calls.at(-1).payload.tree;
+    const toggle = findNode(tree.root, BEVY_MAIN_MENU_ATOME_ID);
+    const box = tree.itemBoxes.find(box => box.item.id === BEVY_MAIN_MENU_ATOME_ID);
+    const target = { treeId: tree.id, nodeId: toggle.id, kind: 'button', box: { x: box.x + box.iconOffsetX, y: box.y, width: tree.layout.itemSize, height: tree.layout.itemSize } };
     const handlers = new Map(Object.entries(toggle.on).map(([key, handler]) => [`${tree.id}:${toggle.id}:${key}`, handler]));
     const state = { handlers, lastSurfacePoints: new Map() };
     const canvas = {};
@@ -192,8 +208,10 @@ test.each(['tap', 'up', 'left', 'down', 'cancel'])('shared pointer route handles
     if (gesture !== 'tap' && gesture !== 'cancel') { route('pointermove', end); route('pointermove', end); }
     if (gesture === 'up') expect(reveal).toHaveBeenCalledTimes(1);
     route(gesture === 'cancel' ? 'pointercancel' : 'pointerup', end);
-    expect(reveal).toHaveBeenCalledTimes(gesture === 'up' ? 1 : 0);
-    expect(activate).toHaveBeenCalledTimes(gesture === 'tap' ? 1 : 0);
+    try {
+        expect(reveal).toHaveBeenCalledTimes(gesture === 'up' ? 1 : 0);
+        expect(activate).toHaveBeenCalledTimes(gesture === 'tap' ? 1 : 0);
+    } finally { h.runtime.destroy(); h.restore(); h.dom.window.close(); }
 });
 
 test('embedded/default layout retains the existing single-row contract', () => {

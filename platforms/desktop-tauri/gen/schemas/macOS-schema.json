@@ -345,6 +345,12 @@
       "description": "Permission identifier",
       "oneOf": [
         {
+          "description": "Lets the main webview take the assistant request opened by the atome://assistant link.\n#### This permission set includes:\n\n- `allow-assistant-request-take`",
+          "type": "string",
+          "const": "assistant-link",
+          "markdownDescription": "Lets the main webview take the assistant request opened by the atome://assistant link.\n#### This permission set includes:\n\n- `allow-assistant-request-take`"
+        },
+        {
           "description": "Allows the main webview to use the native Kira audio engine commands.\n#### This permission set includes:\n\n- `allow-audio-init`\n- `allow-audio-load-clip`\n- `allow-audio-load-clip-from-bytes`\n- `allow-audio-has-clip`\n- `allow-audio-play`\n- `allow-audio-play-instance`\n- `allow-audio-stop`\n- `allow-audio-stop-instance`\n- `allow-audio-destroy-clip`\n- `allow-audio-set-volume`\n- `allow-audio-set-playback-rate`\n- `allow-audio-record-start`\n- `allow-audio-record-stop`\n- `allow-audio-get-levels`\n- `allow-audio-get-scope`\n- `allow-audio-shutdown`",
           "type": "string",
           "const": "audio-engine",
@@ -379,6 +385,12 @@
           "type": "string",
           "const": "taxonomy-editor",
           "markdownDescription": "Lets the developer taxonomy editor read and save eVe/intuition/menu/context_menus.json (writes only in debug builds).\n#### This permission set includes:\n\n- `allow-taxonomy-read`\n- `allow-taxonomy-save`"
+        },
+        {
+          "description": "Enables the assistant_request_take command.",
+          "type": "string",
+          "const": "allow-assistant-request-take",
+          "markdownDescription": "Enables the assistant_request_take command."
         },
         {
           "description": "Enables the audio_destroy_clip command.",

@@ -10,6 +10,8 @@ export const PERSONAL_IMPORT_TOOLS = [
     { name: 'contacts.stop_import', method: 'stopSource', param: 'source_id', write: true,
         description: 'Stop automatic collection without deleting imported contacts.', properties: source },
     { name: 'contacts.import_status', method: 'importStatus', description: 'Read active contact collectors.', properties: {} },
+    { name: 'contacts.merge_duplicates', method: 'mergeDuplicates', write: true,
+        description: 'Merge contacts sharing a phone number into one card on explicit user request; removed cards stay restorable.', properties: {} },
     { name: 'calendar.import_native', method: 'importNative', write: true,
         description: 'Read selected native calendars into private canonical events. Requires full native read permission.',
         properties: { ...source, start_year: { type: 'number', minimum: 1900 }, future_years: { type: 'number', minimum: 1, maximum: 20 } } },
@@ -27,7 +29,7 @@ export const PERSONAL_IMPORT_TOOLS = [
 export function personalImportToolResult(tool, result) {
     if (!tool.write) return result;
     const output = {};
-    for (const key of ['ok', 'imported', 'changed', 'skipped', 'durability', 'local_persisted', 'remote_acknowledgement', 'replication', 'more'])
+    for (const key of ['ok', 'imported', 'changed', 'skipped', 'durability', 'local_persisted', 'remote_acknowledgement', 'replication', 'more', 'groups', 'duplicates_merged'])
         if (result?.[key] !== undefined) output[key] = result[key];
     if (result?.error) output.error = /^[a-z][a-z0-9_]{1,100}$/.test(result.error) ? result.error : 'personal_import_failed';
     return output;

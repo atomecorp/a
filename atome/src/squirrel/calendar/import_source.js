@@ -30,7 +30,10 @@ export function normalizeImportedEvent(input) {
 
 export function createCalendarImport({ env = globalThis, session, device } = {}) {
     const api = () => env.Atome || env.window?.Atome;
-    const store = createCanonicalImport({ type: 'calendar_event', api, session, normalize: normalizeImportedEvent });
+    // Un meme rendez-vous natif (meme serie, meme debut) vu depuis un autre appareil
+    // ou un autre calendrier local du meme compte iCloud n'est garde qu'une fois.
+    const store = createCanonicalImport({ type: 'calendar_event', api, session, normalize: normalizeImportedEvent,
+        identityKeys: (props) => (props.native_series_id && props.start ? [`series:${props.native_series_id}|${props.start}`] : []) });
     const calendars = createCanonicalImport({ type: 'calendar', api, session, normalize: input => ({
         name: input.name || input.title || '', ...(input.color ? { color: input.color } : {}),
         ...(input.timezone ? { timezone: input.timezone } : {}), calendar_scope: 'personal', access: 'private', visibility: 'private'
@@ -49,7 +52,8 @@ export function createCalendarImport({ env = globalThis, session, device } = {})
             ...options, cursor: response.cursor, complete: response.complete === true,
             removed_ids: response.removed_ids || [], removed_hrefs: response.removed_hrefs || [], coverage: response.coverage
         });
-        return { ...result, more: response.more === true, coverage: response.coverage };
+        return { ...result, more: response.more === true, coverage: response.coverage,
+            changed: Number(result.changed || 0) + Number(collected.changed || 0) + (response.removed_ids?.length || 0) };
     };
     const ensureNative = () => {
         if (sources.has('native_calendar')) return;

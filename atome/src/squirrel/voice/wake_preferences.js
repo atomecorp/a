@@ -1,2 +1,2 @@
-// Profile preference only; device microphone consent is owned by wake_runtime.
-export const normalizeAssistantPreferences = value => ({ voiceActivation: value?.voiceActivation === true, locale: 'fr-FR' });
+// Profile preference only; voice activation is on unless the user turned it off.
+export const normalizeAssistantPreferences = value => ({ voiceActivation: value?.voiceActivation !== false, locale: 'fr-FR' });

@@ -1,6 +1,11 @@
 import { importIdentity } from '../shared/canonical_import.js';
 
 const CONTACT_PHOTO_ID_PREFIX = 'contact_photo_';
+/** Failures a later read of the same source photo cannot fix. */
+export const CONTACT_PHOTO_PERMANENT_ERRORS = new Set(['contact_photo_payload_invalid', 'contact_photo_owner_invalid']);
+// The media record can outlive its file (iOS keeps files on the local server
+// only; a reinstall empties it): such a photo is uploaded again.
+const MEDIA_FILE_MISSING = new Set(['media_export_read_failed', 'media_export_file_unavailable']);
 
 /** Contact photos are ordinary image media; listings show them apart from the user's own files. */
 export const isContactPhotoMedia = (file = {}) => [file.id, file.atome_id, file.file_name, file.name]
@@ -27,11 +32,16 @@ export async function persistContactPhoto(contact, context, signal) {
     if (existing?.owner_id && String(existing.owner_id) !== context.owner) throw new Error('contact_photo_owner_invalid');
     let url = existing?.properties?.media_url;
     if (existing?.deleted_at || existing?.deleted || existing?.properties?.__deleted) url = null;
+    const [{ createAssetFileUploader, readMediaAssetBytes }, { createUploadAtome }] = await Promise.all([
+        import('../../../../eVe/domains/media/asset_box_file_upload.js'),
+        import('../../../../eVe/domains/media/asset_box_atome_store.js')
+    ]);
+    if (url) {
+        try { await readMediaAssetBytes({ fileName: existing.properties.file_name, ownerId: context.owner }); }
+        catch (error) { if (!MEDIA_FILE_MISSING.has(error.message)) throw error; url = null; }
+        context.check();
+    }
     if (!url) {
-        const [{ createAssetFileUploader }, { createUploadAtome }] = await Promise.all([
-            import('../../../../eVe/domains/media/asset_box_file_upload.js'),
-            import('../../../../eVe/domains/media/asset_box_atome_store.js')
-        ]);
         const upload = createAssetFileUploader({ setUploadsAuthMissing() {}, renderAuthMissingUploads() {}, createUploadAtomeForUpload: createUploadAtome });
         const binary = atob(match[2]), bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
         const extension = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[match[1]];

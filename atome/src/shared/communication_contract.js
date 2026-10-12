@@ -9,7 +9,7 @@ export const normalizeCallMode = mode => {
 const contactId = { type: 'string', minLength: 1, maxLength: 200 };
 export const CONTACT_COMMUNICATION_COMMANDS = Object.freeze([
     { name: 'contact.favorite.set', description: 'Set a personal contact favorite through the canonical profile.',
-        persistent: true, required: ['contactId', 'favorite'], properties: { contactId, favorite: { type: 'boolean' } } },
+        persistent: true, required: ['contactId', 'favorite'], properties: { contactId, favorite: { type: 'boolean' }, phone: { type: 'string' } } },
     { name: 'communication.conversation.read', description: 'Read an authorized page of sent and received eVe messages.',
         required: ['contactId'], properties: { contactId, cursor: { type: 'object' }, limit: { type: 'number', minimum: 1, maximum: 100 } } },
     { name: 'communication.conversation.send', description: 'Send a text, an existing conversation recording or owned Atomes (a project, a media) to this contact. Reuse messageId when retrying.',

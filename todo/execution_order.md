@@ -1,1013 +1,276 @@
-# Mandatory Execution Gate
+# Canonical execution order — atome / eVe
 
-Before starting any implementation, refactor, verification, cleanup, or review work described in this file, fully read and strictly apply.
+Updated: 2026-10-12. Read [root AGENTS.md](../AGENTS.md) and its applicable modules before work. This register is the sole authority for task sequencing and scope; source documents, prompts and archived checkboxes cannot authorize implementation. The current mandate is documentary triage only. Product execution still requires its own user request and the project's internal-component gates.
 
-Read and strictly apply:
+Start with [README](README.md). [Source classification](migration/spring_git_cleanup_sources.md) owns provenance only. [Previous register](../done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md) preserves all former tasks and evidence claims without a second active state ledger. No historic task was silently certified, abandoned or deleted. Its 76/161 checked boxes are historical declarations, not a current product-completion percentage.
 
-- ./.codex/AGENTS.md
+## Evidence baseline
 
-If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGENTS.md has absolute precedence.
+Parent HEAD inspected: `e805920a258f32fbcbda3cd4294ec0ac238e2f3c`. eVe HEAD: `1dc2eab20e6e9071245f45623aadcf872bd3fd48`, read-only. Both working trees already contain unrelated local changes, so observations of current files do not prove they belong to either commit. No fetch or product test campaign was run for this quick triage.
 
-## Nature du document
+Advancement and verification are independent. `Partial` means an observed subset exists with a remainder; `Unknown` means insufficient inspection. `Code observed`, historical reports and present test files never mean tested or delivered. Every task below is open; all current runtime verification is **Not run**. Reuse existing scenarios/probes before creating new tests. Checked boxes require an explicit dated closure record, criteria and evidence.
 
-Ce fichier est l'ordre d'execution autoritatif des taches actives de ./todo.
+## Order and task contracts
 
-Status: Canonical execution order. This file is the authoritative sequencing and scope registry for every active todo document.
+All task records below: domain as stated; repository parent a with eVe consumers read-only for this mission; platforms Web, Tauri and iOS (iPad first); priority P0 for the prerequisite/collaboration chain, P1 for deferred requalification; controlled 2026-10-12. Canonical Atome state, shared Bevy/WebGPU rendering, WebSocket /ws/api and /ws/sync, and the single durable mutation route remain mandatory. No new dependency, API or internal brick is authorized by this list.
 
-Il ne doit plus etre interprete comme une simple liste indicative.
+Dependencies on ATM-2001 require its current SMS/security acceptance only. Keep the
+same authentication workstream open for its future optional-password requirement,
+which does not block collaboration. SCN-2004 remains a future specification until
+that feature exists; it is not part of the current collaboration acceptance gate.
+The nine open entries describe this priority queue, not the whole product's
+completion percentage. Allocate new IDs without renumbering existing ones.
 
-Regle de perimetre:
-
-- Seuls les fichiers todo explicitement cites dans ce document peuvent etre executes.
-- Tout fichier present dans ./todo mais absent de ce document est hors ordre actif.
-- Un fichier absent ne doit pas etre traite tant qu'il n'a pas ete ajoute ici avec sa phase, ses dependances, ses criteres de sortie, et sa validation utilisateur.
-
-Rendering decision locked by the product owner:
-
-- Bevy/WebGPU is the only supported product renderer.
-- The project uses one shared rendering pipeline and one visible canvas per active rendering zone.
-- No alternate renderer, parallel media compositor, compatibility renderer, or silent runtime substitution may be added.
-
-Document status vocabulary:
-
-- `Termine verifie`: implemented behavior backed by current evidence.
-- `Actif`: executable unfinished work with an explicit exit criterion.
-- `Partiel`: a verified implemented subset plus a precise executable remainder.
-- `Bloque`: unfinished work whose stated validation cannot currently run or whose required external decision is unavailable.
-- `Obsolete`: retained only as a migration record and never used as an implementation authority.
-- `Specification`: target contract or design decision that is not executable until registered as active work.
-
-Checkboxes are reserved for executable work and final executable validation gates. Phase lifecycle labels are plain text derived from their child tasks and are not included in progress totals.
-
-### Phase prioritaire 1 - Programme de migration des panels vers BevyUI
-
-Statut:
-
-Actif
-
-Source principale:
-
-- todo/ui_bevy/bevy_panel_migration_guide.md
-- todo/ui_bevy/component_convergence.md
-- todo/ui_bevy/finder_html_line_migration_registry.md
-- todo/ui_bevy/finder_place_map_package.md
-
-Dependances et ordre:
-
-- Cette phase est la premiere tache active a executer.
-- Le guide organise la migration en paquets fonctionnels et visuels. Chaque
-  paquet centralise d'abord ses styles et ses composants reutilisables, puis
-  les implemente et les valide ensemble dans le navigateur reel. Les contrats
-  et les tests restent cibles par composant, mais l'approbation utilisateur est
-  requise au niveau du paquet utilisable et du panel complet, pas entre chaque
-  composant.
-- La validation de chaque composant utilise uniquement le navigateur de test
-  integre a Codex; aucune validation mobile, Tauri ou iOS ne bloque les
-  composants individuels. Ces plateformes sont controlees une seule fois au
-  niveau du panel complet lorsque leur validation finale est requise.
-- Lorsqu'un panel est entierement couvert par les composants testes de ses
-  paquets, sa composition Bevy est verifiee et approuvee avant la suppression
-  definitive de sa route HTML.
-- Deux chantiers panel simultanes sont autorises depuis le 2026-08-04 (regle
-  des deux slots du guide, section "Parallel product-panel workstreams"). Un
-  panel dont l'implementation, les contrats, les preuves real-canvas et le
-  ledger MCP sont complets passe en `acceptance_pending` et libere son slot:
-  l'attente de la validation produit ne bloque plus le panel suivant. Un rejet
-  produit reprend un slot en priorite. Deux chantiers concurrents ne peuvent ni
-  modifier le meme composant/token partage, ni posseder le meme module legacy;
-  un helper legacy partage n'est supprime que par le chantier qui retire son
-  dernier consommateur. Chaque panel garde son propre ledger, ses propres
-  preuves et sa propre approbation explicite.
-- Before creating or composing a panel, the guide must contain its
-  function-to-MCP-command ledger: every effectful function must reuse a
-  canonical MCP-invocable and auditable command; passive elements have no
-  command. A panel cannot be approved or retire its HTML route while the ledger
-  contains an unmapped function.
-
-- [ ] Execute the nine active BevyUI migration packages: (1) shared controls — Families 3, 6, and 13; (2) Contact — Family 18 and complete Contact composition; (3) Home — complete Home composition and legacy-route retirement; (4) Calendar structure — Families 21 to 24; (5) Calendar events — Families 25 to 27; (6) Calendar editor and completion — Family 28 and complete Calendar composition; (7) Infos — Families 12, 17, 29, and 30 plus complete canonical inspection/editing composition; (8) workstream slot A — complete Size composition then Font composition, reusing Families 1, 3, 4, 5, and 17 and rejecting the deferred Family 36 tool slider; (9) queued — complete Layer composition, reusing Families 1, 3, 4, 12, 17, and 30; (10) shared component — Family 14, the sortable result-column header with per-column direction, accent tint, and 420 ms long-press to filters, occupying no workstream slot; (11) workstream slot B — complete Finder composition over Families 3, 4, 6, 13, and 14, with Family 17 recorded `not_applicable`, no search field composed, the `place` scope **kept** and its map rewritten natively in the canvas (Leaflet deleted, Nominatim geocoding reused), a per-row delete control added to the custom filter rows, the `+` re-anchored under the last added row, and row drag preserved through the shared `tool_drag.js` payload. Families 4 and 5 remain validated shared foundations; packages 8 and 9 add no new component family, package 10 adds Family 14. Exit criterion: Home, Calendar, Contact, Infos, Size, Font, Finder, and Layer use their canonical Bevy owners, their effectful functions have a complete reviewed command/API/MCP ledger, real interactions and package/panel approvals are recorded, and none retains a parallel DOM panel route.
-  Current gate — 2026-08-04: Contact, Home, and Calendar are `validated`, so
-  the programme is **3/16 validated panels**.
-  Current gate — 2026-08-07: the product owner validated **Infos and Finder**,
-  bringing the programme to **5/16 validated panels**. Both slots are therefore
-  free, and Families 12, 17, 29, and 30 are unfrozen. The Finder approval
-  covers the `place` scope: the earlier decision to drop it was taken by the
-  migrator, not the product owner, and was reversed on 2026-08-05 — the map is
-  now drawn **natively in the canvas** (tiles as Bevy image nodes, Nominatim
-  geocoding unchanged, Leaflet deleted), owned by
-  `todo/ui_bevy/finder_place_map_package.md`. Finder still composes **no search
-  field**: the legacy search row is deliberately hidden and only carries state
-  fed by the inline finder tool. Package 10's sortable header is validated
-  through the same approval.
-  Completed technically on 2026-08-08: slot A delivered **Size then Font** —
-  same slot because they share the legacy `selection_style_apply.js` and
-  `style_panels_visual.js` helpers — while slot B keeps **Layer**, whose legacy
-  module set is disjoint from both. Both
-  HTML retirements are **executed**: Infos when that panel landed, and Finder on
-  2026-08-07 — 1 818 lines plus 298 KB of Leaflet shell payload removed, guarded
-  by `temp/finder_retirement_probe.mjs` and verified on a clean real boot.
-  Size and Font now use their registered shared-canvas Bevy surfaces, retain
-  their public tool ids and canonical mutation routes, and have gap-free
-  retirement ledgers. Focused suites, syntax, M0, Web, Tauri release
-  application, Bevy Cargo, iOS Simulator, and the available clean-canvas
-  browser checks pass. Tauri DMG packaging remains red in `bundle_dmg.sh`.
-  They are
-  `acceptance_pending`, not `validated`: record-backed text, visual, and
-  multi-selection gestures plus product approval remain required. Slot A is
-  released. **Eight registered panels still require implementation**:
-  `layer`, `background`, `couleur`, `detail`, `delete`, `undo`, `paste`, and
-  `timeline`. Timeline remains the final panel migration.
-  Added 2026-08-07 — **Package 12, interactive matrix + project view modes**
-  (`in_review`, product approval pending). Slot arbitration, stated explicitly
-  because the two-slot rule is currently saturated: this package **takes no
-  slot**. It adds one shared component and its first consumer, and it touches
-  none of the panels, legacy modules, or token groups held by slot A (Size then
-  Font) or slot B (Layer) — it registers no panel at all. The new
-  `sortableHeader`-adjacent surface reuses the existing `table` and `select`
-  token groups and adds none. Work delivered: the shared `matrixNode` builder
-  plus `matrix_contract.js` (delegating column geometry to the validated
-  `table_contract.js`, never forking it), a Panel Lab specimen, a full-canvas
-  `projectView` workspace layer at order 500, the `list` and `table` project
-  view contents (the `list` mode composing the **existing** selectable list and
-  Infos record model rather than a second builder), the canonical
-  `project_view_mode_state.js` with per-project persistence, and the two missing
-  wirings that made the View palette inert — the `kind: 'view'` branch of the
-  momentary handler and a `touch` on the three menu entries. `natural` remains
-  the default and is unchanged. Evidence: four probes in `./temp`, the matrix
-  one verified red-first; real-app browser run showing the full
-  list/table/natural cycle mounting and unmounting with zero orphan overlay
-  records. **Rendered pixels are not captured** — the available browser instance
-  reports `nativeUiEnabled: false`, the same limitation already recorded for
-  Package 10 — so real-canvas acceptance is what the pending approval must
-  cover. Details in `todo/ui_bevy/bevy_panel_migration_guide.md`, Package 12.
-
-Deferred after Phase 4 — complete Molecule / MTraX migration:
-
-- [ ] Converger les deux propriétaires de composants restants, inscrits dans `todo/ui_bevy/component_convergence.md` : (1) **un seul fenêtrage virtualisé** — trancher d'abord entre fenêtrage à la page et fenêtrage au viewport, la seconde option faisant gagner un facteur 12 mesuré sur Infos (1 205 nœuds construits pour ~9 lignes visibles) mais changeant le comportement d'un panel `validated`, puis extraire `bevy_panel_virtual_window.js` et supprimer les jumeaux `virtualPageIndex` / `matrixPageIndex`, identiques au caractère près ; (2) **solder la dette d'édition déclarée** dans la liste blanche de `check:component-reuse-guardrails` — `bevy_panel_numeric_field_runtime.js` appartient au slot A qui migre Size/Font et doit y être converti ou cédé, les deux runtimes du Panel Lab partent avec le retrait du Panel Lab déjà `planned`, et `bevy_ui_main_menu_inline_search_runtime.js` doit être ré-audité avant d'être présumé copie (il ne porte pas le squelette de l'éditeur). Critère de sortie : un seul propriétaire de fenêtrage consommé par la liste, la matrice et la grille de tuiles ; le comportement de défilement d'Infos vérifié inchangé en navigateur ; la liste blanche de la garde réduite aux seuls modules de session, au propriétaire canonique et à `text_bridge.js`.
-- [ ] Resume the remaining Panel programme after Phase 4: assess Families 7, 8, 10, 12, 15, 16, and 36 — Family 14 left this list and was validated with Finder on 2026-08-07; Families 11, 19 and 20 left it the same day, validated with Communication (Package 13), and Family 9 was resolved `not_applicable` by that package's source audit — plus any panel-specific extensions of the Infos-owned 12/17/29/30 contracts. Exit criterion: all 16 registered panels are validated, the 7 legacy HTML routes still active after Size, Font, and Layer (`background`, `couleur`, `detail`, `delete`, `undo`, `paste`, `timeline`) are retired, and the temporary Panel Lab is removed.
-
-Critere de sortie du programme complet:
-
-- Each component has targeted evidence and real-canvas validation; each usable
-  migration package and complete panel has explicit product-owner approval.
-  Every effectful function of every panel
-  is mapped to its canonical MCP command and audit; no HTML route, double
-  composition, or temporary Panel Lab implementation remains at completion.
-  Finder's former external provider gate is closed since its 2026-08-07
-  approval with a native in-canvas map.
-
-### Reconciliation audit - original 138-entry snapshot
-
-Statut:
-
-Termine verifie
-
-Sources principales:
-
-- todo/execution_order.md
-- todo/audits/2026-07-14_framework_documentation_conformance.md
-- done/obsolete/eVe_optimisations.md
-- todo/cleanup_architecture/file_size_inventory_2026-07-14.md
-- todo/dev_ops/developer-experience.md
-- todo/molecule/PROJET_MOLECULE_DEBUG.md
-- todo/New work/atome_songlist_full_spec.md
-- todo/New work/atome_toolbox_addons_spec.md
-- todo/audit_execution_plan.md
-- todo/context_tools.md
-- todo/perf_audit_2026-08-09.md
-- todo/perf_parity_html.md
-- todo/remote_session_audit.md
-- done/molecule/molecule-status-2026-04-28.md
-- todo/rendering_graphics/robust_bevy_regression_fix_prompt_en.md
-- todo/sharing_search_monitoring/tool_monitor.md
-- done/obsolete/tools_monitoring.md
-- todo/tests/
-- todo/ui_bevy/
-- todo/text_caret_creation_contract.md
-
-Classification record:
-
-- `todo/text_caret_creation_contract.md` is a historical product record, not
-  active executable work. The product owner confirmed that its feature predates
-  the current BevyUI component sequence. Its legacy unchecked entries do not
-  authorize implementation; a future regression requires a separately
-  registered task with current evidence.
-
-- [x] Auditer et reconcilier le snapshot original des 138 entrees, classifier tous les documents todo, produire la preuve entree par entree et installer le controle permanent `npm run check:execution-order`.
-
-Critere de sortie:
-
-- Les 138 entrees originales ont une decision tracable, chaque document todo est enregistre ou explicitement classe, et le controle permanent reproduit le total et passe avec ses tests.
-
-### Phase 0 - Documentation and architecture normalization
+### Phase 1 — Security and identity prerequisites
 
 Status:
 
-Termine verifie
+Partiel
 
-Scope completed:
+- [ ] ATM-2001 — Complete authentication acceptance and qualify the optional-password evolution in the existing auth workstream.
 
-- [x] Retire the obsolete pre-Bevy media-editor specification from the active architecture.
-- [x] Remove audio/video fallback language and describe browser capture as an explicit backend where it is supported.
-- [x] Mark timeline, AV, recording, and export documents with explicit status semantics.
-- [x] Add the professional export contract: editable project package, open archival master, delivery export, deterministic rendering, checkpointed resume, atomic publication, and final validation.
-- [x] Register the relevant timeline, media, rendering, AI, sharing, test, and product todo families in the phase sources below.
+  Need/domain: secure first connection and subsequent account access / identity. Advancement: Partial for SMS code; optional-password evolution is a specification. Verification: Not run; older 25/25 reports are historical, carrier delivery remains unproven. Sources: [phone-link status](auth_phone_link_implementation.md), [auth backlog](communication_social/user_auth.md), [password migration](cleanup_architecture/argon2id_password_hash_migration.md), imported Authentication security and Next Task. Evidence: server/auth_phone_link.js start/confirm and atome/src/squirrel/security/auth_phone_link_client.js resume/consume were inspected; commit 3d56e258 touches the server owner, with no delivery inference. Depends on: authorized SMS access, real test devices and isolated accounts. Next: execute the existing focused auth acceptance, then a real SMS handoff. Exit: delivery, originating-device proof, expiry/replay rejection and restart are evidenced per platform; future password criteria remain explicitly separate until implemented. First connection stays SMS; a verified user may later set an optional password inside the account and choose password or SMS after entering the phone number. That future password feature is not a prerequisite for sharing. Scenarios: SCN-2001 and SCN-2004.
 
-## Regles de pilotage
+- [ ] ATM-2002 — Verify stable identity, explicit provisioning and private-by-default data before collaboration.
 
-- Cocher chaque tache terminee avec [x].
-- Ne pas commencer une phase dependante tant que ses prerequis ne sont pas totalement valides.
-- Avant chaque tache, effectuer un controle de coherence court et strictement limite aux
-  instructions, documentations, maps et todo directement applicables a cette tache.
-- Ne remonter a l'utilisateur que les conflits materiels qui modifieraient le
-  comportement produit, l'architecture, la securite, le perimetre ou le critere de
-  sortie. Les differences de formulation, raffinements non bloquants, details
-  d'implementation et questions pouvant etre resolues pendant l'analyse technique ne
-  doivent pas interrompre l'execution.
-- Regrouper les conflits materiels connus de la tache en une seule demande de decision,
-  avec une recommandation concise et au maximum les choix reellement necessaires. Apres
-  la decision, mettre les sources concernees en coherence puis executer la tache.
-- Ce controle prealable ne doit jamais devenir un nouvel audit exhaustif du depot. Il
-  s'arrete des que les sources directement applicables sont coherentes. Un conflit
-  decouvert plus tard n'interrompt la tache que s'il rend l'implementation en cours
-  incorrecte ou dangereuse.
-- Avant chaque nouvelle tache, dire explicitement a l'utilisateur ce qui doit etre fait sur cette tache, quels fichiers sources sont concernes, quelles dependances s'appliquent, quels tests ou verifications sont prevus, et quel est le pourcentage de taches accomplies sur le total.
-- Ce point d'etape doit etre donne avant l'execution de la tache.
-- Aucune nouvelle tache ne demarre sans validation explicite de l'utilisateur.
-- Chaque tache terminee doit etre suivie d'au moins un test, une verification, ou un controle cible adapte a la tache.
-- Chaque cloture de tache doit produire un rapport avec: tache realisee, validation executee, resultat, nombre de taches accomplies sur le total, et pourcentage d'avancement global.
-- Le pourcentage d'avancement global se calcule sur le total des cases a cocher de ce fichier.
-- Toute tache ouverte herite obligatoirement des criteres de sortie et de la Definition of Done de ses sources principales. Si la ligne fournit un critere plus precis, ce critere s'ajoute au contrat source. Une tache sans source verifiable, sans resultat observable ou sans validation ciblee ne peut pas etre cloturee.
-- Toute nouvelle sous-tache decouverte en cours de route doit etre ajoutee ici avant execution si elle modifie l'ordre ou le perimetre.
-- Une fois toutes les taches d'un fichier todo/*.md accomplies et verifiees, deplacer ce fichier vers done/ si ce n'est pas deja fait.
-- Apres la derniere tache terminee et verifiee, supprimer ce fichier: todo/execution_order.md.
+  Need/domain: sharing must identify accounts and enforce authorization without exposing private data / security. Advancement: Unknown as a complete chain. Verification: Not run. Sources: todo/cleanup_architecture/stable_user_identity_independent_of_phone.md, todo/cleanup_architecture/explicit_cross_runtime_account_provisioning.md, todo/cleanup_architecture/account_recovery_trusted_device_and_recovery_kit.md and archived Phase 1 / Phase 6 privacy criteria. Evidence: share-rights and server authorization paths are present; not a full security audit. Depends on: ATM-2001 SMS acceptance. Next: inspect the existing identity/provisioning and permission tests, then verify consent, revocation and secret-free payloads. Exit: phone changes do not change account identity; no shadow-account fallback; ACL and consent apply across clients, sync, search and offline projections; no password_hash or secrets in client payloads. Scenario: SCN-2002.
 
-## Processus obligatoire par tache
+### Phase 2 — Durable data and recovery
 
-1. Identifier la prochaine tache non cochee la plus prioritaire dans l'ordre ci-dessous.
-2. Effectuer le controle de coherence cible des seules sources directement applicables.
-3. Si un conflit materiel existe, le regrouper et demander une decision concise avant
-   implementation; sinon ne pas interrompre le flux.
-4. Dire a l'utilisateur ce qui doit etre fait sur la tache, les fichiers sources concernes, les dependances, les tests prevus, et le pourcentage de taches accomplies sur le total.
-5. Attendre sa validation explicite.
-6. Executer la tache.
-7. Lancer le test ou la verification obligatoire.
-8. Produire le rapport d'avancement avec X/Y et Z%.
-9. Si le fichier source todo est entierement solde, le deplacer vers done/.
-
-Baseline after the 2026-07-13 renderer-decision cleanup: 61/138 checked tasks (44.20%). Historical progress reports below retain the totals recorded at their original completion date.
-
-Reconciled state after the 2026-07-16 audit and subsequent documentation decisions: 61/148 executable tasks checked (41.22%). The current denominator includes the completed reconciliation, the WebSocket-only transport decision, secure browser/native authentication-token storage remediation, the OVHcloud production SMS provider boundary, stable user identity independent of phone, explicit cross-runtime account provisioning with preserved isolated guest mode, Argon2id migration of legacy bcrypt password verifiers, trusted-device and Recovery-Kit account recovery, snapshot-accelerated rebuild, two ordered Time Machine historical-branching tasks, reopened `/ws/sync` security validation, persistent sender auto-accept UI, true manual-linked sharing, append-only last-write-wins offline conflict handling, and private-by-default directory contact data. The full original 138-entry decision ledger remains `done/planning_audit/execution_order_reconciliation_2026-07-16.md`.
-
-Current governance audit after splitting the Priority 1 BevyUI panel migration
-programme into essential and post-Molecule work and registering the transverse
-Conditions implementation and the executable Granularity Validation programme:
-75/160 executable tasks checked (46.88%).
-
-## Gardes-fous transverses obligatoires
-
-Sources principales:
-
-- todo/1- condition.md
-- todo/2- Granularity_Validation.md
-- todo/cleanup_architecture/file_size_and_coding_standards_remediation.md
-
-Ces regles s'appliquent a toutes les phases restantes ci-dessous:
-
-- Reduire les gros fichiers au lieu de continuer a les etendre sans limite.
-- Supprimer le code mort, duplique, deprecated, ou inatteignable decouvert pendant chaque tache.
-- Rechercher et reduire le code mort, inoperant, fragile, trompeur, ou structurellement problematique quand il est confirme par l'audit local.
-- Ne pas creer de micro-fichiers, wrappers pass-through, proxies, ou couches artificielles.
-- Verifier via les maps qu'aucune logique similaire n'est maintenue a deux endroits sans justification.
-- Reduire les annotations, commentaires, et explications verbeuses qui n'apportent pas de valeur durable.
-- Verifier la taille, la cohesion, la factorisation, et la validation de tout fichier touche.
-- Simplifier au maximum le code touche sans supprimer de fonctionnalite ni casser l'application.
-- Ne jamais considerer un refactor comme termine sans preuve de validation.
-
-## Historique deja execute
-
-### 1. Corrections critiques immediates eVe Intuition
-
-Source principale:
-
-- done/urgent_task.md (historical source; no active work)
-
-- [x] Remplacer tout require() dans module ES, notamment tools/communication.js.
-- [x] Deplacer mtraxCloseInFlightGuard avant toute utilisation dans eVeIntuition.js.
-- [x] Unifier les prefixes de selection depuis runtime/selection.js.
-- [x] Renommer ensureString en isString dans contracts/validator.js.
-- [x] Ajouter destroyLayerInvariantObserver() et le connecter au cycle de destruction.
-- [x] Verifier lint/build/smoke test apres chaque correction.
-
-### 2. Factorisation minimale du socle
-
-Source principale:
-
-- done/urgent_task.md (historical source; no active work)
-
-- [x] Creer shared/utils.js et migrer progressivement les utilitaires communs.
-- [x] Creer shared/media_types.js et supprimer les duplications de types media.
-- [x] Centraliser les constantes de layers et de TTL panels.
-- [x] Factoriser le locking via runtime/in_flight_lock.js.
-- [x] Unifier readExplicitLatchedState / readExplicitLatched.
-- [x] Verifier les imports/exports et l'absence de duplication restante avec rg.
-
-### 3. Contrat panel / layout eVe
-
-Sources principales:
-
-- todo/eve_features/update_panel_refactor.md
-- todo/eve_features/panel_tools_above_footer_band.md
-- todo/eve_features/panel_overflow_direction_indicators.md
-
-- [x] Centraliser les tokens de chrome panel.
-- [x] Finaliser createEveDialog avec header, body, tools band, footer.
-- [x] Placer les outils de panel au-dessus du footer band.
-- [x] Garder le footer comme bande finale avec titre, fermeture et resize grip.
-- [x] Garantir que le body reste la seule zone scrollable.
-- [x] Ajouter des indicateurs visibles de debordement haut/bas sur le vrai scroll container.
-- [x] Migrer les panels simples avant les panels complexes.
-- [x] Valider home/user, finder, communication, calendar et mtrack.
-
-### 4. Molecule / MTraX deja engage - points deja valides
-
-Sources principales:
-
-- todo/molecule/molecule_sanitizer.md
-- todo/media_handling/MTraX_edition.md
-- todo/molecule/molecule_tests.md
-- todo/molecule/molecule_trouble_solving.md
-- todo/molecule/molecule_rename_mtrack_to_molecule.md
-
-- [x] Construire les diagnostics globaux Molecule avant les corrections profondes.
-- [x] Clarifier le contrat preview: interne par defaut, externalise uniquement si explicite.
-- [x] Remplacer le layout tracks/cells par un layout responsive.
-- [x] Fiabiliser le splitter pour qu'il ne deplace jamais le panel.
-- [x] Retirer les styles globaux dangereux sur le host docke.
-- [x] Simplifier les synchronisations layout.
-
-Les points Molecule non termines sont repris plus bas dans l'ordre obligatoire restant.
-
-## Ordre obligatoire des phases restantes
-
-### Phase urgente autorisee - Enregistrement multipiste audio/video sample-accurate
-
-Statut:
-
-Termine verifie
-
-Decision utilisateur:
-
-- Priorite explicitement validee le 2026-07-19 avant la poursuite de l'ordre restant.
-- Cette tache ne clot pas les phases 3 ter, 4 ou 5 et ne supprime aucun de leurs criteres de sortie restants.
-
-Sources principales:
-
-- todo/media_handling/RECORDING_INTEGRATION_PLAN.md
-- todo/media_handling/video_recording_and_preview.md
-- todo/molecule/NewMolecules.md
-- todo/molecule/PROJET_MOLECULE_DEBUG.md
-- atome/documentations/audio_multitracks.md
-- maps/API_MAP.md
-- maps/ARCHITECTURE_MAP.md
-- maps/CODEMAP.md
-- maps/DESIGN_MAP.md
-
-Dependances appliquees:
-
-- Reutiliser les backends audio et video actifs et leur controleur canonique; ne pas creer un troisieme enregistreur.
-- Kira reste maitre de lecture du projet; l'enregistrement exact n'est accepte que lorsque la capture et la timeline prouvent le meme epoch. Le backend AUv3 livre utilise `auv3.render` pour la capture et `auv3.host_transport` pour le placement.
-- Conserver le pipeline visible Bevy/WebGPU unique; aucun proxy DOM, renderer ou canvas produit parallele ne peut etre restaure.
-- Construire d'abord la reproduction deterministe record -> stop -> Atome -> ouverture immediate Molecule avant de modifier le runtime produit.
-- Supprimer dans la meme tache tout chemin recording confirme orphelin, duplique ou rendu inutile.
-
-Taches:
-
-- [x] Rebrancher les outils Bevy audio/video et les actions d'enregistrement Molecule sur les vrais controleurs actifs, garantir pour l'overdub audio une horloge de transport commune en frames entieres avec metadonnees de latence explicites et placement sample-accurate, conserver la video generique sur son controleur canonique et refuser explicitement l'overdub video sample-accurate tant que le mapping PTS -> echantillons n'existe pas, supprimer les chemins orphelins ou dupliques confirmes, puis valider la stabilite start/stop, l'Atome cree, l'ouverture immediate de la piste et la synchronisation multipiste sur les backends supportes; critere de sortie: la reproduction deterministe echoue avant correction puis passe, les tests cibles audio/video/Molecule et garde-fous passent, les plateformes sans horloge precise retournent une erreur de capacite typee sans precision simulee, et les maps/documentations applicables refletent l'unique pipeline restant.
-
-Rapport de cloture:
-
-- Resultat: audio exact accepte uniquement sur `plugin_input` AUv3 avec epoch commun, sample rate identique, latences positives et placement en frames; video generique reconnectee avec cycle start/stop/reprise/ACK fiable et refus type `av_sample_accurate_overdub_unsupported` avant acces camera pour toute demande exacte.
-- Validation: 41 contrats Node, 34 contrats Vitest, 13 suites Molecule, garde-fous architecture/DOM/renderer, syntaxe globale, parse Swift, transaction de suppression native, build iOS simulateur arm64 application + AUv3 et clics reels sur la palette Capture.
-- Avancement global: 64/150 taches terminees (42.67%).
-
-### Phase 2 bis - Migration exclusive du transport métier Atome vers WebSocket
-
-Statut:
-
-Actif
-
-Depend de:
-
-- Phase 2 terminee
-
-Sources principales:
-
-- done/websocket_only_atome_transport.md
-- todo/cleanup_architecture/authenticated_permission_scoped_ws_sync.md
-- todo/cleanup_architecture/stable_user_identity_independent_of_phone.md
-- todo/cleanup_architecture/explicit_cross_runtime_account_provisioning.md
-- todo/cleanup_architecture/argon2id_password_hash_migration.md
-- todo/cleanup_architecture/production_sms_provider_boundary.md
-- todo/cleanup_architecture/account_recovery_trusted_device_and_recovery_kit.md
-- todo/cleanup_architecture/secure_auth_token_storage.md
-- eVe/documentations/atome_persistence_contract.md
-- atome/documentations/CRUD_apis.md
-- maps/API_MAP.md
-- maps/ARCHITECTURE_MAP.md
-
-Objectif:
-
-- Faire de `/ws/api` l'unique transport des operations applicatives et métier Atome sur Fastify, Tauri et les plateformes supportees, sans fallback HTTP. HTTP reste limite au bootstrap/configuration/sante et au transfert de ressources ou fichiers binaires explicitement documente.
-
-Taches:
-
-- [x] Migrer toutes les operations Atome métier vers `/ws/api`, securiser `/ws/sync` par authentification et filtrage des permissions, implementer les actions WebSocket manquantes, retirer les lectures/ecritures HTTP et leurs fallbacks, puis valider la parite Fastify/Tauri/iOS et installer des garde-fous permanents; critere de sortie: tous les criteres et tests de `done/websocket_only_atome_transport.md` et `todo/cleanup_architecture/authenticated_permission_scoped_ws_sync.md` passent.
-- [ ] Migrer l'identite utilisateur vers un principal opaque, immuable et independant du telephone: separer les alias de connexion/recherche, supprimer toute derivation ou prediction d'identifiant depuis un numero, migrer atomiquement les comptes existants et toutes leurs references, puis valider changement, suppression et reattribution du telephone sans perte ni transfert de donnees; critere de sortie: tous les criteres et tests de `todo/cleanup_architecture/stable_user_identity_independent_of_phone.md` passent.
-- [x] Remplacer la creation implicite de shadow users par un provisionnement Tauri/Fastify explicite et securise, tout en conservant `Essayer` comme espace invite local/prive a principal opaque isole et avec adoption transactionnelle optionnelle lors de la creation ou liaison d'un compte; critere de sortie: tous les criteres et tests de `todo/cleanup_architecture/explicit_cross_runtime_account_provisioning.md` passent.
-- [ ] Migrer les verificateurs de mot de passe Fastify/Tauri/iOS vers Argon2id: ne creer que des hashes Argon2id, verifier les anciens bcrypt uniquement pour migration, les remplacer atomiquement apres connexion reussie, imposer 15 points de code Unicode minimum et au moins 64 acceptes avec espaces sans regles de composition, refuser les secrets compromis de facon respectueuse de la confidentialite, puis borner memoire/concurrence; critere de sortie: tous les criteres et tests de `todo/cleanup_architecture/argon2id_password_hash_migration.md` passent.
-- [ ] Implementer la frontiere OVHcloud SMS de production apres une requete `/ws/api`: raccorder le point d'extension `sendSMS()` a un compte OVHcloud restreint, conserver protocoles et secrets exclusivement dans l'adaptateur serveur, interdire tout fallback automatique, remplacer `Math.random()` et les stores process-locaux par un OTP cryptographiquement sur et un defi temporaire PostgreSQL consomme atomiquement, sans OTP persiste en clair ni entree Atome/historique/sync, appliquer des limitations progressives multidimensionnelles sans verrouillage global du compte, puis journaliser les evenements de securite avec references opaques, empreinte reseau HMAC rotative, client normalise et retention automatique de six mois sans IP/user-agent complets; critere de sortie: tous les criteres et tests de `todo/cleanup_architecture/production_sms_provider_boundary.md` passent.
-- [ ] Remplacer atomiquement la recuperation SMS seule par SMS plus cle d'appareil autorise, ou SMS plus Recovery Kit lorsque l'appareil est perdu, avec changement de telephone securise, delais/notifications, revocation complete et maintien du chemin actuel jusqu'a validation du remplacement; critere de sortie: tous les criteres et tests de `todo/cleanup_architecture/account_recovery_trusted_device_and_recovery_kit.md` passent.
-- [ ] Supprimer tout stockage ou chargement de bearer tokens lisibles depuis `localStorage` ou `sessionStorage`, conserver les sessions navigateur dans des cookies HttpOnly et les secrets natifs dans le credential store ou coffre chiffre approuve, nettoyer les anciennes cles sans les reutiliser, puis installer un garde-fou permanent; critere de sortie: tous les criteres et tests de `todo/cleanup_architecture/secure_auth_token_storage.md` passent.
-
-### Phase 2 ter - Reconstruction acceleree de state_current par snapshot
-
-Statut:
-
-Actif
-
-Depend de:
-
-- Phase 2 bis terminee pour exposer les operations et diagnostics par le transport canonique
-
-Sources principales:
-
-- todo/cleanup_architecture/snapshot_accelerated_state_rebuild.md
-- eVe/documentations/atome_persistence_contract.md
-- atome/documentations/database_architecture.md
-- eVe/documentations/Atome Time Machine.md
-- maps/API_MAP.md
-- maps/ARCHITECTURE_MAP.md
-
-Objectif:
-
-- Implementer une reconstruction sure et deterministe de `state_current` depuis un snapshot de confiance et le seul suffixe d'evenements posterieur, sans autoriser la suppression ou l'archivage destructif des evenements avant validation complete.
-
-Taches:
-
-- [ ] Implementer et valider la reconstruction acceleree snapshot + curseur d'evenements + replay du suffixe, avec comparaison au replay complet et garde-fou anti-suppression; critere de sortie: toutes les exigences et validations de `todo/cleanup_architecture/snapshot_accelerated_state_rebuild.md` passent.
-
-### Phase 2 quater - Time Machine historical branching
-
-Statut:
-
-Actif
-
-Depend de:
-
-- Phase 2 bis terminee pour disposer du transport canonique des branches, historiques, snapshots et restaurations
-- Phase 2 ter terminee pour disposer d'une reconstruction snapshot + suffixe fiable avant d'introduire les branches
-
-Sources principales:
-
-- todo/ai_voice/time_machine_historical_branching.md
-- todo/ai_voice/history_and_ai.md
-- eVe/documentations/Atome Time Machine.md
-- maps/API_MAP.md
-- maps/ARCHITECTURE_MAP.md
-
-Objectif:
-
-- Etendre le replay append-only existant avec une edition historique sur branche persistante, sans modifier l'historique original et sans commencer l'implementation avant validation explicite du modele de branches.
-
-Taches:
-
-- [ ] Definir puis faire valider par l'utilisateur le modele Time Machine de branches, divergence, recomputation, conflits, fusion, abandon, permissions, synchronisation, snapshots et presentation; critere de sortie: le contrat versionne satisfait la Task 1 de `todo/ai_voice/time_machine_historical_branching.md`.
-- [ ] Implementer l'edition historique avec branches et replay avant deterministe uniquement apres validation du modele; critere de sortie: toutes les exigences et validations de la Task 2 de `todo/ai_voice/time_machine_historical_branching.md` passent sur Fastify, Tauri et les plateformes supportees.
-
-### Phase 3 ter - Product UI Bevy migration and DOM retirement
-
-Statut:
+Status:
 
 Partiel
 
-Depend de:
+- [ ] ATM-2003 — Verify durable offline writes, canonical replay and central synchronization.
 
-- Phase 3 terminee
+  Need/domain: keep work across disconnects and device changes / persistence. Advancement: Partial, owning modules and probes exist; full cross-device result unknown. Verification: Not run. Sources: imported Todo/Next Task.md, todo/2- Granularity_Validation.md, archived state/sync phases. Evidence: atome/src/squirrel/apis/unified/sync_engine.js and tests/server/ws_sync_runtime.test.mjs exist; source presence is not acceptance. Depends on: ATM-2001 and ATM-2002. Next: run existing targeted sync/replay probes, then offline/reconnect on isolated clients. Exit: durable event IDs, idempotence, authorized replay and unchanged history; atome.one remains central for shared synchronization, while local offline writes remain durable. Scenario: SCN-2003.
 
-Sources principales:
+- [ ] ATM-2008 — Qualify and verify account backup, reinstall and restoration through existing owners.
 
-- todo/ui_bevy/
-- todo/cleanup_architecture/system_ui_component_ssot.md
-- todo/cleanup_architecture/v2_full_migration_framework.md
-- todo/eve_features/menu_interactions.md
-- todo/eve_features/calendar_todos.md
-- todo/eve_features/map_localization.md
-- todo/communication_social/matrix_flower_context_menu.md
-- todo/rendering_graphics/robust_bevy_regression_fix_prompt_en.md
+  Need/domain: recover the same user's data without server loss / recovery. Advancement: Unknown end to end. Verification: Not run. Sources: imported User Backup and Format and Todo/Next Task.md; archived snapshots/history contracts. Depends on: ATM-2003 and a proven backup before any destructive local test. Next: identify the existing export/restore contract and preserve a reference dataset. Exit: same-account restoration preserves contents, hierarchy, media, metadata and permissions after local reset/reinstall on Web/Tauri/iPad; no production data or unsynchronized work is removed. Scenario: SCN-2003.
 
-Objectif:
+### Phase 3 — Sharing and collaboration, first product priority
 
-- Construire le socle UI Bevy unique, migrer les surfaces produit visibles, puis supprimer leurs routes HTML/DOM, Intuition/View et bridges devenus inutiles. Le navigateur ne conserve que le shell minimal et les services caches autorises pour texte/accessibilite/IME.
-
-Taches:
-
-- [x] Completer et valider les primitives BevyUI partagees manquantes et leurs interactions reelles, sans remigrer le dashboard ni le menu direct deja rendus par Bevy.
-- [x] Migrate the bottom Bevy main menu interaction model: direct actions, expandable palettes, latch state, dedicated hold actions, hold-to-palette, drag cancellation, and removal of the flattened legacy projection.
-- [x] Repair the bottom Bevy main-menu palette opening regression at its canonical direct-motion owner: restore immediate first-frame presentation, the historical 180/70/120 ms elastic rebound, shared icon/label/accent movement, and validate real WebGPU clicks frame by frame without reconciliation fallback or duplicate animation path.
-- [x] Migrate the Flower hold contract: held-pointer palette opening, immediate Back navigation, leaf preview followed by activation on release, and cancellation safety.
-- [x] Delete Flower/menu/toolbox DOM bridges, aliases, factories, and browser-only state once the complete Bevy interaction contract is verified and no canonical consumer remains.
-- [x] Confirmer le Dashboard fonctionnel rendu par Bevy: ouverture, fermeture, scroll, glissement, edition des libelles et absence d'arbre Dashboard DOM visible.
-- [ ] Ajouter le contexte Flower Matrix avec la tuile cible ou selectionnee et exactement Copy, Paste, Duplicate, Delete et Rename; critere de sortie: clic droit et appui long ouvrent le Flower canonique sur la bonne tuile, sans proxy DOM.
-- [ ] Relier les cinq actions Flower Matrix aux vrais chemins runtime et desactiver visiblement toute action indisponible; critere de sortie: chaque commande modifie la cible attendue ou retourne un etat desactive explicite, avec tests cibles.
-- [ ] Corriger ou formaliser l'ecart vertical de 0,5 px des previews Dashboard; critere de sortie: le contrat `dashboard_records` et le rendu accepte utilisent la meme regle d'arrondi.
-- [ ] Clore les notes de regression drag/lasso encore ouvertes dans `robust_bevy_regression_fix_prompt_en.md`; critere de sortie: priorite des gestes et selection lasso passent leurs interactions reelles et contrats cibles.
-- [ ] Migrer les panels/dialogs et leur infrastructure commune, puis supprimer les factories, observateurs layout et lectures de geometrie DOM devenus inutiles; le chrome Molecule reste execute en Phase 4 apres sa stabilisation fonctionnelle.
-- [ ] Realiser l'audit calendrier et implementer sa projection Bevy sans dupliquer CalendarAPI, recurrence, alarmes, todos ou fuseaux horaires.
-- [ ] Realiser l'audit map/localisation, valider le provider et la confidentialite, puis implementer la scene Bevy sans Leaflet ni widget DOM embarque.
-- [ ] Inventorier puis supprimer toutes les couches visibles Intuition/View/DOM devenues sans consommateurs apres migration.
-- [ ] Valider Web, Tauri et iOS sur le meme contrat scene/diff/interactions, avec erreurs typees pour les capacites indisponibles.
-
-Progress report Phase 3 ter — Flower hold contract:
-
-- Completed the Bevy Flower tree and captured-pointer interaction contract. Stationary hold release is passive; palette and Back navigation occur during the held session; leaves activate once on release; cancellation clears the session without committing a tool action.
-- Retired the visible Flower DOM renderer and its direct production export. `new_menu_v2` remains active because verified consumers still use its menu API; its removal is a separate pending migration task.
-- Validation passed: focused Flower tests, main-menu BevyUI tests, `npm run check:syntax`, `npm run check:no-fallbacks`, and `npm run check:dom-projection-guardrails`.
-- Global progress: 62/138 checked tasks, 44.92%.
-
-Progress report Phase 3 quater — BevyUI browser bridge retirement:
-
-- Replaced browser menu/Flower aliases and pointer-state globals with a lightweight internal per-window registry; the product compositor now registers BevyUI menu and Flower instances without exposing them on `window`.
-- Deleted the DOM main-menu/Flower factories and obsolete bridge/guard modules, migrated geometry and login docking consumers to BevyUI measurements, and removed the Dashboard DOM toolbox fallback.
-- Updated focused tests, Playwright guidance, architecture/API/design/code maps, and added a production-source regression scan against retired aliases and Flower browser state.
-- Validation passed: 29 focused Vitest contracts, Flower/selection/layer/capture/login probes, `npm run check:syntax`, `npm run check:no-fallbacks`, `npm run check:dom-projection-guardrails`, and both root/eVe diff checks.
-- Global progress: 63/138 checked tasks, 45.65%.
-
-### Phase 1 - Gouvernance architecture Atome/eVe
-
-Statut:
-
-Termine verifie
-
-Depend de:
-
-- aucune phase restante
-
-Sources principales:
-
-- todo/cleanup_architecture/eve_atome_master_cleanup_plan.md
-
-Objectif:
-
-- Definir avec l'utilisateur l'architecture cible avant toute cartographie globale ou tout nouveau chantier structurel.
-
-Regles obligatoires de cette phase:
-
-- L'architecture cible Atome open / eVe closed doit etre definie avec la collaboration explicite de l'utilisateur.
-- Cette phase doit etre terminee avant todo/ai_voice/eVe_MCP_APIS_Tools.md.
-- La frontiere open/closed doit etre validee avant toute cartographie CODEMAP/API_MAP/ARCHITECTURE_MAP.
-
-Taches:
-
-- [x] Valider avec l'utilisateur la frontiere open-source Atome / closed-source eVe.
-- [x] Valider les regles de classement: UI closed, tools closed, infrastructure de l'app open, security open, cross-platform open, server open.
-- [x] Identifier les dependances autorisees et interdites entre couches open et closed.
-- [x] Identifier les dossiers et modules a deplacer, scinder, ou proteger pour respecter cette architecture.
-- [x] Verifier que la structure cible est suffisamment stable pour devenir la base des cartographies futures.
-- [x] Executer les deplacements, scissions, et protections structurels valides avant toute cartographie future.
-- [x] Produire un test ou une verification adaptee apres chaque sous-tache et un rapport d'avancement global.
-
-Contrainte validee:
-
-- Les deplacements, scissions, et protections identifies dans cette phase ne doivent pas etre repousses a une phase lointaine: ils doivent etre prepares maintenant par inventaire exact, puis executes des que la structure cible est validee, au plus tard dans la tache suivante compatible avec la regle interdisant toute execution structurelle avant validation explicite de l'architecture cible.
-
-Structure cible validee:
-
-- atome/: couche open contenant core framework, APIs, contrats, runtime partage, securite, server, sync, plateformes, engines, et assets generiques.
-- eve/: couche closed contenant UI produit, tools produit, workflows eVe, composition produit, branding, et packaging prive.
-- tests/: validations separees par cible atome, eve, et integration.
-- documentations/: documentation separee par ownership et cartographies futures.
-- temp/: seul emplacement autorise pour probes, sorties temporaires, scripts de diagnostic jetables, et artefacts temporaires.
-- dist/ ou dossiers build dedies: uniquement artefacts generes, jamais source maintenue.
-
-Execution structurelle en cours:
-
-- Deplacements effectues: src/shared vers atome/shared, src/application/security vers atome/security, eVe vers eVe.
-- Chemins historiques actifs eVe, src/shared, et src/application/security retires des sources filtrees hors artefacts generes.
-- src/squirrel a ete remappe sous atome/src/squirrel; les dependances directes vers eVe des modules explicitement listes ont ete scindees ou protegees avant classement open strict.
-- Modules src/squirrel a scinder ou proteger avant migration open stricte: src/squirrel/ai/default_tools.js, src/squirrel/ai/default_tools.runtime_trace_integration.probe.mjs, src/squirrel/ai/model_catalog_refresh.js, src/squirrel/ai/provider_client.js, src/squirrel/calendar/bootstrap.js, src/squirrel/calendar/calendar_api_source.js, src/squirrel/mail/bootstrap.js, src/squirrel/voice/ai_planner.js, src/squirrel/voice/aVa_panel.js, src/squirrel/voice/home_surface.js, src/squirrel/voice/home_surface.locale_history.test.mjs, src/squirrel/components/intuition_builder/index.js.
-- Validation passee: npm run check:syntax.
-- Validation passee: npm run check:no-fallbacks.
-- Execution finale passee: les imports directs Atome -> eVe ont ete retires des modules atome/src/squirrel explicitement listes; les integrations produit passent maintenant par injections runtime, globals installes, ou module closed eVe dedie.
-- Deplacement/scission passee: atome/src/squirrel/voice/aVa_panel.js a ete retire de la couche Atome et reinstalle dans eVe/voice/aVa_panel.js, charge par eVe/eVe.js.
-- Protection passee: atome/src/squirrel/components/intuition_builder/layer_contract.js isole le contrat minimal de layer flottant necessaire au builder Atome sans import closed eVe.
-- Protection passee: atome/src/squirrel/ai/profile_loader.js centralise la lecture injectee du profil utilisateur sans import closed eVe.
-- Verification passee: rg sur atome/src/squirrel/ai, calendar, mail, voice et components/intuition_builder ne trouve plus d'import direct vers eVe.
-- Verification passee: git submodule status eVe conserve le gitlink eVe actif; .git/modules/eVe/config core.worktree vaut ../../../eVe.
-- Validations passees: npm run check:syntax; npm run check:no-fallbacks; node atome/src/squirrel/ai/default_tools.runtime_trace_integration.probe.mjs; node atome/src/squirrel/voice/main_handle_bridge.import_bootstrap.probe.mjs; node atome/src/squirrel/voice/main_handle_bridge.test.mjs; node atome/src/squirrel/voice/home_surface.locale_history.test.mjs; node --test atome/src/application/audio_runtime/play_record_core.probe.mjs; node --test atome/src/squirrel/ai/provider_client.probe.mjs; node --test atome/src/squirrel/ai/model_catalog_refresh.probe.mjs; node --test atome/src/squirrel/calendar/bootstrap.probe.mjs atome/src/squirrel/calendar/calendar_api_source.probe.mjs; node --test atome/src/squirrel/voice/ai_planner.probe.mjs atome/src/squirrel/voice/home_surface.test.mjs; node --check eVe/voice/aVa_panel.js.
-- Rapport d'avancement Phase 1: tache realisee, validations executees et reussies, 34/118 taches cochees, avancement global 28.81%.
-- Note de perimetre: les references eVe restantes dans atome/src/application/index.js et atome/src/squirrel/kickstart.js sont des points de bootstrap/version produit; atome/src/application/audio_runtime/av_api_boundaries.probe.mjs reste un test d'integration AV avec eVe a traiter dans la phase AV dediee.
-
-### Phase 2 - Cartographie framework, APIs, code et MCP
-
-Statut:
-
-Termine verifie
-
-Depend de:
-
-- Phase 1 terminee et architecture validee avec l'utilisateur
-
-Sources principales:
-
-- todo/ai_voice/eVe_MCP_APIS_Tools.md
-- todo/ai_voice/history_and_ai.md
-
-Objectif:
-
-- Cartographier correctement le framework, les APIs et les responsabilites du code a partir d'une architecture deja clarifiee.
-
-Taches:
-
-- [x] Creer ou mettre a jour maps/CODEMAP.md apres validation de la phase 1.
-- [x] Creer ou mettre a jour maps/API_MAP.md apres validation de la phase 1.
-- [x] Creer maps/DESIGN_MAP.md pour cartographier le design JavaScript, les tokens, les factories visuelles, les styles injectes, les assets, et les exceptions CSS generees ou vendorisees.
-- [x] Creer ou mettre a jour maps/ARCHITECTURE_MAP.md apres validation de la phase 1.
-- [x] Lister les APIs publiques, semi-publiques, et internes sans hallucination ni doublon.
-- [x] Faire apparaitre explicitement la frontiere Atome open / eVe closed dans les maps.
-- [x] Rendre ces maps obligatoires avant toute nouvelle implementation.
-- [x] Produire un test ou une verification documentaire ciblee apres chaque sous-tache et un rapport d'avancement global.
-
-Rapports d'avancement Phase 2:
-
-- CODEMAP: creation de maps/CODEMAP.md comme carte operationnelle du codebase; validation par controle des references maps/docs, presence du fichier, sections documentaires obligatoires; resultat reussi; avancement 35/118, soit 29.66%.
-- API_MAP: creation de maps/API_MAP.md comme carte initiale des familles d'APIs verifiees; validation par controle de taille, presence, sections/frontieres rg, inspection ciblee des exports, globals, routes HTTP/WebSocket, et APIs bootstrap; resultat reussi; avancement 36/118, soit 30.51%.
-- DESIGN_MAP: creation de maps/DESIGN_MAP.md comme carte du design JavaScript, tokens, factories, styles injectes, assets, et exceptions CSS framework/vendor/build; validation par controle de taille, sections rg, inventaire CSS, inspection des modules eVe/elements, eVe/intuition, eVe/domains/mtrax, atome/src/squirrel/components, atome/src/assets; resultat reussi; avancement 37/118, soit 31.36%.
-- ARCHITECTURE_MAP: creation de maps/ARCHITECTURE_MAP.md comme contrat de couches, directions de dependance, modes runtime, flux de mutation, separation UI/API/MCP/storage/sync, regles de placement et zones To verify; validation par controle de taille, sections rg obligatoires, references aux maps et documents sources, et existence des chemins documentaires references; resultat reussi; avancement 38/118, soit 32.20%.
-- API visibility inventory: mise a jour de maps/API_MAP.md avec inventaire classe Public, Semi-public, Internal, et Status: To verify; validation par extraction rg des exports, globals, routes Fastify/WebSocket, points runtime eVe, services Atome, stores eVe, MCP/AI/voice/audio, correction des entrees non confirmees SelectionAPI et AtomeAI, et controle rg des sections/statuts; resultat reussi; avancement 39/118, soit 33.05%.
-- Explicit open/closed boundary: updated maps/CODEMAP.md, maps/API_MAP.md, maps/DESIGN_MAP.md, and maps/ARCHITECTURE_MAP.md with explicit Atome open / eVe closed boundary contracts covering ownership, dependency direction, API exposure, design ownership, promotion rules, and boundary debt; validation by targeted rg checks for the new contract sections and cross-map references; result passed; progress 40/118, 33.90%.
-- Mandatory pre-implementation map gate: updated maps/CODEMAP.md, maps/API_MAP.md, maps/DESIGN_MAP.md, and maps/ARCHITECTURE_MAP.md with explicit mandatory pre-implementation gates defining which map must be consulted before code, API, design, architecture, runtime, persistence, sync, MCP, tool, UI, security, or cross-layer work; validation by targeted rg checks for the new gate sections and cross-map references; result passed; progress 41/118, 34.75%.
-- Phase 2 final documentary verification: verified that maps/CODEMAP.md, maps/API_MAP.md, maps/DESIGN_MAP.md, and maps/ARCHITECTURE_MAP.md exist and contain Mandatory Use sections, Mandatory Pre-Implementation Gate sections, explicit Atome open / eVe closed boundary contracts, cross-map references, and Phase 2 progress reports; corrected the two legacy Phase 2 progress totals from 115 to the current 118-task total; validation by targeted rg checks, map existence checks, and global checkbox recount; result passed; Phase 2 completed; progress 43/118, 36.44%.
-
-### Phase 3 - Audit strict de securite framework / resolution des failles
-
-Statut:
+Status:
 
 Partiel
 
-Depend de:
+- [ ] ATM-2004 — Validate invitations, bounded acceptance, share modes, permissions and revocation.
 
-- Phase 2 terminee
+  Need/domain: safely share objects/projects/files with another user / sharing. Advancement: Partial; server paths observed, client/platform acceptance unknown. Verification: Not run. Sources: todo/sharing_search_monitoring/Share_tool.md, todo/sharing_search_monitoring/sharing_to_code.md and archived Phase 6. Evidence: server/syncSharingService.js has mode/type selection, bounded policies and revoke; tests/server/sync_sharing_service.probe.mjs exists. Depends on: ATM-2001, ATM-2002 and ATM-2003. Next: reproduce two-account Fastify/Tauri sharing using real owners, confirm receiverProjectId/parent filtering before repair. Exit: linked realtime, linked manual and detached copy are distinct; acceptance policy is bounded/revocable; unauthorized reads/writes, expired grants and implicit privilege expansion are rejected. Scenario: SCN-2002.
 
-Sources principales:
+- [ ] ATM-2005 — Verify concurrent editing, manual publication and offline conflict replay.
 
-- done/planning_audit/framework_security_audit_and_vulnerability_remediation.md
-- todo/cleanup_architecture/authenticated_permission_scoped_ws_sync.md
-- todo/cleanup_architecture/eve_atome_master_cleanup_plan.md
-- todo/communication_social/user_auth.md
-- todo/communication_social/apple_mail_security.md
-- todo/sharing_search_monitoring/Share_tool.md
-- todo/ai_voice/MCP_voice_control.md
-- done/ai_voice/Full_vocal_AI_integration.md
+  Need/domain: collaborate without data or history loss / sync. Advancement: Unknown as a complete multi-client contract. Verification: Not run. Sources: imported Todo/Next Task.md, archived Phase 6 manual-delta and append-only last-write-wins criteria, todo/2- Granularity_Validation.md. Evidence: tests/server/offline_lww_conflicts.probe.mjs and ws_sync replay probes exist; not executed here. Depends on: ATM-2004. Next: run the existing conflict/replay probes, then simultaneous edits and reconnection with two isolated accounts. Exit: deterministic ties, preserved concurrent events, corrections as new events, no background propagation in manual mode, explicit delta publication, ACL/revocation enforced after reconnect. Scenarios: SCN-2002 and SCN-2003.
 
-Objectif:
+- [ ] ATM-2006 — Requalify communication, Matrix roles/identity and media integration against the canonical transport.
 
-- Mener un audit de securite strict, hautement sensible, et tres approfondi sur tout le framework, puis resoudre les failles identifiees selon leur severite avant de poursuivre les autres chantiers.
+  Need/domain: collaborative conversations and calls / communication. Advancement: Unknown for the complete Matrix/Keycloak/mediasoup target; historical Communication closure is preserved separately. Verification: Not run. Sources: todo/communication_social/matrix.md, todo/communication_social/social_network_tool.md, todo/dev_ops/install_MediaSoup.md, todo/debug_communication_notifications_publications_2026-09-01.md. Depends on: ATM-2004; identify any additional prerequisite before implementation. Next: compare actual account/role and communication owners to these specifications, recording verified availability. Exit: bounded executable gaps and acceptance criteria identified without duplicate identity or transport; /ws/api and /ws/sync remain canonical; only the already documented media-plane exception may apply. Missing bricks or external dependencies require separate authorization. Scenario linkage remains to qualify; do not invent a completed scenario.
 
-Regles obligatoires de cette phase:
+### Phase 4 — Permanent acceptance, then deferred backlog
 
-- L'audit couvre l'ensemble du framework, pas seulement un sous-systeme isole.
-- Les surfaces client, runtime, MCP, bridge, stockage, reseau, serveur, auth, permissions, sync, et natif doivent etre auditees.
-- Les failles critiques et hautes doivent etre resolues avant de passer aux phases suivantes.
-- Les failles moyennes doivent etre soit corrigees, soit documentees avec proprietaire, impact, mitigation, et plan d'action explicite.
-- Aucun resultat d'audit ne doit etre masque par un fallback, un silence, ou une simple note cosmetique.
-- La cloture de phase exige des validations de securite ciblees et un rapport explicite des risques restants.
-
-Taches:
-
-- [x] Inventorier toutes les surfaces de securite du framework: filesystem, reseau, websocket, bridges JS/natifs, tokens, secrets, permissions, stockage, MCP, sync, server, sandbox, et imports dynamiques.
-- [x] Verifier en profondeur les risques de fuite de secrets, d'injection de commande, de traversal de chemin, d'elevation de privilege, de bypass de permissions, de bridge trop permissif, et de payloads non valides.
-- [x] Auditer les flux auth, user preferences sensibles, token storage, journalisation, rate limiting, et separation des donnees utilisateur.
-- [x] Auditer les surfaces MCP et IA pour confirmer l'absence de raccourcis dangereux, de mutations non autorisees, et de contournements du pipeline canonique.
-- [x] Prioriser les failles par severite: critique, haute, moyenne, basse.
-- [x] Corriger toutes les failles critiques et hautes avant de poursuivre.
-- [x] Documenter clairement les failles restantes avec impact, proprietaire, plan de remediation, et justification si elles ne sont pas corrigees immediatement.
-- [x] Produire des tests et verifications de securite cibles apres chaque correction sensible.
-- [x] Produire un rapport d'audit et de resolution des failles avec avancement global avant cloture de phase.
-- [ ] Revalider la cloture securite apres authentification et cloisonnement de `/ws/sync`; critere de sortie: les connexions anonymes sont refusees avant `welcome`, les evenements Atome, comptes et fichiers sont limites aux permissions et capacites du principal, et tous les tests de `todo/cleanup_architecture/authenticated_permission_scoped_ws_sync.md` passent.
-
-Rapports d'avancement Phase 3:
-
-- The original Phase 3 security audit and remediation report remains the historical record in `done/planning_audit/framework_security_audit_and_vulnerability_remediation.md`.
-- The 2026-07-16 documentation/code reconciliation found an unauthenticated and globally forwarded `/ws/sync` channel. Phase 3 is reopened only for remediation validation after the Phase 2 bis WebSocket work.
-
-### Phase 4 - Finalisation Molecule / MTraX
-
-Statut:
-
-Partiel
-
-Depend de:
-
-- Phase 3 ter terminee
-
-Sources principales:
-
-- todo/molecule/molecule_sanitizer.md
-- todo/media_handling/MTraX_edition.md
-- todo/molecule/NewMolecules.md
-- todo/molecule/molecule_tests.md
-- todo/molecule/molecule_trouble_solving.md
-- todo/molecule/molecule_rename_mtrack_to_molecule.md
-- todo/molecule/PROJET_MOLECULE_DEBUG.md
-
-Taches:
-
-- [ ] Traiter les bugs Molecule dans l'ordre du guide trouble solving.
-- [x] Ajouter et maintenir les probes/tests Molecule v2, l'UI reelle, le visuel, la performance, l'endurance et les builds de plateforme dans un manifeste d'acceptation unique.
-- [x] Inventorier puis retirer de la route active les noms mtrack, mtrax, mtracks et hmtracks devenus incompatibles avec le contrat v2.
-- [x] Stabiliser directement le nom Molecule sur la route v2, sans migration de donnees ni renommage progressif de l'ancien format.
-- [x] Retirer les aliases legacy de la route Molecule v2 conformement au contrat sans compatibilite historique.
-- [x] Migrer le chrome visible Molecule vers Bevy et supprimer son panel DOM et le contrat footer orphelin selon V2.12.
-- [x] Remplacer le contrat Marker/Cell par le schema Molecule v2 canonique `Molecule -> Section -> Piste`, sans compatibilite historique; supprimer le convertisseur v1, le panel DOM et son footer orphelin; ajouter Sections, Pistes, groupes, regions Record, crop, boucles, quantification et les outils API correspondants.
-- [x] Terminer l'acceptation executable Molecule v2: interactions Liste, rail Info editable, capture generique et Record region, transports scopes, Mixage, UI/visuel WebGPU, Tauri natif, builds iOS/AUv3, performance et endurance.
-- [x] Ajouter l'activite Timeline continue et les boucles Apple-style par bloc comme projections du meme snapshot v2.
-- [ ] Valider les portes physiques restantes sur iPhone et iPad connectes, puis le chemin exact `plugin_input` dans un vrai hote AUv3 avec le composant installe; aucune preuve Simulator/Web/Tauri ne peut fermer cette ligne.
-
-Rapports d'avancement Phase 4:
-
-- Trouble solving Task 1 / clip disappearance during drag: reused the existing browser-driven `tests/probes/mtrack_clip_drag_invariant_probe.test.mjs` probe against the active Fastify app on port 3001. The report at `temp/probe_reports/mtrack_clip_drag_invariant_probe/report.json` validated horizontal drag, drag to previous track, drag to next track, repeated stress movements with track creation and return, and autoscroll edge dragging. Result passed: clip identity and persisted identity stayed present, track and clip counts stayed valid, DOM parent tracks matched model track ids, no stale clip node remained attached to the wrong lane, and console error count was 0. Additional validations passed: `npm run check:molecule-guardrails`; `npm run check:no-fallbacks`. No source edit was required because the current implementation already satisfies Task 1 invariants. The global Phase 4 execution-order checkbox remains open until the remaining trouble solving tasks are validated in order. Progress remains 53/118, 44.92%.
-- Abandoned investigation note for immediate post-record Molecule open: the unresolved user-visible bug is that after recording a short audio/video media item, opening the created Molecule in less than one second can show empty tracks; waiting two or three seconds or reopening can make tracks appear. A later attempted correction was fully reverted because it made the system less stable: Molecules were not always created after recording, and the recording flow could become difficult or impossible to stop reliably. The next investigation must start from the clean pre-attempt state and must not reapply the reverted strategy without a deterministic reproduction. Related symptoms still to investigate include missing or unclear Molecule tools for record media audio/video, record motion, audio/video/front/back camera source selection, synchronized target track semantics, SVG/keyframe recording behavior, and the `detail` tool. Evidence from the reverted attempt: targeted contract probes for panel record tools, camera record state, and media-open readiness passed while the code was present, but they were removed with the rollback because they validated the reverted implementation; `npm run check:molecule-guardrails`, `npm run check:no-fallbacks`, `npm run check:syntax`, and `git diff --check` passed during the attempt; `npm run test:molecule` could not run because `eVe/tests/molecule/run_molecule_tests.mjs` is missing; the attempted full capture probe `node tests/probes/photo_video_capture_fullscreen_probe.test.mjs` did not reach the record scenario because `.eve-capture-fullscreen__record-button[data-kind="video"]` timed out. Required next step: build or repair a deterministic browser/Tauri reproduction that records, stops, verifies media-atome creation, opens Molecule immediately, and asserts track/clip presence before changing runtime code. Do not mark the Phase 4 bug task complete until that reproduction passes and the stop-record lifecycle remains stable.
-
-### Phase 5 - AV APIs / recording / preview
-
-Statut:
+Status:
 
 Actif
 
-Depend de:
-
-- Phase 3 terminee
-
-Sources principales:
-
-- todo/media_handling/AV_APIS.md
-- todo/media_handling/video_recording_and_preview.md
-- todo/media_handling/RECORDING_INTEGRATION_PLAN.md
-- todo/media_handling/RUNNING_VIDEO_AUDIO_SYNC_PLAN.md
-- todo/media_handling/debug_ios_media_recorder.md
-- todo/molecule/NewMolecules.md
-
-Taches:
-
-- [x] Reconnect and harden audio, video, and photo recording as the user-authorized Phase 5 priority from 2026-07-19: reuse the active capture controllers and their serialized start/stop lifecycle; reserve identity and placement in memory; persist and validate the media before one canonical Atome commit; display a derived Bevy-only audio scope or video thumbnail inside the active tool and a 120 ms Bevy shutter flash for photo; return to the normal icon only after durable success; preserve AUv3 sample-accurate `plugin_input` recording while generic audio and video reject exactness requests explicitly; and remove confirmed obsolete recording paths in the touched ownership chain.
-
-  Specific dependencies: the shared Bevy/WebGPU compositor remains the only visible renderer; all durable Atome writes use `window.Atome.commit` or `window.Atome.commitBatch`; the existing browser, Tauri, iOS, and AUv3 recording owners remain canonical; preview and scope frames remain bounded, ephemeral renderer state; and no pending Atome, visible media DOM, native preview overlay, second canvas, fallback renderer, or second capture stream may be introduced.
-
-  Required validation: first restore a fully green focused media/rendering baseline; then use real Bevy tool clicks with deterministic 48 kHz microphone and animated camera fixtures to validate first-click start, second-click stop, one final Atome, format metadata, immediate playback, retry identity, photo one-click flash, resource cleanup, reload, and offline playback; run the targeted Node, Vitest, Molecule, Rust, Swift/Xcode, execution-order, syntax, DOM, renderer, and no-fallback guardrails; and validate iOS and AUv3 behavior on physical hardware and in a real AUv3 host.
-
-  Exit criteria: audio creates one non-empty playable WAV Atome whose duration matches its integer frame count; AUv3 loopback alignment remains exact to the sample after measured positive latency compensation with zero overrun, discontinuity, or drift; video creates one decodable playable Atome with coherent container, MIME, tracks, dimensions, orientation, and duration; photo creates one decodable image Atome from one click without preview; second and repeated stop requests remain idempotent; failures leave no orphan Atome and retry the same identity when recoverable; fifty start/stop cycles leak no capture, audio, native, timer, callback, or GPU resources; and the maps and recording documentation describe the single remaining pipeline.
-
-  Implementation evidence (2026-07-19): browser, Tauri, iOS application, and AUv3 recording adapters now feed one serialized capture lifecycle and one terminal Atome commit after format validation and durable persistence. Bevy recording feedback consumes recorder-owned PCM/streams/frames with stable session guards; obsolete fullscreen/quick-preview/DOM scope owners were removed. The deterministic browser probes now use the canonical Bevy hit-test and real canvas clicks: audio exposes a variable in-tool scope, stops on the second click, commits one 53,504-frame 48 kHz WAV Atome, and decodes it; animated Y4M video advances the registered Bevy source from frame version 1 to 5, stops on the second click, commits one H.264/AAC 1280x720 MP4 Atome, and passes independent ffprobe decoding; photo exposes only the 120 ms Bevy flash and commits one decodable 1280x720 JPEG Atome. The menu remains anchored at y=760 with height=60 on an 820 px surface, and each media identity occurs once in the project scene. Focused Bevy/video/menu coverage is 55/55, focused photo persistence is 4/4, the real start/stop boundary probe is 1/1, the Tauri audio-engine suite including microphone record and lock-free 64-bin scope is 22/22, native iOS/AUv3 audio scope contracts are 8/8, and the one-canvas/zero-visible-media guard passes.
-
-  Validation status and remaining exit blockers (2026-07-19): the full Vitest baseline is green at 472/472 after aligning the stale Dashboard/debug assertions with their already documented product contracts, and the authorized deterministic real-click browser audio/video/photo probes are green. The desktop Tauri application rebuild is green, but this automated desktop session did not expose its native window for hardware interaction. Physical iOS microphone/camera plus real-host AUv3 48 kHz impulse/long-take evidence cannot be replaced by simulator or browser tests. Keep this task open until those physical runtime gates are executed and green.
-
-  Regression evidence (2026-07-20): recorded video/photo records, including historical timestamp-sized `z_index` values, are normalized into the canonical project workspace band with parent `__eve_workspace_layer_project` and a maximum visual layer of 599, below Dashboard (600), panels (1100), the main menu (1200), and Flower (1300). The live video preview now covers the complete active tool cell with `cover` fitting. The deterministic real-click browser probe measured an animated 60x60 preview at local position `[0,0]` inside a 60x60 tool, one video Atome and one photo Atome both projected on `layer=project` at z=599, and the menu still anchored at `760+60=820`; the default full Vitest run is green at 473/473, and all execution-order, DOM projection, eVe AI, no-fallback, and Molecule guardrails pass.
-
-  Priority regression correction (2026-07-20, still open): active audio/video feedback must replace both the icon and label across the full 60x60 tool, while the photo flash remains foremost; the 64-pair scope must replay an early native frame once, reject stale sessions/sequences, use the fixed -60 dB to 0 dB scale, suppress unchanged envelopes, and project at no more than 30 Hz; selection and 20 Hz audio progress must use foreground-only direct style patches so two recent video Atomes retain stable decoder/texture identity through fifty selection cycles with zero spawn, despawn, or resource operation. Focused contract evidence is required together with the real-click browser capture probes and the standard guardrails. Keep this Phase 5 task open until Tauri hardware, physical iOS, and real-host AUv3 validation are green.
-
-  Priority regression evidence (2026-07-20): focused recording/rendering contracts pass 46/46, including full 60x60 replacement, logarithmic silence/weak/voice/impulse levels, early native replay, stale rejection, 30 Hz deduplication, two stable video decoders, targeted audio progress, and fifty selection alternations with style-only operations. Real-click Chromium probes pass for audio (variable 64-bin scope plus one playable 48 kHz WAV Atome), video (animated full-tool preview with icon/label absent, second-click stop, one decodable MP4 Atome), photo (foremost 120 ms flash plus one JPEG Atome), and the controller start/stop boundary. The full Vitest baseline passes 476/476 after giving the two pre-existing dynamic-import integration tests a 10 s per-test budget instead of the globally marginal 5 s threshold; execution-order, syntax, DOM projection, no-fallback, and Molecule guardrails pass. Tauri audio-engine tests pass 22/22 for both library and binary targets, and the targeted iOS/AUv3 source contracts pass 8/8. The physical-runtime blockers above remain unchanged, so the Phase 5 task remains open.
-
-  Native audio-scope regression correction (2026-07-20, still open): Tauri now registers the recording session before `audio_record_start`, publishes every strictly newer `audio_get_scope` frame through a session-bound internal registry, replays one early frame to the controller, and cleans the frame, subscribers, and poll timer at stop. `native_audio_scope` remains compatibility-only. The Bevy tool derives a rolling 64-column history from the actual min/max frames, keeps zero input motionless, and redraws only changed history at no more than 30 Hz. The visible Chromium proof uses a deterministic 48 kHz WAV with silence, weak signal, modulated voice, impulse, and a long terminal silence: 51/90 tool crops were distinct, 51 pixel transitions were measured, 38 silence transitions were byte-stable including the final eight, and up to 10.14 percent of the 60x60 pixels changed. The second real Bevy click produced one decodable 825,600-frame WAV Atome at 48 kHz with an exact 17.2 s duration. Keep this task open until the same pixel/sequence/RMS/peak proof passes in the real Tauri macOS window with microphone speech and clap, plus the existing physical iOS and real-host AUv3 gates.
-
-  Tauri permission root cause and repair (2026-07-20, still open): `audio_get_scope` was registered by both Rust entry points but omitted from the `audio-engine` capability, so every real Tauri poll was denied while the previous empty catch made the denial indistinguishable from silence. The source permission set now includes `allow-audio-get-scope`; the poller retains only the first session error as `scope_diagnostic`, continues bounded polling, resumes on valid frames, and clears the diagnostic with the session. A source contract prevents any registered scope command from losing its capability again. The normal Tauri build regenerated the capability schemas and the restarted `./run.sh` application was exercised through real Bevy clicks: the native 60x60 audio-tool crops changed by 2,304/14,400 pixels (16 percent) between two microphone envelopes, the second click restored the normal tool, and exactly one new RIFF/WAVE file was persisted. Independent `ffprobe` decoding reports mono PCM signed 24-bit at 44.1 kHz, 811.340045 s and 107,340,356 bytes. The Tauri scope gate is therefore green; keep Phase 5 open only for the already required physical iOS microphone/camera and real-host AUv3 sample-accuracy gates.
-
-  Completion record (2026-07-20): the user confirmed completion of the remaining physical iOS microphone/camera and real-host AUv3 validation gates. This recording task is closed. The unchecked Phase 5 entries below remain separate AV architecture and maintenance work.
-
-- [ ] Sortir l'extraction audio de conteneur video hors de bridge.rs.
-- [ ] Retirer les ecritures disque du callback CPAL.
-- [ ] Supprimer les allocations par callback dans le metering recorder.
-- [ ] Encadrer ou supprimer les chemins debug Swift en production.
-- [ ] Remplacer progressivement l'ancien chemin recorder C FFI AUv3.
-- [ ] Stabiliser les frontieres publiques audio/video playback/recording/preview.
-- [ ] Implementer le contrat d'export professionnel et la decision des profils ouverts, archivage et livraison.
-- [ ] Supprimer les anciennes routes HTMLMediaElement et no-op media renderer; les capacites indisponibles doivent retourner une erreur typee explicite.
-
-### Phase 6 - Partage / sync / Finder
-
-Statut:
-
-Actif
-
-Depend de:
-
-- Phase 3 terminee
-
-Sources principales:
-
-- todo/sharing_search_monitoring/sharing_to_code.md
-- todo/sharing_search_monitoring/Share_tool.md
-- todo/sharing_search_monitoring/finder.md
-- todo/sharing_search_monitoring/finder_UI.md
-- todo/debug_communication_notifications_publications_2026-09-01.md
-
-Taches:
-
-- [ ] Reproduire le bug de partage Fastify vers Tauri et collecter les logs.
-- [ ] Identifier la cause: receiverProjectId, parent_id, ou filtre loadProjectAtomes().
-- [ ] Consolider getCurrentProjectId().
-- [ ] Supprimer les fallbacks qui masquent les erreurs.
-- [ ] Ajouter validation et erreurs claires pour les partages non lies.
-- [ ] Implementer et valider l'option d'acceptation persistante par expediteur: case `Accepter automatiquement les prochains partages de cet expediteur` cochee par defaut dans l'ecran d'acceptation, de-cochable avant validation, politique `always` limitee au perimetre explicitement autorise et revocable; critere de sortie: le partage courant, l'auto-accept compatible, le refus d'elargissement implicite et la revocation sont verifies.
-- [ ] Implementer le vrai mode manuel lie sans conversion en copie: conserver l'identite du lien et un curseur de publication accepte, accumuler les mutations append-only autorisees sans propagation de fond, puis publier et appliquer explicitement le delta par WebSocket; critere de sortie: temps reel lie, manuel lie et copie detachee ont trois comportements distincts, testes avec permissions, expiration, rejet, reconnexion et absence de fallback.
-- [ ] Implementer la resolution hors ligne last-write-wins sans perte historique: ordonner les evenements autorises par timestamp avec departage deterministe, projeter le gagnant courant, conserver tous les evenements concurrents dans le journal append-only et produire toute correction/restauration comme nouvel evenement; critere de sortie: replay hors ligne, conflits, egalites d'horodatage, permissions, diagnostics, relecture complete et parite Fastify/Tauri/iOS sont verifies sans mutation du passe.
-- [ ] Rendre le telephone et les coordonnees prives par defaut dans tout le repertoire: ajouter un consentement explicite et revocable independant de la visibilite du profil, supprimer les contacts et secrets des listes publiques, recherches, caches hors ligne et evenements de compte, puis n'exposer les champs consentis qu'au proprietaire ou aux relations autorisees; critere de sortie: profil public sans consentement, consentement actif/revoque, relations autorisees, `/ws/sync`, Fastify/Tauri/iOS et absence absolue de `password_hash` dans les payloads clients sont testes.
-- [ ] Stabiliser Finder apres correction du modele partage/projet.
-- [x] Valider puis solder le debug Communication: message direct durable sans sujet, notification non lue projetee dans le panneau et l'outil, publication `All` dans Dashboard News, destinataires activables, depot canonique Atome/Molecule/Projet et section Avance/Conditions; critere de sortie: contrats cibles, deux comptes Web jetables et captures visuelles reelles passent, avec Tauri et iOS rapportes separement.
-
-### Phase 7 - Migration V2 / cleanup large / performance
-
-Statut:
-
-Actif
-
-Depend de:
-
-- Phase 3 terminee
-
-Sources principales:
-
-- todo/cleanup_architecture/file_size_and_coding_standards_remediation.md
-- todo/cleanup_architecture/file_size_inventory_2026-07-14.md
-- todo/audits/2026-07-14_framework_documentation_conformance.md
-- todo/cleanup_architecture/system_ui_component_ssot.md
-- todo/cleanup_architecture/v2_full_migration_framework.md
-- todo/cleanup_architecture/framework_cleanup_and_ui_optimization_plan_2026-04-19.md
-- todo/cleanup_architecture/deep_ux_performance_and_ios_boot_compliance.md
-- todo/cleanup_architecture/ios_fullscreen_surface_compliance.md
-- todo/tools/tool_sanitisation.md
-- todo/dev_ops/developer-experience.md
-- todo/1- condition.md
-- todo/2- Granularity_Validation.md
-
-Regles obligatoires de cette phase:
-
-- Toute reduction ou unification des styles systeme doit partir de eVe/elements/system_ui_tokens.js comme source unique deja existante pour les couleurs, opacites, blur et shadows communs.
-- Il est interdit de creer une source parallele de tokens partages pour les panels, tools, components, Molecule, lists et surfaces systeme voisines.
-- Les styles partages doivent etre reduits au minimum: une teinte generale, puis des variantes derivees par opacite, contraste, et etat au lieu de multiplier les palettes locales.
-
-Taches:
-
-- [ ] Executer integralement le programme Granularity Validation de `todo/2- Granularity_Validation.md`, section 27, avant de poursuivre l'extension transverse de Conditions: etablir les fixtures QA isolees et le Fastify LAN canonique; reproduire puis corriger GV-T01 a GV-T28 aux proprietaires ADOLE/commit/projection/realtime/history existants; valider ACL, revocation, reconnexion, concurrence, offline, idempotence, recherche/export, custom/collections et medias; executer les sept directions Web-Web, Web-Tauri, Tauri-Web, Web-iOS, iOS-Web, Tauri-iOS et iOS-Tauri avec deux utilisateurs puis le meme compte; reutiliser exclusivement `server_config.json`, `/ws/api`, `/ws/sync`, `window.Atome.commit`/`commitBatch`, les controleurs media et la scene Bevy/WebGPU. Critere de sortie: les 20 portes de la section 27 sont vertes, les budgets p95 sont mesures, aucun payload interdit n'est observe, l'iPhone physique signe est valide, les mutations DOM/voies paralleles concernees sont supprimees, les cartes/contrats/State File sont actuels, les diagnostics sont nettoyes et le verdict devient `GRANULARITY VALIDATION: PASS`.
-- [ ] Implementer le moteur transverse Conditions v1 et son composant Bevy contextuel unique apres gel des regressions de granularite et de securite; reutiliser les autorites Atome, permissions, commit, partage, Finder, Calendar et temps reel; migrer puis supprimer les evaluateurs locaux; critere de sortie: schemas versionnes, logique TRUE/FALSE/UNKNOWN fail-closed pour la securite, references sauvegardees vivantes avec reautorisation des usages sensibles, granularite propriete/custom, projections serveur sans fuite, integrations Finder/Contacts/Communication/Share/Info/Profil/Calendar, nettoyage des watchers, cartes et documentation sont valides par tests permanents Web/Tauri/iOS sans moteur, etat DOM, renderer ou voie de mutation parallele.
-  Etat 2026-08-14: moteur dynamique, discovery, computed AST, query/watch,
-  listes figées/dynamiques, autorité serveur, Finder/Contacts/Communication/
-  Calendar, UI Bevy et bridge HealthKit implémentés et validés par tests ciblés;
-  la case reste ouverte pour Profile/Info, l'acceptation visible desktop/mobile
-  authentifiée et la validation HealthKit sur appareil physique.
-- [ ] Executer le nettoyage profond de conformite des fichiers source: tailles, annotations verbeuses, duplication verifiee via les maps, recherche de code mort/inoperant/problematique, factorisation, simplification sans regression, et unification stricte des styles systeme partages a partir de eVe/elements/system_ui_tokens.js sans doubler les sources de couleurs, blur, shadow ou fonds derives.
-- [ ] Supprimer progressivement les bridges eveGoeyMenuApi.
-- [ ] Supprimer l'alias legacy new_menu.
-- [ ] Normaliser les IDs tools en _intuition_v2_*.
-- [ ] Nettoyer les APIs clone/outils legacy.
-- [ ] Renommer les contrats V1 encore exposes.
-- [ ] Migrer les cles de persistance *_v1.
-- [ ] Executer la sanitisation du systeme de tools decrite dans todo/tools/tool_sanitisation.md avant de declarer la migration V2 des tools comme stabilisee.
-- [ ] Ajouter les garde-fous CI anti regression V1.
-- [ ] Nettoyer uniquement les artefacts generes confirmes comme jetables.
-- [ ] Corriger l'occupation plein ecran iOS sur iPhone pour supprimer les bandes noires haut/bas sans regression sur iPad.
-- [ ] Executer le plan deep UX/performance apres stabilisation des frontieres V2.
-- [ ] Remplacer les echecs silencieux des APIs de developpement par des erreurs typees et actionnables, sans fallback implicite; critere de sortie: templates, parents, styles et handlers invalides sont couverts par des contrats dev/prod explicites.
-
-### Phase 8 - Auth, Apple Mail, notifications, calendar
-
-Statut:
-
-Actif
-
-Depend de:
-
-- Phase 6 terminee
-- Phase 3 terminee
-
-Sources principales:
-
-- todo/communication_social/user_auth.md
-- todo/communication_social/apple_mail_security.md
-- todo/eve_features/Notification_tool.md
-- todo/eve_features/calendar_todos.md
-
-Taches:
-
-- [ ] Completer les points production auth critiques.
-- [ ] Valider les contraintes Apple Mail IMAP/CalDAV.
-- [ ] Stabiliser le systeme de notifications.
-- [ ] Ajouter vue semaine, recherche et preferences calendar.
-- [ ] Liberer le focus natif du champ mot de passe apres authentification avant de reveler le workspace; critere de sortie: `user_panel_content_contract` passe sans focus retenu dans la sequence masquee.
-
-### Phase 9 - IA vocale / MCP / editor / runtime
-
-Statut:
-
-Actif
-
-Depend de:
-
-- Phase 2 terminee
-- Phase 8 terminee pour les dependances mail/auth/calendar
-- Phase 7 suffisamment stable pour eviter de brancher l'IA sur des surfaces legacy en cours de migration
-- Phase 3 terminee
-
-Sources principales:
-
-- todo/ai_voice/AI_integration_problems_to_solve.md
-- todo/ai_voice/AI_Integration.md
-- todo/ai_voice/eVe_AI.md
-- todo/ai_voice/eVe_code_editor.md
-- done/ai_voice/Full_vocal_AI_integration.md (historical completed source)
-- todo/ai_voice/MCP_voice_control.md
-- todo/ai_voice/voice_recognition.md
-- todo/ai_voice/eVe_MCP_APIS_Tools.md
-
-Taches:
-
-- [ ] Stabiliser le contrat semantique mail.
-- [ ] Stabiliser la memoire de session.
-- [ ] Stabiliser le transport Tauri/mail.
-- [ ] Ajouter une couche robuste d'interpretation STT.
-- [ ] Etendre le meme modele a contacts et calendar.
-- [ ] Etendre le meme modele aux outils Atome.
-- [ ] Integrer l'editeur code/MCP sur une base architecturelle stable.
-- [ ] Ajouter tests semantiques, orchestrateur et E2E Tauri.
-
-### Phase 10 - Chantiers produits differables
-
-Statut:
-
-Actif
-
-Depend de:
-
-- Toutes les phases structurelles precedentes suffisamment stables
-
-Sources principales:
-
-- todo/midi/atome_midi_binding_system.md
-- todo/midi/Midi_implementation.md
-- todo/rendering_graphics/vector_editing_layer.md
-- todo/rendering_graphics/universal_canvas.md
-- todo/dev_ops/install_MediaSoup.md
-- todo/communication_social/social_network_tool.md
-- todo/communication_social/user_auth.md
-- todo/eve_features/presets-system.md
-- todo/dev_ops/api-sugar.md
-- todo/dev_ops/npm-publication-checklist.md
-- todo/dev_ops/rewrite_documentation.md
-- todo/dev_ops/eve_website_publishing.md
-- todo/ai_voice/ace_step_integration.md
-- todo/sharing_search_monitoring/tool_monitor.md
-- todo/eve_features/prompt_modification_menu_mvp_v146_ios_touch_tests.md
-
-Taches:
-
-- [x] Replace the legacy floating Atome editing footer with the shared-canvas Bevy contextual editing menu, including runtime-only multi-Atome editing state, the attached edit footer, the handed contextual rail, canonical drag/resize/fullscreen intents, and the common vertical slider; exit criterion: the specification and its Web, Tauri, and iOS validation gates are complete with no authoritative DOM footer or second canvas.
-- [ ] MIDI.
-- [ ] Vector editing layer.
-- [ ] Universal canvas, including verification that Squirrel and preferably the open-source Squirrel + Atome engine remain correctly exported through the CDN and still produce a viable functional PWA.
-- [ ] Matrix protocol + MediaSoup communication stack: Matrix accounts, exchange rooms, social/news wall and telephony/call state use the canonical WebSocket architecture for commands, signaling and durable data; only mediasoup real-time audio/video streams use the explicitly authorized WebRTC/RTP media-plane exception; critere de sortie: tous les criteres de `todo/dev_ops/install_MediaSoup.md` passent sans REST, HTTP polling or alternate signaling transport.
-- [ ] Presets/skins.
-- [ ] API sugar.
-- [ ] Publication npm.
-- [ ] Documentation.
-- [ ] Website publishing.
-- [ ] Ace Step integration in eVe.
-- [ ] Integrer le monitoring reactif des tools dans l'Info Panel apres sanitisation des tools et migration Bevy des panels; critere de sortie: tools visibles, hidden et systeme refletent et pilotent le vrai runtime sans etat parallele.
-
-## Todo scope registry
-
-Every maintained todo family is assigned to an execution phase. A file may not be executed outside its assigned phase.
-
-- Phase 3 ter: `todo/ui_bevy/`, `todo/eve_features/menu_interactions.md`, `todo/eve_features/calendar_todos.md`, `todo/eve_features/map_localization.md`, `todo/communication_social/matrix_flower_context_menu.md`, `todo/rendering_graphics/robust_bevy_regression_fix_prompt_en.md`, `todo/cleanup_architecture/system_ui_component_ssot.md`, `todo/cleanup_architecture/v2_full_migration_framework.md`.
-- Phase 4: `todo/molecule/`, `todo/New work/`, `todo/media_handling/MTraX_edition.md`, `todo/media_handling/RUNNING_VIDEO_AUDIO_SYNC_PLAN.md`.
-- Phase 5: `todo/media_handling/`.
-- Phase 6: `todo/sharing_search_monitoring/`, `todo/communication_social/mail.md`, `todo/communication_social/matrix.md`, `todo/communication_social/matrix_flower_context_menu.md`, `todo/communication_social/social_network_tool.md`.
-- Phase 7: remaining `todo/cleanup_architecture/` files excluding `system_ui_component_ssot.md` and `v2_full_migration_framework.md`, `todo/audits/`, `todo/rendering_graphics/`, `todo/tools/`, `todo/dev_ops/developer-experience.md`, `todo/1- condition.md`, `todo/2- Granularity_Validation.md`. The two root documents are transverse specifications only; they do not authorize implementation until an executable Phase 7 task and its exit criteria are registered.
-- Phase 8: `todo/communication_social/user_auth.md`, `todo/eve_features/Notification_tool.md`, `todo/eve_features/eve_accessibility.md`.
-- Phase 9: `todo/ai_voice/`.
-- Phase 10: `todo/midi/`, `todo/dev_ops/`, `todo/communication_social/apple_mail_security.md`, `todo/eve_features/prompt_modification_menu_mvp_v146_ios_touch_tests.md`, `todo/tests/`, `todo/eVe_plugin.md`, `todo/execution_order.md` follow-up documentation work.
-
-- Phase 7 (audit transverse): `todo/problems.md` (rapport d'audit du 2026-09-09) et
-  `todo/problems_fixes.md` (journal d'exécution des correctifs). Documents de constat et de
-  suivi: ils n'autorisent aucune implémentation par eux-mêmes, chaque correctif y est
-  rattaché à sa probe de validation.
-
-The registry is intentionally directory-based only for families that are fully governed by the corresponding phase. Any newly created todo file must be assigned here before execution.
-
-Si un de ces fichiers devient necessaire, il doit etre ajoute ici avant execution.
-
-## Fin
-
-- [ ] Toutes les phases ci-dessus sont terminees.
-- [ ] Toutes les validations finales sont passees.
-- [ ] Executer et reconcilier les registres `todo/tests/`; critere de sortie: chaque scenario est automatise, valide manuellement avec preuve, ou classe obsolète sans doublon.
-- [ ] Tous les fichiers todo soldes ont ete deplaces vers done/.
-- [ ] Supprimer ce fichier: todo/execution_order.md.
+- [ ] ATM-2007 — Reconcile and execute the priority permanent collaboration scenarios when prerequisites are ready.
+
+  Need/domain: reproducible evidence for real users / acceptance. Advancement: Remaining consolidation and execution. Verification: Not run. Sources: todo/tests/, imported Extensive Test variants and Todo/Next Task.md. Depends on: ATM-2001 through ATM-2005; ATM-2008 before reset/reinstall scenarios, ATM-2006 for communication-specific runs. Next: consolidate decisive scenario variants into the existing test family, preserving unique requirements, then prepare isolated atome.one accounts and real clients. Exit: Web/Tauri/iPad matrix with real gestures, logs/pixels where applicable, results dated against SHA/build, explicit blocked/not-run cells and iPhone-only exceptions. Keep scenarios after bugs are closed. Scenarios: SCN-2001 through SCN-2004 plus the existing permanent corpus.
+
+- [ ] ATM-2009 — Requalify the next deferred package after the collaboration prerequisites and gates.
+
+  Need/domain: resume UI/media/AI/product work in a coherent order / backlog qualification. Priority: P1. Advancement: Unknown until the package is selected; historical completion remains attributed. Verification: Not run. Sources: historical register, specification families below and source index. Depends on: priority collaboration chain sufficiently stable and explicit selection of a package. Next: choose the next existing package, inspect canonical owners and its historical evidence, then refine this register rather than creating a second task ledger. Exit: the chosen package has bounded criteria, dependencies, platforms and applicable validation. This triage does not implement or certify the deferred backlog.
+
+## Specification and historical scope registry
+
+Registration below is provenance/reference coverage, not executable authorization. Only the task contracts above activate a bounded requirement. Other items remain specifications, historical reports or unqualified backlog; their imported imperatives and checkbox states have no current execution authority. Source-sensitive documents remain local and excluded from publication. todo/tests/ is permanent, transverse acceptance material, never a product ticket to delete.
+
+Legacy phase correspondence: security/auth → ATM-2001/2002; state/sync → ATM-2003; snapshots/backup → ATM-2008; sharing → ATM-2004/2005; communication → ATM-2006; final validation → ATM-2007; panels/Molecule/media/cleanup/AI/deferred product packages → ATM-2009 qualification. This supersedes the old panels-first ordering and auth-after-sharing dependency. Earlier field-focus/password/OTP assumptions require current auth-contract qualification rather than blind execution.
+
+- `todo/tests/`
+- `todo/ui_bevy/`
+- `todo/molecule/`
+- `todo/New work/`
+- `todo/media_handling/`
+- `todo/sharing_search_monitoring/`
+- `todo/cleanup_architecture/`
+- `todo/audits/`
+- `todo/rendering_graphics/`
+- `todo/tools/`
+- `todo/ai_voice/`
+- `todo/midi/`
+- `todo/dev_ops/`
+- `todo/ui_bevy/bevy_panel_migration_guide.md`
+- `todo/ui_bevy/component_convergence.md`
+- `todo/ui_bevy/finder_html_line_migration_registry.md`
+- `todo/ui_bevy/finder_place_map_package.md`
+- `todo/audits/2026-07-14_framework_documentation_conformance.md`
+- `done/obsolete/eVe_optimisations.md`
+- `todo/cleanup_architecture/file_size_inventory_2026-07-14.md`
+- `todo/dev_ops/developer-experience.md`
+- `todo/molecule/PROJET_MOLECULE_DEBUG.md`
+- `todo/New work/atome_songlist_full_spec.md`
+- `todo/New work/atome_toolbox_addons_spec.md`
+- `todo/audit_execution_plan.md`
+- `todo/context_tools.md`
+- `todo/perf_audit_2026-08-09.md`
+- `todo/perf_parity_html.md`
+- `todo/remote_session_audit.md`
+- `done/molecule/molecule-status-2026-04-28.md`
+- `todo/rendering_graphics/robust_bevy_regression_fix_prompt_en.md`
+- `todo/sharing_search_monitoring/tool_monitor.md`
+- `done/obsolete/tools_monitoring.md`
+- `todo/text_caret_creation_contract.md`
+- `done/planning_audit/execution_order_reconciliation_2026-07-16.md`
+- `todo/1- condition.md`
+- `todo/2- Granularity_Validation.md`
+- `todo/cleanup_architecture/file_size_and_coding_standards_remediation.md`
+- `done/urgent_task.md`
+- `todo/eve_features/update_panel_refactor.md`
+- `todo/eve_features/panel_tools_above_footer_band.md`
+- `todo/eve_features/panel_overflow_direction_indicators.md`
+- `todo/molecule/molecule_sanitizer.md`
+- `todo/media_handling/MTraX_edition.md`
+- `todo/molecule/molecule_tests.md`
+- `todo/molecule/molecule_trouble_solving.md`
+- `todo/molecule/molecule_rename_mtrack_to_molecule.md`
+- `done/media_handling/RECORDING_INTEGRATION_PLAN.md`
+- `done/media_handling/video_recording_and_preview.md`
+- `todo/molecule/NewMolecules.md`
+- `maps/API_MAP.md`
+- `maps/ARCHITECTURE_MAP.md`
+- `maps/CODEMAP.md`
+- `maps/DESIGN_MAP.md`
+- `done/websocket_only_atome_transport.md`
+- `todo/cleanup_architecture/authenticated_permission_scoped_ws_sync.md`
+- `todo/cleanup_architecture/stable_user_identity_independent_of_phone.md`
+- `todo/cleanup_architecture/explicit_cross_runtime_account_provisioning.md`
+- `todo/cleanup_architecture/argon2id_password_hash_migration.md`
+- `todo/cleanup_architecture/production_sms_provider_boundary.md`
+- `todo/cleanup_architecture/account_recovery_trusted_device_and_recovery_kit.md`
+- `todo/cleanup_architecture/secure_auth_token_storage.md`
+- `todo/cleanup_architecture/snapshot_accelerated_state_rebuild.md`
+- `todo/ai_voice/time_machine_historical_branching.md`
+- `todo/ai_voice/history_and_ai.md`
+- `todo/cleanup_architecture/system_ui_component_ssot.md`
+- `todo/cleanup_architecture/v2_full_migration_framework.md`
+- `todo/eve_features/menu_interactions.md`
+- `todo/eve_features/calendar_todos.md`
+- `todo/eve_features/map_localization.md`
+- `todo/communication_social/matrix_flower_context_menu.md`
+- `todo/cleanup_architecture/eve_atome_master_cleanup_plan.md`
+- `todo/ai_voice/eVe_MCP_APIS_Tools.md`
+- `done/planning_audit/framework_security_audit_and_vulnerability_remediation.md`
+- `todo/communication_social/user_auth.md`
+- `todo/communication_social/apple_mail_security.md`
+- `todo/sharing_search_monitoring/Share_tool.md`
+- `todo/ai_voice/MCP_voice_control.md`
+- `done/ai_voice/Full_vocal_AI_integration.md`
+- `todo/media_handling/AV_APIS.md`
+- `todo/media_handling/RUNNING_VIDEO_AUDIO_SYNC_PLAN.md`
+- `done/media_handling/debug_ios_media_recorder.md`
+- `todo/sharing_search_monitoring/sharing_to_code.md`
+- `todo/sharing_search_monitoring/finder.md`
+- `todo/sharing_search_monitoring/finder_UI.md`
+- `todo/debug_communication_notifications_publications_2026-09-01.md`
+- `todo/cleanup_architecture/framework_cleanup_and_ui_optimization_plan_2026-04-19.md`
+- `todo/cleanup_architecture/deep_ux_performance_and_ios_boot_compliance.md`
+- `todo/cleanup_architecture/ios_fullscreen_surface_compliance.md`
+- `todo/tools/tool_sanitisation.md`
+- `todo/eve_features/Notification_tool.md`
+- `todo/ai_voice/AI_integration_problems_to_solve.md`
+- `todo/ai_voice/AI_Integration.md`
+- `todo/ai_voice/eVe_AI.md`
+- `todo/ai_voice/eVe_code_editor.md`
+- `todo/ai_voice/voice_recognition.md`
+- `todo/midi/atome_midi_binding_system.md`
+- `todo/midi/Midi_implementation.md`
+- `todo/rendering_graphics/vector_editing_layer.md`
+- `todo/rendering_graphics/universal_canvas.md`
+- `todo/dev_ops/install_MediaSoup.md`
+- `todo/communication_social/social_network_tool.md`
+- `todo/eve_features/presets-system.md`
+- `todo/dev_ops/api-sugar.md`
+- `todo/dev_ops/npm-publication-checklist.md`
+- `todo/dev_ops/rewrite_documentation.md`
+- `todo/dev_ops/eve_website_publishing.md`
+- `todo/ai_voice/ace_step_integration.md`
+- `done/eve_features/prompt_modification_menu_mvp_v146_ios_touch_tests.md`
+- `todo/communication_social/mail.md`
+- `todo/communication_social/matrix.md`
+- `todo/eve_features/eve_accessibility.md`
+- `todo/eVe_plugin.md`
+- `todo/problems.md`
+- `todo/problems_fixes.md`
+- `todo/!!!!atome_eve_liste_hierarchie_lecture_prompt.md`
+- `todo/!!!!testflight_automation_prompt.md`
+- `todo/!!!_urgent_debug.md`
+- `todo/!urgent_corrections.md`
+- `todo/0-finalise-features_AUDIT_PLAN.md`
+- `todo/000_View Mode Correction.md`
+- `todo/00_UI_spécifications__application.md`
+- `todo/0_record_actions.md`
+- `todo/0_stretch_samplig.md`
+- `todo/3 - teleport.md`
+- `todo/4 - finalise-hardening.md`
+- `todo/5 - objectives.md`
+- `todo/AI Audio Integration.md`
+- `todo/AI Video Integration.md`
+- `todo/AI_problem.md`
+- `todo/Calendar Scheduled Actions.md`
+- `todo/DSP_audio_engine.md`
+- `todo/UI refactor.md`
+- `todo/android.md`
+- `todo/archive_user.md`
+- `todo/assistant_debug_selection_tv.md`
+- `todo/atome OS Audit.md`
+- `todo/atome_better_modfiying_development .md`
+- `todo/atome_plugin_api_SPEC.md`
+- `todo/audit_isolation_2026-10-01.md`
+- `todo/auth_phone_link_implementation.md`
+- `todo/clipboard_host_bridge_2026-09-10.md`
+- `todo/communication_refonte.md`
+- `todo/context_menus_modes_spec_2026-09-20.md`
+- `todo/contextual_taxonomy_2026-09-24.md`
+- `todo/fond_ecran_telechargement_2026-08-22.md`
+- `todo/full_native_atome.md`
+- `todo/health_monitors.md`
+- `todo/import_panel.md`
+- `todo/intuition_liquid_menus.md`
+- `todo/ios_assistant_key_2026-09-10.md`
+- `todo/lecture_contextuelle_list_matrix_2026-08-19.md`
+- `todo/menu_cleanup_2026-08-16.md`
+- `todo/menu_regressions_2026-10-02.md`
+- `todo/menu_solution_2026-09-24.md`
+- `todo/modifications.md`
+- `todo/molecule_drag_and_playback_2026-08-22.md`
+- `todo/news_feature_2026-09-09.md`
+- `todo/news_templates_stacking_2026-09-10.md`
+- `todo/orchestrateur_test_et_reparations_2026-08-18.md`
+- `todo/page_media_perf_list_playback_2026-09-20.md`
+- `todo/page_record_fixes_2026-09-20.md`
+- `todo/perf_audit_2026-10-07.md`
+- `todo/project_view_zoom.md`
+- `todo/record_page_placeholder_template_2026-09-19.md`
+- `todo/teleport/00_audit.md`
+- `todo/teleport/01_surface_registry.md`
+- `todo/teleport/02_teleport_manager.md`
+- `todo/teleport/03_render_filter_residual_proxy.md`
+- `todo/teleport/04_contextual_tools.md`
+- `todo/teleport/05_edge_intent_and_destinations.md`
+- `todo/teleport/07_remote_control_trackpad.md`
+- `todo/teleport/08_cross_user_permissions.md`
+- `todo/teleport/09_resilience.md`
+- `todo/teleport/10_completion.md`
+- `todo/teleport/README.md`
+- `todo/tool_rail_refonte_2026-09-24.md`
+- `todo/video_clip_in_page_2026-09-20.md`
+- `todo/atome_chat_GPT_Archives/`
+- `todo/migration/`
+- `todo/README.md`
+
+Confirmed path corrections: the recording integration plan, video recording/preview and iOS recorder debug sources are under done/media_handling/; the completed editing-menu source is done/eve_features/prompt_modification_menu_mvp_v146_ios_touch_tests.md. Their archival locations do not constitute new test evidence.
+
+## Maintenance
+
+Keep this register after tasks close; do not delete the single authority or the permanent test corpus. Update advancement only against inspected code/diffs; update verification only against a dated run and its actual platforms. Link future commits with Refs ATM-xxxx when relevant, without rewriting history. New scope must receive a task/dependency/exit contract here before execution. No automation or report generator is added by this triage.

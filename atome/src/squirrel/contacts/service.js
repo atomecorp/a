@@ -170,9 +170,9 @@ export const createContactsService = ({
             imported_from_source: source.source_id,
             imported_from_label: toText(source.contract?.provider || source.source_id),
             source_key: options.source_key || source.source_key || source.source_id,
-            cursor: sourcePull.cursor, complete: sourcePull.complete === true,
+            cursor: sourcePull.cursor, complete: sourcePull.complete === true, full_snapshot: options.incremental !== true && sourcePull.mode !== 'delta',
             removed_ids: sourcePull.removed_ids || [], removed_hrefs: sourcePull.removed_hrefs || [], groups: sourcePull.groups || [],
-            device_id: options.device_id, signal: options.signal, checkSession,
+            device_id: options.device_id, signal: options.signal, checkSession, legacy_source_prefix: options.legacy_source_prefix,
             restore_suppressed: options.restore_suppressed === true
         });
         if (imported?.ok !== true) {
@@ -185,6 +185,10 @@ export const createContactsService = ({
         return {
             ok: refreshed?.ok === true,
             imported: imported.imported || 0,
+            // Records actually written (created, modified, merged or removed):
+            // a cycle that found nothing new announces nothing.
+            changed: Number(imported.changed || 0) + Number(imported.duplicates_removed || 0)
+                + (sourcePull.removed_ids?.length || 0),
             source_id: normalizedSourceId,
             permission: sourcePull.permission || null,
             target_source_id: primarySourceEntry.source_id,
@@ -204,6 +208,7 @@ export const createContactsService = ({
     const createLocalContact = (input, options) => mutatePrimary('createContact', input, options);
     const updateLocalContact = (id, changes, options) => mutatePrimary('updateContact', id, changes, options);
     const deleteLocalContact = (id, options) => mutatePrimary('deleteContact', id, options);
+    const mergeDuplicateContacts = () => mutatePrimary('mergeDuplicates');
 
     const resolvePushContactPayload = (options = {}) => {
         if (options?.contact && typeof options.contact === 'object') {
@@ -319,6 +324,9 @@ export const createContactsService = ({
         },
         deleteLocalContact(contactId, options = {}) {
             return deleteLocalContact(contactId, options);
+        },
+        mergeDuplicateContacts() {
+            return mergeDuplicateContacts();
         },
         pushContactToSource(sourceId, options = {}) {
             return pushContactToSource(sourceId, options);

@@ -15,6 +15,7 @@ import { buildLogEnvelope } from '../../shared/logging.js';
 import { createHealthHistoryReader } from './health_history_reader.js';
 
 const DEFAULT_POLL_MS = 60000;
+const RETAINED_READING_FRESH_MS = 60000;
 const INVALIDATION_EVENT = 'atome:native-health-invalidated';
 const MAX_BACKOFF_MS = 15 * 60000;
 const READ_BATCH_LIMIT = 16;
@@ -326,7 +327,10 @@ export function createHealthOwner({
         set.add(listener);
         const known = readings.get(monitorId);
         listener(known || readingOf(monitorId, sealed ? 'unsupported' : (family ? 'loading' : 'unsupported'), describe().reason || 'loading'));
-        if (family && !sealed && !known) scheduleRead(monitorId);
+        // La derniere lecture survit au depart de son dernier abonne (fermeture du
+        // Dashboard) : la reouverture l'affiche aussitot et ne relit que si elle date.
+        const fresh = Number.isFinite(known?.fetchedAt) && now() - known.fetchedAt < RETAINED_READING_FRESH_MS;
+        if (family && !sealed && !fresh) scheduleRead(monitorId);
         if (pollTimer === null) schedulePoll();
         let active = true;
         return () => {
@@ -335,7 +339,6 @@ export function createHealthOwner({
             set.delete(listener);
             if (!set.size) {
                 consumers.delete(monitorId);
-                readings.delete(monitorId);
                 pendingReads.delete(monitorId);
                 syncObservers(context());
                 if (!consumers.size) schedulePoll();

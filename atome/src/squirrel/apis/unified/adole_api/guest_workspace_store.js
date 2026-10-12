@@ -1,6 +1,7 @@
 import { extractEventPatch, eventDeletedPropertyKeys, assertIdempotentEventReplay } from '../../../../shared/adole_event_contract.js';
 import { personalProfileFromProperties } from '../../../../shared/profile_sharing.js';
 import { sanitizeAtomeProperties } from '../../../../shared/atome_contract.js';
+import { mapStateCurrentToAtome } from './atome_record_projection.js';
 // Installation-scoped browser guest persistence. This is the only local guest
 // authority and keeps append-only events separate from projected current state.
 const DB_NAME = 'squirrel_guest_workspace_v1';
@@ -302,13 +303,28 @@ export async function refusedWorkspaceEvents(ownerId) {
 
 // Incoming state cannot overwrite an unsent local change. Account namespaces and
 // explicit server ownership are both checked before any projection is persisted.
+// Le serveur sert la forme canonique projetee (`id`, `type`, `meta.owner_id`,
+// `meta.project_id`…) ; le magasin local range des lignes plates. Sans cette
+// conversion aucun etat n'avait de proprietaire et un appareil neuf ne
+// recuperait rien (ni projets, ni contacts, ni rendez-vous, ni profil).
+const flatWorkspaceState = (state) => {
+    const properties = typeof state.properties === 'string' ? JSON.parse(state.properties) : state.properties;
+    if (!properties || typeof properties !== 'object' || Array.isArray(properties)) throw new Error('workspace_properties_invalid');
+    const canonical = mapStateCurrentToAtome({ ...state, properties }) || {};
+    const deletedAt = state.deleted_at || state.meta?.deleted_at
+        || (properties.__deleted === true ? String(properties.deleted_at || state.meta?.updated_at || new Date().toISOString()) : null);
+    return { ...state, properties,
+        atome_id: String(state.atome_id || canonical.id || ''),
+        owner_id: String(state.owner_id || canonical.owner_id || ''),
+        atome_type: state.atome_type || canonical.type || null,
+        project_id: state.project_id ?? canonical.project_id ?? null,
+        parent_id: state.parent_id ?? canonical.parent_id ?? null,
+        deleted_at: deletedAt };
+};
+
 export async function importWorkspaceStates(ownerId, states) {
     if (!Array.isArray(states)) throw new Error('workspace_states_invalid');
-    const owned = states.filter(state => state.owner_id === String(ownerId) && state.atome_id).map(state => {
-        const properties = typeof state.properties === 'string' ? JSON.parse(state.properties) : state.properties;
-        if (!properties || typeof properties !== 'object' || Array.isArray(properties)) throw new Error('workspace_properties_invalid');
-        return { ...state, properties };
-    });
+    const owned = states.map(flatWorkspaceState).filter(state => state.owner_id === String(ownerId) && state.atome_id);
     // Only this owner's unsent rows, read from the send-order index: the outbox
     // of every identity on the device was deserialized for each imported page.
     await transact([STORE_RECORDS, STORE_QUEUE, STORE_REFUSED], 'readwrite', tx => {

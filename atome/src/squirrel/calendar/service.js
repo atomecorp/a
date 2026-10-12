@@ -469,9 +469,15 @@ export const createCalendarService = ({
             if (listed.ok !== true) return listed;
             const limit = toLimit(options.limit, DEFAULT_LIMIT);
             const events = listed.items.filter(entry => !options.source_id || entry.source_id === options.source_id);
-            const items = calendarRangeOccurrences(events, {
-                start: reference, end: toDate(options.end || options.to), futureOnly: true, excludeCompleted: true
-            }, limit);
+            // `overlap` keeps occurrences still running at `reference` (the
+            // Calendar's own range rule) instead of only those starting after
+            // it; `filter` applies before the limit, so excluded entries never
+            // take the place of a kept one.
+            const filter = typeof options.filter === 'function' ? options.filter : null;
+            const expanded = calendarRangeOccurrences(events, {
+                start: reference, end: toDate(options.end || options.to), futureOnly: options.overlap !== true, excludeCompleted: true
+            }, filter ? Math.max(limit, 800) : limit);
+            const items = (filter ? expanded.filter(entry => filter(entry)) : expanded).slice(0, limit);
             return {
                 ok: true, items, total: items.length, sources: listed.sources
             };

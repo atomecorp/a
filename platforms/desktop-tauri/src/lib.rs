@@ -1,4 +1,5 @@
 mod android_assets;
+mod assistant_link;
 mod auth_device;
 mod audio_engine;
 mod bevy_backend;
@@ -229,6 +230,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_health::init())
         .manage(std::sync::Mutex::new(native_health::state()))
+        .manage(assistant_link::AssistantRequestInbox::default())
         // A main-frame page load claims a new health channel (see native_health.rs).
         .on_page_load(|webview, payload| {
             if webview.label() == "main" && payload.event() == tauri::webview::PageLoadEvent::Started {
@@ -284,6 +286,7 @@ pub fn run() {
             native_health::health_invoke,
             taxonomy_editor::taxonomy_read,
             taxonomy_editor::taxonomy_save,
+            assistant_link::assistant_request_take,
             project_root
         ])
         .setup(|app| {
@@ -476,6 +479,13 @@ pub fn run() {
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("Erreur lors du lancement de Tauri");
+        .build(tauri::generate_context!())
+        .expect("Erreur lors du lancement de Tauri")
+        .run(|_app, _event| {
+            // `atome://assistant` (a Shortcut run by Siri) opens the page's assistant.
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            if let tauri::RunEvent::Opened { urls } = &_event {
+                assistant_link::receive_urls(_app, urls);
+            }
+        });
 }

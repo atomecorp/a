@@ -323,9 +323,11 @@ test('Dashboard presents interactive structure before data and rejects hydration
     const oldTask=runtime.state.postOpenHydrationPromise;
     assert.ok(mountedTrees.has('dashboard_bevy_ui'), 'unresolved data must not block presentation');
     const toggle = mountedTrees.get('dashboard_bevy_ui').root.children.find(node => node.id === '__eve_dashboard_sidebar_toggle');
-    assert.equal(typeof toggle?.on?.activate, 'function', 'unresolved data must not block the native sidebar control');
+    assert.ok(toggle, 'professional Dashboard keeps its own lateral-band disclosure control');
+    assert.ok(toggle.children.some(node => node.id === '__eve_dashboard_sidebar_toggle_disclosure'), 'the visible band control carries the shared disclosure glyph');
     assert.equal(runtime.state.actionHitsByNodeId.has('__eve_dashboard_header_bg_projects'), false, 'collapsed headers must not intercept input');
     await runtime.close();
+    assert.equal(mountedTrees.has('dashboard_bevy_ui'), false, 'professional close releases its projection before restoring a project');
     await runtime.open({sceneProjectId:DASHBOARD_WORKSPACE_PROJECT_ID,dataProjectId:'p'});
     await runtime.state.postOpenHydrationPromise;
     assert.equal(runtime.state.itemsByCategory.get('projects')?.[0]?.id,'new_project');

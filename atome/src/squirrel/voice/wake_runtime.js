@@ -1,26 +1,18 @@
-import { createPorcupineWakeBackend } from './wake_porcupine.js';
+import { createWakeDetectorBackend } from './wake_detector.js';
+import { runWakeEnrollment } from './wake_enrollment.js';
 
 import { normalizeAssistantPreferences } from './wake_preferences.js';
 export { normalizeAssistantPreferences } from './wake_preferences.js';
 
-// Owns device consent and standby lifecycle; profile synchronization never arms a microphone.
-export const createWakeRuntime = ({ env = globalThis, backend = createPorcupineWakeBackend({ env }),
-    signalReady = async () => {
-        const context = new env.AudioContext();
-        try {
-            await context.resume();
-            const oscillator = context.createOscillator(), gain = context.createGain();
-            oscillator.frequency.value = 880; gain.gain.value = 0.08;
-            oscillator.connect(gain); gain.connect(context.destination);
-            oscillator.start(); oscillator.stop(context.currentTime + 0.12);
-            await new Promise(resolve => { oscillator.onended = resolve; });
-        } finally { await context.close(); }
-    }
-} = {}) => {
+// Owns the standby lifecycle. The enabled profile preference arms this device: listening
+// runs in the foreground only, and an error disarms it until the preference is set again.
+// Every snapshot carries the cause of its last transition so voice surfaces can answer
+// a spoken or explicit request out loud without announcing failures at every launch.
+export const createWakeRuntime = ({ env = globalThis, backend = createWakeDetectorBackend({ env }) } = {}) => {
     const listeners = new Set(), blockers = new Set();
     let engine = null, pending = Promise.resolve(), generation = 0, disposed = false;
-    let enabled = false, armed = false, testing = false, testTimer = null, assistant = null, unsubscribe = () => {};
-    let readiness = false, captureRetry = null;
+    let enabled = false, armed = false, assistant = null, unsubscribe = () => {};
+    let captureRetry = null;
     const clearCaptureRetry = () => { if (captureRetry !== null) env.clearTimeout(captureRetry); captureRetry = null; };
     const retryCapture = () => {
         clearCaptureRetry();
@@ -35,29 +27,27 @@ export const createWakeRuntime = ({ env = globalThis, backend = createPorcupineW
     };
     const safeError = error => {
         const code = String(error?.message || '');
-        const known = ['wake_key_missing', 'wake_model_missing', 'wake_model_origin_invalid', 'wake_vault_locked',
-            'wake_principal_unavailable', 'wake_principal_changed', 'wake_capture_busy', 'wake_capture_overrun',
-            'wake_capture_failed', 'wake_engine_failed', 'wake_native_capture_unavailable', 'wake_assistant_failed', 'wake_signal_failed'];
+        const known = ['wake_model_missing', 'wake_capture_busy', 'wake_capture_overrun', 'wake_capture_failed',
+            'wake_engine_failed', 'wake_native_capture_unavailable', 'microphone_permission_denied'];
         return known.includes(code) ? code : ['NotAllowedError', 'SecurityError', 'PermissionError'].includes(error?.name) || code === 'microphone_permission_denied'
             ? 'microphone_permission_denied' : 'wake_engine_failed';
     };
-    const state = { phase: 'off', error: '', detected: false, locale: 'fr-FR', phrase: 'Ève, écoute-moi' };
-    const snapshot = () => ({ ...state, enabled, armed, testing });
+    const state = { phase: 'off', error: '', detected: false, cause: 'profile', locale: 'fr-FR', phrase: 'Ève, écoute-moi' };
+    const snapshot = () => ({ ...state, enabled, armed });
     const emit = (phase, error = '') => { state.phase = phase; state.error = error; listeners.forEach(fn => fn(snapshot())); return snapshot(); };
     const foreground = () => env.document?.visibilityState !== 'hidden';
-    const desired = () => !disposed && armed && (enabled || testing) && foreground() && !blockers.size;
+    const desired = () => !disposed && armed && enabled && foreground() && !blockers.size;
     const release = async () => { const current = engine; engine = null; await current?.close(); };
-    const cancelTest = () => { if (testTimer !== null) env.clearTimeout(testTimer); testTimer = null; testing = false; };
     const reportError = error => {
         generation++;
         if (error.message === 'wake_capture_busy') {
             blockers.add('external_capture');
             pending = pending.then(release).then(() => { emit('suspended', 'wake_capture_busy'); retryCapture(); })
-                .catch(failure => { armed = false; cancelTest(); return emit('unavailable', safeError(failure)); });
+                .catch(failure => { armed = false; return emit('unavailable', safeError(failure)); });
             return pending;
         }
         clearCaptureRetry();
-        armed = false; cancelTest();
+        armed = false;
         void engine?.close().catch(() => {});
         pending = pending.then(release).then(() => emit('unavailable', safeError(error)))
             .catch(failure => emit('unavailable', safeError(failure)));
@@ -66,17 +56,15 @@ export const createWakeRuntime = ({ env = globalThis, backend = createPorcupineW
     const detected = async token => {
         if (token !== generation || !desired() || state.phase !== 'listening') return;
         generation++; state.detected = true;
-        const testOnly = testing;
         blockers.add('activation');
         try {
             await release();
-            if (testOnly) { cancelTest(); armed = false; emit('off'); return; }
             if (!enabled || !armed || !foreground()) return;
             if (!assistant) {
                 const { bootstrapEveAssistant } = await import('../../../../eVe/voice/assistant/assistant_runtime.js');
                 api.connectAssistant(bootstrapEveAssistant({ env }));
             }
-            readiness = true;
+            state.cause = 'detection';
             emit('assistant');
             await assistant.open({ source: 'wake_phrase' });
         } catch (error) { await reportError(error); }
@@ -89,7 +77,11 @@ export const createWakeRuntime = ({ env = globalThis, backend = createPorcupineW
         pending = pending.then(async () => {
             await release();
             if (token !== generation) return snapshot();
-            if (!desired()) return emit(!enabled && !testing ? 'off' : blockers.has('assistant') ? 'assistant' : 'suspended');
+            if (!desired()) {
+                // Switched off: the engine's memory is returned; suspensions keep it for a fast resume.
+                if (!enabled || disposed) backend.release?.();
+                return emit(!enabled ? 'off' : blockers.has('assistant') ? 'assistant' : 'suspended');
+            }
             emit('starting');
             let candidate;
             try {
@@ -99,26 +91,31 @@ export const createWakeRuntime = ({ env = globalThis, backend = createPorcupineW
                 engine = candidate;
                 await candidate.start();
                 if (token !== generation || !desired()) { await release(); return snapshot(); }
+                // A later failure was not asked for by anyone: it is reported silently.
+                state.cause = 'profile';
                 return emit('listening');
             } catch (error) {
                 if (engine === candidate) await release(); else await candidate?.close();
                 if (token === generation) {
                     if (error.message === 'wake_capture_busy') { blockers.add('external_capture'); retryCapture(); return emit('suspended', error.message); }
-                    armed = false; cancelTest(); return emit('unavailable', error.message || 'wake_engine_failed');
+                    armed = false; return emit('unavailable', safeError(error));
                 }
                 return snapshot();
             }
-        }).catch(error => { armed = false; cancelTest(); return emit('unavailable', safeError(error)); });
+        }).catch(error => { armed = false; return emit('unavailable', safeError(error)); });
         return pending;
     };
     const onVisibility = () => { clearCaptureRetry(); if (blockers.has('external_capture')) retryCapture(); void reconcile(); };
     const onLogout = () => { enabled = false; void api.stop(); };
     const onProfile = event => { void api.setEnabled(normalizeAssistantPreferences(event.detail?.preferences?.assistant).voiceActivation); };
-    const onPageHide = () => { void api.stop(); };
+    // A page kept in the back/forward cache comes back armed.
+    const onPageHide = () => { void api.suspend('page_hidden'); };
+    const onPageShow = () => { void api.resume('page_hidden'); };
     const onBlur = () => { void api.suspend('window_focus'); };
     const onFocus = () => { void api.resume('window_focus'); };
     env.document?.addEventListener?.('visibilitychange', onVisibility);
     env.addEventListener?.('pagehide', onPageHide);
+    env.addEventListener?.('pageshow', onPageShow);
     env.addEventListener?.('blur', onBlur);
     env.addEventListener?.('focus', onFocus);
     env.addEventListener?.('squirrel:user-logged-out', onLogout);
@@ -127,30 +124,42 @@ export const createWakeRuntime = ({ env = globalThis, backend = createPorcupineW
     const api = {
         getState: snapshot,
         subscribe(fn) { listeners.add(fn); fn(snapshot()); return () => listeners.delete(fn); },
-        configure: config => backend.configure(config),
-        setEnabled(value) { if (enabled === (value === true)) return Promise.resolve(snapshot()); enabled = value === true; if (!enabled) { clearCaptureRetry(); blockers.delete('external_capture'); armed = false; cancelTest(); } return reconcile(); },
+        // An unchanged value keeps the current arming, so an error is not retried on every profile
+        // publication; an explicit switch ('preference') re-arms a device an error disarmed.
+        setEnabled(value, { cause = 'profile' } = {}) {
+            if (enabled === (value === true) && (cause !== 'preference' || armed || !enabled)) return Promise.resolve(snapshot());
+            enabled = armed = value === true; state.detected = false; state.cause = cause;
+            if (!enabled) { clearCaptureRetry(); blockers.delete('external_capture'); }
+            return reconcile();
+        },
         start() { if (!enabled) return Promise.reject(new Error('wake_disabled')); armed = true; state.detected = false; return reconcile(); },
-        stop() { clearCaptureRetry(); blockers.delete('external_capture'); armed = false; readiness = false; cancelTest(); return reconcile(); },
-        test() { cancelTest(); armed = true; testing = true; state.detected = false; testTimer = env.setTimeout(() => { void api.stop(); }, 30000); return reconcile(); },
+        stop() { clearCaptureRetry(); blockers.delete('external_capture'); armed = false; return reconcile(); },
         suspend(reason = 'capture') { blockers.add(reason); return reconcile(); },
         resume(reason = 'capture') { blockers.delete(reason); return reconcile(); },
+        hasPersonalModel: () => backend.hasVerifier(),
+        // Standby is suspended while enrollment owns the microphone, then restarts with the new verifier.
+        async enroll({ prompt, signal }) {
+            state.cause = 'enrollment';
+            await api.suspend('enrollment');
+            try { return await runWakeEnrollment({ backend, prompt, signal }); }
+            finally { await api.resume('enrollment'); }
+        },
         connectAssistant(value) {
             unsubscribe(); assistant = value;
             unsubscribe = assistant.subscribe(current => {
                 const wasActive = blockers.has('assistant');
-                if (current.active) blockers.add('assistant'); else blockers.delete('assistant');
-                if (readiness && current.active && current.phase === 'listening' && current.microphoneActive) {
-                    readiness = false;
-                    void signalReady().catch(error => reportError(new Error('wake_signal_failed')));
-                }
-                if (readiness && current.error) { readiness = false; void reportError(new Error('wake_assistant_failed')); }
-                if (wasActive !== current.active) void reconcile();
+                // An assistant that failed to start holds no microphone: standby listens again,
+                // so the phrase can retry. The assistant shows and speaks its own failure.
+                const holding = current.active && !(current.phase === 'error' && !current.connected && !current.microphoneActive);
+                if (holding) blockers.add('assistant'); else blockers.delete('assistant');
+                if (wasActive !== holding) void reconcile();
             });
         },
         async dispose() {
             disposed = true; await api.stop(); unsubscribe();
             env.document?.removeEventListener?.('visibilitychange', onVisibility);
             env.removeEventListener?.('pagehide', onPageHide);
+            env.removeEventListener?.('pageshow', onPageShow);
             env.removeEventListener?.('blur', onBlur);
             env.removeEventListener?.('focus', onFocus);
             env.removeEventListener?.('squirrel:user-logged-out', onLogout);
@@ -158,8 +167,8 @@ export const createWakeRuntime = ({ env = globalThis, backend = createPorcupineW
             env.removeEventListener?.('eve:profile-preferences-updated', onProfile); listeners.clear();
         }
     };
-    enabled = normalizeAssistantPreferences(env.__eveProfilePreferences?.assistant).voiceActivation;
-    state.phase = enabled ? 'suspended' : 'off';
     if (env.eveAssistantApi) api.connectAssistant(env.eveAssistantApi);
+    // Preferences not yet published leave the device off until the profile announces them.
+    if (env.__eveProfilePreferences) void api.setEnabled(normalizeAssistantPreferences(env.__eveProfilePreferences.assistant).voiceActivation);
     return api;
 };

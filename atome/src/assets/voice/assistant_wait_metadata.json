@@ -1,20 +1,20 @@
 {
-  "phrase": "Patientez.",
+  "phrase": "Attends.",
   "language": "fr-FR",
   "engine": "local_tts_worker.js",
   "model": "fr_FR-siwis-medium",
   "modelLicense": "CC-BY-4.0",
   "modelCard": "fr_FR-siwis-medium/MODEL_CARD",
   "source": "https://datashare.is.ed.ac.uk/handle/10283/2353",
-  "generatedAt": "2026-10-11",
+  "generatedAt": "2026-10-12",
   "modelSha256": "641d1ab097da2b81128c076810edb052b385decc8be3381814802a64a73baf99",
   "assets": {
     "assistant_wait_fr.json": {
-      "bytes": 407215,
-      "samples": 18944,
+      "bytes": 301704,
+      "samples": 13824,
       "sampleRate": 22050,
-      "durationMs": 859,
-      "sha256": "1ed187ad36b29d0b2b6b6519b2b2e353f6368eb9115841ae5c26b2ab2d7d38c3"
+      "durationMs": 627,
+      "sha256": "5a1ed541e5077357a1932180578c6912de079af9e082e519abfa79be8a3e525f"
     },
     "assistant_wait_beep.json": {
       "bytes": 56079,

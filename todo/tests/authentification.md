@@ -1,5 +1,13 @@
 # Authentification et accès invité
 
+## 2026-10-12 provenance notice
+
+The checklist below is retained as a historical test source. Its typed-OTP and
+initial-password steps are not current acceptance criteria for the SMS phone-link
+flow. Use [SCN-2001 and SCN-2004](collaboration_priority_scenarios.md) and
+[ATM-2001](../execution_order.md) to distinguish current SMS acceptance from the
+future optional-password evolution. No historical checkbox was revalidated here.
+
 - [ ] [Fonctionnel][Compte] Créer un compte.
 - [ ] [Fonctionnel][Invité] Accéder sans créer de compte.
 - [ ] [Fonctionnel][Compte] Cliquer sur créer un compte.

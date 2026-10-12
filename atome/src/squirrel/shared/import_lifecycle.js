@@ -3,15 +3,27 @@ import { getLocalSurfaceId } from '../apis/unified/adole_api/surfaces.js';
 import { getSessionState } from '../apis/unified/adole_api/session.js';
 import { sameImportValue } from './import_reconciliation.js';
 
+// A native book is read on one device. Contact and calendar identifiers belong
+// to the system stores and survive an app reinstall, unlike the WebView surface
+// id: both keys are stable and records seen under the device-scoped keys used
+// before Oct. 2026 (`macos_contacts/<surface>`, `native_calendar/<surface>`) are
+// adopted, never duplicated. The checkpoint (cursor) stays per device.
+const FORMERLY_DEVICE_SCOPED = new Set(['macos_contacts', 'native_calendar']);
+const sourceKeyFor = (id) => id;
+
 /** One cancellable, serialized collector per configured source and account. */
 export function createImportLifecycle({ domain, run, restore, env = globalThis, api, session = getSessionState,
     device = getLocalSurfaceId, intervalMs = 300000, recoveryVersion = '' } = {}) {
     const store = createCanonicalImport({ type: domain, api, session });
     const active = new Map();
-    let timer = null, generation = 0, disposed = false, resuming = null;
-    const notify = (source_id, result) => {
+    let timer = null, generation = 0, disposed = false, resuming = null, owner = null;
+    // Seulement les pages qui ont ecrit quelque chose (et les echecs) : un cycle sans
+    // nouveaute (retour au premier plan, minuterie) ne fait relire ni le Dashboard ni
+    // le Calendrier. `changed` null = inconnu, donc annonce.
+    const notify = (source_id, result, changed = null) => {
+        if (result?.ok === true && changed === 0) return;
         if (env.dispatchEvent && env.CustomEvent) env.dispatchEvent(new env.CustomEvent('squirrel:import-updated', { detail: {
-            domain, source_id, ok: result?.ok === true, error: result?.ok === false ? result.error : null
+            domain, source_id, ok: result?.ok === true, error: result?.ok === false ? result.error : null, changed
         } }));
     };
     const cycle = (id, options = {}) => {
@@ -34,11 +46,12 @@ export function createImportLifecycle({ domain, run, restore, env = globalThis, 
                 if (recovering === null) recovering = startRecovery;
                 const cursor = startRecovery ? null : (props.cursor ?? null);
                 result = await run(id, { ...entry.config, ...options, source_key: entry.sourceKey,
+                    ...(FORMERLY_DEVICE_SCOPED.has(id) && !entry.config.source_key ? { legacy_source_prefix: `${id}/` } : {}),
                     device_id: entry.deviceId, cursor, incremental: cursor != null,
                     ...(recovering ? { restore_suppressed: true } : {}),
                     signal: entry.controller.signal, checkSession: context.check });
                 context.check();
-                if (currentGeneration === generation) notify(id, result);
+                if (currentGeneration === generation) notify(id, result, typeof result?.changed === 'number' ? result.changed : null);
                 if (result?.ok === true && result.more === true) entry.pending = true;
                 else if (result?.ok === true && recovering) {
                     const rows = await store.list(IMPORT_SOURCE_TYPE, context);
@@ -67,14 +80,16 @@ export function createImportLifecycle({ domain, run, restore, env = globalThis, 
             if (entry.debounce) clearTimeout(entry.debounce);
         }
         active.clear();
+        owner = null;
         if (timer) clearInterval(timer);
         timer = null;
     };
     const install = async (id, config, context) => {
         const deviceId = device();
-        const sourceKey = String(config.source_key || (['macos_contacts', 'native_calendar'].includes(id) ? `${id}/${deviceId}` : id));
+        const sourceKey = String(config.source_key || sourceKeyFor(id, deviceId));
         const checkpointId = `source_${await importIdentity([context.owner, domain, sourceKey, deviceId])}`;
         context.check();
+        owner = context.owner;
         const existing = active.get(id);
         if (existing && existing.sourceKey === sourceKey) { existing.config = config; return existing; }
         if (existing) existing.controller.abort();
@@ -125,7 +140,15 @@ export function createImportLifecycle({ domain, run, restore, env = globalThis, 
                 if (!props.enabled || props.domain_type !== domain || props.device_id !== device()) continue;
                 await restore?.(props.source_id, props.config || {});
                 context.check();
-                await install(props.source_id, props.config || {}, context);
+                const entry = await install(props.source_id, props.config || {}, context);
+                // A checkpoint written under a former key moves to the current one
+                // (without its cursor: one full read adopts the former records).
+                if (importRecordId(row) !== entry.checkpointId) {
+                    const current = importRecordProps(rows.find(other => importRecordId(other) === entry.checkpointId));
+                    await store.write(entry.checkpointId, IMPORT_SOURCE_TYPE, { recovery: props.recovery, ...current, domain_type: domain,
+                        source_key: entry.sourceKey, source_id: props.source_id, device_id: entry.deviceId, enabled: true, config: props.config || {} }, context);
+                    await store.write(importRecordId(row), IMPORT_SOURCE_TYPE, { ...props, enabled: false }, context);
+                }
                 void cycle(props.source_id);
             }
         })().catch(error => { if (resumeGeneration === generation) notify(null, { ok: false, error: 'import_resume_failed' }); })
@@ -133,7 +156,9 @@ export function createImportLifecycle({ domain, run, restore, env = globalThis, 
         return resuming;
     };
     const onResume = () => { void resume(); for (const id of active.keys()) void cycle(id); };
-    const onLogin = () => {
+    const onLogin = event => {
+        // A token renewal re-announces the same account: its imports go on.
+        if (active.size && owner && String(event?.detail?.userId ?? '') === owner) return;
         const previousResume = resuming;
         stopRuntime();
         if (previousResume) void previousResume.finally(() => resume());

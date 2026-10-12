@@ -1,0 +1,11 @@
+"$schema" = "schemas/schema.json"
+
+[[set]]
+identifier = "assistant-link"
+description = "Lets the main webview take the assistant request opened by the atome://assistant link."
+permissions = ["allow-assistant-request-take"]
+
+[[permission]]
+identifier = "allow-assistant-request-take"
+description = "Enables the assistant_request_take command."
+commands.allow = ["assistant_request_take"]

@@ -22,6 +22,7 @@ import {
     wsSendJsonToSurface
 } from './wsApiState.js';
 import { hasSurfaceCapability } from './surfaceGrants.js';
+import { failRemoteCommandsForSurface, relayRemoteCommand, settleRemoteCommand } from './remoteCommandRelay.js';
 import { wsResponse, wsErrorResponse } from './wsResponse.js';
 
 // Family-bound aliases over the shared envelope (server/wsResponse.js).
@@ -31,7 +32,7 @@ const errorResponse = (message, error) => wsErrorResponse('remote-control', mess
 
 const SUPPORTED_ACTIONS = new Set([
     'request', 'grant', 'deny', 'revoke', 'list', 'pointer', 'gesture', 'key',
-    'preview-request', 'preview-frame', 'preview-stop'
+    'preview-request', 'preview-frame', 'preview-stop', 'command', 'command-result'
 ]);
 
 // Input kinds a controller may send. Anything else is refused rather than forwarded:
@@ -340,6 +341,13 @@ export async function handleWsRemoteControlOperation(message, connection) {
         if (action === 'preview-request') return handlePreviewRequest(message, connection, userId);
         if (action === 'preview-frame') return handlePreviewFrame(message, connection, userId);
         if (action === 'preview-stop') return handlePreviewStop(message, connection, userId);
+        // One-shot commands (remoteCommandRelay.js): no session, authorized per command.
+        if (action === 'command' || action === 'command-result') {
+            const outcome = action === 'command'
+                ? await relayRemoteCommand(message, connection, userId)
+                : settleRemoteCommand(message, connection, userId);
+            return response(message, !outcome.error, { ...(outcome.fields || {}), ...(outcome.error ? { error: outcome.error } : {}) });
+        }
         if (action === 'grant') {
             // Reserved for the cross-user flow: same-account sessions are granted on
             // request, so an explicit grant here would have nothing to approve.
@@ -358,6 +366,7 @@ export function handleRemoteControlSurfaceLoss({ userId, surfaceId } = {}) {
     const lost = normalizeSurfaceId(surfaceId);
     const principalId = String(userId || '');
     if (!lost || !principalId) return [];
+    failRemoteCommandsForSurface({ userId: principalId, surfaceId: lost });
     const ended = [];
     for (const [sessionId, session] of [...sessions.entries()]) {
         const involved = (session.controllerUserId === principalId && session.controllerSurfaceId === lost)

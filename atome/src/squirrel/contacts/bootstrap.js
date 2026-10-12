@@ -108,7 +108,7 @@ export const createGlobalContactsApi = ({
         recoveryVersion: 'contacts_replace_loss_2026_10',
         run: async (id, options) => {
             const result = await getOrCreateService(env).importSource(id, options);
-            if (result.ok) dispatchPeopleDirectoryUpdated(env);
+            if (result.ok && result.changed !== 0) dispatchPeopleDirectoryUpdated(env);
             return result;
         },
         restore: async (id, options) => {
@@ -272,6 +272,12 @@ export const createGlobalContactsApi = ({
         async deleteLocalContact(contactId, options = {}) {
             const result = await getOrCreateService(env).deleteLocalContact(contactId, options);
             if (result?.ok === true) dispatchPeopleDirectoryUpdated(env, { action: 'delete', contact_id: contactId });
+            return result;
+        },
+        // Explicit only (contacts.merge_duplicates): never run by an import or at boot.
+        async mergeDuplicates() {
+            const result = await getOrCreateService(env).mergeDuplicateContacts();
+            if (result?.ok === true) dispatchPeopleDirectoryUpdated(env, { action: 'merge', merges: result.merges });
             return result;
         },
         search(query, options = {}) {

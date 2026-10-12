@@ -1,4 +1,5 @@
 const WORD_EXCEPTIONS = Object.freeze({
+    attends: ['a', 't', 'ɑ', '̃'],
     au: ['o'],
     aux: ['o'],
     bonjour: ['b', 'ɔ', '̃', 'ʒ', 'u', 'ʁ'],

@@ -38,8 +38,13 @@ the established solution before attempting a new implementation.
 | A12-class iPad shows a uniform grey canvas while boot states read "ready" | [ipad-a12-grey-canvas-storage-limit](ipad-a12-grey-canvas-storage-limit/README.md) |
 | A panel keeps its first frame ("Chargement des contacts") and ignores taps; console repeats `bevy_media_texture_fetch_failed:404` | [panel-frozen-by-missing-image](panel-frozen-by-missing-image/README.md) |
 | iOS launch shows "Le démarrage continue…" for 10-20 s when the server does not answer | [ios-boot-server-await](ios-boot-server-await/README.md) |
+| iPhone assistant answers nothing and shows nothing although the app looks signed in | [ios-assistant-silent-dead-remote-session](ios-assistant-silent-dead-remote-session/README.md) |
 | Dashboard rows (contacts, appointments, health) vanish and come back at boot | [dashboard-lane-flicker](dashboard-lane-flicker/README.md) |
 | Many contacts missing for good, photos missing, editing one contact deletes others | [contacts-lost-by-global-replace](contacts-lost-by-global-replace/README.md) |
+| A new device or reinstalled browser restores nothing; re-imports duplicate contacts/appointments; old duplicate cards remain (merge on request) | [new-device-restores-nothing](new-device-restores-nothing/README.md) |
+| Contact favorites lost; Dashboard rows reload/flicker each visit; one heart shows a person several times | [home-panel-save-erases-favorites](home-panel-save-erases-favorites/README.md) |
+| Project → Dashboard pauses then snaps to the wallpaper | [dashboard-transition-jump](dashboard-transition-jump/README.md) |
+| Native contacts import stops after ~14 min or after a kill, then a reinstall duplicates the book | [contacts-import-interrupted-and-duplicated](contacts-import-interrupted-and-duplicated/README.md) |
 | iOS launch keeps "Le démarrage continue…" over a Dashboard entry or a late Main Toolbar mount | [ios-boot-presentation-contract](ios-boot-presentation-contract/README.md) |
 | A long press in a panel input box closes the field, the keyboard and the layout on finger lift | [ios-panel-input-fast-tap-blur](ios-panel-input-fast-tap-blur/README.md) |
 | iOS freezes after a rotation: the old frame is stretched, the bottom band stops answering and every tool raises the keyboard | [ios-rotation-freeze](ios-rotation-freeze/README.md) |

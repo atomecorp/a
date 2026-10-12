@@ -58,7 +58,14 @@ extension WebViewManager {
         AudioSchemeHandler.resetBootMetrics()
     }
 
+    // The page can outlive a window (CarPlay boots it windowless): a window that
+    // attaches after the presentation must neither wait for it nor report a stall.
+    static var bootPresented: Bool {
+        bootMilestones["presentation_ready"] != nil || bootMilestones["authentication_ready"] != nil
+    }
+
     static func startBootWatchdog() {
+        guard !bootPresented else { return }
         bootWatchdog.start { reportBootStall() }
     }
 
@@ -114,6 +121,7 @@ extension WebViewManager {
     ) {
         bootPresentationHandler = onReady
         bootFailureHandler = onFailure
+        if bootPresented { DispatchQueue.main.async { onReady([:]) } }
     }
 
     static func handleBootPresentationReady(_ body: [String: Any]) {

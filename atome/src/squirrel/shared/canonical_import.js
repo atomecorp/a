@@ -19,18 +19,45 @@ export async function importIdentity(parts) {
 }
 
 /** Durable import bookkeeping uses the same private Atomes as domain objects. */
+// Fusion d'une observation dans une fiche deja presente (meme identite metier) :
+// ce qui est deja rempli gagne (les modifications de l'utilisateur), le vide est
+// complete, les listes (numeros, e-mails…) sont reunies sans doublon.
+const LIST_IDENTITY = entry => JSON.stringify(entry && typeof entry === 'object' ? (entry.value ?? entry) : entry);
+const preferExisting = (current = {}, incoming = {}) => {
+    const out = { ...current };
+    for (const [key, value] of Object.entries(incoming)) {
+        const existing = current[key];
+        if (Array.isArray(value) && Array.isArray(existing)) {
+            const seen = new Set(existing.map(LIST_IDENTITY));
+            out[key] = [...existing, ...value.filter(entry => !seen.has(LIST_IDENTITY(entry)))];
+        } else if (existing === undefined || existing === null || existing === '' || (Array.isArray(existing) && !existing.length)) out[key] = value;
+    }
+    return out;
+};
+
+export { preferExisting as preferExistingImportValues };
+
 export function createCanonicalImport({ type, api = () => globalThis.window?.Atome || globalThis.Atome,
-    session = getSessionState, normalize = value => value } = {}) {
+    session = getSessionState, normalize = value => value,
+    // Identite metier d'une fiche (ex. numeros E.164 d'un contact) : une observation
+    // nouvelle qui partage une cle avec une fiche vivante est fusionnee dedans au lieu
+    // de creer un doublon (import repete, autre appareil, autre carnet).
+    identityKeys = null,
+    // Fusion d'une observation dans la fiche reprise par identite (defaut : ce qui
+    // est rempli gagne, le vide est complete, les listes sont reunies).
+    mergeIntoExisting = preferExisting } = {}) {
     const fieldGroups = type === 'calendar_event'
         ? [['start', 'end', 'timezone', 'all_day', 'recurrence', 'recurrence_id', 'exdates', 'rdates', 'icalendar']]
         : type === 'contact' ? [['phone', 'phones'], ['email', 'emails']] : [];
     const capture = () => {
         const state = session();
         if (state?.mode !== 'authenticated' || !state.user?.id) throw new Error('import_authenticated_owner_required');
-        const owner = String(state.user.id), stamp = state.updatedAt;
+        // Identity, not freshness: iOS/Tauri renew the local token of the same
+        // account every 14 min (new `updatedAt`), which aborted every long import.
+        const owner = String(state.user.id);
         const check = () => {
             const active = session();
-            if (active?.mode !== 'authenticated' || String(active.user?.id) !== owner || active.updatedAt !== stamp) throw new Error('import_session_changed');
+            if (active?.mode !== 'authenticated' || String(active.user?.id) !== owner) throw new Error('import_session_changed');
         };
         const store = api();
         if (!store?.commit || !store?.listStateCurrent) throw new Error('canonical_import_api_unavailable');
@@ -66,13 +93,55 @@ export function createCanonicalImport({ type, api = () => globalThis.window?.Ato
             input.source_collection || input.raw?.source_collection || '', externalId, occurrence])}`;
         return { externalId, occurrence, originId };
     };
-    const resolveIds = async (items, source) => {
-        const context = capture(), origins = await list(IMPORT_ORIGIN_TYPE, context);
-        const rows = origins.map(importRecordProps).filter(props => props.domain_type === type && props.source_key === source);
-        const ids = new Map(rows.map(props => [props.external_id, props.canonical_id]));
+    // A native book keeps its record identifiers across app reinstalls, while
+    // the device-scoped key it was first imported under does not: a record
+    // observed under a former key of the same book is adopted, never duplicated.
+    // Former origins are found by their external identity; their ids cannot be
+    // recomputed (older ones were hashed with another owner id).
+    const formerOrigins = (byOrigin, source, prefix) => {
+        const index = new Map();
+        if (!prefix) return index;
+        for (const props of [...byOrigin.values()].sort((a, b) => String(a.source_key).localeCompare(String(b.source_key)))) {
+            if (props.domain_type !== type || props.source_key === source || !String(props.source_key).startsWith(prefix)) continue;
+            const key = JSON.stringify([props.source_collection || '', props.external_id, props.recurrence_id || '']);
+            index.set(key, [...(index.get(key) || []), props]);
+        }
+        return index;
+    };
+    const identityIndex = (records) => {
+        const index = new Map();
+        if (typeof identityKeys !== 'function') return index;
+        for (const row of records) {
+            if (importRecordDeleted(row)) continue;
+            for (const keyValue of identityKeys(importRecordProps(row)) || []) if (keyValue && !index.has(keyValue)) index.set(keyValue, importRecordId(row));
+        }
+        return index;
+    };
+    const matchIdentity = (props, index) => {
+        if (typeof identityKeys !== 'function') return null;
+        for (const keyValue of identityKeys(props) || []) if (keyValue && index.has(keyValue)) return index.get(keyValue);
+        return null;
+    };
+    const adopt = (input, { externalId, occurrence }, former, byId) => {
+        const candidates = former.get(JSON.stringify([input.source_collection || input.raw?.source_collection || '', externalId, occurrence])) || [];
+        const live = candidates.find(props => byId.has(props.canonical_id) && !importRecordDeleted(byId.get(props.canonical_id)));
+        return live || candidates[0] || null;
+    };
+    const resolveIds = async (items, source, { legacy_source_prefix: prefix } = {}) => {
+        const context = capture();
+        const [records, origins] = await Promise.all([prefix || identityKeys ? list(type, context) : [], list(IMPORT_ORIGIN_TYPE, context)]);
+        const byId = new Map(records.map(row => [importRecordId(row), row]));
+        const byIdentity = identityIndex(records);
+        const byOrigin = new Map(origins.map(row => [importRecordId(row), importRecordProps(row)]));
+        const former = formerOrigins(byOrigin, source, prefix);
+        // Group members absent from a delta keep their known ids.
+        const ids = new Map([...byOrigin.values()].filter(props => props.domain_type === type && props.source_key === source)
+            .map(props => [props.external_id, props.canonical_id]));
         for (const input of items) {
-            const { externalId, originId } = await identify(input, source, context);
-            ids.set(externalId, rows.find(props => props.external_id === externalId)?.canonical_id || `${type}_${originId.slice(7)}`);
+            const identity = await identify(input, source, context);
+            const old = byOrigin.get(identity.originId) || adopt(input, identity, former, byId);
+            const matched = old ? null : matchIdentity(importData(normalize(input)), byIdentity);
+            ids.set(identity.externalId, old?.canonical_id || matched || `${type}_${identity.originId.slice(7)}`);
         }
         context.check(); return ids;
     };
@@ -88,15 +157,20 @@ export function createCanonicalImport({ type, api = () => globalThis.window?.Ato
         const [records, origins] = await Promise.all([list(type, context), list(IMPORT_ORIGIN_TYPE, context)]);
         const byId = new Map(records.map(row => [importRecordId(row), row]));
         const byOrigin = new Map(origins.map(row => [importRecordId(row), importRecordProps(row)]));
-        let changed = 0, skipped = 0;
+        const former = formerOrigins(byOrigin, source, meta.legacy_source_prefix);
+        const byIdentity = identityIndex(records);
+        let changed = 0, skipped = 0, merged_into_existing = 0;
         for (const input of items) {
             context.check();
             meta.checkSession?.();
             if (meta.signal?.aborted) throw new Error('import_cancelled');
-            const { externalId, occurrence, originId } = await identify(input, source, context);
-            const old = byOrigin.get(originId);
+            const identity = await identify(input, source, context), { externalId, occurrence, originId } = identity;
+            const old = byOrigin.get(originId) || adopt(input, identity, former, byId);
+            // Jamais vu sous aucune cle : une fiche vivante de meme identite metier
+            // (meme numero…) le recoit, sans doublon.
+            const matched = old ? null : matchIdentity(importData(normalize(input)), byIdentity);
             // Deterministic reservation also survives simultaneous observations on two devices.
-            const recordId = old?.canonical_id || `${type}_${originId.slice(7)}`;
+            const recordId = old?.canonical_id || matched || `${type}_${originId.slice(7)}`;
             let record = byId.get(recordId);
             // Seule une suppression demandee par l'utilisateur fait foi. Une
             // reecriture globale (`replace`) sur un cache incomplet a supprime des
@@ -122,13 +196,17 @@ export function createCanonicalImport({ type, api = () => globalThis.window?.Ato
                 source_key: source, external_id: externalId, recurrence_id: occurrence, pending: true, baseline: normalized,
                 source_collection: input.source_collection || input.raw?.source_collection || '',
                 external_href: externalHref(input) }, context);
-            const merged = old && record ? reconcileImport(current, old.baseline, normalized, old.conflicts, fieldGroups) : { properties: normalized, conflicts: {} };
+            const merged = old && record ? reconcileImport(current, old.baseline, normalized, old.conflicts, fieldGroups)
+                : matched && record ? { properties: mergeIntoExisting(current, normalized, { recordId }), conflicts: {} }
+                    : { properties: normalized, conflicts: {} };
+            if (matched && record) merged_into_existing += 1;
             const next = { ...merged.properties, access: 'private', visibility: 'private',
                 exchange_uid: current.exchange_uid || input.uid || input.exchange_uid || recordId };
             if (!record || !sameImportValue(current, next)) {
                 await write(recordId, type, next, context);
                 const stored = { atome_id: recordId, owner_id: context.owner, properties: next };
                 byId.set(recordId, stored);
+                for (const keyValue of (typeof identityKeys === 'function' ? identityKeys(next) : null) || []) if (keyValue && !byIdentity.has(keyValue)) byIdentity.set(keyValue, recordId);
                 changed += 1;
             }
             const origin = { canonical_id: recordId, domain_type: type, source_key: source, external_id: externalId,
@@ -160,7 +238,7 @@ export function createCanonicalImport({ type, api = () => globalThis.window?.Ato
                 coverage: meta.coverage || null };
             if (!sameImportValue(importRecordProps(prior), checkpoint)) await write(checkpointId, IMPORT_SOURCE_TYPE, checkpoint, context);
         }
-        return { ok: true, imported: items.length, changed, skipped, durability: 'canonical_commit',
+        return { ok: true, imported: items.length, changed, skipped, merged_into_existing, durability: 'canonical_commit',
             correspondences: [...byOrigin.values()].filter(p => p.domain_type === type && p.source_key === source),
             local_persisted: true, remote_acknowledgement: 'not_observed', replication: 'existing_pipeline',
             items: [...byId.values()].filter(row => !importRecordDeleted(row)) };

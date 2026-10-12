@@ -1,0 +1,39 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "Talk to ${applicationName}": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passe-moi ${applicationName}"
+          }
+        }
+      }
+    },
+    "Open the ${applicationName} assistant": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvre l'assistant ${applicationName}"
+          }
+        }
+      }
+    },
+    "Start the ${applicationName} assistant": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lance l'assistant ${applicationName}"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

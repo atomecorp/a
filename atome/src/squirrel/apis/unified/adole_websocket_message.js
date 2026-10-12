@@ -32,7 +32,18 @@ const PUSH_EVENTS = {
     'remote-control-ended': remoteControlDetail,
     'remote-control-preview-request': remoteControlDetail,
     'remote-control-preview-frame': remoteControlDetail,
-    'remote-control-preview-stopped': remoteControlDetail
+    'remote-control-preview-stopped': remoteControlDetail,
+    'remote-control-command': message => ({
+        commandId: message.command_id || null,
+        toolId: message.tool_id || null,
+        toolAction: message.tool_action || null,
+        input: message.input || {},
+        confirmed: message.confirmed === true,
+        fromSurfaceId: message.from_surface_id || null,
+        fromUserId: message.from_user_id || null,
+        fromLabel: message.from_label || null,
+        timestamp: message.timestamp || null
+    })
 };
 
 PUSH_EVENTS['share-invitation'] = (message) => {
@@ -123,9 +134,12 @@ const RESPONSE_PAYLOADS = {
         session: message.session,
         localSession: message.localSession,
         users: message.users,
-        localSession: message.localSession,
         sessions: message.sessions,
-        delivered: message.delivered
+        delivered: message.delivered,
+        commandId: message.command_id,
+        targetSurfaceId: message.target_surface_id,
+        targetLabel: message.target_label,
+        result: message.result
     }),
     'teleport-response': (message) => ({
         atomeId: message.atome_id,

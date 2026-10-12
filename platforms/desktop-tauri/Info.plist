@@ -2,6 +2,17 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>com.squirrel.desktop.assistant</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>atome</string>
+            </array>
+        </dict>
+    </array>
     <key>NSMicrophoneUsageDescription</key>
     <string>eVe a besoin du microphone pour t ecouter et transcrire ta voix.</string>
     <key>NSSpeechRecognitionUsageDescription</key>

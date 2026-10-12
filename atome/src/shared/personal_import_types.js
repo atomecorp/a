@@ -12,12 +12,12 @@ export const PERSONAL_IMPORT_TYPES = [
         ...fields('name color timezone description created_iso updated_iso exchange_uid calendar_scope', 'string'), ...privateFields
     } },
     { type: 'import_origin', kind: 'data_model', schema: {
-        ...fields('canonical_id domain_type source_key external_id recurrence_id source_collection external_href', 'string'),
+        ...fields('canonical_id domain_type source_key external_id recurrence_id source_collection external_href suppressed_reason', 'string'),
         ...fields('pending removed suppressed', 'boolean'), baseline: { type: 'object' }, conflicts: { type: 'object' },
         external_version: {}, ...privateFields
     } },
     { type: 'import_source_state', kind: 'data_model', schema: {
-        ...fields('domain_type source_key source_id device_id exchange_uid', 'string'), enabled: { type: 'boolean' },
+        ...fields('domain_type source_key source_id device_id exchange_uid recovery', 'string'), enabled: { type: 'boolean' },
         config: { type: 'object' }, coverage: { type: 'object' }, cursor: {}, ...privateFields
     } }
 ];

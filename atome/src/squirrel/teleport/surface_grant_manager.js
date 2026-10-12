@@ -16,7 +16,10 @@ export const SURFACE_CAPABILITIES = Object.freeze({
     TELEPORT_PERSIST: 'teleport_persist',
     TELEPORT_RETURN: 'teleport_return',
     REMOTE_POINTER: 'remote_pointer',
-    REMOTE_SURFACE: 'remote_surface'
+    REMOTE_SURFACE: 'remote_surface',
+    // Running one canonical tool on the surface (remoteCommandRelay.js). Separate from
+    // the pointer: being allowed to move a cursor is not being allowed to act.
+    REMOTE_COMMAND: 'remote_command'
 });
 
 const isAuthenticated = () => getSessionState()?.mode === 'authenticated';
