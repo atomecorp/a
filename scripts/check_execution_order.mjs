@@ -13,6 +13,7 @@ const ALLOWED_PHASE_STATUSES = new Set([
 ]);
 const ADMINISTRATIVE_CHECKBOX_RE = /^(?:completed|non commencee?s?|partiellement commencee|terminee?)\.?$/i;
 const TODO_REFERENCE_RE = /\b(?:todo|done|maps)\/(?:(?:[A-Za-z0-9_.-]+(?: [A-Za-z0-9_.-]+)*\/)*[A-Za-z0-9_.-]+(?: [A-Za-z0-9_.-]+)*\.md|(?:[A-Za-z0-9_.-]+(?: [A-Za-z0-9_.-]+)*\/)+)/g;
+const QUOTED_REFERENCE_RE = /`((?:todo|done|maps)\/[^`\r\n]+)`/g;
 
 const normalizePath = (value = '') => String(value).replace(/\\/g, '/').replace(/[),.;:]+$/g, '');
 const normalizeTask = (value = '') => String(value)
@@ -74,7 +75,12 @@ export const inspectExecutionOrder = ({
     const absoluteOrderPath = path.resolve(rootDir, orderPath);
     const text = fs.readFileSync(absoluteOrderPath, 'utf8');
     const checkboxes = parseCheckboxes(text);
-    const references = Array.from(new Set((text.match(TODO_REFERENCE_RE) || []).map(normalizePath)));
+    const quotedReferences = Array.from(text.matchAll(QUOTED_REFERENCE_RE), (match) => match[1]);
+    const plainText = text.replace(QUOTED_REFERENCE_RE, '');
+    const references = Array.from(new Set([
+        ...quotedReferences,
+        ...(plainText.match(TODO_REFERENCE_RE) || [])
+    ].map(normalizePath)));
     const errors = [];
 
     const taskLocations = new Map();

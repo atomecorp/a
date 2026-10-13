@@ -33,9 +33,14 @@ export const createWakeFeatureStream = ({ ort, melSession, embeddingSession, sil
     const mel = new Float32Array(MEL_WINDOW_FRAMES * MEL_BINS).fill(1);
     const embeddings = new Float32Array(WAKE_WINDOW_SIZE);
     let filled = 0, floor = null, quietFrames = 0;
+    // Loudest frame of the last second: a phrase spoken to the device stands far above the
+    // room, an ambient or distant sound does not (wake_classifier.js#createWakeTrigger).
+    const recent = new Float32Array(GATE_HOLD_FRAMES + 1);
+    let recentIndex = 0;
 
     const quiet = (frame) => {
         const rms = Math.max(GATE_MIN_RMS, frameRms(frame));
+        recent[recentIndex] = rms; recentIndex = (recentIndex + 1) % recent.length;
         floor = floor === null || rms < floor ? rms : floor + (rms - floor) * GATE_FLOOR_RISE;
         quietFrames = rms <= floor * GATE_RATIO ? quietFrames + 1 : 0;
         return silenceGate && filled === WAKE_WINDOW_EMBEDDINGS && quietFrames > GATE_HOLD_FRAMES;
@@ -66,6 +71,8 @@ export const createWakeFeatureStream = ({ ort, melSession, embeddingSession, sil
         return filled === WAKE_WINDOW_EMBEDDINGS ? embeddings.slice() : null;
     };
 
-    const reset = () => { melInput.fill(0); mel.fill(1); embeddings.fill(0); filled = 0; floor = null; quietFrames = 0; };
-    return Object.freeze({ push, reset });
+    const reset = () => { melInput.fill(0); mel.fill(1); embeddings.fill(0); filled = 0; floor = null; quietFrames = 0; recent.fill(0); recentIndex = 0; };
+    // How far the loudest recent frame rises above the tracked noise floor.
+    const voiceRatio = () => (floor ? Math.max(...recent) / floor : 0);
+    return Object.freeze({ push, reset, voiceRatio });
 };

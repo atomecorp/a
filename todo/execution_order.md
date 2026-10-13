@@ -1,24 +1,24 @@
 # Canonical execution order — atome / eVe
 
-Updated: 2026-10-12. Read [root AGENTS.md](../AGENTS.md) and its applicable modules before work. This register is the sole authority for task sequencing and scope; source documents, prompts and archived checkboxes cannot authorize implementation. The current mandate is documentary triage only. Product execution still requires its own user request and the project's internal-component gates.
+Updated: 2026-10-13. Read [root AGENTS.md](../AGENTS.md) and its applicable modules before work. This register is the sole authority for task sequencing and scope; source documents, prompts and archived checkboxes cannot authorize implementation. The current mandate is documentary triage only. Product execution still requires its own user request and the project's internal-component gates.
 
 Start with [README](README.md). [Source classification](migration/spring_git_cleanup_sources.md) owns provenance only. [Previous register](../done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md) preserves all former tasks and evidence claims without a second active state ledger. No historic task was silently certified, abandoned or deleted. Its 76/161 checked boxes are historical declarations, not a current product-completion percentage.
 
 ## Evidence baseline
 
-Parent HEAD inspected: `e805920a258f32fbcbda3cd4294ec0ac238e2f3c`. eVe HEAD: `1dc2eab20e6e9071245f45623aadcf872bd3fd48`, read-only. Both working trees already contain unrelated local changes, so observations of current files do not prove they belong to either commit. No fetch or product test campaign was run for this quick triage.
+Continuation baseline: parent `1241535281747379b9b177bfec0efde27dcabe83`; eVe `6ac91ece0a58ba2b695380738dac79271d39a9f8`. Both repositories are on main. The earlier e805920a/1dc2eab2 inspection is retained as historical evidence. A concurrent commit included the earlier triage and raw export; the user explicitly requested its preservation/publication on main. The repair was published before this continuation. Subsequent cleanup edits remain local, without staging, commit, push or further remote operations. No product test campaign is run.
 
 Advancement and verification are independent. `Partial` means an observed subset exists with a remainder; `Unknown` means insufficient inspection. `Code observed`, historical reports and present test files never mean tested or delivered. Every task below is open; all current runtime verification is **Not run**. Reuse existing scenarios/probes before creating new tests. Checked boxes require an explicit dated closure record, criteria and evidence.
 
 ## Order and task contracts
 
-All task records below: domain as stated; repository parent a with eVe consumers read-only for this mission; platforms Web, Tauri and iOS (iPad first); priority P0 for the prerequisite/collaboration chain, P1 for deferred requalification; controlled 2026-10-12. Canonical Atome state, shared Bevy/WebGPU rendering, WebSocket /ws/api and /ws/sync, and the single durable mutation route remain mandatory. No new dependency, API or internal brick is authorized by this list.
+All task records below: domain as stated; repository parent a with eVe consumers read-only for this mission; platforms Web, Tauri and iOS (iPad first); priority P0 for the prerequisite/collaboration chain, P1/P2 for the deferred packages; controlled 2026-10-12. Canonical Atome state, shared Bevy/WebGPU rendering, WebSocket /ws/api and /ws/sync, and the single durable mutation route remain mandatory. No new dependency, API or internal brick is authorized by this list.
 
 Dependencies on ATM-2001 require its current SMS/security acceptance only. Keep the
 same authentication workstream open for its future optional-password requirement,
 which does not block collaboration. SCN-2004 remains a future specification until
 that feature exists; it is not part of the current collaboration acceptance gate.
-The nine open entries describe this priority queue, not the whole product's
+The open entries describe this consolidated backlog, not the whole product's
 completion percentage. Allocate new IDs without renumbering existing ones.
 
 ### Phase 1 — Security and identity prerequisites
@@ -77,15 +77,73 @@ Actif
 
   Need/domain: reproducible evidence for real users / acceptance. Advancement: Remaining consolidation and execution. Verification: Not run. Sources: todo/tests/, imported Extensive Test variants and Todo/Next Task.md. Depends on: ATM-2001 through ATM-2005; ATM-2008 before reset/reinstall scenarios, ATM-2006 for communication-specific runs. Next: consolidate decisive scenario variants into the existing test family, preserving unique requirements, then prepare isolated atome.one accounts and real clients. Exit: Web/Tauri/iPad matrix with real gestures, logs/pixels where applicable, results dated against SHA/build, explicit blocked/not-run cells and iPhone-only exceptions. Keep scenarios after bugs are closed. Scenarios: SCN-2001 through SCN-2004 plus the existing permanent corpus.
 
-- [ ] ATM-2009 — Requalify the next deferred package after the collaboration prerequisites and gates.
+### Phase 5 — Consolidated remaining creation and maintenance packages
 
-  Need/domain: resume UI/media/AI/product work in a coherent order / backlog qualification. Priority: P1. Advancement: Unknown until the package is selected; historical completion remains attributed. Verification: Not run. Sources: historical register, specification families below and source index. Depends on: priority collaboration chain sufficiently stable and explicit selection of a package. Next: choose the next existing package, inspect canonical owners and its historical evidence, then refine this register rather than creating a second task ledger. Exit: the chosen package has bounded criteria, dependencies, platforms and applicable validation. This triage does not implement or certify the deferred backlog.
+Status:
+
+Specification
+
+- [ ] ATM-2009 — Finish remaining shared BevyUI/panel acceptance and real platform interactions.
+
+  Domain: Shared UI and platform acceptance; repository/platforms/date follow the common contract above. Priority: P1. Advancement: Partial. Verification: Not run in this triage. Already present: The canonical panel/list/editing/virtual-window owners and many completed panel compositions already exist. Do not recreate Contact/Home/Calendar/Finder or retired HTML routes. Remaining/exit contract: Keep package-specific approval, remaining panel/legacy-route gaps, Matrix Flower target actions, clipboard native gestures, page/drag/lasso and Dashboard rounding/native acceptance. Sources: todo/ui_bevy/bevy_panel_migration_guide.md; todo/ui_bevy/component_convergence.md; done/spring_git_cleanup_2026-10-12/clipboard_host_bridge_2026-09-10.md; todo/UI refactor.md. Evidence: eVe/intuition/runtime/bevy_panel/bevy_panel_virtual_window.js and bevy_panel_text_editing.js; historical approvals in FRAMEWORK_STATE, inspected selectively rather than revalidated. Depends on: ATM-2002; collaboration-dependent panels after ATM-2004. Next: Read the current panel ledger, remove delivered subpackages, then exercise only its remaining real interactions.
+
+- [ ] ATM-2010 — Complete Molecule/audio-video/export and page-media remainders.
+
+  Domain: Molecule, AV and export; repository/platforms/date follow the common contract above. Priority: P1. Advancement: Partial. Verification: Not run in this triage. Already present: Recording/page/action capture/template foundations exist; 29 checked implementation sub-items in four archived reports are removed from creation work. Remaining/exit contract: Retain AUv3 plugin_input/physical capture gates, professional export profiles/package/archive/delivery, realtime-thread disk/allocation cleanup, page-members-outside-frame and the historical WebAssembly clip-build limitation until reverified. Sources: todo/molecule/; todo/media_handling/AV_APIS.md; todo/media_handling/RUNNING_VIDEO_AUDIO_SYNC_PLAN.md. Evidence: eVe/domains/rendering/page_container_projection.js and natural_action_journal.js; atome/renderers/bevy-core/src/clip.rs; existing recording owners, inspected selectively rather than revalidated. Depends on: ATM-2003; applicable shared components. Next: Select one remaining AV/Molecule package and run its existing focused checks before the necessary physical acceptance.
+
+- [ ] ATM-2011 — Qualify snapshot acceleration and historical branching through the current mutation owner.
+
+  Domain: History and replay; repository/platforms/date follow the common contract above. Priority: P1. Advancement: Remaining/Unknown. Verification: Not run in this triage. Already present: Manual snapshots/current-state replay foundations are historical completed work, not a new history implementation. Remaining/exit contract: Snapshot-plus-cursor equivalence and Time Machine branch/divergence/recompute/merge/abandon/rights contracts remain; historical model approval must be established before implementing branches. Never create automatic canonical snapshots or rewrite event history. Sources: todo/cleanup_architecture/snapshot_accelerated_state_rebuild.md; todo/ai_voice/time_machine_historical_branching.md. Evidence: eVe/core/atome_commit.js; existing snapshot/history contracts, inspected selectively rather than revalidated. Depends on: ATM-2003; explicit historical-branch model approval. Next: Confirm approved branch semantics and compare suffix replay with full replay using the existing owners.
+
+- [ ] ATM-2012 — Finish Conditions/calendar/health integration beyond the implemented baseline.
+
+  Domain: Conditions, calendar and health; repository/platforms/date follow the common contract above. Priority: P1. Advancement: Partial. Verification: Not run in this triage. Already present: The Conditions engine, HealthKit boundaries, scheduling and existing calendar operations are already present in source/historical evidence. Remaining/exit contract: Retain Profile/Info/current-context integration, real HealthKit sample arrival, permissions, platform parity and concrete scheduled-action gaps. Do not create a second evaluator, health truth or Calendar API. Sources: todo/1- condition.md; todo/2- Granularity_Validation.md; todo/Calendar Scheduled Actions.md; todo/health_monitors.md; todo/eve_features/calendar_todos.md. Evidence: atome/src/squirrel/conditions/; atome/src/squirrel/health/health_owner.js; canonical CalendarAPI, inspected selectively rather than revalidated. Depends on: ATM-2002 and ATM-2003; relevant shared UI. Next: Compare the latest implemented consumers to each remaining criterion, then exercise only verified gaps.
+
+- [ ] ATM-2013 — Consolidate framework cleanup, native cohesion and measured performance work.
+
+  Domain: Maintenance and performance; repository/platforms/date follow the common contract above. Priority: P1. Advancement: Partial. Verification: Not run in this triage. Already present: Earlier utility factorization, shared token/locking ownership and many V2 migrations are completed historical work. Remaining/exit contract: Retain currently observed oversized/native owners, live legacy consumers, measured performance regressions and tool sanitization/runtime monitoring gaps. Reject renderer-owned business truth and parallel stacks as current implementation directions. Sources: todo/cleanup_architecture/; todo/tools/tool_sanitisation.md; todo/sharing_search_monitoring/tool_monitor.md; todo/perf_audit_2026-10-07.md; todo/full_native_atome.md. Evidence: existing maps and guardrails; component ownership in AGENTS/module 04, inspected selectively rather than revalidated. Depends on: Priority collaboration chain; consumer/dependency proof before removal. Next: Refresh only the selected owner inventory, distinguish audit-only reports from unimplemented corrections, and remove confirmed unused consumers.
+
+- [ ] ATM-2014 — Finish AI/voice/MCP/editor gaps after the existing assistant baseline.
+
+  Domain: AI, voice, MCP and editor; repository/platforms/date follow the common contract above. Priority: P1. Advancement: Partial. Verification: Not run in this triage. Already present: The current assistant, canonical context tools, wake/remote-command and provider handling are implemented in source/commits; older prompts requesting an entire new voice stack are superseded as creation tasks. Remaining/exit contract: Keep actual device recognition/latency/permissions, outstanding semantic mail/contact/calendar behavior, unimplemented editor and audited Codex-like integration. External systems or missing internal bricks need bounded authorization. Sources: todo/ai_voice/; todo/AI_problem.md; todo/assistant_debug_selection_tv.md; imported Action 2/Urgent/Codex-like integration. Evidence: atome/src/squirrel/voice/; server/remoteCommandRelay.js; canonical runtime/MCP tool paths, inspected selectively rather than revalidated. Depends on: ATM-2001/2002; canonical tool/package prerequisites. Next: Choose a remaining observable assistant/editor defect, verify its current owner and historical evidence, then qualify its next repair.
+
+- [ ] ATM-2015 — Qualify AI audio/video generation providers and remaining TV/media integration.
+
+  Domain: AI media and TV; repository/platforms/date follow the common contract above. Priority: P2. Advancement: Unknown/Specification. Verification: Not run in this triage. Already present: Existing generic image/assistant/media machinery is reused; it does not prove MusicGPT/Runway capabilities or all TV playback gates. Remaining/exit contract: Converge local/exported AI Audio and AI Video variants; validate real provider operations/rights/native import, and retain the documented iOS TV user-activation remainder. Sources: todo/AI Audio Integration.md; todo/AI Video Integration.md; todo/assistant_debug_selection_tv.md; imported TV Integration et MCP. Evidence: existing media/provider boundaries; no new provider availability inferred, inspected selectively rather than revalidated. Depends on: ATM-2014 and ATM-2010; precise provider/component authorization where missing. Next: Compare provider contracts and variants, retain shared requirements once and activate one bounded real capability.
+
+- [ ] ATM-2016 — Finish contextual taxonomy/menu tooling after the implemented beginner workflow.
+
+  Domain: Taxonomy and menus; repository/platforms/date follow the common contract above. Priority: P1. Advancement: Partial. Verification: Not run in this triage. Already present: The beginner workflow, menu expertise and many contextual rail changes already exist; do not replay older everything-unimplemented claims. Remaining/exit contract: Keep spreadsheet-to-runtime taxonomy reconciliation, DEV editor native support, genuine menu/rail regressions and uncovered contexts. The spreadsheet is a proposal, not an automatic runtime-ID rename mandate. Sources: todo/contextual_taxonomy_2026-09-24.md; todo/menu_solution_2026-09-24.md; todo/menu_regressions_2026-10-02.md; imported Taxonomie/. Evidence: eVe/intuition/dev/taxonomy_editor/; current main-menu/context owner paths; beginner_interface_scope tests, inspected selectively rather than revalidated. Depends on: ATM-2009 shared UI; actual tool catalogue. Next: Compare current registered tools/context axes to the spreadsheet and remove already implemented menu demands.
+
+- [ ] ATM-2017 — Implement only the missing objectives/templates/activities packages.
+
+  Domain: Objectives, templates and activities; repository/platforms/date follow the common contract above. Priority: P2. Advancement: Specification; some template primitives implemented. Verification: Not run in this triage. Already present: Project template creation/selection, page templates and Dashboard/basic/onboarding foundations already exist and are reused. Remaining/exit contract: Retain the future objective engine, optional matching, aesthetic scenario and transversal health notebook requirements. Keep seven foundational objectives, general catalogue, health objectives and UI scenarios distinct. Prefer the 80-prompt/13-scenario master ordering, retaining the 111-prompt package as historical specification; prompt counts never measure delivery. Sources: todo/5 - objectives.md; todo/New work/; imported Objectif.md, objectives variants and both ZIPs; imported Templates and Activities. Evidence: eVe/intuition/tools/project_templates.js -> domains/templates/project_template_runtime.js/system_template_runtime.js; tests/eve/project_templates_panel.test.mjs, inspected selectively rather than revalidated. Depends on: ATM-2002/2003 and relevant Calendar/Conditions/UI contracts. Next: Select the first indispensable missing objective brick from the master package, prove existing composition, and obtain only the required bounded authorization.
+
+- [ ] ATM-2018 — Finish teleport/cross-device control beyond the existing owner implementation.
+
+  Domain: Cross-device control; repository/platforms/date follow the common contract above. Priority: P1. Advancement: Partial. Verification: Not run in this triage. Already present: Surface registration, teleport manager, remote input, grants and remote-command relay exist. Old full-system creation checklists are not replayed. Remaining/exit contract: Keep unverified real cross-device control, cross-user authorization/confirmation, disconnection/recovery, privacy and current native acceptance; retain renderer previews as derived data only. Sources: todo/3 - teleport.md; todo/teleport/. Evidence: atome/src/squirrel/teleport/teleport_manager.js, remote_control_manager.js, surface_grant_manager.js, remote_command.js; server/remoteCommandRelay.js, inspected selectively rather than revalidated. Depends on: ATM-2002/2003; applicable native capabilities. Next: Compare the ten historical package specifications to current owners and execute the remaining isolated device/rights scenarios.
+
+- [ ] ATM-2019 — Qualify navigation/GPS beyond existing Finder place rendering.
+
+  Domain: GPS and maps; repository/platforms/date follow the common contract above. Priority: P2. Advancement: Specification/Partial. Verification: Not run in this triage. Already present: Finder place/map rendering is historically implemented; it is not a complete navigation engine. Remaining/exit contract: Retain Valhalla/navigation, provider/license/privacy/offline contracts and actual platform capability gaps without adding a second map renderer or restoring Leaflet. Sources: todo/eve_features/map_localization.md; todo/ui_bevy/finder_place_map_package.md; imported Roadmap/GPS.md. Evidence: existing Finder native canvas/map owners; no Valhalla availability proof, inspected selectively rather than revalidated. Depends on: ATM-2002 and ATM-2009; explicit provider approval. Next: Separate delivered place lookup/rendering from unimplemented navigation and qualify the smallest missing capability.
+
+- [ ] ATM-2020 — Qualify Android and standalone OS distribution against the approved platform stack.
+
+  Domain: Platform distribution; repository/platforms/date follow the common contract above. Priority: P2. Advancement: Specification. Verification: Not run in this triage. Already present: Existing Web/Tauri/iOS packaging is reused; Android/Pure OS source intentions do not establish builds or store distribution. Remaining/exit contract: Converge identical Android export variants and local Android scope; retain signing/store/native capability questions, the FreeBSD Pure OS contract and unapproved alternative OS proposals outside active implementation. Sources: todo/android.md; todo/atome OS Audit.md; imported To sort/android.md. Evidence: existing platform build/distribution boundaries; no new stack authorized, inspected selectively rather than revalidated. Depends on: Canonical platform contracts; explicit missing-brick/platform approval. Next: Select a target platform and document the real existing implementation, signing boundary and remaining package scope.
+
+- [ ] ATM-2021 — Finish MIDI/vector/DSP/presets beyond available binding primitives.
+
+  Domain: MIDI, vector, DSP and presets; repository/platforms/date follow the common contract above. Priority: P2. Advancement: Partial/Specification. Verification: Not run in this triage. Already present: MIDI bindings already read canonical state, execute existing commands and have focused tests/native output; a task merely named MIDI is obsolete as whole-system creation. Remaining/exit contract: Retain actual hardware/platform acceptance, advanced mapping/learn gaps, DSP stretch/sample requirements, vector editing and preset/skin gaps as separate criteria within this package. Sources: `todo/audio2midi_converter_tool.md⁠`; todo/midi/; todo/DSP_audio_engine.md; todo/0_stretch_samplig.md; todo/rendering_graphics/vector_editing_layer.md; todo/eve_features/presets-system.md. Evidence: eVe/intuition/runtime/midi_binding_service.js/midi_binding_runtime.js -> domains/midi/midi_output_runtime.js; focused MIDI tests, inspected selectively rather than revalidated. Depends on: ATM-2010/2009; compatible verified components. Next: Compare each requirement to current bindings/rendering/DSP owners, then qualify one actual missing behavior.
+
+- [ ] ATM-2022 — Finish plugin/distribution/documentation/dev-experience gaps without parallel registries.
+
+  Domain: Plugins, publication and developer experience; repository/platforms/date follow the common contract above. Priority: P2. Advancement: Specification/Unknown. Verification: Not run in this triage. Already present: Existing API/MCP/tool registries and Squirrel distribution boundaries are reused. Remaining/exit contract: Retain plugin contracts, npm/CDN/PWA verification, website/documentation publishing, API sugar and developer experience as bounded remaining deliverables. Imported Task Guard/auto-debug/orchestration ideas do not authorize new registries, agents or periodic automation. Sources: todo/eVe_plugin.md; todo/atome_plugin_api_SPEC.md; todo/dev_ops/; todo/rendering_graphics/universal_canvas.md; imported Code Relation Alignment/debug/Urgent. Evidence: current public API/MCP/package owners; their publication status remains unverified, inspected selectively rather than revalidated. Depends on: Stable canonical APIs and relevant prior packages; explicit publication authorization. Next: Choose a bounded missing deliverable, inspect real consumers/distribution and update this register rather than creating another task truth.
 
 ## Specification and historical scope registry
 
 Registration below is provenance/reference coverage, not executable authorization. Only the task contracts above activate a bounded requirement. Other items remain specifications, historical reports or unqualified backlog; their imported imperatives and checkbox states have no current execution authority. Source-sensitive documents remain local and excluded from publication. todo/tests/ is permanent, transverse acceptance material, never a product ticket to delete.
 
-Legacy phase correspondence: security/auth → ATM-2001/2002; state/sync → ATM-2003; snapshots/backup → ATM-2008; sharing → ATM-2004/2005; communication → ATM-2006; final validation → ATM-2007; panels/Molecule/media/cleanup/AI/deferred product packages → ATM-2009 qualification. This supersedes the old panels-first ordering and auth-after-sharing dependency. Earlier field-focus/password/OTP assumptions require current auth-contract qualification rather than blind execution.
+Legacy phase correspondence: security/auth → ATM-2001/2002; state/sync → ATM-2003; snapshots/backup → ATM-2008; sharing → ATM-2004/2005; communication → ATM-2006; final validation → ATM-2007; panels → ATM-2009; Molecule/media → ATM-2010; history → ATM-2011; Conditions/calendar/health → ATM-2012; cleanup/performance → ATM-2013; AI/editor → ATM-2014/2015; taxonomy → ATM-2016; objectives/templates → ATM-2017; teleport → ATM-2018; navigation → ATM-2019; Android/OS → ATM-2020; MIDI/vector/DSP/presets → ATM-2021; plugin/distribution/docs → ATM-2022. This supersedes the old panels-first ordering and auth-after-sharing dependency. Earlier field-focus/password/OTP assumptions require current auth-contract qualification rather than blind execution.
 
 - `todo/tests/`
 - `todo/ui_bevy/`
@@ -228,7 +286,7 @@ Legacy phase correspondence: security/auth → ATM-2001/2002; state/sync → ATM
 - `todo/atome_plugin_api_SPEC.md`
 - `todo/audit_isolation_2026-10-01.md`
 - `todo/auth_phone_link_implementation.md`
-- `todo/clipboard_host_bridge_2026-09-10.md`
+- `done/spring_git_cleanup_2026-10-12/clipboard_host_bridge_2026-09-10.md`
 - `todo/communication_refonte.md`
 - `todo/context_menus_modes_spec_2026-09-20.md`
 - `todo/contextual_taxonomy_2026-09-24.md`
@@ -244,14 +302,14 @@ Legacy phase correspondence: security/auth → ATM-2001/2002; state/sync → ATM
 - `todo/menu_solution_2026-09-24.md`
 - `todo/modifications.md`
 - `todo/molecule_drag_and_playback_2026-08-22.md`
-- `todo/news_feature_2026-09-09.md`
+- `done/spring_git_cleanup_2026-10-12/news_feature_2026-09-09.md`
 - `todo/news_templates_stacking_2026-09-10.md`
 - `todo/orchestrateur_test_et_reparations_2026-08-18.md`
-- `todo/page_media_perf_list_playback_2026-09-20.md`
-- `todo/page_record_fixes_2026-09-20.md`
+- `done/spring_git_cleanup_2026-10-12/page_media_perf_list_playback_2026-09-20.md`
+- `done/spring_git_cleanup_2026-10-12/page_record_fixes_2026-09-20.md`
 - `todo/perf_audit_2026-10-07.md`
 - `todo/project_view_zoom.md`
-- `todo/record_page_placeholder_template_2026-09-19.md`
+- `done/spring_git_cleanup_2026-10-12/record_page_placeholder_template_2026-09-19.md`
 - `todo/teleport/00_audit.md`
 - `todo/teleport/01_surface_registry.md`
 - `todo/teleport/02_teleport_manager.md`
@@ -270,6 +328,17 @@ Legacy phase correspondence: security/auth → ATM-2001/2002; state/sync → ATM
 - `todo/README.md`
 
 Confirmed path corrections: the recording integration plan, video recording/preview and iOS recorder debug sources are under done/media_handling/; the completed editing-menu source is done/eve_features/prompt_modification_menu_mvp_v146_ios_touch_tests.md. Their archival locations do not constitute new test evidence.
+
+## Resolved arbitration
+
+ARB-0001 was resolved by the user on 2026-10-13: retain the recent SMS/device-proof
+session with access tokens in memory; retire the old unconditional HttpOnly-cookie
+migration requirement. [Decision record](migration/spring_git_cleanup_questions.md)
+and [updated token-storage specification](cleanup_architecture/secure_auth_token_storage.md)
+preserve the provenance. ATM-2001/ATM-2002 retain the applicable security/runtime
+acceptance criteria; the future optional password/SMS choice is unchanged.
+There is no pending documentary arbitration in this triage. No application or
+session configuration change follows from this decision.
 
 ## Maintenance
 

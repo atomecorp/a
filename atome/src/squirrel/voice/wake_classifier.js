@@ -47,6 +47,25 @@ export const scoreWakeWindow = (model, window) => {
     return sigmoid(activations[activations.length - 1][0]);
 };
 
+// Decision of the detector, shared by the worker and the offline measurements. A window
+// counts only when its score passes and a voice stands `voiceRatio` times above the room
+// noise floor: a quiet room or a distant voice scored high by the model opened the
+// assistant on its own (iPad, 2026-10-13). A personal verifier decides the windows the base
+// model already finds likely (`verifierGate`); it never replaces the voice requirement.
+export const createWakeTrigger = (policy) => {
+    let streak = 0;
+    return {
+        push({ baseScore, verifierScore = null, voiceRatio }) {
+            const voiced = voiceRatio >= (policy.voiceRatio || 0);
+            const passed = verifierScore === null ? baseScore >= policy.threshold
+                : baseScore >= policy.verifierGate && verifierScore >= policy.verifierThreshold;
+            streak = voiced && passed ? streak + 1 : 0;
+            return streak === policy.consecutive;
+        },
+        reset() { streak = 0; }
+    };
+};
+
 export const trainWakeClassifier = ({ positives, negatives, hidden = [], epochs = 30, batchSize = 64,
     learningRate = 1e-3, weightDecay = 0, negativeWeight = 1, seed = 1, onEpoch = () => {} }) => {
     if (!positives.length || !negatives.length) throw new Error('wake_training_examples_missing');

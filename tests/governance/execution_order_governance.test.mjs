@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -10,7 +9,9 @@ import {
 
 const roots = [];
 const createRoot = ({ order, todos = {} }) => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'execution-order-'));
+    const fixtureParent = path.resolve('temp');
+    fs.mkdirSync(fixtureParent, { recursive: true });
+    const root = fs.mkdtempSync(path.join(fixtureParent, 'execution-order-'));
     roots.push(root);
     fs.mkdirSync(path.join(root, 'todo'), { recursive: true });
     fs.writeFileSync(path.join(root, 'todo/execution_order.md'), order);
@@ -85,5 +86,28 @@ describe('execution order governance', () => {
             expect.stringContaining('unregistered todo document'),
             expect.stringContaining('completed phase contains')
         ]));
+    });
+
+    it('recognizes exact quoted filenames with punctuation, Unicode and a space before the extension', () => {
+        const filenames = [
+            'todo/!!!!urgent.md',
+            'todo/00_UI_spécifications.md',
+            'todo/development .md',
+            'todo/To sort/spec(1).md'
+        ];
+        const root = createRoot({
+            order: filenames.map((filename) => `- \`${filename}\``).join('\n'),
+            todos: Object.fromEntries(filenames.map((filename) => [filename, '# Specification']))
+        });
+        const result = inspectExecutionOrder({ rootDir: root });
+        expect(result.errors).toEqual([]);
+        expect(result.references).toEqual(filenames);
+    });
+
+    it('still reports missing quoted paths instead of accepting registration without a file', () => {
+        const root = createRoot({ order: '`todo/!spécification absente.md`' });
+        expect(inspectExecutionOrder({ rootDir: root }).errors).toContain(
+            'missing referenced path: todo/!spécification absente.md'
+        );
     });
 });

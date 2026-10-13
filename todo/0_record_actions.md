@@ -307,7 +307,7 @@ encore. Assertion de non-régression ajoutée à la probe.
 # Journal d'exécution — 19 sept. 2026
 
 **§6, la capture spatiale du mode Naturel : traitée.** Détail et vérification dans
-`todo/record_page_placeholder_template_2026-09-19.md`.
+`done/spring_git_cleanup_2026-10-12/record_page_placeholder_template_2026-09-19.md`.
 
 - La question laissée ouverte (« le schéma de molecule ne porte aucune géométrie ») est
   tranchée : la prise Naturel n'est pas une timeline de clips mais un **journal** rangé sur

@@ -1,13 +1,22 @@
 # Secure authentication token storage
 
-Status: Actif
+Status: Specification — residual security acceptance belongs to
+[ATM-2001/ATM-2002](../execution_order.md).
+
+User decision, 2026-10-13 (ARB-0001): retain the recent SMS/device-bound session
+flow with access tokens in memory. The former unconditional HttpOnly-cookie
+migration requirement is historical and is removed from active implementation
+scope. This documentary decision is not a new runtime/security validation.
 
 ## Confirmed contract
 
 Browser and WebView JavaScript must not persist readable authentication bearer tokens in
 `localStorage` or `sessionStorage`.
 
-- Browser authentication uses HttpOnly secure cookies and server-side refresh sessions.
+- Browser authentication retains the SMS/device-proof flow: access tokens remain
+  in memory and persistent resumption descriptors require the device key.
+  A migration to HttpOnly cookies is not required by this backlog. Existing
+  cookie-using surfaces remain governed by their own security contracts.
 - Native runtimes use a platform credential store or an encrypted vault whose secret is
   not readable from ordinary product JavaScript.
 - Authentication material must not enter Atome properties, `state_current`, events,
@@ -15,19 +24,21 @@ Browser and WebView JavaScript must not persist readable authentication bearer t
 - Compatibility migration may delete legacy browser-storage keys but must never restore
   them as an active token source.
 
-## Current gap
+## Historical gap — current presence to verify
 
-Maintained Adole and eVe transport modules still contain reads or writes for
+The earlier inventory reported Adole and eVe transport reads or writes for
 `local_auth_token`, `cloud_auth_token`, or legacy `auth_token` browser-storage keys,
 despite the security audit recording the browser token-storage remediation as complete.
+That inventory predates the phone-link migration. Verify the current owners
+before treating any legacy-token cleanup as unfinished implementation.
 
 ## Executable scope
 
 1. Inventory every maintained authentication-token read, write, migration and deletion
    in browser, Tauri WebView and iOS WebView code.
 2. Distinguish non-secret device identifiers and login hints from bearer material.
-3. Route browser sessions through HttpOnly cookies and native bearer material through
-   the approved credential-store or encrypted-vault boundary.
+3. Verify the retained browser device-proof/in-memory session and native bearer
+   material through the approved credential-store or encrypted-vault boundary.
 4. Remove active bearer-token reads and writes from Web Storage.
 5. Keep a bounded one-way cleanup for legacy token keys without treating their values as
    valid credentials.
@@ -38,8 +49,9 @@ despite the security audit recording the browser token-storage remediation as co
 
 - No maintained product code stores or retrieves readable bearer tokens from
   `localStorage` or `sessionStorage`.
-- Browser login, reload, refresh, reconnect and logout work through the HttpOnly session
-  contract.
+- Browser login, reload, refresh, reconnect, revocation and logout satisfy the
+  retained SMS/device-bound session contract without persistent readable bearer
+  tokens. Their actual runtime validation remains separate from this decision.
 - Tauri and supported iOS runtimes use only the approved native credential boundary.
 - Legacy stored tokens are removed and cannot authenticate or be migrated into another
   browser-readable key.
@@ -52,3 +64,10 @@ despite the security audit recording the browser token-storage remediation as co
 - Repository scans and a permanent negative guardrail for bearer-token Web Storage.
 - `npm run check:execution-order`, security tests and the narrowest relevant WebSocket
   transport suites.
+
+## Historical prescription
+
+The former requirement was: "Browser authentication uses HttpOnly secure cookies
+and server-side refresh sessions." It is retained here as provenance only,
+superseded by the user's ARB-0001 decision. The future optional password/SMS
+choice for an already verified account remains in the existing auth workstream.

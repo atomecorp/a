@@ -1,0 +1,2941 @@
+{
+  "date": "2026-10-12",
+  "scope": "fixed documentary reconciliation snapshot; execution_order alone owns live state",
+  "moves": [
+    {
+      "source": "todo/clipboard_host_bridge_2026-09-10.md",
+      "destination": "done/spring_git_cleanup_2026-10-12/clipboard_host_bridge_2026-09-10.md",
+      "sha256": "2a9c90bf399437a5efaf4dfe2e4d471fdf16014b9ca1004308984dd3a84d5ad7",
+      "decision": "implementation report archived; remaining acceptance/limitations stay in canonical ATM-2009, ATM-2010 and ATM-2006"
+    },
+    {
+      "source": "todo/page_record_fixes_2026-09-20.md",
+      "destination": "done/spring_git_cleanup_2026-10-12/page_record_fixes_2026-09-20.md",
+      "sha256": "2bf9477eca9fae67a5103e1b00a974fbe1925ea8362a5160ae0af2f3b887e8f1",
+      "decision": "implementation report archived; remaining acceptance/limitations stay in canonical ATM-2009, ATM-2010 and ATM-2006"
+    },
+    {
+      "source": "todo/page_media_perf_list_playback_2026-09-20.md",
+      "destination": "done/spring_git_cleanup_2026-10-12/page_media_perf_list_playback_2026-09-20.md",
+      "sha256": "cf26705bcb37a760f6eaa6e2c86082ca1b21441894adaf0f607d8ce9c9dc3360",
+      "decision": "implementation report archived; remaining acceptance/limitations stay in canonical ATM-2009, ATM-2010 and ATM-2006"
+    },
+    {
+      "source": "todo/record_page_placeholder_template_2026-09-19.md",
+      "destination": "done/spring_git_cleanup_2026-10-12/record_page_placeholder_template_2026-09-19.md",
+      "sha256": "b25f722397f630f21cd870ff23c976c8044f13de3ed83e5acb0e7dd325c62a94",
+      "decision": "implementation report archived; remaining acceptance/limitations stay in canonical ATM-2009, ATM-2010 and ATM-2006"
+    },
+    {
+      "source": "todo/news_feature_2026-09-09.md",
+      "destination": "done/spring_git_cleanup_2026-10-12/news_feature_2026-09-09.md",
+      "sha256": "10ec3419aab22bce9a7872c8fd6bd3d4433c2c4c9404db425fc8f0667d134139",
+      "decision": "implementation report archived; remaining acceptance/limitations stay in canonical ATM-2009, ATM-2010 and ATM-2006"
+    }
+  ],
+  "historicTasks": [
+    {
+      "id": "HIST-0001",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 93,
+      "phase": "Phase prioritaire 1 - Programme de migration des panels vers BevyUI",
+      "text": "Execute the nine active BevyUI migration packages: (1) shared controls — Families 3, 6, and 13; (2) Contact — Family 18 and complete Contact composition; (3) Home — complete Home composition and legacy-route retirement; (4) Calendar structure — Families 21 to 24; (5) Calendar events — Families 25 to 27; (6) Calendar editor and completion — Family 28 and complete Calendar composition; (7) Infos — Families 12, 17, 29, and 30 plus complete canonical inspection/editing composition; (8) workstream slot A — complete Size composition then Font composition, reusing Families 1, 3, 4, 5, and 17 and rejecting the deferred Family 36 tool slider; (9) queued — complete Layer composition, reusing Families 1, 3, 4, 12, 17, and 30; (10) shared component — Family 14, the sortable result-column header with per-column direction, accent tint, and 420 ms long-press to filters, occupying no workstream slot; (11) workstream slot B — complete Finder composition over Families 3, 4, 6, 13, and 14, with Family 17 recorded `not_applicable`, no search field composed, the `place` scope **kept** and its map rewritten natively in the canvas (Leaflet deleted, Nominatim geocoding reused), a per-row delete control added to the custom filter rows, the `+` re-anchored under the last added row, and row drag preserved through the shared `tool_drag.js` payload. Families 4 and 5 remain validated shared foundations; packages 8 and 9 add no new component family, package 10 adds Family 14. Exit criterion: Home, Calendar, Contact, Infos, Size, Font, Finder, and Layer use their canonical Bevy owners, their effectful functions have a complete reviewed command/API/MCP ledger, real interactions and package/panel approvals are recorded, and none retains a parallel DOM panel route.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2004/2005",
+      "originalLine": 87
+    },
+    {
+      "id": "HIST-0002",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 151,
+      "phase": "Phase prioritaire 1 - Programme de migration des panels vers BevyUI",
+      "text": "Converger les deux propriétaires de composants restants, inscrits dans `todo/ui_bevy/component_convergence.md` : (1) **un seul fenêtrage virtualisé** — trancher d'abord entre fenêtrage à la page et fenêtrage au viewport, la seconde option faisant gagner un facteur 12 mesuré sur Infos (1 205 nœuds construits pour ~9 lignes visibles) mais changeant le comportement d'un panel `validated`, puis extraire `bevy_panel_virtual_window.js` et supprimer les jumeaux `virtualPageIndex` / `matrixPageIndex`, identiques au caractère près ; (2) **solder la dette d'édition déclarée** dans la liste blanche de `check:component-reuse-guardrails` — `bevy_panel_numeric_field_runtime.js` appartient au slot A qui migre Size/Font et doit y être converti ou cédé, les deux runtimes du Panel Lab partent avec le retrait du Panel Lab déjà `planned`, et `bevy_ui_main_menu_inline_search_runtime.js` doit être ré-audité avant d'être présumé copie (il ne porte pas le squelette de l'éditeur). Critère de sortie : un seul propriétaire de fenêtrage consommé par la liste, la matrice et la grille de tuiles ; le comportement de défilement d'Infos vérifié inchangé en navigateur ; la liste blanche de la garde réduite aux seuls modules de session, au propriétaire canonique et à `text_bridge.js`.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2009",
+      "originalLine": 145
+    },
+    {
+      "id": "HIST-0003",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 152,
+      "phase": "Phase prioritaire 1 - Programme de migration des panels vers BevyUI",
+      "text": "Resume the remaining Panel programme after Phase 4: assess Families 7, 8, 10, 12, 15, 16, and 36 — Family 14 left this list and was validated with Finder on 2026-08-07; Families 11, 19 and 20 left it the same day, validated with Communication (Package 13), and Family 9 was resolved `not_applicable` by that package's source audit — plus any panel-specific extensions of the Infos-owned 12/17/29/30 contracts. Exit criterion: all 16 registered panels are validated, the 7 legacy HTML routes still active after Size, Font, and Layer (`background`, `couleur`, `detail`, `delete`, `undo`, `paste`, `timeline`) are retired, and the temporary Panel Lab is removed.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2004/2005",
+      "originalLine": 146
+    },
+    {
+      "id": "HIST-0004",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 201,
+      "phase": "Reconciliation audit - original 138-entry snapshot",
+      "text": "Auditer et reconcilier le snapshot original des 138 entrees, classifier tous les documents todo, produire la preuve entree par entree et installer le controle permanent `npm run check:execution-order`.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2011",
+      "originalLine": 195
+    },
+    {
+      "id": "HIST-0005",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 215,
+      "phase": "Phase 0 - Documentation and architecture normalization",
+      "text": "Retire the obsolete pre-Bevy media-editor specification from the active architecture.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2014",
+      "originalLine": 209
+    },
+    {
+      "id": "HIST-0006",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 216,
+      "phase": "Phase 0 - Documentation and architecture normalization",
+      "text": "Remove audio/video fallback language and describe browser capture as an explicit backend where it is supported.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2010",
+      "originalLine": 210
+    },
+    {
+      "id": "HIST-0007",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 217,
+      "phase": "Phase 0 - Documentation and architecture normalization",
+      "text": "Mark timeline, AV, recording, and export documents with explicit status semantics.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2010",
+      "originalLine": 211
+    },
+    {
+      "id": "HIST-0008",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 218,
+      "phase": "Phase 0 - Documentation and architecture normalization",
+      "text": "Add the professional export contract: editable project package, open archival master, delivery export, deterministic rendering, checkpointed resume, atomic publication, and final validation.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2010",
+      "originalLine": 212
+    },
+    {
+      "id": "HIST-0009",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 219,
+      "phase": "Phase 0 - Documentation and architecture normalization",
+      "text": "Register the relevant timeline, media, rendering, AI, sharing, test, and product todo families in the phase sources below.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2014",
+      "originalLine": 213
+    },
+    {
+      "id": "HIST-0010",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 300,
+      "phase": "1. Corrections critiques immediates eVe Intuition",
+      "text": "Remplacer tout require() dans module ES, notamment tools/communication.js.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2006",
+      "originalLine": 294
+    },
+    {
+      "id": "HIST-0011",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 301,
+      "phase": "1. Corrections critiques immediates eVe Intuition",
+      "text": "Deplacer mtraxCloseInFlightGuard avant toute utilisation dans eVeIntuition.js.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2010",
+      "originalLine": 295
+    },
+    {
+      "id": "HIST-0012",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 302,
+      "phase": "1. Corrections critiques immediates eVe Intuition",
+      "text": "Unifier les prefixes de selection depuis runtime/selection.js.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 296
+    },
+    {
+      "id": "HIST-0013",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 303,
+      "phase": "1. Corrections critiques immediates eVe Intuition",
+      "text": "Renommer ensureString en isString dans contracts/validator.js.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 297
+    },
+    {
+      "id": "HIST-0014",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 304,
+      "phase": "1. Corrections critiques immediates eVe Intuition",
+      "text": "Ajouter destroyLayerInvariantObserver() et le connecter au cycle de destruction.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2014",
+      "originalLine": 298
+    },
+    {
+      "id": "HIST-0015",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 305,
+      "phase": "1. Corrections critiques immediates eVe Intuition",
+      "text": "Verifier lint/build/smoke test apres chaque correction.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 299
+    },
+    {
+      "id": "HIST-0016",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 313,
+      "phase": "2. Factorisation minimale du socle",
+      "text": "Creer shared/utils.js et migrer progressivement les utilitaires communs.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 307
+    },
+    {
+      "id": "HIST-0017",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 314,
+      "phase": "2. Factorisation minimale du socle",
+      "text": "Creer shared/media_types.js et supprimer les duplications de types media.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2014",
+      "originalLine": 308
+    },
+    {
+      "id": "HIST-0018",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 315,
+      "phase": "2. Factorisation minimale du socle",
+      "text": "Centraliser les constantes de layers et de TTL panels.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2009",
+      "originalLine": 309
+    },
+    {
+      "id": "HIST-0019",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 316,
+      "phase": "2. Factorisation minimale du socle",
+      "text": "Factoriser le locking via runtime/in_flight_lock.js.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2014",
+      "originalLine": 310
+    },
+    {
+      "id": "HIST-0020",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 317,
+      "phase": "2. Factorisation minimale du socle",
+      "text": "Unifier readExplicitLatchedState / readExplicitLatched.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 311
+    },
+    {
+      "id": "HIST-0021",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 318,
+      "phase": "2. Factorisation minimale du socle",
+      "text": "Verifier les imports/exports et l'absence de duplication restante avec rg.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2010",
+      "originalLine": 312
+    },
+    {
+      "id": "HIST-0022",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 328,
+      "phase": "3. Contrat panel / layout eVe",
+      "text": "Centraliser les tokens de chrome panel.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2001",
+      "originalLine": 322
+    },
+    {
+      "id": "HIST-0023",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 329,
+      "phase": "3. Contrat panel / layout eVe",
+      "text": "Finaliser createEveDialog avec header, body, tools band, footer.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2014",
+      "originalLine": 323
+    },
+    {
+      "id": "HIST-0024",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 330,
+      "phase": "3. Contrat panel / layout eVe",
+      "text": "Placer les outils de panel au-dessus du footer band.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2009",
+      "originalLine": 324
+    },
+    {
+      "id": "HIST-0025",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 331,
+      "phase": "3. Contrat panel / layout eVe",
+      "text": "Garder le footer comme bande finale avec titre, fermeture et resize grip.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2009",
+      "originalLine": 325
+    },
+    {
+      "id": "HIST-0026",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 332,
+      "phase": "3. Contrat panel / layout eVe",
+      "text": "Garantir que le body reste la seule zone scrollable.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 326
+    },
+    {
+      "id": "HIST-0027",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 333,
+      "phase": "3. Contrat panel / layout eVe",
+      "text": "Ajouter des indicateurs visibles de debordement haut/bas sur le vrai scroll container.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 327
+    },
+    {
+      "id": "HIST-0028",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 334,
+      "phase": "3. Contrat panel / layout eVe",
+      "text": "Migrer les panels simples avant les panels complexes.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2009",
+      "originalLine": 328
+    },
+    {
+      "id": "HIST-0029",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 335,
+      "phase": "3. Contrat panel / layout eVe",
+      "text": "Valider home/user, finder, communication, calendar et mtrack.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2004/2005",
+      "originalLine": 329
+    },
+    {
+      "id": "HIST-0030",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 347,
+      "phase": "4. Molecule / MTraX deja engage - points deja valides",
+      "text": "Construire les diagnostics globaux Molecule avant les corrections profondes.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2014",
+      "originalLine": 341
+    },
+    {
+      "id": "HIST-0031",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 348,
+      "phase": "4. Molecule / MTraX deja engage - points deja valides",
+      "text": "Clarifier le contrat preview: interne par defaut, externalise uniquement si explicite.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 342
+    },
+    {
+      "id": "HIST-0032",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 349,
+      "phase": "4. Molecule / MTraX deja engage - points deja valides",
+      "text": "Remplacer le layout tracks/cells par un layout responsive.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2009",
+      "originalLine": 343
+    },
+    {
+      "id": "HIST-0033",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 350,
+      "phase": "4. Molecule / MTraX deja engage - points deja valides",
+      "text": "Fiabiliser le splitter pour qu'il ne deplace jamais le panel.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2014",
+      "originalLine": 344
+    },
+    {
+      "id": "HIST-0034",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 351,
+      "phase": "4. Molecule / MTraX deja engage - points deja valides",
+      "text": "Retirer les styles globaux dangereux sur le host docke.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 345
+    },
+    {
+      "id": "HIST-0035",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 352,
+      "phase": "4. Molecule / MTraX deja engage - points deja valides",
+      "text": "Simplifier les synchronisations layout.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2009",
+      "originalLine": 346
+    },
+    {
+      "id": "HIST-0036",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 391,
+      "phase": "Phase urgente autorisee - Enregistrement multipiste audio/video sample-accurate",
+      "text": "Rebrancher les outils Bevy audio/video et les actions d'enregistrement Molecule sur les vrais controleurs actifs, garantir pour l'overdub audio une horloge de transport commune en frames entieres avec metadonnees de latence explicites et placement sample-accurate, conserver la video generique sur son controleur canonique et refuser explicitement l'overdub video sample-accurate tant que le mapping PTS -> echantillons n'existe pas, supprimer les chemins orphelins ou dupliques confirmes, puis valider la stabilite start/stop, l'Atome cree, l'ouverture immediate de la piste et la synchronisation multipiste sur les backends supportes; critere de sortie: la reproduction deterministe echoue avant correction puis passe, les tests cibles audio/video/Molecule et garde-fous passent, les plateformes sans horloge precise retournent une erreur de capacite typee sans precision simulee, et les maps/documentations applicables refletent l'unique pipeline restant.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2014",
+      "originalLine": 385
+    },
+    {
+      "id": "HIST-0037",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 430,
+      "phase": "Phase 2 bis - Migration exclusive du transport métier Atome vers WebSocket",
+      "text": "Migrer toutes les operations Atome métier vers `/ws/api`, securiser `/ws/sync` par authentification et filtrage des permissions, implementer les actions WebSocket manquantes, retirer les lectures/ecritures HTTP et leurs fallbacks, puis valider la parite Fastify/Tauri/iOS et installer des garde-fous permanents; critere de sortie: tous les criteres et tests de `done/websocket_only_atome_transport.md` et `todo/cleanup_architecture/authenticated_permission_scoped_ws_sync.md` passent.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2002",
+      "originalLine": 424
+    },
+    {
+      "id": "HIST-0038",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 431,
+      "phase": "Phase 2 bis - Migration exclusive du transport métier Atome vers WebSocket",
+      "text": "Migrer l'identite utilisateur vers un principal opaque, immuable et independant du telephone: separer les alias de connexion/recherche, supprimer toute derivation ou prediction d'identifiant depuis un numero, migrer atomiquement les comptes existants et toutes leurs references, puis valider changement, suppression et reattribution du telephone sans perte ni transfert de donnees; critere de sortie: tous les criteres et tests de `todo/cleanup_architecture/stable_user_identity_independent_of_phone.md` passent.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2002",
+      "originalLine": 425
+    },
+    {
+      "id": "HIST-0039",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 432,
+      "phase": "Phase 2 bis - Migration exclusive du transport métier Atome vers WebSocket",
+      "text": "Remplacer la creation implicite de shadow users par un provisionnement Tauri/Fastify explicite et securise, tout en conservant `Essayer` comme espace invite local/prive a principal opaque isole et avec adoption transactionnelle optionnelle lors de la creation ou liaison d'un compte; critere de sortie: tous les criteres et tests de `todo/cleanup_architecture/explicit_cross_runtime_account_provisioning.md` passent.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2002",
+      "originalLine": 426
+    },
+    {
+      "id": "HIST-0040",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 433,
+      "phase": "Phase 2 bis - Migration exclusive du transport métier Atome vers WebSocket",
+      "text": "Migrer les verificateurs de mot de passe Fastify/Tauri/iOS vers Argon2id: ne creer que des hashes Argon2id, verifier les anciens bcrypt uniquement pour migration, les remplacer atomiquement apres connexion reussie, imposer 15 points de code Unicode minimum et au moins 64 acceptes avec espaces sans regles de composition, refuser les secrets compromis de facon respectueuse de la confidentialite, puis borner memoire/concurrence; critere de sortie: tous les criteres et tests de `todo/cleanup_architecture/argon2id_password_hash_migration.md` passent.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2001",
+      "originalLine": 427
+    },
+    {
+      "id": "HIST-0041",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 434,
+      "phase": "Phase 2 bis - Migration exclusive du transport métier Atome vers WebSocket",
+      "text": "Implementer la frontiere OVHcloud SMS de production apres une requete `/ws/api`: raccorder le point d'extension `sendSMS()` a un compte OVHcloud restreint, conserver protocoles et secrets exclusivement dans l'adaptateur serveur, interdire tout fallback automatique, remplacer `Math.random()` et les stores process-locaux par un OTP cryptographiquement sur et un defi temporaire PostgreSQL consomme atomiquement, sans OTP persiste en clair ni entree Atome/historique/sync, appliquer des limitations progressives multidimensionnelles sans verrouillage global du compte, puis journaliser les evenements de securite avec references opaques, empreinte reseau HMAC rotative, client normalise et retention automatique de six mois sans IP/user-agent complets; critere de sortie: tous les criteres et tests de `todo/cleanup_architecture/production_sms_provider_boundary.md` passent.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2001",
+      "originalLine": 428
+    },
+    {
+      "id": "HIST-0042",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 435,
+      "phase": "Phase 2 bis - Migration exclusive du transport métier Atome vers WebSocket",
+      "text": "Remplacer atomiquement la recuperation SMS seule par SMS plus cle d'appareil autorise, ou SMS plus Recovery Kit lorsque l'appareil est perdu, avec changement de telephone securise, delais/notifications, revocation complete et maintien du chemin actuel jusqu'a validation du remplacement; critere de sortie: tous les criteres et tests de `todo/cleanup_architecture/account_recovery_trusted_device_and_recovery_kit.md` passent.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2001",
+      "originalLine": 429
+    },
+    {
+      "id": "HIST-0043",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 436,
+      "phase": "Phase 2 bis - Migration exclusive du transport métier Atome vers WebSocket",
+      "text": "Supprimer tout stockage ou chargement de bearer tokens lisibles depuis `localStorage` ou `sessionStorage`, conserver les sessions navigateur dans des cookies HttpOnly et les secrets natifs dans le credential store ou coffre chiffre approuve, nettoyer les anciennes cles sans les reutiliser, puis installer un garde-fou permanent; critere de sortie: tous les criteres et tests de `todo/cleanup_architecture/secure_auth_token_storage.md` passent.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2001",
+      "originalLine": 430
+    },
+    {
+      "id": "HIST-0044",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 463,
+      "phase": "Phase 2 ter - Reconstruction acceleree de state_current par snapshot",
+      "text": "Implementer et valider la reconstruction acceleree snapshot + curseur d'evenements + replay du suffixe, avec comparaison au replay complet et garde-fou anti-suppression; critere de sortie: toutes les exigences et validations de `todo/cleanup_architecture/snapshot_accelerated_state_rebuild.md` passent.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2011",
+      "originalLine": 457
+    },
+    {
+      "id": "HIST-0045",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 490,
+      "phase": "Phase 2 quater - Time Machine historical branching",
+      "text": "Definir puis faire valider par l'utilisateur le modele Time Machine de branches, divergence, recomputation, conflits, fusion, abandon, permissions, synchronisation, snapshots et presentation; critere de sortie: le contrat versionne satisfait la Task 1 de `todo/ai_voice/time_machine_historical_branching.md`.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2011",
+      "originalLine": 484
+    },
+    {
+      "id": "HIST-0046",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 491,
+      "phase": "Phase 2 quater - Time Machine historical branching",
+      "text": "Implementer l'edition historique avec branches et replay avant deterministe uniquement apres validation du modele; critere de sortie: toutes les exigences et validations de la Task 2 de `todo/ai_voice/time_machine_historical_branching.md` passent sur Fastify, Tauri et les plateformes supportees.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2011",
+      "originalLine": 485
+    },
+    {
+      "id": "HIST-0047",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 520,
+      "phase": "Phase 3 ter - Product UI Bevy migration and DOM retirement",
+      "text": "Completer et valider les primitives BevyUI partagees manquantes et leurs interactions reelles, sans remigrer le dashboard ni le menu direct deja rendus par Bevy.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2004/2005",
+      "originalLine": 514
+    },
+    {
+      "id": "HIST-0048",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 521,
+      "phase": "Phase 3 ter - Product UI Bevy migration and DOM retirement",
+      "text": "Migrate the bottom Bevy main menu interaction model: direct actions, expandable palettes, latch state, dedicated hold actions, hold-to-palette, drag cancellation, and removal of the flattened legacy projection.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2009",
+      "originalLine": 515
+    },
+    {
+      "id": "HIST-0049",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 522,
+      "phase": "Phase 3 ter - Product UI Bevy migration and DOM retirement",
+      "text": "Repair the bottom Bevy main-menu palette opening regression at its canonical direct-motion owner: restore immediate first-frame presentation, the historical 180/70/120 ms elastic rebound, shared icon/label/accent movement, and validate real WebGPU clicks frame by frame without reconciliation fallback or duplicate animation path.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2014",
+      "originalLine": 516
+    },
+    {
+      "id": "HIST-0050",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 523,
+      "phase": "Phase 3 ter - Product UI Bevy migration and DOM retirement",
+      "text": "Migrate the Flower hold contract: held-pointer palette opening, immediate Back navigation, leaf preview followed by activation on release, and cancellation safety.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2014",
+      "originalLine": 517
+    },
+    {
+      "id": "HIST-0051",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 524,
+      "phase": "Phase 3 ter - Product UI Bevy migration and DOM retirement",
+      "text": "Delete Flower/menu/toolbox DOM bridges, aliases, factories, and browser-only state once the complete Bevy interaction contract is verified and no canonical consumer remains.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2014",
+      "originalLine": 518
+    },
+    {
+      "id": "HIST-0052",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 525,
+      "phase": "Phase 3 ter - Product UI Bevy migration and DOM retirement",
+      "text": "Confirmer le Dashboard fonctionnel rendu par Bevy: ouverture, fermeture, scroll, glissement, edition des libelles et absence d'arbre Dashboard DOM visible.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2009",
+      "originalLine": 519
+    },
+    {
+      "id": "HIST-0053",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 526,
+      "phase": "Phase 3 ter - Product UI Bevy migration and DOM retirement",
+      "text": "Ajouter le contexte Flower Matrix avec la tuile cible ou selectionnee et exactement Copy, Paste, Duplicate, Delete et Rename; critere de sortie: clic droit et appui long ouvrent le Flower canonique sur la bonne tuile, sans proxy DOM.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2009",
+      "originalLine": 520
+    },
+    {
+      "id": "HIST-0054",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 527,
+      "phase": "Phase 3 ter - Product UI Bevy migration and DOM retirement",
+      "text": "Relier les cinq actions Flower Matrix aux vrais chemins runtime et desactiver visiblement toute action indisponible; critere de sortie: chaque commande modifie la cible attendue ou retourne un etat desactive explicite, avec tests cibles.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2009",
+      "originalLine": 521
+    },
+    {
+      "id": "HIST-0055",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 528,
+      "phase": "Phase 3 ter - Product UI Bevy migration and DOM retirement",
+      "text": "Corriger ou formaliser l'ecart vertical de 0,5 px des previews Dashboard; critere de sortie: le contrat `dashboard_records` et le rendu accepte utilisent la meme regle d'arrondi.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2010",
+      "originalLine": 522
+    },
+    {
+      "id": "HIST-0056",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 529,
+      "phase": "Phase 3 ter - Product UI Bevy migration and DOM retirement",
+      "text": "Clore les notes de regression drag/lasso encore ouvertes dans `robust_bevy_regression_fix_prompt_en.md`; critere de sortie: priorite des gestes et selection lasso passent leurs interactions reelles et contrats cibles.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2009",
+      "originalLine": 523
+    },
+    {
+      "id": "HIST-0057",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 530,
+      "phase": "Phase 3 ter - Product UI Bevy migration and DOM retirement",
+      "text": "Migrer les panels/dialogs et leur infrastructure commune, puis supprimer les factories, observateurs layout et lectures de geometrie DOM devenus inutiles; le chrome Molecule reste execute en Phase 4 apres sa stabilisation fonctionnelle.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2014",
+      "originalLine": 524
+    },
+    {
+      "id": "HIST-0058",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 531,
+      "phase": "Phase 3 ter - Product UI Bevy migration and DOM retirement",
+      "text": "Realiser l'audit calendrier et implementer sa projection Bevy sans dupliquer CalendarAPI, recurrence, alarmes, todos ou fuseaux horaires.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2012",
+      "originalLine": 525
+    },
+    {
+      "id": "HIST-0059",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 532,
+      "phase": "Phase 3 ter - Product UI Bevy migration and DOM retirement",
+      "text": "Realiser l'audit map/localisation, valider le provider et la confidentialite, puis implementer la scene Bevy sans Leaflet ni widget DOM embarque.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2014",
+      "originalLine": 526
+    },
+    {
+      "id": "HIST-0060",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 533,
+      "phase": "Phase 3 ter - Product UI Bevy migration and DOM retirement",
+      "text": "Inventorier puis supprimer toutes les couches visibles Intuition/View/DOM devenues sans consommateurs apres migration.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2009",
+      "originalLine": 527
+    },
+    {
+      "id": "HIST-0061",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 534,
+      "phase": "Phase 3 ter - Product UI Bevy migration and DOM retirement",
+      "text": "Valider Web, Tauri et iOS sur le meme contrat scene/diff/interactions, avec erreurs typees pour les capacites indisponibles.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 528
+    },
+    {
+      "id": "HIST-0062",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 577,
+      "phase": "Phase 1 - Gouvernance architecture Atome/eVe",
+      "text": "Valider avec l'utilisateur la frontiere open-source Atome / closed-source eVe.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 571
+    },
+    {
+      "id": "HIST-0063",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 578,
+      "phase": "Phase 1 - Gouvernance architecture Atome/eVe",
+      "text": "Valider les regles de classement: UI closed, tools closed, infrastructure de l'app open, security open, cross-platform open, server open.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2001",
+      "originalLine": 572
+    },
+    {
+      "id": "HIST-0064",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 579,
+      "phase": "Phase 1 - Gouvernance architecture Atome/eVe",
+      "text": "Identifier les dependances autorisees et interdites entre couches open et closed.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 573
+    },
+    {
+      "id": "HIST-0065",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 580,
+      "phase": "Phase 1 - Gouvernance architecture Atome/eVe",
+      "text": "Identifier les dossiers et modules a deplacer, scinder, ou proteger pour respecter cette architecture.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 574
+    },
+    {
+      "id": "HIST-0066",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 581,
+      "phase": "Phase 1 - Gouvernance architecture Atome/eVe",
+      "text": "Verifier que la structure cible est suffisamment stable pour devenir la base des cartographies futures.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 575
+    },
+    {
+      "id": "HIST-0067",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 582,
+      "phase": "Phase 1 - Gouvernance architecture Atome/eVe",
+      "text": "Executer les deplacements, scissions, et protections structurels valides avant toute cartographie future.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 576
+    },
+    {
+      "id": "HIST-0068",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 583,
+      "phase": "Phase 1 - Gouvernance architecture Atome/eVe",
+      "text": "Produire un test ou une verification adaptee apres chaque sous-tache et un rapport d'avancement global.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 577
+    },
+    {
+      "id": "HIST-0069",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 637,
+      "phase": "Phase 2 - Cartographie framework, APIs, code et MCP",
+      "text": "Creer ou mettre a jour maps/CODEMAP.md apres validation de la phase 1.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2019",
+      "originalLine": 631
+    },
+    {
+      "id": "HIST-0070",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 638,
+      "phase": "Phase 2 - Cartographie framework, APIs, code et MCP",
+      "text": "Creer ou mettre a jour maps/API_MAP.md apres validation de la phase 1.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2019",
+      "originalLine": 632
+    },
+    {
+      "id": "HIST-0071",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 639,
+      "phase": "Phase 2 - Cartographie framework, APIs, code et MCP",
+      "text": "Creer maps/DESIGN_MAP.md pour cartographier le design JavaScript, les tokens, les factories visuelles, les styles injectes, les assets, et les exceptions CSS generees ou vendorisees.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2001",
+      "originalLine": 633
+    },
+    {
+      "id": "HIST-0072",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 640,
+      "phase": "Phase 2 - Cartographie framework, APIs, code et MCP",
+      "text": "Creer ou mettre a jour maps/ARCHITECTURE_MAP.md apres validation de la phase 1.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2019",
+      "originalLine": 634
+    },
+    {
+      "id": "HIST-0073",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 641,
+      "phase": "Phase 2 - Cartographie framework, APIs, code et MCP",
+      "text": "Lister les APIs publiques, semi-publiques, et internes sans hallucination ni doublon.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 635
+    },
+    {
+      "id": "HIST-0074",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 642,
+      "phase": "Phase 2 - Cartographie framework, APIs, code et MCP",
+      "text": "Faire apparaitre explicitement la frontiere Atome open / eVe closed dans les maps.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2019",
+      "originalLine": 636
+    },
+    {
+      "id": "HIST-0075",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 643,
+      "phase": "Phase 2 - Cartographie framework, APIs, code et MCP",
+      "text": "Rendre ces maps obligatoires avant toute nouvelle implementation.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2019",
+      "originalLine": 637
+    },
+    {
+      "id": "HIST-0076",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 644,
+      "phase": "Phase 2 - Cartographie framework, APIs, code et MCP",
+      "text": "Produire un test ou une verification documentaire ciblee apres chaque sous-tache et un rapport d'avancement global.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 638
+    },
+    {
+      "id": "HIST-0077",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 693,
+      "phase": "Phase 3 - Audit strict de securite framework / resolution des failles",
+      "text": "Inventorier toutes les surfaces de securite du framework: filesystem, reseau, websocket, bridges JS/natifs, tokens, secrets, permissions, stockage, MCP, sync, server, sandbox, et imports dynamiques.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2002",
+      "originalLine": 687
+    },
+    {
+      "id": "HIST-0078",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 694,
+      "phase": "Phase 3 - Audit strict de securite framework / resolution des failles",
+      "text": "Verifier en profondeur les risques de fuite de secrets, d'injection de commande, de traversal de chemin, d'elevation de privilege, de bypass de permissions, de bridge trop permissif, et de payloads non valides.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 688
+    },
+    {
+      "id": "HIST-0079",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 695,
+      "phase": "Phase 3 - Audit strict de securite framework / resolution des failles",
+      "text": "Auditer les flux auth, user preferences sensibles, token storage, journalisation, rate limiting, et separation des donnees utilisateur.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2001",
+      "originalLine": 689
+    },
+    {
+      "id": "HIST-0080",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 696,
+      "phase": "Phase 3 - Audit strict de securite framework / resolution des failles",
+      "text": "Auditer les surfaces MCP et IA pour confirmer l'absence de raccourcis dangereux, de mutations non autorisees, et de contournements du pipeline canonique.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2014",
+      "originalLine": 690
+    },
+    {
+      "id": "HIST-0081",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 697,
+      "phase": "Phase 3 - Audit strict de securite framework / resolution des failles",
+      "text": "Prioriser les failles par severite: critique, haute, moyenne, basse.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 691
+    },
+    {
+      "id": "HIST-0082",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 698,
+      "phase": "Phase 3 - Audit strict de securite framework / resolution des failles",
+      "text": "Corriger toutes les failles critiques et hautes avant de poursuivre.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 692
+    },
+    {
+      "id": "HIST-0083",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 699,
+      "phase": "Phase 3 - Audit strict de securite framework / resolution des failles",
+      "text": "Documenter clairement les failles restantes avec impact, proprietaire, plan de remediation, et justification si elles ne sont pas corrigees immediatement.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2014",
+      "originalLine": 693
+    },
+    {
+      "id": "HIST-0084",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 700,
+      "phase": "Phase 3 - Audit strict de securite framework / resolution des failles",
+      "text": "Produire des tests et verifications de securite cibles apres chaque correction sensible.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2001",
+      "originalLine": 694
+    },
+    {
+      "id": "HIST-0085",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 701,
+      "phase": "Phase 3 - Audit strict de securite framework / resolution des failles",
+      "text": "Produire un rapport d'audit et de resolution des failles avec avancement global avant cloture de phase.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 695
+    },
+    {
+      "id": "HIST-0086",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 702,
+      "phase": "Phase 3 - Audit strict de securite framework / resolution des failles",
+      "text": "Revalider la cloture securite apres authentification et cloisonnement de `/ws/sync`; critere de sortie: les connexions anonymes sont refusees avant `welcome`, les evenements Atome, comptes et fichiers sont limites aux permissions et capacites du principal, et tous les tests de `todo/cleanup_architecture/authenticated_permission_scoped_ws_sync.md` passent.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2002",
+      "originalLine": 696
+    },
+    {
+      "id": "HIST-0087",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 731,
+      "phase": "Phase 4 - Finalisation Molecule / MTraX",
+      "text": "Traiter les bugs Molecule dans l'ordre du guide trouble solving.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2010",
+      "originalLine": 725
+    },
+    {
+      "id": "HIST-0088",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 732,
+      "phase": "Phase 4 - Finalisation Molecule / MTraX",
+      "text": "Ajouter et maintenir les probes/tests Molecule v2, l'UI reelle, le visuel, la performance, l'endurance et les builds de plateforme dans un manifeste d'acceptation unique.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2010",
+      "originalLine": 726
+    },
+    {
+      "id": "HIST-0089",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 733,
+      "phase": "Phase 4 - Finalisation Molecule / MTraX",
+      "text": "Inventorier puis retirer de la route active les noms mtrack, mtrax, mtracks et hmtracks devenus incompatibles avec le contrat v2.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2010",
+      "originalLine": 727
+    },
+    {
+      "id": "HIST-0090",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 734,
+      "phase": "Phase 4 - Finalisation Molecule / MTraX",
+      "text": "Stabiliser directement le nom Molecule sur la route v2, sans migration de donnees ni renommage progressif de l'ancien format.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2010",
+      "originalLine": 728
+    },
+    {
+      "id": "HIST-0091",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 735,
+      "phase": "Phase 4 - Finalisation Molecule / MTraX",
+      "text": "Retirer les aliases legacy de la route Molecule v2 conformement au contrat sans compatibilite historique.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2011",
+      "originalLine": 729
+    },
+    {
+      "id": "HIST-0092",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 736,
+      "phase": "Phase 4 - Finalisation Molecule / MTraX",
+      "text": "Migrer le chrome visible Molecule vers Bevy et supprimer son panel DOM et le contrat footer orphelin selon V2.12.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2010",
+      "originalLine": 730
+    },
+    {
+      "id": "HIST-0093",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 737,
+      "phase": "Phase 4 - Finalisation Molecule / MTraX",
+      "text": "Remplacer le contrat Marker/Cell par le schema Molecule v2 canonique `Molecule -> Section -> Piste`, sans compatibilite historique; supprimer le convertisseur v1, le panel DOM et son footer orphelin; ajouter Sections, Pistes, groupes, regions Record, crop, boucles, quantification et les outils API correspondants.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2011",
+      "originalLine": 731
+    },
+    {
+      "id": "HIST-0094",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 738,
+      "phase": "Phase 4 - Finalisation Molecule / MTraX",
+      "text": "Terminer l'acceptation executable Molecule v2: interactions Liste, rail Info editable, capture generique et Record region, transports scopes, Mixage, UI/visuel WebGPU, Tauri natif, builds iOS/AUv3, performance et endurance.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2010",
+      "originalLine": 732
+    },
+    {
+      "id": "HIST-0095",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 739,
+      "phase": "Phase 4 - Finalisation Molecule / MTraX",
+      "text": "Ajouter l'activite Timeline continue et les boucles Apple-style par bloc comme projections du meme snapshot v2.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2011",
+      "originalLine": 733
+    },
+    {
+      "id": "HIST-0096",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 740,
+      "phase": "Phase 4 - Finalisation Molecule / MTraX",
+      "text": "Valider les portes physiques restantes sur iPhone et iPad connectes, puis le chemin exact `plugin_input` dans un vrai hote AUv3 avec le composant installe; aucune preuve Simulator/Web/Tauri ne peut fermer cette ligne.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2010",
+      "originalLine": 734
+    },
+    {
+      "id": "HIST-0097",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 768,
+      "phase": "Phase 5 - AV APIs / recording / preview",
+      "text": "Reconnect and harden audio, video, and photo recording as the user-authorized Phase 5 priority from 2026-07-19: reuse the active capture controllers and their serialized start/stop lifecycle; reserve identity and placement in memory; persist and validate the media before one canonical Atome commit; display a derived Bevy-only audio scope or video thumbnail inside the active tool and a 120 ms Bevy shutter flash for photo; return to the normal icon only after durable success; preserve AUv3 sample-accurate `plugin_input` recording while generic audio and video reject exactness requests explicitly; and remove confirmed obsolete recording paths in the touched ownership chain.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2002",
+      "originalLine": 762
+    },
+    {
+      "id": "HIST-0098",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 792,
+      "phase": "Phase 5 - AV APIs / recording / preview",
+      "text": "Sortir l'extraction audio de conteneur video hors de bridge.rs.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2010",
+      "originalLine": 786
+    },
+    {
+      "id": "HIST-0099",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 793,
+      "phase": "Phase 5 - AV APIs / recording / preview",
+      "text": "Retirer les ecritures disque du callback CPAL.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2010",
+      "originalLine": 787
+    },
+    {
+      "id": "HIST-0100",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 794,
+      "phase": "Phase 5 - AV APIs / recording / preview",
+      "text": "Supprimer les allocations par callback dans le metering recorder.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2010",
+      "originalLine": 788
+    },
+    {
+      "id": "HIST-0101",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 795,
+      "phase": "Phase 5 - AV APIs / recording / preview",
+      "text": "Encadrer ou supprimer les chemins debug Swift en production.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 789
+    },
+    {
+      "id": "HIST-0102",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 796,
+      "phase": "Phase 5 - AV APIs / recording / preview",
+      "text": "Remplacer progressivement l'ancien chemin recorder C FFI AUv3.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2010",
+      "originalLine": 790
+    },
+    {
+      "id": "HIST-0103",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 797,
+      "phase": "Phase 5 - AV APIs / recording / preview",
+      "text": "Stabiliser les frontieres publiques audio/video playback/recording/preview.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2010",
+      "originalLine": 791
+    },
+    {
+      "id": "HIST-0104",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 798,
+      "phase": "Phase 5 - AV APIs / recording / preview",
+      "text": "Implementer le contrat d'export professionnel et la decision des profils ouverts, archivage et livraison.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2010",
+      "originalLine": 792
+    },
+    {
+      "id": "HIST-0105",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 799,
+      "phase": "Phase 5 - AV APIs / recording / preview",
+      "text": "Supprimer les anciennes routes HTMLMediaElement et no-op media renderer; les capacites indisponibles doivent retourner une erreur typee explicite.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2014",
+      "originalLine": 793
+    },
+    {
+      "id": "HIST-0106",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 821,
+      "phase": "Phase 6 - Partage / sync / Finder",
+      "text": "Reproduire le bug de partage Fastify vers Tauri et collecter les logs.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2004/2005",
+      "originalLine": 815
+    },
+    {
+      "id": "HIST-0107",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 822,
+      "phase": "Phase 6 - Partage / sync / Finder",
+      "text": "Identifier la cause: receiverProjectId, parent_id, ou filtre loadProjectAtomes().",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2004/2005",
+      "originalLine": 816
+    },
+    {
+      "id": "HIST-0108",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 823,
+      "phase": "Phase 6 - Partage / sync / Finder",
+      "text": "Consolider getCurrentProjectId().",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 817
+    },
+    {
+      "id": "HIST-0109",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 824,
+      "phase": "Phase 6 - Partage / sync / Finder",
+      "text": "Supprimer les fallbacks qui masquent les erreurs.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 818
+    },
+    {
+      "id": "HIST-0110",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 825,
+      "phase": "Phase 6 - Partage / sync / Finder",
+      "text": "Ajouter validation et erreurs claires pour les partages non lies.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2004/2005",
+      "originalLine": 819
+    },
+    {
+      "id": "HIST-0111",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 826,
+      "phase": "Phase 6 - Partage / sync / Finder",
+      "text": "Implementer et valider l'option d'acceptation persistante par expediteur: case `Accepter automatiquement les prochains partages de cet expediteur` cochee par defaut dans l'ecran d'acceptation, de-cochable avant validation, politique `always` limitee au perimetre explicitement autorise et revocable; critere de sortie: le partage courant, l'auto-accept compatible, le refus d'elargissement implicite et la revocation sont verifies.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2004/2005",
+      "originalLine": 820
+    },
+    {
+      "id": "HIST-0112",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 827,
+      "phase": "Phase 6 - Partage / sync / Finder",
+      "text": "Implementer le vrai mode manuel lie sans conversion en copie: conserver l'identite du lien et un curseur de publication accepte, accumuler les mutations append-only autorisees sans propagation de fond, puis publier et appliquer explicitement le delta par WebSocket; critere de sortie: temps reel lie, manuel lie et copie detachee ont trois comportements distincts, testes avec permissions, expiration, rejet, reconnexion et absence de fallback.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2002",
+      "originalLine": 821
+    },
+    {
+      "id": "HIST-0113",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 828,
+      "phase": "Phase 6 - Partage / sync / Finder",
+      "text": "Implementer la resolution hors ligne last-write-wins sans perte historique: ordonner les evenements autorises par timestamp avec departage deterministe, projeter le gagnant courant, conserver tous les evenements concurrents dans le journal append-only et produire toute correction/restauration comme nouvel evenement; critere de sortie: replay hors ligne, conflits, egalites d'horodatage, permissions, diagnostics, relecture complete et parite Fastify/Tauri/iOS sont verifies sans mutation du passe.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2011",
+      "originalLine": 822
+    },
+    {
+      "id": "HIST-0114",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 829,
+      "phase": "Phase 6 - Partage / sync / Finder",
+      "text": "Rendre le telephone et les coordonnees prives par defaut dans tout le repertoire: ajouter un consentement explicite et revocable independant de la visibilite du profil, supprimer les contacts et secrets des listes publiques, recherches, caches hors ligne et evenements de compte, puis n'exposer les champs consentis qu'au proprietaire ou aux relations autorisees; critere de sortie: profil public sans consentement, consentement actif/revoque, relations autorisees, `/ws/sync`, Fastify/Tauri/iOS et absence absolue de `password_hash` dans les payloads clients sont testes.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2002",
+      "originalLine": 823
+    },
+    {
+      "id": "HIST-0115",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 830,
+      "phase": "Phase 6 - Partage / sync / Finder",
+      "text": "Stabiliser Finder apres correction du modele partage/projet.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2004/2005",
+      "originalLine": 824
+    },
+    {
+      "id": "HIST-0116",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 831,
+      "phase": "Phase 6 - Partage / sync / Finder",
+      "text": "Valider puis solder le debug Communication: message direct durable sans sujet, notification non lue projetee dans le panneau et l'outil, publication `All` dans Dashboard News, destinataires activables, depot canonique Atome/Molecule/Projet et section Avance/Conditions; critere de sortie: contrats cibles, deux comptes Web jetables et captures visuelles reelles passent, avec Tauri et iOS rapportes separement.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2006",
+      "originalLine": 825
+    },
+    {
+      "id": "HIST-0117",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 866,
+      "phase": "Phase 7 - Migration V2 / cleanup large / performance",
+      "text": "Executer integralement le programme Granularity Validation de `todo/2- Granularity_Validation.md`, section 27, avant de poursuivre l'extension transverse de Conditions: etablir les fixtures QA isolees et le Fastify LAN canonique; reproduire puis corriger GV-T01 a GV-T28 aux proprietaires ADOLE/commit/projection/realtime/history existants; valider ACL, revocation, reconnexion, concurrence, offline, idempotence, recherche/export, custom/collections et medias; executer les sept directions Web-Web, Web-Tauri, Tauri-Web, Web-iOS, iOS-Web, Tauri-iOS et iOS-Tauri avec deux utilisateurs puis le meme compte; reutiliser exclusivement `server_config.json`, `/ws/api`, `/ws/sync`, `window.Atome.commit`/`commitBatch`, les controleurs media et la scene Bevy/WebGPU. Critere de sortie: les 20 portes de la section 27 sont vertes, les budgets p95 sont mesures, aucun payload interdit n'est observe, l'iPhone physique signe est valide, les mutations DOM/voies paralleles concernees sont supprimees, les cartes/contrats/State File sont actuels, les diagnostics sont nettoyes et le verdict devient `GRANULARITY VALIDATION: PASS`.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2014",
+      "originalLine": 860
+    },
+    {
+      "id": "HIST-0118",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 867,
+      "phase": "Phase 7 - Migration V2 / cleanup large / performance",
+      "text": "Implementer le moteur transverse Conditions v1 et son composant Bevy contextuel unique apres gel des regressions de granularite et de securite; reutiliser les autorites Atome, permissions, commit, partage, Finder, Calendar et temps reel; migrer puis supprimer les evaluateurs locaux; critere de sortie: schemas versionnes, logique TRUE/FALSE/UNKNOWN fail-closed pour la securite, references sauvegardees vivantes avec reautorisation des usages sensibles, granularite propriete/custom, projections serveur sans fuite, integrations Finder/Contacts/Communication/Share/Info/Profil/Calendar, nettoyage des watchers, cartes et documentation sont valides par tests permanents Web/Tauri/iOS sans moteur, etat DOM, renderer ou voie de mutation parallele.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2002",
+      "originalLine": 861
+    },
+    {
+      "id": "HIST-0119",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 873,
+      "phase": "Phase 7 - Migration V2 / cleanup large / performance",
+      "text": "Executer le nettoyage profond de conformite des fichiers source: tailles, annotations verbeuses, duplication verifiee via les maps, recherche de code mort/inoperant/problematique, factorisation, simplification sans regression, et unification stricte des styles systeme partages a partir de eVe/elements/system_ui_tokens.js sans doubler les sources de couleurs, blur, shadow ou fonds derives.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2001",
+      "originalLine": 867
+    },
+    {
+      "id": "HIST-0120",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 874,
+      "phase": "Phase 7 - Migration V2 / cleanup large / performance",
+      "text": "Supprimer progressivement les bridges eveGoeyMenuApi.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 868
+    },
+    {
+      "id": "HIST-0121",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 875,
+      "phase": "Phase 7 - Migration V2 / cleanup large / performance",
+      "text": "Supprimer l'alias legacy new_menu.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2014",
+      "originalLine": 869
+    },
+    {
+      "id": "HIST-0122",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 876,
+      "phase": "Phase 7 - Migration V2 / cleanup large / performance",
+      "text": "Normaliser les IDs tools en _intuition_v2_*.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 870
+    },
+    {
+      "id": "HIST-0123",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 877,
+      "phase": "Phase 7 - Migration V2 / cleanup large / performance",
+      "text": "Nettoyer les APIs clone/outils legacy.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 871
+    },
+    {
+      "id": "HIST-0124",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 878,
+      "phase": "Phase 7 - Migration V2 / cleanup large / performance",
+      "text": "Renommer les contrats V1 encore exposes.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 872
+    },
+    {
+      "id": "HIST-0125",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 879,
+      "phase": "Phase 7 - Migration V2 / cleanup large / performance",
+      "text": "Migrer les cles de persistance *_v1.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2003",
+      "originalLine": 873
+    },
+    {
+      "id": "HIST-0126",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 880,
+      "phase": "Phase 7 - Migration V2 / cleanup large / performance",
+      "text": "Executer la sanitisation du systeme de tools decrite dans todo/tools/tool_sanitisation.md avant de declarer la migration V2 des tools comme stabilisee.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 874
+    },
+    {
+      "id": "HIST-0127",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 881,
+      "phase": "Phase 7 - Migration V2 / cleanup large / performance",
+      "text": "Ajouter les garde-fous CI anti regression V1.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 875
+    },
+    {
+      "id": "HIST-0128",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 882,
+      "phase": "Phase 7 - Migration V2 / cleanup large / performance",
+      "text": "Nettoyer uniquement les artefacts generes confirmes comme jetables.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 876
+    },
+    {
+      "id": "HIST-0129",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 883,
+      "phase": "Phase 7 - Migration V2 / cleanup large / performance",
+      "text": "Corriger l'occupation plein ecran iOS sur iPhone pour supprimer les bandes noires haut/bas sans regression sur iPad.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 877
+    },
+    {
+      "id": "HIST-0130",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 884,
+      "phase": "Phase 7 - Migration V2 / cleanup large / performance",
+      "text": "Executer le plan deep UX/performance apres stabilisation des frontieres V2.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 878
+    },
+    {
+      "id": "HIST-0131",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 885,
+      "phase": "Phase 7 - Migration V2 / cleanup large / performance",
+      "text": "Remplacer les echecs silencieux des APIs de developpement par des erreurs typees et actionnables, sans fallback implicite; critere de sortie: templates, parents, styles et handlers invalides sont couverts par des contrats dev/prod explicites.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 879
+    },
+    {
+      "id": "HIST-0132",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 907,
+      "phase": "Phase 8 - Auth, Apple Mail, notifications, calendar",
+      "text": "Completer les points production auth critiques.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2001",
+      "originalLine": 901
+    },
+    {
+      "id": "HIST-0133",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 908,
+      "phase": "Phase 8 - Auth, Apple Mail, notifications, calendar",
+      "text": "Valider les contraintes Apple Mail IMAP/CalDAV.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2014",
+      "originalLine": 902
+    },
+    {
+      "id": "HIST-0134",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 909,
+      "phase": "Phase 8 - Auth, Apple Mail, notifications, calendar",
+      "text": "Stabiliser le systeme de notifications.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2006",
+      "originalLine": 903
+    },
+    {
+      "id": "HIST-0135",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 910,
+      "phase": "Phase 8 - Auth, Apple Mail, notifications, calendar",
+      "text": "Ajouter vue semaine, recherche et preferences calendar.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2012",
+      "originalLine": 904
+    },
+    {
+      "id": "HIST-0136",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 911,
+      "phase": "Phase 8 - Auth, Apple Mail, notifications, calendar",
+      "text": "Liberer le focus natif du champ mot de passe apres authentification avant de reveler le workspace; critere de sortie: `user_panel_content_contract` passe sans focus retenu dans la sequence masquee.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2001",
+      "originalLine": 905
+    },
+    {
+      "id": "HIST-0137",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 939,
+      "phase": "Phase 9 - IA vocale / MCP / editor / runtime",
+      "text": "Stabiliser le contrat semantique mail.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2014",
+      "originalLine": 933
+    },
+    {
+      "id": "HIST-0138",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 940,
+      "phase": "Phase 9 - IA vocale / MCP / editor / runtime",
+      "text": "Stabiliser la memoire de session.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 934
+    },
+    {
+      "id": "HIST-0139",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 941,
+      "phase": "Phase 9 - IA vocale / MCP / editor / runtime",
+      "text": "Stabiliser le transport Tauri/mail.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2014",
+      "originalLine": 935
+    },
+    {
+      "id": "HIST-0140",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 942,
+      "phase": "Phase 9 - IA vocale / MCP / editor / runtime",
+      "text": "Ajouter une couche robuste d'interpretation STT.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2014",
+      "originalLine": 936
+    },
+    {
+      "id": "HIST-0141",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 943,
+      "phase": "Phase 9 - IA vocale / MCP / editor / runtime",
+      "text": "Etendre le meme modele a contacts et calendar.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2012",
+      "originalLine": 937
+    },
+    {
+      "id": "HIST-0142",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 944,
+      "phase": "Phase 9 - IA vocale / MCP / editor / runtime",
+      "text": "Etendre le meme modele aux outils Atome.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 938
+    },
+    {
+      "id": "HIST-0143",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 945,
+      "phase": "Phase 9 - IA vocale / MCP / editor / runtime",
+      "text": "Integrer l'editeur code/MCP sur une base architecturelle stable.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2014",
+      "originalLine": 939
+    },
+    {
+      "id": "HIST-0144",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 946,
+      "phase": "Phase 9 - IA vocale / MCP / editor / runtime",
+      "text": "Ajouter tests semantiques, orchestrateur et E2E Tauri.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 940
+    },
+    {
+      "id": "HIST-0145",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 978,
+      "phase": "Phase 10 - Chantiers produits differables",
+      "text": "Replace the legacy floating Atome editing footer with the shared-canvas Bevy contextual editing menu, including runtime-only multi-Atome editing state, the attached edit footer, the handed contextual rail, canonical drag/resize/fullscreen intents, and the common vertical slider; exit criterion: the specification and its Web, Tauri, and iOS validation gates are complete with no authoritative DOM footer or second canvas.",
+      "historicallyChecked": true,
+      "decision": "removed from active creation; historical completed claim retained without fresh runtime validation",
+      "canonicalTarget": "ATM-2001",
+      "originalLine": 972
+    },
+    {
+      "id": "HIST-0146",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 979,
+      "phase": "Phase 10 - Chantiers produits differables",
+      "text": "MIDI.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2021",
+      "originalLine": 973
+    },
+    {
+      "id": "HIST-0147",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 980,
+      "phase": "Phase 10 - Chantiers produits differables",
+      "text": "Vector editing layer.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2021",
+      "originalLine": 974
+    },
+    {
+      "id": "HIST-0148",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 981,
+      "phase": "Phase 10 - Chantiers produits differables",
+      "text": "Universal canvas, including verification that Squirrel and preferably the open-source Squirrel + Atome engine remain correctly exported through the CDN and still produce a viable functional PWA.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2014",
+      "originalLine": 975
+    },
+    {
+      "id": "HIST-0149",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 982,
+      "phase": "Phase 10 - Chantiers produits differables",
+      "text": "Matrix protocol + MediaSoup communication stack: Matrix accounts, exchange rooms, social/news wall and telephony/call state use the canonical WebSocket architecture for commands, signaling and durable data; only mediasoup real-time audio/video streams use the explicitly authorized WebRTC/RTP media-plane exception; critere de sortie: tous les criteres de `todo/dev_ops/install_MediaSoup.md` passent sans REST, HTTP polling or alternate signaling transport.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2001",
+      "originalLine": 976
+    },
+    {
+      "id": "HIST-0150",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 983,
+      "phase": "Phase 10 - Chantiers produits differables",
+      "text": "Presets/skins.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2021",
+      "originalLine": 977
+    },
+    {
+      "id": "HIST-0151",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 984,
+      "phase": "Phase 10 - Chantiers produits differables",
+      "text": "API sugar.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2022",
+      "originalLine": 978
+    },
+    {
+      "id": "HIST-0152",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 985,
+      "phase": "Phase 10 - Chantiers produits differables",
+      "text": "Publication npm.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2022",
+      "originalLine": 979
+    },
+    {
+      "id": "HIST-0153",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 986,
+      "phase": "Phase 10 - Chantiers produits differables",
+      "text": "Documentation.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2022",
+      "originalLine": 980
+    },
+    {
+      "id": "HIST-0154",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 987,
+      "phase": "Phase 10 - Chantiers produits differables",
+      "text": "Website publishing.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2022",
+      "originalLine": 981
+    },
+    {
+      "id": "HIST-0155",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 988,
+      "phase": "Phase 10 - Chantiers produits differables",
+      "text": "Ace Step integration in eVe.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 982
+    },
+    {
+      "id": "HIST-0156",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 989,
+      "phase": "Phase 10 - Chantiers produits differables",
+      "text": "Integrer le monitoring reactif des tools dans l'Info Panel apres sanitisation des tools et migration Bevy des panels; critere de sortie: tools visibles, hidden et systeme refletent et pilotent le vrai runtime sans etat parallele.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2009",
+      "originalLine": 983
+    },
+    {
+      "id": "HIST-0157",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 1015,
+      "phase": "Phase 10 - Chantiers produits differables",
+      "text": "Toutes les phases ci-dessus sont terminees.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 1009
+    },
+    {
+      "id": "HIST-0158",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 1016,
+      "phase": "Phase 10 - Chantiers produits differables",
+      "text": "Toutes les validations finales sont passees.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 1010
+    },
+    {
+      "id": "HIST-0159",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 1017,
+      "phase": "Phase 10 - Chantiers produits differables",
+      "text": "Executer et reconcilier les registres `todo/tests/`; critere de sortie: chaque scenario est automatise, valide manuellement avec preuve, ou classe obsolète sans doublon.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 1011
+    },
+    {
+      "id": "HIST-0160",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 1018,
+      "phase": "Phase 10 - Chantiers produits differables",
+      "text": "Tous les fichiers todo soldes ont ete deplaces vers done/.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 1012
+    },
+    {
+      "id": "HIST-0161",
+      "source": "done/obsolete/execution_order_before_spring_cleanup_2026-10-12.md",
+      "line": 1019,
+      "phase": "Phase 10 - Chantiers produits differables",
+      "text": "Supprimer ce fichier: todo/execution_order.md.",
+      "historicallyChecked": false,
+      "decision": "remaining scope consolidated; already implemented subsets are not repeated",
+      "canonicalTarget": "ATM-2013",
+      "originalLine": 1013
+    }
+  ],
+  "localDocuments": [
+    {
+      "path": "todo/!!!!atome_eve_liste_hierarchie_lecture_prompt.md",
+      "destination": "todo/!!!!atome_eve_liste_hierarchie_lecture_prompt.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/!!!!testflight_automation_prompt.md",
+      "destination": "todo/!!!!testflight_automation_prompt.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/!!!_urgent_debug.md",
+      "destination": "todo/!!!_urgent_debug.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/!urgent_corrections.md",
+      "destination": "todo/!urgent_corrections.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/0-finalise-features_AUDIT_PLAN.md",
+      "destination": "todo/0-finalise-features_AUDIT_PLAN.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/000_View Mode Correction.md",
+      "destination": "todo/000_View Mode Correction.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/00_UI_spécifications__application.md",
+      "destination": "todo/00_UI_spécifications__application.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/0_record_actions.md",
+      "destination": "todo/0_record_actions.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/0_stretch_samplig.md",
+      "destination": "todo/0_stretch_samplig.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/1- condition.md",
+      "destination": "todo/1- condition.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/2- Granularity_Validation.md",
+      "destination": "todo/2- Granularity_Validation.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/3 - teleport.md",
+      "destination": "todo/3 - teleport.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/4 - finalise-hardening.md",
+      "destination": "todo/4 - finalise-hardening.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/5 - objectives.md",
+      "destination": "todo/5 - objectives.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/AI Audio Integration.md",
+      "destination": "todo/AI Audio Integration.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/AI Video Integration.md",
+      "destination": "todo/AI Video Integration.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/AI_problem.md",
+      "destination": "todo/AI_problem.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/Calendar Scheduled Actions.md",
+      "destination": "todo/Calendar Scheduled Actions.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/DSP_audio_engine.md",
+      "destination": "todo/DSP_audio_engine.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/New work/atome_songlist_full_spec.md",
+      "destination": "todo/New work/atome_songlist_full_spec.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/New work/atome_toolbox_addons_spec.md",
+      "destination": "todo/New work/atome_toolbox_addons_spec.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/README.md",
+      "destination": "todo/README.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/UI refactor.md",
+      "destination": "todo/UI refactor.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/ai_voice/AI_Integration.md",
+      "destination": "todo/ai_voice/AI_Integration.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/ai_voice/AI_integration_problems_to_solve.md",
+      "destination": "todo/ai_voice/AI_integration_problems_to_solve.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/ai_voice/MCP_voice_control.md",
+      "destination": "todo/ai_voice/MCP_voice_control.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/ai_voice/ace_step_integration.md",
+      "destination": "todo/ai_voice/ace_step_integration.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/ai_voice/eVe_AI.md",
+      "destination": "todo/ai_voice/eVe_AI.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/ai_voice/eVe_MCP_APIS_Tools.md",
+      "destination": "todo/ai_voice/eVe_MCP_APIS_Tools.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/ai_voice/eVe_code_editor.md",
+      "destination": "todo/ai_voice/eVe_code_editor.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/ai_voice/history_and_ai.md",
+      "destination": "todo/ai_voice/history_and_ai.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/ai_voice/time_machine_historical_branching.md",
+      "destination": "todo/ai_voice/time_machine_historical_branching.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/ai_voice/voice_recognition.md",
+      "destination": "todo/ai_voice/voice_recognition.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/android.md",
+      "destination": "todo/android.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/archive_user.md",
+      "destination": "todo/archive_user.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/assistant_debug_selection_tv.md",
+      "destination": "todo/assistant_debug_selection_tv.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/atome OS Audit.md",
+      "destination": "todo/atome OS Audit.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/atome_better_modfiying_development .md",
+      "destination": "todo/atome_better_modfiying_development .md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/atome_plugin_api_SPEC.md",
+      "destination": "todo/atome_plugin_api_SPEC.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/audit_execution_plan.md",
+      "destination": "todo/audit_execution_plan.md",
+      "classification": "evidence/reference; not independent task state",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/audit_isolation_2026-10-01.md",
+      "destination": "todo/audit_isolation_2026-10-01.md",
+      "classification": "evidence/reference; not independent task state",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/audits/2026-07-14_framework_documentation_conformance.md",
+      "destination": "todo/audits/2026-07-14_framework_documentation_conformance.md",
+      "classification": "evidence/reference; not independent task state",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/audits/granularity_progress.md",
+      "destination": "todo/audits/granularity_progress.md",
+      "classification": "evidence/reference; not independent task state",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/audits/granularity_validation_report.md",
+      "destination": "todo/audits/granularity_validation_report.md",
+      "classification": "evidence/reference; not independent task state",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/audits/theme_integration_audit_2026-08-15.md",
+      "destination": "todo/audits/theme_integration_audit_2026-08-15.md",
+      "classification": "evidence/reference; not independent task state",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/audits/theme_integration_audit_2026-08-17.md",
+      "destination": "todo/audits/theme_integration_audit_2026-08-17.md",
+      "classification": "evidence/reference; not independent task state",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/audits/toolbox_visible_audit_2026-08-15.md",
+      "destination": "todo/audits/toolbox_visible_audit_2026-08-15.md",
+      "classification": "evidence/reference; not independent task state",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/auth_phone_link_implementation.md",
+      "destination": "todo/auth_phone_link_implementation.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/cleanup_architecture/account_recovery_trusted_device_and_recovery_kit.md",
+      "destination": "todo/cleanup_architecture/account_recovery_trusted_device_and_recovery_kit.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/cleanup_architecture/argon2id_password_hash_migration.md",
+      "destination": "todo/cleanup_architecture/argon2id_password_hash_migration.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/cleanup_architecture/authenticated_permission_scoped_ws_sync.md",
+      "destination": "todo/cleanup_architecture/authenticated_permission_scoped_ws_sync.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/cleanup_architecture/deep_ux_performance_and_ios_boot_compliance.md",
+      "destination": "todo/cleanup_architecture/deep_ux_performance_and_ios_boot_compliance.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/cleanup_architecture/eve_atome_master_cleanup_plan.md",
+      "destination": "todo/cleanup_architecture/eve_atome_master_cleanup_plan.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/cleanup_architecture/explicit_cross_runtime_account_provisioning.md",
+      "destination": "todo/cleanup_architecture/explicit_cross_runtime_account_provisioning.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/cleanup_architecture/file_size_and_coding_standards_remediation.md",
+      "destination": "todo/cleanup_architecture/file_size_and_coding_standards_remediation.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/cleanup_architecture/file_size_inventory_2026-07-14.md",
+      "destination": "todo/cleanup_architecture/file_size_inventory_2026-07-14.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/cleanup_architecture/framework_cleanup_and_ui_optimization_plan_2026-04-19.md",
+      "destination": "todo/cleanup_architecture/framework_cleanup_and_ui_optimization_plan_2026-04-19.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/cleanup_architecture/ios_fullscreen_surface_compliance.md",
+      "destination": "todo/cleanup_architecture/ios_fullscreen_surface_compliance.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/cleanup_architecture/production_sms_provider_boundary.md",
+      "destination": "todo/cleanup_architecture/production_sms_provider_boundary.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/cleanup_architecture/secure_auth_token_storage.md",
+      "destination": "todo/cleanup_architecture/secure_auth_token_storage.md",
+      "classification": "security specification; former unconditional cookie migration retired by user decision ARB-0001",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/cleanup_architecture/snapshot_accelerated_state_rebuild.md",
+      "destination": "todo/cleanup_architecture/snapshot_accelerated_state_rebuild.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/cleanup_architecture/stable_user_identity_independent_of_phone.md",
+      "destination": "todo/cleanup_architecture/stable_user_identity_independent_of_phone.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/cleanup_architecture/system_ui_component_ssot.md",
+      "destination": "todo/cleanup_architecture/system_ui_component_ssot.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/cleanup_architecture/v2_full_migration_framework.md",
+      "destination": "todo/cleanup_architecture/v2_full_migration_framework.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/clipboard_host_bridge_2026-09-10.md",
+      "destination": "done/spring_git_cleanup_2026-10-12/clipboard_host_bridge_2026-09-10.md",
+      "classification": "archived implementation report",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/communication_refonte.md",
+      "destination": "todo/communication_refonte.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/communication_social/apple_mail_security.md",
+      "destination": "todo/communication_social/apple_mail_security.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/communication_social/mail.md",
+      "destination": "todo/communication_social/mail.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/communication_social/matrix.md",
+      "destination": "todo/communication_social/matrix.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/communication_social/matrix_flower_context_menu.md",
+      "destination": "todo/communication_social/matrix_flower_context_menu.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/communication_social/social_network_tool.md",
+      "destination": "todo/communication_social/social_network_tool.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/communication_social/user_auth.md",
+      "destination": "todo/communication_social/user_auth.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/context_menus_modes_spec_2026-09-20.md",
+      "destination": "todo/context_menus_modes_spec_2026-09-20.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/context_tools.md",
+      "destination": "todo/context_tools.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/contextual_taxonomy_2026-09-24.md",
+      "destination": "todo/contextual_taxonomy_2026-09-24.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/debug_communication_notifications_publications_2026-09-01.md",
+      "destination": "todo/debug_communication_notifications_publications_2026-09-01.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/dev_ops/api-sugar.md",
+      "destination": "todo/dev_ops/api-sugar.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/dev_ops/developer-experience.md",
+      "destination": "todo/dev_ops/developer-experience.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/dev_ops/eve_website_publishing.md",
+      "destination": "todo/dev_ops/eve_website_publishing.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/dev_ops/install_MediaSoup.md",
+      "destination": "todo/dev_ops/install_MediaSoup.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/dev_ops/ios_login_session.md",
+      "destination": "todo/dev_ops/ios_login_session.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/dev_ops/npm-publication-checklist.md",
+      "destination": "todo/dev_ops/npm-publication-checklist.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/dev_ops/rewrite_documentation.md",
+      "destination": "todo/dev_ops/rewrite_documentation.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/eVe_plugin.md",
+      "destination": "todo/eVe_plugin.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/eve_features/Notification_tool.md",
+      "destination": "todo/eve_features/Notification_tool.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/eve_features/calendar_todos.md",
+      "destination": "todo/eve_features/calendar_todos.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/eve_features/eve_accessibility.md",
+      "destination": "todo/eve_features/eve_accessibility.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/eve_features/map_localization.md",
+      "destination": "todo/eve_features/map_localization.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/eve_features/menu_interactions.md",
+      "destination": "todo/eve_features/menu_interactions.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/eve_features/panel_overflow_direction_indicators.md",
+      "destination": "todo/eve_features/panel_overflow_direction_indicators.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/eve_features/panel_tools_above_footer_band.md",
+      "destination": "todo/eve_features/panel_tools_above_footer_band.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/eve_features/presets-system.md",
+      "destination": "todo/eve_features/presets-system.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/eve_features/update_panel_refactor.md",
+      "destination": "todo/eve_features/update_panel_refactor.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/execution_order.md",
+      "destination": "todo/execution_order.md",
+      "classification": "canonical task register",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/fond_ecran_telechargement_2026-08-22.md",
+      "destination": "todo/fond_ecran_telechargement_2026-08-22.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/full_native_atome.md",
+      "destination": "todo/full_native_atome.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/health_monitors.md",
+      "destination": "todo/health_monitors.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/import_panel.md",
+      "destination": "todo/import_panel.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/intuition_liquid_menus.md",
+      "destination": "todo/intuition_liquid_menus.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/ios_assistant_key_2026-09-10.md",
+      "destination": "todo/ios_assistant_key_2026-09-10.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/lecture_contextuelle_list_matrix_2026-08-19.md",
+      "destination": "todo/lecture_contextuelle_list_matrix_2026-08-19.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/media_handling/AV_APIS.md",
+      "destination": "todo/media_handling/AV_APIS.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/media_handling/MTraX_edition.md",
+      "destination": "todo/media_handling/MTraX_edition.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/media_handling/RUNNING_VIDEO_AUDIO_SYNC_PLAN.md",
+      "destination": "todo/media_handling/RUNNING_VIDEO_AUDIO_SYNC_PLAN.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/menu_cleanup_2026-08-16.md",
+      "destination": "todo/menu_cleanup_2026-08-16.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/menu_regressions_2026-10-02.md",
+      "destination": "todo/menu_regressions_2026-10-02.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/menu_solution_2026-09-24.md",
+      "destination": "todo/menu_solution_2026-09-24.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/midi/MIDI_Binding_Panel_truth_source.md",
+      "destination": "todo/midi/MIDI_Binding_Panel_truth_source.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/midi/Midi_implementation.md",
+      "destination": "todo/midi/Midi_implementation.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/midi/atome_midi_binding_system.md",
+      "destination": "todo/midi/atome_midi_binding_system.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/modifications.md",
+      "destination": "todo/modifications.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/molecule/NewMolecules.md",
+      "destination": "todo/molecule/NewMolecules.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/molecule/PROJET_MOLECULE_DEBUG.md",
+      "destination": "todo/molecule/PROJET_MOLECULE_DEBUG.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/molecule/molecule_rename_mtrack_to_molecule.md",
+      "destination": "todo/molecule/molecule_rename_mtrack_to_molecule.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/molecule/molecule_sanitizer.md",
+      "destination": "todo/molecule/molecule_sanitizer.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/molecule/molecule_tests.md",
+      "destination": "todo/molecule/molecule_tests.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/molecule/molecule_trouble_solving.md",
+      "destination": "todo/molecule/molecule_trouble_solving.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/molecule_drag_and_playback_2026-08-22.md",
+      "destination": "todo/molecule_drag_and_playback_2026-08-22.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/news_feature_2026-09-09.md",
+      "destination": "done/spring_git_cleanup_2026-10-12/news_feature_2026-09-09.md",
+      "classification": "archived implementation report",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/news_templates_stacking_2026-09-10.md",
+      "destination": "todo/news_templates_stacking_2026-09-10.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/orchestrateur_test_et_reparations_2026-08-18.md",
+      "destination": "todo/orchestrateur_test_et_reparations_2026-08-18.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/page_media_perf_list_playback_2026-09-20.md",
+      "destination": "done/spring_git_cleanup_2026-10-12/page_media_perf_list_playback_2026-09-20.md",
+      "classification": "archived implementation report",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/page_record_fixes_2026-09-20.md",
+      "destination": "done/spring_git_cleanup_2026-10-12/page_record_fixes_2026-09-20.md",
+      "classification": "archived implementation report",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/perf_audit_2026-08-09.md",
+      "destination": "todo/perf_audit_2026-08-09.md",
+      "classification": "evidence/reference; not independent task state",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/perf_audit_2026-10-07.md",
+      "destination": "todo/perf_audit_2026-10-07.md",
+      "classification": "evidence/reference; not independent task state",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/perf_parity_html.md",
+      "destination": "todo/perf_parity_html.md",
+      "classification": "evidence/reference; not independent task state",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/problems.md",
+      "destination": "todo/problems.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/problems_fixes.md",
+      "destination": "todo/problems_fixes.md",
+      "classification": "evidence/reference; not independent task state",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/project_view_zoom.md",
+      "destination": "todo/project_view_zoom.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/record_page_placeholder_template_2026-09-19.md",
+      "destination": "done/spring_git_cleanup_2026-10-12/record_page_placeholder_template_2026-09-19.md",
+      "classification": "archived implementation report",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/remote_session_audit.md",
+      "destination": "todo/remote_session_audit.md",
+      "classification": "evidence/reference; not independent task state",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/rendering_graphics/robust_bevy_regression_fix_prompt_en.md",
+      "destination": "todo/rendering_graphics/robust_bevy_regression_fix_prompt_en.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/rendering_graphics/universal_canvas.md",
+      "destination": "todo/rendering_graphics/universal_canvas.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/rendering_graphics/vector_editing_layer.md",
+      "destination": "todo/rendering_graphics/vector_editing_layer.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/sharing_search_monitoring/Share_tool.md",
+      "destination": "todo/sharing_search_monitoring/Share_tool.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/sharing_search_monitoring/finder.md",
+      "destination": "todo/sharing_search_monitoring/finder.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/sharing_search_monitoring/finder_UI.md",
+      "destination": "todo/sharing_search_monitoring/finder_UI.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/sharing_search_monitoring/sharing_to_code.md",
+      "destination": "todo/sharing_search_monitoring/sharing_to_code.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/sharing_search_monitoring/tool_monitor.md",
+      "destination": "todo/sharing_search_monitoring/tool_monitor.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/teleport/00_audit.md",
+      "destination": "todo/teleport/00_audit.md",
+      "classification": "evidence/reference; not independent task state",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/teleport/01_surface_registry.md",
+      "destination": "todo/teleport/01_surface_registry.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/teleport/02_teleport_manager.md",
+      "destination": "todo/teleport/02_teleport_manager.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/teleport/03_render_filter_residual_proxy.md",
+      "destination": "todo/teleport/03_render_filter_residual_proxy.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/teleport/04_contextual_tools.md",
+      "destination": "todo/teleport/04_contextual_tools.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/teleport/05_edge_intent_and_destinations.md",
+      "destination": "todo/teleport/05_edge_intent_and_destinations.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/teleport/07_remote_control_trackpad.md",
+      "destination": "todo/teleport/07_remote_control_trackpad.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/teleport/08_cross_user_permissions.md",
+      "destination": "todo/teleport/08_cross_user_permissions.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/teleport/09_resilience.md",
+      "destination": "todo/teleport/09_resilience.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/teleport/10_completion.md",
+      "destination": "todo/teleport/10_completion.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/teleport/README.md",
+      "destination": "todo/teleport/README.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/text_caret_creation_contract.md",
+      "destination": "todo/text_caret_creation_contract.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/tool_rail_refonte_2026-09-24.md",
+      "destination": "todo/tool_rail_refonte_2026-09-24.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/tools/tool_sanitisation.md",
+      "destination": "todo/tools/tool_sanitisation.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/ui_bevy/bevy_panel_migration_guide.md",
+      "destination": "todo/ui_bevy/bevy_panel_migration_guide.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/ui_bevy/bevy_ui_integration_zen.md",
+      "destination": "todo/ui_bevy/bevy_ui_integration_zen.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/ui_bevy/communication_html_line_migration_registry.md",
+      "destination": "todo/ui_bevy/communication_html_line_migration_registry.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/ui_bevy/communication_mcp_command_ledger.md",
+      "destination": "todo/ui_bevy/communication_mcp_command_ledger.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/ui_bevy/communication_surface_freeze.md",
+      "destination": "todo/ui_bevy/communication_surface_freeze.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/ui_bevy/component_convergence.md",
+      "destination": "todo/ui_bevy/component_convergence.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/ui_bevy/dashboard.md",
+      "destination": "todo/ui_bevy/dashboard.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/ui_bevy/dashboard_bevy_ui_parity_matrix.md",
+      "destination": "todo/ui_bevy/dashboard_bevy_ui_parity_matrix.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/ui_bevy/finder_html_line_migration_registry.md",
+      "destination": "todo/ui_bevy/finder_html_line_migration_registry.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/ui_bevy/finder_place_map_package.md",
+      "destination": "todo/ui_bevy/finder_place_map_package.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/ui_bevy/info_html_line_migration_registry.md",
+      "destination": "todo/ui_bevy/info_html_line_migration_registry.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/ui_bevy/size_font_html_line_migration_registry.md",
+      "destination": "todo/ui_bevy/size_font_html_line_migration_registry.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/ui_bevy/size_font_mcp_command_ledger.md",
+      "destination": "todo/ui_bevy/size_font_mcp_command_ledger.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/ui_bevy/size_font_surface_freeze.md",
+      "destination": "todo/ui_bevy/size_font_surface_freeze.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/ui_bevy/ui_bevy_migration.md",
+      "destination": "todo/ui_bevy/ui_bevy_migration.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/video_clip_in_page_2026-09-20.md",
+      "destination": "todo/video_clip_in_page_2026-09-20.md",
+      "classification": "specification or partial backlog; activate only the matching canonical criterion",
+      "coverage": "heading/status/checkbox scan plus targeted decisive passages where recorded; no exhaustive code or runtime audit"
+    },
+    {
+      "path": "todo/!!!!atome_eve_liste_hierarchie_lecture_prompt.html",
+      "destination": "todo/!!!!atome_eve_liste_hierarchie_lecture_prompt.html",
+      "classification": "historical prototype/reference; not an authorized application realization",
+      "coverage": "filename/type metadata; no prototype executed"
+    },
+    {
+      "path": "todo/.DS_Store",
+      "destination": "todo/.DS_Store",
+      "classification": "excluded generated macOS metadata; no task",
+      "coverage": "filename/type metadata; no prototype executed"
+    },
+    {
+      "path": "todo/New work/.DS_Store",
+      "destination": "todo/New work/.DS_Store",
+      "classification": "excluded generated macOS metadata; no task",
+      "coverage": "filename/type metadata; no prototype executed"
+    },
+    {
+      "path": "todo/New work/atome_songlist_prototype_v7_collapsed_record.html",
+      "destination": "todo/New work/atome_songlist_prototype_v7_collapsed_record.html",
+      "classification": "historical prototype/reference; not an authorized application realization",
+      "coverage": "filename/type metadata; no prototype executed"
+    },
+    {
+      "path": "todo/audio2midi_converter_tool.md⁠",
+      "destination": "todo/audio2midi_converter_tool.md⁠",
+      "classification": "useful audio-to-MIDI specification",
+      "coverage": "opening passage and heading reviewed; no product validation",
+      "canonicalTarget": "ATM-2021"
+    },
+    {
+      "path": "todo/midi/.DS_Store",
+      "destination": "todo/midi/.DS_Store",
+      "classification": "excluded generated macOS metadata; no task",
+      "coverage": "filename/type metadata; no prototype executed"
+    },
+    {
+      "path": "todo/midi/MIDI_Binding_Panel_Concept.png",
+      "destination": "todo/midi/MIDI_Binding_Panel_Concept.png",
+      "classification": "non-Markdown reference/prototype; not executable authorization",
+      "coverage": "filename/type metadata; no prototype executed"
+    },
+    {
+      "path": "todo/prompt_automatisation_appareil_ios.txt",
+      "destination": "todo/prompt_automatisation_appareil_ios.txt",
+      "classification": "non-Markdown reference/prototype; not executable authorization",
+      "coverage": "filename/type metadata; no prototype executed"
+    },
+    {
+      "path": "todo/tests/README.md",
+      "destination": "todo/tests/README.md",
+      "classification": "permanent test reference",
+      "coverage": "headings and scope scan"
+    },
+    {
+      "path": "todo/tests/assistant_ai.md",
+      "destination": "todo/tests/assistant_ai.md",
+      "classification": "permanent test reference",
+      "coverage": "headings and scope scan"
+    },
+    {
+      "path": "todo/tests/authentification.md",
+      "destination": "todo/tests/authentification.md",
+      "classification": "permanent test reference",
+      "coverage": "headings and scope scan"
+    },
+    {
+      "path": "todo/tests/collaboration_priority_scenarios.md",
+      "destination": "todo/tests/collaboration_priority_scenarios.md",
+      "classification": "permanent test reference",
+      "coverage": "headings and scope scan"
+    },
+    {
+      "path": "todo/tests/dashboard.md",
+      "destination": "todo/tests/dashboard.md",
+      "classification": "permanent test reference",
+      "coverage": "headings and scope scan"
+    },
+    {
+      "path": "todo/tests/main_menu.md",
+      "destination": "todo/tests/main_menu.md",
+      "classification": "permanent test reference",
+      "coverage": "headings and scope scan"
+    },
+    {
+      "path": "todo/tests/preferences_utilisateur.md",
+      "destination": "todo/tests/preferences_utilisateur.md",
+      "classification": "permanent test reference",
+      "coverage": "headings and scope scan"
+    },
+    {
+      "path": "todo/tests/projets.md",
+      "destination": "todo/tests/projets.md",
+      "classification": "permanent test reference",
+      "coverage": "headings and scope scan"
+    },
+    {
+      "path": "todo/tests/transversal.md",
+      "destination": "todo/tests/transversal.md",
+      "classification": "permanent test reference",
+      "coverage": "headings and scope scan"
+    }
+  ],
+  "arbitrationResolutions": [
+    {
+      "id": "ARB-0001",
+      "date": "2026-10-13",
+      "source": "direct user answer",
+      "decision": "Retain recent SMS/device-proof sessions and in-memory access tokens; retire former unconditional HttpOnly-cookie migration",
+      "canonicalTargets": [
+        "ATM-2001",
+        "ATM-2002"
+      ],
+      "preserved": "Historical cookie prescription and still-applicable security acceptance; no new runtime evidence"
+    }
+  ]
+}

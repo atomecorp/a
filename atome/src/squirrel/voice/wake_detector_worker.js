@@ -1,6 +1,6 @@
 import * as ort from '../../assets/vendor/onnxruntime-web/ort.wasm.min.mjs';
 import { createWakeFeatureStream } from './wake_features.js';
-import { deserializeWakeClassifier, scoreWakeWindow } from './wake_classifier.js';
+import { createWakeTrigger, deserializeWakeClassifier, scoreWakeWindow } from './wake_classifier.js';
 
 const ASSET_ROOT = '/src/assets/voice/wake/';
 const WASM_ROOT = '/src/assets/vendor/onnxruntime-web/';
@@ -9,7 +9,7 @@ const WASM_ROOT = '/src/assets/vendor/onnxruntime-web/';
 // a second instance beside it runs out of memory on iPhone. Detection and enrollment
 // are modes of the same engine, switched by `configure`.
 let sessions = null, base = null, policy = null;
-let stream = null, verifier = null, collecting = false, active = false, streak = 0;
+let stream = null, verifier = null, collecting = false, active = false, trigger = null;
 
 const load = async (name) => {
     const response = await fetch(ASSET_ROOT + name);
@@ -35,26 +35,26 @@ const configure = ({ verifier: personal, collect }) => {
     collecting = collect === true;
     verifier = personal ? deserializeWakeClassifier(personal) : null;
     stream = createWakeFeatureStream({ ort, ...sessions, silenceGate: !collecting });
-    streak = 0;
+    trigger = createWakeTrigger(policy);
     active = true;
 };
 
-// Base model first; a personal verifier, when enrolled, decides every candidate it gates.
+// Base model first; a personal verifier, when enrolled, scores the candidates it gates.
 const decide = (window) => {
     const baseScore = scoreWakeWindow(base, window);
-    if (!verifier) return { baseScore, score: baseScore };
-    return { baseScore, score: baseScore >= policy.verifierGate ? scoreWakeWindow(verifier, window) : 0 };
+    if (!verifier) return { baseScore, verifierScore: null };
+    return { baseScore, verifierScore: baseScore >= policy.verifierGate ? scoreWakeWindow(verifier, window) : 0 };
 };
 
 const frame = async (samples) => {
     if (!active) return;
     const window = await stream.push(samples);
     if (!window) return;
-    const { baseScore, score } = decide(window);
+    const { baseScore, verifierScore } = decide(window);
     if (collecting) { self.postMessage({ type: 'window', window, baseScore }, [window.buffer]); return; }
-    // The verifier is a logistic regression with its own calibration, hence its own threshold.
-    streak = score >= (verifier ? policy.verifierThreshold : policy.threshold) ? streak + 1 : 0;
-    if (streak === policy.consecutive) self.postMessage({ type: 'detected', score });
+    if (trigger.push({ baseScore, verifierScore, voiceRatio: stream.voiceRatio() })) {
+        self.postMessage({ type: 'detected', score: verifierScore ?? baseScore });
+    }
 };
 
 const handle = async (data) => {
