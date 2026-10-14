@@ -10,6 +10,7 @@ import UIKit
 
 @main
 struct atomeApp: App {
+    @UIApplicationDelegateAdaptor(AtomeApplicationDelegate.self) private var applicationDelegate
     @StateObject private var fileManager: iCloudFileManager
     @Environment(\.scenePhase) private var scenePhase
 
@@ -41,7 +42,7 @@ struct atomeApp: App {
         .onChange(of: scenePhase) { _, newPhase in
             switch newPhase {
             case .active:
-                break
+                AppNativeCommunication.shared.resume()
             case .background, .inactive:
                 ActiveScenePoller.shared.stop()
             @unknown default:

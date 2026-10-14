@@ -2,7 +2,7 @@ import { $ } from '../squirrel.js';
 // The slider's collapsed square is the framework base unit; the caller passes the
 // live surface size, this import is only the last-resort default.
 import { SYSTEM_UI_METRICS } from '../../../../eVe/elements/system_ui_tokens.js';
-import { normalizeSliderOptions, resolveSliderLength, quantizeSliderValue as quantize, formatSliderBound } from './slider_contract.js';
+import { normalizeSliderOptions, resolveSliderLength, quantizeSliderValue as quantize, formatSliderBound, sliderValueCaption } from './slider_contract.js';
 import { createSliderToolElements, createSliderToolEditor } from './tool_slider_elements.js';
 import { createDirectSliderDragController } from './tool_slider_drag.js';
 import { createSliderEmitters } from './tool_slider_emit.js';
@@ -86,7 +86,7 @@ const mountIntuitionXSliderToolContent = ({
     const syncValueVisual = () => {
         bounds.forEach((bound, index) => { bound.textContent = formatSliderBound(index ? max : min, currentUnit); });
         const currentValue = clamp(toFiniteNumber(input.value, initialValue), min, max);
-        valueButton.textContent = formatSliderValue({
+        valueButton.textContent = sliderValueCaption(currentValue, options) ?? formatSliderValue({
             value: currentValue,
             step
         });

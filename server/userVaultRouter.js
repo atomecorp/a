@@ -32,10 +32,25 @@ const propertySet = (share, column) => {
 const allowedProperties = (share) => propertySet(share, 'readable_properties_json');
 const writableProperties = (share) => propertySet(share, 'writable_properties_json');
 
+// A media URL written by its owner may carry the owner's session capability
+// (`media_token`). A recipient never receives it: its client signs the same file route
+// with its own session, and the file read resolvers decide what it may read.
+const OWNER_CREDENTIAL_PARAMS = ['media_token', 'token', 'access_token'];
+const withoutOwnerCredentials = (value) => {
+    if (typeof value !== 'string' || !OWNER_CREDENTIAL_PARAMS.some((name) => value.includes(`${name}=`))) return value;
+    try {
+        const relative = value.startsWith('/');
+        const url = new URL(value, 'http://relative.invalid');
+        OWNER_CREDENTIAL_PARAMS.forEach((name) => url.searchParams.delete(name));
+        return relative ? `${url.pathname}${url.search}${url.hash}` : url.toString();
+    } catch (_) { return value; }
+};
+
 const filterProperties = (properties, share) => {
     const allowed = allowedProperties(share);
-    if (!allowed) return { ...(properties || {}) };
-    return Object.fromEntries(Object.entries(properties || {}).filter(([key]) => allowed.has(key)));
+    return Object.fromEntries(Object.entries(properties || {})
+        .filter(([key]) => !allowed || allowed.has(key))
+        .map(([key, value]) => [key, withoutOwnerCredentials(value)]));
 };
 
 const SYSTEM_STATE_TYPES = new Set(['project', 'user', 'blackhole', 'tool', 'tool_macro', 'toolbox', 'tool_block', 'panel', 'system']);
@@ -264,6 +279,46 @@ export class UserVaultRouter {
             [principalId, stream.vault_principal_id, stream.stream_id]
         );
         return shares?.length ? { ...stream, owner: false, shares } : null;
+    }
+
+    // Bulk form of `streamAccess` + `stream:head` for a subscription batch: one registry read,
+    // one share read and one vault request per owning vault, instead of several per stream.
+    // Returns the head sequence of every authorized stream; unauthorized streams are absent.
+    async authorizedStreamHeads(principalId, streamIds = []) {
+        const ids = Array.from(new Set(streamIds.map(String).filter(Boolean)));
+        const heads = new Map();
+        if (!ids.length) return heads;
+        const marks = (values) => values.map(() => '?').join(',');
+        const rows = await db.query(
+            'all',
+            `SELECT stream_id, vault_principal_id FROM vault_stream_registry WHERE stream_id IN (${marks(ids)})`,
+            ids
+        ) || [];
+        const foreignIds = rows
+            .filter((row) => String(row.vault_principal_id) !== String(principalId))
+            .map((row) => row.stream_id);
+        const shared = new Set();
+        if (foreignIds.length) {
+            const shares = await db.query(
+                'all',
+                `SELECT DISTINCT stream_id, owner_id FROM sync_share_requests
+                 WHERE principal_id = ? AND stream_id IN (${marks(foreignIds)}) AND ${ACTIVE_LINKED_SHARE_SQL}`,
+                [principalId, ...foreignIds]
+            );
+            for (const share of shares || []) shared.add(`${share.owner_id}\n${share.stream_id}`);
+        }
+        const byVault = new Map();
+        for (const row of rows) {
+            const owner = String(row.vault_principal_id);
+            if (owner !== String(principalId) && !shared.has(`${owner}\n${row.stream_id}`)) continue;
+            if (!byVault.has(owner)) byVault.set(owner, []);
+            byVault.get(owner).push(row.stream_id);
+        }
+        for (const [owner, streams] of byVault) {
+            const vaultHeads = await this.provider.request(owner, 'stream:heads', { stream_ids: streams });
+            for (const stream of streams) heads.set(stream, Number(vaultHeads?.[stream] || 0));
+        }
+        return heads;
     }
 
     // Flux dans lequel vivent les evenements d'un objet du coffre de `ownerId`.

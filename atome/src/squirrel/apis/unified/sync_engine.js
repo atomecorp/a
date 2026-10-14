@@ -4,6 +4,9 @@ import { getToken } from './adole_connection.js';
 const DEVICE_KEY = 'squirrel_sync_device_id_v1';
 const STREAMS_KEY = 'squirrel_sync_streams_v1';
 const CURSORS_KEY = 'squirrel_sync_cursors_v1';
+const PERSIST_DELAY_MS = 250;
+// Server limit for one `subscribe` carrying many cursors (`subscribe-batch` capability).
+const SUBSCRIBE_BATCH_SIZE = 500;
 
 const readJson = (storage, key, fallback) => {
     try {
@@ -57,13 +60,18 @@ export class SyncEngine {
         this.error = '';
         this.reconnectTimer = null;
         this.reconnectAttempt = 0;
+        this.batchSubscribe = false;
+        this.pendingReplays = 0;
         this.seenEventIds = new Set();
         this.streams = new Set();
         this.cursors = {};
         this.installed = false;
+        this.persistTimer = null;
+        this.loadedScopeKey = '';
         this.boundLogin = () => this.retry();
         this.boundLogout = () => this.disconnect();
         this.boundOnline = () => this.retry();
+        this.boundPageHide = () => this.flushPersist();
         this.source = this.loadDeviceSource();
         this.loadScope();
         this.streams.add('directory.public');
@@ -87,6 +95,7 @@ export class SyncEngine {
 
     loadScope() {
         const key = this.scopeKey();
+        this.loadedScopeKey = key;
         const streamScopes = readJson(this.env?.localStorage, STREAMS_KEY, {});
         const cursorScopes = readJson(this.env?.localStorage, CURSORS_KEY, {});
         this.streams = new Set(Array.isArray(streamScopes[key]) ? streamScopes[key] : []);
@@ -96,8 +105,11 @@ export class SyncEngine {
             : {};
     }
 
+    // The streams and cursors in memory belong to the scope they were loaded from: they are
+    // never written under another account's key (a commit observed before this account's
+    // scope was loaded erased its 9 831 streams, iPhone 2026-10-13).
     persistScope() {
-        const key = this.scopeKey();
+        const key = this.loadedScopeKey;
         const storage = this.env?.localStorage;
         const streamScopes = readJson(storage, STREAMS_KEY, {});
         const cursorScopes = readJson(storage, CURSORS_KEY, {});
@@ -107,12 +119,27 @@ export class SyncEngine {
         writeJson(storage, CURSORS_KEY, cursorScopes);
     }
 
+    // A (re)connection delivers one message per stream, thousands of them: the scope is
+    // written once per burst instead of once per message.
+    schedulePersist() {
+        if (this.persistTimer) return;
+        this.persistTimer = setTimeout(() => { this.persistTimer = null; this.persistScope(); }, PERSIST_DELAY_MS);
+    }
+
+    flushPersist() {
+        if (!this.persistTimer) return;
+        clearTimeout(this.persistTimer);
+        this.persistTimer = null;
+        this.persistScope();
+    }
+
     install() {
         if (this.installed) return this;
         this.installed = true;
         this.env?.addEventListener?.('squirrel:user-logged-in', this.boundLogin);
         this.env?.addEventListener?.('squirrel:user-logged-out', this.boundLogout);
         this.env?.addEventListener?.('online', this.boundOnline);
+        this.env?.addEventListener?.('pagehide', this.boundPageHide);
         if (principalId(this.env) && this.token()) void this.connect();
         return this;
     }
@@ -141,16 +168,18 @@ export class SyncEngine {
         if (!url || !authToken || !principalId(this.env) || !this.WebSocketClass) return false;
         if (this.socket?.readyState === this.WebSocketClass.OPEN) return true;
         this.disconnect({ reconnect: false });
+        this.flushPersist();
         this.loadScope();
         const socket = new this.WebSocketClass(url);
         this.socket = socket;
         socket.onopen = () => {
             if (this.socket !== socket) return;
             this.error = '';
-            this.reconnectAttempt = 0;
+            this.pendingReplays = 0;
             socket.send(JSON.stringify({ type: 'auth', token: authToken }));
         };
-        socket.onmessage = (event) => this.handleMessage(event.data);
+        // A replaced socket still delivers its in-flight frames; they belong to no current subscription.
+        socket.onmessage = (event) => { if (this.socket === socket) this.handleMessage(event.data); };
         socket.onerror = () => { this.error = 'sync_connection_error'; };
         socket.onclose = () => {
             if (this.socket !== socket) return;
@@ -173,13 +202,14 @@ export class SyncEngine {
         try { message = JSON.parse(raw); } catch (_) { this.error = 'sync_invalid_json'; return; }
         if (message.type === 'welcome') {
             this.connected = true;
+            this.batchSubscribe = Array.isArray(message.capabilities) && message.capabilities.includes('subscribe-batch');
             this.send({ type: 'register', source: this.source, capabilities: ['events', 'replay'] });
             return;
         }
         if (message.type === 'registered') {
             this.observeEvents((message.streams || []).map((stream) => ({ stream_id: stream })));
             this.registered = true;
-            for (const stream of this.streams) this.subscribe(stream);
+            this.subscribeAll();
             return;
         }
         if (message.type === 'stream-available') {
@@ -191,15 +221,26 @@ export class SyncEngine {
             return;
         }
         if (message.type === 'replay-complete') {
-            this.persistCursor(message.stream, message.cursor);
+            const completed = Array.isArray(message.streams) ? message.streams : [message];
+            for (const entry of completed) this.persistCursor(entry?.stream, entry?.cursor);
+            this.settleReplay();
             return;
         }
         if (message.type === 'revoked') {
             this.streams.delete(String(message.stream || ''));
             this.persistScope();
+            this.settleReplay();
             return;
         }
-        if (message.type === 'error') this.error = String(message.code || 'sync_error');
+        if (message.type === 'error') {
+            this.error = String(message.code || 'sync_error');
+            if (message.code !== 'stream_access_denied') return;
+            // A batch denial names streams this account no longer reaches: stop resubscribing them.
+            if (Array.isArray(message.streams)) {
+                for (const stream of message.streams) this.streams.delete(String(stream));
+                this.schedulePersist();
+            } else this.settleReplay();
+        }
     }
 
     applyEvent(message) {
@@ -273,8 +314,11 @@ export class SyncEngine {
     persistCursor(stream, sequence) {
         const normalized = Number(sequence);
         if (!stream || !Number.isInteger(normalized)) return;
-        this.cursors[stream] = Math.max(Number(this.cursors[stream]) || 0, normalized);
-        this.persistScope();
+        // Every (re)connection ends one replay per stream, mostly unchanged: rewriting the
+        // whole scope for each of thousands of streams kept the phone busy at idle.
+        if (normalized <= (Number(this.cursors[stream]) || 0)) return;
+        this.cursors[stream] = normalized;
+        this.schedulePersist();
     }
 
     ack(stream, sequence) {
@@ -284,17 +328,45 @@ export class SyncEngine {
     subscribe(stream) {
         const id = String(stream || '').trim();
         if (!id || !this.registered) return false;
-        return this.send({ type: 'subscribe', stream: id, cursor: Number(this.cursors[id]) || 0 });
+        if (!this.send({ type: 'subscribe', stream: id, cursor: Number(this.cursors[id]) || 0 })) return false;
+        this.pendingReplays += 1;
+        return true;
+    }
+
+    // One message per SUBSCRIBE_BATCH_SIZE streams when the server accepts it, instead of one per stream.
+    subscribeAll() {
+        const streams = Array.from(this.streams);
+        if (!this.batchSubscribe) {
+            for (const stream of streams) this.subscribe(stream);
+            return;
+        }
+        for (let index = 0; index < streams.length; index += SUBSCRIBE_BATCH_SIZE) {
+            const batch = streams.slice(index, index + SUBSCRIBE_BATCH_SIZE)
+                .map((stream) => ({ stream, cursor: Number(this.cursors[stream]) || 0 }));
+            if (this.send({ type: 'subscribe', streams: batch })) this.pendingReplays += 1;
+        }
+    }
+
+    // Every subscription of this connection has been answered: only then is the connection
+    // proven useful, so a server closing right after authentication keeps backing off.
+    settleReplay() {
+        this.pendingReplays = Math.max(0, this.pendingReplays - 1);
+        if (this.pendingReplays === 0) this.reconnectAttempt = 0;
     }
 
     observeEvents(events = []) {
+        if (this.scopeKey() !== this.loadedScopeKey) {
+            this.flushPersist();
+            this.loadScope();
+        }
+        let added = false;
         for (const event of events || []) {
             const stream = String(event?.stream_id || event?.stream || '').trim();
             if (!stream) continue;
-            this.streams.add(stream);
+            if (!this.streams.has(stream)) { this.streams.add(stream); added = true; }
             if (this.registered) this.subscribe(stream);
         }
-        this.persistScope();
+        if (added) this.schedulePersist();
     }
 
     async requestSync() {

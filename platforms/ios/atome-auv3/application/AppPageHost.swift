@@ -7,6 +7,8 @@ import WebKit
 final class AppPageHost {
     static let shared = AppPageHost()
     private(set) lazy var webView: WKWebView = makeWebView()
+    // CoreMIDI starts when the page's MIDI input service asks (`start_native_midi`).
+    private let midiController = MIDIController()
     private var started = false
 
     private init() {}
@@ -61,10 +63,14 @@ final class AppPageHost {
 
     private func installNativeBridges() {
         WebViewManager.setNativeInvokeHandler { command, payload, completion in
-            if AppNativeMediaCaptureController.canHandle(command: command) {
+            if AppNativeCommunication.canHandle(command) {
+                AppNativeCommunication.shared.handle(command, payload: payload, completion: completion)
+            } else if AppNativeMediaCaptureController.canHandle(command: command) {
                 AppNativeMediaCaptureController.shared.handle(command: command, payload: payload, completion: completion)
             } else if AppNativeHealthController.canHandle(command: command) {
                 AppNativeHealthController.shared.handle(command: command, payload: payload, completion: completion)
+            } else if AppNativeGpsController.canHandle(command: command) {
+                AppNativeGpsController.shared.handle(command: command, payload: payload, completion: completion)
             } else if AppNativeClipboardController.canHandle(command: command) {
                 AppNativeClipboardController.shared.handle(command: command, payload: payload, completion: completion)
             } else if AppNativeBevyRendererController.canHandle(command: command) {
@@ -79,6 +85,7 @@ final class AppPageHost {
                 AppNativeAudioController.shared.handle(command: command, payload: payload, completion: completion)
             }
         }
+        WebViewManager.midiController = midiController
         AppNativeMediaCaptureController.shared.attachPreviewHost(webView: webView)
         NativePersonalImport.shared.openSettings = AppPageHost.openSettings
         // This app's page in Settings: Motion & Fitness and Health access.

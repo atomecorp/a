@@ -77,7 +77,16 @@ final class NativePersonalImport {
             for contact in members { membership[contact.identifier, default: []].append(group.identifier) }
             groupMembers[group.identifier] = members.map(\.identifier)
         }
-        let items = (history["contacts"] as? [CNContact] ?? []).map { contact -> [String: Any] in
+        // The installed iOS SDK marks unifiedMeContactWithKeys unavailable.
+        // Public phone matching is only a hint; JavaScript validates uniqueness
+        // against the authenticated account's verified E.164 alias.
+        let phone = payload["verifiedPhone"] as? String ?? ""
+        let candidates = phone.isEmpty ? [] : try contacts.unifiedContacts(
+            matching: CNContact.predicateForContacts(matching: CNPhoneNumber(stringValue: phone)), keysToFetch: keys)
+        var observed = history["contacts"] as? [CNContact] ?? []
+        let observedIds = Set(observed.map(\.identifier))
+        observed.append(contentsOf: candidates.filter { !observedIds.contains($0.identifier) })
+        let items = observed.map { contact -> [String: Any] in
             let phones = contact.phoneNumbers.map { ["label": $0.label ?? "", "value": $0.value.stringValue] }
             let emails = contact.emailAddresses.map { ["label": $0.label ?? "", "value": $0.value as String] }
             var item: [String: Any] = ["id": contact.identifier, "first_name": contact.givenName, "middle_name": contact.middleName,
@@ -109,7 +118,10 @@ final class NativePersonalImport {
         }
         return ["ok": true, "complete": true, "permission": Self.contactsPermission(), "contacts": items,
                 "groups": groups.map { ["id": $0.identifier, "name": $0.name, "members": groupMembers[$0.identifier] ?? []] as [String: Any] }, "cursor": history["cursor"] ?? "",
-                "mode": history["mode"] ?? "snapshot", "removed_ids": history["removed_ids"] ?? []]
+                "mode": history["mode"] ?? "snapshot", "removed_ids": history["removed_ids"] ?? [],
+                "personal_candidates": candidates.map { contact in
+                    ["id": contact.identifier, "phones": contact.phoneNumbers.map { ["value": $0.value.stringValue] }] as [String: Any]
+                }]
     }
 
     private func fullImageData(_ identifier: String) -> Data? {

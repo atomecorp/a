@@ -40,10 +40,10 @@ extension WebViewManager {
         evaluateJS(script, label: "viewport.safeArea", priority: .high, targetWebView: webView)
     }
 
-    // Scrub and playback fire these several times per frame: three log lines
-    // each flood the console (and slow the app while Xcode is attached).
-    // Their failures are still logged.
-    static let quietNativeInvokeCommands: Set<String> = ["audio_play_instance", "audio_stop_instance"]
+    // Scrub and playback fire these several times per frame, and wake-phrase standby
+    // reads the microphone every 80 ms: three log lines each flood the console (and
+    // slow the app while Xcode is attached). Their failures are still logged.
+    static let quietNativeInvokeCommands: Set<String> = ["audio_play_instance", "audio_stop_instance", "audio_wake_read"]
 
     static func sendNativeInvokeResponse(requestId: String,
                                                  payload: [String: Any]? = nil,
@@ -82,6 +82,23 @@ extension WebViewManager {
             message["type"] = "auth"
             AiSRuntime.handleAuthMessage(message) { response in
                 sendNativeInvokeResponse(requestId: requestId, payload: response)
+            }
+            return
+        }
+        if command == "start_native_midi" {
+            // Same command as the Tauri adapter. The AUv3 starts its controller once
+            // the host is stable and then publishes its inputs (`eve:midi-native-ports`).
+            guard let controller = midiController else {
+                sendNativeInvokeResponse(requestId: requestId, error: "ios_midi_controller_unavailable")
+                return
+            }
+            controller.startMIDIMonitoring { result in
+                switch result {
+                case .success(let inputs):
+                    sendNativeInvokeResponse(requestId: requestId, payload: ["ok": true, "runtime": "coremidi", "inputs": inputs])
+                case .failure(let error):
+                    sendNativeInvokeResponse(requestId: requestId, error: error.localizedDescription)
+                }
             }
             return
         }

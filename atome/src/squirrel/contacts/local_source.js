@@ -5,6 +5,7 @@ import { matchesQuery } from './service_contact_utils.js';
 import { getSessionState } from '../apis/unified/adole_api/session.js';
 import { persistContactPhoto, CONTACT_PHOTO_PERMANENT_ERRORS } from './photo_media.js';
 import { contactBookPhone } from '../../shared/contact_book_hash.js';
+import { createPersonalContactImport } from './personal_profile.js';
 
 const TEXT_FIELDS = ['name', 'first_name', 'last_name', 'middle_name', 'prefix', 'suffix', 'nickname', 'phone', 'email', 'user_face',
     'organization', 'title', 'role', 'note', 'birthday', 'anniversary', 'gender', 'photo', 'photo_asset_id', 'exchange_uid'];
@@ -129,12 +130,13 @@ async function removeFormerImportCopies(store, items, collected, prefix) {
 }
 
 export function createLocalContactsSource({ source_id = 'eve_contacts_local', role = 'primary', writable = true,
-    api, session } = {}) {
+    api, session, publishProfile } = {}) {
     // Un meme numero = une meme personne : un import repete, un autre appareil ou
     // un autre carnet completent la fiche existante au lieu de la dupliquer.
     const store = createCanonicalImport({ type: 'contact', api, session, normalize: normalizeContactProperties,
         identityKeys: contactPhoneKeys, mergeIntoExisting: mergeContactIntoExisting });
     const groups = createCanonicalImport({ type: 'contact_group', api, session, normalize: input => ({ name: String(input.name || ''), members: input.members || [] }) });
+    const personal = createPersonalContactImport({ api, session, publish: publishProfile });
     let cache = [], cacheOwner = null, persisted = false;
     const clearOnSessionChange = () => {
         const state = (session || getSessionState)();
@@ -162,6 +164,8 @@ export function createLocalContactsSource({ source_id = 'eve_contacts_local', ro
         syncInitial: refresh, syncIncremental: refresh,
         syncStatus() { return { persisted, hydrated: persisted, durability: persisted ? 'canonical_commit' : null }; },
         async importContacts(items, meta) {
+            const own = meta.personal_candidates ? await personal.collect(items, meta.personal_candidates, meta) : null;
+            if (own?.external_id) items = items.filter(item => String(item.source_contact_id || item.id) !== own.external_id);
             const context = store.capture(), prepared = [];
             let photoRetry = false;
             for (const item of items) {
@@ -194,7 +198,27 @@ export function createLocalContactsSource({ source_id = 'eve_contacts_local', ro
             }), photoRetry ? { ...meta, complete: false } : meta);
             const duplicatesRemoved = meta.legacy_source_prefix && meta.full_snapshot === true && meta.complete === true
                 ? await removeFormerImportCopies(store, items, result, meta.legacy_source_prefix) : 0;
-            await hydrate(); return { ...result, duplicates_removed: duplicatesRemoved, items: cache };
+            await hydrate(); return { ...result, personal_profile: own, duplicates_removed: duplicatesRemoved, items: cache };
+        },
+        async selectPersonalContact(id) {
+            await hydrate();
+            const contact = cache.find(row => row.id === id);
+            if (!contact) return { ok: false, error: 'contacts_not_found' };
+            const context = store.capture();
+            const origins = (await store.list(IMPORT_ORIGIN_TYPE, context)).filter(row => {
+                const props = importRecordProps(row);
+                return props.canonical_id === id && String(props.source_key).startsWith('macos_contacts');
+            });
+            if (!origins.length) return { ok: false, error: 'personal_native_contact_required' };
+            const result = await personal.select({ ...contact, source_contact_id: importRecordProps(origins[0]).external_id });
+            for (const group of await store.list('contact_group', context)) {
+                const props = importRecordProps(group);
+                if (props.members?.includes(id)) await store.write(importRecordId(group), 'contact_group',
+                    { ...props, members: [...new Set(props.members.map(member => member === id ? context.owner : member))] }, context);
+            }
+            await store.remove(id, { reason: 'personal_profile' });
+            await hydrate();
+            return { ...result, items: cache };
         },
         async createContact(input) { const id = await store.create(input); await hydrate(); return { ok: true, created: true, contact: cache.find(row => row.id === id), items: cache }; },
         async replaceContacts(items) { await store.replace(items); await hydrate(); return { ok: true, items: cache }; },

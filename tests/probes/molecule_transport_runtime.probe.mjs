@@ -5,7 +5,7 @@ import {
     buildTransportTimeline,
     createMoleculeTransportRuntime
 } from '../../eVe/intuition/tools/molecule/runtime_transport.js';
-import { addClip, addSection, createTimeline, setClipBlockLoop, updateSection, updateTrack } from '../../eVe/intuition/tools/molecule/kernel/index.js';
+import { addClip, addSection, createTimeline, setClipBlockLoop, updateMixModule, updateSection, updateTrack } from '../../eVe/intuition/tools/molecule/kernel/index.js';
 
 const createTransportFixture = () => {
     let timeline = createTimeline({
@@ -41,15 +41,21 @@ const env = {
 };
 
 test('transport projection unfolds Sections left-to-right and scopes Section playback', async () => {
-    const timeline = updateTrack(createTransportFixture(), { track_id: 'track_a', gain: 1.35, pan: -0.4 });
+    const timeline = updateMixModule(createTransportFixture(), {
+        strip_id: 'track_a:audio', module_id: 'track_a:audio:pan', params: { pan: -0.4 }
+    });
     const molecule = await buildTransportTimeline(env, timeline);
     assert.equal(molecule.duration, 3);
     assert.deepEqual(molecule.tracks.flatMap((track) => track.clips).map((clip) => [clip.id, clip.start]), [
         ['clip_a', 0], ['clip_b', 2]
     ]);
-    assert.deepEqual([molecule.tracks[0].gain, molecule.tracks[0].pan], [1.35, -0.4]);
+    // The mix belongs to the strip in the engine graph: voices carry no track gain/pan.
+    assert.deepEqual([molecule.tracks[0].gain, molecule.tracks[0].pan, molecule.tracks[0].stripId], [1, 0, 'track_a:audio']);
     assert.equal(molecule.tracks[0].clips[0].gain, 1,
-        'Track gain must be applied exactly once by the shared executor');
+        'Track gain must be applied exactly once, by the mixer strip');
+    const withoutGraph = await buildTransportTimeline(env, timeline, { graph: false });
+    assert.deepEqual([withoutGraph.tracks[0].gain, withoutGraph.tracks[0].pan, withoutGraph.tracks[0].stripId], [1, -0.4, undefined],
+        'an engine without the mixer graph receives the strip level per voice');
     assert.equal(molecule.tracks[0].clips[0].playbackRate, 1,
         'Natural playback must not introduce an implicit stretch');
     const section = await buildTransportTimeline(env, timeline, { section_id: 'section_b' });

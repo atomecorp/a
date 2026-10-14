@@ -32,6 +32,15 @@ pub(super) fn capture_before(db: &Connection, event: &mut EventRecord) -> Result
     let Some(atome_id) = event.atome_id.as_deref() else {
         return Ok(());
     };
+    if let Some(expected) = event.payload.as_ref().and_then(|p| p.get("expected_versions")).and_then(JsonValue::as_object) {
+        for (key, version) in expected {
+            let current: Option<i64> = db.query_row(
+                "SELECT version FROM particles WHERE atome_id = ?1 AND particle_key = ?2",
+                rusqlite::params![atome_id, key], |r| r.get(0),
+            ).optional().map_err(|e| e.to_string())?;
+            if version.as_i64() != Some(current.unwrap_or(0)) { return Err("property_version_conflict".into()); }
+        }
+    }
     let Some(patch) = extract_event_patch(&event.kind, &event.payload, &event.ts) else {
         return Ok(());
     };

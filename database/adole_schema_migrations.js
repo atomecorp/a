@@ -497,4 +497,4 @@ async function runAdoleSchemaMigrations(query) {
     await refreshUsersView(query);
 }
 
-export { prepareAdoleSchemaColumns, runAdoleSchemaMigrations };
+export { prepareAdoleSchemaColumns, runAdoleSchemaMigrations, ensureColumn };

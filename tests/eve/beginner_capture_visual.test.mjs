@@ -47,7 +47,9 @@ test('beginner audio uses the shared resizable preview and patches the existing 
     panel.build({ width: 500, height: 300 });
     listener({ sequence: 2, pairs: [[-0.3, 0.3]] });
     await vi.advanceTimersByTimeAsync(40);
-    expect(patch.mock.calls.at(-1)[0].at(-1).overlayProperties.left).toBeLessThan(500);
+    expect(patch.mock.calls.at(-1)[0].at(-1).position[0]).toBeLessThan(500);
+    // The motion patch resizes each column, not only moves it.
+    expect(patch.mock.calls.at(-1)[0].at(-1).style.size[0]).toBeCloseTo(500 / 64);
     const late = listener;
     await session.dispose();
     expect(panel.isEnabled()).toBe(false);
@@ -68,29 +70,24 @@ test('a stopped capture error keeps its feedback without publishing a phantom ac
     finally { await projectViewVisualPanel.clearToolRecordingVisual({ toolId: 'ui.capture.audio', sessionId: 'failed' }); }
 });
 
-test('beginner video uses one preview destination, ignores late native frames and never opens a floating panel', async () => {
-    vi.useFakeTimers(); const view = win(); vi.stubGlobal('window', view);
+test('beginner video uses one preview destination, the GPU stream route, and never opens a floating panel', async () => {
+    const view = win(); vi.stubGlobal('window', view);
     const panel = createProjectViewVisualPanel(); const previewOpener = vi.fn();
-    let finishRead;
+    const register = vi.fn(async () => ({ ok: true, dispose: vi.fn() }));
     const runtime = createCaptureRecordingFeedbackRuntime({ projectVisualResolver: () => ({ runtime: panel, projectId }),
-        mainMenuResolver: () => ({ setToolRecordingVisual: vi.fn() }), previewOpener,
-        videoStateResolver: () => ({ readNativePreviewFrame: () => new Promise(resolve => { finishRead = resolve; }) }) });
+        mainMenuResolver: () => ({ setToolRecordingVisual: vi.fn() }), previewOpener, videoStreamRegistrar: register,
+        videoStateResolver: () => ({ readNativePreviewFrame: vi.fn() }),
+        nativePreviewStreamFactory: () => ({ stream: {}, firstFrameReady: Promise.resolve({ width: 960, height: 540 }), dispose: vi.fn() }) });
     const session = await runtime.startCaptureVisualSession({ kind: 'video' });
-    finishRead({ available: true, sequence: 1, width: 1, height: 1, pixel_format: 'bgra8',
-        bytes_base64: btoa(String.fromCharCode(10, 20, 30, 255)) });
-    await Promise.resolve(); await Promise.resolve();
     const video = children(panel.build({ width: 800, height: 240 })).find(node => node.id.endsWith('_recording_video'));
-    expect([...video.overlayRecord.bevyTexture.rgba]).toEqual([30, 20, 10, 255]);
+    expect(video.overlayRecord.type).toBe('video');
+    expect(video.overlayRecord.bevyTexture).toBeUndefined();
     expect(video.style.size).toEqual([800, 240]);
+    expect(register.mock.calls[0][0].id).toBe('__eve_bevy_ui_eve_bevy_ui_project_view_project_view_visual_preview_recording_video');
     expect(previewOpener).not.toHaveBeenCalled();
     view.__currentProject.id = 'other_project';
     expect(children(panel.build({ width: 800, height: 240 })).some(node => node.id.includes('_recording_'))).toBe(false);
-    await vi.advanceTimersByTimeAsync(67);
     await session.dispose();
-    finishRead({ available: true, sequence: 2, width: 1, height: 1, pixel_format: 'bgra8',
-        bytes_base64: btoa(String.fromCharCode(0, 0, 0, 255)) });
-    await Promise.resolve(); await Promise.resolve();
-    expect(vi.getTimerCount()).toBe(0);
     expect(panel.readCaptureVisual()).toBe(null);
 });
 

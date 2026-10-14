@@ -1,6 +1,6 @@
 # Feature Work, Cleanup And Framework Reuse
 
-Read this module for implementation, reuse, cleanup, refactoring, migration, or maintenance. The [root instructions](../../AGENTS.md) own the composition and explicit missing-component authorization rules. The [common method](07-future-code-guardrails.md) owns the reuse audit, status classifications, implementation gate, blockers, and reporting. This module supplies concrete owners, cleanup obligations, and map maintenance.
+Read this module for implementation, reuse, cleanup, refactoring, migration, or maintenance. The [root instructions](../../AGENTS.md) own the composition and standing internal creation and capability-extension authorization rules. The [common method](07-future-code-guardrails.md) owns the reuse audit, status classifications, implementation gate, blockers, and reporting. This module supplies concrete owners, cleanup obligations, and map maintenance.
 
 ## Canonical component owners
 
@@ -25,7 +25,7 @@ These are named single owners, not permission to create an equivalent implementa
 `npm run check:component-reuse-guardrails` enforces this ownership and is included in `check:m0`.
 
 - A compatible consumer may use the verified existing contract within the authorized task. Writing a second owner is forbidden.
-- If the contract cannot serve the need, use the root missing-component gate. An additive parameter is a proposal requiring bounded authorization, not an automatic remedy; preserve existing behavior by default when such an extension is authorized.
+- If the contract cannot serve the need, document the evidence and extend the canonical owner under the root standing authorization. Necessary additive parameters and capabilities within the requested task require no separate user approval; preserve existing behavior by default and validate shared consumers.
 - Do not create files such as `*_editing.js` or `*_virtual_window.js` that announce a responsibility already owned; the guardrail rejects duplicated ownership.
 - Surface-specific labels, injections, or panel differences do not justify a copy.
 - Converge discovered copies to the owner when authorized and verifiable; otherwise report the prerequisite and bounded migration proposal before feature growth.
@@ -36,7 +36,7 @@ The guardrail allowlist records remaining copies. It may shrink and must never g
 
 For any task, analyze legacy files, modules, paths, adapters, wrappers, bypasses, or obsolete implementations on the relevant controlling path as architectural liabilities. Do not ignore them because the original request emphasized another surface, preserve them by habit, or defer them merely because they are large or central.
 
-The target is safe removal through the canonical owner, rather than coexistence. Within the authorized scope, perform the necessary migration, call-site and dependency cleanup, ownership transfer, structural refactor, and validation. If completion requires broader scope or an unavailable internal component, report evidence and a bounded proposal through the common method; do not expand implementation automatically or claim the unresolved prerequisite is repaired.
+The target is safe removal through the canonical owner, rather than coexistence. Within the authorized scope, perform the necessary migration, call-site and dependency cleanup, ownership transfer, structural refactor, and validation. If completion requires an unavailable internal component, document the evidence and create or extend the canonical reusable owner under the root standing authorization. If unrelated broader scope is needed, report evidence and a bounded proposal through the common blocker procedure; do not expand into unrelated work or claim an unresolved prerequisite is repaired.
 
 Before deleting or replacing a legacy file, verify every import, runtime reference, dynamic loading path, test, synchronization dependency, generated output, and map/documentation contract depending on it, including rendering, API/MCP, history and replay dependencies. Run the narrowest relevant executable checks after removal, widening as needed to prove no regression.
 

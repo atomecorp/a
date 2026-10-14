@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
 // Compile the actual storage owners; authentication and device storage are explicit test seams.
-export function buildAiSFixture(fixturePath, { client = false, authentication = false } = {}) {
+export function buildAiSFixture(fixturePath, { client = false, authentication = false, extraFiles = [], compilerArgs = [] } = {}) {
     const directory = mkdtempSync(resolve('temp/ios-runtime-probe-'));
     const common = 'platforms/ios/atome-auv3/Common/';
     const source = readFileSync(common + 'LocalHTTPServer.swift', 'utf8');
@@ -20,7 +20,7 @@ export function buildAiSFixture(fixturePath, { client = false, authentication = 
     const binary = resolve(directory, 'probe');
     try {
         execFileSync('xcrun', ['swiftc', '-module-cache-path', resolve(directory, 'modules'), main,
-            ...files.map(file => common + file), '-o', binary], { timeout: 120000, stdio: 'pipe' });
+            ...files.map(file => common + file), ...extraFiles, ...compilerArgs, '-o', binary], { timeout: 120000, stdio: 'pipe' });
         return { binary, directory, dispose: () => rmSync(directory, { recursive: true, force: true }) };
     } catch (error) {
         rmSync(directory, { recursive: true, force: true });

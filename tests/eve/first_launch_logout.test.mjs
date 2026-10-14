@@ -97,6 +97,7 @@ describe('logout first-launch ownership', () => {
         await f.home.openLoginSequenceAfterAuthCheck();
         expect(await transport.presentations.at(-1).activate({ operation: 'phone', value: '' })).toMatchObject({ ok: true });
         transport.presentations.at(-1).writeDraft('phone', '+33612345678');
+        expect(await transport.presentations.at(-1).activate({ operation: 'choose_auth', value: '' })).toMatchObject({ ok: true });
         expect(await transport.presentations.at(-1).activate({ operation: 'authenticate', value: '' })).toMatchObject({ ok: true });
         expect(f.flow().state.stage).toBe('billing');
         expect(await transport.presentations.at(-1).activate({ operation: 'pay', value: '' })).toMatchObject({ ok: true });

@@ -217,10 +217,13 @@ fn procedural_sdf_mystic_mode_is_one_isolated_turning_tile_branch() {
     assert!(shader.contains("material.mystic_tile_colors[index]"));
     assert!(shader.contains("material.mystic_tile_motion[index]"));
     // The back face carries the workspace WHOLE — no fade gating its opacity — and
-    // the cell it leaves behind is filled with the menu plate: the hole.
-    assert!(shader.contains("plate_color = textureSampleLevel(menu_front, menu_front_sampler, source_uv, 0.0).rgb"));
+    // the cell it leaves behind shows the surface background alone: the hole
+    // reveals the wallpaper, never the tile nor a flat menu colour.
+    assert!(shader.contains("let previous = textureSampleLevel(menu_front, menu_front_sampler, source_uv, 0.0);"));
+    assert!(shader.contains("plate_color = previous.rgb;"));
     assert!(!shader.contains("back_alpha"));
     assert!(shader.contains("let hole_distance = sd_mystic_tile(delta, half_side,"));
+    assert!(shader.contains("let hole_color = textureSampleLevel(menu_back, menu_back_sampler, back_uv, 0.0).rgb"));
     // A palette tile's top-right corner is folded: `mystic_tile_motion.w` is the
     // fold's side, and the plate, its contact shadow and its hole are all cut
     // along the same diagonal.
@@ -233,9 +236,23 @@ fn procedural_sdf_mystic_mode_is_one_isolated_turning_tile_branch() {
     // carries its full shadow; a plate lying flat keeps atome's standard tool
     // shadow at `mystic_style.y`, on its menu face only.
     assert!(shader.contains("* shadow_dose * (1.0 - plate_mask) * lifted"));
-    assert!(shader.contains("let lifted = max(abs(sine), clamp(material.mystic_style.y, 0.0, 1.0) * select(0.0, 1.0, cosine < 0.0));"));
-    // A tile that has not started turning paints nothing at all.
-    assert!(shader.contains("if progress <= 0.0 { continue; }"));
+    assert!(shader.contains("let lifted = max(abs(sine), clamp(material.mystic_style.y, 0.0, 1.0) * select(0.0, 1.0, cosine < 0.0 || level_turn));"));
+    // A tile that has not started turning paints nothing at all, except in a
+    // level turn, where it still shows the level it carried.
+    assert!(shader.contains("if progress <= 0.0 && (!level_turn || previous_absent) { continue; }"));
+    // A level turn (`mystic_style.z`) turns from the previous level's face, on the
+    // same glass, never from the workspace; `|motion.z|` names what the cell showed.
+    assert!(shader.contains("let level_turn = material.mystic_style.z > 0.5;"));
+    assert!(shader.contains("let previous_kind = select(0.0, round(abs(motion.z)) - 1.0, level_turn);"));
+    assert!(shader.contains("plate_color = intuition_mystic_plate(box_distance, source_uv, family, glass_mix, tint);"));
+    // An empty grid cell (`motion.w < 0`, never a folded palette) shows the
+    // wallpaper alone, blurred (never the tile beneath), and a light outline on
+    // its menu face: no tint, no colour, no resting shadow.
+    assert!(shader.contains("let ghost = motion.w < -0.5;"));
+    assert!(shader.contains("plate_color = mix(intuition_mystic_back_blur(ghost_uv, surface), vec3(1.0), outline_dose);"));
+    assert!(shader.contains("fn intuition_mystic_back_blur(uv: vec2<f32>, surface: vec2<f32>) -> vec3<f32>"));
+    assert!(shader.contains("let shadowless = select(ghost, previous_ghost || previous_absent, cosine >= 0.0);"));
+    assert!(shader.contains("* lifted * select(1.0, 0.0, shadowless)"));
     // Every mystic uniform is declared, and in the bind group order.
     let mut order = vec![shader.find("liquid_drop_count: vec4<f32>").expect("liquid drop count")];
     for field in ["mystic_tiles", "mystic_tile_motion", "mystic_tile_colors", "mystic_count", "mystic_style"] {

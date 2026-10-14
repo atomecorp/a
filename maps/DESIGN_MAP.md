@@ -1,3 +1,19 @@
+2026-10-14 Incoming-call interaction: real audio/video invitations use native system ringing with answer/decline, then the canonical atome call engine. Current iOS metadata handling avoids optional stale/duplicate ringing while preserving mandatory system reports; no eVe panel/DOM/canvas added. Atomic app installation/launch verified, actual CallKit UI/receipt remains To verify. Android target uses its native Telecom/call-style presentation, with runtime permissions/full-screen policy respected; this target is not implemented and cannot be presented as accepted UI.
+
+2026-10-14 Existing Contact selects an imported iOS card as the personal profile; Home/Contact refresh the same account profile after canonical commit. Existing FirstLaunch Matrix adds the phone -> password/SMS choice for every number (no account-discovery response); existing Home Security sets the optional password. Raw credentials remain transient; Bevy text projects bullets. The single canonical hidden native text INPUT supports type=password, inputmode=text and explicit autocomplete without a length64 truncation, correcting its previous text/tel-only contract. Existing Home notification action requests OS permission in context. UserNotifications/CallKit are platform presentation boundaries; they do not add an eVe panel/canvas. Real Web gestures checked 1024×768 and 390×844; iOS signed compilation succeeds but physical acceptance remains unverified. [Evidence](../eVe/documentations/FRAMEWORK_STATE.md#5-recent-task-record).
+
+2026-10-14 GPS presentation (ATM-2019, partial acceptance): existing Mystic rubric tiles/history/current-first and ordinary create slot; movie-stage rectangle reused by a disposable shared-canvas Bevy panel tree. Preview map activation toggles fullscreen; only fullscreen exposes canonical fields/buttons/search/scroll and Finder pan/zoom. Finder map factory adds clipped route segments, multiple markers and configured tile-source parameters using existing tokens and shared WebGPU textures. FR/EN text is owned by languages_gps.js; browser locked-screen limit and remaining distance/time are visible. No Dashboard layout/animation/colour/pagination change, private renderer, product DOM or separate canvas. Actual platform visual acceptance is recorded in FRAMEWORK_STATE.
+
+2026-10-14 Dashboard mystique: a rubric fills the cells nearest the touched tile first; one level down the return sits on the chosen plate; levels turn with the rubric wave (never via the Dashboard tiles); the in-place edit tools are half-size plates (the standard Mystic tool size) around the edited tile; YouTube/TV start at the stage size, a tap on the picture goes fullscreen.
+
+2026-10-14 Dashboard mystique Mystic: plates keep the menu's tinted transparent glass; Return tile opaque (system surface) with the back glyph; empty cells = blurred wallpaper with a light outline, no tint; the event cell shows content like the others; under the keyboard the search field sits just above it and results fill from the bottom. Search band: Dashboard glass (blur + slight darkening), 60 px high, placeholder « Rechercher ».
+
+2026-10-14 Dashboard mystique: band one unit high (half a tile), pinned under the top safe area; time + date and weather + place each on one line; the block is seen down to the bottom safe area; no form notice on the home.
+
+2026-10-13 Dashboard mystique v2: tiles 2 × unitPx (120 px), centred block; band 1.5 units high, 3 tiles wide; resting tiles tinted by rubric (alpha 0.55), turned plates opaque in the rubric colour, unused cells empty opaque plates; monitors share one colour; Settings and page turns use the system colour. The stage covers the 12 upper tiles; the bottom-centre tile reads « Fermer », or red « Arrêter » while recording. Search field one unit high under the last row. Card icons centred vertically above the label band.
+
+2026-10-13 Dashboard mystique (provisional look, final design to come from the user): 3 square columns sized to the surface (half-unit margin, Dashboard gap), Dashboard glass cards (`buildDashboardCardRecords`) for every tile, ribbon glyphs tinted with the system content colour and the Atom with `MYSTIC_CENTER_TINT`. Turned plates keep the Mystic shader (family-tinted glass, Dashboard `contentRadius`), faces are the same Dashboard cards; page turns are Mystic page tiles (system family). Phone width verified (390×844).
+
 2026-10-12 Professional lateral-band control restored: the shared glass disclosure button/triangle remains visible at the band edge while collapsed, left for right-handed users and right for left-handed users. Tap toggles the registered sidebar command; upward slide opens it. Atom retains its opposite, persistent project/Dashboard anchor and native tap/hold behavior. The button uses the existing 2x-unit by half-unit footer geometry, shared native safe area, and the existing Dashboard material. This supersedes the preceding removal of that button.
 
 2026-10-12 Professional Dashboard: right-handed Atom stays on the right and the lateral band moves to the left; left-handed Atom stays on the left and the lateral band moves to the right. This supersedes the earlier same-side interpretation. The former disclosure rectangle is replaced by the existing native Atom tool, fixed through band expansion/collapse, scrolling, project transitions and assistant input reservations. An upward slide toggles the native band; a short press alternates Dashboard/last prepared project; the canonical 520 ms hold opens the assistant. Category/New controls and card handedness remain intact. The professional assistant keeps the Atom logo rather than replacing it with its procedural animation. Layout and menu share canonical size, margins and native safe-area insets. Other Dashboard variants remain unchanged.
@@ -36,6 +52,10 @@
 2026-10-09 Current menu material and validation contract: `eVe/elements/skin/tool_skin.js` mixes the five existing family hues lightly into the common system tint. Palette and Mystic fronts retain 69% tint opacity and 16 px blur; geometry, folds, shadow and animation are unchanged. `eVe/intuition/ribbon/bevy_ui_menu_surface.js` preserves the real backdrop through the existing projection; the shared backdrop shader clips it to the existing fold and the SVG carries only fold/shadow paint. Separate palette accent bars are retired. Mystic keeps the activation point fixed and reflows whole rows/columns near edges; the shared tool seam is currently 4 px. Ribbon slider triggers pin/unpin their existing native slider on activation. Current contracts supersede older opaque-fill, accent-bar, 3 px seam and translated-centre descriptions below. Executable evidence: `tests/eve/bevy_ui_main_menu_palette_background_motion.test.mjs`, `tests/eve/bevy_ui_main_menu_palette_motion.test.mjs`, `tests/eve/bevy_ui_mystic_menu.test.mjs` and `tests/eve/bevy_ui_main_menu_contract.test.mjs`; real UI acceptance remains a separate evidence level.
 
 2026-10-09 Reference maintenance: active code paths must exist. An explicit `retired:path` identifies a former source absent from this checkout, never a callable owner or availability proof. Historical entries below are qualified accordingly; unresolved feature equivalence remains **To verify**. The map guard checks active paths and rejects retired annotations on existing files.
+
+2026-10-14 Timeline view (cahier v1.6): composes canonical panel bricks only (`node`/`textNode`, `recordPreviewNode`, `recordTimelineStripNodes`, mix M/S colours) with `EVE_TOOL_SKIN_TOKENS.timeline` tokens through `TIMELINE_PALETTE` (`project_view_timeline_layout.js`): lanes, clip fill per kind, record region, Scenes band, ruler and ticks, crop handle, loop ribbon (`loopFill`, green accent), automation dots (`automationFill`), playhead. Unit = `projectViewToolSize()`; headers one unit (four when expanded), ruler at the bottom on two levels, detail zone only with a selection. No guiding text, no new status marks; the selection is the native ring.
+
+2026-10-14 Prompteur design: the operator panel composes canonical panel bricks only (buttons, segmented controls, numeric fields, selectable list with a `time` meta column, colour swatch grid). The reading view (`bevy_panel_prompter_reading_view.js`) is a clipped frame with one column of text lines; colours come from the user preference `preferences.visual.prompter` (CSS hex/rgba, defaults white on black, current line #ffd84d, reading band rgba(255,216,77,0.18), dimmed lines at 45 %) converted to BevyUI RGBA floats by `readSurfaceBackgroundRgba`; dimming is baked into the colour alpha. Motion patches carry only the column position and the time labels; the current-line colour changes by a rebuild (a patched colour would survive a rebuild). Prompteur clip ticks in the Molecule timeline use `EVE_TOOL_SKIN_TOKENS.timeline.rulerTickFill`. Mirror (`preferences.visual.prompter.mirror`: none|horizontal, Display > Mirror) flips each reading leaf in place (`scale: [-1, 1]` about its centre, position reflected in its container) because flat overlay records do not inherit a container's transform; the exit button stays unmirrored.
 
 2026-10-08 Beginner List redesign: the existing fixed row composes one fixed square thumbnail on the left, an editable filename in the middle and the canonical Play/Stop icon on the right, for either handedness. Double-click renames; thumbnail activation selects. Hierarchy marks, accordion, timeline progress and expanding names are omitted. The right rail automatically composes Delete (selected object only), Color, Import, Video, Photo, Audio, Text, Shape and Draw, with Organizer last at the rail base; permissions and native tool options remain canonical. Intermediate/advanced List retains hierarchy disclosure, removes Mute/Copy/Cut/Paste/Size/Info/Teleport and puts Enter in the selected Molecule rail. Shared skins/tokens and source preview owners remain responsible for pixels. UI pixel/gesture acceptance remains To verify because current WebGPU startup panics.
 
@@ -892,7 +912,6 @@ Primary sources:
 - `eVe/intuition/tools/capture_recording_feedback_runtime.js`
 - `eVe/intuition/tools/capture_video_recording_runtime.js`
 - `eVe/intuition/tools/capture_reveal_runtime.js`
-- `eVe/intuition/tools/capture_export_geometry.js`
 - `eVe/domains/media/api/audio_api.js`
 - `eVe/domains/media/api/video_recording_controller.js`
 - `eVe/domains/rendering/bevy_video_stream_source_runtime.js`
@@ -1261,7 +1280,7 @@ The perceptual contract is backed by presented WebGPU frames, not JS sampling al
 # Molecule v2 Bevy design contract — 2026-08-12
 
 - Timeline lanes sit above one opaque `surfaceFill` record, so durable project Atomes never bleed through previews or waveforms. Lane fills, ruler ticks, Record regions, crop handles and the playhead remain skinnable projection palette values.
-- Mix channel strips consume the `bevyPanel.moleculeMix` token group (`strip*`, `control*`, meter and group/rest surfaces). Stable ids `molecule_mix_gain_<track>` and `molecule_mix_pan_<track>` identify the two canonical sliders for future skins without local style discovery. Both sliders stay vertically centred in the usable strip body so mobile navigation rails cannot cover either control.
+- Mixer strips consume `bevyPanel.moleculeMix`, owned by `eVe/elements/skin/mixer_skin.js` (strip/zone/tile/band surfaces, outline and glow, lane accents — audio cyan, video/group master violet, members cyan/green/orange — fader track/thumb/ticks, delete zone, lasso). One fixed strip template: module column (canonical menu tool tiles on a `tileBackground` ground, IN on top, + then OUT anchored at the bottom), contextual zone (canonical `bevy_panel_fader.js` in dB or linear law, or the effect's parameters as deported horizontal tool sliders; the zone widens for effects), bottom band (name + destination, group chevron up/right). The selected module and its zone share one continuous glowing outline (per-edge `surfacePaint` borders plus a bridge). Stable ids: `molecule_mix_strip_<strip>_{in,module_<n>,add,out,band,chevron}`, `molecule_mix_zone_<strip>_{fader,param_<key>}`.
 
 - The fixed main menu order is Atom, Home, Finder, Record, Time, Communication, Mode, View, Create. Create opens the functional Text, Draw, Code and Page entries; generator entries exist only when backed by a registered generator.
 - Text, Draw, Code and Page are mutually exclusive visible latches whose shared WebGPU shell uses the blue active fill and restores the initial fill on shutdown. Natural Text waits for an empty-canvas click and repeats placement while armed; List/Matrix Text creates immediately, reveals the row/tile, opens Visual and focuses the shared hidden editor. Structured Draw and Page also create one immediate canonical draft row/tile, then the first valid Visual gesture fills that same `shape` or `group`; Natural Draw/Page still wait for the first valid gesture. Page is a canonical `group`; entering it never recenters, masks or moves the Natural project and merely changes the shared current insertion container. Code is centered within the usable application layer on every open and remains movable/resizable.
@@ -1439,6 +1458,10 @@ Pinned case without a rail (2026-09-24): the reserved zone above the Atome handl
 
 ## Programme panel composition (2026-10-01)
 
+2026-10-13 compact Matrix control: the native ToolSlider owner supplies the closed square and expanded horizontal rail/value. Matrix owns temporary 2–3-column placement, right-edge anchoring, neighbour movement and nested-group growth. Slots, object identities and values retain canonical ownership; closing restores layout. Extra rows enlarge the disposable embedded viewport within the shared surface and remain scrollable when necessary. No new material, token, DOM control or renderer. Actual Web geometry/click/drag/focus/small-screen captures and canonical value save/reload pass in Consultation/Performance after the explicitly authorized mode-policy exception. P004/accessibility/final/native acceptance remains open.
+
+2026-10-13: the existing Programme surface also projects the account-global activity library under its `activities` tab. Canonical hierarchical selectable rows, text, divider, Refresh button and panel lifecycle display objective references, one realization and original/corrected durations. This is consultation of real records; creation/link/execution controls remain pending the required Matrix composition. The user authorized continuous integration after viewing the isolated proposal. Actual integrated Web pixels and pointer selection/Refresh pass at 1024×768 with one shared canvas and no `.eve-atome` nodes; native acceptance remains To verify. No new skin, token, visible DOM, editor or renderer.
+
 `eVe/intuition/runtime/bevy_panel/bevy_panel_program_runtime.js` composes the canonical Bevy panel shell, `createPanelTextEditingRuntime`, `textInputNode`, scope chips, selectable lists and `bevy_ui_tool_slider`. Involvement contains exactly two native sliders: time and rhythm. Unit changes affect display only; conversion waits for selected days. Five optional Finder family chips remain separate from activity filters. Journal consent is explicit. Monitor displays consented observations and declared completions separately; missing data has no efficacy score. No HTML app, private editor or new rendering path is introduced. Cross-platform acceptance is tracked in `eVe/documentations/programs/README.md`.
 
 ## Unified menu tools (2026-10-02)
@@ -1534,3 +1557,99 @@ canonical data model, renderer or durable mutation owner is added.
 ### 2026-10-11 — Assistant Message presentation
 
 Pending preparation/connection and errors occupy the existing ribbon Message cell exclusively, using the shared clipped horizontal scroll area when unfocused. Focusing the canonical editor restores its preserved draft. A separate canonical link button inside that cell opens the precise prerequisite panel. History, contextual tool confirmations and explicit media previews retain their owners. Assistant dock and scene align to the main-menu published slot and layout in both handednesses, including its bottom spacing. French/English interaction strings own all new labels. Physical iPad pixels and gestures remain to verify.
+
+2026-10-13 Matrix navigation/resume reuses native square media tiles, tile tokens, icon button, localized Back label, shared selection and the Bevy scrollIntent. Back occupies the next square after the current children, preserving canonical child indices and drag layout. Selection/scroll are remembered per canonical level and restored on return/reopening. Web portrait and landscape evidence is available; keyboard/screen-reader/physical-native acceptance and objective/activity template composition remain to verify.
+
+2026-10-13 BevyUI keyboard/semantics: The authorized BevyUI semantic DOM is strictly nonvisual: one shared root per canvas, fixed 1 px dimensions, overflow hidden, clipPath inset(50%), and pointerEvents none; there is no product HTML/CSS visual route or metadata-bearing data-* attribute. Focus is drawn by the existing Bevy panel select.focusShadow and border tokens in the shared canvas projection. Native Matrix squares, columns, Back square and media layouts remain owned by their canonical factories. Real Web focus pixel differences, keyboard/AX and List-to-Matrix handoff pass; physical screen-reader/native and other native control keyboard contracts remain to verify.
+
+2026-10-13 official objective entry: thirteen official choices plus Create my own objective compose the existing Dashboard glass/icon/text cells. Localized Preview/Pilot programme labels state actual programme availability. Objective cells keep the native initial size for readable titles/status and use the existing Dashboard wheel/drag/snap owner for overflow; title/hint and grid clipping remain distinct. Native action records provide labels to the already approved nonvisual semantics. Corrected Web portrait/landscape pixels are inspected; physical/native acceptance remains to verify.
+
+2026-10-13 ATM-2017 Effort: Minimum/Doux/Régulier/Soutenu/Ambitieux use the native compact ToolSlider square and its existing 2–3-cell horizontal expansion, tokens and text projection. Named captions are opt-in; ordinary numeric formatting remains unchanged. New guided health projects receive the declared Matrix control below existing content. Explanation and editable brick-count seeds live in the existing on-demand Help article, not permanent extra controls. Actual Web pointer/save/reload and portrait/landscape pixels were inspected for a preview objective and Sleep; List/Matrix-browser embedding and physical/native/human acceptance remain To verify.
+
+2026-10-13 ATM-2017 P006/V02 (explicitly authorized): Optional capacity uses the existing native radio rows and localized short captions. The explicit minutes field uses the supported native text input with numeric validation; generated UX seeds use the existing multiline editor. Proposal activation/notice and landscape scroll reuse native Matrix/Bevy components on the shared canvas. High Effort with limited/unknown/omitted capacity and ten minutes shows one editable five-minute seed. New guided health assembly has no accepted capacity/time defaults. Web captures and real gestures are recorded under temp/atm2017/p006-v02-*; Tauri/iOS/human acceptance remains open.
+
+2026-10-13 ATM-2017 P007: the Time square reuses native compact horizontal ToolSlider expansion and canonical text/unit/day chips. Initial slider amplitudes 0–120/day and 0–840/week, step five, expand for explicitly entered larger values. View conversions preserve the stored original; decimal manual input is retained. Native optional charge-check fields and selected time-part chips are wrapped and scroll with the existing Matrix. Actual Web captures include over-budget, zero, portrait/landscape and Programme handoff. The Programme panel shows its source budget and native Open Time button instead of a second editable budget. visual_fullscreen is explicitly consultation in the existing shared tool_family owner.
+
+2026-10-13 ATM-2017 native objective projection: objective_engagement controls render directly in Matrix and List through the same native template tree and scroll box, with the existing Back icon button. Visual preview is omitted for this configuration level, leaving the full body to native controls. Real Web portrait 390×844, landscape 844×390 and List reopen pixels inspected; generated older footer names remain to verify.
+2026-10-14 ATM-2017 health collection: one optional purposeful question is composed from the existing native text input, buttons, scope chips and checkbox inside the objective Matrix native slot; the same control supports a fixed standalone activity context. Starting state and existing Nutrition allergies use localized purpose explanations, explicit preferences/journal consent, original source/date/uncertainty/freshness and manual/unknown/later actions. Long source/reason text uses createTextEditingLayout measured height and existing outer scroll rather than clipping to guessed line counts. Final Web portrait 390×844 and landscape 844×390 pixels and real Save/reload/reuse pass; physical iOS/Tauri/human acceptance remains unverified. No Dashboard UI is edited or attached.
+
+2026-10-14 ATM-2017 independent health configuration: program_activity_configuration_control composes native editor/buttons/chips/measured text in the existing Programme activities tab, with explicit choices and exact immutable retry. Native health links reuse one global activity identity across two objectives. Nutrition composes the same optional standalone collection owner. ui.panel.open declares its existing tab option. No Dashboard source or attachment. Persistent program_activity_configuration suite plus six affected suites: 119/119; syntax 2659. Actual isolated Web three groups, real gestures/reload/390×844/844×390, final pixels inspected, one visible canvas/zero .eve-atome/no browser warnings or errors. Canonical commits prepare fictitious goal fixtures; Dashboard creation, sport/category Matrix/execution and native/cloud/human acceptance remain unverified.
+
+2026-10-14 ATM-2017 common health sessions: shared program_session_contract declares immutable plans and ordered transition facts inside the existing record type and Programme command family. program_session_model deterministically derives prepared/running/paused/completed/stopped, explicit step confirmation/skip/correction/undo, separate planned/actual units and unknown quantities, and clock time excluding pauses. program_session_runtime reuses canonical owned global records and immutableActivity/event-ID replay: one deterministic identity per revision rejects competing intents without a guessed CAS/version contract or second store. Final completion reconciles one session-referenced occurrence/execution without fabricating Calendar placement; direct activity_complete cannot bypass this owner. program_session_control composes real native editors/buttons/chips/measured text and the existing outer scroll in the activities tab. Distinct confirmation protects the primary gesture; exact pending retries and account/close guards remain disposable. Existing numeric formatting limits presentation precision without rounding stored time. No Dashboard modification/attachment or new renderer/registry/transport. Tests: program_session_contract plus Programme/configuration/collection/time, 79/79; syntax 2664, mutation guard pass. M0 retains two existing Porcupine paths after its earlier stages pass. Actual isolated Web session-report.json: ok:true, three groups, real preparation/step/pause/reload/resume/skip/undo/finish, quantity correction planned 5 / declared 3, portrait/landscape native scrolling and partial stop; final pixels inspected, one visible canvas/zero .eve-atome/no browser errors/warnings. Initial probe capture API/readiness mismatches and large-wheel oscillation were corrected in the temporary harness, without a product pointer workaround; multiline preparation explicitly enables the existing block editor. The final replay contains no temporary command/performance instrumentation. To verify: finished-session step corrections, composed specialized sports/meal routines and multi-metric steps, native/cloud/physical-reader and human acceptance; Dashboard and external alarms/sensors excluded. No full P015 or health-scope completion.
+
+### 2026-10-14 — Native health edit and Nutrition Matrix
+
+**Human design rejection:** the user explicitly refused both current Nutrition captures. The generic free-text habit, undefined action, repeated apple glyphs and ambiguous long Save/Back/Close bars do not constitute an accepted Atome composition. The assembly described below is technical implementation evidence only. Revised V01 must use verified native Matrix/tool composition with a named activity, contextual options and clear actions, and receive explicit acceptance for each surface/version. Dashboard changes remain excluded.
+
+Health Edit reuses the same configuration editor/chips and keeps the brick identity fixed. Nutrition composes the existing Matrix template projection in the activities tab: Habits or Meal → meal type → food groups → user choice and optional explicit portion → optional preparation/shopping/source. Category cells use the canonical creation-cell owner at the system-unit proportions; long food choices use the native wrapped button slot. A previously tried content-card composition cramped labels; the final assembly calls the compatible existing creation-cell owner without changing it. FR/EN labels belong to languages_programs.js. The actual host body height supplies the embedded viewport, so landscape scroll can reach Save/Close. No local skin, copied glyph, raw DOM, new canvas or Dashboard change. Actual Web native gestures/reload and 390×844/844×390 pixels are recorded in temp/atm2017/nutrition-report.json; native/cloud/human acceptance remains open.
+
+2026-10-14 terminal health correction: The same native confirmed-step chips, explicit quantity editor and Undo remain in completed/interrupted health views. Advancement, Resume and termination controls disappear. Portrait/landscape real correction/undo pixels are Web-verified; no new layout skin.
+
+2026-10-14 Nutrition V01 proposal 2: isolated review assembly under temp/atm2017
+uses the existing Matrix/native panel and buildBevyMenuToolNode/content owners.
+Two 60 px tools, Meal and Action, have full native text captions, maintained lit
+selection and contextual explanation. Native window height/phone layout/scroll
+and Close are reused; no private skin, DOM or production/Dashboard source change.
+Actual Web selection, responsive scroll, Close and six inspected captures are
+recorded in nutrition-v2-report.json. This is a first-entry proposal only: concrete
+habit/meal editors, durable writes and human acceptance are not claimed. The prior
+Nutrition assembly remains rejected; this version has been submitted for review.
+
+2026-10-14 Nutrition copy review: the user accepts proposal 2's direction and asks
+for less text. Its isolated assembly now has a short heading, complete Meal/Action
+captions and one selected-choice explanation; duplicate selection/preview notices
+are removed and the native footer identifies the preview. Matrix rows reduce from
+six to four. nutrition-v2-short-report.json confirms real Web selection/reflow/Close
+and four inspected captures. No production or Dashboard source change; complete
+Nutrition and native acceptance are not implied.
+
+2026-10-14 Nutrition meal-type proposal: the same isolated entry now opens a native
+radioGroupNode with the existing seven NUTRITION_MEAL_TYPES, short title and Back
+icon. Options are the Meal tool's settings, not seven repeated category glyphs.
+Back retains the temporary choice; Close discards it. Real Web seven choices,
+portrait/landscape and native scroll to the last option pass; four captures and
+nutrition-meal-choice-report.json record the result. No production/Dashboard source
+change, private skin, durable save or full Nutrition completion. The user explicitly
+approved this exact meal-type surface after its P031/V01 review.
+
+2026-10-14 Nutrition composition proposal: the same isolated Matrix now keeps the
+selected meal title and a real 60 px Add palette tool. Its options use the existing
+radioGroupNode and eight typed food groups instead of repeated apple tiles. Native
+half-unit rows reduce unused space; square/tool/choice geometry and skins remain
+owned by their factories. A category selection is not presented as an added food.
+Seven inspected captures and nutrition-composition-preview-report.json verify
+real Web Add/group/Back/scroll/Close. This new surface is submitted for P031/V01
+review; food naming, saving, full Nutrition and native acceptance remain open.
+No production or Dashboard source change.
+
+2026-10-14 named-food review: the user explicitly accepts the empty meal and
+Add-category composition. The next isolated assembly keeps the meal/category
+heading, one real native text field, an Add tool, and native OK/Remove tools when
+editing. Food rows use iconButtonRowNode; Save reuses a native menu tool. Matrix
+half-unit spacing and existing text measurement govern geometry, not a private
+skin or DOM form. Real per-character typing, blank rejection, editing, Save,
+reload/reopen and portrait/landscape pass in nutrition-food-report.json; six
+captures inspected. One shared canvas, zero .eve-atome, one hidden text root.
+This food screen is submitted for P031/V01 review; public integration and the
+remaining Nutrition surfaces are not accepted or complete. Canonical Nutrition
+owns the draft and saved identity; Dashboard source remains excluded.
+
+Subsequent user decision: "Cest validé" accepts that food-name/edit screen.
+Its unchanged native layout is transferred to program_nutrition_meal_presentation
+and its 23 French/English labels to languages_programs, using the ordinary
+dictionary composition. No private factory, renderer, DOM or skin is added.
+The next proposed composition shows two actual chosen foods with native pencil
+actions and the native Save tool. Actual Web two-food edit/save/reopen/portrait/
+landscape/scroll/unsaved-remove Close pass in nutrition-composed-report.json;
+five captures inspected. Populated composition acceptance remains pending.
+
+The user subsequently accepts populated composition and explicitly requires
+shared templates/styles and standard Atome UI for all health panels. Their base
+is the existing buildBevyPanelTree/panel_skin/bevy_panel_tokens chain, with no
+private domain skin or style database. Standard buttons/fields/chips/radios/
+icon rows and ToolSlider retain their canonical owners. Common style-definition
+changes are consumed when projections are rebuilt; no live database theme editor
+is claimed. Nutrition now has one createProgramNutritionPresentation assembly
+for Meal and the proposed Action editor, reusing the same Matrix field/action
+placement and native controls. Eight inspected Web captures in
+nutrition-composed-report.json verify both real flows; Action review is pending.

@@ -1,4 +1,4 @@
-import { parseAuthLink } from '../../shared/auth_link_contract.js';
+import { parseAuthLink, authPasswordRequestDigest } from '../../shared/auth_link_contract.js';
 
 // `auth_session_invalid` is deliberately absent: a session sent to another
 // server than the one that issued it is "invalid" there yet alive at home.
@@ -88,6 +88,25 @@ export function createPhoneLinkClient({ devices, send, installSession, locks = g
         return result.pending ? { ...result, ok: true, attemptId: record.attemptId, expiresAt: record.expiresAt } : result;
     }
     return {
+        passwordLogin: (phone, password) => exclusive(async () => {
+            const device = await devices.forPhone(phone);
+            const fields = { phone, publicKey: device.publicKey, clientNonce: devices.randomHandle() };
+            const { challenge } = await request('password-login-challenge', fields);
+            if (!challenge.reference?.endsWith(`:${fields.clientNonce}`)) throw new Error('auth_challenge_invalid');
+            const signed = await sign(device, challenge, 'password-login', challenge.reference, fields.clientNonce);
+            const result = await request('password-login', { ...fields, ...signed, password });
+            const accepted = await accept(result, phone);
+            return accepted;
+        }),
+        setPassword: (password, currentPassword = '') => exclusive(async () => {
+            const record = await devices.read('session');
+            if (!record) throw new Error('auth_session_required');
+            const device = await devices.forPhone(record.phone);
+            const fields = { sessionId: record.session.id, generation: record.session.generation, requestDigest: await authPasswordRequestDigest(password, currentPassword) };
+            const { challenge } = await request('session-challenge', { ...fields, purpose: 'set-password' });
+            const signed = await sign(device, challenge, 'set-password', `${fields.sessionId}:${fields.generation}:${fields.requestDigest}`);
+            return request('session-set-password', { ...fields, ...signed, password, currentPassword });
+        }),
         retryRevocations: () => exclusive(async () => {
             const pending = await devices.keys('revoke:');
             for (const key of pending) {

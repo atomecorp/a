@@ -5,6 +5,8 @@ use serde_json::{json, Value as JsonValue};
 use super::provider_relay::ProviderRelay;
 #[path = "file_selection.rs"]
 mod file_selection;
+#[path = "gps_native.rs"]
+mod gps_native;
 
 /// A reply the browser is waiting on is matched by `requestId`; a frame without
 /// one is dropped by the transport, which then waits out its full ten-second
@@ -110,6 +112,21 @@ pub(super) async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
 
                 if super::public_relay::PUBLIC_TYPES.contains(&msg_type) {
                     let response = super::public_relay::relay(&data).await;
+                    if socket.send(Message::Text(response.to_string())).await.is_err() { break; }
+                    continue;
+                }
+
+                if msg_type == "gps-native" {
+                    // Local, data-free capability revocation must still work after logout.
+                    if data.get("action").and_then(JsonValue::as_str) == Some("release") {
+                        let response = gps_native::release(&data).await;
+                        if socket.send(Message::Text(response.to_string())).await.is_err() { break; }
+                        continue;
+                    }
+                    let response = match (ws_authenticated_user(&data, &state), state.atome_state.as_ref()) {
+                        (Ok(user), Some(atome)) => gps_native::handle(&data, &user, atome, state.auth_state.as_ref()).await,
+                        _ => ws_reply_envelope(json!({"type":"gps-native-response", "error":"AUTH_REQUIRED"}), request_id),
+                    };
                     if socket.send(Message::Text(response.to_string())).await.is_err() { break; }
                     continue;
                 }

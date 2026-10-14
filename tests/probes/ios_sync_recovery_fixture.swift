@@ -104,7 +104,7 @@ extension AiSRuntime {
         check(try query(db, "SELECT atome_id FROM atomes WHERE atome_id='offline-project' AND deleted_at IS NULL").count == 1, "newer winning restore must clear the tombstone")
         try execute(db, "UPDATE remote_sync_stream_cursors SET projection_version=0 WHERE stream_id='own-stream'")
         check(remoteSyncCursors(principalId:"cloud-account").contains { $0.0 == "own-stream" && $0.1 == 0 }, "legacy projections must request replay")
-        try completeRemoteReplay(principalId:"cloud-account", streamId:"own-stream")
+        try completeRemoteReplay(principalId:"cloud-account", streamIds:["own-stream"])
         check(remoteSyncCursors(principalId:"cloud-account").contains { $0.0 == "own-stream" && $0.1 == 7 }, "successful replay must retain the durable cursor")
         print("AiS sync recovery checks passed")
     }

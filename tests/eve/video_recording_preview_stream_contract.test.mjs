@@ -143,12 +143,14 @@ test('obsolete DOM/JPEG recording preview path stays deleted', async () => {
     )?.source ?? '';
     assert.equal(swiftSource.includes('__ATOME_NATIVE_VIDEO_PREVIEW_FRAME'), false);
     assert.deepEqual(videoDataOutputOwners, ['AppNativeVideoRecorderPreview.swift']);
-    assert.match(nativePreviewSource, /maximumDimension = 96/);
-    assert.match(nativePreviewSource, /minimumFrameInterval = 1\.0 \/ 15\.0/);
+    // One bounded latest-frame JPEG (GPU encoded), turned into a MediaStream by
+    // `video_native_preview_stream.js` for the shared Bevy video route.
+    assert.match(nativePreviewSource, /maximumDimension = 960/);
+    assert.match(nativePreviewSource, /maximumFps = 30/);
     assert.match(nativePreviewSource, /alwaysDiscardsLateVideoFrames = true/);
-    assert.match(nativePreviewSource, /vImageScale_ARGB8888/);
-    assert.match(nativePreviewSource, /"pixel_format": "bgra8"/);
-    assert.equal(nativePreviewSource.toLowerCase().includes('jpeg'), false);
+    assert.match(nativePreviewSource, /jpegRepresentation/);
+    assert.match(nativePreviewSource, /"pixel_format": "jpeg"/);
+    assert.equal(nativePreviewSource.includes('bgra8'), false);
     assert.equal(swiftSource.includes('AVCaptureVideoPreviewLayer'), false);
     assert.equal(swiftSource.includes('media_camera_preview_'), false);
 });

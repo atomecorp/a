@@ -30,3 +30,7 @@ GitHub's repair-push response reported one moderate dependency alert. No depende
 ## 2026-10-13 — Final documentary arbitration resolved
 
 The user selected the recent SMS/device-proof flow with access tokens in memory. The unconditional browser-cookie migration requirement is retired as historical provenance in secure_auth_token_storage.md; applicable security acceptance remains in ATM-2001/ATM-2002. The decision record, single register and source index are aligned. No documentary arbitration remains pending for this triage. This follow-up changes documentation only, preserves the source export and eVe, and performs no Git write or GitHub action. No product/runtime validation is inferred from approval.
+
+## 2026-10-13 — User-selected product priority and visual approval
+
+The user made ATM-2017 (projects, objectives and transversal activities, including sport) execution rank 1, superseding the earlier security/collaboration-first recommendation. The single register now places this package first and explicitly repeats Objectif.md section 4: every new panel, visible proposal, state or step must be shown and receive explicit user visual approval before integration. Remaining priorities are provisional. This is a documentary ordering change, not product implementation or a new runtime result. No architecture maps change; eVe/FRAMEWORK_STATE.md stays outside the authorized read-only submodule scope.

@@ -119,7 +119,8 @@ fn development_auth_authority(base: &str) -> Result<String, String> {
 mod tests;
 
 #[tauri::command]
-pub fn auth_device_key(
+pub fn auth_device_key<R: tauri::Runtime>(
+    _app: tauri::AppHandle<R>,
     action: String,
     scope: String,
     message: Option<String>,
@@ -132,7 +133,19 @@ pub fn auth_device_key(
     {
         macos::handle(&action, &scope, message.as_deref(), signature.as_deref())
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "android")]
+    {
+        if !matches!(action.as_str(), "public"|"sign"|"verify") { return Err("auth_device_action_invalid".into()); }
+        if action != "public" {
+            let text = message.as_deref().ok_or("auth_device_message_required")?;
+            let context: Vec<Value> = serde_json::from_str(text).map_err(|_| "auth_device_message_invalid")?;
+            if context.len()!=8 || context[0]!="atome.phone-link.v1" || context[1]!="https://atome.one" || text.len()>2048 {
+                return Err("auth_device_message_invalid".into());
+            }
+        }
+        tauri_plugin_mobile_host::call(&_app,"authDevice",json!({"action":action,"scope":scope,"message":message,"signature":signature}))
+    }
+    #[cfg(not(any(target_os = "macos",target_os = "android")))]
     {
         let _ = (action, message, signature);
         Err("auth_protected_device_key_unavailable".into())

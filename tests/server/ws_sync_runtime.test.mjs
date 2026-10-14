@@ -56,7 +56,10 @@ const createFixture = (options = {}) => {
             listAuthorizedStreams: async () => authorizedStreams,
             streamAccess: async (principal, stream) => access(principal, stream),
             projectEventForPrincipal: async (principal, event) => access(principal, event.stream_id) ? event : null,
-            listStreamEvents
+            listStreamEvents,
+            authorizedStreamHeads: options.authorizedStreamHeads || (async (principal, streams) => new Map(streams
+                .filter((stream) => access(principal, stream))
+                .map((stream) => [stream, Math.max(0, ...events.filter((event) => event.stream_id === stream).map((event) => event.sequence))])))
         },
         authTimeoutMs: 1000,
         idleTimeoutMs: 60_000
@@ -251,4 +254,56 @@ test('ws/sync revokes replay as soon as stream authorization disappears', async 
         ['e1']
     );
     assert.equal(connection.sent.at(-1).type, 'revoked');
+});
+
+test('ws/sync answers a subscription batch with bulk heads and one replay-complete for the replayed streams', async (t) => {
+    const replays = [];
+    const events = [
+        { id: 'a1', stream_id: 'stream-a', sequence: 1, kind: 'set', payload: {} },
+        { id: 'a2', stream_id: 'stream-a', sequence: 2, kind: 'set', payload: {} },
+        { id: 'b5', stream_id: 'stream-b', sequence: 5, kind: 'set', payload: {} }
+    ];
+    const runtime = createFixture({
+        events,
+        access: (_principal, stream) => stream !== 'stream-denied',
+        listStreamEvents: async (_principal, stream, query) => {
+            replays.push(stream);
+            return events.filter((event) => event.stream_id === stream && event.sequence > query.cursor);
+        }
+    });
+    t.after(() => runtime.stop());
+    const connection = new FakeConnection();
+    await runtime.attach(connection, { principal: 'user-a' });
+    assert.equal(connection.sent[0].capabilities.includes('subscribe-batch'), true);
+    await emitJson(connection, { type: 'register', source: 'browser-a' });
+    connection.sent.length = 0;
+    await emitJson(connection, { type: 'subscribe', streams: [
+        { stream: 'stream-a', cursor: 0 },
+        { stream: 'stream-b', cursor: 5 },
+        { stream: 'stream-empty', cursor: 0 },
+        { stream: 'stream-denied', cursor: 0 }
+    ] });
+
+    // Up-to-date and empty streams cost no vault replay request and no message.
+    assert.deepEqual(replays, ['stream-a']);
+    assert.deepEqual(connection.sent.map((entry) => entry.type), ['error', 'event', 'event', 'replay-complete']);
+    assert.deepEqual(connection.sent[0], { type: 'error', code: 'stream_access_denied', streams: ['stream-denied'] });
+    assert.deepEqual(connection.sent.at(-1), { type: 'replay-complete', streams: [{ stream: 'stream-a', cursor: 2 }] });
+    assert.deepEqual(new Set(runtime.snapshot()[0].streams), new Set(['stream-a', 'stream-b', 'stream-empty']));
+
+    // Live delivery continues from each stream's batch cursor.
+    await runtime.publish({ id: 'b6', stream_id: 'stream-b', sequence: 6, source: 'other', kind: 'set', payload: {} });
+    assert.equal(connection.sent.at(-1).event_id, 'b6');
+});
+
+test('ws/sync bounds a subscription batch and keeps the connection open', async (t) => {
+    const runtime = createFixture();
+    t.after(() => runtime.stop());
+    const connection = new FakeConnection();
+    await runtime.attach(connection, { principal: 'user-a' });
+    await emitJson(connection, { type: 'register', source: 'browser-a' });
+    const streams = Array.from({ length: 501 }, (_, index) => ({ stream: `stream-${index}`, cursor: 0 }));
+    await emitJson(connection, { type: 'subscribe', streams });
+    assert.deepEqual(connection.sent.at(-1), { type: 'error', code: 'subscribe_batch_too_large', limit: 500 });
+    assert.equal(connection.closed, null);
 });

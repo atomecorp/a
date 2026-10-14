@@ -714,7 +714,8 @@ test('Create > Generator is a plain tool fed by its registry: the real click arm
     for (const key of content.generator.option_keys) {
         assert.ok(content[key], `${key} is projected into the catalogue for the rail`);
     }
-    assert.equal(content.generator_run_text_title.tool_id, 'ui.generator.run');
+    assert.equal(content.generator.tool_id, 'ui.generator.create', 'the palette entry arms');
+    assert.equal(content.generator_run_text_title.tool_id, 'ui.generator.run', 'a case runs its generator');
     assert.equal(content.generator_run_text_title.extra_input.generator_id, 'text.title');
     assert.ok(content.generator_family_text.children.length,
         'a family keeps its children, which the rail flattens into its own level');
@@ -738,7 +739,8 @@ test('Create > Generator is a plain tool fed by its registry: the real click arm
         assert.ok(generatorNode, 'Generator is still listed in Create');
         await generatorNode.on.activate();
         await settleTree();
-        assert.deepEqual(invocations, ['ui.generator.run'], 'the click arms the generator tool');
+        assert.deepEqual(invocations, ['ui.generator.create'],
+            'the click arms the generator tool through its arming command, never through ui.generator.run');
         assert.equal(harness.runtime.measure().activePaletteKey, '',
             'and closes the menu, exactly like Text, Page and Placeholder');
     } finally {

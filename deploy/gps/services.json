@@ -1,0 +1,11 @@
+{
+  "status": "prepared_not_deployed",
+  "coverage": "metropolitan_france",
+  "target": "existing_atome.one_infrastructure",
+  "services": [
+    { "name": "atome-gps-routing", "implementation": "Valhalla", "listen": "127.0.0.1:8002", "endpoint": "/route", "data": "France OSM routing graph", "directory": "/srv/atome-gps/valhalla" },
+    { "name": "atome-gps-geocoding", "implementation": "Nominatim", "listen": "127.0.0.1:8003", "endpoint": "/search", "data": "France OSM PostgreSQL/PostGIS index", "directory": "/srv/atome-gps/nominatim" },
+    { "name": "atome-gps-raster", "implementation": "OSM raster tile service", "listen": "127.0.0.1:8004", "endpoint": "/tiles/{z}/{x}/{y}.png", "data": "France OSM render database and raster tiles", "directory": "/srv/atome-gps/tiles" }
+  ],
+  "activation_prerequisites": ["verified SSH host identity", "OS and service manager identified", "import and serving resource budgets measured", "billing and egress allowance verified", "dataset date and license recorded", "upstream versions pinned and validated", "private service health checks pass", "existing production resource reserve preserved"]
+}

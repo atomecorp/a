@@ -1,17 +1,25 @@
 fn main() {
     tauri_build::build();
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
+        let status = std::process::Command::new("node").arg("../../scripts/build_gps_native_engine.mjs")
+            .status().expect("GPS engine packaging requires the existing Node build runtime");
+        assert!(status.success(), "Canonical GPS engine packaging failed");
+        for source in ["../../scripts/build_gps_native_engine.mjs", "../../atome/src/squirrel/gps/navigation_engine.js", "../../atome/src/squirrel/gps/route_geometry.js"] {
+            println!("cargo:rerun-if-changed={source}");
+        }
         cc::Build::new().file("native/personal_import.m")
             .file("../ios/atome-auv3/Common/AtomeContactHistory.m")
+            .file("../ios/atome-auv3/Common/AtomeGPSHost.m")
             .file("native/clipboard.m").file("native/file_selection.m")
             .flag("-fobjc-arc").compile("atome_personal_import");
-        for framework in ["Foundation", "Contacts", "EventKit", "AppKit", "UniformTypeIdentifiers"] {
+        for framework in ["Foundation", "Contacts", "EventKit", "AppKit", "UniformTypeIdentifiers", "CoreLocation", "JavaScriptCore", "AVFoundation"] {
             println!("cargo:rustc-link-lib=framework={framework}");
         }
         println!("cargo:rerun-if-changed=native/personal_import.m");
         println!("cargo:rerun-if-changed=native/clipboard.m");
         println!("cargo:rerun-if-changed=native/file_selection.m");
         println!("cargo:rerun-if-changed=../ios/atome-auv3/Common/AtomeContactHistory.m");
+        println!("cargo:rerun-if-changed=../ios/atome-auv3/Common/AtomeGPSHost.m");
     }
 
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("linux") {

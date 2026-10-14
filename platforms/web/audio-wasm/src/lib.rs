@@ -1,8 +1,12 @@
 // WASM audio engine for Squirrel
 // Compiled to WebAssembly via wasm-pack. Provides the same audio API
-// as the native Tauri engine, routing through CPAL + Kira in the browser.
+// as the native Tauri engine, rendering Kira into an AudioContext this module
+// owns (`scheduled_backend`), shared with recording for sample-accurate takes.
 
-use kira::backend::cpal::CpalBackend;
+mod mix;
+mod scheduled_backend;
+
+use scheduled_backend::ScheduledContextBackend;
 use kira::sound::static_sound::{StaticSoundData, StaticSoundHandle, StaticSoundSettings};
 use kira::{AudioManager, AudioManagerSettings, Decibels, Frame, Panning, PlaybackRate, Tween};
 use std::collections::HashMap;
@@ -31,7 +35,8 @@ struct VoiceEntry {
 }
 
 struct WasmAudioEngine {
-    manager: Option<AudioManager<CpalBackend>>,
+    manager: Option<AudioManager<ScheduledContextBackend>>,
+    mix: atome_mix_graph::host::MixHost,
     clips: HashMap<String, ClipEntry>,
     voices: HashMap<String, VoiceEntry>,
 }
@@ -39,14 +44,17 @@ struct WasmAudioEngine {
 static ENGINE: once_cell::sync::Lazy<Mutex<Option<WasmAudioEngine>>> =
     once_cell::sync::Lazy::new(|| Mutex::new(None));
 
-fn create_audio_manager() -> Result<AudioManager<CpalBackend>, JsValue> {
-    AudioManager::<CpalBackend>::new(AudioManagerSettings::default())
+fn create_audio_manager(mix: &atome_mix_graph::host::MixHost) -> Result<AudioManager<ScheduledContextBackend>, JsValue> {
+    scheduled_backend::install_start_hook(start_due_voice);
+    scheduled_backend::install_aux_source(mix.aux_outputs());
+    AudioManager::<ScheduledContextBackend>::new(AudioManagerSettings { main_track_builder: mix.main_track_builder(), ..Default::default() })
         .map_err(|e| JsValue::from_str(&format!("Failed to create AudioManager: {e}")))
 }
 
 fn ensure_engine(guard: &mut Option<WasmAudioEngine>) -> &mut WasmAudioEngine {
     guard.get_or_insert_with(|| WasmAudioEngine {
         manager: None,
+        mix: atome_mix_graph::host::MixHost::new(),
         clips: HashMap::new(),
         voices: HashMap::new(),
     })
@@ -54,9 +62,9 @@ fn ensure_engine(guard: &mut Option<WasmAudioEngine>) -> &mut WasmAudioEngine {
 
 fn ensure_audio_manager(
     engine: &mut WasmAudioEngine,
-) -> Result<&mut AudioManager<CpalBackend>, JsValue> {
+) -> Result<&mut AudioManager<ScheduledContextBackend>, JsValue> {
     if engine.manager.is_none() {
-        engine.manager = Some(create_audio_manager()?);
+        engine.manager = Some(create_audio_manager(&engine.mix)?);
     }
     engine
         .manager
@@ -235,8 +243,20 @@ pub fn audio_load_clip_from_bytes(id: &str, data: &[u8]) -> Result<f64, JsValue>
 }
 
 #[wasm_bindgen]
-pub fn audio_play(id: &str) -> Result<(), JsValue> {
-    audio_play_instance(id, id, 0.0, None, 1.0, 0.0, 1.0, None, None)
+pub fn audio_play(id: &str) -> Result<f64, JsValue> {
+    audio_play_instance(id, id, 0.0, None, 1.0, 0.0, 1.0, None, None, None)
+}
+
+/// The AudioContext playback renders into; recording opens its worklet on it.
+#[wasm_bindgen]
+pub fn audio_shared_context() -> Result<web_sys::AudioContext, JsValue> {
+    scheduled_backend::shared_context().ok_or_else(|| JsValue::from_str("audio_context_not_started"))
+}
+
+/// `{ frames_rendered, base_context_frame, sample_rate, discontinuities, block_frames }`.
+#[wasm_bindgen]
+pub fn audio_render_clock() -> js_sys::Object {
+    scheduled_backend::render_clock()
 }
 
 fn gain_to_decibels(gain: f64) -> Decibels {
@@ -254,10 +274,12 @@ fn crop_duration_within_available_audio(
         .filter(|value| *value < available_duration)
 }
 
-#[wasm_bindgen]
-pub fn audio_play_instance(
+// The sound one voice plays: the clip's window from `start_seconds`, cropped,
+// looped, with its gain, pan and rate.
+#[allow(clippy::too_many_arguments)]
+fn build_voice_sound(
+    engine: &WasmAudioEngine,
     asset_id: &str,
-    voice_id: &str,
     start_seconds: f64,
     duration_seconds: Option<f64>,
     gain: f64,
@@ -265,24 +287,12 @@ pub fn audio_play_instance(
     rate: f64,
     loop_start_seconds: Option<f64>,
     loop_end_seconds: Option<f64>,
-) -> Result<(), JsValue> {
-    let mut guard = ENGINE
-        .lock()
-        .map_err(|e| JsValue::from_str(&format!("Lock error: {e}")))?;
-    let engine = guard
-        .as_mut()
-        .ok_or_else(|| JsValue::from_str("Audio engine not initialized"))?;
-
+) -> Result<StaticSoundData, JsValue> {
     let sound_data_template = engine
         .clips
         .get(asset_id)
         .map(|clip| clip.data.clone())
         .ok_or_else(|| JsValue::from_str(&format!("Clip '{asset_id}' not found")))?;
-
-    if let Some(mut existing_voice) = engine.voices.remove(voice_id) {
-        existing_voice.handle.stop(Tween::default());
-    }
-
     let start = start_seconds.max(0.0);
     let source_duration = sound_data_template.duration().as_secs_f64();
     if start >= source_duration {
@@ -316,19 +326,81 @@ pub fn audio_play_instance(
         }
     }
 
-    sound_data = sound_data
+    Ok(sound_data
         .volume(gain_to_decibels(gain))
         .panning(Panning(pan.clamp(-1.0, 1.0) as f32))
-        .playback_rate(PlaybackRate(requested_rate));
+        .playback_rate(PlaybackRate(requested_rate)))
+}
 
-    let manager = ensure_audio_manager(engine)?;
-    let handle = manager
-        .play(sound_data)
-        .map_err(|e| JsValue::from_str(&format!("Play error: {e}")))?;
-    engine
-        .voices
-        .insert(voice_id.to_string(), VoiceEntry { handle });
+fn start_voice(engine: &mut WasmAudioEngine, voice_id: &str, sound_data: StaticSoundData) -> Result<(), JsValue> {
+    if let Some(mut existing_voice) = engine.voices.remove(voice_id) {
+        existing_voice.handle.stop(Tween::default());
+    }
+    ensure_audio_manager(engine)?;
+    let manager = engine.manager.as_mut().ok_or_else(|| JsValue::from_str("Audio manager not initialized"))?;
+    let handle = engine.mix.play(manager, voice_id, sound_data).map_err(|e| JsValue::from_str(&format!("Play error: {e}")))?;
+    engine.voices.insert(voice_id.to_string(), VoiceEntry { handle });
     Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+#[wasm_bindgen]
+pub fn audio_play_instance(
+    asset_id: &str,
+    voice_id: &str,
+    start_seconds: f64,
+    duration_seconds: Option<f64>,
+    gain: f64,
+    pan: f64,
+    rate: f64,
+    loop_start_seconds: Option<f64>,
+    loop_end_seconds: Option<f64>,
+    strip_id: Option<String>,
+) -> Result<f64, JsValue> {
+    let mut guard = ENGINE.lock().map_err(|e| JsValue::from_str(&format!("Lock error: {e}")))?;
+    let engine = guard.as_mut().ok_or_else(|| JsValue::from_str("Audio engine not initialized"))?;
+    engine.mix.route_voice(voice_id, strip_id.as_deref());
+    let sound_data = build_voice_sound(
+        engine, asset_id, start_seconds, duration_seconds, gain, pan, rate, loop_start_seconds, loop_end_seconds,
+    )?;
+    scheduled_backend::cancel_scheduled(voice_id);
+    start_voice(engine, voice_id, sound_data)?;
+    // The rendered frame this voice starts on: every voice started before the
+    // next render pump shares it.
+    Ok(scheduled_backend::next_render_frame())
+}
+
+/// Starts a voice exactly on rendered frame `start_render_frame`: the render
+/// loop stops there, starts it, and renders on. A frame already rendered
+/// starts it on the next block instead; the returned frame says which.
+#[allow(clippy::too_many_arguments)]
+#[wasm_bindgen]
+pub fn audio_schedule_instance(
+    asset_id: &str,
+    voice_id: &str,
+    start_seconds: f64,
+    duration_seconds: Option<f64>,
+    gain: f64,
+    pan: f64,
+    rate: f64,
+    start_render_frame: f64,
+    strip_id: Option<String>,
+) -> Result<f64, JsValue> {
+    let mut guard = ENGINE.lock().map_err(|e| JsValue::from_str(&format!("Lock error: {e}")))?;
+    let engine = guard.as_mut().ok_or_else(|| JsValue::from_str("Audio engine not initialized"))?;
+    engine.mix.route_voice(voice_id, strip_id.as_deref());
+    let sound_data = build_voice_sound(engine, asset_id, start_seconds, duration_seconds, gain, pan, rate, None, None)?;
+    drop(guard);
+    Ok(scheduled_backend::schedule(voice_id, sound_data, start_render_frame.max(0.0) as u64) as f64)
+}
+
+// Called by the render loop at the exact frame a scheduled voice is due.
+fn start_due_voice(voice_id: &str, sound_data: StaticSoundData) {
+    if let Ok(mut guard) = ENGINE.lock() {
+        if let Some(engine) = guard.as_mut() {
+            let _ = start_voice(engine, voice_id, sound_data);
+        }
+    }
 }
 
 #[wasm_bindgen]
@@ -345,10 +417,12 @@ pub fn audio_stop_instance(voice_id: &str) -> Result<(), JsValue> {
         .as_mut()
         .ok_or_else(|| JsValue::from_str("Audio engine not initialized"))?;
 
-    let mut voice = engine
-        .voices
-        .remove(voice_id)
-        .ok_or_else(|| JsValue::from_str(&format!("Voice '{voice_id}' not found")))?;
+    let cancelled = scheduled_backend::cancel_scheduled(voice_id);
+    engine.mix.forget_voice(voice_id);
+    let Some(mut voice) = engine.voices.remove(voice_id) else {
+        if cancelled { return Ok(()); }
+        return Err(JsValue::from_str(&format!("Voice '{voice_id}' not found")));
+    };
     voice.handle.stop(Tween {
         duration: Duration::from_millis(10),
         ..Default::default()

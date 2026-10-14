@@ -1,6 +1,6 @@
 # atome / eVe To Do
 
-Read [execution_order.md](execution_order.md) for the single active task register and next action. The order is security and SMS identity → durable persistence and recovery → sharing and concurrent collaboration → permanent acceptance → requalification of deferred product work.
+Read [execution_order.md](execution_order.md) for the single active task register and next action. The user-selected first priority is ATM-2017: projects, objectives and transversal activities, including sport and shared activity tracking. Each new panel or visible step requires an actual visual shown to the user and explicit visual approval before integration. Other package ordering is provisional pending user review; supporting checks address demonstrated dependencies of the selected feature.
 
 - [Source classification and decisions](migration/spring_git_cleanup_sources.md): quick local triage, source destinations, exclusions and reading limitations.
 - [Permanent tests](tests/): retained across delivery and bug closure; each run records its actual platforms and evidence.

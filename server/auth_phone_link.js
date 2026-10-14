@@ -1,14 +1,16 @@
 import { AUTH_LINK_ORIGIN, AUTH_LINK_TTL_MS } from '../atome/src/shared/auth_link_contract.js';
 import { createAuthProofSecurity, publicDeviceKey, randomHandle, digest, reject, requireHandle } from './auth_link_security.js';
 import { createDeviceSessions } from './auth_sessions.js';
+import { createPasswordAuth } from './auth_password.js';
 
 // The injected persistence and account functions are the existing server owners.
 // SMS I/O is outside transactions; proofs and identity changes are atomic.
 export function createPhoneLinkAuth({ query, transaction, findByPhone, findById, createAccount,
-    sendLink, masterSecret, issueAccess, disconnectSession, deleteAccount, replacePhone, now = Date.now, dailyLimit = 20 }) {
+    sendLink, masterSecret, issueAccess, disconnectSession, deleteAccount, replacePhone, screenPassword, now = Date.now, dailyLimit = 20 }) {
     if (!Number.isSafeInteger(dailyLimit) || dailyLimit < 1) reject('auth_budget_invalid');
     const proof = createAuthProofSecurity({ query, transaction, masterSecret, now });
     const sessions = createDeviceSessions({ query, transaction, proof, now, issueAccess, findById, disconnectSession, deleteAccount });
+    const passwords = createPasswordAuth({ query, transaction, proof, sessions, now, findByPhone, findById, disconnectSession, screen: screenPassword });
     const attempt = async (id, { forCancellation = false } = {}) => {
         requireHandle(id);
         const value = await query('get', 'SELECT * FROM auth_link_attempts WHERE attempt_id = ?', [id]);
@@ -203,5 +205,5 @@ export function createPhoneLinkAuth({ query, transaction, findByPhone, findById,
         if (keyId !== authorization.key_id) reject();
         return start({ ...input, phone: input.newPhone }, network, authorization);
     }
-    return { start, simulatePayment, resend, startPhoneChange, getChallenge, complete, approve, confirm, cancel, sessions };
+    return { start, simulatePayment, resend, startPhoneChange, getChallenge, complete, approve, confirm, cancel, sessions, passwords };
 }

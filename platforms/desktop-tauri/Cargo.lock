@@ -497,6 +497,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "atome-mix-graph"
+version = "0.1.0"
+dependencies = [
+ "kira",
+ "serde",
+]
+
+[[package]]
 name = "atomic-arena"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7708,6 +7716,7 @@ name = "squirrel"
 version = "0.1.0"
 dependencies = [
  "atome-bevy-renderer-core",
+ "atome-mix-graph",
  "axum",
  "base64 0.22.1",
  "bcrypt",

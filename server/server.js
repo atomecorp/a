@@ -77,9 +77,7 @@ import { normalizePhone } from './auth_crypto.js';
 import { ensureOpaquePrincipalIdentity } from './auth_identity.js';
 import { createWsPhoneLinkHandler } from './wsPhoneLinkAuth.js';
 import { assertDeviceSessionClaims, validateConnectionDeviceSession } from './auth_session_validation.js';
-import { handleWsPersonalImport } from './ws_personal_import.js';
-import { handleWsYoutubeSearch } from './ws_youtube_search.js';
-import { handleWsTvCatalog, handleWsTvResolve } from './ws_tv_catalog.js';
+import { handleWsExternalResourceOperation } from './wsExternalResourceOperations.js';
 import { issueMediaToken, readMediaTokenFromQuery, verifyMediaToken } from './media_capability.js';
 import { handleWsApiGuestAdoption } from './wsApiGuestAdoption.js';
 import { announceWsSurfaceDisconnect, handleWsSurfaceOperation } from './wsSurfaceOperations.js';
@@ -176,17 +174,8 @@ const wsSyncRuntime = createWsSyncRuntime({
   validatePrincipal: validateWsSyncPrincipal,
   isProvisioned: isWsApiPrincipalProvisioned,
   getVersion: getLocalVersion,
-  vaultRouter: userVaultRouter
-});
-const syncSharingService = createSyncSharingService({
   vaultRouter: userVaultRouter,
-  syncRuntime: wsSyncRuntime,
-  isProvisioned: isWsApiPrincipalProvisioned,
-  notifyPrincipal: (principalId, payload) => wsSendJsonToUser(
-    principalId,
-    payload,
-    { scope: 'ws/api', op: payload.type, targetUserId: principalId }
-  )
+  reportFailure: (data) => logStructured('warn', { component: 'ws/sync', message: 'sync_processing_failed', data })
 });
 // Communication pair-a-pair : livraison serveur des notifications, premier contact, blocage.
 const deliverCommNotification = createNotificationDelivery({
@@ -201,6 +190,17 @@ const communicationRelations = createCommunicationRelations({
   findUserById: (id) => findUserById(db.getDataSourceAdapter(), id)
 });
 const directMessageRateAllowed = createRateLimiter();
+const syncSharingService = createSyncSharingService({
+  vaultRouter: userVaultRouter,
+  relations: communicationRelations,
+  syncRuntime: wsSyncRuntime,
+  isProvisioned: isWsApiPrincipalProvisioned,
+  notifyPrincipal: (principalId, payload) => wsSendJsonToUser(
+    principalId,
+    payload,
+    { scope: 'ws/api', op: payload.type, targetUserId: principalId }
+  )
+});
 // News : diffusion serveur (tous les utilisateurs, y compris prives : D1), tags, abonnements.
 const newsBroadcast = createNewsBroadcast({
   vaultProvider: userVaultRouter.provider,
@@ -2175,18 +2175,9 @@ async function startServer() {
             return;
           }
 
-          const personalImportResponse = await handleWsPersonalImport(data, connection);
-          if (personalImportResponse) { safeSend(personalImportResponse); return; }
-
-          const youtubeSearchResponse = await handleWsYoutubeSearch(data, request.ip);
-          if (youtubeSearchResponse) {
-            safeSend(youtubeSearchResponse);
-            return;
-          }
-
-          const tvCatalogResponse = await handleWsTvCatalog(data) || await handleWsTvResolve(data);
-          if (tvCatalogResponse) {
-            safeSend(tvCatalogResponse);
+          const resourceResponse = await handleWsExternalResourceOperation(data, connection, request.ip);
+          if (resourceResponse) {
+            safeSend(resourceResponse);
             return;
           }
 

@@ -48,9 +48,19 @@ final class FastifySyncClient {
     var outboxRows: [[String: Any]] = []
     var outboxRetry: DispatchWorkItem?
     private var subscribedStreams: Set<String> = []
+    // Streams whose current replay applied at least one event: only those changed the
+    // projection. Every connection replays thousands of per-atome streams, almost all
+    // empty, and announcing each one made the Dashboard reload continuously.
+    private var replayDeliveredStreams: Set<String> = []
     private var connecting = false
     private var connected = false
     private var reconnectDelay: TimeInterval = 1
+    // Server limit for one `subscribe` carrying many cursors (`subscribe-batch` capability).
+    private static let subscribeBatchSize = 500
+    private var batchSubscribe = false
+    // Subscriptions of this connection not yet answered. The backoff resets only once every one
+    // is answered, so a server closing right after authentication keeps backing off.
+    private var pendingReplays = 0
 
     func connectIfConfigured() {
         queue.async { [weak self] in self?.connectLocked() }
@@ -104,7 +114,7 @@ final class FastifySyncClient {
         task.resume()
         connected = true
         connecting = false
-        reconnectDelay = 1
+        pendingReplays = 0
         sendJSON(["type":"auth", "token":config.token], task: task)
         receiveNext(task)
         scheduleHeartbeat(task)
@@ -138,6 +148,7 @@ final class FastifySyncClient {
     private func handle(_ payload: [String: Any], task: URLSessionWebSocketTask) {
         let type = payload["type"] as? String ?? ""
         if type == "welcome" {
+            batchSubscribe = (payload["capabilities"] as? [String] ?? []).contains("subscribe-batch")
             sendJSON([
                 "type":"register", "source":deviceSource(),
                 "capabilities":["sqlite-projection", "offline-lww"]
@@ -153,10 +164,15 @@ final class FastifySyncClient {
             drainOutbox()
             return
         }
-        if type == "replay-complete", let stream = payload["stream"] as? String {
-            do { try AiSRuntime.completeRemoteReplay(principalId: activePrincipalId, streamId: stream) }
+        if type == "replay-complete" {
+            // A batch answer lists every replayed stream; a single answer names one.
+            let streams = (payload["streams"] as? [[String: Any]])?.compactMap { $0["stream"] as? String }
+                ?? [payload["stream"] as? String].compactMap { $0 }
+            do { try AiSRuntime.completeRemoteReplay(principalId: activePrincipalId, streamIds: streams) }
             catch { notifyLocal(["type":"sync:persistence-error", "error":error.localizedDescription]) }
-            notifyLocal(["type":"sync:projection-ready", "stream":stream, "replay":true])
+            let delivered = streams.filter { replayDeliveredStreams.remove($0) != nil }
+            if !delivered.isEmpty { notifyLocal(["type":"sync:projection-ready", "streams":delivered, "replay":true]) }
+            settleReplay()
             return
         }
         if type == "stream-available", let stream = payload["stream"] as? String {
@@ -170,12 +186,12 @@ final class FastifySyncClient {
         if type == "revoked", let stream = payload["stream"] as? String {
             subscribedStreams.remove(stream)
             notifyLocal(payload)
+            settleReplay()
             return
         }
-        if type == "error",
-           let code = payload["code"] as? String,
-           ["authentication_expired", "authentication_invalid"].contains(code) {
-            scheduleReconnectLocked()
+        if type == "error", let code = payload["code"] as? String {
+            if ["authentication_expired", "authentication_invalid"].contains(code) { scheduleReconnectLocked() }
+            else if code == "stream_access_denied", payload["stream"] is String { settleReplay() }
         }
     }
 
@@ -189,6 +205,7 @@ final class FastifySyncClient {
             let inserted = try AiSRuntime.persistRemoteSyncEnvelope(
                 payload, principalId: activePrincipalId, localPrincipalId: configuration?.localPrincipalId
             )
+            if inserted && payload["replay"] as? Bool == true { replayDeliveredStreams.insert(stream) }
             if inserted && payload["replay"] as? Bool != true && payload["source"] as? String != deviceSource() {
                 notifyLocal(["type":"sync:projection-ready", "stream":stream, "replay":false])
             }
@@ -208,10 +225,25 @@ final class FastifySyncClient {
         var known: [String: Int64] = [:]
         for (stream, cursor) in cursors { known[stream] = cursor }
         cursors.append(contentsOf: announced.map { ($0, known[$0] ?? 0) })
+        var pending: [[String: Any]] = []
         for (stream, cursor) in cursors where !subscribedStreams.contains(stream) {
-            sendJSON(["type":"subscribe", "stream":stream, "cursor":cursor], task: task)
+            pending.append(["stream":stream, "cursor":cursor])
             subscribedStreams.insert(stream)
         }
+        let size = batchSubscribe ? Self.subscribeBatchSize : 1
+        for start in stride(from: 0, to: pending.count, by: size) {
+            let batch = Array(pending[start..<min(start + size, pending.count)])
+            let message: [String: Any] = batchSubscribe
+                ? ["type":"subscribe", "streams":batch]
+                : batch[0].merging(["type":"subscribe"]) { $1 }
+            sendJSON(message, task: task)
+            pendingReplays += 1
+        }
+    }
+
+    private func settleReplay() {
+        pendingReplays = max(0, pendingReplays - 1)
+        if pendingReplays == 0 { reconnectDelay = 1 }
     }
 
     private func sendJSON(_ payload: [String: Any], task: URLSessionWebSocketTask) {
@@ -245,6 +277,7 @@ final class FastifySyncClient {
         connected = false
         connecting = false
         subscribedStreams.removeAll()
+        replayDeliveredStreams.removeAll()
         syncTask?.cancel(with: .goingAway, reason: nil)
         syncTask = nil
         session?.invalidateAndCancel()
@@ -261,6 +294,7 @@ final class FastifySyncClient {
         connected = false
         connecting = false
         subscribedStreams.removeAll()
+        replayDeliveredStreams.removeAll()
         configuration = nil
         activePrincipalId = ""
         syncTask?.cancel(with: .normalClosure, reason: nil)

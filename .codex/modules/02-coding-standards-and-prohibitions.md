@@ -10,7 +10,7 @@ Within the authorized scope, eliminate duplication and dead code, remove unused 
 
 At equal correctness, determinism, security, and validation, choose fewer concepts, writable state holders, modules, branches, execution paths, dependencies, allocations, retained resources, code, and configuration. Keep one canonical owner per responsibility.
 
-Before proposing a module, abstraction, adapter, cache, registry, wrapper, service, state layer, compatibility path, or dependency, prove that the existing owner cannot correctly own the responsibility. This evidence does not authorize its creation or extension; apply the root gate.
+Before proposing a module, abstraction, adapter, cache, registry, wrapper, service, state layer, compatibility path, or dependency, prove that the existing owner cannot correctly own the responsibility. Apply the root standing authorization for necessary internal creation or extension within the requested task; external dependencies remain subject to separate authorization.
 
 Forbidden:
 
@@ -62,7 +62,7 @@ Before deleting a file, verify usages, runtime dependencies, and synchronization
 
 Forbidden: temporary fixes, workaround or quick fixes, symptom-level repairs, compatibility shims, defensive guards hiding root causes, silent catches, hidden bypasses, fallback architectures, transitional adapters, duplicated compatibility layers, and proxy layers created to avoid a proper repair.
 
-Identify the root cause and architectural issue. Correct the source and perform a structured refactor or rewrite when required and authorized. If a clean correction needs broader scope, a missing component, or an unresolved architectural decision, follow the common stop-and-proposal procedure. Never implement a temporary solution "until later".
+Identify the root cause and architectural issue. Correct the source and perform a structured refactor or rewrite when required and authorized. For a missing internal component, follow the common autonomous creation and extension procedure. If a clean correction needs unrelated broader scope or an unresolved architectural decision, follow the common blocker procedure. Never implement a temporary solution "until later".
 
 ## Language and stack details
 
@@ -72,7 +72,7 @@ TypeScript and Python implementations are forbidden. Report the conflicting requ
 
 Generated comments, internal logs, warnings, errors, documentation, and debug messages must be English. User-visible and assistive text instead follows the localization policy below.
 
-Do not generate raw product HTML or CSS outside documented existing shell, native, or canonical Squirrel/Atome ownership exceptions in [modules 01](01-root-constitution.md) and [05](05-api-rendering-and-ui.md). Do not use browser/system `alert` or `confirm` dialogs for product flows; use the verified internal dialog owner. If none can serve the need, follow the root missing-component gate rather than inventing a substitute.
+Do not generate raw product HTML or CSS outside documented existing shell, native, or canonical Squirrel/Atome ownership exceptions in [modules 01](01-root-constitution.md) and [05](05-api-rendering-and-ui.md). Do not use browser/system `alert` or `confirm` dialogs for product flows; use the verified internal dialog owner. If none can serve the need, create or extend the canonical internal dialog owner under the root standing authorization and consume it by composition.
 
 ## Temporary artifacts
 
@@ -90,7 +90,7 @@ Agents must never run `git push`, including force-push. The user performs all pu
 
 ## Fallbacks and localization
 
-Runtime, data, control-flow, silent, proxy, and legacy-bypass fallbacks are forbidden. Missing dependencies must produce explicit errors and follow the root missing-component gate.
+Runtime, data, control-flow, silent, proxy, and legacy-bypass fallbacks are forbidden. Missing dependencies must produce explicit errors. Create or extend necessary internal components under the root standing authorization; report external dependencies or missing access through the common blocker procedure.
 
 The only permitted fallback forms are `eveT(key, fallback)` and `ui.label_fallback`, strictly for translating user-visible labels or messages. They cannot replace an unavailable tool, unsupported type, missing property, component, runtime capability, dependency, mutation route, or architecture. No other fallback mechanism is permitted. Correct missing translation keys in scope instead of using these exceptions to hide unresolved localization defects.
 

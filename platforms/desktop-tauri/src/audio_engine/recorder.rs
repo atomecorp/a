@@ -12,6 +12,7 @@
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{SampleFormat, StreamConfig};
+use super::scheduled_backend::{note_capture_start, CaptureClock};
 use ringbuf::{traits::*, HeapRb};
 use std::collections::HashMap;
 use std::fs;
@@ -75,6 +76,7 @@ struct RecordingSession {
     output_format: OutputFormat,
     frame_count: Arc<AtomicU64>,
     overrun_frames: Arc<AtomicU64>,
+    capture_clock: Arc<Mutex<Option<CaptureClock>>>,
 }
 
 static SESSIONS: once_cell::sync::Lazy<Mutex<HashMap<String, RecordingSession>>> =
@@ -91,6 +93,8 @@ pub struct RecordResult {
     pub sample_rate: u32,
     pub channels: u16,
     pub output_format: String,
+    // Where the take started on the playback's clock (sample-accurate placement).
+    pub capture_clock: Option<CaptureClock>,
 }
 
 pub fn has_active_sessions() -> bool {
@@ -110,7 +114,33 @@ pub fn start(
         channels,
         OutputFormat::default(),
         BufferSizeHint::default(),
+        None,
     )
+}
+
+// The same on the input chosen with the Input tool (by device name).
+pub fn start_on_device(
+    session_id: &str,
+    abs_wav_path: &str,
+    sample_rate: u32,
+    channels: u16,
+    device_name: Option<String>,
+) -> Result<(), String> {
+    start_with_options(session_id, abs_wav_path, sample_rate, channels, OutputFormat::default(), BufferSizeHint::default(), device_name)
+}
+
+// The chosen input by name, else the default one. A chosen input that is gone
+// is an error: the take must not silently come from another microphone.
+pub(super) fn input_device(name: Option<&str>) -> Result<cpal::Device, String> {
+    let host = cpal::default_host();
+    if let Some(wanted) = name.map(str::trim).filter(|value| !value.is_empty()) {
+        let devices = host.input_devices().map_err(|e| format!("audio_input_devices_unavailable: {e}"))?;
+        return devices
+            .into_iter()
+            .find(|device| device.name().map(|candidate| candidate == wanted).unwrap_or(false))
+            .ok_or_else(|| format!("audio_input_device_not_found: {wanted}"));
+    }
+    host.default_input_device().ok_or_else(|| "No default input (microphone) device found".to_string())
 }
 
 pub fn start_with_options(
@@ -120,6 +150,7 @@ pub fn start_with_options(
     channels: u16,
     output_format: OutputFormat,
     buffer_hint: BufferSizeHint,
+    device_name: Option<String>,
 ) -> Result<(), String> {
     super::wake_capture::stop()?;
     let mut sessions = SESSIONS.lock().map_err(|e| format!("Lock error: {e}"))?;
@@ -127,9 +158,7 @@ pub fn start_with_options(
         return Err(format!("Session '{session_id}' already active"));
     }
 
-    let default_input_config = cpal::default_host()
-        .default_input_device()
-        .ok_or("No default input (microphone) device found")?
+    let default_input_config = input_device(device_name.as_deref())?
         .default_input_config()
         .map_err(|e| format!("No default input config: {e}"))?;
     let actual_sample_rate = if sample_rate > 0 {
@@ -157,6 +186,8 @@ pub fn start_with_options(
     let frame_count_thread = Arc::clone(&frame_count);
     let overrun_frames = Arc::new(AtomicU64::new(0));
     let overrun_frames_thread = Arc::clone(&overrun_frames);
+    let capture_clock: Arc<Mutex<Option<CaptureClock>>> = Arc::new(Mutex::new(None));
+    let capture_clock_thread = Arc::clone(&capture_clock);
     let path_owned = abs_wav_path.to_string();
     let sr = actual_sample_rate;
     let ch = actual_channels;
@@ -168,10 +199,7 @@ pub fn start_with_options(
     // be created and dropped on the same thread).
     let thread_handle = std::thread::spawn(move || -> Result<f64, String> {
         let init_result = (|| {
-            let host = cpal::default_host();
-            let device = host
-                .default_input_device()
-                .ok_or("No default input (microphone) device found")?;
+            let device = input_device(device_name.as_deref())?;
 
             let default_config = device
                 .default_input_config()
@@ -210,6 +238,7 @@ pub fn start_with_options(
             let stop_for_callback = Arc::clone(&stop_atomic_cb);
             let frame_count_cb = Arc::clone(&frame_count_thread);
             let overrun_frames_cb = Arc::clone(&overrun_frames_thread);
+            let clock_cb = Arc::clone(&capture_clock_thread);
 
             let sample_format = default_config.sample_format();
 
@@ -223,10 +252,11 @@ pub fn start_with_options(
                     device
                         .build_input_stream(
                             &stream_config,
-                            move |data: &[f32], _: &cpal::InputCallbackInfo| {
+                            move |data: &[f32], info: &cpal::InputCallbackInfo| {
                                 if stop_for_callback.load(Ordering::Relaxed) {
                                     return;
                                 }
+                                note_capture_start(&clock_cb, info);
                                 metering::push_samples(data);
                                 let frames = (data.len() / usize::from(actual_ch.max(1))) as u64;
                                 if producer.vacant_len() >= data.len() {
@@ -249,13 +279,15 @@ pub fn start_with_options(
                     let stop_for_callback2 = Arc::clone(&stop_atomic_cb);
                     let frame_count_cb2 = Arc::clone(&frame_count_thread);
                     let overrun_frames_cb2 = Arc::clone(&overrun_frames_thread);
+                    let clock_cb2 = Arc::clone(&capture_clock_thread);
                     device
                         .build_input_stream(
                             &stream_config,
-                            move |data: &[i16], _: &cpal::InputCallbackInfo| {
+                            move |data: &[i16], info: &cpal::InputCallbackInfo| {
                                 if stop_for_callback2.load(Ordering::Relaxed) {
                                     return;
                                 }
+                                note_capture_start(&clock_cb2, info);
                                 metering::push_i16_samples(data);
                                 let frames = (data.len() / usize::from(actual_ch.max(1))) as u64;
                                 if producer.vacant_len() >= data.len() {
@@ -285,13 +317,15 @@ pub fn start_with_options(
                     let stop_for_callback3 = Arc::clone(&stop_atomic_cb);
                     let frame_count_cb3 = Arc::clone(&frame_count_thread);
                     let overrun_frames_cb3 = Arc::clone(&overrun_frames_thread);
+                    let clock_cb3 = Arc::clone(&capture_clock_thread);
                     device
                         .build_input_stream(
                             &stream_config,
-                            move |data: &[u16], _: &cpal::InputCallbackInfo| {
+                            move |data: &[u16], info: &cpal::InputCallbackInfo| {
                                 if stop_for_callback3.load(Ordering::Relaxed) {
                                     return;
                                 }
+                                note_capture_start(&clock_cb3, info);
                                 metering::push_u16_samples(data);
                                 let frames = (data.len() / usize::from(actual_ch.max(1))) as u64;
                                 if producer.vacant_len() >= data.len() {
@@ -391,6 +425,7 @@ pub fn start_with_options(
             output_format,
             frame_count,
             overrun_frames,
+            capture_clock,
         },
     );
 
@@ -449,5 +484,6 @@ pub fn stop(session_id: &str) -> Result<RecordResult, String> {
         sample_rate: session.sample_rate,
         channels: session.channels,
         output_format: format!("{:?}", session.output_format),
+        capture_clock: session.capture_clock.lock().ok().and_then(|clock| *clock),
     })
 }

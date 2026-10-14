@@ -95,3 +95,11 @@ export function normalizePhoneToE164(value, { region } = {}) {
 export function isE164Phone(value) {
     return /^\+[1-9]\d{7,14}$/.test(String(value || ''));
 }
+
+// A verified alias supplies the dialing country for its own native card.
+// Shared calling codes (US/CA) have the same national-prefix contract here.
+export function phoneRegionFromE164(value) {
+    if (!isE164Phone(value)) return null;
+    return Object.entries(COUNTRY_PHONE_METADATA).sort((a, b) => b[1].callingCode.length - a[1].callingCode.length)
+        .find(([, metadata]) => value.startsWith('+' + metadata.callingCode))?.[0] || null;
+}

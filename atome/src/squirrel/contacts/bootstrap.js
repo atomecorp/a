@@ -39,7 +39,11 @@ const installContactsGlobals = (env, api) => {
 const getOrCreateService = (env) => {
     if (env[SERVICE_KEY]) return env[SERVICE_KEY];
     const service = createContactsService({
-        primarySource: createLocalContactsSource({ api: () => env.Atome || env.window?.Atome })
+        primarySource: createLocalContactsSource({ api: () => env.Atome || env.window?.Atome,
+            publishProfile: async id => {
+                const loader = (env.window || env).__eveLoadUserProfile;
+                if (typeof loader === 'function') await loader(id, { repair: false, eventSource: 'ios_personal_import' });
+            } })
     });
     env[SERVICE_KEY] = service;
     return service;
@@ -119,6 +123,11 @@ export const createGlobalContactsApi = ({
     const api = {
         get service() {
             return getOrCreateService(env);
+        },
+        async selectPersonalContact(id) {
+            const result = await getOrCreateService(env).selectPersonalContact(id);
+            if (result.ok) dispatchPeopleDirectoryUpdated(env);
+            return result;
         },
         registerSource(source) {
             return getOrCreateService(env).registerSource(source);

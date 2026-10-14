@@ -83,7 +83,7 @@ export async function handleWsCommunication({ data, connection, safeSend, relati
             if (received.from_id !== userId || received.message !== properties.message || JSON.stringify(received.atome_ids) !== JSON.stringify(properties.atome_ids)) throw new Error('direct_message_id_conflict');
             properties = received;
         } else await persistCommunicationMessage(connection._wsApiVaultRouter, targetId, properties);
-        const stacked = await pushNotificationToUserStack({ userId: targetId, authorId: userId,
+        const stacked = await pushNotificationToUserStack({ userId: targetId, authorId: userId, deferPush: true,
             notification: { ...properties, id: params.id } });
         if (!stacked.ok) throw new Error(stacked.error);
         await persistCommunicationMessage(connection._wsApiVaultRouter, userId, { ...properties, unread: false, box: 'sent' });
@@ -93,6 +93,7 @@ export async function handleWsCommunication({ data, connection, safeSend, relati
         const queueSize = delivery.delivered ? 0 : enqueue(targetId, payload);
         reply({ success: true, ...delivery, queued: !delivery.delivered, queueSize, message_id: params.id,
             sender_id: userId, receiver_id: targetId });
+        await stacked.deliverPush();
     } catch (error) { reply({ success: false, error: error.message || 'communication_failed' }); }
     finally { releaseDelivery?.(); }
 }

@@ -33,8 +33,6 @@ const SUITES = [
     'tests/probes/molecule_list_projection.probe.mjs',
     'tests/probes/molecule_mix_projection.probe.mjs',
     'tests/probes/molecule_timeline_activity.probe.mjs',
-    'tests/probes/molecule_timeline_scene.probe.mjs',
-    'tests/probes/molecule_timeline_scene_bridge.probe.mjs',
     'tests/probes/molecule_track_type_registry.probe.mjs'
 ];
 

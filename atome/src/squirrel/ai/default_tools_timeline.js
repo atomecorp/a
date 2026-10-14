@@ -21,7 +21,6 @@ const TIMELINE_WRITE_VERBS = Object.freeze([
     'track.remove',
     'track.update',
     'track.reorder',
-    'track.group',
     'track.loop',
     'track.quantization',
     'track.mute',
@@ -47,7 +46,32 @@ const TIMELINE_WRITE_VERBS = Object.freeze([
     'automation.keyframe.remove'
 ]);
 
-const registerTimelineWriteVerb = ({ Agent, verb }) => {
+// Mixer verbs carry a typed command contract (strip ids are `<track_id>:<lane>`).
+const destination = { type: ['object', 'null'], properties: { kind: { type: 'string', enum: ['main', 'bus', 'strip', 'device', 'screen', 'midi_port'] }, id: { type: 'string' }, channel: { type: 'integer' } } };
+const stripCommand = (properties, required = []) => ({
+    type: 'object', required: ['strip_id', ...required],
+    properties: { strip_id: { type: 'string' }, ...properties }
+});
+const MIX_WRITE_VERBS = Object.freeze({
+    'mix.module.add': stripCommand({
+        module_id: { type: 'string' },
+        type: { type: 'string', enum: ['volume', 'pan', 'mono', 'fx', 'send', 'opacity', 'video_fx'] },
+        effect: { type: 'string', enum: ['reverb', 'delay', 'compressor', 'eq', 'filter', 'distortion', 'color'] },
+        params: { type: 'object' }, destination, index: { type: 'integer' }
+    }, ['module_id', 'type']),
+    'mix.module.update': stripCommand({ module_id: { type: 'string' }, effect: { type: 'string' }, params: { type: 'object' }, destination }, ['module_id']),
+    'mix.module.move': stripCommand({ module_id: { type: 'string' }, index: { type: 'integer' } }, ['module_id', 'index']),
+    'mix.module.remove': stripCommand({ module_id: { type: 'string' } }, ['module_id']),
+    'mix.module.bypass': stripCommand({ module_id: { type: 'string' }, bypass: { type: 'boolean' } }, ['module_id', 'bypass']),
+    'mix.output.set': stripCommand({ destination, enabled: { type: 'boolean' } }),
+    'mix.input.set': stripCommand({ input: { type: 'object', properties: { kind: { type: 'string', enum: ['track', 'live_audio'] }, device_id: { type: 'string' } } } }, ['input']),
+    'mix.group.create': { type: 'object', required: ['group_id', 'master_strip_id', 'member_strip_ids'], properties: { group_id: { type: 'string' }, master_strip_id: { type: 'string' }, member_strip_ids: { type: 'array', items: { type: 'string' } } } },
+    'mix.group.join': stripCommand({ group_id: { type: 'string' } }, ['group_id']),
+    'mix.group.leave': stripCommand({}),
+    'mix.group.dissolve': { type: 'object', required: ['group_id'], properties: { group_id: { type: 'string' } } }
+});
+
+const registerTimelineWriteVerb = ({ Agent, verb, command = { type: 'object' } }) => {
     Agent.registerTool({
         name: `eve.timeline.${verb}`,
         description: `Apply Molecule timeline ${verb}.`,
@@ -57,7 +81,7 @@ const registerTimelineWriteVerb = ({ Agent, verb }) => {
             type: 'object',
             properties: {
                 group_id: { type: 'string' },
-                command: { type: 'object' }
+                command
             }
         },
         handler: async (params = {}) => requireMoleculeTimelineApi().applyGroupTimelineOperation({
@@ -248,4 +272,5 @@ export const registerTimelineDefaultTools = ({ Agent }) => {
     });
 
     TIMELINE_WRITE_VERBS.forEach((verb) => registerTimelineWriteVerb({ Agent, verb }));
+    Object.entries(MIX_WRITE_VERBS).forEach(([verb, command]) => registerTimelineWriteVerb({ Agent, verb, command }));
 };

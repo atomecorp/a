@@ -41,6 +41,10 @@ struct ProceduralSdfUniform {
 @group(#{MATERIAL_BIND_GROUP}) @binding(4) var menu_front_sampler: sampler;
 @group(#{MATERIAL_BIND_GROUP}) @binding(5) var menu_face: texture_2d<f32>;
 @group(#{MATERIAL_BIND_GROUP}) @binding(6) var menu_face_sampler: sampler;
+// The surface background alone (wallpaper, project colour, wallpaper video),
+// captured without any atome or UI: what a turning plate reveals.
+@group(#{MATERIAL_BIND_GROUP}) @binding(7) var menu_back: texture_2d<f32>;
+@group(#{MATERIAL_BIND_GROUP}) @binding(8) var menu_back_sampler: sampler;
 
 const BACKDROP_BLUR_LEVEL_SHIFT: f32 = 0.4;
 
@@ -550,6 +554,13 @@ const INTUITION_MYSTIC_PI: f32 = 3.14159265;
 // Projection denominator guard: a point of the plate can never reach the eye plane,
 // and the Rust validation already bounds the perspective.
 const INTUITION_MYSTIC_EYE_MIN: f32 = 0.02;
+// An empty cell of a grid (`mystic_tile_motion.w < 0`, a tile never folded): its
+// menu face is the BACKGROUND alone, blurred — never the tile beneath it, no tint,
+// no colour, no resting shadow — with a light outline of this width and dose.
+const INTUITION_MYSTIC_GHOST_BLUR_PX: f32 = 28.0;
+const INTUITION_MYSTIC_GHOST_BLUR_TAPS: i32 = 32;
+const INTUITION_MYSTIC_GHOST_OUTLINE_PX: f32 = 1.25;
+const INTUITION_MYSTIC_GHOST_OUTLINE_DOSE: f32 = 0.45;
 
 // The menu plate of one cell: the shared system glass, tinted by the family of the
 // rung the tile reached, with the light rim that keeps a plate from reading as a
@@ -561,6 +572,23 @@ fn intuition_mystic_plate(box_distance: f32, screen_uv: vec2<f32>, family: vec4<
     // Family hue belongs inside the tint; preserve the common live-backdrop share.
     plate = mix(plate, mix(tint.rgb, family.rgb, family.a), tint.a);
     return plate;
+}
+
+// The background capture (`menu_back`: the wallpaper alone) blurred around `uv`:
+// a Vogel disk (golden-angle spiral) of taps, Gaussian-weighted, so the frost is
+// smooth — no rings, no doubled edges — without a pyramid of its own.
+fn intuition_mystic_back_blur(uv: vec2<f32>, surface: vec2<f32>) -> vec3<f32> {
+    var sum = vec3(0.0);
+    var weight = 0.0;
+    for (var tap = 0; tap < INTUITION_MYSTIC_GHOST_BLUR_TAPS; tap = tap + 1) {
+        let radius = sqrt((f32(tap) + 0.5) / f32(INTUITION_MYSTIC_GHOST_BLUR_TAPS));
+        let angle = f32(tap) * 2.39996323;
+        let offset = vec2(cos(angle), -sin(angle)) * radius * INTUITION_MYSTIC_GHOST_BLUR_PX / surface;
+        let tap_weight = exp(-2.0 * radius * radius);
+        sum += textureSampleLevel(menu_back, menu_back_sampler, clamp(uv + offset, vec2(0.0), vec2(1.0)), 0.0).rgb * tap_weight;
+        weight += tap_weight;
+    }
+    return sum / max(weight, 0.0001);
 }
 
 fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32> {
@@ -584,6 +612,12 @@ fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32
     let glass_mix = clamp(material.transition.x, 0.0, 1.0);
     let surface = max(material.geometry.xy, vec2(1.0));
 
+    // A LEVEL TURN (`mystic_style.z`: a grid's submenu, page or return) turns the
+    // plates from the level shown so far — `menu_front` then holds its face
+    // (mystic_capture.rs) — never from the workspace. `|motion.z|` says what the
+    // cell showed: 1 a plate, 2 an empty (ghost) plate, 3 nothing.
+    let level_turn = material.mystic_style.z > 0.5;
+
     var color = vec3(0.0);
     var alpha = 0.0;
     for (var index = 0; index < count; index = index + 1) {
@@ -592,10 +626,14 @@ fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32
         let half_side = max(tile.z, 1.0);
         let motion = material.mystic_tile_motion[index];
         let progress = clamp(motion.x, 0.0, 1.0);
+        let previous_kind = select(0.0, round(abs(motion.z)) - 1.0, level_turn);
+        let previous_ghost = previous_kind > 0.5 && previous_kind < 1.5;
+        let previous_absent = previous_kind > 1.5;
         // A tile that has not started turning is not part of the menu yet: it
         // paints nothing at all, so the workspace behind the record is what the
-        // user sees — and nothing is frosted while nothing is moving.
-        if progress <= 0.0 { continue; }
+        // user sees — and nothing is frosted while nothing is moving. In a level
+        // turn it still shows the previous level.
+        if progress <= 0.0 && (!level_turn || previous_absent) { continue; }
         let delta = pixel_position - tile.xy;
         // Bounding box, BEFORE the two `textureSample` calls: a resting tile covers
         // its own cell, a tile that turns overflows through the perspective division.
@@ -634,6 +672,7 @@ fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32
         // footprint, which is where that plate stands.
         // `motion.w`: the side of the folded corner, in pixels (0 = none).
         let fold = clamp(motion.w, 0.0, half_side);
+        let ghost = motion.w < -0.5;
         let footprint_distance = sd_mystic_tile(delta, half_side, clamp(tile.w, 0.0, half_side), fold);
         var contact_distance = footprint_distance;
         let denominator = cosine * eye + along * sine;
@@ -656,15 +695,23 @@ fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32
                 plate_mask = 1.0 - smoothstep(-softness, softness, box_distance);
             }
         }
+        if previous_absent && cosine >= 0.0 { plate_mask = 0.0; }
+        let outline_dose = INTUITION_MYSTIC_GHOST_OUTLINE_DOSE * (1.0 - smoothstep(0.0, INTUITION_MYSTIC_GHOST_OUTLINE_PX,
+            abs(box_distance + INTUITION_MYSTIC_GHOST_OUTLINE_PX)));
+        let ghost_uv = clamp(vec2(pixel_position.x / surface.x, 1.0 - (pixel_position.y / surface.y)), vec2(0.0), vec2(1.0));
         if plate_mask > 0.002 {
             var plate_color = vec3(0.0);
             if cosine < 0.0 {
                 // MENU side: the shared system surface, tinted by the rung.
                 let source = select(tile.xy + vec2(-aside, bside), tile.xy + vec2(bside, -aside), turning_y);
                 let face_uv = vec2(source.x / surface.x, 1.0 - source.y / surface.y);
-                let content = textureSampleLevel(menu_face, menu_face_sampler, face_uv, 0.0);
-                plate_color = intuition_mystic_plate(box_distance, face_uv, family, glass_mix, tint);
-                plate_color = mix(plate_color, content.rgb / max(content.a, 0.001), content.a);
+                if ghost {
+                    plate_color = mix(intuition_mystic_back_blur(ghost_uv, surface), vec3(1.0), outline_dose);
+                } else {
+                    let content = textureSampleLevel(menu_face, menu_face_sampler, face_uv, 0.0);
+                    plate_color = intuition_mystic_plate(box_distance, face_uv, family, glass_mix, tint);
+                    plate_color = mix(plate_color, content.rgb / max(content.a, 0.001), content.a);
+                }
             } else {
                 // WORKSPACE side: the piece of image the plate was cut from, still
                 // carried by it — FULLY opaque, so the picture really leaves with
@@ -676,7 +723,16 @@ fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32
                     vec2(0.0),
                     vec2(1.0)
                 );
-                plate_color = textureSampleLevel(menu_front, menu_front_sampler, source_uv, 0.0).rgb;
+                let previous = textureSampleLevel(menu_front, menu_front_sampler, source_uv, 0.0);
+                if previous_ghost {
+                    plate_color = mix(intuition_mystic_back_blur(ghost_uv, surface), vec3(1.0), outline_dose);
+                } else if level_turn {
+                    // The previous level's plate: the same glass, with the face it carried.
+                    plate_color = intuition_mystic_plate(box_distance, source_uv, family, glass_mix, tint);
+                    plate_color = mix(plate_color, previous.rgb / max(previous.a, 0.001), previous.a);
+                } else {
+                    plate_color = previous.rgb;
+                }
             }
             let contribution = plate_mask * (1.0 - alpha);
             color = color * alpha + plate_color * contribution;
@@ -691,21 +747,23 @@ fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32
         // A plate lying flat keeps atome's standard tool shadow at
         // `mystic_style.y` (the open menu reads as raised tools, like the
         // ribbon and the rail); a turning plate casts its full contact shadow.
-        let lifted = max(abs(sine), clamp(material.mystic_style.y, 0.0, 1.0) * select(0.0, 1.0, cosine < 0.0));
+        let lifted = max(abs(sine), clamp(material.mystic_style.y, 0.0, 1.0) * select(0.0, 1.0, cosine < 0.0 || level_turn));
+        let shadowless = select(ghost, previous_ghost || previous_absent, cosine >= 0.0);
         let shadow_value = (1.0 - smoothstep(0.0, shadow_blur, max(contact_distance, 0.0)))
-            * shadow_dose * (1.0 - plate_mask) * lifted;
+            * shadow_dose * (1.0 - plate_mask) * lifted * select(1.0, 0.0, shadowless);
         let shadow_contribution = shadow_value * (1.0 - alpha);
         color = color * alpha + shadow_color * shadow_contribution;
         alpha = alpha + shadow_contribution;
         color = color / max(alpha, 0.001);
 
-        // THE HOLE. The cell's own footprint, filled with the menu plate and laid
-        // flat under the turning plate: this is what the user sees where the plate
-        // used to be, and what makes the cell read as CUT OUT of the workspace.
+        // THE HOLE. The cell's own footprint, laid flat under the turning plate:
+        // the plate took its piece of the workspace with it, so what shows there
+        // is the surface background itself — never the tile, never a flat colour.
         let hole_distance = sd_mystic_tile(delta, half_side, clamp(tile.w, 0.0, half_side), fold);
         let hole_mask = (1.0 - smoothstep(-softness, softness, hole_distance)) * hole_dose;
         if hole_mask > 0.002 {
-            let hole_color = mix(tint.rgb, family.rgb, family.a);
+            let back_uv = clamp(vec2(pixel_position.x / surface.x, 1.0 - (pixel_position.y / surface.y)), vec2(0.0), vec2(1.0));
+            let hole_color = textureSampleLevel(menu_back, menu_back_sampler, back_uv, 0.0).rgb;
             let hole_contribution = hole_mask * (1.0 - alpha);
             color = color * alpha + hole_color * hole_contribution;
             alpha = alpha + hole_contribution;

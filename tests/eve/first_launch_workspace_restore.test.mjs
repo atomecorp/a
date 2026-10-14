@@ -17,7 +17,7 @@ vi.mock('../../eVe/intuition/tools/workspace_main_menu_visibility.js', () => ({
 vi.mock('../../eVe/intuition/tools/user_login_shared_runtime.js', () => ({
     ensureSharedLoginSequence: () => ({ handleAuthenticated: async () => false })
 }));
-vi.mock('../../eVe/domains/dashboard/workspace_surface_preference.js', () => ({ rememberWorkspaceSurface: async () => ({ ok: true }), ensureBeginnerHomeProject: async () => ({ ok: true, projectId: window.__eveProfilePreferences.workspace.home_template_project_id }) }));
+vi.mock('../../eVe/domains/dashboard/workspace_surface_preference.js', () => ({ rememberWorkspaceSurface: async () => ({ ok: true }), ensureHomeTemplateProject: async () => ({ ok: true, projectId: window.__eveProfilePreferences.workspace.home_template_project_id }) }));
 vi.mock('../../eVe/domains/dashboard/dashboard_bevy_ui_runtime.js', () => ({
     getDashboardBevyUiRuntime: () => window.eveDashboardBevyUiRuntime
 }));

@@ -264,7 +264,7 @@ const createSlider = (config = {}) => {
   const sState = { isDragging: false, currentVal: currentValue, currentHandleOffset: handleOffset };
 
   // Fonction de mise à jour de position
-  const readConfig = () => ({ ...normalizeSliderRange({ min, max, step }), disabled, dragMin, dragMax, unit });
+  const readConfig = () => ({ ...normalizeSliderRange({ min, max, step }), disabled, dragMin, dragMax, unit, sliderOptions: options });
   const { updatePosition, destroy } = setupSliderBehavior({ container, track, handle, progression, label, bounds, type, isCircular, readConfig, onChange, onInput, sState,
     circularStyles: { stroke: skin.progression?.stroke || progressionStyles.backgroundColor || '#007bff',
       strokeWidth: skin.progression?.strokeWidth || '6', strokeLinecap: skin.progression?.strokeLinecap || 'butt', opacity: skin.progression?.opacity || '1' } });

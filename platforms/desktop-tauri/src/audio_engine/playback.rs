@@ -1,13 +1,10 @@
-// Kira-based audio playback engine
-// Manages AudioManager, clips, mixer tracks, and effects.
-//
-// Optimizations over previous version:
-// - Per-clip RwLock replaces global Mutex (concurrent reads, write-only on mutation)
-// - Arc<StaticSoundData> avoids full data clone on every play()
-// - Configurable tween durations (stop, volume, rate) instead of hardcoded values
-// - Zero-copy load_clip_from_bytes via Cursor over owned Vec (no extra .to_vec())
+// Kira-based audio playback engine: clips, voices, and the mixer graph host
+// (voices play on their strip's sub-track, see atome-mix-graph).
 
-use kira::backend::cpal::CpalBackend;
+use super::playback_region::{
+    normalize_playback_duration, normalize_playback_start, playback_min_region_duration, sound_duration_seconds,
+};
+use super::scheduled_backend::{self, ScheduledCpalBackend};
 use kira::sound::static_sound::{StaticSoundData, StaticSoundHandle, StaticSoundSettings};
 use kira::{AudioManager, AudioManagerSettings, Decibels, Frame, Panning, PlaybackRate, Tween};
 use std::collections::HashMap;
@@ -74,18 +71,19 @@ impl ClipMetadata {
     }
 }
 
-struct VoiceEntry {
+pub(super) struct VoiceEntry {
     handle: StaticSoundHandle,
 }
 
 pub struct PlaybackEngine {
-    manager: AudioManager<CpalBackend>,
+    pub(super) manager: AudioManager<ScheduledCpalBackend>,
+    pub(super) mix: atome_mix_graph::host::MixHost,
     clips: HashMap<String, ClipEntry>,
     voices: HashMap<String, VoiceEntry>,
     tween_config: TweenConfig,
 }
 
-static ENGINE: once_cell::sync::Lazy<RwLock<Option<PlaybackEngine>>> =
+pub(super) static ENGINE: once_cell::sync::Lazy<RwLock<Option<PlaybackEngine>>> =
     once_cell::sync::Lazy::new(|| RwLock::new(None));
 
 fn lock_err<E: std::fmt::Display>(e: E) -> String {
@@ -496,10 +494,15 @@ pub fn init_with_config(tween_config: TweenConfig) -> Result<(), String> {
     if guard.is_some() {
         return Ok(()); // already init
     }
-    let manager = AudioManager::<CpalBackend>::new(AudioManagerSettings::default())
+    let mix = atome_mix_graph::host::MixHost::new();
+    super::aux_outputs::install_aux_source(mix.aux_outputs());
+    let settings = AudioManagerSettings { main_track_builder: mix.main_track_builder(), ..Default::default() };
+    let manager = AudioManager::<ScheduledCpalBackend>::new(settings)
         .map_err(|e| format!("Failed to create AudioManager: {e}"))?;
+    scheduled_backend::install_start_hook(super::playback_schedule::start_due_voice);
     *guard = Some(PlaybackEngine {
         manager,
+        mix,
         clips: HashMap::new(),
         voices: HashMap::new(),
         tween_config,
@@ -546,67 +549,12 @@ pub fn has_clip(id: &str) -> Result<bool, String> {
 }
 
 pub fn play(id: &str) -> Result<(), String> {
-    play_instance(id, id, 0.0, None, 1.0, 0.0, 1.0, None, None)
+    play_instance(id, id, 0.0, None, 1.0, 0.0, 1.0, None, None, None)
 }
 
 fn gain_to_decibels(gain: f64) -> Decibels {
     let clamped = gain.clamp(0.000_001, 16.0);
     Decibels((20.0 * clamped.log10()) as f32)
-}
-
-fn sound_duration_seconds(data: &StaticSoundData) -> Result<f64, String> {
-    if data.sample_rate == 0 {
-        return Err("Clip sample rate is zero".to_string());
-    }
-    Ok(data.frames.len() as f64 / data.sample_rate as f64)
-}
-
-fn playback_min_region_duration(sample_rate: u32, source_duration: f64) -> Result<f64, String> {
-    if !source_duration.is_finite() || source_duration <= 0.0 {
-        return Err("Clip has no playable duration".to_string());
-    }
-    let frame_duration = 1.0 / sample_rate.max(1) as f64;
-    Ok(frame_duration.max(0.0005).min(source_duration))
-}
-
-fn normalize_playback_start(
-    requested_start: f64,
-    source_duration: f64,
-    min_region_duration: f64,
-) -> Result<f64, String> {
-    if !requested_start.is_finite() {
-        return Err("start_seconds must be finite".to_string());
-    }
-    let latest_start = (source_duration - min_region_duration).max(0.0);
-    Ok(requested_start.max(0.0).min(latest_start))
-}
-
-fn normalize_playback_duration(
-    requested_duration: Option<f64>,
-    min_region_duration: f64,
-    max_duration: f64,
-) -> Result<Option<f64>, String> {
-    if !max_duration.is_finite() || max_duration <= 0.0 {
-        return Ok(None);
-    }
-    let Some(duration) = requested_duration else {
-        return Ok(None);
-    };
-    if !duration.is_finite() {
-        return Err("duration_seconds must be finite when provided".to_string());
-    }
-    if duration <= 0.0 {
-        return Ok(None);
-    }
-    if max_duration <= min_region_duration {
-        return Ok(None);
-    }
-    let bounded_duration = duration.max(min_region_duration).min(max_duration);
-    if bounded_duration >= max_duration {
-        Ok(None)
-    } else {
-        Ok(Some(bounded_duration))
-    }
 }
 
 pub fn play_instance(
@@ -619,20 +567,32 @@ pub fn play_instance(
     rate: f64,
     loop_start_seconds: Option<f64>,
     loop_end_seconds: Option<f64>,
+    strip_id: Option<&str>,
 ) -> Result<(), String> {
     let mut guard = ENGINE.write().map_err(lock_err)?;
     let engine = guard.as_mut().ok_or("Audio engine not initialized")?;
-    let sound_data_template = engine
+    engine.mix.route_voice(voice_id, strip_id);
+    let sound = build_voice_sound(engine, asset_id, start_seconds, duration_seconds, gain, pan, rate, loop_start_seconds, loop_end_seconds)?;
+    start_voice(engine, asset_id, voice_id, sound)
+}
+
+// The sound a voice plays: the clip's region, gain, pan and rate.
+pub(super) fn build_voice_sound(
+    engine: &PlaybackEngine,
+    asset_id: &str,
+    start_seconds: f64,
+    duration_seconds: Option<f64>,
+    gain: f64,
+    pan: f64,
+    rate: f64,
+    loop_start_seconds: Option<f64>,
+    loop_end_seconds: Option<f64>,
+) -> Result<StaticSoundData, String> {
+    let mut sound_data: StaticSoundData = engine
         .clips
         .get(asset_id)
         .map(|clip| (*clip.data).clone())
         .ok_or(format!("Clip '{asset_id}' not found"))?;
-
-    if let Some(mut existing_voice) = engine.voices.remove(voice_id) {
-        existing_voice.handle.stop(Tween::default());
-    }
-
-    let mut sound_data: StaticSoundData = sound_data_template;
     let source_duration = sound_duration_seconds(&sound_data)?;
     if source_duration <= 0.0 {
         return Err(format!("Clip '{asset_id}' has no playable duration"));
@@ -680,18 +640,19 @@ pub fn play_instance(
         }
     }
 
-    sound_data = sound_data
+    Ok(sound_data
         .volume(gain_to_decibels(gain))
         .panning(Panning(pan.clamp(-1.0, 1.0) as f32))
-        .playback_rate(PlaybackRate(requested_rate));
+        .playback_rate(PlaybackRate(requested_rate)))
+}
 
-    let handle = engine
-        .manager
-        .play(sound_data)
+pub(super) fn start_voice(engine: &mut PlaybackEngine, asset_id: &str, voice_id: &str, sound_data: StaticSoundData) -> Result<(), String> {
+    if let Some(mut existing_voice) = engine.voices.remove(voice_id) {
+        existing_voice.handle.stop(Tween::default());
+    }
+    let handle = engine.mix.play(&mut engine.manager, voice_id, sound_data)
         .map_err(|e| format!("Failed to play clip '{asset_id}': {e}"))?;
-    engine
-        .voices
-        .insert(voice_id.to_string(), VoiceEntry { handle });
+    engine.voices.insert(voice_id.to_string(), VoiceEntry { handle });
     Ok(())
 }
 
@@ -702,10 +663,11 @@ pub fn stop(id: &str) -> Result<(), String> {
 pub fn stop_instance(voice_id: &str) -> Result<(), String> {
     let mut guard = ENGINE.write().map_err(lock_err)?;
     let engine = guard.as_mut().ok_or("Audio engine not initialized")?;
-    let mut voice = engine
-        .voices
-        .remove(voice_id)
-        .ok_or(format!("Voice '{voice_id}' not found"))?;
+    let cancelled = scheduled_backend::cancel_scheduled(voice_id);
+    engine.mix.forget_voice(voice_id);
+    let Some(mut voice) = engine.voices.remove(voice_id) else {
+        return if cancelled { Ok(()) } else { Err(format!("Voice '{voice_id}' not found")) };
+    };
     let handle = &mut voice.handle;
     handle.stop(Tween {
         duration: Duration::from_millis(engine.tween_config.stop_ms),
@@ -779,42 +741,4 @@ pub fn shutdown() -> Result<(), String> {
     let mut guard = ENGINE.write().map_err(lock_err)?;
     *guard = None;
     Ok(())
-}
-
-#[cfg(test)]
-mod playback_region_tests {
-    use super::{
-        normalize_playback_duration, normalize_playback_start, playback_min_region_duration,
-    };
-
-    #[test]
-    fn min_region_never_exceeds_tiny_clip_duration() {
-        let min_region = playback_min_region_duration(44_100, 0.0002).unwrap();
-        assert_eq!(min_region, 0.0002);
-    }
-
-    #[test]
-    fn start_is_bounded_to_a_playable_region() {
-        let min_region = playback_min_region_duration(44_100, 10.0).unwrap();
-        let start = normalize_playback_start(20.0, 10.0, min_region).unwrap();
-        assert!(start <= 10.0 - min_region);
-    }
-
-    #[test]
-    fn duration_normalization_does_not_clamp_with_reversed_bounds() {
-        let duration = normalize_playback_duration(Some(0.12), 0.0005, 0.0002).unwrap();
-        assert_eq!(duration, None);
-    }
-
-    #[test]
-    fn duration_rejects_non_finite_values() {
-        let error = normalize_playback_duration(Some(f64::NAN), 0.0005, 1.0).unwrap_err();
-        assert_eq!(error, "duration_seconds must be finite when provided");
-    }
-
-    #[test]
-    fn explicit_short_duration_is_promoted_to_min_region() {
-        let duration = normalize_playback_duration(Some(0.0001), 0.0005, 1.0).unwrap();
-        assert_eq!(duration, Some(0.0005));
-    }
 }

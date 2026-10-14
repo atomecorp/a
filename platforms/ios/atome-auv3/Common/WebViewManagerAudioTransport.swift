@@ -134,18 +134,26 @@ extension WebViewManager {
     
     // MARK: - MIDI Communication
     
-    /// Send MIDI data to JavaScript
-    static func sendMIDIToJS(data1: UInt8, data2: UInt8, data3: UInt8, timestamp: Double = 0) {
-        let jsCode = """
-        if (typeof window.AtomeMidi !== 'undefined' && typeof window.AtomeMidi.receive === 'function') {
-            window.AtomeMidi.receive(\(data1), \(data2), \(data3), \(timestamp), { id: 'coremidi', name: 'CoreMIDI' });
-        } else if (typeof window.midiUtilities !== 'undefined' && typeof window.midiUtilities.receiveMidiData === 'function') {
-            window.midiUtilities.receiveMidiData(\(data1), \(data2), \(data3), \(timestamp));
-        } else if (typeof window.Lyrix !== 'undefined' && typeof window.Lyrix.midiUtilities !== 'undefined' && typeof window.Lyrix.midiUtilities.receiveMidiData === 'function') {
-            window.Lyrix.midiUtilities.receiveMidiData(\(data1), \(data2), \(data3), \(timestamp));
-        }
-        """
-        evaluateJS(jsCode, label: "midi", priority: .high)
+    /// Delivers one MIDI message to the canonical MIDI input service with its
+    /// source port, a `{ id, name }` JSON literal (see `MIDIController`).
+    static func sendMIDIToJS(data1: UInt8, data2: UInt8, data3: UInt8, timestamp: Double, portLiteral: String) {
+        evaluateJS(
+            "window.AtomeMidi&&window.AtomeMidi.receive(\(data1),\(data2),\(data3),\(timestamp),\(portLiteral));",
+            label: "midi",
+            priority: .high
+        )
+    }
+
+    /// Publishes the MIDI input list after a setup change (hot-plug, virtual
+    /// sources); `start_native_midi` answers the same list on request.
+    static func publishMIDIInputsToJS(_ inputs: [[String: String]]) {
+        guard let data = try? JSONSerialization.data(withJSONObject: ["inputs": inputs], options: [.sortedKeys]),
+              let detail = String(data: data, encoding: .utf8) else { return }
+        evaluateJS(
+            "window.dispatchEvent(new CustomEvent('eve:midi-native-ports',{detail:\(detail)}));",
+            label: "midi.ports",
+            priority: .normal
+        )
     }
 
     private func sendMuteStateToJS() {

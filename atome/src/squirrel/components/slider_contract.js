@@ -9,6 +9,22 @@ export const quantizeSliderValue = (value, config = {}) => {
     const clamped = Math.min(max, Math.max(min, finite(value, min)));
     return Math.min(max, Math.max(min, min + Math.round((clamped - min) / step) * step));
 };
+const valueKey = value => String(Number(Number(value).toPrecision(15)));
+export const isSliderValueValid = (value, config = {}, options = {}) => {
+    const { min, max, step } = normalizeSliderRange(config);
+    if (!Number.isFinite(value) || value < min || value > max) return false;
+    const quantized = quantizeSliderValue(value, config);
+    const tolerance = Math.min(step * 1e-7, Number.EPSILON * 8 * Math.max(1, Math.abs(value), Math.abs(quantized)));
+    if (Math.abs(value - quantized) > tolerance) return false;
+    return options.valueLabels == null || Object.hasOwn(options.valueLabels, valueKey(value));
+};
+// Captions are presentation only. Consumers retain their numeric formatting when absent.
+export const sliderValueCaption = (value, options = {}) => {
+    if (options.valueLabels == null) return null;
+    const key = valueKey(value);
+    if (!Object.hasOwn(options.valueLabels, key)) throw new Error('slider_value_caption_required');
+    return options.valueLabels[key];
+};
 export const formatSliderBound = (value, unit = '') => {
     const numeric = Number(Number(value).toFixed(6));
     return unit ? `${numeric} ${unit}` : String(numeric);
@@ -18,7 +34,15 @@ export const normalizeSliderOptions = (options = {}) => {
     const length = options.lengthPx ?? null, inset = options.valueInsetPx ?? 0;
     if (length !== null && length !== 'fill' && (!Number.isFinite(length) || length <= 0)) throw new Error('slider_length_invalid');
     if (!Number.isFinite(inset) || inset < 0) throw new Error('slider_value_inset_invalid');
-    return { showBounds: options.showBounds === true, lengthPx: length, valueInsetPx: inset };
+    const normalized = { showBounds: options.showBounds === true, lengthPx: length, valueInsetPx: inset };
+    if (options.valueLabels != null) {
+        const labels = options.valueLabels;
+        if (!labels || typeof labels !== 'object' || Array.isArray(labels) || !Object.keys(labels).length
+            || Object.entries(labels).some(([key, label]) => !Number.isFinite(Number(key)) || valueKey(key) !== key
+                || typeof label !== 'string' || !label.trim())) throw new Error('slider_value_labels_invalid');
+        normalized.valueLabels = { ...labels };
+    }
+    return normalized;
 };
 export const resolveSliderLength = (options, defaultLength, availableLength) => {
     const { lengthPx } = normalizeSliderOptions(options);

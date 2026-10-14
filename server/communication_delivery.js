@@ -59,15 +59,17 @@ export function createNotificationDelivery({ pushNotificationToUserStack, wsSend
             fromId: senderUserId ? String(senderUserId) : '', fromName: senderName || '',
             atomeIds: [], publication, ...extra
         };
-        await pushNotificationToUserStack({
+        const stacked = await pushNotificationToUserStack({
             userId: target,
+            deferPush: true,
             authorId: senderUserId ? String(senderUserId) : target,
             notification: {
                 id: notificationId, message_id: notificationId, command: 'eve-comm-share', kind, subject, message,
                 atome_ids: [], from_id: params.fromId, from_name: senderName, to_user_id: target,
                 timestamp, unread: true, box: 'inbox', publication, ...extra
             }
-        }).catch((error) => console.warn('[communication] notification stack push failed', error?.message || error));
+        });
+        if (stacked?.ok !== true) throw new Error(stacked?.error || 'communication_notification_commit_failed');
         const payload = {
             type: 'console-message',
             message: JSON.stringify({ command: 'eve-comm-share', params }),
@@ -77,6 +79,7 @@ export function createNotificationDelivery({ pushNotificationToUserStack, wsSend
         };
         const { delivered } = wsSendJsonToUser(target, payload, { scope: 'ws/api', op: kind, targetUserId: target });
         if (!delivered) enqueuePendingConsoleMessage(target, payload);
-        return { ok: true, delivered, id: notificationId };
+        const push = await stacked?.deliverPush?.();
+        return { ok: true, delivered, id: notificationId, ...(push ? { push } : {}) };
     };
 }

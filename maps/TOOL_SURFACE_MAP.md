@@ -68,7 +68,7 @@ Code : `eVe/intuition/tools/core/exposable_tools.js` ; branché dans `finder_dat
 | catalogue › placeholder | `placeholder_text` / `video` / `audio` / `photo` / `image` / `shape` | `ui.placeholder.create` | Texte, Vidéo, Audio, Photo, Image, Dessin — cases du rail ; libellé et icône lus ici |
 | catalogue › placeholder | `placeholder_duration` | `ui.placeholder.duration.apply` | Durée |
 | catalogue › placeholder | `placeholder_max_chars` | `ui.placeholder.max_chars.apply` | Caractères |
-| main › create | `generator` | `ui.generator.run` | Générateur (armement direct ; sa liste de rail est `generator.option_keys`, projetée par le registre) |
+| main › create | `generator` | `ui.generator.create` | Générateur (armement direct ; sa liste de rail est `generator.option_keys`, projetée par le registre ; chaque case porte `ui.generator.run` + `generator_id`) |
 | main › create | `shape_create` | `ui.shape.create` | Shape (armement direct : ses 4 variantes et leurs paramètres sont les cases du rail) |
 
 ## Rail de l'outil armé (`context_menus.json` → `menus.sidebar.tools`)
@@ -83,7 +83,7 @@ Un outil de création `pinned: true` quitte « Créer » dès qu'il est armé : 
 | Page | `page_create` | `ui.page.create` | les 6 `page_format_*` | `eveProjectViewCreationApi.readPageFormat()` |
 | Placeholder | `create_placeholder` | `ui.placeholder.create` | les 6 `placeholder_*` + `placeholder_duration`, `placeholder_max_chars` | `evePlaceholderCreationApi.readChoice()` / `readLimits()` |
 | Shape | `shape_create` | `ui.shape.create` | `shape_square`, `shape_circle`, `shape_star`, `shape_polygon`, puis **les seuls réglages de la variante choisie** : l'étoile → `shape_star_branches` (3–20), `shape_star_inner_radius` (0.15–0.95) ; le polygone → `shape_polygon_sides` (3–12) ; un carré ou un cercle n'en déplie aucun | `window.eveShapeCreationApi.readChoice()` / `readOptions()` ; `ui.shape.variant.*`, `ui.shape.star.branches.apply`, `ui.shape.star.inner_radius.apply`, `ui.shape.polygon.sides.apply` |
-| Générateur | `generator` | `ui.generator.run` | liste projetée par `eVe/intuition/tools/generator/registry.js` (familles remplacées par leurs générateurs) | `window.eveGeneratorApi.readChoice()` |
+| Générateur | `generator` | `ui.generator.create` (cases : `ui.generator.run`) | liste projetée par `eVe/intuition/tools/generator/registry.js` (familles remplacées par leurs générateurs) | `window.eveGeneratorApi.readChoice()` |
 | Template | `template_create` | `ui.template.create` | — (aucune porte d'entrée dans le ruban aujourd'hui) | `eveTemplateCreationApi` |
 
 Contrat des deux listes : les cases d'un outil épinglé viennent de la taxonomie (`menus.sidebar.tools.<outil>.options`) ou, quand son contenu déclare la liste lui-même, de `catalog[cléDeContenu].option_keys` (Générateur). Les `children` d'une entrée `type: 'palette'` restent réservés au ruban : une liste publiée en `children` serait peinte par le ruban à côté de la colonne du rail, jamais dedans.

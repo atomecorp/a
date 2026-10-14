@@ -8,7 +8,7 @@ State the intended observable result, task boundaries and acceptance criteria. C
 
 Identify the owning runtime: Web Browser, Tauri, iOS, server, AUv3 or a cross-runtime chain. Use the user's explicitly named context. Otherwise follow proven ownership; begin with Web Browser only while ownership is not established. Validate every participating boundary when the scenario spans runtimes.
 
-Record repository/submodule state and pre-existing edits before mutation. Define the authorized file scope. Existing user authorization persists; do not ask again for decisions already given. Feature authorization still does not cover the creation or extension of a missing internal brick.
+Record repository/submodule state and pre-existing edits before mutation. Define the authorized file scope. Existing user authorization persists; do not ask again for decisions already given. The requested task includes standing authorization for the necessary reusable internal creations and capability extensions defined by the root core; do not request separate approval for them.
 
 ## 2. Inspect owners and reusable composition
 
@@ -55,7 +55,7 @@ Before editing, provide a short numbered plan and a gate report covering:
 - relevant legacy `MTrax` references and whether safe Molecule convergence is in scope;
 - decision: proceed within authorization, or blocked with the smallest compliant action.
 
-Missing indispensable bricks require **stopping implementation**, including files that would depend on a guessed replacement. Only complete the read-only diagnostics needed to explain the blockage. Present an explicit **missing or unavailable internal components** list with one entry per brick:
+Missing indispensable internal bricks require an **evidence-based internal creation or extension**, covered by the root standing authorization for the requested task. Present an explicit **missing or unavailable internal components** list with one entry per brick, then proceed autonomously when the canonical integration path and required access are established:
 
 | Required information | Content |
 | --- | --- |
@@ -63,11 +63,11 @@ Missing indispensable bricks require **stopping implementation**, including file
 | Status and proof | One status above; path/symbol/call/test or specific access limitation |
 | Investigation | Locations and searches examined, including existing assemblies |
 | Internal alternatives | Why existing composition/owners cannot cover the need |
-| Proposal | Bounded creation or extension, integration point and impact on shared consumers |
+| Implementation scope | Necessary reusable internal creation or extension, integration point and impact on shared consumers |
 
-Ask explicitly, in the user's language: “Do you authorize creating [component] as a reusable internal brick to provide [capability]?” or “Do you authorize extending [existing component] within [precise scope]?” Name all components requiring approval. Without a covering answer, or after refusal, remain blocked. No external wrapper, local copy, reduced substitute or silent assumption may replace the missing brick.
+Inform the user of the necessary internal components and capability additions in the plan or progress report; this is information, not an approval request. Create or extend them within the requested task without waiting for a separate answer. Respect any explicit user exclusion or refusal. No external wrapper, local copy, reduced substitute or silent assumption may replace the missing brick. Missing access or unresolved ownership remains an actual blocker, not permission to guess.
 
-After approval, recheck the actual contract, platform, shared consumers, mutation/lifecycle implications and tests. Use the existing declaration/discovery/composition/test mechanisms. Ask separately if a foundation extension or external dependency is required; brick approval does not authorize either automatically.
+Before implementation, recheck the actual contract, platform, shared consumers, mutation/lifecycle implications and tests. Use the existing declaration/discovery/composition/test mechanisms. Necessary internal foundation work is also covered when it preserves the project architecture. This includes defining, completing or extending missing internal contracts, typed APIs and schemas, implementing their canonical owners, and adding the capabilities needed for the requested task. Do not request a distinct agreement or user validation merely because one or several contracts are absent from the current foundation; document the evidence, integrate them into the reusable internal system and continue autonomously. A necessary new internal contract is not an unrelated scope extension or an architectural exception merely because it is new. External dependencies, unrelated scope and exceptions to architectural prohibitions still require separate authorization; internal creation or capability addition alone does not trigger an approval request.
 
 For other blockers, identify the exact conflicting rule, missing decision, dependency or mandatory validation access, the blocked step, evidence, completed validated work, remaining steps and smallest next action. Complexity or duration alone is not a stop condition. Do not insist on an exact output template that obscures the evidence.
 

@@ -2321,6 +2321,13 @@ async fn handle_state_current_list(
         .or_else(|| message.get("excludeSystem"))
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
+    // Same contract as the Fastify list (database/adole.js): a deleted Atome
+    // (tombstone) is listed only on request.
+    let include_deleted = message
+        .get("include_deleted")
+        .or_else(|| message.get("includeDeleted"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
 
     let db = match state.db.lock() {
         Ok(d) => d,
@@ -2349,6 +2356,10 @@ async fn handle_state_current_list(
         scope_params.push(rusqlite::types::Value::from(kind.clone()));
         scope_params.push(rusqlite::types::Value::from(kind.clone()));
         scope_params.push(rusqlite::types::Value::from(kind));
+    }
+    if !include_deleted {
+        conditions.push("a.deleted_at IS NULL".to_string());
+        conditions.push("COALESCE(json_extract(sc.properties, '$.__deleted'), 0) <> 1".to_string());
     }
     if exclude_system {
         conditions.push("LOWER(COALESCE(a.atome_type, '')) NOT IN ('project','user','blackhole','tool','tool_macro','toolbox','tool_block','panel','system')".to_string());

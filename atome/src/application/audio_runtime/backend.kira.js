@@ -13,12 +13,6 @@ import {
 // Kira backend for Squirrel.av.audio
 // Routes audio commands to either Tauri invoke (native) or WASM module (web).
 // Replaces legacy HTML/native split backends with a unified CPAL/Kira engine.
-//
-// Fixes over previous version:
-// - Proper error propagation (no more silent .catch(() => {}))
-// - Binary transport via Uint8Array instead of Array.from(bytes)
-// - All API methods implemented (jump, markers, query_clip)
-// - loadClipFromUrl returns a Promise for proper chaining
 
 (function () {
   const audio = window.Squirrel && window.Squirrel.av && window.Squirrel.av.audio;
@@ -299,6 +293,38 @@ import {
       });
     },
 
+    // Sample-accurate overdub: the AudioContext the Web engine renders into
+    // (recording opens its worklet on it), and the engine's render clock — a
+    // promise on the native engine, whose clock also stamps host instants.
+    shared_context() { return mode === 'wasm' && wasm && wasmAudioManagerReady ? wasm.audio_shared_context() : null; },
+    render_clock() {
+      if (mode === 'tauri') return invoke('audio_render_clock', {}).then(function (r) { return r && r.clock ? Object.assign({ host_clock: true }, r.clock) : null; }, function () { return null; });
+      return mode === 'wasm' && wasm && wasmAudioManagerReady ? wasm.audio_render_clock() : null;
+    },
+
+    // Many voices in one call (one native round trip); resolves with their start frames.
+    schedule_instances(list) {
+      if (mode === 'tauri') return invoke('audio_schedule_instances', { voices: list.map(function (arg) { return Object.assign(buildTauriKiraAudioPayload(KIRA_AUDIO_COMMANDS.PLAY_INSTANCE, normalizeKiraPlayInstancePayload(arg)), { startRenderFrame: Number(arg.startRenderFrame) }); }) }).then(function (r) { return r.start_render_frames; });
+      return Promise.all(list.map(function (arg) { return backend.schedule_instance(arg); }));
+    },
+
+    // Starts a voice exactly on a rendered frame of the engine.
+    schedule_instance(arg) {
+      var payload = normalizeKiraPlayInstancePayload(arg);
+      var frame = Number(arg && (arg.startRenderFrame != null ? arg.startRenderFrame : arg.start_render_frame));
+      if (!payload.assetId || !payload.voiceId || !Number.isFinite(frame)) {
+        return Promise.reject(new Error('[backend.kira] schedule_instance requires asset, voice and frame'));
+      }
+      if (mode === 'tauri') return invoke('audio_schedule_instance', Object.assign(buildTauriKiraAudioPayload(KIRA_AUDIO_COMMANDS.PLAY_INSTANCE, payload),
+        { startRenderFrame: frame })).then(function (r) { return Number(r && r.start_render_frame); });
+      if (mode !== 'wasm') return Promise.reject(new Error('[backend.kira] sample-accurate scheduling requires a Kira engine'));
+      return ensureRuntimeMode({ audioManager: true }).then(function () {
+        return wasm.audio_schedule_instance(payload.assetId, payload.voiceId, payload.startSeconds,
+          payload.durationSeconds == null ? undefined : payload.durationSeconds, payload.gain, payload.pan, payload.rate, frame,
+          payload.stripId == null ? undefined : payload.stripId);
+      });
+    },
+
     play(arg) {
       var id = resolveClipId(arg);
       if (id) return ensureRuntimeMode({ audioManager: true }).then(function () {
@@ -352,6 +378,50 @@ import {
 
     stop_clip(arg) {
       backend.stop(arg);
+    },
+
+    // Mixer graph (atome-mix-graph): program compiled from the canonical timeline mix.
+    mix_apply(program) {
+      return ensureRuntimeMode({ audioManager: true }).then(function () {
+        if (mode === 'wasm') return wasm.audio_mix_apply(program);
+        return invoke('audio_mix_apply', { program: program }).then(function (r) { return r && r.strips; });
+      });
+    },
+
+    mix_levels() {
+      if (mode === 'wasm') return wasm && wasmAudioManagerReady ? Promise.resolve(Array.from(wasm.audio_mix_levels())) : Promise.resolve([]);
+      return invoke('audio_mix_levels', {}).then(function (r) { return (r && r.levels) || []; });
+    },
+
+    mix_cut_tail(moduleId) {
+      return ensureRuntimeMode({ audioManager: true }).then(function () {
+        return mode === 'wasm' ? wasm.audio_mix_cut_tail(moduleId) : invoke('audio_mix_cut_tail', { moduleId: moduleId });
+      });
+    },
+
+    // The real inputs and outputs a strip can use. Web: the destination's
+    // channels and the browser's audio inputs; native: the engine's devices.
+    mix_output_devices() {
+      if (mode !== 'wasm') return invoke('audio_mix_devices', {}).then(function (r) { return (r && r.devices) || { outputs: [], inputs: [] }; });
+      var context = wasm && wasmAudioManagerReady ? wasm.audio_shared_context() : null;
+      var outputs = context ? [{ id: 'default', name: '', channels: Number(context.destination.maxChannelCount) || 2, isDefault: true }] : [];
+      var media = window.navigator && window.navigator.mediaDevices;
+      if (!media || typeof media.enumerateDevices !== 'function') return Promise.resolve({ outputs: outputs, inputs: [] });
+      return media.enumerateDevices().then(function (devices) {
+        return { outputs: outputs, inputs: devices.filter(function (device) { return device.kind === 'audioinput'; })
+          .map(function (device) { return { id: device.deviceId || 'default', name: device.label || '', channels: 2 }; }) };
+      });
+    },
+
+    mix_live_push(arg) {
+      if (mode !== 'wasm' || !wasm || !wasmAudioManagerReady || !arg) return false;
+      wasm.audio_mix_live_push(String(arg.deviceId || ''), arg.pcm);
+      return true;
+    },
+
+    mix_module_state(moduleId) {
+      if (mode === 'wasm') return Promise.resolve(wasm && wasmAudioManagerReady ? wasm.audio_mix_module_state(moduleId) : null);
+      return invoke('audio_mix_module_state', { moduleId: moduleId }).then(function (r) { return r ? r.state : null; });
     },
 
     jump(arg) {

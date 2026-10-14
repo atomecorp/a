@@ -1567,6 +1567,7 @@ async fn remote_audio_playback_play_handler(
         rate,
         None,
         None,
+        None,
     ) {
         Ok(()) => {
             println!(

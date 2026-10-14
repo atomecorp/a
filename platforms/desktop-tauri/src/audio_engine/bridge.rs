@@ -138,6 +138,7 @@ pub fn audio_play_instance(
     rate: f64,
     loop_start_seconds: Option<f64>,
     loop_end_seconds: Option<f64>,
+    strip_id: Option<String>,
 ) -> Result<Value, String> {
     playback::play_instance(
         &asset_id,
@@ -149,12 +150,100 @@ pub fn audio_play_instance(
         rate,
         loop_start_seconds,
         loop_end_seconds,
+        strip_id.as_deref(),
     )?;
     Ok(json!({
         "success": true,
         "asset_id": asset_id,
         "voice_id": voice_id
     }))
+}
+
+// Starts a voice exactly on a rendered frame; returns the frame it starts on.
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub fn audio_schedule_instance(
+    asset_id: String,
+    voice_id: String,
+    start_seconds: f64,
+    duration_seconds: Option<f64>,
+    gain: f64,
+    pan: f64,
+    rate: f64,
+    start_render_frame: u64,
+    strip_id: Option<String>,
+) -> Result<Value, String> {
+    let frame = super::playback_schedule::schedule_instance(
+        &asset_id, &voice_id, start_seconds, duration_seconds, gain, pan, rate, start_render_frame, strip_id.as_deref(),
+    )?;
+    Ok(json!({ "success": true, "voice_id": voice_id, "start_render_frame": frame }))
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScheduleRequest {
+    asset_id: String,
+    voice_id: String,
+    start_seconds: f64,
+    duration_seconds: Option<f64>,
+    gain: f64,
+    pan: f64,
+    rate: f64,
+    start_render_frame: u64,
+    #[serde(default)]
+    strip_id: Option<String>,
+}
+
+// Many voices in one call (one IPC round trip); returns each one's start frame.
+#[tauri::command]
+pub fn audio_schedule_instances(voices: Vec<ScheduleRequest>) -> Result<Value, String> {
+    let frames = voices
+        .iter()
+        .map(|voice| super::playback_schedule::schedule_instance(
+            &voice.asset_id, &voice.voice_id, voice.start_seconds, voice.duration_seconds,
+            voice.gain, voice.pan, voice.rate, voice.start_render_frame, voice.strip_id.as_deref(),
+        ))
+        .collect::<Result<Vec<u64>, String>>()?;
+    Ok(json!({ "success": true, "start_render_frames": frames }))
+}
+
+// The render clock: rendered frames, and which one the device plays at which host instant.
+#[tauri::command]
+pub fn audio_render_clock() -> Result<Value, String> {
+    Ok(json!({ "success": true, "clock": super::playback_schedule::render_clock() }))
+}
+
+// Mixer graph: program compiled from the canonical timeline mix.
+#[tauri::command]
+pub fn audio_mix_apply(program: Value) -> Result<Value, String> {
+    let program: atome_mix_graph::Program = serde_json::from_value(program).map_err(|error| format!("mix program invalid: {error}"))?;
+    let strips = super::mix::apply_program(program)?;
+    Ok(json!({ "success": true, "strips": strips }))
+}
+
+#[tauri::command]
+pub fn audio_mix_levels() -> Result<Value, String> {
+    let levels: Vec<Value> = super::mix::levels()?.into_iter()
+        .map(|level| json!({ "strip_id": level.strip_id, "peak": level.peak, "rms": level.rms }))
+        .collect();
+    Ok(json!({ "success": true, "levels": levels }))
+}
+
+#[tauri::command]
+pub fn audio_mix_devices() -> Result<Value, String> {
+    Ok(json!({ "success": true, "devices": super::mix::devices() }))
+}
+
+#[tauri::command]
+pub fn audio_mix_cut_tail(module_id: String) -> Result<Value, String> {
+    super::mix::cut_tail(&module_id)?;
+    Ok(json!({ "success": true, "module_id": module_id }))
+}
+
+#[tauri::command]
+pub fn audio_mix_module_state(module_id: String) -> Result<Value, String> {
+    let state = super::mix::module_state(&module_id)?;
+    Ok(json!({ "success": true, "module_id": module_id, "state": state }))
 }
 
 #[tauri::command]
@@ -200,6 +289,7 @@ pub fn audio_record_start(
     file_path: String,
     sample_rate: u32,
     channels: u16,
+    input_device_name: Option<String>,
 ) -> Result<Value, String> {
     // Resolve path relative to project root if not absolute
     let abs_path = if std::path::Path::new(&file_path).is_absolute() {
@@ -213,7 +303,7 @@ pub fn audio_record_start(
     };
 
     metering::reset();
-    recorder::start(&session_id, &abs_path, sample_rate, channels)?;
+    recorder::start_on_device(&session_id, &abs_path, sample_rate, channels, input_device_name)?;
     Ok(json!({
         "success": true,
         "session_id": session_id,
@@ -235,6 +325,7 @@ pub fn audio_record_stop(session_id: String) -> Result<Value, String> {
         "overrun_frames": result.overrun_frames,
         "sample_rate": result.sample_rate,
         "channels": result.channels,
+        "capture_clock": result.capture_clock,
         "output_format": result.output_format
     }))
 }

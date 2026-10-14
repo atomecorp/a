@@ -70,6 +70,7 @@ tauri-plugin-opener = "2"
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-stt = { path = "vendor/tauri-plugin-stt" }
 tauri-plugin-health = { path = "vendor/tauri-plugin-health" }
+tauri-plugin-mobile-host = { path = "vendor/tauri-plugin-mobile-host" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tracing = "0.1"
@@ -83,6 +84,7 @@ base64 = "0.22"
 cpal = "0.15"
 hound = "3"
 kira = { version = "0.12", features = ["cpal", "wav", "mp3", "ogg", "flac", "aac", "isomp4"] }
+atome-mix-graph = { path = "../../atome/engines/mix-graph" }
 symphonia = { version = "0.5.5", default-features = false, features = ["aac", "isomp4"] }
 ringbuf = "0.4"
 once_cell = "1"
@@ -113,3 +115,7 @@ dotenvy = "0.15"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = { version = "3.7.0", features = ["OSX_10_15"] }
+
+# Reuse the JNI ABI already carried by the installed Android audio/runtime graph.
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "=0.21.1"

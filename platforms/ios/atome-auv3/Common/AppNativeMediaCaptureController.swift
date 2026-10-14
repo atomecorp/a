@@ -24,6 +24,11 @@ final class AppNativeMediaCaptureController: NSObject {
     var photoOutputURL: URL?
     var photoRelativePath: String?
     var photoFileName: String?
+    // Live camera preview outside a video take: the photo session stays running
+    // and its frames feed the same bounded JPEG slots as the recorder's preview.
+    let cameraPreviewState = AppNativeVideoPreviewState()
+    var cameraPreviewActive = false
+    static let cameraPreviewSourceId = "native_camera_preview"
 
     var activeCameraPosition: AVCaptureDevice.Position = .back
     weak var previewWebView: WKWebView?
@@ -38,7 +43,10 @@ final class AppNativeMediaCaptureController: NSObject {
              "media_video_preview_frame",
              "media_video_record_cancel",
              "media_video_record_ack",
-             "media_camera_switch":
+             "media_camera_switch",
+             "media_camera_preview_start",
+             "media_camera_preview_frame",
+             "media_camera_preview_stop":
             return true
         default:
             return false
@@ -73,6 +81,12 @@ final class AppNativeMediaCaptureController: NSObject {
             acknowledgeVideoRecording(payload: payload, completion: completion)
         case "media_camera_switch":
             switchCamera(payload: payload, completion: completion)
+        case "media_camera_preview_start":
+            startCameraPreview(payload: payload, completion: completion)
+        case "media_camera_preview_frame":
+            readCameraPreviewFrame(completion: completion)
+        case "media_camera_preview_stop":
+            stopCameraPreview(completion: completion)
         default:
             completion(["success": false], "Unsupported native media command: \(command)")
         }

@@ -52,6 +52,12 @@ extension AiSRuntime {
             return stateCurrentResponse(requestId: requestId, success: false, error: "Access denied")
         }
         state["capabilities"] = try projectStateCurrentCapabilities(state, userId: userId)
+        // Same optimistic commit metadata as Fastify, including versioned
+        // tombstones. This exposes counters only, never the deleted values.
+        let versions = try query(db, "SELECT particle_key, version FROM particles WHERE atome_id=?", [.text(atomeId)])
+        state["property_versions"] = Dictionary(uniqueKeysWithValues: versions.map {
+            (stringValue($0["particle_key"]), intValue($0["version"], defaultValue: 0))
+        })
         return stateCurrentResponse(requestId: requestId, success: true, state: state)
     }
 
@@ -65,6 +71,9 @@ extension AiSRuntime {
         let ownerId = stringValue(claims["sub"])
         let excludeSystem = boolValue(message["exclude_system"] ?? message["excludeSystem"])
         let includeTotal = boolValue(message["include_total"] ?? message["includeTotal"])
+        // Same contract as the Fastify list (database/adole.js): a deleted Atome
+        // (tombstone) is listed only on request.
+        let includeDeleted = boolValue(message["include_deleted"] ?? message["includeDeleted"])
         let excludedParticleKeys = Set(
             ((message["exclude_particle_keys"] ?? message["excludeParticleKeys"]) as? [Any] ?? [])
                 .compactMap { normalizedOptionalString($0) }
@@ -77,7 +86,8 @@ extension AiSRuntime {
             offset: intValue(message["offset"], defaultValue: 0),
             excludeSystem: excludeSystem,
             atomeType: atomeType,
-            excludingParticleKeys: excludedParticleKeys
+            excludingParticleKeys: excludedParticleKeys,
+            includeDeleted: includeDeleted
         ).map { state in
             var state = state
             state["capabilities"] = try projectStateCurrentCapabilities(state, userId: ownerId)
@@ -89,7 +99,8 @@ extension AiSRuntime {
                 projectId: projectId,
                 ownerId: ownerId,
                 excludeSystem: excludeSystem,
-                atomeType: atomeType
+                atomeType: atomeType,
+                includeDeleted: includeDeleted
             )
             : nil
         return stateCurrentResponse(requestId: requestId, success: true, states: states, total: total)
@@ -152,7 +163,8 @@ extension AiSRuntime {
         offset: Int64,
         excludeSystem: Bool = false,
         atomeType: String? = nil,
-        excludingParticleKeys: Set<String> = []
+        excludingParticleKeys: Set<String> = [],
+        includeDeleted: Bool = true
     ) throws -> [[String: Any]] {
         // The page is chosen on (atome_id, updated_at) only: sorting whole rows
         // made SQLite spill OFFSET + LIMIT full `properties` blobs to a temporary
@@ -164,6 +176,10 @@ extension AiSRuntime {
             """
         var conditions: [String] = []
         var bindings: [SQLiteBinding] = []
+        if !includeDeleted {
+            conditions.append("a.deleted_at IS NULL")
+            conditions.append("COALESCE(json_extract(sc.properties, '$.__deleted'), 0) <> 1")
+        }
         if let projectId, !projectId.isEmpty {
             conditions.append("sc.project_id = ?")
             bindings.append(.text(projectId))
@@ -213,11 +229,16 @@ extension AiSRuntime {
         projectId: String?,
         ownerId: String?,
         excludeSystem: Bool,
-        atomeType: String? = nil
+        atomeType: String? = nil,
+        includeDeleted: Bool = true
     ) throws -> Int64 {
         var sql = "SELECT COUNT(DISTINCT sc.atome_id) AS total FROM state_current sc LEFT JOIN atomes a ON a.atome_id = sc.atome_id"
         var conditions: [String] = []
         var bindings: [SQLiteBinding] = []
+        if !includeDeleted {
+            conditions.append("a.deleted_at IS NULL")
+            conditions.append("COALESCE(json_extract(sc.properties, '$.__deleted'), 0) <> 1")
+        }
         if let projectId, !projectId.isEmpty {
             conditions.append("sc.project_id = ?")
             bindings.append(.text(projectId))

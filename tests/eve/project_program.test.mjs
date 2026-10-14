@@ -5,6 +5,9 @@ import { readTemplateLink } from '../../eVe/domains/templates/project_template_m
 import { programDiscoveryRecords } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_finder_data.js';
 import { normalizeEvent, buildEventParticles } from '../../eVe/intuition/tools/calendar_model.js';
 import { isWithinSharedRoot, statesWithinSharedRoot, hasPrivateProgramAncestor } from '../../server/syncShareHierarchy.js';
+import { assertIdempotentEventReplay } from '../../atome/src/shared/adole_event_contract.js';
+import { registerCoreAtomeTypes } from '../../atome/src/shared/core_atome_types.js';
+import { normalizeCanonicalAtome } from '../../atome/src/shared/atome_contract.js';
 vi.mock('../../database/adole.js', () => ({ default: { query: async () => { throw new Error('unexpected_database_access'); } } }));
 const involvement = { minutes: 10, basis: 'day', days: [1, 2, 3, 4, 5], rhythm: 3 };
 const start = '2030-01-07T20:00:00Z';
@@ -289,4 +292,168 @@ it('retains invocation context for queued commands when the active project chang
     await Promise.resolve(); f.setProject('q'); release();
     expect((await Promise.all([first, queued])).map(result => result.error)).toEqual(['program_context_changed', 'program_context_changed']);
     expect(f.commits()).toBe(0);
+});
+
+const activityFixture = () => {
+    registerCoreAtomeTypes();
+    const f = fixture(); const events = new Map(); let writes = 0;
+    f.store.set('personal-event', { id: 'personal-event', type: 'calendar_event', owner_id: 'alice', project_id: null,
+        properties: { calendar_scope: 'personal', start, end: '2030-01-07T20:10:00Z', kind: 'event', status: 'open' } });
+    const dependencies = { ...f.dependencies, list: async id => id === null ? [...f.store.values()] : f.dependencies.list(id),
+        commitActivity: async event => {
+            const previous = f.store.get(event.atome_id);
+            const canonical = normalizeCanonicalAtome({ id: event.atome_id, type: event.type || previous?.type,
+                properties: { ...previous?.properties, ...event.props } }).atome;
+            if (events.has(event.id)) { assertIdempotentEventReplay(events.get(event.id), event); return { ok: true }; }
+            expect(event.scope).toBe('global'); expect(event.actor).toBe('alice');
+            events.set(event.id, structuredClone(event)); writes++;
+            f.store.set(canonical.id, { ...canonical, owner_id: 'alice', project_id: null });
+            return { ok: true };
+        } };
+    return { ...f, events, dependencies, invoke: createProjectProgramRuntime(dependencies).invoke, writes: () => writes };
+};
+const activityInput = { operation: 'activity_create', activity_id: 'shared-activity', recorded_at: '2030-01-07T19:00:00Z',
+    activity: { brick_id: 'meditation', title: 'Synthetic common activity', involvement } };
+const completion = { start, end: '2030-01-07T20:10:00Z', provenance: 'manual', use_in_followup: true, note: 'Synthetic declaration' };
+const sharedOccurrence = async f => {
+    expect((await f.invoke(activityInput)).ok).toBe(true);
+    const bound = await f.invoke({ operation: 'activity_bind', activity_id: 'shared-activity', calendar_event_id: 'personal-event', recorded_at: activityInput.recorded_at });
+    expect(bound.ok).toBe(true); return bound;
+};
+describe('account-global shared activities over canonical typed records', () => {
+    it('revises one activity without replacing objective links, Calendar placement or its original execution', async () => {
+        const f = activityFixture(), bound = await sharedOccurrence(f);
+        for (const objective_id of ['p', 'q']) await f.invoke({ operation: 'activity_link', activity_id: 'shared-activity', objective_id, recorded_at: activityInput.recorded_at });
+        await f.invoke({ operation: 'activity_complete', activity_id: 'shared-activity', occurrence_id: bound.occurrence_id, execution: completion, recorded_at: completion.end });
+        expect((await f.invoke({ operation: 'activity_revise', activity_id: 'shared-activity', base_activity_version: 1, recorded_at: completion.end,
+            activity: { ...activityInput.activity, title: 'Revised synthetic activity', involvement: { ...involvement, minutes: 20 } } })).ok).toBe(true);
+        const view = await f.invoke({ operation: 'activity_read' });
+        expect(view.activities).toHaveLength(1); expect(view.activities[0].properties.program_activity.version).toBe(2);
+        expect(view.links).toHaveLength(2); expect(view.occurrences).toHaveLength(1); expect(view.total_minutes).toBe(10); expect(view.realized_count).toBe(1);
+        expect(f.store.get('personal-event').properties.end).toBe(completion.end);
+        expect(f.events.get('shared-activity').props.program_activity.involvement.minutes).toBe(10);
+        expect(view.objectives.map(value => value.execution_ids)).toEqual([[bound.execution_id], [bound.execution_id]]);
+    });
+    it('refreshes the native library through the read command and clears a recovered error', async () => {
+        const f = activityFixture(); const bound = await sharedOccurrence(f);
+        for (const objective_id of ['p', 'q']) await f.invoke({ operation: 'activity_link', activity_id: 'shared-activity', objective_id,
+            recorded_at: activityInput.recorded_at });
+        await f.invoke({ operation: 'activity_complete', activity_id: 'shared-activity', occurrence_id: bound.occurrence_id,
+            execution: completion, recorded_at: completion.end });
+        const { createProgramPanelSurface } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_program_runtime.js');
+        let fail = true; const requests = [];
+        const surface = createProgramPanelSurface({ readProjects: async () => [...f.store.values()].filter(record => record.type === 'project'), call: async request => {
+            requests.push(request); return { result: fail ? { ok: false, error: 'program_context_changed' } : await f.invoke(request.input) };
+        } });
+        await surface.handleEvent({ type: 'program.tab', value: 'activities' });
+        expect(surface.readState().notice).not.toBe('');
+        fail = false; await surface.handleEvent({ type: 'program.shared_reload' });
+        expect(requests.every(request => request.tool_id === 'project.program.read' && request.input.operation === 'activity_read')).toBe(true);
+        expect(surface.readState().library.realized_count).toBe(1); expect(surface.readState().notice).toBe('');
+        await surface.handleEvent({ type: 'program.shared_select', value: 'shared-activity' });
+        const nodes = surface.buildContent(surface.readState(), { emit: () => {}, bodyWidth: 600 });
+        expect(nodes.filter(node => node.id.startsWith('program_shared_goal_'))).toHaveLength(2);
+        expect(nodes.filter(node => node.id.startsWith('program_shared_original_'))).toHaveLength(1);
+        surface.onClose(); expect(surface.readState().library).toBeNull(); expect(surface.readState().selectedActivityId).toBe('');
+    });
+    it('declares typed references and complete correction provenance in the canonical record schema', () => {
+        registerCoreAtomeTypes();
+        const normalize = properties => normalizeCanonicalAtome({ id: 'shared-record', type: 'record', properties }).atome;
+        expect(normalize({ program_activity_link: { activity_id: 'activity', objective_id: 'objective' } }).type).toBe('record');
+        expect(() => normalize({ program_activity_link: { activity_id: 'activity' } })).toThrow('Required Atome property missing');
+        expect(() => normalize({ program_occurrence: { activity_id: 'activity', calendar_event_id: 'event', execution_id: 4 } })).toThrow('Invalid Atome property type');
+        expect(() => normalize({ program_execution: { activity_id: 'activity', occurrence_id: 'occurrence', start,
+            end: completion.end, provenance: 'manual', use_in_followup: 'yes', note: '' } })).toThrow('Invalid Atome property type');
+        expect(() => normalize({ program_execution_correction: { execution_id: 'execution', supersedes_ids: ['execution'], reason: 'Correction',
+            execution: { start, end: completion.end } } })).toThrow('Required Atome property missing');
+    });
+    it('keeps one standalone activity and realization across two objectives, reload and project closure', async () => {
+        const f = activityFixture(); const bound = await sharedOccurrence(f);
+        expect((await f.invoke({ operation: 'activity_read' })).objectives).toEqual([]);
+        for (const objective_id of ['p', 'q', 'p']) expect((await f.invoke({ operation: 'activity_link', activity_id: 'shared-activity',
+            objective_id, recorded_at: activityInput.recorded_at })).ok).toBe(true);
+        const input = { operation: 'activity_complete', activity_id: 'shared-activity', occurrence_id: bound.occurrence_id,
+            execution: completion, recorded_at: completion.end };
+        expect((await f.invoke(input)).ok).toBe(true);
+        expect((await f.invoke({ ...input, recorded_at: '2030-01-08T00:00:00Z' })).preserved).toBe(true);
+        f.store.get('p').deleted = true; f.setProject('music');
+        const read = await createProjectProgramRuntime(f.dependencies).invoke({ operation: 'activity_read' });
+        expect(read.activities).toHaveLength(1); expect(read.links).toHaveLength(2); expect(read.occurrences).toHaveLength(1);
+        expect(read.realized_count).toBe(1); expect(read.total_minutes).toBe(10);
+        expect(read.objectives.map(objective => objective.execution_ids)).toEqual([[bound.execution_id], [bound.execution_id]]);
+        expect(f.writes()).toBe(5);
+        expect([...f.events.values()].every(event => !event.project_id && !event.parent_id)).toBe(true);
+    });
+    it('preserves the original, reports competing corrections and resolves them with a new record', async () => {
+        const f = activityFixture(); const bound = await sharedOccurrence(f);
+        const base = { activity_id: 'shared-activity', occurrence_id: bound.occurrence_id, execution: completion, recorded_at: completion.end };
+        await f.invoke({ ...base, operation: 'activity_complete' });
+        const original = structuredClone(f.store.get(bound.execution_id));
+        for (const [id, minutes] of [['correction-a', 8], ['correction-b', 9]]) expect((await f.invoke({ ...base, operation: 'activity_correct',
+            correction_id: id, supersedes_ids: [bound.execution_id], reason: 'Synthetic correction',
+            execution: { ...completion, end: new Date(Date.parse(start) + minutes * 60000).toISOString() } })).ok).toBe(true);
+        let read = await f.invoke({ operation: 'activity_read' });
+        expect(read.total_minutes).toBeNull(); expect(read.realized_count).toBe(1); expect(read.results[0].conflict).toBe(true);
+        expect(read.results[0].candidate_ids).toEqual(['correction-a', 'correction-b']);
+        expect((await f.invoke({ ...base, operation: 'activity_correct', correction_id: 'correction-resolution',
+            supersedes_ids: ['correction-b', 'correction-a'], reason: 'Explicit branch resolution',
+            execution: { ...completion, end: '2030-01-07T20:07:00Z' } })).ok).toBe(true);
+        read = await f.invoke({ operation: 'activity_read' });
+        expect(read.total_minutes).toBe(7); expect(read.results[0].corrections).toHaveLength(3);
+        expect(read.results[0].current.id).toBe('correction-resolution'); expect(f.store.get(bound.execution_id)).toEqual(original);
+    });
+    it('rejects a different first realization, reused identity and an unowned objective', async () => {
+        const f = activityFixture(); const bound = await sharedOccurrence(f);
+        const base = { operation: 'activity_complete', activity_id: 'shared-activity', occurrence_id: bound.occurrence_id,
+            recorded_at: completion.end, execution: completion };
+        await f.invoke(base);
+        expect((await f.invoke({ ...base, execution: { ...completion, note: 'Changed original' } })).error).toBe('event_id_conflict');
+        expect((await f.invoke({ ...activityInput, activity_id: bound.execution_id })).error).toBe('event_id_conflict');
+        f.store.get('q').owner_id = 'bob';
+        expect((await f.invoke({ operation: 'activity_link', activity_id: 'shared-activity', objective_id: 'q',
+            recorded_at: activityInput.recorded_at })).error).toBe('program_activity_reference_denied');
+        f.setActor('bob');
+        expect((await f.invoke({ operation: 'activity_read' })).activities).toHaveLength(0);
+        expect((await f.invoke(base)).error).toBe('program_activity_reference_denied');
+    });
+    it('rejects project-owned/recurrent calendars and cross-activity corrections', async () => {
+        const f = activityFixture(); const bound = await sharedOccurrence(f);
+        f.store.get('personal-event').properties.recurrence = '{}';
+        expect((await f.invoke({ operation: 'activity_bind', activity_id: 'shared-activity', calendar_event_id: 'personal-event',
+            recorded_at: activityInput.recorded_at })).error).toBe('program_activity_calendar_occurrence_required');
+        const base = { activity_id: 'shared-activity', occurrence_id: bound.occurrence_id, recorded_at: completion.end, execution: completion };
+        await f.invoke({ ...base, operation: 'activity_complete' });
+        expect((await f.invoke({ ...base, operation: 'activity_correct', correction_id: 'correction', reason: 'Synthetic',
+            supersedes_ids: ['shared-activity'] })).error).toBe('program_activity_reference_invalid');
+        expect((await f.invoke({ ...base, operation: 'activity_correct', correction_id: 'cycle', reason: 'Synthetic',
+            supersedes_ids: ['cycle'] })).error).toBe('program_activity_correction_invalid');
+    });
+    it('keeps concurrent first-completion intents singular through the actual shared event replay contract', async () => {
+        const f = activityFixture(); const bound = await sharedOccurrence(f);
+        const input = { operation: 'activity_complete', activity_id: 'shared-activity', occurrence_id: bound.occurrence_id,
+            recorded_at: completion.end, execution: completion };
+        const other = createProjectProgramRuntime(f.dependencies);
+        const results = await Promise.all([f.invoke(input), other.invoke({ ...input, execution: { ...completion, note: 'Competing intent' } })]);
+        expect(results.filter(result => result.ok)).toHaveLength(1);
+        expect(results.find(result => !result.ok).error).toBe('event_id_conflict');
+        expect((await f.invoke({ operation: 'activity_read' })).realized_count).toBe(1);
+    });
+    it('rejects incomplete library reads and an account change while a reference is loading', async () => {
+        const f = activityFixture(); await f.invoke(activityInput);
+        const incomplete = createProjectProgramRuntime({ ...f.dependencies, list: async () => Object.assign([], { totalCount: 3 }) });
+        expect((await incomplete.invoke({ operation: 'activity_read' })).error).toBe('program_activity_read_incomplete');
+        let release; const gate = new Promise(resolve => { release = resolve; });
+        const runtime = createProjectProgramRuntime({ ...f.dependencies, read: async id => { await gate; return f.dependencies.read(id); } });
+        const command = runtime.invoke({ operation: 'activity_link', activity_id: 'shared-activity', objective_id: 'p', recorded_at: activityInput.recorded_at });
+        await Promise.resolve(); f.setActor('bob'); release();
+        expect((await command).error).toBe('program_context_changed'); expect(f.writes()).toBe(1);
+    });
+    it('keeps account-global activity commands independent of a concurrent workspace transition', async () => {
+        const f = activityFixture(); await f.invoke(activityInput);
+        let release; const gate = new Promise(resolve => { release = resolve; });
+        const runtime = createProjectProgramRuntime({ ...f.dependencies, read: async id => { await gate; return f.dependencies.read(id); } });
+        const command = runtime.invoke({ operation: 'activity_link', activity_id: 'shared-activity', objective_id: 'p', recorded_at: activityInput.recorded_at });
+        await Promise.resolve(); f.setProject('q'); release();
+        expect((await command).ok).toBe(true); expect(f.writes()).toBe(2);
+    });
 });

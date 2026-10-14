@@ -10,6 +10,7 @@ mod native_contacts;
 mod native_personal_import;
 mod native_file_export;
 mod native_health;
+mod native_communication;
 mod native_midi;
 mod runtime_logging;
 mod server;
@@ -34,35 +35,6 @@ const TAURI_LOCAL_HTTP_FAILURE_SCRIPT: &str = concat!(
     "Vos donnees sont intactes. Consultez la console du terminal pour la cause, puis relancez.';",
     "document.body.appendChild(b);})();"
 );
-const TAURI_RUNTIME_INIT_SCRIPT: &str = concat!(
-    "window.__SQUIRREL_FORCE_TAURI_RUNTIME__=true;",
-    "window.__ATOME_LOCAL_HTTP_PORT__=3000;",
-    "window.__SQUIRREL_TAURI_CANONICAL_URL__='http://127.0.0.1:3000/';"
-);
-
-fn configured_tauri_fastify_url() -> Option<String> {
-    let configured = std::env::var("SQUIRREL_FASTIFY_URL")
-        .or_else(|_| std::env::var("FASTIFY_URL"))
-        .ok()
-        .map(|value| value.trim().trim_end_matches('/').to_string())
-        .filter(|value| value.starts_with("https://") || value.starts_with("http://"));
-    if configured.is_some() {
-        return configured;
-    }
-    Some("https://atome.one".to_string())
-}
-
-fn tauri_runtime_init_script() -> String {
-    let mut script = TAURI_RUNTIME_INIT_SCRIPT.to_string();
-    if let Some(remote) = configured_tauri_fastify_url() {
-        let literal = serde_json::to_string(&remote).expect("Fastify URL must serialize");
-        script.push_str("window.__SQUIRREL_TAURI_FASTIFY_URL__=");
-        script.push_str(&literal);
-        script.push(';');
-    }
-    script
-}
-
 macro_rules! println {
     ($($arg:tt)*) => {
         if crate::runtime_logging::xcode_logs_enabled() {
@@ -220,7 +192,7 @@ pub fn run() {
     load_env_from_candidates();
 
     let _log_guard = dev_logging::init_tracing();
-    let runtime_init_script = tauri_runtime_init_script();
+    let runtime_init_script = local_http_navigation::runtime_init_script();
 
     tauri::Builder::default()
         .append_invoke_initialization_script(runtime_init_script)
@@ -229,6 +201,7 @@ pub fn run() {
         // Opens the official social login pages in the system browser.
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_health::init())
+        .plugin(tauri_plugin_mobile_host::init())
         .manage(std::sync::Mutex::new(native_health::state()))
         .manage(assistant_link::AssistantRequestInbox::default())
         // A main-frame page load claims a new health channel (see native_health.rs).
@@ -261,6 +234,14 @@ pub fn run() {
             audio_engine::bridge::audio_has_clip,
             audio_engine::bridge::audio_play,
             audio_engine::bridge::audio_play_instance,
+            audio_engine::bridge::audio_schedule_instance,
+            audio_engine::bridge::audio_schedule_instances,
+            audio_engine::bridge::audio_render_clock,
+            audio_engine::bridge::audio_mix_apply,
+            audio_engine::bridge::audio_mix_levels,
+            audio_engine::bridge::audio_mix_devices,
+            audio_engine::bridge::audio_mix_cut_tail,
+            audio_engine::bridge::audio_mix_module_state,
             audio_engine::bridge::audio_stop,
             audio_engine::bridge::audio_stop_instance,
             audio_engine::bridge::audio_destroy_clip,
@@ -284,6 +265,7 @@ pub fn run() {
             native_clipboard::clipboard_has_text,
             native_file_export::export_file_save,
             native_health::health_invoke,
+            native_communication::notifications_invoke,
             taxonomy_editor::taxonomy_read,
             taxonomy_editor::taxonomy_save,
             assistant_link::assistant_request_take,

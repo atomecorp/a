@@ -2,7 +2,7 @@
 name = "squirrel-audio-wasm"
 version = "0.1.0"
 edition = "2021"
-description = "WASM audio engine for Squirrel (CPAL + Kira)"
+description = "WASM audio engine for Squirrel (Kira on a scheduled AudioContext)"
 
 [lib]
 crate-type = ["cdylib"]
@@ -12,6 +12,14 @@ wasm-bindgen = "=0.2.100"
 js-sys = "0.3"
 web-sys = { version = "0.3", features = [
     "console",
+    "AudioBuffer",
+    "AudioBufferSourceNode",
+    "AudioContextOptions",
+    "AudioDestinationNode",
+    "AudioNode",
+    "ChannelInterpretation",
+    "AudioScheduledSourceNode",
+    "BaseAudioContext",
     "AudioContext",
     "AudioWorklet",
     "MediaStream",
@@ -19,8 +27,8 @@ web-sys = { version = "0.3", features = [
     "Navigator",
     "Window",
 ] }
-cpal = { version = "0.15", features = ["wasm-bindgen"] }
-kira = { version = "0.12", default-features = false, features = ["cpal", "wav", "mp3", "ogg", "flac", "aac", "isomp4"] }
+kira = { version = "0.12", default-features = false, features = ["wav", "mp3", "ogg", "flac", "aac", "isomp4"] }
+atome-mix-graph = { path = "../../../atome/engines/mix-graph" }
 symphonia = { version = "0.5", default-features = false, features = ["wav", "pcm", "mp3", "ogg", "vorbis", "flac", "aac", "isomp4"] }
 hound = "3"
 serde = { version = "1", features = ["derive"] }

@@ -10,12 +10,17 @@ const finiteNumber = (value, defaultValue = 0) => {
     const numeric = Number(value);
     return Number.isFinite(numeric) ? numeric : defaultValue;
 };
+// An absent value stays absent: `Number(null)` is 0, which turned "play to
+// the end" (`durationSeconds: null`) into a 1 ms play — silent playback on iOS.
+const optionalNumber = (value) => (
+    value === null || value === undefined || value === '' ? NaN : Number(value)
+);
 const optionalPositiveNumber = (value) => {
-    const numeric = Number(value);
+    const numeric = optionalNumber(value);
     return Number.isFinite(numeric) ? Math.max(0.001, numeric) : null;
 };
 const optionalNonNegativeNumber = (value) => {
-    const numeric = Number(value);
+    const numeric = optionalNumber(value);
     return Number.isFinite(numeric) ? Math.max(0, numeric) : null;
 };
 const clamp = (value, min, max) => Math.min(max, Math.max(min, Number(value) || 0));
@@ -33,7 +38,9 @@ export const normalizeKiraPlayInstancePayload = (input = {}) => {
         pan: clamp(source.pan ?? 0, -1, 1),
         rate: Math.max(0.0001, finiteNumber(source.rate, 1)),
         loopStartSeconds: optionalNonNegativeNumber(source.loopStartSeconds ?? source.loop_start_seconds),
-        loopEndSeconds: optionalNonNegativeNumber(source.loopEndSeconds ?? source.loop_end_seconds)
+        loopEndSeconds: optionalNonNegativeNumber(source.loopEndSeconds ?? source.loop_end_seconds),
+        // Mixer strip whose sub-track plays the voice (`<track_id>:audio`).
+        stripId: safeString(source.stripId ?? source.strip_id) || null
     };
 };
 
@@ -60,7 +67,8 @@ export const buildTauriKiraAudioPayload = (command = '', input = {}) => {
             pan: payload.pan,
             rate: payload.rate,
             loopStartSeconds: payload.loopStartSeconds,
-            loopEndSeconds: payload.loopEndSeconds
+            loopEndSeconds: payload.loopEndSeconds,
+            stripId: payload.stripId
         };
     }
     if (normalizedCommand === KIRA_AUDIO_COMMANDS.STOP_INSTANCE) {
@@ -83,7 +91,8 @@ export const buildFacadeKiraAudioPayload = (command = '', input = {}) => {
             pan: payload.pan,
             rate: payload.rate,
             loop_start_seconds: payload.loopStartSeconds,
-            loop_end_seconds: payload.loopEndSeconds
+            loop_end_seconds: payload.loopEndSeconds,
+            strip_id: payload.stripId
         };
     }
     if (normalizedCommand === KIRA_AUDIO_COMMANDS.STOP_INSTANCE) {

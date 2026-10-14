@@ -264,6 +264,7 @@ describe('first-launch canonical lifecycle', () => {
         const f = fixture(); await f.flow.open();
         expect((await f.flow.handle({ operation: 'finish' })).ok).toBe(false);
         await f.flow.handle({ operation: 'phone' }); f.draft('phone', '+33612345678');
+        await f.flow.handle({ operation: 'choose_auth' }); expect(f.flow.state.stage).toBe('credentials');
         await f.flow.handle({ operation: 'authenticate' }); expect(f.flow.state.stage).toBe('billing');
         await f.flow.handle({ operation: 'method', value: 'paypal' });
         await f.flow.handle({ operation: 'pay' }); expect(window.AdoleAPI.auth.simulatePhonePayment).toHaveBeenCalledWith('paypal');
@@ -272,7 +273,7 @@ describe('first-launch canonical lifecycle', () => {
     it('advances simulated Pay before SMS delivery settles and keeps delivery failures visible', async () => {
         const f = fixture(); await f.flow.open();
         await f.flow.handle({ operation: 'phone' }); f.draft('phone', '+33612345678');
-        await f.flow.handle({ operation: 'authenticate' }); let release;
+        await f.flow.handle({ operation: 'choose_auth' }); await f.flow.handle({ operation: 'authenticate' }); let release;
         window.AdoleAPI.auth.simulatePhonePayment.mockImplementationOnce(() => new Promise(done => { release = done; }));
         const paying = f.flow.handle({ operation: 'pay' });
         await vi.waitFor(() => expect(release).toBeTypeOf('function'));
@@ -393,13 +394,14 @@ it('phone Enter invokes the same registered authentication action as Continue', 
     f.draft('phone', '0612345678');
     await f.submitField('phone');
     expect(owners.gateway).toHaveBeenLastCalledWith({ tool_id: 'ui.first_launch.auth', action: 'pointer.click',
-        input: { operation: 'authenticate' }, source: { type: 'ui' } });
+        input: { operation: 'choose_auth' }, source: { type: 'ui' } });
+    expect((await f.flow.handle({ operation: 'choose_auth' })).ok).toBe(true);
     expect((await f.flow.handle({ operation: 'authenticate' })).ok).toBe(true);
     expect(f.flow.state.stage).toBe('billing');
     const calls = owners.gateway.mock.calls.length;
     await f.submitField('phone'); expect(owners.gateway.mock.calls).toHaveLength(calls);
     const invalid = fixture(); await invalid.flow.open({ credentials: true }); invalid.draft('phone', 'abc');
-    expect(await invalid.flow.handle({ operation: 'authenticate' })).toMatchObject({ ok: false, error: 'auth_phone_e164_required' });
+    expect(await invalid.flow.handle({ operation: 'choose_auth' })).toMatchObject({ ok: false, error: 'auth_phone_e164_required' });
     expect(invalid.flow.state.stage).toBe('phone');
 });
 

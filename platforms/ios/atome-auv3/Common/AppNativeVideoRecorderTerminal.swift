@@ -62,7 +62,7 @@ extension AppNativeVideoRecorder {
         let generation = lifecycleGeneration
         Task {
             let result: Result<AppNativeVideoAssetInspection, Error>
-            do { result = .success(try await self.inspectAsset(fileURL: fileURL)) }
+            do { result = .success(try await self.uprightRecordingIfNeeded(fileURL: fileURL, inspection: try await self.inspectAsset(fileURL: fileURL))) }
             catch { result = .failure(error) }
             self.sessionQueue.async {
                 guard self.lifecycleGeneration == generation, self.movieOutput != nil else { return }
@@ -77,6 +77,47 @@ extension AppNativeVideoRecorder {
                     self.failActiveLifecycle(code: "video_recording_inspection_failed:\(loadingError.localizedDescription)")
                 }
             }
+        }
+    }
+
+    /// WebKit's WebGPU external textures ignore a track's rotation metadata, and
+    /// `AVCaptureMovieFileOutput` stores a portrait (or mirrored) take as a
+    /// rotated transform over landscape pixels: the take played sideways in the
+    /// app. The orientation is baked into the pixels once, at the end of the
+    /// take, so the file is upright for every player and every contact. If the
+    /// export fails the original take is kept and the failure is logged.
+    func uprightRecordingIfNeeded(fileURL: URL,
+                                  inspection: AppNativeVideoAssetInspection) async throws -> AppNativeVideoAssetInspection {
+        guard inspection.rotationDegrees != 0 || inspection.mirrored else { return inspection }
+        let uprightURL = fileURL.deletingLastPathComponent()
+            .appendingPathComponent(".upright_\(fileURL.lastPathComponent)")
+        try? FileManager.default.removeItem(at: uprightURL)
+        let startedAt = Date()
+        do {
+            let asset = AVURLAsset(url: fileURL)
+            let composition = try await AVVideoComposition.videoComposition(withPropertiesOf: asset)
+            guard let export = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetHEVCHighestQuality) else {
+                throw NSError(domain: "AppNativeVideoRecorder", code: 20, userInfo: [
+                    NSLocalizedDescriptionKey: "video_upright_export_unavailable"
+                ])
+            }
+            export.outputURL = uprightURL
+            export.outputFileType = .mov
+            export.videoComposition = composition
+            await export.export()
+            guard export.status == .completed else {
+                throw export.error ?? NSError(domain: "AppNativeVideoRecorder", code: 21, userInfo: [
+                    NSLocalizedDescriptionKey: "video_upright_export_failed"
+                ])
+            }
+            _ = try FileManager.default.replaceItemAt(fileURL, withItemAt: uprightURL)
+            let upright = try await inspectAsset(fileURL: fileURL)
+            log("video_upright rotation=\(inspection.rotationDegrees) mirrored=\(inspection.mirrored) resolution=\(upright.width)x\(upright.height) seconds=\(String(format: "%.2f", Date().timeIntervalSince(startedAt)))")
+            return upright
+        } catch {
+            try? FileManager.default.removeItem(at: uprightURL)
+            log("video_upright_failed rotation=\(inspection.rotationDegrees) error=\(error.localizedDescription)")
+            return inspection
         }
     }
 

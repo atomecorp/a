@@ -60,8 +60,9 @@ async function openDatabase(config) {
     const { fileURLToPath } = await import('node:url');
     const here = path.dirname(fileURLToPath(import.meta.url));
     const schema = fs.readFileSync(path.join(here, 'schema.sql'), 'utf8');
+    const authSchema = fs.readFileSync(path.join(here, 'auth_security_schema.sql'), 'utf8');
     const migrations = fs.readFileSync(path.join(here, 'adole_schema_migrations.js'), 'utf8');
-    const expectedVersion = ddlFingerprint(schema, migrations);
+    const expectedVersion = ddlFingerprint(schema, authSchema, migrations);
 
     const [{ user_version: currentVersion = 0 } = {}] = await query('all', 'PRAGMA user_version');
     if (currentVersion === expectedVersion) return db;
@@ -71,6 +72,10 @@ async function openDatabase(config) {
     // Existing tables must gain columns before schema indexes reference them.
     await prepareAdoleSchemaColumns(query);
     await query('exec', schema);
+    await query('exec', authSchema);
+    const { ensureColumn } = await import('./adole_schema_migrations.js');
+    await ensureColumn({ query, table: 'auth_push_installations', column: 'provider',
+        ddl: "ALTER TABLE auth_push_installations ADD COLUMN provider TEXT NOT NULL DEFAULT 'apns'" });
     await runAdoleSchemaMigrations(query);
     await query('exec', `PRAGMA user_version = ${expectedVersion}`);
     console.log(`[ADOLE v3.0] Schema and migrations applied (ddl ${expectedVersion})`);

@@ -208,8 +208,12 @@ test('every previously lazy exposed tool resolves a canonical definition and an 
     const {createToolRuntimeBootstrap}=await import('../../eVe/intuition/tools/core/tool_runtime_bootstrap.js');
     const handlers=new Map();
     const runtime=createToolRuntimeBootstrap({buildLabelKey:key=>'eve.tool.'+key,publishRuntimeRegisteredHandler:(id,handler)=>handlers.set(id,handler),PANEL_RUNTIME_CONFIG_BY_TOOL_ID:{},MAIN_TOOL_RUNTIME_CONFIG_BY_TOOL_ID:{},V2_CALENDAR_API_EXECUTION_MODE:'v2_calendar_api',V2_REGISTERED_HANDLER_EXECUTION_MODE:'v2_registered_handler'});
-    for(const id of ['ui.youtube.create','ui.placeholder.create','ui.shape.create','ui.generator.run','ui.new_project','tool.main.z_order']) {
+    for(const id of ['ui.youtube.create','ui.placeholder.create','ui.shape.create','ui.generator.create','ui.new_project','tool.main.z_order']) {
         const tool=runtime.resolveBootstrapRuntimeTool(id);
         assert.equal(tool.id,id);assert.equal(tool.type,'tool');assert.equal(typeof handlers.get(id),'function',id);
     }
+    // `ui.generator.run` belongs to the generator runtime alone: a bootstrap
+    // definition or handler for it would again shadow the run with the arming toggle.
+    assert.equal(runtime.resolveBootstrapRuntimeTool('ui.generator.run'),null);
+    assert.equal(handlers.has('ui.generator.run'),false);
 });

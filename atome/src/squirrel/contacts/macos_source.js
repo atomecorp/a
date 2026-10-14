@@ -3,6 +3,7 @@ import {
     createContactsConnectorContract
 } from './connector_contract.js';
 import { toText } from '../shared/scalars.js';
+import { getSessionState } from '../apis/unified/adole_api/session.js';
 
 
 export const getNativeImportInvoke = () => {
@@ -126,7 +127,9 @@ export const createMacosContactsSource = ({
                 source_id
             };
         }
-        const response = await invoke('macos_contacts_snapshot', { cursor: options.cursor || null, collections: options.collections || null });
+        const state = getSessionState();
+        const response = await invoke('macos_contacts_snapshot', { cursor: options.cursor || null, collections: options.collections || null,
+            verifiedPhone: state.mode === 'authenticated' ? state.user?.phone : null });
         permission = toText(response?.permission || permission) || 'not_determined';
         if (!response || response.ok !== true) {
             return {
@@ -157,6 +160,7 @@ export const createMacosContactsSource = ({
             groups: response.groups || [],
             removed_ids: response.removed_ids || [],
             permission,
+            ...(Array.isArray(response.personal_candidates) ? { personal_candidates: response.personal_candidates } : {}),
             items: normalized.map((entry) => ({ ...entry }))
         };
     };

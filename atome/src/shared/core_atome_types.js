@@ -1,7 +1,26 @@
 import { PERSONAL_IMPORT_TYPES, CALENDAR_IMPORT_FIELDS } from './personal_import_types.js';
+import { GPS_TRIP_TYPE } from './gps_trip_contract.js';
 import { registerAtomeType } from './atome_universal_contract.js';
+import { PROGRAM_PREFERENCE_SCHEMA, PROGRAM_DATA_PERMISSION_SCHEMA, PROGRAM_PREFERENCE_KEYS } from './program_collection_contract.js';
+import { PROGRAM_SESSION_SCHEMA, PROGRAM_SESSION_TRANSITION_SCHEMA } from './program_session_contract.js';
+import { PROGRAM_NUTRITION_SCHEMA } from './program_nutrition_contract.js';
 
 export const CORE_ATOME_TYPE_VERSION = 1;
+
+export const ATOME_OBJECTIVE_IDS = Object.freeze(Array.from({ length: 13 }, (_, index) => `OBJ-${String(index + 1).padStart(2, '0')}`));
+
+export const ATOME_MATRIX_NAVIGATION_SCHEMA = Object.freeze({
+    type: 'object', required: ['version', 'project_id', 'path', 'views'], properties: {
+        version: { type: 'number', enum: [1] }, project_id: { type: 'string' },
+        path: { type: 'array', maxItems: 64, items: { type: 'string' } },
+        views: { type: 'array', maxItems: 256, items: { type: 'object',
+            required: ['level_id', 'selected_ids', 'scroll_y'], properties: {
+                level_id: { type: 'string' }, selected_ids: { type: 'array', maxItems: 256, items: { type: 'string' } },
+                scroll_y: { type: 'number', minimum: 0 }
+            }
+        } }
+    }
+});
 
 const orderSchema = Object.freeze({
     order: { type: 'number' },
@@ -12,6 +31,13 @@ const orderSchema = Object.freeze({
     label: { type: 'string' },
     accessibility: { type: 'object' }
 });
+
+const programExecutionSchema = {
+    active_minutes: { type: 'number', minimum: 0 },
+    start: { type: 'string' }, end: { type: 'string' }, provenance: { type: 'string' },
+    use_in_followup: { type: 'boolean' }, note: { type: 'string' }
+};
+const programExecutionRequired = ['start', 'end', 'provenance', 'use_in_followup'];
 
 export const ATOME_MIX_PROPERTY_SCHEMA = Object.freeze({
     mute: { type: 'boolean' },
@@ -79,6 +105,7 @@ const defineType = (definition) => Object.freeze({
 });
 
 export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
+    defineType(GPS_TRIP_TYPE),
     ...PERSONAL_IMPORT_TYPES.map(defineType),
     defineType({
         type: 'project',
@@ -100,6 +127,7 @@ export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
             project_intent: { type: 'object', properties: {
                 family: { type: 'string', enum: ['health', 'creation', 'recording', 'publication'] },
                 goal: { type: 'string' },
+                objective_id: { type: 'string', enum: ATOME_OBJECTIVE_IDS },
                 status: { type: 'string', enum: ['draft'] },
                 audience: { type: 'string', enum: ['everyone', 'group'] }
             }, required: ['family', 'goal'] },
@@ -151,13 +179,23 @@ export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
         schema: {
             program_observation: { type: 'object', properties: {
                 kind: { type: 'string', enum: ['declaration', 'measurement', 'hypothesis', 'completion', 'benefit'] },
-                date: { type: 'string' }, provenance: { type: 'string' }, useInFollowup: { type: 'boolean' }, missing: { type: 'boolean' }
+                date: { type: 'string' }, provenance: { type: 'string' }, useInFollowup: { type: 'boolean' }, missing: { type: 'boolean' },
+                preference_key: { type: 'string', enum: PROGRAM_PREFERENCE_KEYS }, uncertain: { type: 'boolean' }, review_after: { type: 'string' }
             }, required: ['kind', 'date', 'provenance', 'useInFollowup'] },
             ...orderSchema,
             ...frameSchema,
             text: { type: 'string' },
             rich_text: { type: 'object' },
-            text_style: { type: 'object' }
+            text_style: { type: 'object' },
+            // Time a still stays on screen in playback (Line Splitter lines, prompteur).
+            playback_dwell_seconds: { type: 'number', minimum: 0 },
+            // A prompteur is a text carrying this property (eVe/intuition/tools/prompter).
+            prompter: { type: 'object', properties: {
+                version: { type: 'number', enum: [1] }, source_id: { type: 'string' },
+                mode: { type: 'string', enum: ['manual', 'duration', 'keypoints'] },
+                between: { type: 'string', enum: ['scroll', 'page'] }, clock: { type: 'string', enum: ['project', 'host'] },
+                offset_seconds: { type: 'number' }, weight_by_length: { type: 'boolean' }, cues: { type: 'array' }
+            }, required: ['version', 'mode', 'cues'] }
         }
     }),
     defineType({
@@ -304,6 +342,31 @@ export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
             description: { type: 'string' },
             category_id: { type: 'string' },
             source_domain: { type: 'string' },
+            matrix_navigation: ATOME_MATRIX_NAVIGATION_SCHEMA,
+            program_preference: PROGRAM_PREFERENCE_SCHEMA,
+            program_data_permission: PROGRAM_DATA_PERMISSION_SCHEMA,
+            program_session: PROGRAM_SESSION_SCHEMA,
+            program_session_transition: PROGRAM_SESSION_TRANSITION_SCHEMA,
+            program_activity: { type: 'object', required: ['version', 'brick_id', 'title', 'involvement'], properties: {
+                version: { type: 'number', minimum: 1 }, brick_id: { type: 'string' }, title: { type: 'string' }, nutrition: PROGRAM_NUTRITION_SCHEMA,
+                involvement: { type: 'object', required: ['minutes', 'basis', 'days', 'rhythm'], properties: {
+                    minutes: { type: 'number' }, basis: { type: 'string', enum: ['day', 'week'] },
+                    days: { type: 'array' }, rhythm: { type: 'number' }
+                } }
+            } },
+            program_activity_link: { type: 'object', required: ['activity_id', 'objective_id'], properties: {
+                activity_id: { type: 'string' }, objective_id: { type: 'string' }
+            } },
+            program_occurrence: { type: 'object', required: ['activity_id', 'execution_id'], properties: {
+                activity_id: { type: 'string' }, calendar_event_id: { type: 'string' }, session_id: { type: 'string' }, execution_id: { type: 'string' }
+            } },
+            program_execution: { type: 'object', required: ['activity_id', 'occurrence_id', ...programExecutionRequired], properties: {
+                activity_id: { type: 'string' }, occurrence_id: { type: 'string' }, ...programExecutionSchema
+            } },
+            program_execution_correction: { type: 'object', required: ['execution_id', 'supersedes_ids', 'reason', 'execution'], properties: {
+                execution_id: { type: 'string' }, supersedes_ids: { type: 'array' }, reason: { type: 'string' },
+                execution: { type: 'object', required: programExecutionRequired, properties: programExecutionSchema }
+            } },
             metadata: { type: 'object' },
             payload: { type: 'object' },
             created_iso: { type: 'string' },

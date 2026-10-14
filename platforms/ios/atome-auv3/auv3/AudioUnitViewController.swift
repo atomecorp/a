@@ -369,7 +369,7 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
                 self.log.warning("MIDI startup skipped: AUv3 view is not attached to a window")
                 return
             }
-            let controller = self.midiController ?? MIDIController()
+            let controller = self.midiController ?? MIDIController(includesHostInput: true)
             self.midiController = controller
             WebViewManager.midiController = controller
             self.log.info("Starting MIDI after delayed AUv3 startup")

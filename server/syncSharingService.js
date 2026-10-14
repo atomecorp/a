@@ -76,6 +76,8 @@ const visibleRow = (row) => ({
 export class SyncSharingService {
     constructor(options = {}) {
         this.vaultRouter = options.vaultRouter;
+        // Relations pair-a-pair (premier contact, blocage) : `canCommunicate(sender, recipient)`.
+        this.relations = options.relations || null;
         this.syncRuntime = options.syncRuntime;
         this.isProvisioned = options.isProvisioned;
         this.notifyPrincipal = options.notifyPrincipal || (() => {});
@@ -143,6 +145,18 @@ export class SyncSharingService {
         return { ownerId: String(share.owner_id), stream, rights, share };
     }
 
+    // Un message vocal/video de conversation se lit comme le message qui le porte : le
+    // destinataire n'a rien a accepter tant qu'il a accepte l'expediteur comme contact et
+    // que personne n'a bloque l'autre. Lecture seule, partage par le proprietaire lui-meme,
+    // et seulement un enregistrement de conversation (lu dans le coffre du proprietaire).
+    async isConversationRecordingFor(authority, atomeId, principalId, granted) {
+        if (authority.share || !this.relations) return false;
+        if (Object.entries(granted || {}).some(([capability, allowed]) => capability !== 'read' && allowed === true)) return false;
+        const state = await this.vaultRouter.getState(authority.ownerId, atomeId).catch(() => null);
+        if (!String(state?.properties?.conversation_contact_id || '').trim()) return false;
+        return (await this.relations.canCommunicate(authority.ownerId, principalId))?.ok === true;
+    }
+
     async request(granterId, message) {
         const principalId = await this.targetId(message);
         if (!principalId || !await this.isProvisioned(principalId)) throw new Error('target_not_provisioned');
@@ -176,7 +190,9 @@ export class SyncSharingService {
             const requestedExpiry = sqlTime(message.expires_at || message.expiresAt || null);
             const parentExpiry = authority.share?.expires_at || null;
             const expiresAt = parentExpiry && (!requestedExpiry || requestedExpiry > parentExpiry) ? parentExpiry : requestedExpiry;
-            const initialStatus = peerPolicy?.policy === 'always'
+            const autoAccepted = peerPolicy?.policy === 'always'
+                || await this.isConversationRecordingFor(authority, atomeId, principalId, granted);
+            const initialStatus = autoAccepted
                 ? (shareType === 'linked' ? 'active' : 'accepted')
                 : (peerPolicy?.policy === 'never' ? 'rejected' : 'pending');
             const shareId = crypto.randomUUID();

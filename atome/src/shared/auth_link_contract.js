@@ -6,6 +6,13 @@ export const AUTH_ACCESS_TTL_SECONDS = 15 * 60;
 export const AUTH_SESSION_IDLE_MS = 30 * 24 * 60 * 60 * 1000;
 export const AUTH_SESSION_MAX_MS = 90 * 24 * 60 * 60 * 1000;
 
+export async function authPasswordRequestDigest(password, currentPassword = '') {
+    if (typeof password !== 'string' || typeof currentPassword !== 'string') throw new Error('auth_password_invalid');
+    const bytes = new TextEncoder().encode(JSON.stringify(['atome.password.set.v1', password, currentPassword]));
+    const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
 export function authSigningMessage({ purpose, reference, challenge, nonce, keyId, issuedAt }) {
     if (![purpose, reference, challenge, nonce, keyId].every((value) => typeof value === 'string' && value.length > 0)
         || !Number.isSafeInteger(issuedAt)) throw new Error('auth_challenge_invalid');

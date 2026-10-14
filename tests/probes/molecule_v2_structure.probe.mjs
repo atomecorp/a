@@ -18,12 +18,10 @@ import {
     transferTracksBetweenTimelines,
     updateSection,
     updateTrack,
+    mixTrackBusId,
+    setMixOutput,
     validateTimeline
 } from '../../eVe/intuition/tools/molecule/kernel/index.js';
-import {
-    projectTimelineToSceneRecords,
-    timelineLayoutForContextualRail
-} from '../../eVe/intuition/tools/molecule/render/timeline_scene.js';
 
 const createV2 = () => createTimeline({
     timeline_id: 'tl_v2',
@@ -97,11 +95,11 @@ test('Sections own their Tracks and remain structurally ordered', () => {
         track_id: 'audio_b',
         section_id: 'section_b',
         kind: 'audio',
-        name: 'Voice',
-        output_group_track_id: 'group_b'
+        name: 'Voice'
     });
+    timeline = setMixOutput(timeline, { strip_id: 'audio_b:audio', destination: { kind: 'bus', id: 'group_b' } });
     assert.deepEqual(timeline.sections.map((section) => section.section_id), ['section_a', 'section_b']);
-    assert.equal(timeline.tracks.find((track) => track.track_id === 'audio_b').output_group_track_id, 'group_b');
+    assert.equal(mixTrackBusId(timeline, 'audio_b'), 'group_b');
     assert.equal(timeline.tracks.filter((track) => track.section_id === 'section_b').at(-1).empty_slot, true);
     validateTimeline(timeline);
 });
@@ -212,17 +210,6 @@ test('Fill empty space derives its boundary from the next content', () => {
     assert.equal(timeline.record_regions[0].duration_frames, 192000);
 });
 
-test('Bevy projection keeps exactly two time bands and left-to-right time in both handed modes', () => {
-    const timeline = createV2();
-    for (const handedness of ['left', 'right']) {
-        const layout = timelineLayoutForContextualRail({ handedness, railVisible: true, railWidth: 52 });
-        const records = projectTimelineToSceneRecords(timeline, { handedness, layout });
-        assert.equal(records.filter((record) => record.id.startsWith('mol:time:')).length, 2);
-        assert.equal(records.find((record) => record.id === 'mol:time:ruler').properties.time_direction, 'left_to_right');
-        assert.equal(records.find((record) => record.id === 'mol:playhead').properties.left, handedness === 'left' ? 52 : 0);
-    }
-});
-
 test('a Section transfers atomically between Molecules and removes an emptied source owner', () => {
     let source = createV2();
     source = addClip(source, {
@@ -245,15 +232,15 @@ test('a Section transfers atomically between Molecules and removes an emptied so
     validateTimeline(result.target);
 });
 
-test('Track transfers preserve a moved group route and drop an orphaned route', () => {
+test('Track transfers preserve a moved bus route and drop an orphaned route', () => {
     let source = createV2();
     source = addTrack(source, {
         track_id: 'bus', section_id: 'section_a', kind: 'audio', name: 'Bus', role: 'group'
     });
     source = addTrack(source, {
-        track_id: 'voice', section_id: 'section_a', kind: 'audio', name: 'Voice',
-        output_group_track_id: 'bus'
+        track_id: 'voice', section_id: 'section_a', kind: 'audio', name: 'Voice'
     });
+    source = setMixOutput(source, { strip_id: 'voice:audio', destination: { kind: 'bus', id: 'bus' } });
     source = addClip(source, {
         clip_id: 'voice_clip', track_id: 'voice', kind: 'audio',
         source: { type: 'atome', atome_id: 'voice_source' },
@@ -272,7 +259,7 @@ test('Track transfers preserve a moved group route and drop an orphaned route', 
     const together = transferTracksBetweenTimelines(source, target, {
         track_ids: ['bus', 'voice'], target_section_id: 'target_section'
     });
-    assert.equal(together.target.tracks.find((track) => track.track_id === 'voice').output_group_track_id, 'bus');
+    assert.equal(mixTrackBusId(together.target, 'voice'), 'bus');
     assert.equal(together.target.tracks.at(-1).track_id, 'target_empty');
     assert.equal(together.source.clips[0].clip_id, 'keeper');
     validateTimeline(together.source);
@@ -281,7 +268,7 @@ test('Track transfers preserve a moved group route and drop an orphaned route', 
     const alone = transferTracksBetweenTimelines(source, target, {
         track_id: 'voice', target_section_id: 'target_section'
     });
-    assert.equal(alone.target.tracks.find((track) => track.track_id === 'voice').output_group_track_id, null);
+    assert.equal(mixTrackBusId(alone.target, 'voice'), null);
     validateTimeline(alone.source);
     validateTimeline(alone.target);
 });
@@ -311,15 +298,16 @@ test('Tracks move between Sections while preserving both trailing empty Tracks',
         track_id: 'bus_a', section_id: 'section_a', kind: 'audio', name: 'Bus', role: 'group'
     });
     timeline = addTrack(timeline, {
-        track_id: 'voice_a', section_id: 'section_a', kind: 'audio', name: 'Voice',
-        output_group_track_id: 'bus_a'
+        track_id: 'voice_a', section_id: 'section_a', kind: 'audio', name: 'Voice'
     });
+    timeline = setMixOutput(timeline, { strip_id: 'voice_a:audio', destination: { kind: 'bus', id: 'bus_a' } });
     timeline = moveTrack(timeline, {
         track_id: 'voice_a', target_section_id: 'section_b', target_index: 0
     });
     const moved = timeline.tracks.find((track) => track.track_id === 'voice_a');
     assert.equal(moved.section_id, 'section_b');
-    assert.equal(moved.output_group_track_id, null);
+    // The mixer routes across Sections: moving a Track keeps its bus.
+    assert.equal(mixTrackBusId(timeline, 'voice_a'), 'bus_a');
     for (const sectionId of ['section_a', 'section_b']) {
         const tracks = timeline.tracks
             .filter((track) => track.section_id === sectionId)
@@ -343,9 +331,6 @@ test('block loops extend one source non-destructively with quantized frame truth
     assert.equal(timeline.clips.length, 1);
     assert.deepEqual(timeline.clips[0].source, { type: 'atome', atome_id: 'loop_audio' });
     assert.deepEqual(timeline.clips[0].block_loop, { enabled: true, duration_frames: 144000 });
-    const records = projectTimelineToSceneRecords(timeline);
-    assert.equal(records.filter((record) => record.id.startsWith('mol:clip-loop:loop_source:')).length, 2);
-    assert.ok(records.some((record) => record.id === 'mol:clip-loop-handle:loop_source'));
     validateTimeline(timeline);
 });
 

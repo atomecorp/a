@@ -4,7 +4,8 @@ import * as surfaceState from '../../eVe/domains/rendering/project_view_surface_
 import { createProjectViewListContent } from '../../eVe/domains/rendering/project_view_list_content.js';
 import { feedContextualRailWithRow, projectViewDashboardToolDefinition } from '../../eVe/domains/rendering/project_view_contextual_rail.js';
 import { createProjectViewSurfaceContextRuntime } from '../../eVe/domains/rendering/project_view_surface_context_runtime.js';
-import { resetProjectViewNavigation } from '../../eVe/domains/rendering/project_view_navigation.js';
+import { invokeProjectViewNavigation, resetProjectViewNavigation } from '../../eVe/domains/rendering/project_view_navigation.js';
+import * as toolGateway from '../../eVe/intuition/runtime/tool_gateway.js';
 import { playProjectViewEntry } from '../../eVe/domains/rendering/project_view_item_actions.js';
 import { setAtomeContextualEditApi } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_registry.js';
 import { createAtomeContextualRailRuntime } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_rail_runtime.js';
@@ -29,6 +30,10 @@ afterEach(() => { setAtomeContextualEditApi(null); vi.restoreAllMocks(); vi.unst
 
 test('switching expertise hides expanded descendants and restores disclosure without losing expansion', async () => {
     const win = profile('advanced'); vi.stubGlobal('window', win);
+    const root = { id: projectId, type: 'project', owner_id: 'list_qa', properties: { name: 'Project' } };
+    vi.spyOn(toolGateway, 'invokeToolGateway').mockImplementation(payload => invokeProjectViewNavigation(payload.input, {
+        windowRef: win, actor: () => 'list_qa', read: async id => id === projectId ? root : null
+    }));
     const content = createProjectViewListContent({ requestRefresh: () => {} });
     await content.load({ projectId, sourceRecords: [owner, { id: 'child', parent_id: owner.id,
         project_id: projectId, type: 'text', properties: { text: 'Child' } }] });

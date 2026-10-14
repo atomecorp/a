@@ -1,4 +1,4 @@
-import { extractEventPatch, eventDeletedPropertyKeys, assertIdempotentEventReplay } from '../../../../shared/adole_event_contract.js';
+import { extractEventPatch, eventDeletedPropertyKeys, eventExpectedPropertyVersions, assertIdempotentEventReplay } from '../../../../shared/adole_event_contract.js';
 import { personalProfileFromProperties } from '../../../../shared/profile_sharing.js';
 import { sanitizeAtomeProperties } from '../../../../shared/atome_contract.js';
 import { mapStateCurrentToAtome } from './atome_record_projection.js';
@@ -124,6 +124,14 @@ export async function commitWorkspaceEvents(ownerId, inputs, { actorType = 'user
                                 }
                                 const requestedOwner = event.owner_id || patch.owner_id || patch.ownerId;
                                 if (requestedOwner && String(requestedOwner) !== String(ownerId)) throw new Error('workspace_identity_mismatch');
+                                // gps_trip revision starts at value 0 / particle version 1 and is
+                                // incremented by every GPS transaction, including native transitions.
+                                // This also validates imported GPS states without a second version store.
+                                if ((previous?.atome_type || patch.type || event.type) === 'gps_trip') {
+                                    const expected = eventExpectedPropertyVersions(event).revision;
+                                    if (expected !== undefined && expected !== (previous ? previous.properties.revision + 1 : 0))
+                                        throw new Error('property_version_conflict');
+                                }
                                 const properties = { ...(previous?.properties || {}), ...sanitizeAtomeProperties(patch) };
                                 eventDeletedPropertyKeys(event).forEach(name => delete properties[name]);
                                 const record = {

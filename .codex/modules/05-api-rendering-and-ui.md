@@ -10,7 +10,7 @@ Every effectful operation must pass through the canonical Command Bus, policy ch
 
 Tool execution is sandboxed: no raw filesystem, network, or process access. Use the canonical capability and system boundaries. Standardize tool input across UI, AI, and Voice. Tool APIs are programmable for batch operations and AI control; their mutations are persisted and fully historized through the same pipeline. Gestures such as drag, resize, and rotate must be recorded with sufficient precision for deterministic movie-like replay, while undo/restore respects module 06's logical-event boundaries.
 
-Inspect the actual tool gateway, registered tool, dispatch path, and mutation owner before changing an API or exposing a tool in a panel. A similarly named function, copied control, external wrapper, or unregistered implementation does not prove that a native tool is available. Apply the core's compatibility and missing-component gate; preserve the tool's existing native options rather than inventing a panel-specific execution path.
+Inspect the actual tool gateway, registered tool, dispatch path, and mutation owner before changing an API or exposing a tool in a panel. A similarly named function, copied control, external wrapper, or unregistered implementation does not prove that a native tool is available. Apply the core's compatibility audit and standing internal creation and extension authorization; preserve the tool's existing native options rather than inventing a panel-specific execution path.
 
 ## Communication architecture
 
@@ -31,7 +31,7 @@ Every UI element must have a unique id, exist as a canonical Atome or a property
 
 Buttons, sliders, inputs, toggles, selects, tool buttons, palette items, ribbon/footer/projected controls, and equivalent primitives must use canonical component code and system design definitions. Each control has one implementation owner and one visual-contract owner. Local wrappers may compose, configure, and place it; they must not redefine interaction semantics, rendering, geometry, state ownership, or styling tokens through eVe-local factories, feature-local builders, ad-hoc DOM creation, local presets, or surface-specific contracts.
 
-If a required control is absent, incompatible, or unverifiable, stop at the core's missing-component gate. Approval for the requested feature does not authorize implementing or completing a new control. After explicit bounded authorization, create or extend the canonical Atome/Squirrel owner and consume it by composition.
+If a required control is absent or incompatible after investigation, document the evidence, create or extend the canonical Atome/Squirrel owner under the root standing authorization, validate it and consume it by composition. The requested feature covers these necessary internal controls and capability additions without separate user approval. If availability cannot be verified because access is missing, report that actual limitation instead of guessing or creating a competing owner.
 
 Follow the readiness, component-format, children-array, batching, and system-abstraction conventions in [the Squirrel coding guide](../../atome/documentations/instructions_for_ai.md) when using those APIs.
 

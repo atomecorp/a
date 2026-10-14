@@ -1,11 +1,11 @@
 /** Canonical generic-slider gestures and projection; configuration stays live. */
-import { quantizeSliderValue, formatSliderBound } from './slider_contract.js';
+import { quantizeSliderValue, formatSliderBound, sliderValueCaption } from './slider_contract.js';
 
 export function setupSliderBehavior({ container, track, handle, progression, label, bounds = [], type, isCircular,
     readConfig, onChange, onInput, sState, circularStyles }) {
   let progressCircle = null;
   const updatePosition = raw => {
-    const { min, max, step, disabled, dragMin, dragMax, unit } = readConfig();
+    const { min, max, step, disabled, dragMin, dragMax, unit, sliderOptions } = readConfig();
     const value = quantizeSliderValue(raw, { min, max, step });
     const fraction = max === min ? 0 : (value - min) / (max - min);
     const percentage = fraction * 100;
@@ -51,11 +51,13 @@ export function setupSliderBehavior({ container, track, handle, progression, lab
       handle.$({ css: { left: `${percentage}%`, transform: 'translate(-50%, -50%)' } });
       progression?.$({ css: { width: `${percentage}%` } });
     }
-    label?.$({ text: formatSliderBound(value, unit) });
+    const caption = sliderValueCaption(value, sliderOptions);
+    label?.$({ text: caption ?? formatSliderBound(value, unit) });
     bounds.forEach((entry, index) => entry.$({ text: formatSliderBound(index ? max : min, unit) }));
     sState.currentVal = value;
     container.setAttribute('aria-valuemin', String(min)); container.setAttribute('aria-valuemax', String(max));
     container.setAttribute('aria-valuenow', String(value)); container.setAttribute('aria-disabled', String(disabled));
+    if (caption !== null) container.setAttribute('aria-valuetext', caption);
   };
   const fromPoint = (x, y) => {
     const { min, max, dragMin, dragMax } = readConfig();

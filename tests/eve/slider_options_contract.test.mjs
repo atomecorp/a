@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { JSDOM } from 'jsdom';
-import { normalizeSliderOptions, resolveSliderLength, quantizeSliderValue } from '../../atome/src/squirrel/components/slider_contract.js';
+import { normalizeSliderOptions, resolveSliderLength, quantizeSliderValue, sliderValueCaption, isSliderValueValid } from '../../atome/src/squirrel/components/slider_contract.js';
 import { buildBevyToolSliderNode, createBevyToolSliderHandlers } from '../../eVe/intuition/shared/bevy_ui_tool_slider.js';
 import { resolveSliderPreviewGeometry, createLinearMenuLensController } from '../../eVe/intuition/ribbon/bevy_ui_linear_menu_lens.js';
 import { serializeToolParams, buildToolParamsFromPayload, buildToolParamsFromEntry } from '../../eVe/intuition/tools/ui/tool_button_params.js';
 const options = { showBounds: true, lengthPx: 360, valueInsetPx: 8 };
+const valueLabels = { 1: 'Minimum', 2: 'Doux', 3: 'Régulier', 4: 'Soutenu', 5: 'Ambitieux' };
 const find = (node, id) => node.id === id ? node : (node.children || []).map(child => find(child, id)).find(Boolean);
 const withDom = async callback => {
     const dom = new JSDOM('<!doctype html><body><button id="tool"></button></body>');
@@ -15,6 +16,54 @@ const withDom = async callback => {
     try { await callback(dom.window); } finally { Object.assign(globalThis, previous); dom.window.close(); }
 };
 describe('framework optional slider contract', () => {
+    it('validates named values without converting captions into numbers or units', () => {
+        const restored = normalizeSliderOptions(JSON.parse(JSON.stringify({ valueLabels })));
+        for (const [value, caption] of Object.entries(valueLabels)) {
+            expect(sliderValueCaption(Number(value), restored)).toBe(caption);
+            expect(isSliderValueValid(Number(value), { min: 1, max: 5, step: 1 }, restored)).toBe(true);
+        }
+        expect(sliderValueCaption(2.5)).toBeNull();
+        expect(() => sliderValueCaption(2.5, restored)).toThrow('slider_value_caption_required');
+        for (const labels of [[], {}, { invalid: 'Unknown' }, { '1.0': 'Ambiguous' }, { 1: '' }, { 1: 7 }]) {
+            expect(() => normalizeSliderOptions({ valueLabels: labels })).toThrow('slider_value_labels_invalid');
+        }
+        expect(isSliderValueValid(2.5, { min: 1, max: 5, step: 1 })).toBe(false);
+        expect(isSliderValueValid(.3, { min: 0, max: 1, step: .1 })).toBe(true);
+        expect(isSliderValueValid(.31, { min: 0, max: 1, step: .1 })).toBe(false);
+        expect(isSliderValueValid(1e15 + .5, { min: 0, max: 2e15, step: 1 })).toBe(false);
+        expect(isSliderValueValid(2.5, { min: 1, max: 5, step: .5 })).toBe(true);
+        expect(isSliderValueValid(3, { min: 1, max: 5, step: 1 }, { valueLabels: { 1: 'Only one' } })).toBe(false);
+    });
+    it.each(['horizontal', 'vertical'])('the shared Bevy %s owner paints all five captions in normal and deported controls', orientation => {
+        for (const previewOnly of [false, true]) for (const [value, caption] of Object.entries(valueLabels)) {
+            const tree = buildBevyToolSliderNode({ id: 'named', orientation, expanded: true, previewOnly,
+                value: Number(value), min: 1, max: 5, step: 1, sliderOptions: { valueLabels } });
+            expect(find(tree, 'named_value').text).toBe(caption);
+        }
+        const serialized = serializeToolParams({ entry: { key: 'effort', toolType: 'slider', sliderMin: 1,
+            sliderMax: 5, sliderStep: 1, sliderValue: 5, sliderOptions: { valueLabels } } });
+        expect(buildToolParamsFromPayload({ factory_params: serialized }).entry.sliderOptions.valueLabels).toEqual(valueLabels);
+    });
+    it.each(['horizontal', 'vertical'])('the canonical DOM ToolSlider uses the same %s captions after value changes', async orientation => withDom(async window => {
+        const { mountIntuitionXSliderToolContent } = await import('../../atome/src/squirrel/components/tool_slider_builder.js');
+        const slider = mountIntuitionXSliderToolContent({ button: window.document.getElementById('tool'), orientation, collapsedWidthPx: 60, expandedWidthPx: 180,
+            definition: { label: 'Effort', sliderMin: 1, sliderMax: 5, sliderStep: 1, sliderValue: 1, sliderOptions: { valueLabels } } });
+        slider.setExpanded(true);
+        for (const [value, caption] of Object.entries(valueLabels)) {
+            slider.input.value = value; slider.input.dispatchEvent(new window.Event('change', { bubbles: true }));
+            expect(slider.valueEl.textContent).toBe(caption); expect(Number(slider.input.value)).toBe(Number(value));
+        }
+    }));
+    it.each(['horizontal', 'vertical', 'circular'])('the generic %s owner retains named value semantics', async type => withDom(async window => {
+        const { createSlider } = await import('../../atome/src/squirrel/components/slider_builder.js');
+        const slider = createSlider({ id: 'named', type, min: 1, max: 5, value: 1, step: 1, sliderOptions: { valueLabels } });
+        window.document.body.appendChild(slider);
+        for (const [value, caption] of Object.entries(valueLabels)) {
+            slider.setValue(Number(value)); expect(slider.querySelector('#named_label').textContent).toBe(caption);
+            expect(slider.getAttribute('aria-valuetext')).toBe(caption); expect(slider.getValue()).toBe(Number(value));
+        }
+        slider.destroy();
+    }));
     it('keeps the ordinary presentation opt-in and validates the shared length', () => {
         expect(normalizeSliderOptions()).toEqual({ showBounds: false, lengthPx: null, valueInsetPx: 0 });
         expect(resolveSliderLength({ lengthPx: 'fill' }, 180, 344)).toBe(344);

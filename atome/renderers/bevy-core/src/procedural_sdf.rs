@@ -54,6 +54,10 @@ pub struct ProceduralSdfMaterial {
     #[texture(5)]
     #[sampler(6)]
     pub menu_face: Handle<Image>,
+    /// The surface background alone (mystic_capture.rs): what a turning plate reveals.
+    #[texture(7)]
+    #[sampler(8)]
+    pub menu_back: Handle<Image>,
 }
 
 impl Material2d for ProceduralSdfMaterial {
@@ -160,6 +164,7 @@ fn material_from_contract(
         },
         menu_front: backdrop.clone(),
         menu_face: backdrop.clone(),
+        menu_back: backdrop.clone(),
         backdrop,
     }
 }
@@ -244,8 +249,10 @@ pub fn patch_procedural_sdf(world: &mut World, entity: Entity, contract: AtomePr
     optics.x = normalized.lens_refraction_px * device_pixel_ratio.max(1.0);
     let front = material.menu_front.clone();
     let face = material.menu_face.clone();
+    let back = material.menu_back.clone();
     *material = material_from_contract(normalized, backdrop, optics, device_pixel_ratio);
     material.menu_front = front;
     material.menu_face = face;
+    material.menu_back = back;
     Ok(())
 }

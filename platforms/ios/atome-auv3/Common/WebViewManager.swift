@@ -19,7 +19,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     static var webView: WKWebView?
     static weak var audioController: AudioControllerProtocol?
     static var fileSystemBridge: FileSystemBridge?
-    // NEW: MIDI controller reference injected from AudioUnitViewController
+    // CoreMIDI adapter, owned by AppPageHost (app) or AudioUnitViewController (AUv3).
     static weak var midiController: MIDIController?
     static weak var hostAudioUnit: AUAudioUnit?
     static var nativeInvokeHandler: NativeInvokeHandler?

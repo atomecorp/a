@@ -50,6 +50,7 @@ final class AppNativeAudioController: NSObject, @unchecked Sendable {
     var pendingClipLoads: [String: UUID] = [:]
     var voices: [String: VoiceEntry] = [:]
     var audioSessionConsumers = AppNativeAudioConsumerRegistry()
+    var systemOwnsAudioActivation = false
     var captureGate = AppNativeAudioCaptureGate()
     var audioRecordingConsumerSequence: UInt64 = 0
     var activeRecordingConsumerId: String?

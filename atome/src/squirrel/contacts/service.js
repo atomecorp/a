@@ -173,7 +173,8 @@ export const createContactsService = ({
             cursor: sourcePull.cursor, complete: sourcePull.complete === true, full_snapshot: options.incremental !== true && sourcePull.mode !== 'delta',
             removed_ids: sourcePull.removed_ids || [], removed_hrefs: sourcePull.removed_hrefs || [], groups: sourcePull.groups || [],
             device_id: options.device_id, signal: options.signal, checkSession, legacy_source_prefix: options.legacy_source_prefix,
-            restore_suppressed: options.restore_suppressed === true
+            restore_suppressed: options.restore_suppressed === true,
+            personal_candidates: sourcePull.personal_candidates
         });
         if (imported?.ok !== true) {
             return imported || { ok: false, error: 'contacts_import_store_failed', source_id: normalizedSourceId };
@@ -188,9 +189,10 @@ export const createContactsService = ({
             // Records actually written (created, modified, merged or removed):
             // a cycle that found nothing new announces nothing.
             changed: Number(imported.changed || 0) + Number(imported.duplicates_removed || 0)
-                + (sourcePull.removed_ids?.length || 0),
+                + (sourcePull.removed_ids?.length || 0) + Number(imported.personal_profile?.changed === true),
             source_id: normalizedSourceId,
             permission: sourcePull.permission || null,
+            personal_profile: imported.personal_profile || null,
             target_source_id: primarySourceEntry.source_id,
             items: refreshed?.items || [],
             stats: refreshed?.stats || null,
@@ -328,6 +330,7 @@ export const createContactsService = ({
         mergeDuplicateContacts() {
             return mergeDuplicateContacts();
         },
+        selectPersonalContact(id) { return mutatePrimary('selectPersonalContact', id); },
         pushContactToSource(sourceId, options = {}) {
             return pushContactToSource(sourceId, options);
         },

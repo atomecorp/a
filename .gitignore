@@ -60,6 +60,10 @@ tests/database/*
 !tests/database/adole_restart_safe_interactions.test.mjs
 !tests/server/
 tests/server/*
+!tests/server/auth_phone_fixture.mjs
+!tests/server/auth_phone_link.test.mjs
+!tests/server/auth_password.test.mjs
+!tests/server/communication_push.test.mjs
 !tests/server/ws_youtube_search.test.mjs
 !tests/server/ws_tv_catalog.test.mjs
 !tests/server/principal_file_migration.test.mjs
@@ -95,6 +99,7 @@ tests/shared/*
 !tests/shared/semantic_rename_contract.test.mjs
 !tests/eve/
 tests/eve/*
+!tests/eve/personal_contact_profile.test.mjs
 !tests/eve/calendar_next_events.test.mjs
 !tests/eve/dashboard_upcoming_calendar.test.mjs
 !tests/eve/dashboard_confirmed_overview.test.mjs
@@ -168,6 +173,7 @@ tests/rendering/*
 !tests/eve/bevy_panel_passive_batch_contract.test.mjs
 !tests/eve/bevy_panel_geometry_contract.test.mjs
 !tests/eve/bevy_ui_runtime_contract.test.mjs
+!tests/eve/bevy_ui_accessibility_contract.test.mjs
 !tests/eve/input_event_runtime_contract.test.mjs
 !tests/eve/media_persistence_service.sanitization.test.mjs
 !tests/eve/media_recording_atomic_commit_contract.test.mjs
@@ -378,6 +384,10 @@ tests/native/*
 !tests/eve/workspace_surface_preference_contract.test.mjs
 
 !tests/eve/slider_options_contract.test.mjs
+!tests/eve/objective_effort_contract.test.mjs
+!tests/eve/objective_time_budget_contract.test.mjs
+!tests/eve/program_collection_contract.test.mjs
+!tests/eve/program_activity_configuration.test.mjs
 
 # Original-resolution rendering and shared palette ownership regressions
 !tests/eve/media_zoom_resolution.test.mjs
@@ -445,3 +455,6 @@ tests/native/*
 tests/squirrel/*
 !tests/squirrel/remote_command.test.mjs
 !tests/eve/assistant_surface_tools.test.mjs
+
+!tests/eve/program_session_contract.test.mjs
+!tests/eve/program_nutrition.test.mjs

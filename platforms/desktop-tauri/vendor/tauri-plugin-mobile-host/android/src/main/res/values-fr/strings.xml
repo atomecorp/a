@@ -1,0 +1,10 @@
+<resources>
+    <string name="atome_call_channel">Appels Atome</string>
+    <string name="atome_message_channel">Notifications Atome</string>
+    <string name="atome_incoming_call">Appel Atome entrant</string>
+    <string name="atome_active_call">Appel Atome en cours</string>
+    <string name="atome_notification">Nouvelle activité dans Atome</string>
+    <string name="atome_answer">Répondre</string>
+    <string name="atome_decline">Refuser</string>
+    <string name="atome_end">Raccrocher</string>
+</resources>

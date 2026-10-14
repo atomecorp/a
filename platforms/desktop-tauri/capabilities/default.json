@@ -20,6 +20,7 @@
     "file-export",
     "taxonomy-editor",
     "health-bridge",
-    "assistant-link"
+    "assistant-link",
+    "notifications"
   ]
 }

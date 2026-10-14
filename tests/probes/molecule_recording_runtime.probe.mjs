@@ -22,7 +22,6 @@ const createHarness = ({ withAdapter = true } = {}) => {
     const persistedById = new Map();
     const saves = [];
     const events = [];
-    const renders = [];
     const captureCalls = [];
     const projectStore = {
         async loadTimeline(projectId, timelineId) {
@@ -111,18 +110,8 @@ const createHarness = ({ withAdapter = true } = {}) => {
             return { ok: true };
         }
     } : null;
-    const sceneBridge = {
-        async render(detail) {
-            renders.push({ phase: 'render', detail });
-            return { ok: true };
-        },
-        async clear(detail) {
-            renders.push({ phase: 'clear', detail });
-            return { ok: true };
-        }
-    };
-    const api = installMoleculeGroupTimelineRuntime(env, { captureAdapter, sceneBridge });
-    return { api, captureCalls, events, renders, saves, readPersisted: () => persisted };
+    const api = installMoleculeGroupTimelineRuntime(env, { captureAdapter });
+    return { api, captureCalls, events, saves, readPersisted: () => persisted };
 };
 
 const openAndArmAudioTrack = async (api, groupId = 'group_runtime_probe') => {
@@ -146,7 +135,7 @@ const openAndArmAudioTrack = async (api, groupId = 'group_runtime_probe') => {
 };
 
 test('eveMoleculeTimelineApi exposes recording lifecycle and persists before stop resolves', async () => {
-    const { api, captureCalls, events, renders, saves, readPersisted } = createHarness();
+    const { api, captureCalls, events, saves, readPersisted } = createHarness();
     await openAndArmAudioTrack(api);
 
     const started = await api.startGroupTimelineRecording({
@@ -172,7 +161,6 @@ test('eveMoleculeTimelineApi exposes recording lifecycle and persists before sto
     assert.equal(readPersisted().clips[0].source.atome_id, 'audio_recording_runtime_probe');
     assert.equal(readPersisted().clips[0].timeline.duration_frames, FRAME_COUNT);
     assert.equal(saves.at(-1).timeline.clips.length, 1);
-    assert.equal(renders.at(-1).detail.timeline.clips.length, 1);
 
     await api.closeGroupTimeline('group_runtime_probe');
     await api.openGroupTimeline({
@@ -184,7 +172,7 @@ test('eveMoleculeTimelineApi exposes recording lifecycle and persists before sto
 });
 
 test('closing an active Molecule timeline cancels capture before disposing the session', async () => {
-    const { api, captureCalls, renders } = createHarness();
+    const { api, captureCalls } = createHarness();
     await openAndArmAudioTrack(api, 'group_close_probe');
     await api.startGroupTimelineRecording({
         group_id: 'group_close_probe',
@@ -200,7 +188,6 @@ test('closing an active Molecule timeline cancels capture before disposing the s
     const closed = await api.closeGroupTimeline('group_close_probe');
     assert.equal(closed.closed, true);
     assert.equal(captureCalls.at(-1).phase, 'cancel');
-    assert.equal(renders.at(-1).phase, 'clear');
 });
 
 test('reopening a group cancels its active capture before replacing the session', async () => {

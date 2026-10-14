@@ -10,6 +10,7 @@ import { DEFAULT_RTC_MIN_PORT, DEFAULT_RTC_MAX_PORT, DEFAULT_LISTEN_IP, DEFAULT_
 import { createWsHandler } from './visio_ws_handler.js';
 import { createVisioCommands } from './visio_commands.js';
 import { wsSendJsonToUser, wsApiClientsByUserId } from './wsApiState.js';
+import { communicationPush } from './communication_push.js';
 
 export function createVisioService(options = {}) {
   const {
@@ -127,6 +128,7 @@ export function createVisioService(options = {}) {
     }
 
     room.peers.delete(peerId);
+    void commands.peerLeft(roomId, peer.userId);
     notifyRoom(roomId, {
       type: 'participantLeft',
       peer_id: peerId,
@@ -247,11 +249,13 @@ export function createVisioService(options = {}) {
     [meta.room_id, meta.owner_user_id, meta.name, meta.starts_at, meta.ends_at, JSON.stringify([...meta.invites])]);
   }
 
-  async function canJoinRoom(userId, roomId) {
+  async function canJoinRoom(userId, roomId, deviceKey) {
     const meta = await resolveRoomMeta(roomId);
     if (!userId || !meta) return false;
     if (meta.call_status && !['preparing', 'ringing', 'live'].includes(meta.call_status)) return false;
     if (meta.call_status === 'ringing' && meta.owner_user_id !== userId) return false;
+    if (meta.accepted_devices?.has(userId) && meta.accepted_devices.get(userId) !== deviceKey) return false;
+    if (meta.call_target === userId && !meta.accepted_devices?.has(userId)) return false;
     if (meta.owner_user_id === userId) return true;
     if (relations && meta.owner_user_id && await relations.blockedEitherWay(meta.owner_user_id, userId)) return false;
     if (meta.invites?.has(userId) || meta.visibility === 'public') return true;
@@ -286,12 +290,12 @@ export function createVisioService(options = {}) {
 
   const commands = createVisioCommands({ ensureRoomMeta, resolveRoomMeta, resolveUserInfo, relations,
     notify, saveScheduledRoom, closeRoom,
-    online: userId => Boolean(wsApiClientsByUserId.get(userId)?.size),
+    online: async userId => Boolean(wsApiClientsByUserId.get(userId)?.size) || await communicationPush.available(userId),
     publish: (userId, data) => wsSendJsonToUser(userId, { type: 'visio-event', room_id: data.roomId, data }, { scope: 'ws/api', op: 'visio' }) });
   const signaling = new Set(['joinRoom', 'leaveRoom', 'createTransport', 'connectTransport', 'produce', 'consume',
     'pauseProducer', 'resumeProducer', 'closeProducer', 'resumeConsumer']);
   const handleCommand = async (userId, action, input, connection) => {
-    if (!signaling.has(action)) return commands.execute(userId, action, input, connection._wsApiVaultRouter);
+    if (!signaling.has(action)) return commands.execute(userId, action, { ...input, deviceKey: connection._wsApiDeviceClaims?.cnf?.kid }, connection._wsApiVaultRouter);
     connection._visioUserId = userId;
     let reply = null;
     await handleWsMessage(connection, { ...input, type: action }, payload => { reply = payload; });

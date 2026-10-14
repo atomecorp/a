@@ -12,7 +12,12 @@ import { reportRuntimeError } from '../../runtime_errors.js';
 const PUSH_EVENTS = {
     'visio-event': message => ({ roomId: message.room_id, event: message.data }),
     // Native SQLite has committed the cloud projection; consumers re-read the canonical API.
-    'sync:projection-ready': message => ({ stream: message.stream, replay: message.replay === true }),
+    // A replay announces every stream it changed at once (`streams`), a live event its own `stream`.
+    'sync:projection-ready': message => ({
+        stream: message.stream || null,
+        streams: Array.isArray(message.streams) ? message.streams : [],
+        replay: message.replay === true
+    }),
     'phone-link-ready': message => ({ attemptId: message.attemptId }),
     'ai-realtime-event': message => ({ session_id: message.session_id, event: message.event }),
     'surface-presence': (message) => ({

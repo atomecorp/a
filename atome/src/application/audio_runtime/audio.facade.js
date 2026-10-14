@@ -3,6 +3,8 @@ import { resolveAudioRuntime } from './runtime_audio_backend.js';
 import { getAudioPlaybackAPI } from './audio_playback_api.js';
 import { getAudioRecordingAPI } from './audio_recording_api.js';
 import { installSharedAVContracts } from './av_contracts.js';
+// Installs `window.AUv3API._receiveFromSwift`, where the AUv3 host delivers its messages.
+import './auv3_host_bridge.js';
 
 // Squirrel AV Audio Facade — Unified Audio Engine entry point
 // Exposes Squirrel.av.audio with a single playback authority: kira.
@@ -69,7 +71,7 @@ import { installSharedAVContracts } from './av_contracts.js';
   }
 
   // API facade: routes to active backend
-  const immediateNames = new Set(['create_clip', 'destroy_clip', 'unlock', 'play', 'play_instance', 'stop', 'stop_clip', 'stop_instance', 'jump', 'set_param']);
+  const immediateNames = new Set(['create_clip', 'destroy_clip', 'unlock', 'play', 'play_instance', 'stop', 'stop_clip', 'stop_instance', 'jump', 'set_param', 'shared_context', 'render_clock', 'schedule_instance', 'schedule_instances', 'mix_apply', 'mix_levels', 'mix_cut_tail', 'mix_module_state', 'mix_output_devices', 'mix_live_push']);
   const callBackendMethod = (name, arg) => {
     if (!active || !backends[active] || typeof backends[active][name] !== 'function') {
       return false;
@@ -142,6 +144,13 @@ import { installSharedAVContracts } from './av_contracts.js';
   audio.set_marker_follow_actions = proxyCall('set_marker_follow_actions');
   audio.clear_marker_follow_actions = proxyCall('clear_marker_follow_actions');
   audio.query_clip = proxyCall('query_clip');
+  // Mixer graph: apply a compiled program, read strip meters, cut an effect tail.
+  audio.mix_apply = proxyCall('mix_apply');
+  audio.mix_levels = proxyCall('mix_levels');
+  audio.mix_cut_tail = proxyCall('mix_cut_tail');
+  audio.mix_module_state = proxyCall('mix_module_state');
+  audio.mix_output_devices = proxyCall('mix_output_devices');
+  audio.mix_live_push = proxyCall('mix_live_push');
 
   av.devices.listAudioInputs = () => av.devices.list({ media_kind: 'audio', direction: 'input' });
   av.devices.listAudioOutputs = () => av.devices.list({ media_kind: 'audio', direction: 'output' });

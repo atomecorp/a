@@ -48,7 +48,7 @@ afterEach(() => {
     vi.useRealTimers();
 });
 
-test('main menu projects audio scope, video thumbnail and photo flash inside their Bevy tools', () => {
+test('main menu projects audio scope, video frames and photo flash inside their Bevy tools', () => {
     const treeFor = (visuals) => buildBevyMainMenuTree({
         content,
         surface,
@@ -75,7 +75,8 @@ test('main menu projects audio scope, video thumbnail and photo flash inside the
     assert.ok(photoItem);
     assert.equal(audioItem.children.some((node) => node.id.endsWith('_icon')), false);
     assert.equal(audioItem.children.some((node) => node.id.endsWith('_label')), false);
-    assert.equal(audioItem.children.filter((node) => node.id.includes('_recording_scope_bar_')).length, 64);
+    // ~2 px contiguous columns: 30 on a 60 px tool.
+    assert.equal(audioItem.children.filter((node) => node.id.includes('_recording_scope_bar_')).length, 30);
     const videoPreview = videoItem.children.find((node) => node.id.endsWith('_recording_video'));
     assert.equal(videoPreview.kind, 'image');
     assert.equal(videoPreview.overlayRecord.type, 'image');
@@ -127,7 +128,7 @@ test('recording feedback keeps the main menu visible and projects the preview in
     assert.ok(audioItem);
     assert.equal(audioItem.children.some((node) => node.id.endsWith('_icon')), false);
     assert.equal(audioItem.children.some((node) => node.id.endsWith('_label')), false);
-    assert.equal(audioItem.children.filter((node) => node.id.includes('_recording_scope_bar_')).length, 64);
+    assert.equal(audioItem.children.filter((node) => node.id.includes('_recording_scope_bar_')).length, 30);
 });
 
 test('an orphaned recording visual never hides the canonical main menu', () => {
@@ -143,27 +144,70 @@ test('an orphaned recording visual never hides the canonical main menu', () => {
     assert.deepEqual(tree.visualItems.map((item) => item.key), ['photo', 'video', 'audio', 'capture', 'atome']);
 });
 
-test('audio scope uses fixed logarithmic levels without fake silence movement', () => {
-    const heightsFor = (amplitude) => {
+test('audio scope draws one continuous signed waveform, a flat line in silence', () => {
+    const columnsFor = (minimum, maximum) => {
         const tree = buildBevyMainMenuTree({
             content,
             surface,
             itemSize: 60,
             state: treeState(new Map([['ui.capture.audio', {
                 kind: 'audio_scope', phase: 'recording', sessionId: 'levels', sequence: 1,
-                scope: { pairs: Array.from({ length: 64 }, () => [-amplitude, amplitude]) }
+                scope: { pairs: Array.from({ length: 64 }, () => [minimum, maximum]) }
             }]])),
             handlers: {}
         });
         const item = findNode(tree.root, (node) => node.id.endsWith('capture__audio'));
-        return item.children
-            .filter((node) => node.id.includes('_recording_scope_bar_'))
-            .map((node) => node.style.size[1]);
+        return item.children.filter((node) => node.id.includes('_recording_scope_bar_'));
     };
-    assert.deepEqual(new Set(heightsFor(0)), new Set([1]));
-    assert.equal(heightsFor(0.01)[0], 20);
-    assert.equal(heightsFor(0.25)[0] > heightsFor(0.01)[0], true);
-    assert.equal(heightsFor(1)[0], 60);
+    const silence = columnsFor(0, 0);
+    // Square, touching columns: never a row of sub-pixel pills.
+    assert.equal(silence.every((node) => node.style.radius === 0 && node.overlayRecord.properties.corner_radius === 0), true);
+    silence.slice(1).forEach((node, index) => {
+        const previous = silence[index];
+        assert.equal(node.style.position[0], previous.style.position[0] + previous.style.size[0]);
+    });
+    assert.deepEqual(new Set(silence.map((node) => node.style.size[1])), new Set([2]));
+    assert.deepEqual(new Set(silence.map((node) => node.style.position[1])), new Set([29]));
+    // Linear amplitude, like the persisted sound waveform.
+    assert.equal(columnsFor(-0.25, 0.25)[0].style.size[1], 15);
+    assert.equal(columnsFor(-1, 1)[0].style.size[1], 60);
+    // Signed: a positive peak rises above the centre further than the trough falls.
+    const asymmetric = columnsFor(-0.1, 0.5)[0];
+    assert.equal(asymmetric.style.position[1], 15);
+    assert.equal(asymmetric.style.size[1], 18);
+});
+
+test('audio scope stays frozen in the tool while the take is stopped and persisted', () => {
+    for (const phase of ['stopping', 'persisting']) {
+        const tree = buildBevyMainMenuTree({
+            content,
+            surface,
+            itemSize: 60,
+            state: treeState(new Map([['ui.capture.audio', {
+                kind: 'audio_scope', phase, sessionId: 'frozen', sequence: 1,
+                scope: { pairs: Array.from({ length: 64 }, () => [-0.5, 0.5]) }
+            }]])),
+            handlers: {}
+        });
+        const item = findNode(tree.root, (node) => node.id.endsWith('capture__audio'));
+        assert.equal(item.children.filter((node) => node.id.includes('_recording_scope_bar_')).length, 30);
+        assert.equal(item.children.some((node) => node.id.endsWith('_recording_status')), false);
+    }
+});
+
+test('a camera take only turns the ribbon tool red, without a thumbnail', () => {
+    const tree = buildBevyMainMenuTree({
+        content,
+        surface,
+        itemSize: 60,
+        state: treeState(new Map([['ui.capture.video', {
+            toolId: 'ui.capture.video', kind: 'action_indicator', phase: 'recording', sessionId: 'video_1'
+        }]])),
+        handlers: {}
+    });
+    const videoItem = findNode(tree.root, (node) => node.id.endsWith('capture__video'));
+    assert.equal(findNode(videoItem, (node) => node.id.endsWith('_recording_video')), null);
+    assert.ok(findNode(videoItem, (node) => node.id.endsWith('_icon')));
 });
 
 test('recording visual runtime rejects stale scope frames and stale cleanup', async () => {
@@ -301,4 +345,48 @@ test('audio scope decimation is bounded, normalized and derived from the recorde
         assert.ok(minimum >= -1 && minimum <= maximum);
         assert.ok(maximum <= 1);
     });
+});
+
+test('a browser scope frame scrolls the history by its duration, a native snapshot by one column', async () => {
+    const state = { activePaletteKey: '', recordingVisualByToolId: new Map() };
+    const runtime = createMainMenuRecordingVisualRuntime({
+        state,
+        content: () => content,
+        items: () => [{ id: 'menu_audio', toolId: 'ui.capture.audio' }],
+        render: async () => true,
+        scheduleRender: () => true
+    });
+    await runtime.setToolRecordingVisual({
+        toolId: 'ui.capture.audio', sessionId: 'pace', kind: 'audio_scope', phase: 'recording'
+    });
+    const rising = Array.from({ length: 64 }, (_, index) => [-index / 64, index / 64]);
+    // 120 ms of PCM at 48 kHz: three ~40 ms columns, each its own slice.
+    runtime.pushToolAudioScope({
+        toolId: 'ui.capture.audio', sessionId: 'pace', sequence: 1,
+        sampleRate: 48_000, frame_count: 5760, pairs: rising
+    });
+    const history = state.recordingVisualByToolId.get('ui.capture.audio').scope.pairs;
+    assert.equal(history.length, 64);
+    assert.deepEqual(history.slice(-3).map(([, maximum]) => maximum), [20 / 64, 41 / 64, 63 / 64]);
+    runtime.pushToolAudioScope({
+        toolId: 'ui.capture.audio', sessionId: 'pace', sequence: 2, sampleRate: 48_000, pairs: rising
+    });
+    assert.deepEqual(state.recordingVisualByToolId.get('ui.capture.audio').scope.pairs.at(-1), [-63 / 64, 63 / 64]);
+});
+
+test('a phase change of the same take keeps its waveform; a new take starts empty', async () => {
+    const state = { activePaletteKey: '', recordingVisualByToolId: new Map() };
+    const runtime = createMainMenuRecordingVisualRuntime({
+        state,
+        content: () => content,
+        items: () => [{ id: 'menu_audio', toolId: 'ui.capture.audio' }],
+        render: async () => true,
+        scheduleRender: () => true
+    });
+    await runtime.setToolRecordingVisual({ toolId: 'ui.capture.audio', sessionId: 'take', kind: 'audio_scope', phase: 'recording' });
+    runtime.pushToolAudioScope({ toolId: 'ui.capture.audio', sessionId: 'take', sequence: 1, pairs: [[-0.4, 0.6]] });
+    await runtime.setToolRecordingVisual({ toolId: 'ui.capture.audio', sessionId: 'take', kind: 'audio_scope', phase: 'stopping' });
+    assert.deepEqual(state.recordingVisualByToolId.get('ui.capture.audio').scope.pairs.at(-1), [-0.4, 0.6]);
+    await runtime.setToolRecordingVisual({ toolId: 'ui.capture.audio', sessionId: 'next', kind: 'audio_scope', phase: 'recording' });
+    assert.deepEqual(state.recordingVisualByToolId.get('ui.capture.audio').scope.pairs.at(-1), [0, 0]);
 });

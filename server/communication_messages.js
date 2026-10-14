@@ -40,5 +40,36 @@ export async function readConversation(vaultRouter, userId, { contactId, cursor 
         }
         oldCursor = old.nextCursor;
     } while (oldCursor);
-    return vaultRouter.provider.request(userId, 'communication:list', { contactId, cursor, limit });
+    const page = await vaultRouter.provider.request(userId, 'communication:list', { contactId, cursor, limit });
+    const items = await Promise.all((page?.items || []).map(async (item) => ({ ...item,
+        media: await readableMedia(vaultRouter, userId, item.atome_ids) })));
+    return { ...page, items };
+}
+
+// What a participant needs to play the Atomes a message carries, read through the vault
+// (own state, or the share projection: nothing the reader may not read). The source is
+// the file route without the owner's query, which carried the owner's media token; the
+// reader's client signs it with its own session.
+const MEDIA_FIELDS = ['media_kind', 'mime_type', 'duration', 'duration_sec', 'width', 'height', 'media_width', 'media_height', 'name'];
+const tokenFreeSource = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    try {
+        const url = new URL(raw, 'http://relative.invalid');
+        url.search = ''; url.hash = '';
+        return raw.startsWith('/') ? url.pathname : url.toString();
+    } catch (_) { return ''; }
+};
+async function readableMedia(vaultRouter, userId, atomeIds) {
+    const media = [];
+    for (const atomeId of (Array.isArray(atomeIds) ? atomeIds : []).slice(0, 10)) {
+        const state = await vaultRouter.getState(userId, String(atomeId)).catch(() => null);
+        const properties = state?.properties || {};
+        const source = tokenFreeSource(properties.media_url);
+        if (!state || !source) continue;
+        media.push({ id: String(atomeId), type: String(state.atome_type || state.type || properties.type || ''),
+            ...Object.fromEntries(MEDIA_FIELDS.filter((key) => properties[key] != null).map((key) => [key, properties[key]])),
+            media_url: source });
+    }
+    return media;
 }

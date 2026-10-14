@@ -3,7 +3,7 @@ import { JSDOM } from 'jsdom';
 import { test, vi } from 'vitest';
 
 import { createPanelTextEditingRuntime } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_text_editing.js';
-import { getTextServiceState } from '../../eVe/domains/rendering/hidden_text_service_runtime.js';
+import { getTextServiceState, mountActiveTextEditor, unmountActiveTextEditor } from '../../eVe/domains/rendering/hidden_text_service_runtime.js';
 import { createBevyUiPointerRuntime } from '../../eVe/domains/rendering/bevy_ui_pointer_runtime.js';
 import { setMysticRuntime } from '../../eVe/intuition/ribbon/bevy_ui_product_registry.js';
 
@@ -34,6 +34,22 @@ const createRuntime = () => {
 };
 
 const hiddenEditor = (dom) => dom.window.document.querySelector('#eve_hidden_text_service textarea');
+
+test('secure native editor preserves Unicode input, replaces phone semantics and keeps one editor', () => {
+    const dom = installDom();
+    const phone = mountActiveTextEditor({ atomeId: 'phone', inputType: 'tel', value: '+15555550142', ownerKey: 'phone' }).editor;
+    phone.maxLength = 15;
+    const secret = '🙂'.repeat(64) + ' with spaces ';
+    const password = mountActiveTextEditor({ atomeId: 'password', inputType: 'password', value: secret, ownerKey: 'password' }).editor;
+    assert.equal(password, phone);
+    assert.equal(password.type, 'password'); assert.equal(password.value, secret);
+    assert.equal(password.getAttribute('inputmode'), 'text');
+    assert.equal(password.getAttribute('autocomplete'), 'current-password');
+    assert.equal(password.getAttribute('maxlength'), null);
+    assert.equal(password.getAttribute('spellcheck'), 'false');
+    assert.deepEqual(getTextServiceState(), { hiddenRootCount: 1, activeEditorCount: 1 });
+    unmountActiveTextEditor(); dom.window.close();
+});
 
 const focusField = (editing) => {
     editing.handle({

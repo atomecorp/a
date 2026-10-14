@@ -84,7 +84,10 @@ export function createCommunicationRelations({
         if (sender === recipient) return { ok: true };
         if (await hasBlocked(recipient, sender)) return { ok: false, silent: true, error: 'blocked' };
         if (await hasBlocked(sender, recipient)) return { ok: false, error: 'contact_blocked_by_you' };
-        if (await contactStatus(recipient, sender) === 'accepted') return { ok: true };
+        const status = await contactStatus(recipient, sender);
+        if (status === 'accepted') return { ok: true };
+        // Un refus est un blocage, y compris un refus anterieur a cette regle.
+        if (status === 'refused') return { ok: false, silent: true, error: 'blocked' };
         return { ok: false, error: 'contact_required' };
     };
 
@@ -125,8 +128,11 @@ export function createCommunicationRelations({
         if (value !== 'accept' && value !== 'refuse') throw new Error('contact_decision_invalid');
         if (await contactStatus(owner, peer) === null) throw new Error('contact_request_not_found');
         await setContact(owner, peer, value === 'accept' ? 'accepted' : 'refused');
-        if (value === 'accept') await notify(peer, owner, { kind: 'connection-accepted', message: '' });
-        return { ok: true, status: value === 'accept' ? 'accepted' : 'refused' };
+        // Refuser, c'est bloquer (decision du 14 oct. 2026) : silencieux pour l'expediteur,
+        // reversible par « Debloquer ».
+        if (value === 'refuse') return block(owner, peer);
+        await notify(peer, owner, { kind: 'connection-accepted', message: '' });
+        return { ok: true, status: 'accepted' };
     };
 
     const block = async (ownerId, peerId) => {
@@ -142,10 +148,14 @@ export function createCommunicationRelations({
         return { ok: true, status: 'blocked' };
     };
 
-    // Le deblocage retire la policy : la relation de contact, stockee a part, est intacte.
+    // Le deblocage retire la policy et oublie un refus : une nouvelle demande du pair
+    // sera de nouveau notifiee. Une relation acceptee ou en attente reste intacte.
     const unblock = async (ownerId, peerId) => {
         await query('run',
             `DELETE FROM sync_share_policies WHERE owner_id = ? AND peer_id = ? AND policy = 'block'`,
+            [id(ownerId), id(peerId)]);
+        await query('run',
+            `DELETE FROM communication_contacts WHERE owner_id = ? AND peer_id = ? AND status = 'refused'`,
             [id(ownerId), id(peerId)]);
         return { ok: true, status: (await contactStatus(ownerId, peerId)) || 'none' };
     };
@@ -158,7 +168,9 @@ export function createCommunicationRelations({
         const blockedRows = await query('all',
             `SELECT peer_id FROM sync_share_policies WHERE owner_id = ? AND policy = 'block' AND revoked_at IS NULL`,
             [owner]) || [];
-        const blocked = blockedRows.map((row) => String(row.peer_id));
+        // Un refus est un blocage (y compris les refus anterieurs a cette regle).
+        const blocked = [...new Set([...blockedRows.map((row) => String(row.peer_id)),
+            ...rows.filter((row) => row.status === 'refused').map((row) => String(row.peer_id))])];
         const incoming = rows.filter((row) => row.status === 'pending' && String(row.requested_by) !== owner);
         // Etat lisible par pair, du point de vue de `owner`. Un refus ou un blocage de
         // l'AUTRE cote n'est jamais revele : il reste « demande envoyee ».
@@ -166,8 +178,7 @@ export function createCommunicationRelations({
         for (const row of rows) {
             const peer = String(row.peer_id);
             if (row.status === 'pending') statuses[peer] = 'incoming';
-            else if (row.status === 'refused') statuses[peer] = 'refused';
-            else statuses[peer] = (await contactStatus(peer, owner)) === 'accepted' ? 'contact' : 'outgoing';
+            else if (row.status !== 'refused') statuses[peer] = (await contactStatus(peer, owner)) === 'accepted' ? 'contact' : 'outgoing';
         }
         for (const peer of blocked) statuses[peer] = 'blocked';
         return {
@@ -175,7 +186,6 @@ export function createCommunicationRelations({
             statuses,
             contacts: rows.filter((row) => row.status === 'accepted').map((row) => String(row.peer_id)),
             pending: incoming.map((row) => String(row.peer_id)),
-            refused: rows.filter((row) => row.status === 'refused').map((row) => String(row.peer_id)),
             blocked
         };
     };

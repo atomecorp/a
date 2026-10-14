@@ -1,5 +1,13 @@
 # Phone-link authentication implementation status
 
+## 2026-10-14 — ATM-2001 implementation update (partial acceptance)
+
+The optional-password work is implemented through the existing phone-link and device-session owners on /ws/api. First enrollment remains compulsory SMS with its existing payment/device proof; guests stay independent. FirstLaunch offers password or SMS for every submitted number, avoiding account flags. Home Security sets a password only after trusted-session proof; replacement also checks the current password and revokes other sessions. No SMS-only password reset or legacy authentication endpoint was added.
+
+Protected authentication tables store Argon2id verifiers and progressive failure counters. New passwords require 15 Unicode code points and support at least 64, including spaces, without normalization/truncation. Successful legacy bcrypt verification immediately writes Argon2id; inputs beyond bcrypt's 72-byte proof boundary are refused for legacy migration. Server Node 25.2.1 provides native Argon2id (19 MiB/t2/p1, two simultaneous operations maximum); local sequential calibration measured 321–635ms and 61 MiB process RSS, not a production capacity claim. A maintained server-only SHA-256 blocklist at AUTH_PASSWORD_BLOCKLIST_PATH is required; absent/invalid list refuses saving, and none is configured locally. No new dependency or secret/configuration was installed.
+
+Fresh password tests pass 5/5, covering optional setup, Unicode, wrong/unknown/SMS-only, proof, new device, renewal/revocation and controlled bcrypt migration; existing SMS/client tests pass. Real Web gestures prove masked entry, choice/back and portrait layout. Signed iOS compilation succeeds. Actual carrier SMS, Tauri UI, physical password setup/second device/expiry/restart and production deployment remain unverified. Recovery Kit/device-loss recovery is not completed by this patch. Current files/evidence and blockers are in [FRAMEWORK_STATE](../eVe/documentations/FRAMEWORK_STATE.md#5-recent-task-record).
+
 ## 2026-10-12 tracking clarification
 
 Canonical task: [ATM-2001](execution_order.md). User-approved distinction: current first connection is SMS phone-link authentication. Optional password authentication is a future evolution for an already verified account: set the password inside that account, then offer password or SMS after entering its phone number. This is the same authentication workstream, not a duplicate implementation task, and the future password feature does not block sharing.

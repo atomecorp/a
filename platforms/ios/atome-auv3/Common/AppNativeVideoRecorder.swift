@@ -180,7 +180,7 @@ final class AppNativeVideoRecorder: NSObject, AVCaptureFileOutputRecordingDelega
 
     private func configureConnection(_ connection: AVCaptureConnection?) {
         guard let connection else { return }
-        let angle = videoRotationAngle(from: requestedOrientation)
+        let angle = captureRotationAngle()
         if connection.isVideoRotationAngleSupported(angle) {
             connection.videoRotationAngle = angle
         }
@@ -188,6 +188,18 @@ final class AppNativeVideoRecorder: NSObject, AVCaptureFileOutputRecordingDelega
             connection.automaticallyAdjustsVideoMirroring = false
             connection.isVideoMirrored = cameraPosition == .front
         }
+    }
+
+    /// The rotation that makes a take upright for THIS camera. A fixed 90° for
+    /// portrait assumes a landscape-mounted sensor; the square front camera of
+    /// recent iPhones is mounted otherwise, and a selfie came out sideways.
+    /// The rotation coordinator knows each device's mounting.
+    private func captureRotationAngle() -> CGFloat {
+        if #available(iOS 17.0, *), let device = activeDevice {
+            return AVCaptureDevice.RotationCoordinator(device: device, previewLayer: nil)
+                .videoRotationAngleForHorizonLevelCapture
+        }
+        return videoRotationAngle(from: requestedOrientation)
     }
 
     private func startRecording() {
@@ -224,9 +236,9 @@ final class AppNativeVideoRecorder: NSObject, AVCaptureFileOutputRecordingDelega
                     "mime_type": "video/quicktime",
                     "preview_source_id": self.previewSourceId,
                     "preview_command": "media_video_preview_frame",
-                    "preview_pixel_format": "bgra8",
+                    "preview_pixel_format": "jpeg",
                     "preview_max_dimension": AppNativeVideoPreviewState.maximumDimension,
-                    "preview_max_fps": 15
+                    "preview_max_fps": AppNativeVideoPreviewState.maximumFps
                 ])
             }
             if self.stopRequestedBeforeStart {

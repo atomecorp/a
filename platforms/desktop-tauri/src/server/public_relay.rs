@@ -7,7 +7,7 @@ use tokio_tungstenite::{connect_async, tungstenite::Message};
 // television catalogue and YouTube live resolution). The desktop runtime has
 // no copy of them: it forwards the frame, without any credential, to the
 // configured Fastify server and returns its single reply.
-pub(super) const PUBLIC_TYPES: [&str; 3] = ["youtube-search", "tv-catalog", "tv-resolve"];
+pub(super) const PUBLIC_TYPES: [&str; 4] = ["youtube-search", "tv-catalog", "tv-resolve", "gps-resource"];
 
 fn failure_code(request_type: &str) -> &'static str {
     if request_type == "youtube-search" { "youtube_search_unavailable" } else { "PROVIDER_UNAVAILABLE" }

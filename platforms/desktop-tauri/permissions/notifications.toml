@@ -1,0 +1,5 @@
+"$schema" = "schemas/schema.json"
+[[permission]]
+identifier = "notifications"
+description = "Allows the canonical main page to use native OS notification and call capabilities."
+commands.allow = ["notifications_invoke"]

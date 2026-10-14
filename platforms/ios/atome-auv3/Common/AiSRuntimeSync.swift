@@ -165,10 +165,20 @@ extension AiSRuntime {
         }) ?? []
     }
 
-    static func completeRemoteReplay(principalId: String, streamId: String) throws {
+    static func completeRemoteReplay(principalId: String, streamIds: [String]) throws {
+        guard !streamIds.isEmpty else { return }
         try queue.sync {
             let db = try openDatabase()
-            try execute(db, "UPDATE remote_sync_stream_cursors SET projection_version = 1 WHERE principal_id = ? AND stream_id = ?", [.text(principalId), .text(streamId)])
+            try execute(db, "SAVEPOINT ais_sync_replay")
+            do {
+                for streamId in streamIds {
+                    try execute(db, "UPDATE remote_sync_stream_cursors SET projection_version = 1 WHERE principal_id = ? AND stream_id = ? AND projection_version = 0", [.text(principalId), .text(streamId)])
+                }
+                try execute(db, "RELEASE ais_sync_replay")
+            } catch {
+                try execute(db, "ROLLBACK TO ais_sync_replay"); try execute(db, "RELEASE ais_sync_replay")
+                throw error
+            }
         }
     }
 

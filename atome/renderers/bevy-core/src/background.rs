@@ -1,5 +1,6 @@
 use bevy::{
     asset::RenderAssetUsages,
+    camera::visibility::RenderLayers,
     mesh::{Indices, Mesh, Mesh2d},
     prelude::*,
     render::render_resource::PrimitiveTopology,
@@ -14,7 +15,12 @@ use crate::{
         AtomeBevyRendererConfig, AtomeTransition,
     },
     video_external_texture::AtomeVideoExternalTexture,
+    mystic_capture::MENU_BACKGROUND_LAYER,
 };
+
+// Every background entity is drawn like before (layer 0) AND captured alone by the
+// Mystic background target, which is what a turning plate reveals.
+fn background_layers() -> RenderLayers { RenderLayers::layer(0).with(MENU_BACKGROUND_LAYER) }
 
 const BACKGROUND_DEPTH: f32 = -BEVY_LAYER_DEPTH_LIMIT - 1.0;
 // The video sits above its base colour, below every atome layer.
@@ -123,6 +129,7 @@ fn spawn_background_video(
         },
         Transform::from_translation(Vec3::new(0.0, 0.0, BACKGROUND_VIDEO_DEPTH)),
         Visibility::Visible,
+        background_layers(),
     ));
     Ok(())
 }
@@ -171,6 +178,7 @@ pub fn apply_surface_background(
         AtomeSurfaceBackgroundCover,
         Sprite::from_color(color_from_rgba(patch.cover), Vec2::new(surface_width, surface_height)),
         Transform::from_translation(Vec3::new(0.0, 0.0, BACKGROUND_COVER_DEPTH)),
+        background_layers(),
     );
     if let Some(entity) = cover_entity {
         world.entity_mut(entity).insert(cover);
@@ -205,6 +213,7 @@ pub fn apply_surface_background(
             ..sprite
         },
         Transform::from_translation(Vec3::new(0.0, 0.0, BACKGROUND_DEPTH)),
+        background_layers(),
     );
     if let Some(entity) = existing {
         world.entity_mut(entity).insert(components);

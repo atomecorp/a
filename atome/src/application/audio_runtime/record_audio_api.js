@@ -312,7 +312,8 @@ import {
                     filePath,
                     userId,
                     sampleRate: requestedSampleRate,
-                    channels: requestedChannels
+                    channels: requestedChannels,
+                    inputDeviceName: params.inputDeviceName || null
                 });
             } catch (error) {
                 clearRecordingScopeSession(sessionId);
@@ -430,7 +431,9 @@ import {
                     overrun_frames: Number.isFinite(overrunFrames) && overrunFrames > 0 ? overrunFrames : 0,
                     sample_rate: sampleRate,
                     channels: Number(result?.channels || entry.channels || 0),
-                    provider: entry.provider
+                    provider: entry.provider,
+                    // Where the take started on the playback clock (sample-accurate placement).
+                    capture_clock: result?.capture_clock || null
                 };
                 const waveformPeaks = waveformPeaksFromResult(result);
                 if (waveformPeaks.length) {

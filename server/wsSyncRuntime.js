@@ -2,6 +2,8 @@ import crypto from 'node:crypto';
 import { wsSendJson } from './wsSend.js';
 
 const CONTROL_TYPES = new Set(['auth', 'register', 'subscribe', 'unsubscribe', 'ack', 'ping']);
+const SUBSCRIBE_BATCH_LIMIT = 500;
+const DIRECTORY_STREAM = 'directory.public';
 
 const numberCursor = (value) => {
     const cursor = Number(value);
@@ -37,6 +39,7 @@ export class WsSyncRuntime {
         this.vaultRouter = options.vaultRouter;
         this.directoryService = options.directoryService || null;
         this.send = options.send || wsSendJson;
+        this.reportFailure = options.reportFailure || (() => {});
         this.authTimeoutMs = Math.max(100, Number(options.authTimeoutMs) || 5000);
         this.idleTimeoutMs = Math.max(1000, Number(options.idleTimeoutMs) || 45_000);
         this.records = new Map();
@@ -94,7 +97,7 @@ export class WsSyncRuntime {
             connection_id: record.connectionId,
             server: 'fastify',
             version: version?.version || null,
-            capabilities: ['register', 'subscribe', 'unsubscribe', 'ack', 'ping', 'replay'],
+            capabilities: ['register', 'subscribe', 'subscribe-batch', 'unsubscribe', 'ack', 'ping', 'replay'],
             timestamp: new Date().toISOString()
         });
         return true;
@@ -119,7 +122,11 @@ export class WsSyncRuntime {
         connection.on('message', (raw) => {
             record.messageQueue = record.messageQueue
                 .then(() => this.receive(record, raw))
-                .catch(() => this.close(record, 'sync_processing_failed'));
+                .catch((error) => {
+                    // The client reconnects and replays every stream it holds: the cause must be traceable.
+                    this.reportFailure({ principal_id: record.principalId, error: error?.message || String(error) });
+                    this.close(record, 'sync_processing_failed');
+                });
         });
         connection.on('close', () => this.cleanup(connection));
         connection.on('error', () => this.cleanup(connection));
@@ -212,6 +219,10 @@ export class WsSyncRuntime {
     }
 
     async subscribe(record, message) {
+        if (Array.isArray(message.streams)) {
+            await this.subscribeBatch(record, message.streams);
+            return;
+        }
         const stream = String(message.stream || message.stream_id || '').trim();
         if (!stream) {
             this.safeSend(record.connection, { type: 'error', code: 'stream_required' });
@@ -221,7 +232,7 @@ export class WsSyncRuntime {
             this.safeSend(record.connection, { type: 'error', code: 'register_required' });
             return;
         }
-        const directory = stream === 'directory.public';
+        const directory = stream === DIRECTORY_STREAM;
         if (!directory && !await this.vaultRouter.streamAccess(record.principalId, stream)) {
             this.safeSend(record.connection, { type: 'error', code: 'stream_access_denied', stream });
             return;
@@ -231,6 +242,47 @@ export class WsSyncRuntime {
         this.safeSend(record.connection, { type: 'subscribed', stream, cursor });
         if (directory) await this.replayDirectory(record);
         else await this.replay(record, stream);
+    }
+
+    // A reconnection subscribes every stream it holds, thousands of them: one message carries
+    // up to SUBSCRIBE_BATCH_LIMIT cursors, access and heads are read in bulk, only the streams
+    // behind their head are replayed, and one `replay-complete` lists those streams.
+    async subscribeBatch(record, entries) {
+        if (!record.source) {
+            this.safeSend(record.connection, { type: 'error', code: 'register_required' });
+            return;
+        }
+        if (entries.length > SUBSCRIBE_BATCH_LIMIT) {
+            this.safeSend(record.connection, { type: 'error', code: 'subscribe_batch_too_large', limit: SUBSCRIBE_BATCH_LIMIT });
+            return;
+        }
+        const cursors = new Map();
+        for (const entry of entries) {
+            const stream = String(entry?.stream || entry?.stream_id || '').trim();
+            if (stream) cursors.set(stream, numberCursor(entry.cursor));
+        }
+        const directoryCursor = cursors.get(DIRECTORY_STREAM);
+        cursors.delete(DIRECTORY_STREAM);
+        const heads = await this.vaultRouter.authorizedStreamHeads(record.principalId, Array.from(cursors.keys()));
+        const denied = [];
+        for (const [stream, cursor] of cursors) {
+            if (heads.has(stream)) record.subscriptions.set(stream, { cursor, acked: cursor });
+            else denied.push(stream);
+        }
+        if (denied.length) this.safeSend(record.connection, { type: 'error', code: 'stream_access_denied', streams: denied });
+        const replayed = [];
+        if (directoryCursor != null) {
+            record.subscriptions.set(DIRECTORY_STREAM, { cursor: directoryCursor, acked: directoryCursor });
+            const reached = await this.replayDirectory(record, { announce: false });
+            if (reached != null) replayed.push({ stream: DIRECTORY_STREAM, cursor: reached });
+        }
+        for (const [stream, cursor] of cursors) {
+            if (record.closed) return;
+            if (!heads.has(stream) || heads.get(stream) <= cursor) continue;
+            const reached = await this.replay(record, stream, { announce: false });
+            if (reached != null) replayed.push({ stream, cursor: reached });
+        }
+        if (!record.closed) this.safeSend(record.connection, { type: 'replay-complete', streams: replayed });
     }
 
     unsubscribe(record, message) {
@@ -251,14 +303,15 @@ export class WsSyncRuntime {
         this.safeSend(record.connection, { type: 'acked', stream, sequence: subscription.acked });
     }
 
-    async replay(record, stream) {
+    // Returns the cursor reached, or null when the stream was revoked or the connection closed.
+    async replay(record, stream, { announce = true } = {}) {
         const subscription = record.subscriptions.get(stream);
-        if (!subscription) return;
+        if (!subscription) return null;
         while (!record.closed) {
             if (!await this.vaultRouter.streamAccess(record.principalId, stream)) {
                 record.subscriptions.delete(stream);
                 this.safeSend(record.connection, { type: 'revoked', stream });
-                return;
+                return null;
             }
             const events = await this.vaultRouter.listStreamEvents(record.principalId, stream, {
                 cursor: subscription.cursor,
@@ -269,30 +322,31 @@ export class WsSyncRuntime {
                 if (!await this.vaultRouter.streamAccess(record.principalId, stream)) {
                     record.subscriptions.delete(stream);
                     this.safeSend(record.connection, { type: 'revoked', stream });
-                    return;
+                    return null;
                 }
                 this.safeSend(record.connection, eventEnvelope(event, true));
                 subscription.cursor = Math.max(subscription.cursor, Number(event.sequence));
             }
             if (events.length < 500) break;
         }
-        this.safeSend(record.connection, {
-            type: 'replay-complete',
-            stream,
-            cursor: subscription.cursor
-        });
+        if (record.closed) return null;
+        if (announce) {
+            this.safeSend(record.connection, { type: 'replay-complete', stream, cursor: subscription.cursor });
+        }
+        return subscription.cursor;
     }
 
-    async replayDirectory(record) {
-        const stream = 'directory.public';
+    async replayDirectory(record, { announce = true } = {}) {
+        const stream = DIRECTORY_STREAM;
         const subscription = record.subscriptions.get(stream);
-        if (!subscription || !this.directoryService) return;
+        if (!subscription || !this.directoryService) return null;
         const events = await this.directoryService.listEvents(subscription.cursor, 1000);
         for (const event of events) {
             this.safeSend(record.connection, eventEnvelope(event, true));
             subscription.cursor = Math.max(subscription.cursor, Number(event.sequence));
         }
-        this.safeSend(record.connection, { type: 'replay-complete', stream, cursor: subscription.cursor });
+        if (announce) this.safeSend(record.connection, { type: 'replay-complete', stream, cursor: subscription.cursor });
+        return subscription.cursor;
     }
 
     async publish(event) {
@@ -334,7 +388,7 @@ export class WsSyncRuntime {
     async publishDirectory(event) {
         let delivered = 0;
         for (const record of this.records.values()) {
-            const subscription = record.subscriptions.get('directory.public');
+            const subscription = record.subscriptions.get(DIRECTORY_STREAM);
             if (!record.authenticated || record.closed || !subscription) continue;
             if (Number(event.sequence) <= subscription.cursor) continue;
             this.safeSend(record.connection, eventEnvelope(event, false));

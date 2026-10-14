@@ -164,6 +164,37 @@ const normalizeMapPresentation = ({ center, zoom, width, height } = {}) => {
     };
 };
 
+// Reusable path projection: clip at the viewport and coalesce subpixel points.
+// It returns ordinary shared-renderer segment geometry, never a private canvas.
+const pathSegmentsForViewport = ({ points = [], center, zoom, width, height }) => {
+    const projected = points.map(point => projectToViewport({ point, center, zoom, width, height }));
+    const segments = [];
+    let start = projected[0];
+    for (let i = 1; i < projected.length; i++) {
+        const end = projected[i];
+        if (Math.hypot(end.x - start.x, end.y - start.y) < 1 && i !== projected.length - 1) continue;
+        let low = 0, high = 1;
+        const dx = end.x - start.x, dy = end.y - start.y;
+        const boundaries = [[-dx, start.x], [dx, width - start.x], [-dy, start.y], [dy, height - start.y]];
+        let visible = true;
+        for (const [p, q] of boundaries) {
+            if (p === 0) { if (q < 0) visible = false; continue; }
+            const ratio = q / p;
+            if (p < 0) low = Math.max(low, ratio); else high = Math.min(high, ratio);
+            if (low > high) { visible = false; break; }
+        }
+        if (visible) {
+            const a = { x: start.x + low * dx, y: start.y + low * dy };
+            const b = { x: start.x + high * dx, y: start.y + high * dy };
+            const length = Math.hypot(b.x - a.x, b.y - a.y);
+            if (length >= 1) segments.push({ x: (a.x + b.x - length) / 2, y: (a.y + b.y) / 2,
+                length, rotation: Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI });
+        }
+        start = end;
+    }
+    return segments;
+};
+
 export {
     MAX_LATITUDE,
     MAX_ZOOM,
@@ -172,6 +203,7 @@ export {
     clampZoom,
     lonLatToWorld,
     normalizeMapPresentation,
+    pathSegmentsForViewport,
     panCenter,
     projectToViewport,
     tilesForViewport,

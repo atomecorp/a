@@ -158,14 +158,16 @@ test('the card of somebody else holds only their shared card and never any setti
 
 test('only the handedness, the accordion side and the expertise levels remain visual preferences', () => {
     assert.deepEqual(normalizeVisualPreferences({}), {
-        handedness: 'right', accordionDirection: 'down', masteryLevel: 'beginner', activityLevels: {}, mysticAutoSize: true
+        handedness: 'right', accordionDirection: 'down', masteryLevel: 'beginner', activityLevels: {}, mysticAutoSize: true, dashboardStyle: 'auto'
     });
     assert.deepEqual(normalizeVisualPreferences({
         handedness: 'left', renderStyle: 'liquid', navigationTaxonomy: 'modern',
         mysticRoundness: 0, mysticTileGap: 4, mysticOpeningMs: 6000, liquidTheme: 'eau'
-    }), { handedness: 'left', accordionDirection: 'down', masteryLevel: 'beginner', activityLevels: {}, mysticAutoSize: true },
+    }), { handedness: 'left', accordionDirection: 'down', masteryLevel: 'beginner', activityLevels: {}, mysticAutoSize: true, dashboardStyle: 'auto' },
     'retired settings are dropped on the next save');
     assert.equal(normalizeVisualPreferences({ accordionDirection: 'up' }).accordionDirection, 'up');
+    assert.equal(normalizeVisualPreferences({ dashboardStyle: 'mystic' }).dashboardStyle, 'mystic');
+    assert.equal(normalizeVisualPreferences({ dashboardStyle: 'unknown' }).dashboardStyle, 'auto');
 });
 
 test('the shared card defaults to the name, the first name, the nickname and the photo', () => {

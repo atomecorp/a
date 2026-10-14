@@ -17,7 +17,13 @@ pub(super) fn ensure_schema(state: &LocalAuthState) -> Result<(), String> {
          CREATE TABLE IF NOT EXISTS auth_local_challenges (
             challenge_id TEXT PRIMARY KEY, grant_id TEXT NOT NULL, purpose TEXT NOT NULL,
             reference_id TEXT NOT NULL, nonce TEXT NOT NULL, issued_ms INTEGER NOT NULL,
-            expires_ms INTEGER NOT NULL, consumed_ms INTEGER);"
+            expires_ms INTEGER NOT NULL, consumed_ms INTEGER);
+         CREATE TABLE IF NOT EXISTS auth_os_installation (
+            provider TEXT PRIMARY KEY, installation_id TEXT NOT NULL);
+         CREATE TABLE IF NOT EXISTS auth_notification_inbox (
+            notification_id TEXT NOT NULL, action TEXT NOT NULL, principal_id TEXT NOT NULL,
+            payload TEXT NOT NULL, created_ms INTEGER NOT NULL,
+            PRIMARY KEY(notification_id,action,principal_id));"
     ).map_err(|_| "local_auth_schema_unavailable".to_string())?;
     let mut statement = db.prepare("PRAGMA table_info(auth_local_grants)").map_err(|_| "local_auth_schema_unavailable")?;
     let columns = statement.query_map([], |row| row.get::<_, String>(1)).map_err(|_| "local_auth_schema_unavailable")?
@@ -137,10 +143,14 @@ pub(super) async fn handle(
 }
 
 fn describe(message: &JsonValue, state: &LocalAuthState) -> Result<JsonValue, String> {
+    let db = state.db.lock().map_err(|_| "local_database_unavailable")?;
+    describe_db(message, &db)
+}
+
+pub(super) fn describe_db(message: &JsonValue, db: &Connection) -> Result<JsonValue, String> {
     let requested = message["grantId"]
         .as_str()
         .filter(|value| !value.is_empty());
-    let db = state.db.lock().map_err(|_| "local_database_unavailable")?;
     let select = |sql: &str, parameter: &str| {
         db.query_row(sql, [parameter], |r| {
             Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?))

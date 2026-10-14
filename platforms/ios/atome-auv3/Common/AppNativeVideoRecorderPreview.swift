@@ -1,19 +1,23 @@
 //
 //  AppNativeVideoRecorderPreview.swift
-//  Bounded latest-frame adapter for the shared Bevy recording-tool texture.
+//  Bounded latest-frame adapter for the live camera preview.
+//
+//  The WebView receives JPEG frames (960 px long edge, up to 30 fps) and turns
+//  them into a MediaStream that the shared Bevy video route presents as an
+//  external texture. Raw 96 px BGRA frames at 15 fps were upscaled to the
+//  whole preview: blurry and choppy.
 //
 
-import Accelerate
 import AVFoundation
+import CoreImage
 import CoreMedia
 import QuartzCore
 import os.lock
 
 private final class AppNativeVideoPreviewSlot {
-    var bytes = Data(count: AppNativeVideoPreviewState.maximumByteCount)
+    var jpeg = Data()
     var width = 0
     var height = 0
-    var byteCount = 0
     var sequence: UInt64 = 0
     var timestampSeconds: Double = 0
     var orientation = "portrait"
@@ -21,9 +25,12 @@ private final class AppNativeVideoPreviewSlot {
 }
 
 final class AppNativeVideoPreviewState: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
-    static let maximumDimension = 96
-    static let maximumByteCount = maximumDimension * maximumDimension * 4
-    static let minimumFrameInterval = 1.0 / 15.0
+    static let maximumDimension = 960
+    static let maximumFps = 30
+    static let jpegQuality = 0.72
+    // A few milliseconds of tolerance: a 30 fps camera keeps every frame instead
+    // of dropping the ones that arrive a hair early; 60 fps keeps one in two.
+    static let minimumFrameInterval = 1.0 / Double(maximumFps) - 0.004
 
     private let captureQueue = DispatchQueue(
         label: "atome.app.native_video_preview.capture",
@@ -38,6 +45,9 @@ final class AppNativeVideoPreviewState: NSObject, AVCaptureVideoDataOutputSample
         AppNativeVideoPreviewSlot(),
         AppNativeVideoPreviewSlot()
     ]
+    // GPU-backed encoder shared by every frame of the session.
+    private let imageContext = CIContext(options: [.cacheIntermediates: false])
+    private let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
 
     private var stateLock = os_unfair_lock()
     private var active = false
@@ -96,9 +106,9 @@ final class AppNativeVideoPreviewState: NSObject, AVCaptureVideoDataOutputSample
             "preview_active": isActive,
             "preview_available": isAvailable,
             "preview_sequence": NSNumber(value: currentSequence),
-            "preview_pixel_format": "bgra8",
+            "preview_pixel_format": "jpeg",
             "preview_max_dimension": Self.maximumDimension,
-            "preview_max_fps": 15
+            "preview_max_fps": Self.maximumFps
         ]
     }
 
@@ -113,8 +123,7 @@ final class AppNativeVideoPreviewState: NSObject, AVCaptureVideoDataOutputSample
             ]
         }
         let slot = slots[publishedSlot]
-        let byteCount = slot.byteCount
-        let bytes = Data(slot.bytes.prefix(byteCount))
+        let jpeg = slot.jpeg
         let metadata: [String: Any] = [
             "success": true,
             "available": true,
@@ -122,8 +131,8 @@ final class AppNativeVideoPreviewState: NSObject, AVCaptureVideoDataOutputSample
             "sequence": NSNumber(value: slot.sequence),
             "width": slot.width,
             "height": slot.height,
-            "byte_length": byteCount,
-            "pixel_format": "bgra8",
+            "byte_length": jpeg.count,
+            "pixel_format": "jpeg",
             "encoding": "base64",
             "timestamp_sec": slot.timestampSeconds,
             "orientation": slot.orientation,
@@ -131,7 +140,7 @@ final class AppNativeVideoPreviewState: NSObject, AVCaptureVideoDataOutputSample
         ]
         os_unfair_lock_unlock(&stateLock)
         var payload = metadata
-        payload["bytes_base64"] = bytes.base64EncodedString()
+        payload["bytes_base64"] = jpeg.base64EncodedString()
         return payload
     }
 
@@ -187,11 +196,11 @@ final class AppNativeVideoPreviewState: NSObject, AVCaptureVideoDataOutputSample
         let sourceHeight = CVPixelBufferGetHeight(pixelBuffer)
         guard sourceWidth > 0, sourceHeight > 0 else { return }
         let scale = min(
-            Double(Self.maximumDimension) / Double(sourceWidth),
-            Double(Self.maximumDimension) / Double(sourceHeight)
+            1.0,
+            Double(Self.maximumDimension) / Double(max(sourceWidth, sourceHeight))
         )
-        let width = max(1, min(Self.maximumDimension, Int((Double(sourceWidth) * scale).rounded())))
-        let height = max(1, min(Self.maximumDimension, Int((Double(sourceHeight) * scale).rounded())))
+        let width = max(1, Int((Double(sourceWidth) * scale).rounded()))
+        let height = max(1, Int((Double(sourceHeight) * scale).rounded()))
 
         os_unfair_lock_lock(&stateLock)
         guard active, generation == expectedGeneration else {
@@ -201,35 +210,14 @@ final class AppNativeVideoPreviewState: NSObject, AVCaptureVideoDataOutputSample
         let targetSlot = (publishedSlot + 1 + slots.count) % slots.count
         os_unfair_lock_unlock(&stateLock)
 
-        let slot = slots[targetSlot]
-        CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
-        guard let sourceAddress = CVPixelBufferGetBaseAddress(pixelBuffer) else {
-            CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly)
-            return
-        }
-        var source = vImage_Buffer(
-            data: sourceAddress,
-            height: vImagePixelCount(sourceHeight),
-            width: vImagePixelCount(sourceWidth),
-            rowBytes: CVPixelBufferGetBytesPerRow(pixelBuffer)
-        )
-        let scaleError = slot.bytes.withUnsafeMutableBytes { bytes -> vImage_Error in
-            guard let destinationAddress = bytes.baseAddress else { return kvImageNullPointerArgument }
-            var destination = vImage_Buffer(
-                data: destinationAddress,
-                height: vImagePixelCount(height),
-                width: vImagePixelCount(width),
-                rowBytes: width * 4
-            )
-            return vImageScale_ARGB8888(
-                &source,
-                &destination,
-                nil,
-                vImage_Flags(kvImageHighQualityResampling)
-            )
-        }
-        CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly)
-        guard scaleError == kvImageNoError else { return }
+        let image = CIImage(cvPixelBuffer: pixelBuffer)
+            .transformed(by: CGAffineTransform(scaleX: CGFloat(scale), y: CGFloat(scale)))
+        let quality = CIImageRepresentationOption(rawValue: kCGImageDestinationLossyCompressionQuality as String)
+        guard let jpeg = imageContext.jpegRepresentation(
+            of: image,
+            colorSpace: colorSpace,
+            options: [quality: Self.jpegQuality]
+        ) else { return }
 
         os_unfair_lock_lock(&stateLock)
         guard active, generation == expectedGeneration else {
@@ -237,9 +225,10 @@ final class AppNativeVideoPreviewState: NSObject, AVCaptureVideoDataOutputSample
             return
         }
         sequence &+= 1
+        let slot = slots[targetSlot]
+        slot.jpeg = jpeg
         slot.width = width
         slot.height = height
-        slot.byteCount = width * height * 4
         slot.sequence = sequence
         slot.timestampSeconds = CACurrentMediaTime()
         slot.orientation = orientation

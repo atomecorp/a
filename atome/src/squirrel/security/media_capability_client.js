@@ -10,6 +10,9 @@ const REFRESH_MARGIN_MS = 5 * 60 * 1000;
 const RETRY_DELAY_MS = 15 * 1000;
 
 let cached = null; // { token, expiresAt, sub }
+// A context without a session of its own (the preview capture frame) borrows the
+// capability of the page that owns the session.
+let delegated = null; // { token, expiresAt }
 let inflight = null;
 let refreshTimer = null;
 let lastFailureAt = 0;
@@ -76,7 +79,7 @@ export function getMediaTokenSync() {
     const bearer = currentBearer();
     if (!bearer) {
         if (cached) clearMediaToken();
-        return '';
+        return delegated && delegated.expiresAt > Date.now() + 30 * 1000 ? delegated.token : '';
     }
     const now = Date.now();
     const valid = cached && cached.expiresAt > now + 30 * 1000 && cached.sub === decodeSub(bearer);
@@ -84,6 +87,17 @@ export function getMediaTokenSync() {
         if (!inflight && now - lastFailureAt > RETRY_DELAY_MS) refreshMediaToken().catch(() => {});
     }
     return valid ? cached.token : '';
+}
+
+// The valid capability of this session, to hand to a context that has none.
+export function readMediaCapability() {
+    const token = getMediaTokenSync();
+    return token && cached?.token === token ? { token, expiresAt: cached.expiresAt } : null;
+}
+
+export function adoptDelegatedMediaCapability(capability = null) {
+    const token = String(capability?.token || '').trim();
+    delegated = token ? { token, expiresAt: Number(capability.expiresAt) || 0 } : null;
 }
 
 export async function ensureMediaToken() {

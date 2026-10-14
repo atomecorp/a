@@ -127,9 +127,21 @@ pub(crate) fn polygon_mesh(
     let positions: Vec<[f32; 3]> =
         polygon.iter().map(|p| [p.x - center.x, center.y - p.y, 0.0]).collect();
     let uvs: Vec<[f32; 2]> = polygon.iter().map(|p| uv_of(*p)).collect();
+    // The polygon arrives in screen order (y down) and the positions flip y, so
+    // its fan comes out clockwise. Front faces are counter-clockwise, like the
+    // quad it replaces: a pipeline that culls back faces (the external video
+    // texture) dropped every rounded-clipped video. Wind it counter-clockwise.
+    let signed_area: f32 = (0..positions.len())
+        .map(|i| {
+            let [ax, ay, _] = positions[i];
+            let [bx, by, _] = positions[(i + 1) % positions.len()];
+            ax * by - bx * ay
+        })
+        .sum();
     let mut indices = Vec::with_capacity((polygon.len().saturating_sub(2)) * 3);
     for i in 1..polygon.len().saturating_sub(1) {
-        indices.extend_from_slice(&[0u32, i as u32, i as u32 + 1]);
+        let (b, c) = (i as u32, i as u32 + 1);
+        indices.extend_from_slice(&if signed_area < 0.0 { [0u32, c, b] } else { [0u32, b, c] });
     }
     let key = positions.iter().zip(uvs.iter()).map(|(p, uv)| [p[0], p[1], uv[0], uv[1]]).collect();
     let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
@@ -313,6 +325,23 @@ mod clip_polygon_tests {
             let d = p - pivot;
             pivot + Vec2::new(d.x * cos - d.y * sin, d.x * sin + d.y * cos)
         })
+    }
+
+    #[test]
+    fn a_clipped_polygon_mesh_faces_front_like_the_quad_it_replaces() {
+        // Screen order (y down), as every clip produces it: a back-face-culling
+        // pipeline (external video texture) must still draw the result.
+        let square = [Vec2::ZERO, Vec2::new(40.0, 0.0), Vec2::new(40.0, 30.0), Vec2::new(0.0, 30.0)];
+        let (mesh, _) = polygon_mesh(&square, [0.0, 0.0, 40.0, 30.0], |_| [0.0, 0.0]);
+        let Some(bevy::mesh::VertexAttributeValues::Float32x3(positions)) = mesh.attribute(Mesh::ATTRIBUTE_POSITION) else {
+            panic!("positions");
+        };
+        let Some(Indices::U32(indices)) = mesh.indices() else { panic!("indices") };
+        for triangle in indices.chunks(3) {
+            let [a, b, c] = [positions[triangle[0] as usize], positions[triangle[1] as usize], positions[triangle[2] as usize]];
+            let cross = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+            assert!(cross > 0.0, "counter-clockwise front face expected, got {triangle:?}");
+        }
     }
 
     #[test]

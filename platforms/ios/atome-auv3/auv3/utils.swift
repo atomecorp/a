@@ -313,7 +313,8 @@ public class auv3Utils: AUAudioUnit, NativeAudioUnitControl {
         let timestamp = CACurrentMediaTime() // Use more efficient time source
         
         // ULTRA OPTIMIZATION: Batch WebView call without intermediate processing
-        WebViewManager.sendMIDIToJS(data1: data1, data2: data2, data3: data3, timestamp: timestamp)
+        WebViewManager.sendMIDIToJS(data1: data1, data2: data2, data3: data3, timestamp: timestamp,
+                                    portLiteral: MIDIController.hostInputPortLiteral)
         
         // ULTRA OPTIMIZATION: Remove expensive status parsing and logging in render thread
         // All MIDI processing moved to background thread to save CPU in audio thread

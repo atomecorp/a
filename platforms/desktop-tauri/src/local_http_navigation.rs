@@ -2,6 +2,18 @@ use std::net::{SocketAddr, TcpStream};
 use std::thread;
 use std::time::{Duration, Instant};
 
+/// Canonical page/runtime identity, including the actual native mobile platform.
+pub fn runtime_init_script() -> String {
+    let mut script = String::from("window.__SQUIRREL_FORCE_TAURI_RUNTIME__=true;window.__ATOME_LOCAL_HTTP_PORT__=3000;window.__SQUIRREL_TAURI_CANONICAL_URL__='http://127.0.0.1:3000/';");
+    let remote = std::env::var("SQUIRREL_FASTIFY_URL").or_else(|_| std::env::var("FASTIFY_URL"))
+        .ok().map(|value| value.trim().trim_end_matches('/').to_string())
+        .filter(|value| value.starts_with("https://") || value.starts_with("http://"))
+        .unwrap_or_else(|| "https://atome.one".to_string());
+    script.push_str(&format!("window.__SQUIRREL_TAURI_FASTIFY_URL__={};", serde_json::to_string(&remote).expect("Fastify URL must serialize")));
+    if cfg!(target_os = "android") { script.push_str("window.__ATOME_ANDROID_NATIVE__=true;"); }
+    script
+}
+
 pub fn wait_for_local_http(address: SocketAddr, timeout: Duration) -> bool {
     let started_at = Instant::now();
     while started_at.elapsed() < timeout {

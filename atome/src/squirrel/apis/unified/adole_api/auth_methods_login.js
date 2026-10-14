@@ -129,7 +129,7 @@ async function installRemote(result, { attemptId } = {}) {
     local.user = { ...local.user, first_launch_version: result.user.first_launch_version || null };
     installLocal(local, isTauriRuntime() ? 'tauri' : 'fastify');
     globalThis.window?.dispatchEvent(new CustomEvent('squirrel:remote-session-ready', { detail: { userId: result.user.id, user: result.user } }));
-    if (attemptId) globalThis.window?.dispatchEvent(new CustomEvent('squirrel:phone-login-complete', {
+    if (attemptId || result.passwordAuthenticated) globalThis.window?.dispatchEvent(new CustomEvent('squirrel:phone-login-complete', {
         detail: { newAccount: result.newAccount === true, user: result.user }
     }));
 }
@@ -251,6 +251,7 @@ export function ensureLocalSession() {
 
 let linksInitialized = false;
 let workspaceSynchronize = null;
+let communicationPushClient = null;
 // Vider la file d'envoi du workspace navigateur AVANT une action serveur qui porte sur un
 // objet cree localement (partager un projet tout juste cree echouait : `share_owner_required`).
 // Une passe suffit : une demande recue pendant une passe en cours la fait relancer.
@@ -263,6 +264,14 @@ export async function initializePhoneLinks() {
     const env = globalThis.window;
     if (!env || linksInitialized) return;
     linksInitialized = true;
+    if (typeof env.__ATOME_IOS_NATIVE_INVOKE === 'function') {
+        const [{ installCommunicationPushClient }, { executeNativeNotificationAction }] = await Promise.all([
+            import('../../../security/communication_push_client.js'), import('../../../../../../eVe/domains/visio/native_notification_actions.js')
+        ]);
+        communicationPushClient = installCommunicationPushClient({ env, ensureSession: ensureRemoteSession,
+            readRemoteSession: () => deviceStore().read('session'), execute: executeNativeNotificationAction,
+            send: message => FastifyAdapter.ws.send({ ...message, token: FastifyAdapter.getToken() }) });
+    }
     const listeners = new AbortController();
     const report = (error) => env.dispatchEvent(new CustomEvent('squirrel:phone-login-error', {
         detail: { code: error?.message || 'auth_request_rejected' }
@@ -316,10 +325,17 @@ export async function initializePhoneLinks() {
     const link = env.__ATOME_TAKE_AUTH_LINK__?.();
     if (link) await phoneLinkClient().consumeLink(link);
     await takeNativeLink();
+    void communicationPushClient?.run();
     void phoneLinkClient().retryRevocations().catch(report);
 }
 
 export const loginMethods = {
+    async enableNotifications() {
+        if (!communicationPushClient) throw new Error('ios_notifications_unavailable');
+        return communicationPushClient.enable();
+    },
+    async loginWithPassword(phone, password) { return phoneLinkClient().passwordLogin(normalizePhone(phone), password); },
+    async setPassword(password, currentPassword) { return phoneLinkClient().setPassword(password, currentPassword); },
     async startPhoneLogin(phone) {
         const result = await phoneLinkClient().start(normalizePhone(phone));
         if (!result) throw new Error('auth_phone_link_empty_result');

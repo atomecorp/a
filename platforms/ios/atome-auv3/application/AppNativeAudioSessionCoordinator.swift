@@ -64,7 +64,7 @@ extension AppNativeAudioController {
         }
         // Activation is idempotent and also recovers a session the system
         // deactivated through an interruption.
-        try session.setActive(true)
+        if !systemOwnsAudioActivation { try session.setActive(true) }
         AppNativeAudioDiagnostics.log(
             "session \(transition) reason=\(plan.reason) configured=\(needsConfiguration)"
                 + " before=\(before) after=\(audioSessionDiagnosticSnapshot(session: session))"

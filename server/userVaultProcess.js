@@ -122,6 +122,19 @@ const handleOperation = async (operation, payload = {}) => {
         );
         return Number(row?.sequence || 0);
     }
+    // Bulk `stream:head` for a subscription batch: one indexed query instead of one request per stream.
+    if (operation === 'stream:heads') {
+        const streamIds = Array.isArray(payload.stream_ids) ? payload.stream_ids.map(String).filter(Boolean) : [];
+        if (!streamIds.length) return {};
+        if (streamIds.length > 1000) throw new Error('vault_stream_batch_too_large');
+        const rows = await db.default.query(
+            'all',
+            `SELECT stream_id, MAX(sequence) AS sequence FROM events
+             WHERE stream_id IN (${streamIds.map(() => '?').join(',')}) GROUP BY stream_id`,
+            streamIds
+        );
+        return Object.fromEntries((rows || []).map((row) => [row.stream_id, Number(row.sequence || 0)]));
+    }
     throw new Error('vault_operation_not_allowed');
 };
 

@@ -3,6 +3,9 @@ const source = { source_id: { type: 'string' }, source_key: { type: 'string' }, 
     collections: { type: 'array', items: { type: 'string' } } };
 const exportOptions = { ids: { type: 'array', items: { type: 'string' } }, save: { type: 'boolean' }, filename: { type: 'string' } };
 export const PERSONAL_IMPORT_TOOLS = [
+    { name: 'contacts.select_personal', method: 'selectPersonalContact', param: 'contact_id', write: true,
+        description: 'Explicitly designate an imported native contact as the current account personal card without changing account identity.',
+        properties: { contact_id: { type: 'string', minLength: 1 } } },
     { name: 'contacts.import_vcf', method: 'importVcf', param: 'content', write: true,
         description: 'Import vCard 3/4 into private canonical contacts.', properties: { content } },
     { name: 'contacts.export_vcf', method: 'exportVcf', description: 'Export current canonical contacts as vCard.',

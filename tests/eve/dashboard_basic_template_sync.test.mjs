@@ -95,3 +95,16 @@ it('leaves pinned templates untouched and reports a refused source upgrade', asy
     expect(store.records.get('source').properties.system_template_version).toBe(5);
     expect([...store.records.values()].some(record => record.properties.system_template_ref?.endsWith('_background'))).toBe(false);
 });
+
+it('deletes the extra copies two racing syncs made of one slot, keeping the most recent', () => {
+    const source = [{ id: 'cell', type: 'group', project_id: 'src', parent_id: 'src', properties: { template_control: { kind: 'mystic_tile', value: 'capture' } } }];
+    const copy = (id, updated_at) => ({ id, type: 'group', project_id: 'home', parent_id: 'home', updated_at,
+        properties: { template_control: { kind: 'mystic_tile', value: 'capture' }, template_slot_id: 'cell', template_instance_id: 'home' } });
+    const plan = planTemplateInstanceSync({ sourceProjectId: 'src', sourceStates: source,
+        instanceStates: [copy('old', '2026-10-13T10:00:00Z'), copy('new', '2026-10-13T11:00:00Z')],
+        instanceRootId: 'home', instanceProjectId: 'home', createId: () => 'never' });
+    expect(plan.ok).toBe(true);
+    expect(plan.deleted).toEqual(['old']);
+    expect(plan.slot_map.cell).toBe('new');
+    expect(plan.created).toEqual([]);
+});

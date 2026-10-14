@@ -37,6 +37,8 @@ the established solution before attempting a new implementation.
 | iOS shows purple then black because WebContent is terminated during boot | [ios-webcontent-boot](ios-webcontent-boot/README.md) |
 | A12-class iPad shows a uniform grey canvas while boot states read "ready" | [ipad-a12-grey-canvas-storage-limit](ipad-a12-grey-canvas-storage-limit/README.md) |
 | A panel keeps its first frame ("Chargement des contacts") and ignores taps; console repeats `bevy_media_texture_fetch_failed:404` | [panel-frozen-by-missing-image](panel-frozen-by-missing-image/README.md) |
+| Every tap is dead after media lands in a project not on screen; `elementFromPoint` returns another `project_view_` | [offscreen-project-layer-steals-pointer](offscreen-project-layer-steals-pointer/README.md) |
+| Deleted Atomes come back on iOS/Tauri: template cells stacked or duplicated, deleted cells visible | [local-server-tombstones-in-lists](local-server-tombstones-in-lists/README.md) |
 | iOS launch shows "Le démarrage continue…" for 10-20 s when the server does not answer | [ios-boot-server-await](ios-boot-server-await/README.md) |
 | iPhone assistant answers nothing and shows nothing although the app looks signed in | [ios-assistant-silent-dead-remote-session](ios-assistant-silent-dead-remote-session/README.md) |
 | Dashboard rows (contacts, appointments, health) vanish and come back at boot | [dashboard-lane-flicker](dashboard-lane-flicker/README.md) |
@@ -55,6 +57,8 @@ the established solution before attempting a new implementation.
 | Panel/list rows flash while scrolling, or a panel row shows pointer hover paint | [panel-scroll-hover-flicker](panel-scroll-hover-flicker/README.md) |
 | A scrolled panel row is hidden but its avatar/icon reappears over fixed actions below | [panel-scroll-composite-overflow](panel-scroll-composite-overflow/README.md) |
 | The device heats up or the GPU stays busy while the app sits idle — or zoom, rotation and Mystic stutter at ~2 frames/s | [idle-render-loop-heat](idle-render-loop-heat/README.md) |
+| The phone heats up on an idle Dashboard although rendering is at rest; thousands of `subscribe`/`replay-complete` or `sync:projection-ready` per minute | [sync-replay-storm-idle-heat](sync-replay-storm-idle-heat/README.md) |
+| A recorded video stays black in a Bevy preview on Web; decoder `errorCode: 4`, the bare `/api/recordings/` URL answers 404 | [hidden-video-missing-media-token](hidden-video-missing-media-token/README.md) |
 | A Pencil double-tap on the project background toggles the selection/rail instead of arming Draw | [ipad-pencil-background-double-tap](ipad-pencil-background-double-tap/README.md) |
 | iOS reports hundreds of GB of disk writes, the first launch is slow, `adole.db` weighs GB or calendars vanish after a contacts import | [local-db-disk-writes-and-slow-listing](local-db-disk-writes-and-slow-listing/README.md) |
 

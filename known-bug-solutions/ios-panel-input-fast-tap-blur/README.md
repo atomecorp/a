@@ -119,3 +119,25 @@ Delete keys and Done. tests/eve/menu_surface_depth.test.mjs covers real panel
 projection, several panels, repeated frames, removal and the unchanged main-menu
 ground. Existing field/menu/session tests pass. The broader panel shell-opacity
 assertion and unsupported native taxonomy_read remain outside this correction.
+
+## 2026-10-14: desktop health Save intercepted by the native editor
+
+Actual Web health collection exposed a separate symptom on the same canonical
+text owner: a focused transparent textarea fixed at the bottom had a 240 × 104 px
+native hit box. A real Save click targeted TEXTAREA while the shared canvas
+hit-test identified Save beneath it. Waiting for stable scene layout and syncing
+the draft did not change that DOM target.
+
+`hidden_text_service_runtime.js` now composes the existing `isIOSDevice` detector:
+desktop mounting/focus/reclaim remain pointer-transparent; only focused iOS editing
+retains native hit testing for space-bar caret dragging. Retained but unfocused
+editors remain transparent. Glyph metrics, IME, native focus and selection remain
+owned by the same editor. No Dashboard or pointer-dispatch code was changed.
+
+Evidence: persistent text session/retention tests preserve explicit iOS blur and
+reclaim behavior; the actual isolated Web collection Save/refusal/reload passes
+with final pixels inspected and no browser warnings/errors. Source deletion and
+purpose revocation also withdraw displayed journal facts. Broader project text
+geometry has two failures reproduced with the former hit-test behavior; this
+repair does not claim they are fixed. Physical iOS caret/keyboard acceptance for
+this change remains **To verify**. See the ATM-2017 audit and Framework State.

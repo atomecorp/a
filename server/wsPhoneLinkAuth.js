@@ -9,13 +9,16 @@ import { validateConnectionDeviceSession } from './auth_session_validation.js';
 import { generateOpaquePrincipalId } from './auth_crypto.js';
 import { AUTH_LINK_ORIGIN, AUTH_ACCESS_TTL_SECONDS } from '../atome/src/shared/auth_link_contract.js';
 import { attachWsApiClientToUser, detachWsApiClient, wsApiConnections } from './wsApiState.js';
+import { createCommunicationPush } from './communication_push.js';
 
 const ACTIONS = new Set(['phone-link-start', 'phone-link-simulate-payment', 'phone-link-resend', 'phone-change-start', 'phone-link-challenge', 'phone-link-consume',
     'phone-link-approve', 'phone-link-confirm', 'phone-link-resume', 'phone-link-cancel', 'session-challenge',
-    'session-delete-account', 'session-renew', 'session-local-bind', 'session-logout', 'session-logout-all', 'session-revoke-device']);
+    'session-delete-account', 'session-renew', 'session-local-bind', 'session-logout', 'session-logout-all', 'session-revoke-device',
+    'password-login-challenge', 'password-login', 'session-set-password']);
 const PUBLIC_ERRORS = new Set(['auth_phone_e164_required', 'auth_rate_limited', 'sms_delivery_unavailable',
     'sms_configuration_required', 'auth_trusted_phone_required', 'auth_session_invalid',
-    'auth_session_stale', 'auth_session_reused', 'auth_device_cooling_off']);
+    'auth_session_stale', 'auth_session_reused', 'auth_device_cooling_off', 'auth_password_rejected',
+    'auth_password_too_short', 'auth_password_compromised', 'auth_password_screening_unavailable', 'auth_argon2_unavailable']);
 
 export function createWsPhoneLinkHandler({ projectRoot, jwtSecret, sendLink, database = db } = {}) {
     loadLocalSmsConfig(projectRoot);
@@ -74,7 +77,7 @@ export function createWsPhoneLinkHandler({ projectRoot, jwtSecret, sendLink, dat
         try {
             let result;
             if (!ACTIONS.has(message.action)) {
-                if (!['me', 'get-user', 'list-users', 'update-user'].includes(message.action)) {
+                if (!['me', 'get-user', 'list-users', 'update-user', 'push-register', 'push-prune'].includes(message.action)) {
                     return { type: 'auth-response', requestId, success: false, ok: false, error: 'auth_protocol_upgrade_required' };
                 }
                 const claims = await validateConnectionDeviceSession(connection, message.token, jwtSecret())
@@ -82,7 +85,11 @@ export function createWsPhoneLinkHandler({ projectRoot, jwtSecret, sendLink, dat
                 if (!claims || claims.auth_version !== 1) throw new Error('auth_session_invalid');
                 const account = await findUserById(dataSource, claims.sub);
                 if (!account) throw new Error('auth_session_invalid');
-                if (message.action === 'me') {
+                if (message.action === 'push-register') {
+                    result = await createCommunicationPush({ query: database.query }).register(claims, message);
+                } else if (message.action === 'push-prune') {
+                    result = await createCommunicationPush({ query: database.query }).prune(claims, message);
+                } else if (message.action === 'me') {
                     attachWsApiClientToUser(connection, claims.sub);
                     result = { ok: true, user: authenticatedUserSnapshot(account) };
                 } else if (message.action === 'list-users') {
@@ -102,6 +109,9 @@ export function createWsPhoneLinkHandler({ projectRoot, jwtSecret, sendLink, dat
                 return { type: 'auth-response', requestId, success: true, ...result };
             }
             switch (message.action) {
+                case 'password-login-challenge': result = await service.passwords.challenge(message, network); break;
+                case 'password-login': result = await service.passwords.login(message, network); break;
+                case 'session-set-password': result = await service.passwords.set(message); break;
                 case 'phone-change-start': result = await service.startPhoneChange(message, network); break;
                 case 'phone-link-start': result = await service.start(message, network); break;
                 case 'phone-link-simulate-payment': result = await service.simulatePayment(message); break;

@@ -19,6 +19,8 @@
     <string>eVe a besoin de la reconnaissance vocale pour comprendre tes commandes en francais.</string>
     <key>NSCameraUsageDescription</key>
     <string>eVe a besoin de la camera pour capturer photos et videos dans tes projets.</string>
+    <key>NSLocationUsageDescription</key>
+    <string>Atome utilise votre position à votre demande pour le guidage GPS pendant un trajet.</string>
     <key>NSContactsUsageDescription</key>
     <string>eVe requests access to Apple Contacts only when you choose Import.</string>
     <key>NSCalendarsFullAccessUsageDescription</key>

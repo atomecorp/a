@@ -4,6 +4,13 @@ const finite = (value, error) => {
     return numeric;
 };
 
+// An unanswered field is unknown, never the numeric value zero.
+export const parseExplicitNumericInputValue = value => {
+    if (typeof value !== 'string' || !/^[+-]?(?:\d+(?:[.,]\d*)?|[.,]\d+)(?:[eE][+-]?\d+)?$/.test(value.trim()))
+        throw new Error('squirrel_numeric_input_value_required');
+    return finite(value.trim().replace(',', '.'), 'squirrel_numeric_input_value_invalid');
+};
+
 const decimalPlaces = (step) => {
     const text = String(step).toLowerCase();
     if (text.includes('e-')) return Math.max(0, Number(text.split('e-')[1]) || 0);

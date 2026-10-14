@@ -50,28 +50,119 @@ extension AppNativeMediaCaptureController: AVCapturePhotoCaptureDelegate {
                     : requestedName
                 let filePath = self.resolveString(payload, ["filePath", "file_path", "path"])
                 let userId = self.resolveString(payload, ["userId", "user_id"])
-                let cameraPosition = self.resolveCameraPosition(from: payload)
-                self.activeCameraPosition = cameraPosition
                 let (url, relativePath) = try self.outputURL(
                     fileName: fileName,
                     filePath: filePath,
                     userId: userId,
                     folder: "captures"
                 )
-                let (session, photoOutput) = try self.makePhotoSession(position: cameraPosition)
-                self.configureVideoConnection(photoOutput.connection(with: .video), position: cameraPosition)
-                self.photoSession = session
-                self.photoOutput = photoOutput
+                // An open camera preview is the camera the still is taken from.
+                let photoOutput: AVCapturePhotoOutput
+                if self.cameraPreviewActive, let previewOutput = self.photoOutput, self.photoSession?.isRunning == true {
+                    self.configureVideoConnection(previewOutput.connection(with: .video), position: self.activeCameraPosition)
+                    photoOutput = previewOutput
+                } else {
+                    let cameraPosition = self.resolveCameraPosition(from: payload)
+                    self.activeCameraPosition = cameraPosition
+                    let (session, sessionOutput) = try self.makePhotoSession(position: cameraPosition)
+                    self.configureVideoConnection(sessionOutput.connection(with: .video), position: cameraPosition)
+                    self.photoSession = session
+                    self.photoOutput = sessionOutput
+                    session.startRunning()
+                    photoOutput = sessionOutput
+                }
                 self.photoCompletion = completion
                 self.photoOutputURL = url
                 self.photoRelativePath = relativePath
                 self.photoFileName = fileName
-                session.startRunning()
                 photoOutput.capturePhoto(with: AVCapturePhotoSettings(), delegate: self)
             } catch {
                 self.complete(completion, payload: ["success": false], error: error.localizedDescription)
             }
         }
+    }
+
+    func startCameraPreview(payload: [String: Any],
+                            completion: @escaping ([String: Any], String?) -> Void) {
+        requestAccess(video: true, audio: false) { granted, reason in
+            guard granted else {
+                self.complete(completion, payload: ["success": false], error: reason ?? "camera_permission_denied")
+                return
+            }
+            guard !self.videoRecorder.isRecording else {
+                self.complete(completion, payload: ["success": false], error: "camera_preview_blocked_while_recording")
+                return
+            }
+            guard self.photoCompletion == nil else {
+                self.complete(completion, payload: ["success": false], error: "photo_capture_in_progress")
+                return
+            }
+            let position = self.resolveCameraPosition(from: payload)
+            let started: [String: Any] = [
+                "success": true,
+                "source_id": Self.cameraPreviewSourceId,
+                "preview_command": "media_camera_preview_frame"
+            ]
+            if self.cameraPreviewActive, self.activeCameraPosition == position, self.photoSession?.isRunning == true {
+                self.complete(completion, payload: started.merging(["camera_position": self.cameraPositionName(position)]) { $1 })
+                return
+            }
+            self.stopCameraPreviewSession()
+            do {
+                let (session, photoOutput) = try self.makePhotoSession(position: position)
+                session.beginConfiguration()
+                let orientation = self.resolveString(payload, ["orientation"])
+                let previewOutput = self.cameraPreviewState.makeOutput(
+                    orientation: orientation.isEmpty ? "portrait" : orientation,
+                    mirrored: position == .front
+                )
+                guard session.canAddOutput(previewOutput) else {
+                    session.commitConfiguration()
+                    self.cameraPreviewState.stop()
+                    self.complete(completion, payload: ["success": false], error: "camera_preview_output_unavailable")
+                    return
+                }
+                session.addOutput(previewOutput)
+                self.configureVideoConnection(photoOutput.connection(with: .video), position: position)
+                self.configureVideoConnection(previewOutput.connection(with: .video), position: position)
+                session.commitConfiguration()
+                self.activeCameraPosition = position
+                self.photoSession = session
+                self.photoOutput = photoOutput
+                self.cameraPreviewActive = true
+                session.startRunning()
+                print("[MEDIA_NATIVE] camera_preview_start position=\(self.cameraPositionName(position))")
+                self.complete(completion, payload: started.merging(["camera_position": self.cameraPositionName(position)]) { $1 })
+            } catch {
+                self.cameraPreviewState.stop()
+                self.complete(completion, payload: ["success": false], error: error.localizedDescription)
+            }
+        }
+    }
+
+    func readCameraPreviewFrame(completion: @escaping ([String: Any], String?) -> Void) {
+        sessionQueue.async {
+            self.complete(completion, payload: self.cameraPreviewState.framePayload(sourceId: Self.cameraPreviewSourceId))
+        }
+    }
+
+    func stopCameraPreview(completion: @escaping ([String: Any], String?) -> Void) {
+        sessionQueue.async {
+            self.stopCameraPreviewSession()
+            self.complete(completion, payload: ["success": true])
+        }
+    }
+
+    // Runs on `sessionQueue`. A still still in flight keeps its session until
+    // the photo delegate has written it.
+    func stopCameraPreviewSession() {
+        guard cameraPreviewActive else { return }
+        cameraPreviewActive = false
+        cameraPreviewState.stop()
+        guard photoCompletion == nil else { return }
+        photoSession?.stopRunning()
+        photoSession = nil
+        photoOutput = nil
     }
 
     func startVideoRecording(payload: [String: Any],
@@ -94,6 +185,8 @@ extension AppNativeMediaCaptureController: AVCapturePhotoCaptureDelegate {
                 self.complete(completion, payload: ["success": false], error: "video_recording_blocked_while_photo_capture")
                 return
             }
+            // A video take owns the camera: an open photo preview yields it.
+            self.stopCameraPreviewSession()
             self.videoRecorder.start(payload: payload, completion: completion)
         }
     }
@@ -136,9 +229,12 @@ extension AppNativeMediaCaptureController: AVCapturePhotoCaptureDelegate {
                      error: Error?) {
         sessionQueue.async {
             defer {
-                self.photoSession?.stopRunning()
-                self.photoSession = nil
-                self.photoOutput = nil
+                // A still taken from the open preview leaves its session running.
+                if !self.cameraPreviewActive {
+                    self.photoSession?.stopRunning()
+                    self.photoSession = nil
+                    self.photoOutput = nil
+                }
                 self.photoCompletion = nil
                 self.photoOutputURL = nil
                 self.photoRelativePath = nil

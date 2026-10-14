@@ -1,5 +1,6 @@
 import { test, expect, vi } from 'vitest';
 import { createCommunicationCallSession } from '../../eVe/domains/visio/communication_call_session.js';
+import { createVisioCallRuntime } from '../../eVe/domains/visio/visio_call_runtime.js';
 
 const fixture = status => {
     const listeners = new Set();
@@ -45,4 +46,29 @@ test('a failed send preserves the media and reuses its message identity on retry
     await f.session.finish(); expect(f.session.state.phase).toBe('draft');
     await f.session.sendMedia(); expect(f.send.mock.calls[0][0].messageId).toBe(f.send.mock.calls[1][0].messageId);
     expect(f.capture).toHaveBeenCalledTimes(2);
+});
+test('remote terminal call state stops local capture and both canonical media transports', async () => {
+    const win = new EventTarget(), stop = vi.fn(), transports = [];
+    const transport = () => {
+        const value = { on() {}, close: vi.fn(), produce: async () => ({ id: 'producer' }) };
+        transports.push(value); return value;
+    };
+    class Device {
+        async load() {}
+        createSendTransport() { return transport(); }
+        createRecvTransport() { return transport(); }
+    }
+    const api = { security: { getAuthenticatedUser: () => ({ id: 'bob' }) }, communication: {
+        visio: async ({ action }) => action === 'accept' ? { mode: 'audio' }
+            : action === 'joinRoom' ? { rtpCapabilities: {}, participants: [], existingProducers: [] } : { transportOptions: {} }
+    } };
+    const call = createVisioCallRuntime({ win, getApi: () => api, loadClient: async () => ({ Device }),
+        getUserMedia: async () => ({ getTracks: () => [{ kind: 'audio', stop }] }) });
+    expect((await call.joinCall('room')).ok).toBe(true);
+    const event = new Event('squirrel:visio-event');
+    event.detail = { roomId: 'room', event: { type: 'callState', status: 'cancelled' } };
+    win.dispatchEvent(event);
+    expect(call.getState().status).toBe('ended'); expect(stop).toHaveBeenCalledOnce();
+    expect(transports).toHaveLength(2);
+    for (const media of transports) expect(media.close).toHaveBeenCalledOnce();
 });

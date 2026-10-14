@@ -5,7 +5,7 @@ extension FastifySyncClient {
     // television catalogue, YouTube live resolution). The phone has no copy of
     // them: the frame is forwarded, without any credential, to the configured
     // Fastify server and its single reply is returned.
-    static let publicTypes: Set<String> = ["youtube-search", "tv-catalog", "tv-resolve"]
+    static let publicTypes: Set<String> = ["youtube-search", "tv-catalog", "tv-resolve", "gps-resource"]
 
     func relayPublic(_ payload: [String: Any], reply: @escaping ([String: Any]) -> Void) {
         let requestId = payload["requestId"] ?? NSNull()

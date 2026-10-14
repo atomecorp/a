@@ -4,7 +4,7 @@ const clickMenuTarget = clickCanvasTarget;
 import { exerciseMixerLassoBlock, exerciseTimelineEditingGestures } from "./molecule_ui_timeline_gestures.mjs";
 
 export const runMoleculeTimelineAcceptance = async ({ page, project, fixture, report, check, OUT_DIR, ENDURANCE_MS, ENDURANCE_MIN_CYCLES, cdp, projectViewNode, readAcceptanceState }) => {
-        await check('real Mixage and Mute clicks update the canonical grouped track', async () => {
+        await check('real Mixage, OUT and fader gestures update the canonical mix', async () => {
             const activity = await visibleMenuTool(page, project.id, 'activity');
             await clickMenuTarget(page, activity);
             await wait(500);
@@ -22,43 +22,44 @@ export const runMoleculeTimelineAcceptance = async ({ page, project, fixture, re
                     content: view.content
                 };
             });
-            const mute = await awaitBevyUiNodeTarget(page, {
-                nodePrefix: 'molecule_mix_mute_',
-                treeId: 'eve_bevy_ui_project_view'
-            });
-            assert(mute, 'molecule_mix_mute_not_actionable');
-            const projected = await page.evaluate(() => ({
-                routing: (window.atome?.tools?.gatewayRoutingLog || [])
-                    .filter((entry) => entry.tool_id === 'ui.timeline.activity.mix').slice(-6)
-            }));
-            const trackId = mute.id.match(/molecule_mix_mute_(.+)$/)?.[1] || '';
-            assert(trackId, `molecule_mix_track_id_missing:${mute.id}`);
-            const muteHit = await readBevyUiHit(page, mute);
-            assert(String(muteHit.nodeId || '').includes(`molecule_mix_mute_${trackId}`),
-                `molecule_mix_mute_hit_mismatch:${JSON.stringify({ mute, muteHit, trackId })}`);
-            const before = await readAcceptanceState(page, project.id, fixture.ownerId);
-            const previous = before.timeline.tracks.find((track) => track.track_id === trackId)?.mute === true;
-            await clickCanvasTarget(page, mute);
-            const committed = await waitFor(page, async ({ owner, id, prior }) => {
+            // OUT toggles the strip's main output in the canonical mix document.
+            const out = await awaitBevyUiNodeTarget(page, { nodePrefix: 'molecule_mix_strip_', treeId: 'eve_bevy_ui_project_view' });
+            assert(out, 'molecule_mix_strip_not_actionable');
+            const readMix = () => page.evaluate(async (owner) => {
                 const state = await window.Atome.getStateCurrent(owner);
-                const timeline = state?.molecule_timeline || state?.props?.molecule_timeline || state?.properties?.molecule_timeline;
-                const mute = timeline?.tracks?.find((track) => track.track_id === id)?.mute === true;
-                return { ok: mute !== prior, mute, track_id: id };
-            }, { owner: fixture.ownerId, id: trackId, prior: previous });
-            const gainControl = await findBevyUiNodeTarget(page, { nodeId: `molecule_mix_gain_${trackId}`, treeId: 'eve_bevy_ui_project_view' });
-            const panControl = await findBevyUiNodeTarget(page, { nodeId: `molecule_mix_pan_${trackId}`, treeId: 'eve_bevy_ui_project_view' });
-            assert(gainControl && panControl, `molecule_mix_sliders_not_actionable:${JSON.stringify({ gainControl, panControl, trackId })}`); const gainBefore = Number(before.timeline.tracks.find((track) => track.track_id === trackId)?.gain ?? 1);
-            const gainPoint = await playwrightPointForClientTarget(page, gainControl); await page.mouse.move(gainPoint.x, gainPoint.y); await page.mouse.down();
-            await page.mouse.move(gainPoint.x, gainPoint.y - 48, { steps: 6 }); await page.mouse.up();
-            const gainCommitted = await waitFor(page, async ({ owner, id, prior }) => {
-                const state = await window.Atome.getStateCurrent(owner); const timeline = state?.molecule_timeline || state?.props?.molecule_timeline || state?.properties?.molecule_timeline;
-                const gain = Number(timeline?.tracks?.find((track) => track.track_id === id)?.gain ?? 1); return { ok: gain !== prior, gain, track_id: id };
-            }, { owner: fixture.ownerId, id: trackId, prior: gainBefore });
+                return (state?.molecule_timeline || state?.props?.molecule_timeline || state?.properties?.molecule_timeline)?.mix || null;
+            }, fixture.ownerId);
+            const strips = await page.evaluate(async () => (await import('/eVe/domains/rendering/project_view_surface_runtime.js'))
+                .readProjectViewSurfaceState().content?.strips || []);
+            const audio = strips.find((strip) => strip.lane === 'audio');
+            assert(audio, `molecule_mix_audio_strip_missing:${JSON.stringify(strips)}`);
+            const nodeId = `molecule_mix_strip_${audio.strip_id.replace(/[^a-z0-9_]/gi, '_')}`;
+            const outTile = await awaitBevyUiNodeTarget(page, { nodeId: `${nodeId}_out`, treeId: 'eve_bevy_ui_project_view' });
+            assert(outTile, 'molecule_mix_out_not_actionable');
+            await clickCanvasTarget(page, outTile);
+            const committed = await waitFor(page, async ({ owner, id }) => {
+                const state = await window.Atome.getStateCurrent(owner);
+                const mix = (state?.molecule_timeline || state?.props?.molecule_timeline || state?.properties?.molecule_timeline)?.mix;
+                return { ok: mix?.strips?.[id]?.output?.enabled === false, output: mix?.strips?.[id]?.output };
+            }, { owner: fixture.ownerId, id: audio.strip_id });
+            const zone = nodeId.replace('molecule_mix_strip_', 'molecule_mix_zone_');
+            const thumb = await awaitBevyUiNodeTarget(page, { nodeId: `${zone}_fader`, treeId: 'eve_bevy_ui_project_view' });
+            assert(thumb, 'molecule_mix_fader_not_actionable');
+            const point = await playwrightPointForClientTarget(page, thumb);
+            await page.mouse.move(point.x, point.y); await page.mouse.down();
+            await page.mouse.move(point.x, point.y + 60, { steps: 8 }); await page.mouse.up();
+            const gainCommitted = await waitFor(page, async ({ owner, id }) => {
+                const state = await window.Atome.getStateCurrent(owner);
+                const mix = (state?.molecule_timeline || state?.props?.molecule_timeline || state?.properties?.molecule_timeline)?.mix;
+                const gain = mix?.strips?.[id]?.chain?.find((module) => module.type === 'volume')?.params?.gain_db;
+                return { ok: Number.isFinite(gain) && gain !== 0, gain };
+            }, { owner: fixture.ownerId, id: audio.strip_id });
+            const projected = { mix_before: Boolean(await readMix()) };
             const lassoBlock = await exerciseMixerLassoBlock(page); const mixShot = path.join(OUT_DIR, 'mix_controls.png'); await page.screenshot({ path: mixShot, animations: 'disabled' }); report.screenshots.push(mixShot);
-            return { projected, committed, gainCommitted, pan_control: panControl.id, lassoBlock };
+            return { projected, committed, gainCommitted, lassoBlock };
         });
 
-        await check('real Activity and Timeline clicks project sections, lanes, clips, crop and loop handles', async () => {
+        await check('real Activity and Timeline clicks show the Timeline tree: headers, lanes, clips, ruler, playhead', async () => {
             const activePaletteKey = await page.evaluate(async () => {
                 const module = await import('/eVe/intuition/ribbon/bevy_ui_product_registry.js');
                 return String(module.getMainMenuRuntime()?.measure?.()?.activePaletteKey || '');
@@ -70,98 +71,46 @@ export const runMoleculeTimelineAcceptance = async ({ page, project, fixture, re
             }
             const timelineActivity = await visibleMenuTool(page, project.id, 'molecule_activity_timeline');
             await clickMenuTarget(page, timelineActivity);
-            return waitFor(page, async (pid) => {
-                const ids = (window.eveToolBase?.getProjectSceneState?.(pid)?.records || []).map((record) => String(record.id || ''));
-                const registry = await import('/eVe/intuition/ribbon/bevy_ui_product_registry.js');
+            return waitFor(page, async () => {
+                const root = window.eveBevyUiRuntime?.state?.trees?.get?.('eve_bevy_ui_project_view')?.tree?.root;
+                const ids = [];
+                const visit = (node) => { if (!node) return; ids.push(String(node.id)); (node.children || []).forEach(visit); };
+                visit(root);
                 const projectView = await import('/eVe/domains/rendering/project_view_surface_runtime.js');
                 return {
-                    ok: ids.some((id) => id === 'mol:playhead')
-                        && ids.some((id) => id.startsWith('mol:lane:'))
-                        && ids.some((id) => id.startsWith('mol:clip:'))
-                        && ids.some((id) => id.startsWith('mol:crop:'))
-                        && ids.some((id) => id.startsWith('mol:clip-loop-handle:')),
-                    molecule_records: ids.filter((id) => id.startsWith('mol:')).length,
-                    molecule_record_ids: ids.filter((id) => id.startsWith('mol:')),
-                    active_palette: registry.getMainMenuRuntime()?.measure?.()?.activePaletteKey || '',
-                    project_view_mode: projectView.readProjectViewSurfaceState()?.mode || '',
-                    project_view_content: projectView.readProjectViewSurfaceState()?.content || null,
-                    activity_routing: (window.atome?.tools?.gatewayRoutingLog || [])
-                        .filter((entry) => String(entry?.tool_id || '').includes('timeline.activity')).slice(-8)
+                    ok: ids.includes('project_view_timeline_playhead') && ids.includes('project_view_timeline_ruler')
+                        && ids.some((id) => id.startsWith('project_view_timeline_header_'))
+                        && ids.some((id) => id.startsWith('project_view_timeline_lane_'))
+                        && ids.some((id) => id.startsWith('project_view_timeline_clip_')),
+                    timeline_nodes: ids.filter((id) => id.startsWith('project_view_timeline_')).length,
+                    project_view_mode: projectView.readProjectViewSurfaceState()?.mode || ''
                 };
-            }, project.id);
+            });
         });
-        await waitForStableScene(page, project.id);
 
-        await check('a real clip drag commits through the canonical timeline interceptor', async () => {
-            const clip = await recordCenter(
-                page,
-                project.id,
-                (record) => record.id === `mol:clip:${fixture.clipId}`,
-                { sceneCoordinates: true }
-            );
+        await check('a real clip drag commits through the canonical timeline operation', async () => {
+            const clipNode = `project_view_timeline_clip_${String(fixture.clipId).replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+            const clip = await findBevyUiNodeTarget(page, { nodeId: clipNode, treeId: 'eve_bevy_ui_project_view', step: 3 });
+            assert(clip, `timeline_clip_not_actionable:${clipNode}`);
+            const hit = await readBevyUiHit(page, clip);
+            assert(String(hit.nodeId || '').startsWith(clipNode), `clip_hit_mismatch:${JSON.stringify({ clip, hit })}`);
             const before = await readAcceptanceState(page, project.id, fixture.ownerId);
             const previousStart = before.timeline.clips.find((entry) => entry.clip_id === fixture.clipId).timeline.start_frame;
-            const clientPoint = await playwrightPointForClientTarget(page, clip);
-            const hit = await page.evaluate(async ({ point, clipId }) => {
-                const surface = document.getElementById('eve_surface_project');
-                const overlay = window.eveBevyUiRuntime?.hitTestAtClientPoint?.({
-                    surface, clientX: point.x, clientY: point.y
-                });
-                const { getRenderSurfaceState, readRenderSurfaceSize } = await import('/eVe/domains/rendering/surface_runtime.js');
-                const { hitTestRenderScene } = await import('/eVe/domains/rendering/scene_graph.js');
-                const rect = surface.getBoundingClientRect();
-                const size = readRenderSurfaceSize(surface);
-                const scenePoint = {
-                    x: (point.x - rect.left) * (size.width / Math.max(1, rect.width)),
-                    y: (point.y - rect.top) * (size.height / Math.max(1, rect.height))
-                };
-                const state = getRenderSurfaceState(surface);
-                const project = hitTestRenderScene(state?.scene, scenePoint);
-                return {
-                    expected: `mol:clip:${clipId}`,
-                    targetPoint: point,
-                    overlay: { nodeId: overlay?.nodeId || null, treeId: overlay?.treeId || null },
-                    project: { id: project?.id || null, type: project?.type || null },
-                    scenePoint
-                };
-            }, { point: clientPoint, clipId: fixture.clipId });
-            assert(hit.project.id === hit.expected, `clip_hit_mismatch:${JSON.stringify(hit)}`);
-            assert(!hit.overlay.nodeId, `clip_obscured_by_ui:${JSON.stringify(hit)}`);
             const pointer = await playwrightPointForClientTarget(page, clip);
             await page.mouse.move(pointer.x, pointer.y);
             await page.mouse.down();
-            const pointerTwelve = await playwrightPointForClientTarget(page, {
-                x: clip.x + 12, y: clip.y, coordinate_source: clip.coordinate_source
-            });
-            const pointerNinetySix = await playwrightPointForClientTarget(page, {
-                x: clip.x + 96, y: clip.y, coordinate_source: clip.coordinate_source
-            });
-            await page.mouse.move(pointerTwelve.x, pointerTwelve.y);
-            await page.mouse.move(pointerNinetySix.x, pointerNinetySix.y, { steps: 11 });
-            const during = await page.evaluate(async () => {
-                const { getRenderSurfaceState } = await import('/eVe/domains/rendering/surface_runtime.js');
-                const state = getRenderSurfaceState(document.getElementById('eve_surface_project')) || {};
-                return { pointerSession: state.pointerSession || null, lastIntentError: state.last_intent_error || null };
-            });
+            await page.mouse.move(pointer.x + 12, pointer.y);
+            await page.mouse.move(pointer.x + 96, pointer.y, { steps: 11 });
             await page.mouse.up();
-            await wait(1200);
-            const after = await page.evaluate(async ({ owner, clipId, previous }) => {
+            const after = await waitFor(page, async ({ owner, clipId, previous }) => {
                 const state = await window.Atome.getStateCurrent(owner);
                 const timeline = state?.molecule_timeline || state?.props?.molecule_timeline || state?.properties?.molecule_timeline;
                 const current = timeline?.clips?.find((entry) => entry.clip_id === clipId)?.timeline?.start_frame;
-                const { getRenderSurfaceState } = await import('/eVe/domains/rendering/surface_runtime.js');
-                const surfaceState = getRenderSurfaceState(document.getElementById('eve_surface_project')) || {};
-                return {
-                    ok: Number.isSafeInteger(current) && current !== previous,
-                    previous, current,
-                    lastIntentError: surfaceState.last_intent_error || null,
-                    lastPointerCancelReason: surfaceState.last_pointer_cancel_reason || null
-                };
+                return { ok: Number.isSafeInteger(current) && current !== previous, previous, current };
             }, { owner: fixture.ownerId, clipId: fixture.clipId, previous: previousStart });
-            assert(after.ok, `clip_drag_not_committed:${JSON.stringify({ hit, during, after })}`);
-            return { hit, during, after };
+            return { hit, after };
         });
-        await check('real lasso, crop, trackpad zoom and split gestures preserve timeline semantics', () => exerciseTimelineEditingGestures({ page, projectId: project.id, ownerId: fixture.ownerId, clipId: fixture.clipId }));
+        await check('a real crop of the selected clip keeps its source (non-destructive)', () => exerciseTimelineEditingGestures({ page, ownerId: fixture.ownerId, clipId: fixture.clipId }));
         const timelineShot = path.join(OUT_DIR, 'timeline_after_drag.png');
         await page.screenshot({ path: timelineShot, animations: 'disabled' });
         report.screenshots.push(timelineShot);

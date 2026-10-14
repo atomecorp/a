@@ -4,7 +4,7 @@ Read this module for diagnosis, tests, runtime checks, or visual acceptance. App
 
 ## Evidence-driven investigation
 
-Drive validation autonomously within the authorized scope. Continue until the reproduced problem is corrected and validated, or evidence establishes a blocker requiring access, a component authorization, or a product or architectural decision. Never stop at a probable cause, partial diagnosis, or unverified fix.
+Drive validation autonomously within the authorized scope. Continue until the reproduced problem is corrected and validated, or evidence establishes a blocker requiring access, authorization outside the root standing internal-component scope, or a product or architectural decision. Never stop at a probable cause, partial diagnosis, or unverified fix.
 
 1. Reproduce with the narrowest deterministic scenario when feasible.
 2. Identify the exact failing surface, canonical owner, runtime, and controlling chain.
@@ -27,7 +27,7 @@ Cover every important file and dependency involved in debugging, optimization, p
 
 Inspect large files in as many sequential passes as necessary to understand their relevant logic. Follow owners, callers, callees, shared helpers, state holders, renderers, sync boundaries, tests, and validation entry points. Do not claim completion while a controlling dependency remains unexplained.
 
-Perform necessary decomposition and cleanup when authorized. When evidence proves that a complete repair needs broader scope or a missing internal component, finish read-only investigation, identify the prerequisite and bounded proposal, and use the common authorization gate. Complexity alone is not a blocker, and broader implementation is not automatically authorized.
+Perform necessary decomposition and cleanup when authorized. When evidence proves that a complete repair needs a missing internal component, document the prerequisite and implement the necessary reusable creation or extension under the root standing authorization. For unrelated broader scope or an actual access or architectural blocker, identify the evidence and use the common blocker procedure. Complexity alone is not a blocker, and unrelated broader implementation is not automatically authorized.
 
 ## Runtime and console coverage
 
@@ -103,6 +103,6 @@ Remove failed experiments, abandoned probes, temporary logic branches, supersede
 
 Once confirmed, remove temporary logs, probes, tracing hooks, ad-hoc helpers, verbose instrumentation, and product-injected UI test code. Keep required persistent regression tests. Rerun the cleaned validation and inspect consoles again to prove no residue or unexplained output remains.
 
-Committed production code must not contain ad-hoc `console.log`, `console.warn`, `console.debug`, debug traces, or temporary performance/verbose instrumentation. Atome and eVe version logs are the only permanently authorized ad-hoc logs. Needed persistent observability must use architecture-compliant centralized monitoring, structured logging, explicit levels, deterministic traces, and production-safe instrumentation through the existing owner or an explicitly authorized extension.
+Committed production code must not contain ad-hoc `console.log`, `console.warn`, `console.debug`, debug traces, or temporary performance/verbose instrumentation. Atome and eVe version logs are the only permanently authorized ad-hoc logs. Needed persistent observability must use architecture-compliant centralized monitoring, structured logging, explicit levels, deterministic traces, and production-safe instrumentation through the existing owner or a necessary internal extension covered by the root standing authorization.
 
 Before completion, scan modified files for unauthorized logs and temporary debug code. Report all failed, skipped, blocked, flaky, unavailable, or not-run validations through the common method; never convert them into a success claim.

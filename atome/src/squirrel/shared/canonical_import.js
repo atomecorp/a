@@ -211,7 +211,7 @@ export function createCanonicalImport({ type, api = () => globalThis.window?.Ato
             }
             const origin = { canonical_id: recordId, domain_type: type, source_key: source, external_id: externalId,
                 recurrence_id: occurrence, baseline: { ...old?.baseline, ...normalized }, external_version: revision,
-                conflicts: merged.conflicts, removed: false, suppressed: false, access: 'private', visibility: 'private',
+                conflicts: merged.conflicts, pending: false, removed: false, suppressed: false, access: 'private', visibility: 'private',
                 source_collection: input.source_collection || input.raw?.source_collection || '',
                 external_href: externalHref(input) };
             if (!sameImportValue(old, origin)) await write(originId, IMPORT_ORIGIN_TYPE, origin, context);

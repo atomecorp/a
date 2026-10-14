@@ -8,7 +8,8 @@ export function createVisioCommands({ ensureRoomMeta, resolveRoomMeta, resolveUs
     const timers = new Map();
     const stopTimer = id => { if (timers.has(id)) unschedule(timers.get(id)); timers.delete(id); };
     const snapshot = meta => ({ roomId: meta.room_id, mode: meta.call_mode || 'visio', status: meta.call_status || 'live',
-        expiresAt: meta.expires_at || null, targetId: meta.call_target || null });
+        expiresAt: meta.expires_at || null, targetId: meta.call_target || null,
+        acceptedPrincipalId: meta.accepted_principal || null, acceptedKeyId: meta.accepted_key || null });
     const announce = meta => {
         const state = snapshot(meta);
         for (const id of [meta.owner_user_id, ...meta.invites]) publish(id, { type: 'callState', ...state });
@@ -40,11 +41,12 @@ export function createVisioCommands({ ensureRoomMeta, resolveRoomMeta, resolveUs
         }
         if (!verdict.silent) {
             meta.invites.add(user.id);
+            if (!scheduled && !managed) meta.expires_at = now() + CALL_RING_TIMEOUT_MS;
             if (managed) {
                 const profileState = await vaultRouter?.getState(user.id, user.id);
                 const profile = profileState?.properties?.eve_profile;
                 const preferences = (typeof profile === 'string' ? JSON.parse(profile) : profile)?.preferences;
-                if (!online(user.id) || preferences?.notifications?.do_not_disturb === true) return finishRinging(meta, 'recording');
+                if (!await online(user.id) || preferences?.notifications?.do_not_disturb === true) return finishRinging(meta, 'recording');
             }
             if (!scheduled) await notify(user.id, userId, { kind: 'call-invitation', message: meta.name || '', extra: {
                 room_id: meta.room_id, call_mode: meta.call_mode || 'visio', expires_at: meta.expires_at || null } });
@@ -84,10 +86,18 @@ export function createVisioCommands({ ensureRoomMeta, resolveRoomMeta, resolveUs
         }
         if (action === 'accept') {
             if (meta.owner_user_id === userId) throw new Error('visio_accept_denied');
+            meta.accepted_devices ||= new Map();
+            const key = input.deviceKey;
+            if (typeof key !== 'string' || !key) throw new Error('visio_device_session_required');
+            if (meta.accepted_devices.has(userId) && meta.accepted_devices.get(userId) !== key) throw new Error('visio_answered_elsewhere');
             if (meta.call_status === 'ringing' && now() >= meta.expires_at) finishRinging(meta, 'recording');
-            if (meta.call_status === 'ringing') return finishRinging(meta, 'live');
+            if (meta.call_status === 'ringing') {
+                meta.accepted_devices.set(userId, key); meta.accepted_principal = userId; meta.accepted_key = key;
+                return finishRinging(meta, 'live');
+            }
             if (meta.call_status !== 'live') throw new Error('visio_call_ended');
-            return snapshot(meta);
+            meta.accepted_devices.set(userId, key); meta.accepted_principal = userId; meta.accepted_key = key;
+            return announce(meta);
         }
         if (action === 'decline') {
             if (meta.owner_user_id === userId) throw new Error('visio_decline_denied');
@@ -105,5 +115,12 @@ export function createVisioCommands({ ensureRoomMeta, resolveRoomMeta, resolveUs
         }
         throw new Error('visio_action_unsupported');
     };
-    return { execute, dispose: () => { for (const id of timers.keys()) stopTimer(id); } };
+    const peerLeft = async (roomId, userId) => {
+        const meta = await resolveRoomMeta(roomId);
+        if (!meta?.call_target || meta.call_status !== 'live'
+            || ![meta.owner_user_id, meta.call_target].includes(userId)) return;
+        stopTimer(roomId); meta.call_status = 'cancelled';
+        closeRoom(roomId); return announce(meta);
+    };
+    return { execute, peerLeft, dispose: () => { for (const id of timers.keys()) stopTimer(id); } };
 }

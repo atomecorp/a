@@ -81,7 +81,7 @@ export function createWsHandler({ rooms, listenIp, announcedIp, ensureRoom, noti
         safeSend({ type: 'error', error: 'Authentication required', requestId });
         return;
       }
-      if (!await canJoinRoom(connection._visioUserId, requestedRoomId)) {
+      if (!await canJoinRoom(connection._visioUserId, requestedRoomId, connection._wsApiDeviceClaims?.cnf?.kid)) {
         safeSend({ type: 'error', error: 'Access denied', requestId });
         return;
       }

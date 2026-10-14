@@ -110,6 +110,17 @@ test('shared horizontal slider uses only the rail and value, without a compact i
     assert.ok(findNode(slider, 'mix_rail').style.size[0] > findNode(slider, 'mix_rail').style.size[1]);
 });
 
+test('shared horizontal slider retains its native square until expanded and formats the retained value', () => {
+    const input = { id: 'compact', icon: './assets/images/icons/calendar.svg', label: 'Time', orientation: 'horizontal',
+        expanded: false, itemSize: 60, value: 35, min: 0, max: 60, step: 5, unit: 'min', sliderOptions: { lengthPx: 196 } };
+    const closed = buildBevyToolSliderNode(input);
+    assert.deepEqual(closed.style.size, [60, 60]); assert.equal(findNode(closed, 'compact_rail'), null);
+    assert.ok(findNode(closed, 'compact_icon')); assert.equal(closed.accessibility.label, 'Time');
+    const open = buildBevyToolSliderNode({ ...input, expanded: true });
+    assert.deepEqual(open.style.size, [196, 60]); assert.equal(findNode(open, 'compact_value').text, '35 min');
+    assert.ok(findNode(open, 'compact_rail')); assert.equal(findNode(open, 'compact_icon'), null);
+});
+
 test('a held palette gesture opens on press and selects the release target exactly once', () => {
     const emitted = [];
     const canvas = { setPointerCapture: () => {}, releasePointerCapture: () => {} };

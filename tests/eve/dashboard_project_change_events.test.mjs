@@ -57,6 +57,7 @@ describe('dashboard creation mode', () => {
         const runtime = createDashboardCreationRuntime({
             state,
             render: async () => null,
+            invokeTool: async ({ input }) => { created.push(input); return { ok: true }; },
             actions: {
                 createGuidedProject: async (intent) => { created.push(intent); return { ok: true }; },
                 createNews: async () => ({ ok: true }),
@@ -69,7 +70,7 @@ describe('dashboard creation mode', () => {
         ]);
         await runtime.choose('family_health');
         await runtime.choose('goal_health_weight');
-        expect(created).toEqual([{ family: 'health', goal: 'weight' }]);
+        expect(created).toEqual([{ family: 'health', goal: 'weight', objective_id: 'OBJ-01' }]);
         expect(state.activeCategoryId).toBe('');
         await runtime.toggleFromHeader('news');
         await runtime.toggleFromHeader('calendar');
@@ -84,7 +85,7 @@ it('guided creation carries the full intent into the canonical creator and opens
         newsCreator: async () => async options => { calls.push(['news', options]); return { ok: true, project: { id: 'draft' } }; },
         openProject: async item => { calls.push(['open', item]); return { ok: true }; } });
     await actions.createGuidedProject({ family: 'health', goal: 'journal' });
-    expect(calls[0][1].properties.project_intent).toEqual({ family: 'health', goal: 'journal' });
+    expect(calls[0][1].properties.project_intent).toEqual({ family: 'health', goal: 'journal', objective_id: 'OBJ-08' });
     expect(calls[2]).toEqual(['open', { payload: { id: 'guided' } }]);
     calls.length = 0;
     await actions.createGuidedProject({ family: 'publication', goal: 'everyone' });

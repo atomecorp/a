@@ -4,6 +4,7 @@ import { build } from 'esbuild';
 import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import '../../scripts/build_gps_native_engine.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(scriptDir, '../..');
@@ -36,6 +37,7 @@ const RAW_SCRIPT_PATHS = new Set([
     'src/wasm/squirrel_audio_wasm.js',
     'src/wasm/squirrel_bevy_renderer.js',
     'src/wasm/renderer_version.mjs',
+    'src/wasm/gps_navigation_engine.js',
     // ONNX Runtime Web imports its wasm factory by URL at runtime (local TTS and wake workers).
     'src/assets/vendor/onnxruntime-web/ort-wasm-simd-threaded.mjs'
 ]);

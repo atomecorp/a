@@ -200,6 +200,16 @@ extension AiSRuntime {
                 _ = try? execute(db, "RELEASE ais_event")
             }
         }
+        if enqueueRemote, let payload = incoming["payload"] as? [String: Any], let expected = payload["expected_versions"] as? [String: Any] {
+            let atomeId = stringValue(incoming["atome_id"])
+            for (key, value) in expected {
+                let current = try query(db, "SELECT version FROM particles WHERE atome_id = ? AND particle_key = ?",
+                    [.text(atomeId), .text(key)]).first?["version"] as? Int64 ?? 0
+                guard let version = value as? NSNumber, version.doubleValue == Double(current) else {
+                    throw AiSError("property_version_conflict")
+                }
+            }
+        }
         let payloadString = try jsonString(event["payload"] ?? NSNull())
         let actorString = try jsonString(event["actor"] ?? NSNull())
         let actorId = resolveActorId(event["actor"]) ?? "local"

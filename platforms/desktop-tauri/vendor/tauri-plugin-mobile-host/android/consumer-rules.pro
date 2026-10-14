@@ -1,0 +1,2 @@
+-keep class one.atome.mobile.AtomeHostPlugin { *; }
+-keep class one.atome.mobile.AtomeNotificationHost { *; }

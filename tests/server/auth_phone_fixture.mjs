@@ -1,0 +1,56 @@
+import { afterEach } from 'vitest';
+import Database from 'better-sqlite3';
+import crypto from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { createPhoneLinkAuth } from '../../server/auth_phone_link.js';
+import { publicDeviceKey, randomHandle } from '../../server/auth_link_security.js';
+import { authSigningMessage, parseAuthLink } from '../../atome/src/shared/auth_link_contract.js';
+
+const databases = [];
+afterEach(() => databases.splice(0).forEach((db) => db.close()));
+export function fixture({ failDelivery = false, dailyLimit = 20, screenPassword } = {}) {
+    const db = new Database(':memory:');
+    databases.push(db);
+    db.exec(readFileSync(new URL('../../database/schema.sql', import.meta.url), 'utf8'));
+    db.exec(readFileSync(new URL('../../database/auth_security_schema.sql', import.meta.url), 'utf8'));
+    let clock = 1800000000000;
+    let tail = Promise.resolve();
+    const accounts = new Map();
+    const messages = [];
+    const disconnected = [];
+    const query = async (method, sql, params = []) => db.prepare(sql)[method](...params);
+    const transaction = (work) => {
+        const result = tail.then(async () => {
+            db.exec('BEGIN IMMEDIATE');
+            try { const value = await work(); db.exec('COMMIT'); return value; }
+            catch (error) { db.exec('ROLLBACK'); throw error; }
+        });
+        tail = result.catch(() => {});
+        return result;
+    };
+    const auth = createPhoneLinkAuth({ query, transaction, screenPassword, now: () => clock, masterSecret: 'test-only-secret-material'.repeat(3), dailyLimit,
+        findByPhone: async (phone) => accounts.get(phone), findById: async (id) => [...accounts.values()].find((a) => a.user_id === id),
+        replacePhone: async (id, phone) => { const entry = [...accounts.entries()].find(([, value]) => value.user_id === id); if (!entry || accounts.has(phone)) throw new Error('phone_change_invalid'); accounts.delete(entry[0]); accounts.set(phone, { ...entry[1], phone }); },
+        deleteAccount: async id => { for (const [phone, value] of accounts) if (value.user_id === id) accounts.delete(phone); },
+        createAccount: async (phone) => { const account = { user_id: crypto.randomUUID(), username: 'User', phone }; accounts.set(phone, account); return account; },
+        sendLink: async (phone, url) => { messages.push({ phone, url }); if (failDelivery) throw new Error('provider_failed'); },
+        issueAccess: async ({ sessionId }) => `test-access:${sessionId}`, disconnectSession: async (id) => disconnected.push(id) });
+    const device = () => {
+        const keys = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+        const { jwk, keyId } = publicDeviceKey(keys.publicKey.export({ format: 'jwk' }));
+        return { jwk, keyId, sign: (challenge) => ({ challengeId: challenge.challenge,
+            signature: crypto.sign('sha256', Buffer.from(authSigningMessage(challenge)),
+                { key: keys.privateKey, dsaEncoding: 'ieee-p1363' }).toString('base64url') }) };
+    };
+    async function start(key, phone = '+33612345678') {
+        const attempt = await auth.start({ phone, publicKey: key.jwk, clientNonce: randomHandle() }, '192.0.2.1');
+        if (!attempt.paymentRequired) return attempt;
+        const { challenge } = await auth.getChallenge({ attemptId: attempt.attemptId, keyId: key.keyId, purpose: 'simulate-payment' }, '192.0.2.1');
+        return auth.simulatePayment({ attemptId: attempt.attemptId, method: 'card', ...key.sign(challenge) });
+    }
+    async function input(key, attemptId, purpose = 'consume') {
+        const { challenge } = await auth.getChallenge({ attemptId, keyId: key.keyId, purpose }, '192.0.2.1');
+        return { attemptId, action: purpose, ...key.sign(challenge), token: parseAuthLink(messages.at(-1).url).token };
+    }
+    return { now: () => clock, auth, db, accounts, messages, disconnected, device, start, input, advance: (ms) => { clock += ms; } };
+}

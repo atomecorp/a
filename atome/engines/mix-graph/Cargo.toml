@@ -1,0 +1,15 @@
+[package]
+name = "atome-mix-graph"
+version = "0.1.0"
+edition = "2021"
+description = "eVe mixer signal graph hosted inside the Kira mixer (strips, modules, sends, buses, tails, latency)"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+kira = { version = "0.12", default-features = false }
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1"

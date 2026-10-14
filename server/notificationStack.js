@@ -1,5 +1,6 @@
 import { getAtome } from '../database/adole.js';
 import { commitAtomeEvent } from './atomeRoutes.orm.js';
+import { communicationPush } from './communication_push.js';
 
 const writeStack = async (userId, stack) => {
     const result = await commitAtomeEvent({ authenticatedUserId: userId, event: {
@@ -81,7 +82,8 @@ export async function pushNotificationToUserStack({
     userId,
     notification,
     maxKeep = 200,
-    authorId = null
+    authorId = null,
+    deferPush = false
 }) {
     if (!userId || !notification) return { ok: false, error: 'missing_user_or_notification' };
     const normalized = normalizeNotification(notification);
@@ -99,7 +101,12 @@ export async function pushNotificationToUserStack({
     const trimmed = deduped.length > maxKeep ? deduped.slice(deduped.length - maxKeep) : deduped;
 
     await writeStack(userId, trimmed);
-    return { ok: true, count: trimmed.length, stack: trimmed };
+    const deliverPush = async () => {
+        try { return await communicationPush.deliver(userId, normalized); }
+        catch { return { ok: false, error: 'push_delivery_failed' }; }
+    };
+    return { ok: true, count: trimmed.length, stack: trimmed,
+        ...(deferPush ? { deliverPush } : { push: await deliverPush() }) };
 }
 
 export async function readNotificationStack(userId) {

@@ -29,7 +29,11 @@ export function createDeviceSessions({ query, transaction, proof, now, issueAcce
         await proof.audit('session_created', account.user_id, row.session_id);
         return result(row, account);
     }
-    const reference = ({ sessionId, generation, targetKeyId, newPhone }, purpose) => {
+    const reference = ({ sessionId, generation, targetKeyId, newPhone, requestDigest }, purpose) => {
+        if (purpose === 'set-password') {
+            if (typeof requestDigest !== 'string' || !/^[a-f0-9]{64}$/.test(requestDigest)) reject('auth_request_invalid');
+            return `${sessionId}:${generation}:${requestDigest}`;
+        }
         if (purpose === 'change-phone') {
             if (typeof newPhone !== 'string' || !/^\+[1-9]\d{7,14}$/.test(newPhone)) reject('auth_phone_e164_required');
             return `${sessionId}:${generation}:${newPhone}`;
@@ -40,14 +44,14 @@ export function createDeviceSessions({ query, transaction, proof, now, issueAcce
         }
         return `${sessionId}:${generation}`;
     };
-    async function getChallenge({ sessionId, purpose, generation, targetKeyId, newPhone }, network) {
-        if (!['renew', 'local-bind', 'logout', 'logout-all', 'revoke-device', 'delete-account', 'change-phone'].includes(purpose)) reject('auth_request_invalid');
+    async function getChallenge({ sessionId, purpose, generation, targetKeyId, newPhone, requestDigest }, network) {
+        if (!['renew', 'local-bind', 'logout', 'logout-all', 'revoke-device', 'delete-account', 'change-phone', 'set-password'].includes(purpose)) reject('auth_request_invalid');
         return transaction(async () => {
             await proof.limit(`session-challenge:${proof.keyedIndex(String(network))}`, 60, 60000);
             const row = await read(sessionId);
             if (row.generation !== generation) reject('auth_session_stale');
             return { ok: true, challenge: await proof.challenge(purpose,
-                reference({ sessionId, generation, targetKeyId, newPhone }, purpose), row.key_id) };
+                reference({ sessionId, generation, targetKeyId, newPhone, requestDigest }, purpose), row.key_id) };
         });
     }
     async function renew(input) {
@@ -101,7 +105,10 @@ export function createDeviceSessions({ query, transaction, proof, now, issueAcce
                 await query('run', 'UPDATE auth_device_keys SET revoked_ms = ? WHERE key_id = ?', [now(), input.targetKeyId]);
                 selected = await query('all', 'SELECT session_id FROM auth_device_sessions WHERE key_id = ?', [input.targetKeyId]);
             }
-            for (const session of selected) await query('run', 'UPDATE auth_device_sessions SET revoked_ms = ? WHERE session_id = ?', [now(), session.session_id]);
+            for (const session of selected) {
+                await query('run', 'UPDATE auth_device_sessions SET revoked_ms = ? WHERE session_id = ?', [now(), session.session_id]);
+                await query('run', 'DELETE FROM auth_push_installations WHERE session_id = ?', [session.session_id]);
+            }
             await proof.audit(purpose, row.principal_id, row.session_id);
             return selected.map((session) => session.session_id);
         });
@@ -129,6 +136,8 @@ export function createDeviceSessions({ query, transaction, proof, now, issueAcce
             const sessions = await query('all', 'SELECT session_id FROM auth_device_sessions WHERE principal_id = ?', [row.principal_id]);
             await query('run', 'UPDATE auth_device_sessions SET revoked_ms = ? WHERE principal_id = ?', [now(), row.principal_id]);
             await query('run', 'UPDATE auth_device_keys SET revoked_ms = ? WHERE principal_id = ?', [now(), row.principal_id]);
+            await query('run', 'DELETE FROM auth_push_installations WHERE principal_id = ?', [row.principal_id]);
+            await query('run', 'DELETE FROM auth_password_credentials WHERE principal_id = ?', [row.principal_id]);
             await proof.audit('account_deleted', row.principal_id, row.session_id);
             return sessions.map(session => session.session_id);
         });
