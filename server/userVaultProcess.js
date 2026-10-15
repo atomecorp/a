@@ -20,6 +20,9 @@ const db = await import('../database/adole.js');
 await db.initDatabase();
 await db.resolvePendingOwners();
 
+// Upper bound of one stream replay batch (raw stored bytes); see `stream:events`.
+const STREAM_BATCH_BYTES = 8 * 1024 * 1024;
+
 const parseJson = (value) => {
     if (value == null || typeof value === 'object') return value ?? null;
     try { return JSON.parse(value); } catch (_) { return value; }
@@ -104,11 +107,30 @@ const handleOperation = async (operation, payload = {}) => {
         const cursor = Math.max(0, Number(payload.cursor) || 0);
         const limit = Math.max(1, Math.min(Number(payload.limit) || 500, 1000));
         if (!streamId) throw new Error('vault_stream_required');
+        // Every event carries the projection of its object (hundreds of KB for a large
+        // project): 500 of them made one reply of ~150 MB and killed this process. The batch
+        // is bounded in bytes too, read from the row sizes first; at least one event goes.
+        const sizes = await db.default.query(
+            'all',
+            `SELECT COALESCE(LENGTH(payload), 0) + COALESCE(LENGTH(projection), 0)
+                    + COALESCE(LENGTH(lww_decisions), 0) AS bytes
+             FROM events WHERE stream_id = ? AND sequence > ?
+             ORDER BY sequence ASC, id ASC LIMIT ?`,
+            [streamId, cursor, limit]
+        );
+        let count = 0;
+        let bytes = 0;
+        for (const row of sizes || []) {
+            if (count && bytes + Number(row.bytes || 0) > STREAM_BATCH_BYTES) break;
+            bytes += Number(row.bytes || 0);
+            count += 1;
+        }
+        if (!count) return [];
         const rows = await db.default.query(
             'all',
             `SELECT * FROM events WHERE stream_id = ? AND sequence > ?
              ORDER BY sequence ASC, id ASC LIMIT ?`,
-            [streamId, cursor, limit]
+            [streamId, cursor, count]
         );
         return (rows || []).map(parseRow);
     }

@@ -157,6 +157,13 @@ export function createWsPhoneLinkHandler({ projectRoot, jwtSecret, sendLink, dat
             return { type: 'auth-response', requestId, success: result.ok === true, ...result };
         } catch (error) {
             if (message.action === 'phone-link-resume') delete connection._authLinkAttemptId;
+            // The client only sees `auth_request_rejected`; the operator needs the
+            // exact refusal site. Action, code and source line carry no secret.
+            if (!PUBLIC_ERRORS.has(error.message)) {
+                const site = String(error?.stack || '').split('\n').find((line) => /server\/auth_/.test(line) && !/at reject /.test(line)) || '';
+                console.warn('[auth] request rejected', JSON.stringify({ action: message.action, code: error.message,
+                    at: site.trim().replace(/^at\s+/, '').replace(/^.*\/server\//, 'server/').replace(/\)$/, '') }));
+            }
             return { type: 'auth-response', requestId, success: false, ok: false,
                 error: PUBLIC_ERRORS.has(error.message) ? error.message : 'auth_request_rejected' };
         }

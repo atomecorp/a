@@ -327,7 +327,7 @@ export class WsSyncRuntime {
                 this.safeSend(record.connection, eventEnvelope(event, true));
                 subscription.cursor = Math.max(subscription.cursor, Number(event.sequence));
             }
-            if (events.length < 500) break;
+            // A batch is also bounded in bytes by the vault: a short one is not the end.
         }
         if (record.closed) return null;
         if (announce) {
