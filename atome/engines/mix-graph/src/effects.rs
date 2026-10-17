@@ -3,7 +3,7 @@
 
 use crate::program::ModuleSpec;
 use kira::effect::compressor::{CompressorBuilder, CompressorHandle};
-use kira::effect::delay::{DelayBuilder, DelayHandle};
+use crate::delay::{DelayEffectBuilder, DelayHandle};
 use kira::effect::distortion::{DistortionBuilder, DistortionHandle, DistortionKind};
 use kira::effect::eq_filter::{EqFilterBuilder, EqFilterHandle, EqFilterKind};
 use kira::effect::filter::{FilterBuilder, FilterHandle, FilterMode};
@@ -74,10 +74,7 @@ pub fn build_effect(spec: &ModuleSpec, sample_rate: u32, block_size: usize) -> R
             BuiltEffect { effects: vec![effect], handle: EffectHandle::Reverb(handle), has_tail: true }
         }
         "delay" => {
-            let (effect, handle) = boxed(DelayBuilder::new()
-                .delay_time(Duration::from_secs_f64(spec.number("time", 0.375).max(0.001)))
-                .feedback(Decibels(spec.number("feedback_db", -6.0) as f32))
-                .mix(mix(spec, 0.35)));
+            let (effect, handle) = boxed(DelayEffectBuilder::new(spec.number("time", 0.375), spec.number("feedback_db", -6.0), spec.number("mix", 0.35)));
             BuiltEffect { effects: vec![effect], handle: EffectHandle::Delay(handle), has_tail: true }
         }
         "compressor" => {
@@ -128,9 +125,10 @@ pub fn build_effect(spec: &ModuleSpec, sample_rate: u32, block_size: usize) -> R
     Ok(built)
 }
 
-// Parameters that cannot be tweened require a new instance (delay buffer length).
+// Only another effect needs a new instance: every parameter, the delay time
+// included, is changed live on the running one.
 pub fn requires_rebuild(previous: &ModuleSpec, next: &ModuleSpec) -> bool {
-    previous.effect != next.effect || (next.effect.as_deref() == Some("delay") && previous.number("time", 0.375) != next.number("time", 0.375))
+    previous.effect != next.effect
 }
 
 pub fn retune(handle: &mut EffectHandle, spec: &ModuleSpec) {
@@ -141,10 +139,7 @@ pub fn retune(handle: &mut EffectHandle, spec: &ModuleSpec) {
             handle.set_stereo_width(spec.number("stereo_width", 1.0), PARAM_TWEEN);
             handle.set_mix(mix(spec, 0.35), PARAM_TWEEN);
         }
-        EffectHandle::Delay(handle) => {
-            handle.set_feedback(Decibels(spec.number("feedback_db", -6.0) as f32), PARAM_TWEEN);
-            handle.set_mix(mix(spec, 0.35), PARAM_TWEEN);
-        }
+        EffectHandle::Delay(handle) => handle.set(spec.number("time", 0.375), spec.number("feedback_db", -6.0), spec.number("mix", 0.35)),
         EffectHandle::Compressor(handle) => {
             handle.set_threshold(spec.number("threshold_db", -18.0), PARAM_TWEEN);
             handle.set_ratio(spec.number("ratio", 4.0), PARAM_TWEEN);

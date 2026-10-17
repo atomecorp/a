@@ -128,9 +128,9 @@ export function eventIdempotencyIntent(event) {
     });
 }
 
-export function assertIdempotentEventReplay(existing, incoming) {
-    const left = JSON.stringify(eventIdempotencyIntent(existing));
-    const right = JSON.stringify(eventIdempotencyIntent(incoming));
+export function assertIdempotentEventReplay(existing, incoming, hashes = null) {
+    const left = hashes ? hashes.existingHash : JSON.stringify(eventIdempotencyIntent(existing));
+    const right = hashes ? hashes.incomingHash : JSON.stringify(eventIdempotencyIntent(incoming));
     if (left === right) return;
     const error = new Error('event_id_conflict');
     error.code = 'event_id_conflict';

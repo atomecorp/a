@@ -63,3 +63,8 @@ assert.equal(api.getAssetState('molecule_transaction_probe_video').duration, 1);
 await api.disposeAsset('molecule_transaction_probe_video');
 assert.equal(engine.sessions.size, 0, 'dispose must release the audio-only scheduler session');
 assert.equal(api.getAssetState('molecule_transaction_probe_video'), null);
+
+// Browser services imported by the engine keep Node's event loop alive: the
+// probe ends once its assertions hold.
+console.log('molecule_mount_visual_transaction: ok');
+process.exit(0);

@@ -119,6 +119,9 @@ The Bevy integration is documented in `atome/documentations/bevy_integration.md`
 ./run.sh apk --prod          # minified release APK signed with the local keystore
 ./run.sh apk --prod --aab    # signed Play Store bundle
 ./run.sh apk --doctor        # report the JDK/SDK/NDK/Rust-target chain, build nothing
+./scripts/Android_testflight_generator --dry-run  # inspect the Android distribution plan
+./scripts/Android_testflight_generator --prepare  # signed, validated AAB; no Google upload
+./scripts/Android_testflight_generator            # build and publish to Play internal, after setup
 ```
 
 `scripts/android/apk.sh` owns the complete lane. It resolves the JDK, the Android SDK
@@ -126,7 +129,8 @@ packages, the NDK, the Rust Android targets and the Tauri CLI idempotently (alre
 present and current means untouched, missing or older means installed, otherwise a
 named error), stages `platforms/desktop-tauri/gen/android-webroot`, runs the single
 `tauri android build` allowed in this repository, and verifies the produced artifact
-with `aapt2 dump badging` plus `apksigner verify`. `--dry-run` prints the exact plan
+with `aapt2 dump badging` plus `apksigner verify` for APKs, and official AGP-owned
+`bundletool`, strict JDK signature and native 16 KB checks for release AABs. `--dry-run` prints the exact plan
 without touching anything, and `--isolated-home <dir>` keeps the cargo, Gradle and
 Android user caches under `<dir>` instead of `$HOME` for hermetic or CI builds. The
 release keystore lives outside the checkout in `~/.atome/android/`, and
@@ -135,10 +139,20 @@ the signing configuration and manifest customizations survive.
 
 Produced artifacts are located through the Tauri CLI's own report (`Finished N APK
 at:`), because Gradle nests them under a product flavor (`outputs/apk/universal/debug/`)
-whose naming belongs to the CLI. The build log and the freshness marker used by the
-filesystem fallbacks live in the git-ignored `temp/`; the log captures both streams,
+whose naming belongs to the CLI. Missing CLI artifact evidence stops the build;
+older filesystem outputs are never substituted. The build log lives in the
+git-ignored `temp/`; it captures both streams,
 because the CLI reports the assembled artifact on stderr while Gradle writes its
 diagnostics to stdout.
+
+The Android counterpart of the iOS release generator is
+`scripts/Android_testflight_generator`, also reachable through
+`./run.sh apk --play-internal`. It reserves a monotone Android build code, calls
+the same Android builder once and publishes only to **Google Play internal testing**.
+First use `--prepare` for the initial Console upload, then enter Google setup in
+the ignored `Private/android-play.json`. No Google account is embedded in source.
+See the [Android distribution guide](atome/documentations/android_play_internal_distribution.md)
+for one-time setup, tester opt-in, exact-report recovery and remaining phone acceptance.
 
 Before invoking the CLI, the lane deletes this build type's previous artifact.
 Gradle packs into an existing file without truncating it, so a repackaged debug APK

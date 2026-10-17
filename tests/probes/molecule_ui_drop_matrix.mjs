@@ -2,7 +2,7 @@ import {
     assert, clickCanvasTarget, findBevyUiNodeTarget, wait, waitFor
 } from './molecule_ui_acceptance_support.mjs';
 import {
-    drag, dropChoiceToolIds, reloadProjection, screenshot, structuredDropTarget, switchView, waitForMolecule
+    drag, offeredDropChoices, reloadProjection, screenshot, structuredDropTarget, switchView, waitForMolecule
 } from './molecule_ui_drop_core.mjs';
 import {
     assertNoParasites, chooseMoleculePlaybackMode, disarmMemberPlayback,
@@ -89,8 +89,8 @@ export const validateMatrixMoleculeDrop = async ({ page, project, fixture, repor
             || state?.properties?.parent_id || state?.meta?.parent_id || '') === projectId);
     }, { ids: [fixture.imageId, fixture.audioId], projectId: project.id });
     assert(plainDrop, 'matrix_plain_drop_combined');
-    const matrixChoices = await dropChoiceToolIds(page);
-    assert(matrixChoices.length === 6, `matrix_drop_choices_missing:${JSON.stringify(matrixChoices)}`);
+    const matrixChoices = await offeredDropChoices(page);
+    assert(matrixChoices.ok, `matrix_drop_choices_missing:${JSON.stringify(matrixChoices)}`);
     await drag({
         page, source, destination: overlap, holdMs: 700, railChoice: 'front',
         armedShot: async () => {

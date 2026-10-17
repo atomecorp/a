@@ -10,11 +10,24 @@ permissions = [
   "allow-audio-has-clip",
   "allow-audio-play",
   "allow-audio-play-instance",
+  "allow-audio-schedule-instances",
+  "allow-audio-measure-input-latency",
+  "allow-audio-render-clock",
+  "allow-audio-mix-apply",
+  "allow-audio-mix-levels",
+  "allow-audio-mix-devices",
+  "allow-audio-mix-cut-tail",
+  "allow-audio-mix-module-state",
   "allow-audio-stop",
   "allow-audio-stop-instance",
+  "allow-audio-set-voice-end",
   "allow-audio-destroy-clip",
   "allow-audio-set-volume",
+  "allow-audio-set-pan",
   "allow-audio-set-playback-rate",
+  "allow-audio-wake-start",
+  "allow-audio-wake-stop",
+  "allow-audio-wake-read",
   "allow-audio-record-start",
   "allow-audio-record-stop",
   "allow-audio-get-levels",
@@ -101,3 +114,68 @@ commands.allow = ["audio_get_scope"]
 identifier = "allow-audio-shutdown"
 description = "Enables the audio_shutdown command."
 commands.allow = ["audio_shutdown"]
+
+[[permission]]
+identifier = "allow-audio-schedule-instances"
+description = "Enables the audio_schedule_instances command."
+commands.allow = ["audio_schedule_instances"]
+
+[[permission]]
+identifier = "allow-audio-measure-input-latency"
+description = "Enables the audio_measure_input_latency command."
+commands.allow = ["audio_measure_input_latency"]
+
+[[permission]]
+identifier = "allow-audio-render-clock"
+description = "Enables the audio_render_clock command."
+commands.allow = ["audio_render_clock"]
+
+[[permission]]
+identifier = "allow-audio-mix-apply"
+description = "Enables the audio_mix_apply command."
+commands.allow = ["audio_mix_apply"]
+
+[[permission]]
+identifier = "allow-audio-mix-levels"
+description = "Enables the audio_mix_levels command."
+commands.allow = ["audio_mix_levels"]
+
+[[permission]]
+identifier = "allow-audio-mix-devices"
+description = "Enables the audio_mix_devices command."
+commands.allow = ["audio_mix_devices"]
+
+[[permission]]
+identifier = "allow-audio-mix-cut-tail"
+description = "Enables the audio_mix_cut_tail command."
+commands.allow = ["audio_mix_cut_tail"]
+
+[[permission]]
+identifier = "allow-audio-mix-module-state"
+description = "Enables the audio_mix_module_state command."
+commands.allow = ["audio_mix_module_state"]
+
+[[permission]]
+identifier = "allow-audio-set-voice-end"
+description = "Enables the audio_set_voice_end command."
+commands.allow = ["audio_set_voice_end"]
+
+[[permission]]
+identifier = "allow-audio-set-pan"
+description = "Enables the audio_set_pan command."
+commands.allow = ["audio_set_pan"]
+
+[[permission]]
+identifier = "allow-audio-wake-start"
+description = "Enables the audio_wake_start command."
+commands.allow = ["audio_wake_start"]
+
+[[permission]]
+identifier = "allow-audio-wake-stop"
+description = "Enables the audio_wake_stop command."
+commands.allow = ["audio_wake_stop"]
+
+[[permission]]
+identifier = "allow-audio-wake-read"
+description = "Enables the audio_wake_read command."
+commands.allow = ["audio_wake_read"]

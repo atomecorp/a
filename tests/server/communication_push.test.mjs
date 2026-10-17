@@ -7,15 +7,16 @@ import { EventEmitter } from 'node:events';
 import { generateKeyPairSync } from 'node:crypto';
 
 const installationId = 'c51ca76b-a259-4a26-8b15-d8791a97f2f7';
-async function setup() {
+async function setup({ android = false } = {}) {
     const f = fixture(), key = f.device(), attempt = await f.start(key);
-    const login = await f.auth.complete(await f.input(key, attempt.attemptId));
+    const login = await f.complete(await f.input(key, attempt.attemptId));
     const send = vi.fn(async () => ({ ok: true, status: 200 }));
+    const sendAndroid = vi.fn(async () => ({ ok: true, status: 200 }));
     const push = createCommunicationPush({ query: async (method, sql, args = []) => f.db.prepare(sql)[method](...args),
-        now: f.now, transport: { send, configured: () => true } });
+        now: f.now, transport: { send, configured: () => true }, androidTransport: { send: sendAndroid, configured: () => android } });
     const claims = { sub: login.user.id, sid: login.session.id, cnf: { kid: key.keyId } };
     for (const kind of ['alert', 'voip']) await push.register(claims, { installationId, kind, deviceToken: kind === 'alert' ? 'a'.repeat(64) : 'b'.repeat(64), environment: 'sandbox' });
-    return { ...f, key, login, push, send, claims };
+    return { ...f, key, login, push, send, sendAndroid, claims };
 }
 test('one canonical notification reaches only its principal, deduplicates and excludes content', async () => {
     const f = await setup(), item = { id: 'message', kind: 'message', message: 'private text', from_id: 'sender' };
@@ -24,6 +25,23 @@ test('one canonical notification reaches only its principal, deduplicates and ex
     expect(f.send).toHaveBeenCalledOnce();
     expect(JSON.stringify(f.send.mock.calls)).not.toContain('private text');
     expect(f.send.mock.calls[0][1].atome).toMatchObject({ principal_id: f.login.user.id, notification_id: 'message' });
+});
+test('FCM calls share principal/session protection; terminal controls cannot generate Apple VoIP calls', async () => {
+    const f = await setup({ android: true }), id = 'ad1ea0b6-661e-446d-ae31-7f03e1911cba';
+    await f.push.register(f.claims, { installationId: id, provider: 'fcm', kind: 'voip',
+        deviceToken: 'c'.repeat(22), environment: 'production' });
+    const room = '6a937aed-fca6-4dfb-83f4-f17d32149780';
+    await f.push.deliver('foreign', { id: 'call', kind: 'call-invitation', room_id: room, expires_at: f.now() + 10000 });
+    expect(f.sendAndroid).not.toHaveBeenCalled();
+    await f.push.deliver(f.login.user.id, { id: 'call', kind: 'call-invitation', room_id: room, expires_at: f.now() + 10000 });
+    expect(f.send).toHaveBeenCalledOnce(); expect(f.sendAndroid).toHaveBeenCalledOnce();
+    const control = { id: 'cancel', kind: 'call-state', room_id: room, status: 'cancelled' };
+    await f.push.deliver(f.login.user.id, control); await f.push.deliver(f.login.user.id, control);
+    expect(f.send).toHaveBeenCalledOnce(); expect(f.sendAndroid).toHaveBeenCalledTimes(2);
+    expect(f.sendAndroid.mock.calls[1][2]).toMatchObject({ voip: false, control: true });
+    expect(f.sendAndroid.mock.calls[1][1].atome.status).toBe('cancelled');
+    await expect(f.push.register(f.claims, { installationId, provider: 'fcm', kind: 'voip',
+        deviceToken: 'd'.repeat(22), environment: 'production' })).rejects.toThrow('push_registration_invalid');
 });
 test('only real unexpired calls use VoIP; scheduled invitations use ordinary APNs', async () => {
     const f = await setup(), room = '6a937aed-fca6-4dfb-83f4-f17d32149780';

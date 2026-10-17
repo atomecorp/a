@@ -72,6 +72,23 @@ const editing = {
 
 const flatten = (nodes = []) => nodes.flatMap((entry) => [entry, ...flatten(entry?.children || [])]);
 
+test('Home keeps logout on the left and requires a separate confirmation; Cancel has no hold action', () => {
+    const events = [];
+    const build = pending => buildHomeFixedContent(baseState({ sessionExitPending: pending }), { emit: event => events.push(event.type), bodyWidth: 320 });
+    const initial = build(false)[0];
+    assert.equal(initial.children[0].id, 'home_session_exit');
+    assert.equal(initial.children[0].hold_delay_ms, 1000);
+    initial.children[0].on.activate();
+    assert.deepEqual(events, ['home.session.exit']);
+    const confirmed = build(true)[0];
+    assert.equal(confirmed.children.at(-1).id, 'home_session_confirm');
+    assert.equal(confirmed.children[0].on.long_press, undefined);
+    confirmed.children[0].on.activate();
+    confirmed.children.at(-1).on.activate();
+    initial.children[0].on.long_press();
+    assert.deepEqual(events, ['home.session.exit', 'home.session.exit', 'home.session.confirm', 'home.session.hold']);
+});
+
 test('Home is the card of the current user with a collapsed Settings accordion below it', () => {
     const state = baseState();
     const nodes = buildHomeContent(state, { emit: () => {}, bodyWidth: 452, editing });
@@ -130,7 +147,9 @@ test('Home is the card of the current user with a collapsed Settings accordion b
     assert.ok(all.some((entry) => entry.id === 'home_handedness'));
     assert.ok(all.some((entry) => entry.id === 'home_accessibility_auditory'));
     assert.ok(all.some((entry) => entry.id === 'home_server_select'));
-    assert.equal(fixed[0].id, 'home_session_exit');
+    assert.equal(fixed[0].id, 'home_session_buttons');
+    assert.equal(fixed[0].children[0].id, 'home_session_exit');
+    assert.equal(fixed[0].children.some(child => child.id === 'home_session_confirm'), false);
     assert.equal(profileDisplayName(state.profile), 'Ada');
 });
 

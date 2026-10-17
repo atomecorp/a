@@ -880,3 +880,187 @@ Objectif : l'écran blanc de l'émulateur (§12.16, §12.17) ne laisse aucune tr
 ```
 
 Attendu, sur cet émulateur sans GPU utilisable : l'application ouvre la page, le renderer échoue de façon terminale, et la **surface d'échec s'affiche** — titre « L'affichage n'a pas pu démarrer », cause « Le moteur graphique n'a affiché aucune image dans le délai prévu. », le message `bevy_renderer_...` en détail et le bouton Réessayer. La capture de fin de session (`temp/logcat/atome-<horodatage>.png`) doit le montrer, et le journal doit porter `--- boot failure surface painted ---` suivi de la ligne `[boot-failure] surface painted: …` ; la surface doit être **absente** sur un téléphone réel, où le renderer démarre.
+
+## 13. Android incoming-call bridge — 2026-10-14
+
+Scope: ATM-2006/ATM-2020. The user explicitly approves the official Firebase
+Messaging dependency and defers all Android device tests. This is implemented
+source, with compilation evidence tracked in FRAMEWORK_STATE; it is not physical
+receipt or production acceptance. No Firebase project, credential, device setting
+or store publication is created here.
+
+The existing Tauri host registers `tauri-plugin-mobile-host`. Native Firebase
+Messaging 25.1.3 receives data-only OS wake events; a self-managed Telecom
+ConnectionService and CallStyle notification expose ringing/answer/decline.
+API29/30 use the OS notification's actions; API31+ use CallStyle. A phoneCall
+foreground service retains the OS call lifecycle. Microphone/camera service
+types activate only after the existing media owner reports successful user
+answer; WebView capture owns its ordinary runtime permission requests. No media
+starts on receipt or full-screen navigation. One native connection is supported
+at a time; another incoming connection is rejected by Telecom/the host.
+
+The SDK's current `register()`/`onRegistered()` contract supplies a Firebase
+Installation ID (FID), targeted using HTTP v1 `message.fid`. No deprecated
+`getToken`/`onNewToken` or HTTP `message.token` path is introduced. The existing
+application token field carries that opaque OS delivery address; it is never an
+Atome principal. Firebase owns its provider-only installation/registration
+metadata cache. Atome account/grant/inbox persistence remains Rust/Axum-owned.
+Logout disables SDK auto-init and requests unregister in addition to the existing
+server/session revocation. No Firebase Auth or analytics identity is added.
+
+The Rust/Axum auth owner reads the existing unlocked grant and stores only
+opaque OS inbox/installation references. Answer/decline resume the shared JS
+push client, then the existing tool gateway, Visio arbitration and media engine.
+Terminal/other-device controls stop ringing; bounded terminal delivery records
+also suppress delayed duplicate invitations for that room. The server's existing
+protected installation/session/deduplication owner selects APNs or FCM. P-256
+device proof extends the existing auth owner with hardware-backed Android
+Keystore; an unavailable hardware key fails explicitly. An emulator is not
+evidence for that capability.
+
+External configuration, when available:
+
+- Register the exact application ID in the intended Firebase project:
+  `com.squirrel.desktop.debug` for this debug lane, `com.squirrel.desktop` for
+  production. Supply that app's public options to the build environment:
+  `ATOME_ANDROID_FIREBASE_APP_ID`, `ATOME_ANDROID_FIREBASE_API_KEY`,
+  `ATOME_ANDROID_FIREBASE_SENDER_ID`, `ATOME_ANDROID_FIREBASE_PROJECT_ID`.
+  The native Gradle owner generates FirebaseInitProvider's resources for a
+  cold wake and the same host contract fields. No private key enters the APK.
+- On the server only, provide `FCM_PROJECT_ID` and
+  `FCM_SERVICE_ACCOUNT_PATH` pointing to a protected Google service-account
+  credential authorized for that project. OAuth and HTTP v1 endpoints are fixed
+  to Google. Do not put that file in Git, WebView code, logs or chat.
+- Build using the existing `./run.sh apk --test --abi aarch64 --no-install-deps`.
+  This compiles/packages without launching a device. Public options must match
+  the Firebase app; empty options compile but cannot register/receive real FCM.
+
+**To verify, explicitly deferred:** two isolated real accounts; message and real
+audio/video receipt foreground/background/suspended/cold; locked answer/refusal,
+permissions refused, DND/channel restrictions, Android14+ full-screen permission,
+microphone/camera and audio routing, remote cancellation/hangup, expiry, duplicate
+delivery and other-device answer, logout/account switch/session revocation,
+installation/token renewal, process death and explicit force-stop. Android owns
+background starts and full-screen presentation; this code does not bypass their
+restrictions. Decline resumes the canonical application command path; actual
+cold-start timing and prompt network delivery require physical acceptance.
+No Android test suite or device scenario is executed in this continuation.
+
+Primary OS references: [FCM receiver](https://firebase.google.com/docs/cloud-messaging/android/receive-messages),
+[Telecom ConnectionService](https://developer.android.com/reference/android/telecom/ConnectionService),
+[CallStyle](https://developer.android.com/develop/ui/compose/notifications/call-style),
+[foreground service types](https://developer.android.com/develop/background-work/services/fgs/service-types).
+
+## 14. Music voice/MCP on Android — deferred follow-up, 2026-10-15
+
+Scope clarification, later2026-10-15: the user now explicitly requires Apple
+Music to be hidden on Android, Windows and Web. Do not reintroduce its tile as
+part of this deferred work. A later Android music task must first identify the
+intended Android player/provider and reuse compatible shared commands where
+appropriate; the Apple Music Android SDK finding below remains feasibility
+evidence, not authorization to expose Apple Music on Android.
+
+Status: **initial source/documentation study complete; implementation deferred**
+at the user's request when the adaptation is a distinct task. Low priority.
+The requested result is the same Fun/voice workflow as iPhone/iPad: find and
+play songs, artists and playlists, pause/resume/next/previous, create playlists
+and append songs. Playlist deletion remains excluded. This entry records the
+next work item; it does not claim Android support or schedule background work.
+
+Reuse evidence: `atome/src/squirrel/apple_music/contracts.js` already owns the
+typed commands; `eVe/domains/apple_music/apple_music_runtime.js` owns execution
+and private operation receipts, and `apple_music_mystic_items.js` composes Fun.
+The current runtime's default host invocation/support check explicitly requires
+the iOS native bridge. The Android Tauri host registers the existing
+`vendor/tauri-plugin-mobile-host`; its Rust method whitelist and
+`android/src/main/java/AtomeHostPlugin.kt` expose device authentication and
+notifications, not music. Searches for AppleMusic/apple_music/MusicKit/
+MediaSession/MediaController/NotificationListener in Tauri src, vendor and
+generated Android app sources found no music adapter. Availability of an
+Android music capability is therefore **Not found after investigation**, while
+the shared command/UI/receipt composition is available at source level.
+
+Provider distinction, checked against primary documentation:
+
+- Apple Music itself is available for integration on Android: Apple documents
+  native authentication/playback SDKs and cross-platform catalogue/library APIs,
+  including playlist creation and changes. This can preserve the Apple Music
+  tool and command names across platforms, with an Android capability adapter.
+  The SDK is not declared in the inspected mobile-host Gradle dependencies.
+  SDK compatibility, developer-token provisioning, user consent, subscription
+  and physical playback remain **To verify**; do not ship a private signing key
+  in the APK or request credentials in chat.
+- Controlling another installed Android player is a different contract.
+  MediaSession/MediaController expose the operations the session owner permits;
+  discovering other apps' active sessions requires an authorized session token
+  or the documented access mechanism. It is not evidence of a universal music
+  catalogue or provider-library playlist creation API. Do not promise those
+  operations for every Android player or silently substitute one provider.
+
+Next-task sequence and acceptance:
+
+1. Confirm the intended provider scope: retain Apple Music on Android for the
+   same catalogue/account; study another installed player only if requested.
+   Verify the official SDK contract/licence and compatibility with the existing
+   Tauri mobile host, minSdk29/compileSdk36 and application lifecycle before
+   adding any dependency. Existing Firebase approval does not approve MusicKit.
+2. Extend the existing native capability boundary and shared runtime host
+   selection; reuse the current declarations, Command Bus/MCP policy/audit,
+   voice guidance, Fun controls and canonical Atome request/receipt owner.
+   Missing native music support is an internal extension, not grounds for a
+   second UI, new command registry, copied runtime or substitute player.
+   Keep the native boundary authenticated and account-bound, including receipt
+   verification before provider writes; retain CAS claims, dry-run and the
+   prohibition on blindly retrying an unconfirmed external operation.
+3. Design developer-token signing and protected user-token lifecycle through
+   the canonical host/server owners. Any provider HTTP SDK/API calls remain
+   encapsulated provider capabilities; no alternate application transport,
+   WebView secret storage or parallel business-state authority is permitted.
+   Study audio focus, assistant capture/calls, background/lock-screen playback,
+   DRM and process death before implementing the native owner.
+4. Run shared contracts plus Android boundary/authentication/idempotency tests,
+   compile/package through the existing APK lane, then verify a real Android
+   phone: consent/refusal, catalogue search, song/artist/playlist playback,
+   transport, playlist creation/addition/read-back, ambiguous names, account
+   switch/logout, lost acknowledgement, background/locked and voice/audio
+   coexistence. Report supported provider operations explicitly. No emulator
+   compile or source-only result counts as service/audio acceptance.
+
+No production source, dependency, provider/device setting, Git state or native
+audio owner changed during this study. Architectural maps need no update until
+an implementation changes a real boundary. Factual evidence is recorded in
+`eVe/documentations/FRAMEWORK_STATE.md`; runtime acceptance is **To verify**.
+
+Primary references: [MusicKit, Android and API overview](https://developer.apple.com/musickit/),
+[Android MusicKit API](https://developer.apple.com/musickit/android/),
+[create a library playlist](https://developer.apple.com/documentation/applemusicapi/create-a-new-library-playlist),
+[add tracks to a library playlist](https://developer.apple.com/documentation/applemusicapi/add-tracks-to-a-library-playlist),
+[Android MediaController](https://developer.android.com/reference/android/media/session/MediaController),
+[Android active-session access](https://developer.android.com/reference/android/media/session/MediaSessionManager#getActiveSessions(android.content.ComponentName)).
+
+
+## 14. Google Play internal release generator — 2026-10-15
+
+The requested Android counterpart of `scripts/XCode_testflight_generator` is now
+`../scripts/Android_testflight_generator`, delegating to the existing Android lane.
+It exposes offline `--dry-run`/`--doctor`, local signed-AAB `--prepare`, internal-only
+publication and explicit exact-report recovery via `--publish <report>`. Source and
+mocked API tests are implementation evidence, not Google account or phone acceptance.
+The canonical shell lane is factored into cohesive modules; native archive checks
+are shared across APK and AAB. Build codes are reserved in the Android configuration;
+product versions and iOS release settings are not rewritten.
+
+See the [distribution guide](../atome/documentations/android_play_internal_distribution.md)
+for account setup, first Console upload, upload-certificate matching, private API
+credentials, tester opt-in and recovery. A blank local `Private/android-play.json`
+was created without overwriting an existing file. No Google account, credential or
+production publication was configured. Current executable results and remaining
+**To verify** items belong to the newest Android release record in
+[FRAMEWORK_STATE](../eVe/documentations/FRAMEWORK_STATE.md#5-recent-task-record).
+
+Final local evidence: the generator completed with exit0 as Android1.19.0/build4,
+ARM64, minSdk29/targetSdk36. The exact signed, bundletool/JDK/native-validated AAB
+and report are retained under `temp/android-release-ZcSDJ2/`; no Google upload
+was attempted. Six Android suites pass44/44 and canonical asset tests pass5/5;
+M0 and syntax pass. The independent global manifest guard retains an unrelated
+missing legacy-suite entry. Physical Play installation/update remains **To verify**.

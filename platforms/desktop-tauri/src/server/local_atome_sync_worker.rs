@@ -1,6 +1,7 @@
 use super::local_atome::{
-    event_with_actor, list_sync_queue_for_actor, mark_sync_queue_done, mark_sync_queue_error,
-    mark_sync_queue_syncing, EventRecord, LocalAtomeState, RemoteSyncCredential,
+    event_with_actor, list_sync_queue_for_actor, list_sync_queue_for_atomes, mark_sync_queue_done,
+    mark_sync_queue_error, mark_sync_queue_syncing, EventRecord, LocalAtomeState, RemoteSyncCredential,
+    SyncQueueItem,
 };
 pub(crate) use super::local_atome_sync_bootstrap::enqueue_current_user_state_sync;
 use super::local_atome_sync_media::upload_outbound_media;
@@ -201,6 +202,11 @@ fn record_error(
             retry_at(attempts, final_fail),
             final_fail,
         );
+        let user = db.query_row("SELECT json_extract(payload,'$.actor.id') FROM sync_queue WHERE queue_id=?1",
+            [queue_id], |row| row.get::<_,String>(0)).ok();
+        if let Some(user) = user {
+            super::broadcast_sync_event(json!({"type":"sync:status", "local_user_id":user, "data":{"principal_id":user}}));
+        }
     }
 }
 
@@ -281,6 +287,129 @@ async fn request_remote(
     .map_err(|error| error.to_string())?
 }
 
+// One queued event to the remote server; the queue row records the outcome.
+async fn deliver_item(state: &LocalAtomeState, remote_url: &str, item: SyncQueueItem) -> bool {
+    let payload: JsonValue = match serde_json::from_str::<JsonValue>(&item.payload) {
+        Ok(value) if value.is_object() => value,
+        _ => {
+            record_error(state, item.queue_id, item.attempts + 1, "Invalid payload", true);
+            return false;
+        }
+    };
+    let Some(credential) = credential_for_event(state, &payload) else {
+        return false;
+    };
+    let Some(local_user_id) = actor_id(&payload).map(str::to_string) else {
+        return false;
+    };
+    let event_id = payload.get("id").and_then(JsonValue::as_str).unwrap_or("").to_string();
+    let attempts = item.attempts + 1;
+    if let Ok(db) = state.db.lock() {
+        let _ = mark_sync_queue_syncing(&db, item.queue_id, attempts);
+    }
+    let mut event = match normalize_outbound_event(payload, &local_user_id, &credential.remote_user_id) {
+        Ok(value) => value,
+        Err(error) => {
+            record_error(state, item.queue_id, attempts, &error, true);
+            return false;
+        }
+    };
+    let endpoint = if credential.remote_url.is_empty() { remote_url } else { credential.remote_url.as_str() };
+    if let Err(error) = upload_outbound_media(state, endpoint, &local_user_id, &credential, &mut event).await {
+        record_error(state, item.queue_id, attempts, &error, is_permanent_refusal(&error));
+        return false;
+    }
+    let outcome = send_event(state, endpoint, &local_user_id, &credential, event).await;
+    // A republication id carries the digest of the state it publishes: the server holding
+    // that id already holds this version, so a conflict on it is a past delivery.
+    let delivered = match &outcome {
+        Ok(()) => true,
+        Err(error) => error == "event_id_conflict" && bootstrap_identity(&event_id).is_some(),
+    };
+    if delivered {
+        if let Ok(db) = state.db.lock() {
+            let _ = mark_sync_queue_done(&db, item.queue_id);
+            if let Some((remote_user_id, atome_id, digest)) = bootstrap_identity(&event_id) {
+                let _ = db.execute(
+                    "INSERT INTO remote_bootstrap_delivered (remote_user_id, atome_id, digest, delivered_at)
+                     VALUES (?1, ?2, ?3, ?4)
+                     ON CONFLICT(remote_user_id, atome_id) DO UPDATE SET digest = excluded.digest, delivered_at = excluded.delivered_at",
+                    rusqlite::params![remote_user_id, atome_id, digest, Utc::now().to_rfc3339()],
+                );
+            }
+        }
+        super::broadcast_sync_event(json!({"type":"sync:status", "local_user_id":local_user_id, "data":{"principal_id":local_user_id}}));
+        return true;
+    }
+    if let Err(error) = outcome {
+        record_error(state, item.queue_id, attempts, &error, is_permanent_refusal(&error));
+    }
+    false
+}
+
+// Refusals no retry can change: the server rejects this exact event, or its local file is
+// gone. Retrying them forever only delays the rest of the queue; the row stays `failed`.
+fn is_permanent_refusal(error: &str) -> bool {
+    matches!(error, "event_id_conflict" | "property_write_denied") || error.starts_with("media_read_failed")
+}
+
+// `remote-state-bootstrap-v2:<remote user>:<atome>:<digest>` (the atome id may hold colons).
+fn bootstrap_identity(event_id: &str) -> Option<(String, String, String)> {
+    let rest = event_id.strip_prefix("remote-state-bootstrap-v2:")?;
+    let (remote_user_id, rest) = rest.split_once(':')?;
+    let (atome_id, digest) = rest.rsplit_once(':')?;
+    (!remote_user_id.is_empty() && !atome_id.is_empty() && digest.len() == 64)
+        .then(|| (remote_user_id.to_string(), atome_id.to_string(), digest.to_string()))
+}
+
+fn queued_parent_id(item: &SyncQueueItem) -> Option<String> {
+    let payload: JsonValue = serde_json::from_str(&item.payload).ok()?;
+    payload
+        .pointer("/payload/parent_id")
+        .or_else(|| payload.get("parent_id"))
+        .and_then(JsonValue::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+// Delivers now, ahead of the rest of the queue, what a share of `atome_ids` needs on the
+// server: their queued events and those of their queued ancestors, ancestors first. Without
+// it, a recording made offline waits behind a whole workspace republication and its share
+// is refused (`share_owner_required`).
+pub(crate) async fn deliver_atomes(state: &LocalAtomeState, actor: &str, atome_ids: &[String]) -> Result<JsonValue, String> {
+    let remote_url = state
+        .remote_sync_credentials
+        .lock()
+        .map_err(|_| "sync_credentials_unavailable".to_string())?
+        .get(actor)
+        .map(|credential| credential.remote_url.clone())
+        .ok_or_else(|| "sync_remote_not_configured".to_string())?;
+    let mut wanted: Vec<String> = atome_ids.iter().map(|id| id.trim().to_string()).filter(|id| !id.is_empty()).collect();
+    let mut seen = HashSet::<String>::new();
+    // One level per generation: the requested atomes, then their queued parents, and so on.
+    let mut levels = Vec::<Vec<SyncQueueItem>>::new();
+    for _ in 0..16 {
+        let fresh: Vec<String> = wanted.drain(..).filter(|id| seen.insert(id.clone())).collect();
+        if fresh.is_empty() { break; }
+        let found = {
+            let db = state.db.lock().map_err(|_| "local_projection_database_unavailable".to_string())?;
+            list_sync_queue_for_atomes(&db, TARGET_SERVER, actor, &fresh)?
+        };
+        wanted.extend(found.iter().filter_map(queued_parent_id));
+        levels.push(found);
+    }
+    // A parent must exist remotely before its child; each level keeps its queue order.
+    let mut taken = HashSet::<i64>::new();
+    let ordered: Vec<SyncQueueItem> = levels.into_iter().rev().flatten()
+        .filter(|item| taken.insert(item.queue_id)).collect();
+    let (mut delivered, mut failed) = (0usize, 0usize);
+    for item in ordered {
+        if deliver_item(state, &remote_url, item).await { delivered += 1; } else { failed += 1; }
+    }
+    Ok(json!({ "delivered": delivered, "failed": failed }))
+}
+
 pub async fn run(state: LocalAtomeState, remote_url: String) {
     if remote_url.trim().is_empty() {
         return;
@@ -322,63 +451,7 @@ pub async fn run(state: LocalAtomeState, remote_url: String) {
         };
         items.sort_by_key(|item| item.queue_id);
         for item in items {
-            let payload: JsonValue = match serde_json::from_str::<JsonValue>(&item.payload) {
-                Ok(value) if value.is_object() => value,
-                _ => {
-                    record_error(
-                        &state,
-                        item.queue_id,
-                        item.attempts + 1,
-                        "Invalid payload",
-                        true,
-                    );
-                    continue;
-                }
-            };
-            let Some(credential) = credential_for_event(&state, &payload) else {
-                continue;
-            };
-            let Some(local_user_id) = actor_id(&payload).map(str::to_string) else {
-                continue;
-            };
-            let attempts = item.attempts + 1;
-            if let Ok(db) = state.db.lock() {
-                let _ = mark_sync_queue_syncing(&db, item.queue_id, attempts);
-            }
-            let mut event = match normalize_outbound_event(payload, &local_user_id, &credential.remote_user_id) {
-                Ok(value) => value,
-                Err(error) => {
-                    record_error(&state, item.queue_id, attempts, &error, true);
-                    continue;
-                }
-            };
-            let endpoint = if credential.remote_url.is_empty() {
-                remote_url.as_str()
-            } else {
-                credential.remote_url.as_str()
-            };
-            if let Err(error) = upload_outbound_media(
-                &state,
-                endpoint,
-                &local_user_id,
-                &credential,
-                &mut event,
-            )
-            .await
-            {
-                record_error(&state, item.queue_id, attempts, &error, false);
-                continue;
-            }
-            match send_event(&state, endpoint, &local_user_id, &credential, event).await {
-                Ok(()) => {
-                    if let Ok(db) = state.db.lock() {
-                        let _ = mark_sync_queue_done(&db, item.queue_id);
-                    }
-                }
-                Err(error) => {
-                    record_error(&state, item.queue_id, attempts, &error, false);
-                }
-            }
+            deliver_item(&state, &remote_url, item).await;
         }
 
         let queue_idle_interval_ms = std::env::var("SQUIRREL_SYNC_QUEUE_INTERVAL_MS")

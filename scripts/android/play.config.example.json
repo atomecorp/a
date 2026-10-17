@@ -1,0 +1,9 @@
+{
+  "packageName": "com.squirrel.desktop",
+  "track": "internal",
+  "serviceAccountFile": "/absolute/path/outside/the/repository/google-play-service-account.json",
+  "uploadCertificateSha256": "",
+  "initialUploadComplete": false,
+  "testerOptInUrl": "",
+  "releaseNotes": []
+}

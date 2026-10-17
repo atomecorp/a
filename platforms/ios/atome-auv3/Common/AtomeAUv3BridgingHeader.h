@@ -1,4 +1,5 @@
 #import "AUv3NativeRecorderBackend.h"
 #import "AtomeIosBevyRendererBridge.h"
+#import "AtomeIosAudioEngineBridge.h"
 #import "AtomeContactHistory.h"
 #import "AtomeGPSHost.h"

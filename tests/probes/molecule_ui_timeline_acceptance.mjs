@@ -5,12 +5,22 @@ import { exerciseMixerLassoBlock, exerciseTimelineEditingGestures } from "./mole
 
 export const runMoleculeTimelineAcceptance = async ({ page, project, fixture, report, check, OUT_DIR, ENDURANCE_MS, ENDURANCE_MIN_CYCLES, cdp, projectViewNode, readAcceptanceState }) => {
         await check('real Mixage, OUT and fader gestures update the canonical mix', async () => {
-            const activity = await visibleMenuTool(page, project.id, 'activity');
+            // The Molecule's own Mix: selected in the List, its rail's Activity >
+            // Mix enters it and shows its strips (the views present the timeline
+            // of the level the user is in).
+            const row = await page.evaluate(async (id) => ((await import('/eVe/domains/rendering/project_view_surface_runtime.js'))
+                .readProjectViewSurfaceState().content?.entries || []).findIndex((entry) => entry.id === id), fixture.ownerId);
+            assert(row >= 0, 'molecule_row_missing');
+            await clickCanvasTarget(page, await projectViewNode(page, project.id, `project_view_list_entry_${row}_name`));
+            const RAIL = 'eve_bevy_panel_atome_contextual_edit';
+            const activity = await awaitBevyUiNodeTarget(page, { nodeId: 'atome_contextual_tool_molecule_activity', treeId: RAIL });
+            assert(activity, 'molecule_activity_not_actionable');
             await clickMenuTarget(page, activity);
             await wait(500);
-            const mix = await visibleMenuTool(page, project.id, 'molecule_activity_mix');
+            const mix = await awaitBevyUiNodeTarget(page, { nodeId: 'atome_contextual_tool_molecule_activity_molecule_activity_mix', treeId: RAIL });
+            assert(mix, 'molecule_mix_not_actionable');
             const mixHit = await readBevyUiHit(page, mix);
-            assert(String(mixHit.nodeId || '').endsWith('activity__molecule_activity_mix'),
+            assert(String(mixHit.nodeId || '').endsWith('molecule_activity_mix'),
                 `molecule_mix_hit_mismatch:${JSON.stringify({ mix, mixHit })}`);
             await clickMenuTarget(page, mix);
             await waitFor(page, async () => {
@@ -59,18 +69,16 @@ export const runMoleculeTimelineAcceptance = async ({ page, project, fixture, re
             return { projected, committed, gainCommitted, lassoBlock };
         });
 
-        await check('real Activity and Timeline clicks show the Timeline tree: headers, lanes, clips, ruler, playhead', async () => {
-            const activePaletteKey = await page.evaluate(async () => {
-                const module = await import('/eVe/intuition/ribbon/bevy_ui_product_registry.js');
-                return String(module.getMainMenuRuntime()?.measure?.()?.activePaletteKey || '');
-            });
-            if (activePaletteKey !== 'activity') {
-                const activity = await visibleMenuTool(page, project.id, 'activity');
-                await clickMenuTarget(page, activity);
-                await wait(650);
-            }
-            const timelineActivity = await visibleMenuTool(page, project.id, 'molecule_activity_timeline');
-            await clickMenuTarget(page, timelineActivity);
+        await check('real Multitrack and Timeline clicks show the Timeline tree: headers, lanes, clips, ruler, playhead', async () => {
+            // Timeline, Cells and Mix are the rail's Multitrack tool (not the Vue palette).
+            const RAIL = 'eve_bevy_panel_atome_contextual_edit';
+            const multitrack = await awaitBevyUiNodeTarget(page, { nodeId: 'atome_contextual_tool_container_multitrack', treeId: RAIL });
+            assert(multitrack, 'multitrack_not_actionable');
+            await clickMenuTarget(page, multitrack);
+            await wait(650);
+            const timelineChoice = await awaitBevyUiNodeTarget(page, { nodeId: 'atome_contextual_tool_container_multitrack_multitrack_timeline', treeId: RAIL });
+            assert(timelineChoice, 'multitrack_timeline_not_actionable');
+            await clickMenuTarget(page, timelineChoice);
             return waitFor(page, async () => {
                 const root = window.eveBevyUiRuntime?.state?.trees?.get?.('eve_bevy_ui_project_view')?.tree?.root;
                 const ids = [];
@@ -121,7 +129,7 @@ export const runMoleculeTimelineAcceptance = async ({ page, project, fixture, re
                         const registry = await import('/eVe/intuition/ribbon/bevy_ui_product_registry.js');
                         return String(registry.getMainMenuRuntime()?.measure?.()?.activePaletteKey || '');
                     });
-                    if (activePalette === 'activity') return;
+                    if (activePalette === 'view') return;
                     const activity = await findBevyUiNodeTarget(page, {
                         nodeId: 'atome_contextual_tool_activity',
                         treeId: 'eve_bevy_panel_atome_contextual_edit'
@@ -141,7 +149,9 @@ export const runMoleculeTimelineAcceptance = async ({ page, project, fixture, re
                             records: records.length
                         };
                     }, project.id);
-                    const moleculeName = await projectViewNode(page, project.id, 'project_view_list_entry_0_name');
+                    const row = await page.evaluate(async (id) => ((await import('/eVe/domains/rendering/project_view_surface_runtime.js'))
+                        .readProjectViewSurfaceState().content?.entries || []).findIndex((entry) => entry.id === id), fixture.ownerId);
+                    const moleculeName = await projectViewNode(page, project.id, `project_view_list_entry_${Math.max(0, row)}_name`);
                     await clickCanvasTarget(page, moleculeName);
                     await wait(350);
                 };

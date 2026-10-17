@@ -225,6 +225,11 @@ export async function load_saved_current_project() {
             if (String(error?.message || error) !== 'atome_not_available_locally') throw error;
             return null;
         }
+        if (getCurrentUserId() !== currentUserId || isLoggedOut()) throw new Error('project_bootstrap_context_changed');
+        const selected = getCurrentProjectCache();
+        if (selected?.userId === currentUserId && selected.id && selected.id !== cached?.id) {
+            return { id: selected.id, name: selected.name || null };
+        }
         const raw = userAtome?.atome || userAtome?.data || null;
         if (raw && typeof raw === 'object') {
             const props = raw.properties || raw.particles || raw.data || {};

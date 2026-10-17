@@ -1,6 +1,8 @@
 import { TV_COMMANDS, validateTvInput } from '../tv/contracts.js';
 import { YOUTUBE_COMMANDS, validateYoutubeInput } from '../youtube/contracts.js';
 import { SOCIAL_COMMANDS, validateSocialInput } from '../social/contracts.js';
+import { APPLE_MUSIC_COMMANDS, validateAppleMusicInput } from '../apple_music/contracts.js';
+import { MUSIC_COMMANDS, validateMusicInput } from '../music/contracts.js';
 import { ensureRuntimeToolApi } from './mcp_bridges.js';
 import { buildRuntimeInvocationPayload, projectRuntimeMcpResult } from './mcp_runtime.js';
 
@@ -24,3 +26,7 @@ export const createMcpYoutubeHandlers = () => createContractHandlers({
     commands: YOUTUBE_COMMANDS, validate: validateYoutubeInput, layer: 'atome_mcp_youtube', noClient: 'NO_ACTIVE_VIDEO' });
 export const createMcpSocialHandlers = () => createContractHandlers({
     commands: SOCIAL_COMMANDS, validate: validateSocialInput, layer: 'atome_mcp_social', noClient: 'social_handoff_unavailable' });
+export const createMcpAppleMusicHandlers = () => createContractHandlers({
+    commands: APPLE_MUSIC_COMMANDS, validate: validateAppleMusicInput, layer: 'atome_mcp_apple_music', noClient: 'HOST_UNSUPPORTED' });
+export const createMcpMusicHandlers = () => createContractHandlers({
+    commands: MUSIC_COMMANDS, validate: validateMusicInput, layer: 'atome_mcp_music', noClient: 'AUTH_REQUIRED' });

@@ -36,6 +36,7 @@ async fn development_transport_covers_payment_cancel_and_session_lifecycle() {
         "phone-link-simulate-payment",
         "phone-link-resend",
         "phone-link-consume",
+        "phone-link-confirm",
         "phone-link-resume",
         "phone-link-cancel",
         "session-challenge",

@@ -73,9 +73,7 @@ function resolveTauriProdFastifyHttpBase() {
         return candidate && !isInvalidFastifyLoopbackBase(candidate) ? candidate : '';
     };
 
-    const explicit = usable(window.__SQUIRREL_TAURI_FASTIFY_URL__);
-    if (explicit) return explicit;
-
+    // Imposed, chosen or built-in server, in that order (see readTauriFastifyOverride).
     const override = readTauriFastifyOverride();
     if (override) return override;
 
@@ -237,18 +235,9 @@ function isLocalFastifyBase(base) {
         return false;
     }
 }
-function readTauriFastifyOverride() {
-    if (typeof window === 'undefined') return '';
-    const injected = normalizeNoTrailingSlash(window.__SQUIRREL_TAURI_FASTIFY_URL__);
-    if (injected && !isInvalidFastifyLoopbackBase(injected)) return injected;
-    if (shouldBlockFastifyPrimaryOnLocalAxumPage()) {
-        clearFastifyRuntimeGlobals();
-        clearFastifyOverrideStorage();
-        return '';
-    }
+function readStoredTauriFastifyOverride() {
     try {
-        const stored = window.localStorage?.getItem?.('squirrel_tauri_fastify_url_override');
-        const normalized = normalizeNoTrailingSlash(stored);
+        const normalized = normalizeNoTrailingSlash(window.localStorage?.getItem?.('squirrel_tauri_fastify_url_override'));
         if (!normalized) return '';
         if (isInvalidFastifyLoopbackBase(normalized)) {
             clearFastifyOverrideStorage();
@@ -258,6 +247,23 @@ function readTauriFastifyOverride() {
     } catch (_) {
         return '';
     }
+}
+// Precedence: a server imposed at launch (SQUIRREL_FASTIFY_URL, pinned by the
+// native shell), then the server the user chose in the app (written only by
+// applySyncEnvironment), then the shell's built-in default.
+function readTauriFastifyOverride() {
+    if (typeof window === 'undefined') return '';
+    const raw = normalizeNoTrailingSlash(window.__SQUIRREL_TAURI_FASTIFY_URL__);
+    const injected = raw && !isInvalidFastifyLoopbackBase(raw) ? raw : '';
+    if (injected && window.__SQUIRREL_TAURI_FASTIFY_URL_PINNED__ === true) return injected;
+    const chosen = readStoredTauriFastifyOverride();
+    if (chosen) return chosen;
+    if (injected) return injected;
+    if (shouldBlockFastifyPrimaryOnLocalAxumPage()) {
+        clearFastifyRuntimeGlobals();
+        clearFastifyOverrideStorage();
+    }
+    return '';
 }
 function applyFastifyGlobalsFromHttpBase(httpBase, config = null) {
     const base = resolveCanonicalFastifyHttpBase(httpBase);

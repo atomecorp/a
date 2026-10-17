@@ -66,43 +66,74 @@ const ensureProject = (page, projectName) => page.evaluate(async (name) => {
     };
 }, projectName);
 
+// Phone login of the current auth flow: a new number pays (simulated), then the
+// SMS link (sent back in the WebSocket frame by the dev server's SMS mock) logs
+// in; the beginner first launch is then marked complete.
 const enterProvisionedWorkspace = async (page) => {
+    let developmentLink = '';
+    page.on('websocket', (ws) => ws.on('framereceived', (frame) => {
+        const match = String(frame.payload).match(/"developmentLink":"([^"]+)"/);
+        if (match) developmentLink = match[1];
+    }));
     await page.goto(APP_URL, { waitUntil: 'commit', timeout: 45000 });
-    await page.waitForFunction(() => !!window.AdoleAPI && window.__authCheckComplete === true, null, { timeout: 45000 });
-    const login = await page.evaluate(async () => {
+    // The app has adopted its server (an isolated instance announces its own port).
+    const appPort = Number(new URL(APP_URL).port) || 3001;
+    await page.waitForFunction((port) => !!window.AdoleAPI?.auth?.startPhoneLogin && window.__authCheckComplete === true
+        && (port === 3001 || Number(window.__SQUIRREL_SERVER_CONFIG__?.fastify?.port) === port), appPort, { timeout: 120000 });
+    const current = await page.evaluate(async () => {
         const api = window.AdoleAPI;
-        const current = await api.auth.current().catch(() => null);
-        if (current?.logged === true && api.security?.isAnonymous?.() === false) return { ok: true, current };
-        const suffix = `${Date.now()}${Math.floor(Math.random() * 10000)}`.replace(/\D+/g, '').slice(-10);
-        const phone = `+1555${suffix}`;
-        const password = `molecule_${suffix}_password`;
-        const username = `molecule_${suffix}`;
-        const requested = await api.auth.requestPhoneVerification(phone, 'enrollment', { exposeForTest: true });
-        if (!requested?.ok || !requested?.code) return { ok: false, requested };
-        const verified = await api.auth.verifyPhoneVerification(phone, requested.code, 'enrollment');
-        if (!verified?.ok) return { ok: false, requested, verified };
-        const result = await api.auth.create(phone, password, username, { autoLogin: true });
-        return {
-            ok: result?.fastify?.success === true || result?.tauri?.success === true,
-            phone,
-            result,
-            verification: { requested: requested.ok, verified: verified.ok }
-        };
+        const session = await api.auth.current().catch(() => null);
+        return session?.logged === true && api.security?.isAnonymous?.() === false;
     });
-    if (!login?.ok) throw new Error(`provisioned_login_failed:${JSON.stringify(login)}`);
+    let login = { ok: current, current };
+    if (!current) {
+        const started = await page.evaluate(async () => {
+            const suffix = `${Date.now()}${Math.floor(Math.random() * 10000)}`.replace(/\D+/g, '').slice(-10);
+            // The socket may still be opening: a few tries before giving up.
+            let result = null;
+            for (let attempt = 0; attempt < 10; attempt += 1) {
+                try { result = await window.AdoleAPI.auth.startPhoneLogin(`+1555${suffix}`); break; } catch (error) {
+                    if (!/auth_server_unreachable/.test(String(error?.message || error)) || attempt === 9) throw error;
+                    await new Promise((resolve) => setTimeout(resolve, 1500));
+                }
+            }
+            const paid = result?.paymentRequired === true ? await window.AdoleAPI.auth.simulatePhonePayment('paypal') : null;
+            return { started: result, paid, session: Boolean(paid?.session) };
+        });
+        for (let attempt = 0; attempt < 60 && !started.session && !developmentLink; attempt += 1) await page.waitForTimeout(100);
+        login = started.session ? { ok: true, started } : developmentLink
+            ? await page.evaluate(async (link) => ({ ok: (await window.AdoleAPI.auth.completePhoneLogin(link))?.ok === true }), developmentLink)
+            : { ok: false, started };
+        if (login.ok) {
+            await page.reload({ waitUntil: 'commit', timeout: 45000 });
+            await page.waitForFunction(() => !!window.AdoleAPI && window.__authCheckComplete === true && typeof window.Atome?.commit === 'function', null, { timeout: 120000 });
+            login.firstLaunch = await page.evaluate(async () => {
+                const profiles = await import('/eVe/domains/user/profile_api.js');
+                const session = await window.AdoleAPI.auth.current();
+                const info = window.AdoleAPI.auth.getCurrentInfo?.() || {};
+                const userId = String(session?.user?.id || session?.user?.user_id || session?.user_id || info.user_id || info.id || '');
+                const profile = (await profiles.loadUserProfile(userId))?.profile || {};
+                const preferences = profile.preferences || {};
+                const saved = await profiles.upsertUserProfile({ ...profile, preferences: { ...preferences,
+                    first_launch: { ...(preferences.first_launch || {}), version: 1, step: 'complete' } } }, { userId, allowCreate: false, eventSource: 'probe' });
+                return saved?.ok === true;
+            });
+        }
+    }
+    if (!login?.ok) throw new Error(`provisioned_login_failed:${JSON.stringify(login).slice(0, 600)}`);
     await page.reload({ waitUntil: 'commit', timeout: 45000 });
+    // The signed-in workspace opens on the Dashboard (or straight on a project).
     return waitFor(page, async () => {
         const current = await window.AdoleAPI?.auth?.current?.().catch(() => null);
-        const canvas = document.getElementById('eve_surface_project');
+        const dashboard = window.eveDashboardBevyUiRuntime?.state || {};
         return {
             ok: current?.logged === true
                 && window.AdoleAPI?.security?.isAnonymous?.() === false
-                && !!canvas && getComputedStyle(canvas).opacity === '1'
-                && !!(window.__DEBUG__ || document.getElementById('intuition')),
+                && ((dashboard.active === true && dashboard.opening !== true) || window.__eveWorkspaceMode?.mode === 'project'),
             anonymous: window.AdoleAPI?.security?.isAnonymous?.() ?? null,
-            surface_opacity: canvas ? getComputedStyle(canvas).opacity : null
+            dashboard: dashboard.active === true, mode: window.__eveWorkspaceMode?.mode || null
         };
-    });
+    }, null, 180000);
 };
 
 const projectViewNode = (page, _projectId, nodeId) => findBevyUiNodeTarget(page, {
@@ -234,24 +265,30 @@ const main = async () => {
 
     let browser = null;
     let page = null;
-    let memberEntryIndex = null;
     try {
-        browser = await chromium.launch({
-            headless: HEADLESS,
-            args: [
-                '--enable-unsafe-webgpu', '--ignore-gpu-blocklist', '--disable-gpu-sandbox',
-                '--enable-precise-memory-info', '--use-fake-device-for-media-stream',
-                '--use-fake-ui-for-media-stream', '--autoplay-policy=no-user-gesture-required',
-                ...(HEADLESS ? ['--use-angle=swiftshader', '--enable-features=Vulkan'] : []),
-                ...(DEVICE_SCALE_FACTOR > 1 && !HEADLESS ? ['--force-device-scale-factor=1'] : [])
-            ]
-        });
-        const context = await browser.newContext({
-            viewport: VIEWPORT,
-            deviceScaleFactor: DEVICE_SCALE_FACTOR,
-            isMobile: MOBILE_EMULATION,
-            hasTouch: MOBILE_EMULATION
-        });
+        const launchArgs = [
+            '--enable-unsafe-webgpu', '--ignore-gpu-blocklist', '--disable-gpu-sandbox',
+            '--enable-precise-memory-info', '--use-fake-device-for-media-stream',
+            '--use-fake-ui-for-media-stream', '--autoplay-policy=no-user-gesture-required',
+            ...(HEADLESS ? ['--use-angle=swiftshader', '--enable-features=Vulkan'] : []),
+            ...(DEVICE_SCALE_FACTOR > 1 && !HEADLESS ? ['--force-device-scale-factor=1'] : [])
+        ];
+        const contextOptions = { viewport: VIEWPORT, deviceScaleFactor: DEVICE_SCALE_FACTOR, isMobile: MOBILE_EMULATION, hasTouch: MOBILE_EMULATION };
+        // PROBE_PROFILE_DIR: a persistent profile already signed in (its device key
+        // survives), for a dev server whose SMS links are not mocked.
+        const profileDir = String(process.env.PROBE_PROFILE_DIR || '').trim();
+        const context = profileDir
+            ? await chromium.launchPersistentContext(path.resolve(profileDir), { headless: HEADLESS, args: launchArgs, ...contextOptions })
+            : await (browser = await chromium.launch({ headless: HEADLESS, args: launchArgs })).newContext(contextOptions);
+        if (profileDir) browser = context;
+        // Another Fastify than the dev server (an isolated instance with mocked
+        // SMS links): the app is pointed at it alone, never at :3000 / :3001.
+        const appPort = Number(new URL(APP_URL).port);
+        if (appPort && appPort !== 3001) {
+            await context.route('**/server_config.json', (route) => route.fulfill({ contentType: 'application/json',
+                body: JSON.stringify({ fastify: { host: '127.0.0.1', port: appPort, serverInfoPath: '/api/server-info', syncWsPath: '/ws/sync', apiWsPath: '/ws/api' } }) }));
+            await context.addInitScript(() => { window.__SQUIRREL_FORCE_FASTIFY__ = true; });
+        }
         await context.addInitScript((handedness) => {
             localStorage.setItem('eve_handedness', handedness);
             window.__eveProfilePreferences = {
@@ -304,7 +341,7 @@ const main = async () => {
         });
         page.on('pageerror', (error) => report.page_errors.push(error?.stack || error?.message || String(error)));
 
-        await runSetupStep('provisioned_workspace', () => enterProvisionedWorkspace(page), 90000);
+        await runSetupStep('provisioned_workspace', () => enterProvisionedWorkspace(page), 240000);
         await runSetupStep('profile_handedness', () => page.evaluate(async (handedness) => {
             const home = await import('/eVe/intuition/runtime/bevy_panel/bevy_panel_home_actions.js');
             let loaded = await home.loadHomeProfile();

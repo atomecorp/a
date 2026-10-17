@@ -16,6 +16,15 @@ allprojects {
     }
 }
 
+// Inspect the existing AGP dependency graph; never download a second bundletool.
+// The release validator invokes BundleToolMain with this exact resolved classpath.
+val atomeAndroidTools = buildscript.configurations.getByName("classpath")
+tasks.register("atomeBundletoolClasspath") {
+    doLast {
+        println("ATOME_BUNDLETOOL_CLASSPATH=" + atomeAndroidTools.asPath)
+    }
+}
+
 tasks.register("clean").configure {
     delete("build")
 }

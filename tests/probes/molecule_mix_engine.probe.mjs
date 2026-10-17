@@ -82,9 +82,16 @@ test('the engine merges open Molecules, skips identical programs and reports fai
     assert.equal(applied.at(-1).strips.length, 3);
     const inactive = createMoleculeMixEngine({ readAudio: () => ({ get_runtime: () => ({ playback: 'tauri_native_kira' }), mix_apply: () => false }) });
     assert.equal((await inactive.update('x', fixture())).error, 'mix_backend_inactive');
-    // iOS native (AVAudioEngine) hosts no graph: nothing is applied, voices carry the level.
-    const ios = createMoleculeMixEngine({ readAudio: () => ({ get_runtime: () => ({ playback: 'ios_native_kira' }), mix_apply: () => { throw new Error('never'); } }) });
-    assert.deepEqual(await ios.update('x', fixture()), { ok: true, graph: false });
+    // The iOS app and the AUv3 run the native Kira engine: they host the graph too.
+    for (const playback of ['ios_native_kira', 'ios_auv3_native']) {
+        const applied = [];
+        const ios = createMoleculeMixEngine({ readAudio: () => ({ get_runtime: () => ({ playback }), mix_apply: async (program) => { applied.push(program); return true; } }) });
+        assert.equal((await ios.update('x', fixture())).graph, true, playback);
+        assert.equal(applied.length, 1, `${playback} applies the program`);
+    }
+    // A runtime without a Kira engine hosts no graph.
+    const none = createMoleculeMixEngine({ readAudio: () => ({ get_runtime: () => ({ playback: 'none' }), mix_apply: () => { throw new Error('never'); } }) });
+    assert.deepEqual(await none.update('x', fixture()), { ok: true, graph: false });
 });
 
 test('video lanes project opacity and colour onto their clip atomes, hide when unrouted, chain through strips', async () => {

@@ -1,5 +1,5 @@
 import { createContactsConnectorContract } from './connector_contract.js';
-import { createCanonicalImport, importRecordId, importRecordProps, importRecordDeleted, IMPORT_ORIGIN_TYPE, preferExistingImportValues } from '../shared/canonical_import.js';
+import { createCanonicalImport, createImportSnapshot, importRecordId, importRecordProps, importRecordDeleted, IMPORT_ORIGIN_TYPE, preferExistingImportValues } from '../shared/canonical_import.js';
 import { importData, sameImportValue } from '../shared/import_reconciliation.js';
 import { matchesQuery } from './service_contact_utils.js';
 import { getSessionState } from '../apis/unified/adole_api/session.js';
@@ -107,11 +107,11 @@ const IMPORT_RESERVED_ID = /^contact_[0-9a-f]{64}$/;
  * that carries the native identity or the exact name/phones/emails of a reached
  * record is removed — soft and restorable, reason `import_duplicate`.
  */
-async function removeFormerImportCopies(store, items, collected, prefix) {
+async function removeFormerImportCopies(store, items, collected, prefix, snapshot) {
     const context = store.capture();
     const reachedIds = new Map(collected.correspondences.map(props => [props.external_id, props.canonical_id]));
     const kept = new Set(items.map(item => reachedIds.get(String(item.source_contact_id || item.uid || item.id))).filter(Boolean));
-    const [records, origins] = await Promise.all([store.list('contact', context), store.list(IMPORT_ORIGIN_TYPE, context)]);
+    const [records, origins] = await Promise.all([store.list('contact', context, snapshot), store.list(IMPORT_ORIGIN_TYPE, context, snapshot)]);
     const live = records.filter(row => !importRecordDeleted(row));
     const keptSignatures = new Set(live.filter(row => kept.has(importRecordId(row))).map(row => contactSignature(importRecordProps(row))));
     const originsOf = new Map();
@@ -123,7 +123,7 @@ async function removeFormerImportCopies(store, items, collected, prefix) {
         if (kept.has(id)) continue;
         if (own.length ? own.some(props => !String(props.source_key).startsWith(prefix)) : !IMPORT_RESERVED_ID.test(id)) continue;
         if (!own.some(props => reachedIds.has(props.external_id)) && !keptSignatures.has(contactSignature(importRecordProps(row)))) continue;
-        await store.remove(id, { reason: 'import_duplicate' });
+        await store.remove(id, { reason: 'import_duplicate', snapshot });
         removed += 1;
     }
     return removed;
@@ -137,20 +137,38 @@ export function createLocalContactsSource({ source_id = 'eve_contacts_local', ro
         identityKeys: contactPhoneKeys, mergeIntoExisting: mergeContactIntoExisting });
     const groups = createCanonicalImport({ type: 'contact_group', api, session, normalize: input => ({ name: String(input.name || ''), members: input.members || [] }) });
     const personal = createPersonalContactImport({ api, session, publish: publishProfile });
-    let cache = [], cacheOwner = null, persisted = false;
+    // One canonical read of the book serves every pull (each home opening, each panel)
+    // until a contact changes: a write through this source, or a canonical signal for a
+    // contact (a realtime arrival, a native replay, an import). A full read costs one
+    // typed page per 1000 contacts and held the local database for seconds on Tauri.
+    let cache = [], cacheOwner = null, persisted = false, stale = true;
     const clearOnSessionChange = () => {
         const state = (session || getSessionState)();
         const owner = state?.mode === 'authenticated' ? state.user?.id : null;
-        if (owner !== cacheOwner) { cache = []; persisted = false; cacheOwner = owner; }
+        if (owner !== cacheOwner) { cache = []; persisted = false; stale = true; cacheOwner = owner; }
         return owner;
     };
-    const hydrate = async () => {
+    const hydrate = async ({ fresh = false } = {}) => {
         if (!clearOnSessionChange()) return;
+        if (!fresh && persisted && !stale) return;
+        stale = false;
         const rows = await store.list();
         clearOnSessionChange();
         cache = rows.filter(row => !importRecordDeleted(row)).map(normalizeLocalContact);
         persisted = true;
     };
+    const reread = () => hydrate({ fresh: true });
+    const win = globalThis.window;
+    if (typeof win?.addEventListener === 'function') {
+        const forget = (event) => {
+            const detail = event?.detail || {};
+            if (event.type === 'squirrel:import-updated' && (detail.changed === 0 || detail.domain !== 'contact')) return;
+            if (event.type.startsWith('squirrel:atome-') && detail.atome_type !== 'contact' && !cache.some(row => row.id === detail.atome_id)) return;
+            stale = true;
+        };
+        ['squirrel:atome-created', 'squirrel:atome-updated', 'squirrel:atome-deleted', 'squirrel:atome-restored',
+            'squirrel:import-updated', 'squirrel:sync:projection-ready'].forEach(name => win.addEventListener(name, forget));
+    }
     const listContactsSync = ({ query = '', limit = null } = {}) => {
         clearOnSessionChange();
         return { ok: true, source_id, items: cache.filter(entry => matchesQuery(entry, query))
@@ -197,11 +215,11 @@ export function createLocalContactsSource({ source_id = 'eve_contacts_local', ro
                 return collections ? { ...item, collections: collections.map(id => ids.get(id) || id) } : item;
             }), photoRetry ? { ...meta, complete: false } : meta);
             const duplicatesRemoved = meta.legacy_source_prefix && meta.full_snapshot === true && meta.complete === true
-                ? await removeFormerImportCopies(store, items, result, meta.legacy_source_prefix) : 0;
-            await hydrate(); return { ...result, personal_profile: own, duplicates_removed: duplicatesRemoved, items: cache };
+                ? await removeFormerImportCopies(store, items, result, meta.legacy_source_prefix, meta.snapshot || createImportSnapshot()) : 0;
+            await reread(); return { ...result, personal_profile: own, duplicates_removed: duplicatesRemoved, items: cache };
         },
         async selectPersonalContact(id) {
-            await hydrate();
+            await reread();
             const contact = cache.find(row => row.id === id);
             if (!contact) return { ok: false, error: 'contacts_not_found' };
             const context = store.capture();
@@ -217,24 +235,25 @@ export function createLocalContactsSource({ source_id = 'eve_contacts_local', ro
                     { ...props, members: [...new Set(props.members.map(member => member === id ? context.owner : member))] }, context);
             }
             await store.remove(id, { reason: 'personal_profile' });
-            await hydrate();
+            await reread();
             return { ...result, items: cache };
         },
-        async createContact(input) { const id = await store.create(input); await hydrate(); return { ok: true, created: true, contact: cache.find(row => row.id === id), items: cache }; },
-        async replaceContacts(items) { await store.replace(items); await hydrate(); return { ok: true, items: cache }; },
+        async createContact(input) { const id = await store.create(input); await reread(); return { ok: true, created: true, contact: cache.find(row => row.id === id), items: cache }; },
+        async replaceContacts(items) { await store.replace(items); await reread(); return { ok: true, items: cache }; },
         async updateContact(id, changes) {
-            await hydrate(); const current = cache.find(row => row.id === id);
+            // A write starts from the current book, never from the shared read.
+            await reread(); const current = cache.find(row => row.id === id);
             if (!current) return { ok: false, error: 'contacts_not_found' };
             const next = { ...current, ...changes, id, source_contact_id: id, raw: current.raw };
             if (Object.hasOwn(changes, 'user_face') && !Object.hasOwn(changes, 'photo')) {
                 next.photo = changes.user_face || ''; next.photo_asset_id = '';
             }
-            await store.update(id, next); await hydrate();
+            await store.update(id, next); await reread();
             return { ok: true, updated: true, contact: cache.find(row => row.id === id), items: cache };
         },
         async deleteContact(id) {
-            await hydrate(); if (!cache.some(row => row.id === id)) return { ok: false, error: 'contacts_not_found' };
-            await store.remove(id, { reason: 'user_delete' }); await hydrate(); return { ok: true, deleted: true, contact_id: id, items: cache };
+            await reread(); if (!cache.some(row => row.id === id)) return { ok: false, error: 'contacts_not_found' };
+            await store.remove(id, { reason: 'user_delete' }); await reread(); return { ok: true, deleted: true, contact_id: id, items: cache };
         },
         /**
          * Explicit user action: each group of live cards sharing a number keeps one
@@ -269,12 +288,14 @@ export function createLocalContactsSource({ source_id = 'eve_contacts_local', ro
                 if (members.some(id => moved.has(id)))
                     await store.write(importRecordId(row), 'contact_group', { ...props, members: [...new Set(members.map(id => moved.get(id) || id))] }, context);
             }
-            await hydrate();
+            await reread();
             return { ok: true, groups: merges.length, duplicates_merged: moved.size, merges, items: cache };
         },
         async importLegacy(items, { owner_id } = {}) {
             if (owner_id !== store.capture().owner) throw new Error('legacy_contact_owner_confirmation_required');
-            return store.collect(items, { source_key: 'legacy_contacts_explicit' });
+            const collected = await store.collect(items, { source_key: 'legacy_contacts_explicit' });
+            stale = true;
+            return collected;
         }
     };
 }

@@ -29,16 +29,17 @@ export function createFcmTransport({ environment = process.env, request = fetch,
         })().finally(() => { authorizing = null; });
         return authorizing;
     }
-    async function send(installation, payload, { voip = false, expiresAt, collapseId } = {}) {
+    async function send(installation, payload, { voip = false, control = false, expiresAt, collapseId } = {}) {
         if (!configured()) return { ok: false, error: 'fcm_configuration_required' };
-        if (!/^[a-z0-9-]{6,63}$/.test(environment.FCM_PROJECT_ID) || !/^[A-Za-z0-9_:.-]{32,4096}$/.test(installation.token))
+        if (!/^[a-z0-9-]{6,63}$/.test(environment.FCM_PROJECT_ID) || !/^[A-Za-z0-9_-]{22}$/.test(installation.token))
             return { ok: false, error: 'fcm_installation_invalid' };
-        const ttl = Math.max(0, Math.min(86400, Math.floor((expiresAt - now()) / 1000)));
-        if (voip && ttl === 0) return { ok: false, error: 'push_call_expired' };
+        if (!Number.isFinite(expiresAt)) return { ok: false, error: 'fcm_expiration_invalid' };
         let bearer;
         try { bearer = await authorize(); } catch { return { ok: false, error: 'fcm_authorization_unavailable' }; }
-        const body = JSON.stringify({ message: { token: installation.token,
-            data: { atome: JSON.stringify(payload.atome), notification_kind: voip ? 'call' : 'alert' },
+        const ttl = Math.max(0, Math.min(86400, Math.floor((expiresAt - now()) / 1000)));
+        if (ttl === 0) return { ok: false, error: 'push_call_expired' };
+        const body = JSON.stringify({ message: { fid: installation.token,
+            data: { atome: JSON.stringify(payload.atome), notification_kind: control ? 'call-state' : voip ? 'call' : 'alert' },
             android: { priority: 'HIGH', ttl: `${ttl}s`, ...(voip ? { collapse_key: collapseId } : {}) } } });
         if (Buffer.byteLength(body, 'utf8') > 4096) return { ok: false, error: 'fcm_payload_too_large' };
         let response;

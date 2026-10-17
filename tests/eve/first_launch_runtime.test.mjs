@@ -30,20 +30,75 @@ const fixture = (initial = { preferences: { visual: { masteryLevel: 'advanced' }
     const flow = createFirstLaunchRuntime({ currentUser: () => current,
         loadProfile, saveProfile: async next => { profile = structuredClone(next); saves.push(profile); return { ok: true }; },
         installTemplate, createTemplate, finish,
-        guest, submit: async () => ({ ok: true, paymentRequired: true }),
+        guest, submit: async ({ resume } = {}) => ({ ok: true, paymentRequired: resume
+            ? (await window.AdoleAPI.auth.getPendingPhoneLogin())?.paymentRequired === true : true }),
         createPresentation: options => { fields = options; return { open: async () => { renders.push(flow.state.stage); return { ok: true }; }, destroy: async () => {}, render: async () => ({ ok: true }) }; } });
     return { flow, saves, renders, finish, createTemplate, guest, loadProfile, installTemplate, presentation: () => fields, profile: () => profile, draft: (key, value) => fields.writeDraft(key, value), submitField: key => fields.onSubmit(key), switchUser: () => { current = { id: 'other' }; } };
 };
 beforeEach(() => {
     globalThis.window = { dispatchEvent: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn(), __eveProfilePreferences: {}, AdoleAPI: { sync: { flushWorkspace: vi.fn(async () => ({ ok: true })) }, auth: {
         getPendingPhoneLogin: vi.fn(async () => null), resendPhoneLogin: vi.fn(async () => ({ ok: true })),
+        getPendingPairing: vi.fn(async () => null), getPendingRecovery: vi.fn(async () => null), listLocalAccounts: vi.fn(async () => []),
+        hasKnownPassword: vi.fn(async () => true),
         simulatePhonePayment: vi.fn(async () => ({ ok: true })), cancelPhoneLogin: vi.fn(async () => ({ ok: true })) } } };
     owners.gateway.mockReset().mockResolvedValue({ ok: true }); owners.create.mockReset().mockResolvedValue({ ok: true, project_id: 'sleep-project' });
     owners.media.mockReset().mockResolvedValue({ ok: false, cancelled: true });
     owners.readFile.mockReset().mockResolvedValue({ type: 'image/png' }); owners.readImage.mockReset().mockResolvedValue('data:image/png;base64,selected');
     setSessionState({ mode: 'logged_out', user: null }, { persist: false, silent: true });
 });
+describe('first-launch on a device that just joined an existing account', () => {
+    it('waits for the synchronized profile instead of failing the opening', async () => {
+        const f = fixture({ preferences: { first_launch: { version: 1, step: 'goals' } } });
+        const listeners = new Map();
+        Object.assign(window, { setTimeout, clearTimeout,
+            addEventListener: vi.fn((name, listener) => listeners.set(name, listener)), removeEventListener: vi.fn((name) => listeners.delete(name)) });
+        let local = false;
+        const synced = f.loadProfile.getMockImplementation();
+        f.loadProfile.mockImplementation(async (...args) => (local ? synced(...args) : { ok: false, error: 'atome_not_available_locally' }));
+        const opening = f.flow.authenticated({ user });
+        await vi.waitFor(() => expect(listeners.has('squirrel:sync:projection-ready')).toBe(true));
+        local = true;
+        listeners.get('squirrel:sync:projection-ready')();
+        expect(await opening).toBe(true);
+        expect(f.flow.state.stage).toBe('goals');
+        expect(listeners.has('squirrel:sync:projection-ready')).toBe(false);
+    });
+});
 describe('first-launch canonical lifecycle', () => {
+    it('renders the persisted deadline, advances it and releases the timer on close', async () => {
+        vi.useFakeTimers(); vi.setSystemTime(1800000000000);
+        let tick;
+        window.setInterval = vi.fn(fn => { tick = fn; return 42; }); window.clearInterval = vi.fn();
+        window.AdoleAPI.auth.getPendingPhoneLogin.mockResolvedValue({ phone: '+33612345678', expiresAt: Date.now() + 125000, pairingCode: '12345678', paymentRequired: false });
+        const f = fixture();
+        try {
+            await f.flow.open();
+            expect(f.presentation().readValues()).toMatchObject({ sms_remaining: expect.stringContaining('02:05'), pairing_display: '1234 5678' });
+            vi.setSystemTime(1800000007000); tick();
+            expect(f.presentation().readValues().sms_remaining).toContain('01:58');
+            await f.flow.close(); expect(window.clearInterval).toHaveBeenCalledWith(42);
+            await f.flow.open(); expect(f.presentation().readValues().sms_remaining).toContain('01:58');
+            vi.setSystemTime(1800000125000);
+            expect(f.presentation().readValues().sms_remaining).not.toMatch(/\d\d:\d\d/);
+            expect(f.presentation().readValues().pairing_display).toBe('');
+        } finally { await f.flow.close(); vi.useRealTimers(); }
+    });
+    it('opens a foreign link in the pairing template and confirms only the submitted code', async () => {
+        const f = fixture(); window.AdoleAPI.auth.getPendingPhoneLogin.mockResolvedValue({ confirmationRequired: true });
+        window.AdoleAPI.auth.confirmPhoneLogin = vi.fn(async () => {
+            window.AdoleAPI.auth.getPendingPhoneLogin.mockResolvedValue(null);
+            return { ok: true, approved: true };
+        });
+        await f.flow.open();
+        expect(f.flow.state.stage).toBe('pairing'); expect(window.AdoleAPI.auth.confirmPhoneLogin).not.toHaveBeenCalled();
+        f.draft('pairing_input', '1234 5678');
+        expect(await f.flow.handle({ operation: 'confirm_link' })).toMatchObject({ ok: true });
+        expect(window.AdoleAPI.auth.confirmPhoneLogin).toHaveBeenCalledWith('1234 5678');
+        expect(f.flow.state.stage).toBe('confirmed'); expect(f.saves).toHaveLength(0);
+        await f.flow.handle({ operation: 'dismiss_link' });
+        expect(f.flow.state.stage).toBe('access');
+        expect(window.AdoleAPI.auth.cancelPhoneLogin).not.toHaveBeenCalled();
+    });
     it('paints reconnection above the complete caller while retaining its pending editor', async () => {
         const oldDocument = globalThis.document, oldMounted = new Map(bevyPanelRuntimeState.mounted);
         const dom = new JSDOM('<canvas id="eve_surface_project"></canvas>');
@@ -260,7 +315,7 @@ describe('first-launch canonical lifecycle', () => {
         await f.flow.close(); expect(window.dispatchEvent).toHaveBeenCalledTimes(1);
         expect(await f.flow.close()).toEqual({ ok: true, closed: false });
     });
-    it('prepares payment before SMS and routes actions only from their current stage', async () => {
+    it('keeps verified payment on Billing and routes actions only from their current stage', async () => {
         const f = fixture(); await f.flow.open();
         expect((await f.flow.handle({ operation: 'finish' })).ok).toBe(false);
         await f.flow.handle({ operation: 'phone' }); f.draft('phone', '+33612345678');
@@ -268,16 +323,16 @@ describe('first-launch canonical lifecycle', () => {
         await f.flow.handle({ operation: 'authenticate' }); expect(f.flow.state.stage).toBe('billing');
         await f.flow.handle({ operation: 'method', value: 'paypal' });
         await f.flow.handle({ operation: 'pay' }); expect(window.AdoleAPI.auth.simulatePhonePayment).toHaveBeenCalledWith('paypal');
-        expect(f.flow.state.stage).toBe('sms'); expect(f.saves).toHaveLength(0);
+        expect(f.flow.state.stage).toBe('billing'); expect(f.saves).toHaveLength(0);
     });
-    it('advances simulated Pay before SMS delivery settles and keeps delivery failures visible', async () => {
+    it('keeps Billing while payment settles and reports failures', async () => {
         const f = fixture(); await f.flow.open();
         await f.flow.handle({ operation: 'phone' }); f.draft('phone', '+33612345678');
         await f.flow.handle({ operation: 'choose_auth' }); await f.flow.handle({ operation: 'authenticate' }); let release;
         window.AdoleAPI.auth.simulatePhonePayment.mockImplementationOnce(() => new Promise(done => { release = done; }));
         const paying = f.flow.handle({ operation: 'pay' });
         await vi.waitFor(() => expect(release).toBeTypeOf('function'));
-        expect(f.flow.state.stage).toBe('sms'); expect(f.saves).toHaveLength(0);
+        expect(f.flow.state.stage).toBe('billing'); expect(f.saves).toHaveLength(0);
         release({ ok: false, error: 'sms_delivery_unavailable' });
         expect(await paying).toMatchObject({ ok: false, error: 'sms_delivery_unavailable' });
         expect(f.flow.state.notice).toBeTruthy(); expect(f.flow.state.busy).toBe(false);

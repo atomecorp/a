@@ -81,6 +81,14 @@ public class auv3Utils: AUAudioUnit, NativeAudioUnitControl {
     var jsAudioSampleRate: Double = 48000
     var jsAudioActive: Bool = false
     var jsAudioLock = os_unfair_lock() // Low-overhead lock for JS audio injection
+    // Native Kira engine pulled by the render block (AUv3KiraEngine.swift).
+    var kiraEngineStarted = false
+    let kiraLeft = UnsafeMutablePointer<Float>.allocate(capacity: auv3Utils.kiraScratchFrames)
+    let kiraRight = UnsafeMutablePointer<Float>.allocate(capacity: auv3Utils.kiraScratchFrames)
+
+    deinit {
+        releaseKiraEngineBuffers()
+    }
     var audioDebugExpectedPeakFrame: Int? = nil
     var audioDebugRenderFrameCursor: Int64 = 0
     let audioRenderClockEpoch: String = UUID().uuidString

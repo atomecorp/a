@@ -1,10 +1,14 @@
 import { test, expect, vi, afterEach } from 'vitest';
 vi.mock('../../atome/src/squirrel/apis/unified/adole_api/session.js', () => ({ getSessionState: () => ({ mode: 'authenticated', user: { id: 'owner' } }) }));
 vi.mock('../../atome/src/squirrel/atome/mcp.js', () => ({ handleAtomeMCPRequestAsync: vi.fn(async () => ({ result: { ok: true } })) }));
+const notices = vi.hoisted(() => ({ add: vi.fn(), invoke: vi.fn() }));
+vi.mock('../../eVe/intuition/tools/communication.js', () => ({ addNotification: notices.add }));
+vi.mock('../../eVe/intuition/runtime/tool_gateway.js', () => ({ invokeToolGateway: notices.invoke }));
 import { CalendarAPI } from '../../eVe/intuition/tools/calendar_api.js';
 import { eventCache, alarmTimers } from '../../eVe/intuition/tools/calendar_engine_state.js';
 import { resolveActorProfile } from '../../atome/src/squirrel/atome/mcp_security.js';
 import { handleAtomeMCPRequestAsync } from '../../atome/src/squirrel/atome/mcp.js';
+import { createCalendarAlarmDelivery, readPendingCalendarNotifications } from '../../eVe/intuition/tools/calendar_alarm_delivery.js';
 afterEach(() => { for (const timers of alarmTimers.values()) timers.forEach(clearTimeout); alarmTimers.clear(); eventCache.clear(); vi.useRealTimers(); vi.clearAllMocks(); delete globalThis.window; });
 const install = () => {
     vi.useFakeTimers(); vi.setSystemTime(new Date('2026-09-10T10:00:00Z'));
@@ -48,4 +52,20 @@ test('cancelled and distant alarms never fire early', async () => {
     await CalendarAPI.cancelAlarm({ eventId: alarm.eventId, alarmId: alarm.alarmId });
     await vi.advanceTimersByTimeAsync(1000000000);
     expect(handleAtomeMCPRequestAsync).not.toHaveBeenCalled();
+});
+
+test('a calendar reminder projects from its persisted alarm while offline and retries through the same stack command', async () => {
+    install(); notices.invoke.mockResolvedValue({ ok: false, error: 'offline' });
+    const scheduled = await CalendarAPI.setAlarm({ title: 'Meeting', delay_ms: 1000 });
+    expect(scheduled.ok).toBe(true);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(notices.add).toHaveBeenCalledWith(expect.objectContaining({ kind: 'calendar', persisted: true }));
+    const pending = readPendingCalendarNotifications();
+    expect(pending).toHaveLength(1); expect(pending[0]).toMatchObject({ action: { toolId: 'ui.panel.open', input: { eventId: scheduled.eventId, mode: 'open' } } });
+    notices.invoke.mockResolvedValue({ ok: true, result: { ok: true } });
+    const delivery = createCalendarAlarmDelivery({ emitChange() {}, updateEvent: CalendarAPI.updateEvent });
+    delivery.restore(eventCache.get(scheduled.eventId));
+    await vi.waitFor(() => expect(readPendingCalendarNotifications()).toEqual([]));
+    expect(notices.invoke).toHaveBeenLastCalledWith(expect.objectContaining({ tool_id: 'communication.notification.publish', input: expect.objectContaining({ id: pending[0].id }) }));
+    expect(eventCache.get(scheduled.eventId).alarms[0].notification_delivered).toBe(true);
 });

@@ -7,6 +7,7 @@
 //   du destinataire et la livre en direct (ou la met en file s'il est hors ligne), sous la
 //   meme enveloppe `eve-comm-share` que les messages, pour que le client n'ait qu'un chemin.
 
+import { normalizeCommunicationPriority } from '../atome/src/shared/communication_contract.js';
 export const DIRECT_MESSAGE_MAX_BYTES = 128 * 1024;
 export const DIRECT_MESSAGE_TEXT_MAX = 8000;
 export const DIRECT_MESSAGE_RATE = { max: 30, windowMs: 10_000 };
@@ -41,9 +42,15 @@ export function guardDirectMessage(rawText, sender = {}) {
     const body = params.message ?? params.text ?? '';
     if (typeof body === 'string' && body.length > DIRECT_MESSAGE_TEXT_MAX) return { ok: false, error: 'direct_message_too_large' };
     params.kind = kind;
+    try { params.priority = normalizeCommunicationPriority(params.priority); }
+    catch (error) { return { ok: false, error: error.message }; }
+    for (const key of ['action', 'severity', 'priorityAuthorized', 'priority_authorized', 'system']) delete params[key];
     params.fromId = String(sender.userId || '');
     params.fromName = sender.username || '';
+    // Never the phone the sender typed: the one of the authenticated account, so the
+    // recipient recognises the person in their own book (contacts are kept by phone).
     delete params.fromPhone;
+    if (sender.phone) params.fromPhone = String(sender.phone);
     return { ok: true, kind, params, text: JSON.stringify({ ...command, params }) };
 }
 
@@ -52,11 +59,12 @@ export function createNotificationDelivery({ pushNotificationToUserStack, wsSend
         const target = String(targetUserId);
         const senderUser = senderUserId ? await findUserById(String(senderUserId)).catch(() => null) : null;
         const senderName = senderUser?.username || null;
+        const senderPhone = senderUser?.phone ? String(senderUser.phone) : null;
         const timestamp = new Date().toISOString();
         const notificationId = id || `${kind}_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
         const params = {
             id: notificationId, date: timestamp, kind, subject, message,
-            fromId: senderUserId ? String(senderUserId) : '', fromName: senderName || '',
+            fromId: senderUserId ? String(senderUserId) : '', fromName: senderName || '', fromPhone: senderPhone,
             atomeIds: [], publication, ...extra
         };
         const stacked = await pushNotificationToUserStack({
@@ -65,7 +73,7 @@ export function createNotificationDelivery({ pushNotificationToUserStack, wsSend
             authorId: senderUserId ? String(senderUserId) : target,
             notification: {
                 id: notificationId, message_id: notificationId, command: 'eve-comm-share', kind, subject, message,
-                atome_ids: [], from_id: params.fromId, from_name: senderName, to_user_id: target,
+                atome_ids: [], from_id: params.fromId, from_name: senderName, from_phone: senderPhone, to_user_id: target,
                 timestamp, unread: true, box: 'inbox', publication, ...extra
             }
         });
@@ -73,7 +81,7 @@ export function createNotificationDelivery({ pushNotificationToUserStack, wsSend
         const payload = {
             type: 'console-message',
             message: JSON.stringify({ command: 'eve-comm-share', params }),
-            from: { userId: params.fromId || null, username: senderName },
+            from: { userId: params.fromId || null, username: senderName, phone: senderPhone },
             to: { userId: target },
             timestamp
         };

@@ -80,6 +80,7 @@ pub async fn auth_development_request(message: Value) -> Result<Value, String> {
             | "phone-link-simulate-payment"
             | "phone-link-resend"
             | "phone-link-consume"
+            | "phone-link-confirm"
             | "phone-link-resume"
             | "phone-link-cancel"
             | "session-challenge"
@@ -119,13 +120,26 @@ fn development_auth_authority(base: &str) -> Result<String, String> {
 mod tests;
 
 #[tauri::command]
-pub fn auth_device_key<R: tauri::Runtime>(
-    _app: tauri::AppHandle<R>,
+pub async fn auth_device_key(
+    _app: tauri::AppHandle,
     action: String,
     scope: String,
     message: Option<String>,
     signature: Option<String>,
 ) -> Result<Value, String> {
+    #[cfg(target_os = "android")]
+    let _ = ANDROID_APP.set(_app);
+    // Android's plugin resolves on the UI thread. Never wait for it on the
+    // synchronous Tauri IPC/main thread; the shared verifier stays callable
+    // from the Axum worker as well.
+    tauri::async_runtime::spawn_blocking(move || auth_device_handle(action, scope, message, signature))
+        .await.map_err(|_| "auth_protected_device_key_unavailable".to_string())?
+}
+
+#[cfg(target_os = "android")]
+static ANDROID_APP: std::sync::OnceLock<tauri::AppHandle> = std::sync::OnceLock::new();
+
+pub(crate) fn auth_device_handle(action: String, scope: String, message: Option<String>, signature: Option<String>) -> Result<Value, String> {
     if scope.len() != 64 || !scope.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return Err("auth_device_scope_invalid".into());
     }
@@ -143,7 +157,8 @@ pub fn auth_device_key<R: tauri::Runtime>(
                 return Err("auth_device_message_invalid".into());
             }
         }
-        tauri_plugin_mobile_host::call(&_app,"authDevice",json!({"action":action,"scope":scope,"message":message,"signature":signature}))
+        let app = ANDROID_APP.get().ok_or("auth_protected_device_key_unavailable")?;
+        tauri_plugin_mobile_host::call(app,"authDevice",json!({"action":action,"scope":scope,"message":message,"signature":signature}))
     }
     #[cfg(not(any(target_os = "macos",target_os = "android")))]
     {
@@ -206,26 +221,18 @@ mod macos {
         SecKey::new(&options).map_err(|_| "auth_protected_device_key_unavailable".into())
     }
 
-    fn public_key(scope: &str) -> Result<SecKey, String> {
-        let label = key_label(scope);
+    // Several items can share a label (a key created by another build of the
+    // app, an orphan half of an older pair). The public half announced to the
+    // server must be the one of the private key that signs, or every proof is
+    // refused while the sign-in itself starts: select it by application label
+    // (the hash of the public key, set on both halves of a generated pair).
+    fn public_search(private: &SecKey, scope: &str) -> ItemSearchOptions {
         let mut search = ItemSearchOptions::new();
-        search
-            .key_class(KeyClass::public())
-            .label(&label)
-            .load_refs(true);
-        match search.search() {
-            Ok(items) => items
-                .into_iter()
-                .find_map(|item| match item {
-                    SearchResult::Ref(Reference::Key(key)) => Some(key),
-                    _ => None,
-                })
-                .ok_or_else(|| "auth_device_public_key_missing".into()),
-            Err(error) => Err(format!(
-                "auth_device_public_key_search_failed:{}",
-                error.code()
-            )),
+        search.key_class(KeyClass::public()).label(&key_label(scope));
+        if let Some(application_label) = private.application_label() {
+            search.application_label(&application_label);
         }
+        search
     }
 
     fn public_key_bytes(private: &SecKey, scope: &str) -> Result<Vec<u8>, String> {
@@ -234,12 +241,8 @@ mod macos {
         // kSecReturnData returns the stable ANSI X9.63 public point. Prefer the
         // keychain data and accept the derived representation only if it is
         // already the exact uncompressed P-256 form required by the protocol.
-        let label = key_label(scope);
-        let mut search = ItemSearchOptions::new();
-        search
-            .key_class(KeyClass::public())
-            .label(&label)
-            .load_data(true);
+        let mut search = public_search(private, scope);
+        search.load_data(true);
         if let Ok(items) = search.search() {
             if let Some(bytes) = items.into_iter().find_map(|item| match item {
                 SearchResult::Data(bytes) if bytes.len() == 65 && bytes[0] == 4 => Some(bytes),
@@ -293,7 +296,9 @@ mod macos {
             let bytes = URL_SAFE_NO_PAD
                 .decode(encoded)
                 .map_err(|_| "auth_device_signature_invalid")?;
-            let public = public_key(scope)?;
+            // The half derived from the signing key is its exact pair; a keychain
+            // public item looked up by label may be absent or belong to another pair.
+            let public = key.public_key().ok_or("auth_device_public_key_missing")?;
             return public
                 .verify_signature(
                     Algorithm::ECDSASignatureMessageX962SHA256,

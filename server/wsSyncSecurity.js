@@ -1,7 +1,8 @@
 import db from '../database/adole.js';
 import { canAccessFile } from './userFiles.js';
 import { resolveWsApiPrincipal } from './wsApiIdentity.js';
-import { validateConnectionDeviceSession } from './auth_session_validation.js';
+import { readDeviceSessionToken, validateConnectionDeviceSession } from './auth_session_validation.js';
+import { createAuthProofSecurity, randomHandle } from './auth_link_security.js';
 import {
     projectAtomeForRead
 } from './atomePropertySecurity.js';
@@ -16,7 +17,20 @@ function requestToken(request) {
     return String(request?.cookies?.access_token || request?.cookies?.token || '').trim();
 }
 
+// A key-bound token (`cnf.pop`) opens /ws/sync only after the connection signed a
+// fresh challenge with the session key, as on /ws/api.
+let proofOwner = null;
+const proof = () => proofOwner ||= createAuthProofSecurity({ query: db.query, transaction: db.withTransaction, masterSecret: process.env.JWT_SECRET });
+
+export async function issueWsSyncChallenge(connection, message = {}) {
+    connection._wsApiRequiresProof = true;
+    const claims = await readDeviceSessionToken(message.token, process.env.JWT_SECRET);
+    connection._wsSyncNonce ||= randomHandle();
+    return proof().challenge('connection', connection._wsSyncNonce, claims.cnf.kid);
+}
+
 export async function authenticateWsSyncRequest(connection, request) {
+    connection._wsApiRequiresProof = true;
     const token = requestToken(request);
     if (!token) return null;
     try {
@@ -29,7 +43,15 @@ export async function authenticateWsSyncRequest(connection, request) {
 
 export async function authenticateWsSyncMessage(connection, message = {}) {
     if (message?.type !== 'auth') return null;
+    connection._wsApiRequiresProof = true;
     try {
+        if (message.challengeId && connection._wsSyncNonce) {
+            const claims = await readDeviceSessionToken(message.token, process.env.JWT_SECRET);
+            const key = await db.query('get', 'SELECT public_key FROM auth_device_keys WHERE key_id = ?', [claims.cnf.kid]);
+            if (!key) return null;
+            await proof().consumeProof(message, 'connection', connection._wsSyncNonce, JSON.parse(key.public_key));
+            connection._wsApiProvenKeyId = claims.cnf.kid;
+        }
         await validateConnectionDeviceSession(connection, message.token, process.env.JWT_SECRET);
         return resolveWsApiPrincipal(connection, { token: message.token }, { registerClient: false });
     } catch (_) {

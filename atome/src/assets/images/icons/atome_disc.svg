@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The Atom disc of the eVe Dashboard: a deep violet glass disc. The disc is 224 wide
+     in a 300 box (the same box as atome_disc_ring.svg, whose glow needs the margin). -->
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300">
+    <defs>
+        <radialGradient id="atomeDiscFill" cx="150" cy="128" r="140" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#2c1a52"/>
+            <stop offset="0.7" stop-color="#1f1240"/>
+            <stop offset="1" stop-color="#170c30"/>
+        </radialGradient>
+    </defs>
+    <circle cx="150" cy="150" r="112" fill="url(#atomeDiscFill)" fill-opacity="0.94"/>
+</svg>

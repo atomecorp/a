@@ -1,9 +1,12 @@
 import { PERSONAL_IMPORT_TYPES, CALENDAR_IMPORT_FIELDS } from './personal_import_types.js';
 import { GPS_TRIP_TYPE } from './gps_trip_contract.js';
+import { COMMUNICATION_MESSAGE_TYPE } from './communication_contract.js';
+import { APPLE_MUSIC_OPERATION_TYPE } from './apple_music_operation_contract.js';
+import { MUSIC_OPERATION_TYPE } from './music_operation_contract.js';
 import { registerAtomeType } from './atome_universal_contract.js';
 import { PROGRAM_PREFERENCE_SCHEMA, PROGRAM_DATA_PERMISSION_SCHEMA, PROGRAM_PREFERENCE_KEYS } from './program_collection_contract.js';
 import { PROGRAM_SESSION_SCHEMA, PROGRAM_SESSION_TRANSITION_SCHEMA } from './program_session_contract.js';
-import { PROGRAM_NUTRITION_SCHEMA } from './program_nutrition_contract.js';
+import { PROGRAM_NUTRITION_SCHEMA, NUTRITION_CONSUMPTION_SCHEMA } from './program_nutrition_contract.js';
 
 export const CORE_ATOME_TYPE_VERSION = 1;
 
@@ -105,7 +108,10 @@ const defineType = (definition) => Object.freeze({
 });
 
 export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
+    defineType(APPLE_MUSIC_OPERATION_TYPE),
+    defineType(MUSIC_OPERATION_TYPE),
     defineType(GPS_TRIP_TYPE),
+    defineType(COMMUNICATION_MESSAGE_TYPE),
     ...PERSONAL_IMPORT_TYPES.map(defineType),
     defineType({
         type: 'project',
@@ -347,8 +353,10 @@ export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
             program_data_permission: PROGRAM_DATA_PERMISSION_SCHEMA,
             program_session: PROGRAM_SESSION_SCHEMA,
             program_session_transition: PROGRAM_SESSION_TRANSITION_SCHEMA,
+            program_nutrition_consumption: NUTRITION_CONSUMPTION_SCHEMA,
             program_activity: { type: 'object', required: ['version', 'brick_id', 'title', 'involvement'], properties: {
                 version: { type: 'number', minimum: 1 }, brick_id: { type: 'string' }, title: { type: 'string' }, nutrition: PROGRAM_NUTRITION_SCHEMA,
+                nutrition_declined: { type: 'boolean' },
                 involvement: { type: 'object', required: ['minutes', 'basis', 'days', 'rhythm'], properties: {
                     minutes: { type: 'number' }, basis: { type: 'string', enum: ['day', 'week'] },
                     days: { type: 'array' }, rhythm: { type: 'number' }

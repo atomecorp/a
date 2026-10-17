@@ -1,0 +1,21 @@
+"$schema" = "schemas/schema.json"
+
+[[set]]
+identifier = "personal-import"
+description = "Allows the main webview to read this Mac's own address book and agenda for the canonical import, and the installation identity that keeps its checkpoints across rebuilt apps. The system prompts for Contacts and Calendar access before any read."
+permissions = ["allow-macos-contacts-snapshot", "allow-native-calendar-snapshot", "allow-native-import-device-id"]
+
+[[permission]]
+identifier = "allow-macos-contacts-snapshot"
+description = "Enables the macos_contacts_snapshot command."
+commands.allow = ["macos_contacts_snapshot"]
+
+[[permission]]
+identifier = "allow-native-calendar-snapshot"
+description = "Enables the native_calendar_snapshot command."
+commands.allow = ["native_calendar_snapshot"]
+
+[[permission]]
+identifier = "allow-native-import-device-id"
+description = "Enables the native_import_device_id command."
+commands.allow = ["native_import_device_id"]

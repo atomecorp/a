@@ -52,13 +52,36 @@ const configureTauriRemoteSync = async () => {
     };
 };
 
+// The native sync identity only changes with the sessions. Reconfiguring it before every
+// server request (two `me` round trips and a scan of the whole local workspace) made each
+// call, message or share wait on a busy local server, past the 10 s request timeout.
+// Concurrent callers (a project opening fires several requests at once) share the one
+// configuration in flight for the same sessions instead of each starting its own.
+let configuredSessions = '';
+let configuredResult = null;
+let configuring = null;
+
 export async function ensureFastifyToken() {
     try {
         await ensureLocalSession();
         await ensureRemoteSession();
         markFastifyAuthValid();
-        return await configureTauriRemoteSync();
+        const sessions = isTauriRuntime() ? `${FastifyAdapter?.getToken?.() || ''}|${TauriAdapter?.getToken?.() || ''}` : '';
+        if (sessions && sessions === configuredSessions && configuredResult) return configuredResult;
+        if (configuring?.sessions !== sessions) {
+            const task = configureTauriRemoteSync().then((result) => {
+                if (configuring?.task === task) {
+                    configuring = null;
+                    configuredSessions = result?.ok ? sessions : '';
+                    configuredResult = result?.ok ? result : null;
+                }
+                return result;
+            }, (error) => { if (configuring?.task === task) configuring = null; throw error; });
+            configuring = { sessions, task };
+        }
+        return await configuring.task;
     } catch (error) {
+        configuredSessions = ''; configuredResult = null;
         FastifyAdapter.clearToken();
         return { ok: false, reason: error?.message || 'remote_session_unavailable' };
     }

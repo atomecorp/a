@@ -288,10 +288,11 @@ function ensureNodeModules() {
         die(`Missing ${lockPath}. Reproducible installs require a lockfile.`);
     }
 
-    // For native modules like better-sqlite3, build tooling must exist.
+    // For native modules like better-sqlite3, build tooling must exist; ffmpeg
+    // normalizes served videos (HEVC/.mov takes, server/server_media.js).
     // This is safe and idempotent on Debian/Ubuntu.
     run('apt-get update');
-    run('apt-get install -y ca-certificates curl git build-essential python3 make g++ pkg-config libsqlite3-dev');
+    run('apt-get install -y ca-certificates curl git build-essential python3 make g++ pkg-config libsqlite3-dev ffmpeg');
 
     run('npm ci --omit=dev');
 }

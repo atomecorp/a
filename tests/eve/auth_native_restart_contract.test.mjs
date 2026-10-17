@@ -60,9 +60,9 @@ test('native logout rejects a different device key before requesting a lock proo
 });
 
 test('Tauri injects the production authentication authority in debug and release builds', () => {
-    const source = read('platforms/desktop-tauri/src/lib.rs');
-    const owner = source.slice(source.indexOf('fn configured_tauri_fastify_url'), source.indexOf('fn tauri_runtime_init_script'));
-    expect(owner).toContain('Some("https://atome.one".to_string())');
+    const owner = read('platforms/desktop-tauri/src/local_http_navigation.rs');
+    expect(owner).toContain('"https://atome.one".to_string()');
+    expect(owner).toContain('window.__SQUIRREL_TAURI_FASTIFY_URL__=');
     expect(owner).not.toContain('cfg!(debug_assertions)');
 });
 
@@ -114,12 +114,12 @@ test('desktop can finish a cached remote session after local binding was interru
     expect(session).toMatch(/initializePhoneLinks\(\)[\s\S]*recoverDesktopAuthorization\(\)[\s\S]*recovered\.authenticated/);
 });
 
-test('desktop reloads the persisted public key item instead of deriving it from a reloaded private reference', () => {
+test('desktop exports the public point paired with the persisted signing key', () => {
     const rust = read('platforms/desktop-tauri/src/auth_device.rs');
-    expect(rust).toMatch(/fn public_key\(scope: &str\)[\s\S]*KeyClass::public\(\)[\s\S]*load_refs\(true\)/);
-    expect(rust).toMatch(/if action == "public"[\s\S]*let public = public_key\(scope\)/);
-    expect(rust).toMatch(/if action == "verify"[\s\S]*let public = public_key\(scope\)/);
-    expect(rust).not.toContain('key.public_key()');
+    expect(rust).toMatch(/fn public_search[\s\S]*KeyClass::public\(\)[\s\S]*application_label/);
+    expect(rust).toMatch(/fn public_key_bytes[\s\S]*load_data\(true\)[\s\S]*bytes.len\(\) == 65/);
+    expect(rust).toMatch(/if action == "public"[\s\S]*public_key_bytes\(&key, scope\)/);
+    expect(rust).toMatch(/if action == "verify"[\s\S]*key.public_key\(\)/);
 });
 
 test('an active guest is resumable while a new guest cannot claim an existing account', () => {

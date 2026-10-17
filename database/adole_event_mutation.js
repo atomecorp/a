@@ -1,10 +1,15 @@
 import {
+    assertIdempotentEventReplay,
+    eventIdempotencyIntent,
     eventDeletedPropertyKeys,
     eventExpectedPropertyVersions,
     eventPropertyPatch,
     eventTouchedPropertyKeys,
     resolveEventPayload
 } from '../atome/src/shared/adole_event_contract.js';
+import { createHash } from 'node:crypto';
+
+const intentHash = event => createHash('sha256').update(JSON.stringify(eventIdempotencyIntent(event))).digest('hex');
 
 const parseStoredValue = (value) => {
     if (value === null || value === undefined) return null;
@@ -22,7 +27,34 @@ const versionConflict = () => {
 };
 
 export function createAdoleEventMutationApi({ query }) {
+    const assertReplay = (existing, incoming) => {
+        const stored = parseStoredValue(existing.payload) || {};
+        if (stored.idempotency_intent_hash) {
+            assertIdempotentEventReplay(existing, incoming, {
+                existingHash: stored.idempotency_intent_hash, incomingHash: intentHash(incoming)
+            });
+            return;
+        }
+        // Before intent hashes, compacted events retained their immutable
+        // projection. Only additional no-op values proven by that snapshot may
+        // be removed from a legacy retry; identity/version/delete checks remain.
+        const projection = parseStoredValue(existing.projection);
+        if (existing.kind === 'set' && Object.hasOwn(stored, 'base_versions') && projection?.properties) {
+            const recorded = eventPropertyPatch(existing) || {}, patch = eventPropertyPatch(incoming) || {};
+            const expected = eventExpectedPropertyVersions(incoming);
+            const props = Object.fromEntries(Object.entries(patch).filter(([key, value]) => {
+                if (Object.hasOwn(recorded, key) || Object.hasOwn(expected, key) || !Object.hasOwn(projection.properties, key)) return true;
+                return JSON.stringify(value) !== JSON.stringify(projection.properties[key]);
+            }));
+            assertIdempotentEventReplay(existing, { ...incoming, payload: { ...resolveEventPayload(incoming), props } });
+            return;
+        }
+        assertIdempotentEventReplay(existing, incoming);
+    };
     const prepare = async (event, options = {}) => {
+        const incomingPayload = parseStoredValue(resolveEventPayload(event));
+        event = { ...event, payload: { ...(incomingPayload && typeof incomingPayload === 'object' ? incomingPayload : {}),
+            idempotency_intent_hash: intentHash(event) } };
         const atomeId = event?.atome_id || null;
         const touchedKeys = eventTouchedPropertyKeys(event);
         if (!atomeId || !touchedKeys.length) return event;
@@ -98,6 +130,8 @@ export function createAdoleEventMutationApi({ query }) {
         payload.before_identity = identity ? { parent_id: identity.parent_id, atome_type: identity.atome_type } : null;
         payload.before_missing = beforeMissing;
         payload.base_versions = baseVersions;
+        // Compact the patch without losing the original delivery identity or
+        // duplicating large unchanged profile/media properties in the journal.
         return { ...event, payload };
     };
 
@@ -127,5 +161,5 @@ export function createAdoleEventMutationApi({ query }) {
         }
     };
 
-    return { prepare, applyDeletes };
+    return { prepare, applyDeletes, assertReplay };
 }

@@ -29,7 +29,7 @@ fi
 # --- 1. Mise à jour du système ---
 log_info "Mise à jour des paquets système..."
 apt-get update && apt-get upgrade -y
-apt-get install -y curl build-essential git sqlite3
+apt-get install -y curl build-essential git sqlite3 ffmpeg
 
 # --- 2. Vérification de SQLite ---
 if command -v sqlite3 >/dev/null 2>&1; then

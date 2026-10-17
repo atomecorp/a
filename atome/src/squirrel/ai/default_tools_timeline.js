@@ -11,7 +11,17 @@ const TIMELINE_WRITE_VERBS = Object.freeze([
     'clip.trim',
     'clip.crop',
     'clip.loop',
+    'clip.fades',
+    'scene.add',
+    'scene.update',
+    'scene.remove',
+    'scene.move',
+    'cell.set',
+    'cell.clear',
+    'cell.place',
     'clip.split',
+    'clip.join',
+    'clip.take',
     'clip.cut',
     'clip.copy',
     'clip.paste',
@@ -187,6 +197,32 @@ export const registerTimelineDefaultTools = ({ Agent }) => {
         risk_tier: 'LOW',
         parameters: { type: 'object', required: ['group_id'], properties: { group_id: { type: 'string' } } },
         handler: async (params = {}) => requireMoleculeTimelineApi().stopGroupTimelineTransport(params)
+    });
+
+    Agent.registerTool({
+        name: 'eve.timeline.cells.trigger',
+        description: 'Cells (non-linear transport): press or release cells [{scene_id, track_id}] ("scene" = the whole Scene); each follows its own quantization, play mode, passes and Follow Action.',
+        capabilities: ['timeline.write'],
+        risk_tier: 'LOW',
+        parameters: {
+            type: 'object',
+            required: ['group_id', 'cells'],
+            properties: {
+                group_id: { type: 'string' },
+                cells: { type: 'array', items: { type: 'object', properties: { scene_id: { type: 'string' }, track_id: { type: 'string' } } } },
+                gesture: { type: 'string', enum: ['press', 'release'] }
+            }
+        },
+        handler: async (params = {}) => requireMoleculeTimelineApi().triggerGroupTimelineCells(params)
+    });
+
+    Agent.registerTool({
+        name: 'eve.timeline.cells.stop',
+        description: 'Stop every playing cell of a Molecule.',
+        capabilities: ['timeline.write'],
+        risk_tier: 'LOW',
+        parameters: { type: 'object', required: ['group_id'], properties: { group_id: { type: 'string' } } },
+        handler: async (params = {}) => requireMoleculeTimelineApi().stopGroupTimelineCells(params)
     });
 
     Agent.registerTool({

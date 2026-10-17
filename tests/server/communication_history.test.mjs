@@ -10,7 +10,7 @@ test('conversation pagination preserves both directions and isolates the partici
         const add = (id, owner, from, to, timestamp) => {
             database.prepare('INSERT INTO atomes VALUES (?, ?, ?, ?, NULL)').run(id, owner, owner, 'message');
             database.prepare('INSERT INTO state_current VALUES (?, ?, ?)').run(id,
-                JSON.stringify({ from_id: from, to_user_id: to, timestamp, message: id }), timestamp);
+                JSON.stringify({ message_id: 'message_' + id, from_id: from, to_user_id: to, timestamp, message: id }), timestamp);
         };
         add('a', 'alice', 'alice', 'bob', '2026-10-10T12:00:00Z');
         add('b', 'alice', 'bob', 'alice', '2026-10-10T12:00:00Z');
@@ -25,5 +25,13 @@ test('conversation pagination preserves both directions and isolates the partici
         expect(second.items.map(item => item.id)).toEqual(['a']);
         expect(second.nextCursor).toBeNull();
         expect((await queryCommunicationMessages({ query, userId: 'bob', contactId: 'alice' })).items).toEqual([]);
+        const targeted = await queryCommunicationMessages({ query, userId: 'alice', contactId: 'bob', messageId: 'message_b', limit: 1 });
+        expect(targeted.items.map(item => item.id)).toEqual(['b']);
+        const older = await queryCommunicationMessages({ query, userId: 'alice', contactId: 'bob', cursor: targeted.nextCursor, limit: 1 });
+        expect(older.items.map(item => item.id)).toEqual(['a']);
+        for (const messageId of ['message_private', 'message_other', 'missing']) {
+            await expect(queryCommunicationMessages({ query, userId: 'alice', contactId: 'bob', messageId })).rejects.toThrow('conversation_message_unavailable');
+        }
+        await expect(queryCommunicationMessages({ query, userId: 'alice', contactId: 'bob', messageId: 'message_b', cursor: first.nextCursor })).rejects.toThrow('conversation_target_invalid');
     } finally { database.close(); }
 });

@@ -2,7 +2,8 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import { loadUserProfile, upsertUserProfile } from '../../eVe/domains/user/profile_api.js';
 import { transferGuestWorkspace } from '../../atome/src/squirrel/apis/unified/adole_api/auth_workspace.js';
-import { commit } from '../../eVe/core/atome_commit.js';
+import { commit, commitBatch, getStateCurrent, listStateCurrent } from '../../eVe/core/atome_commit.js';
+import { readFastifyStateCurrentMissing } from '../../eVe/core/atome_commit_backend.js';
 import { getSessionState, setSessionState, setGuestWorkspace } from '../../atome/src/squirrel/apis/unified/adole_api/session.js';
 import { FastifyAdapter } from '../../atome/src/squirrel/apis/unified/adole.js';
 import { getGuestAtome, guestAdoptionPayload, completeBrowserGuestAdoption, listWorkspaceEvents, pendingWorkspaceEvents } from '../../atome/src/squirrel/apis/unified/adole_api/guest_workspace_store.js';
@@ -38,6 +39,26 @@ afterEach(() => {
 });
 
 describe('canonical local guest profile', () => {
+    it('keeps remembered absence when a batch is refused before storage', async () => {
+        const id = 'refused-batch'; expect(await getStateCurrent(id)).toBeNull();
+        await expect(commitBatch([{ kind: 'set', atome_id: id, type: 'record', scope: 'global', actor: { type: 'user', id: other }, props: { title: 'Refused' } }]))
+            .rejects.toThrow('workspace_identity_mismatch');
+        expect(readFastifyStateCurrentMissing(id)).toBe(true); expect(await getGuestAtome(owner, id)).toBeUndefined();
+    });
+    it('invalidates known absence for every successful batch write, including when refresh is disabled', async () => {
+        for (const refreshState of [true, false]) {
+            const ids = ['preference-' + refreshState, 'permission-' + refreshState];
+            for (const id of ids) expect(await getStateCurrent(id)).toBeNull();
+            const response = await commitBatch(ids.map((id, index) => ({ kind: 'set', atome_id: id, type: 'record', scope: 'global',
+                props: { title: 'Batch record ' + index } })), { refreshState });
+            expect(response.ok).toBe(true);
+            for (const [index, id] of ids.entries()) {
+                expect((await getGuestAtome(owner, id)).properties.title).toBe('Batch record ' + index);
+                expect((await getStateCurrent(id)).properties.title).toBe('Batch record ' + index);
+            }
+        }
+        expect(cloud).not.toHaveBeenCalled();
+    });
     it('loads an empty guest without creating an account or requesting cloud auth', async () => {
         const result = await loadUserProfile();
         expect(result.ok).toBe(true); expect(result.userId).toBe(owner);
@@ -170,4 +191,63 @@ it('hydrates local personal fields even when the remote account needs no adoptio
     expect((await transferGuestWorkspace(owner, other, { operationId })).ok).toBe(true);
     expect((await getGuestAtome(other, other)).properties.name).toBe('Existing account');
     expect((await getGuestAtome(owner, owner)).properties.name).toBe('Guest');
+});
+
+it('reads and edits an authenticated browser profile locally while remote authorization is unavailable', async () => {
+    setSessionState({ mode: 'authenticated', user: { id: owner, username: 'Local owner' }, backend: 'fastify' });
+    const saved = await upsertUserProfile({ name: 'Offline owner', preferences: { workspace: { startup_view: 'project' } } }, { allowCreate: false });
+    expect(saved.ok).toBe(true);
+    const loaded = await loadUserProfile();
+    expect(loaded.ok).toBe(true);
+    expect(loaded.profile.name).toBe('Offline owner');
+    expect(loaded.profile.preferences.workspace.startup_view).toBe('project');
+    expect(api.auth.ensureFastifyToken).not.toHaveBeenCalled();
+    expect(cloud).not.toHaveBeenCalled();
+});
+
+it('invalidates remembered absence when synchronized local data arrives, and isolates it by account', async () => {
+    const { importWorkspaceStates } = await import('../../atome/src/squirrel/apis/unified/adole_api/guest_workspace_store.js');
+    const id = 'arriving-project';
+    expect(await getStateCurrent(id)).toBeNull();
+    expect(readFastifyStateCurrentMissing(id)).toBe(true);
+    await importWorkspaceStates(owner, [{ atome_id: id, atome_type: 'project', owner_id: owner, properties: { type: 'project', name: 'Arrived' } }]);
+    window.dispatchEvent(new CustomEvent('squirrel:sync:projection-ready', { detail: { principal_id: owner } }));
+    expect((await getStateCurrent(id)).properties.name).toBe('Arrived');
+    expect(await getStateCurrent('still-missing')).toBeNull();
+    setSessionState({ mode: 'authenticated', user: { id: other }, backend: 'fastify' });
+    expect(readFastifyStateCurrentMissing('still-missing')).toBe(false);
+    expect(await getGuestAtome(other, id)).toBeUndefined();
+});
+
+it('saves contacts, the principal card and personal calendar through the same durable outbox', async () => {
+    const { createLocalContactsSource } = await import('../../atome/src/squirrel/contacts/local_source.js');
+    const { CalendarAPI } = await import('../../eVe/intuition/tools/calendar_api.js');
+    const { eventCache } = await import('../../eVe/intuition/tools/calendar_engine_state.js');
+    const { synchronizeBrowserWorkspace } = await import('../../atome/src/squirrel/apis/unified/adole_api/browser_workspace.js');
+    setSessionState({ mode:'authenticated', user:{ id:owner }, backend:'fastify' });
+    Object.assign(window.Atome, { getStateCurrent, listStateCurrent });
+    await upsertUserProfile({ name:'Principal saved locally', email:'principal@example.test' });
+    const source = createLocalContactsSource();
+    const contact = await source.createContact({ name:'Saved contact', phone:'+33100000000' });
+    const appointment = await CalendarAPI.createEvent({ title:'Saved appointment', personal:true,
+        start:'2026-10-17T09:00:00Z', end:'2026-10-17T10:00:00Z', alarms:[] });
+    expect(appointment.ok).toBe(true);
+    const pending = await pendingWorkspaceEvents(owner);
+    expect(new Set(pending.map(row=>row.payload.atome_id))).toEqual(new Set([owner,contact.contact.id,appointment.event.id]));
+    for (const row of pending) expect(row.payload.project_id ?? null).toBeNull();
+    setSessionState({ mode:'logged_out', user:null });
+    setSessionState({ mode:'authenticated', user:{ id:owner }, backend:'fastify' });
+    expect((await loadUserProfile()).profile.name).toBe('Principal saved locally');
+    expect((await createLocalContactsSource().listContacts()).items[0].phone).toBe('+33100000000');
+    eventCache.clear();
+    expect((await CalendarAPI.getEvent(appointment.event.id)).title).toBe('Saved appointment');
+    const sent = [];
+    await synchronizeBrowserWorkspace({ ensureSession:async()=>{}, send:async message=>{
+        if(message.type==='events') { sent.push(message.event.id); return {ok:true}; }
+        return {ok:true,states:[]};
+    } });
+    expect(sent).toEqual(pending.map(row=>row.payload.id));
+    expect(await pendingWorkspaceEvents(owner)).toHaveLength(0);
+    eventCache.clear();
+    expect(cloud).not.toHaveBeenCalled();
 });

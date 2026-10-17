@@ -186,7 +186,8 @@ fn bind(
     remote_session_generation: i64,
 ) -> Result<JsonValue, String> {
     let remote_id = field(remote_user, "id")?;
-    let phone = field(remote_user, "phone")?;
+    // Accounts of authentication V1 carry no phone: the remote principal alone identifies them.
+    let phone = remote_user.get("phone").and_then(JsonValue::as_str).unwrap_or("");
     let username = field(remote_user, "username")?;
     let (grant, principal, generation) = {
         let mut db = state.db.lock().map_err(|_| "local_database_unavailable")?;
@@ -206,7 +207,7 @@ fn bind(
         let generation = existing.as_ref().map(|v| v.2 + 1).unwrap_or(0);
         let principal = if let Some(value) = existing {
             value.1
-        } else if let Some((id, _, deleted)) = accounts::find_user_record_by_phone(&tx, phone)? {
+        } else if let Some((id, _, deleted)) = if phone.is_empty() { None } else { accounts::find_user_record_by_phone(&tx, phone)? } {
             if deleted.is_some() {
                 return Err("local_account_unavailable".into());
             }
@@ -218,13 +219,19 @@ fn bind(
             rusqlite::params![principal,remote_id], |_| Ok(true)).optional().map_err(|_| "local_database_unavailable")?.unwrap_or(false);
         let old_binding: bool = tx.query_row("SELECT 1 FROM remote_sync_stream_cursors WHERE local_user_id=?1 AND remote_user_id!=?2 LIMIT 1",
             rusqlite::params![principal,remote_id], |_| Ok(true)).optional().map_err(|_| "local_database_unavailable")?.unwrap_or(false);
+        // This local account already proved this very remote identity (a grant,
+        // even locked, exists): coming back to it after another server's binding
+        // (a development server's principal for the same phone) is no identity change.
+        let proven_before: bool = tx.query_row("SELECT 1 FROM auth_local_grants WHERE local_principal = ?1 AND remote_principal = ?2 LIMIT 1",
+            rusqlite::params![principal,remote_id], |_| Ok(true)).optional().map_err(|_| "local_database_unavailable")?.unwrap_or(false);
         if other || old_binding {
             // A local development server can be recreated while the durable
             // Tauri workspace remains. The same verified phone then receives a
-            // new opaque remote principal. In mock mode only, retire the stale
-            // grant and reset remote projection metadata; local atomes and files
-            // remain untouched. Production continues to reject identity changes.
-            if std::env::var("SQUIRREL_AUTH_SMS_MOCK").as_deref() != Ok("1") {
+            // new opaque remote principal. In mock mode, or when returning to an
+            // identity this account already proved, retire the stale grant and
+            // reset remote projection metadata; local atomes and files remain
+            // untouched. A never-seen identity is still rejected in production.
+            if !proven_before && std::env::var("SQUIRREL_AUTH_SMS_MOCK").as_deref() != Ok("1") {
                 return Err("local_account_binding_conflict".into());
             }
             tx.execute(
@@ -247,7 +254,7 @@ fn bind(
         let now = Utc::now().to_rfc3339();
         let inserted = tx.execute("INSERT OR IGNORE INTO atomes (atome_id, atome_type, owner_id, creator_id, created_at, updated_at, created_source, sync_status)
             VALUES (?1,'user',?1,?1,?2,?2,'tauri','pending')", rusqlite::params![principal,now]).map_err(|_| "local_account_write_failed")?;
-        accounts::assign_verified_phone(&tx, &principal, phone, &now)?;
+        if !phone.is_empty() { accounts::assign_verified_phone(&tx, &principal, phone, &now)?; }
         if inserted > 0 {
             accounts::upsert_required_user_particles(&tx, &principal, username, "private", &now)?;
             accounts::upsert_user_state_current(
@@ -333,18 +340,23 @@ fn consume(message: &JsonValue, state: &LocalAuthState) -> Result<JsonValue, Str
     };
     let grant = field(message, "grantId")?;
     let challenge = field(message, "challengeId")?;
-    let (principal, generation) = {
-        let mut db = state.db.lock().map_err(|_| "local_database_unavailable")?;
-        let tx = db.transaction().map_err(|_| "local_database_unavailable")?;
-        let (principal,scope,key,generation): (String,String,String,i64) = tx.query_row(
+    // Snapshot the proof material, then release SQLite before invoking the OS
+    // key. Android resolves that capability on its UI thread, which also needs
+    // the grant/inbox for an incoming call. Recheck all material atomically below.
+    let (principal, scope, key, generation, nonce, issued) = {
+        let db = state.db.lock().map_err(|_| "local_database_unavailable")?;
+        let (principal,scope,key,generation): (String,String,String,i64) = db.query_row(
             "SELECT local_principal,key_scope,key_id,generation FROM auth_local_grants WHERE grant_id=?1 AND locked=0",[grant],
             |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))).map_err(|_| "local_session_locked")?;
         let now = Utc::now().timestamp_millis();
         let reference = format!("{grant}:{generation}");
-        let (nonce,issued): (String,i64) = tx.query_row("SELECT nonce,issued_ms FROM auth_local_challenges
+        let (nonce,issued): (String,i64) = db.query_row("SELECT nonce,issued_ms FROM auth_local_challenges
             WHERE challenge_id=?1 AND grant_id=?2 AND purpose=?3 AND reference_id=?4 AND expires_ms>?5 AND consumed_ms IS NULL",
             rusqlite::params![challenge,grant,purpose,reference,now], |r| Ok((r.get(0)?,r.get(1)?))).map_err(|_| "auth_proof_invalid")?;
-        let signed = json!([
+        (principal, scope, key, generation, nonce, issued)
+    };
+    let reference = format!("{grant}:{generation}");
+    let signed = json!([
             "atome.phone-link.v1",
             "https://atome.one",
             purpose,
@@ -355,20 +367,25 @@ fn consume(message: &JsonValue, state: &LocalAuthState) -> Result<JsonValue, Str
             issued
         ])
         .to_string();
-        let valid = crate::auth_device::auth_device_key(
+    let valid = crate::auth_device::auth_device_handle(
             "verify".into(),
-            scope,
+            scope.clone(),
             Some(signed),
             Some(field(message, "signature")?.into()),
         )?;
-        if valid != true {
-            return Err("auth_proof_invalid".into());
-        }
-        tx.execute(
-            "UPDATE auth_local_challenges SET consumed_ms=?1 WHERE challenge_id=?2",
-            rusqlite::params![now, challenge],
-        )
-        .map_err(|_| "local_database_write_failed")?;
+    if valid != true { return Err("auth_proof_invalid".into()); }
+    {
+        let mut db = state.db.lock().map_err(|_| "local_database_unavailable")?;
+        let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate).map_err(|_| "local_database_unavailable")?;
+        let now = Utc::now().timestamp_millis();
+        let consumed = tx.execute("UPDATE auth_local_challenges SET consumed_ms=?1
+            WHERE challenge_id=?2 AND grant_id=?3 AND purpose=?4 AND reference_id=?5
+            AND nonce=?6 AND issued_ms=?7 AND expires_ms>?1 AND consumed_ms IS NULL
+            AND EXISTS(SELECT 1 FROM auth_local_grants WHERE grant_id=?3 AND locked=0
+                AND local_principal=?8 AND key_scope=?9 AND key_id=?10 AND generation=?11)",
+            rusqlite::params![now,challenge,grant,purpose,reference,nonce,issued,principal,scope,key,generation])
+            .map_err(|_| "local_database_write_failed")?;
+        if consumed != 1 { return Err("auth_proof_invalid".into()); }
         if locking {
             let sql = if message["remoteOnly"] == true {
                 "UPDATE auth_local_grants SET remote_session_id='',remote_session_generation=NULL WHERE grant_id=?1"
@@ -382,8 +399,7 @@ fn consume(message: &JsonValue, state: &LocalAuthState) -> Result<JsonValue, Str
             .map_err(|_| "local_database_write_failed")?;
         }
         tx.commit().map_err(|_| "local_database_write_failed")?;
-        (principal, generation)
-    };
+    }
     if locking {
         Ok(json!({"ok":true}))
     } else {

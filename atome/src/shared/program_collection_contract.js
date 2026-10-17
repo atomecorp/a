@@ -1,5 +1,5 @@
 /** Typed Programme preferences and purpose permissions; values stay in Atomes. */
-export const PROGRAM_PREFERENCE_KEYS = Object.freeze(['starting_state', 'allergies', 'equipment']);
+export const PROGRAM_PREFERENCE_KEYS = Object.freeze(['starting_state', 'allergies', 'equipment', 'intolerances', 'food_preferences', 'food_access', 'food_budget']);
 export const PROGRAM_PREFERENCE_SCHEMA = Object.freeze({ type: 'object', additionalProperties: false,
     required: ['version', 'key', 'status', 'value', 'date', 'provenance', 'uncertain'], properties: {
         version: { type: 'number', enum: [1] }, key: { type: 'string', enum: PROGRAM_PREFERENCE_KEYS },

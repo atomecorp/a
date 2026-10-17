@@ -395,9 +395,12 @@ pub(super) fn project_properties_for_read(
     principal_id: &str,
     properties: &JsonValue,
 ) -> JsonValue {
+    // The owner reads every key: one owner lookup per Atome instead of one per key
+    // (a listed page of 1000 Atomes was ~90 lookups per row, seconds under the DB lock).
+    let owner = effective_owner_id(db, atome_id).as_deref() == Some(principal_id);
     let projected = properties.as_object().map(|object| {
         object.iter().filter_map(|(key, value)| {
-            can_read(db, atome_id, principal_id, Some(key)).then(|| (key.clone(), value.clone()))
+            (owner || can_read(db, atome_id, principal_id, Some(key))).then(|| (key.clone(), value.clone()))
         }).collect::<JsonMap<_, _>>()
     }).unwrap_or_default();
     JsonValue::Object(projected)
@@ -409,6 +412,12 @@ pub(super) fn project_capabilities_for_read(
     principal_id: &str,
     property_keys: impl Iterator<Item = String>,
 ) -> JsonValue {
+    // The owner holds every capability on every key (check_permission's first rule).
+    if effective_owner_id(db, atome_id).as_deref() == Some(principal_id) {
+        let all = json!({ "write": true, "delete": true, "share": true });
+        let properties = property_keys.map(|key| (key, all.clone())).collect::<JsonMap<_, _>>();
+        return json!({ "properties": properties, "create": true, "delete": true, "share": true });
+    }
     let properties = property_keys.filter_map(|key| {
         can_read(db, atome_id, principal_id, Some(&key)).then(|| {
             let capabilities = json!({
@@ -520,5 +529,19 @@ mod tests {
         let db = database();
         db.execute("INSERT INTO permissions VALUES ('a', 'content', 'member', 1, 0, 0, 0, 0, NULL, NULL)", []).unwrap();
         assert_eq!(project_properties_for_read(&db, "a", "member", &json!({"content":"ok","secret":"hidden"})), json!({"content":"ok"}));
+    }
+
+    #[test]
+    fn owner_reads_every_key_with_every_capability_and_members_stay_filtered() {
+        let db = database();
+        let props = json!({"content":"ok","secret":"hidden"});
+        assert_eq!(project_properties_for_read(&db, "a", "owner", &props), props);
+        let keys = || ["content".to_string(), "secret".to_string()].into_iter();
+        let all = json!({"write": true, "delete": true, "share": true});
+        assert_eq!(project_capabilities_for_read(&db, "a", "owner", keys()),
+            json!({"properties": {"content": all, "secret": all}, "create": true, "delete": true, "share": true}));
+        db.execute("INSERT INTO permissions VALUES ('a', 'content', 'member', 1, 0, 0, 0, 0, NULL, NULL)", []).unwrap();
+        assert_eq!(project_capabilities_for_read(&db, "a", "member", keys()),
+            json!({"properties": {"content": {"write": false, "delete": false, "share": false}}, "create": false, "delete": false, "share": false}));
     }
 }

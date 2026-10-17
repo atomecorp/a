@@ -47,6 +47,12 @@ export function createVisioService(options = {}) {
     }
     worker = await workerPromise;
     workerPromise = null;
+    // Loopback candidates reach no remote device: calls ring and connect, then carry no
+    // media at all (atome.one, 15 Oct. 2026). A public server sets both variables.
+    if (!announcedIp && /^127\.|^localhost$|^::1$/.test(String(listenIp))) {
+      logger.warn('[visio] mediasoup listens on loopback only: remote clients cannot exchange media'
+        + ' (set MEDIASOUP_LISTEN_IP=0.0.0.0 and MEDIASOUP_ANNOUNCED_IP=<public IP>)');
+    }
 
     worker.on('died', () => {
       logger.error('[visio] mediasoup worker died');
@@ -291,7 +297,15 @@ export function createVisioService(options = {}) {
   const commands = createVisioCommands({ ensureRoomMeta, resolveRoomMeta, resolveUserInfo, relations,
     notify, saveScheduledRoom, closeRoom,
     online: async userId => Boolean(wsApiClientsByUserId.get(userId)?.size) || await communicationPush.available(userId),
-    publish: (userId, data) => wsSendJsonToUser(userId, { type: 'visio-event', room_id: data.roomId, data }, { scope: 'ws/api', op: 'visio' }) });
+    publish: (userId, data) => {
+      wsSendJsonToUser(userId, { type: 'visio-event', room_id: data.roomId, data }, { scope: 'ws/api', op: 'visio' });
+      if (data.status !== 'ringing' && data.status !== 'preparing') {
+        void communicationPush.deliver(userId, { ...data, kind: 'call-state', room_id: data.roomId,
+          id: `call-state:${data.roomId}:${data.status}:${data.acceptedKeyId || ''}` })
+          .then(result => { if (!result.ok) logger.warn('Android call state push unavailable'); })
+          .catch(() => logger.warn('Android call state push unavailable'));
+      }
+    } });
   const signaling = new Set(['joinRoom', 'leaveRoom', 'createTransport', 'connectTransport', 'produce', 'consume',
     'pauseProducer', 'resumeProducer', 'closeProducer', 'resumeConsumer']);
   const handleCommand = async (userId, action, input, connection) => {

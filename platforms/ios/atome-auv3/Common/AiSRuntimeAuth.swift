@@ -108,7 +108,8 @@ extension AiSRuntime {
     private static func bindRemoteIdentity(_ remote: [String: Any], scope: String, keyId: String, sessionId: String, sessionGeneration: Int64) throws -> [String: Any] {
         guard !sessionId.isEmpty, sessionGeneration >= 0 else { throw AiSError("auth_session_invalid") }
         let remoteId = stringValue(remote["id"]), phone = stringValue(remote["phone"]), username = stringValue(remote["username"])
-        guard !remoteId.isEmpty, !phone.isEmpty else { throw AiSError("auth_remote_response_invalid") }
+        // Accounts of authentication V1 carry no phone: the remote principal alone identifies them.
+        guard !remoteId.isEmpty else { throw AiSError("auth_remote_response_invalid") }
         let db = try openDatabase()
         try execute(db, "BEGIN IMMEDIATE", [])
         do {
@@ -117,7 +118,7 @@ extension AiSRuntime {
                intValue(previous?["remote_session_generation"], defaultValue: -1) > sessionGeneration {
                 throw AiSError("auth_session_stale")
             }
-            let existing = try findUserRecordByPhone(db, phone)
+            let existing = phone.isEmpty ? nil : try findUserRecordByPhone(db, phone)
             guard existing?.deletedAt == nil else { throw AiSError("local_account_unavailable") }
             let principal = rowString(previous, "local_principal") ?? existing?.userId ?? UUID().uuidString.lowercased()
             let conflict = try query(db, "SELECT 1 FROM auth_local_grants WHERE local_principal=? AND remote_principal!=?", [.text(principal), .text(remoteId)])
@@ -136,7 +137,7 @@ extension AiSRuntime {
                 try upsertParticle(db, atomeId: principal, key: "visibility", value: "private", changedBy: principal, now: now)
                 try upsertStateCurrent(db, atomeId: principal, ownerId: principal, properties: ["type":"user", "username":username, "visibility":"private"], now: now)
             }
-            try assignVerifiedPhone(db, principalId: principal, phone: phone, now: now)
+            if !phone.isEmpty { try assignVerifiedPhone(db, principalId: principal, phone: phone, now: now) }
             try execute(db, "INSERT INTO auth_local_grants (grant_id,local_principal,remote_principal,key_id,key_scope,generation,locked,remote_session_id,remote_session_generation) VALUES (?,?,?,?,?,?,0,?,?) ON CONFLICT(remote_principal,key_id) DO UPDATE SET locked=0,generation=excluded.generation,remote_session_id=excluded.remote_session_id,remote_session_generation=excluded.remote_session_generation",
                 [.text(grant),.text(principal),.text(remoteId),.text(keyId),.text(scope),.int(generation),.text(sessionId),.int(sessionGeneration)])
             try execute(db, "COMMIT", [])

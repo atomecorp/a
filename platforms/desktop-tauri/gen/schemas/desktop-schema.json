@@ -351,10 +351,10 @@
           "markdownDescription": "Lets the main webview take the assistant request opened by the atome://assistant link.\n#### This permission set includes:\n\n- `allow-assistant-request-take`"
         },
         {
-          "description": "Allows the main webview to use the native Kira audio engine commands.\n#### This permission set includes:\n\n- `allow-audio-init`\n- `allow-audio-load-clip`\n- `allow-audio-load-clip-from-bytes`\n- `allow-audio-has-clip`\n- `allow-audio-play`\n- `allow-audio-play-instance`\n- `allow-audio-stop`\n- `allow-audio-stop-instance`\n- `allow-audio-destroy-clip`\n- `allow-audio-set-volume`\n- `allow-audio-set-playback-rate`\n- `allow-audio-record-start`\n- `allow-audio-record-stop`\n- `allow-audio-get-levels`\n- `allow-audio-get-scope`\n- `allow-audio-shutdown`",
+          "description": "Allows the main webview to use the native Kira audio engine commands.\n#### This permission set includes:\n\n- `allow-audio-init`\n- `allow-audio-load-clip`\n- `allow-audio-load-clip-from-bytes`\n- `allow-audio-has-clip`\n- `allow-audio-play`\n- `allow-audio-play-instance`\n- `allow-audio-schedule-instances`\n- `allow-audio-measure-input-latency`\n- `allow-audio-render-clock`\n- `allow-audio-mix-apply`\n- `allow-audio-mix-levels`\n- `allow-audio-mix-devices`\n- `allow-audio-mix-cut-tail`\n- `allow-audio-mix-module-state`\n- `allow-audio-stop`\n- `allow-audio-stop-instance`\n- `allow-audio-set-voice-end`\n- `allow-audio-destroy-clip`\n- `allow-audio-set-volume`\n- `allow-audio-set-pan`\n- `allow-audio-set-playback-rate`\n- `allow-audio-wake-start`\n- `allow-audio-wake-stop`\n- `allow-audio-wake-read`\n- `allow-audio-record-start`\n- `allow-audio-record-stop`\n- `allow-audio-get-levels`\n- `allow-audio-get-scope`\n- `allow-audio-shutdown`",
           "type": "string",
           "const": "audio-engine",
-          "markdownDescription": "Allows the main webview to use the native Kira audio engine commands.\n#### This permission set includes:\n\n- `allow-audio-init`\n- `allow-audio-load-clip`\n- `allow-audio-load-clip-from-bytes`\n- `allow-audio-has-clip`\n- `allow-audio-play`\n- `allow-audio-play-instance`\n- `allow-audio-stop`\n- `allow-audio-stop-instance`\n- `allow-audio-destroy-clip`\n- `allow-audio-set-volume`\n- `allow-audio-set-playback-rate`\n- `allow-audio-record-start`\n- `allow-audio-record-stop`\n- `allow-audio-get-levels`\n- `allow-audio-get-scope`\n- `allow-audio-shutdown`"
+          "markdownDescription": "Allows the main webview to use the native Kira audio engine commands.\n#### This permission set includes:\n\n- `allow-audio-init`\n- `allow-audio-load-clip`\n- `allow-audio-load-clip-from-bytes`\n- `allow-audio-has-clip`\n- `allow-audio-play`\n- `allow-audio-play-instance`\n- `allow-audio-schedule-instances`\n- `allow-audio-measure-input-latency`\n- `allow-audio-render-clock`\n- `allow-audio-mix-apply`\n- `allow-audio-mix-levels`\n- `allow-audio-mix-devices`\n- `allow-audio-mix-cut-tail`\n- `allow-audio-mix-module-state`\n- `allow-audio-stop`\n- `allow-audio-stop-instance`\n- `allow-audio-set-voice-end`\n- `allow-audio-destroy-clip`\n- `allow-audio-set-volume`\n- `allow-audio-set-pan`\n- `allow-audio-set-playback-rate`\n- `allow-audio-wake-start`\n- `allow-audio-wake-stop`\n- `allow-audio-wake-read`\n- `allow-audio-record-start`\n- `allow-audio-record-stop`\n- `allow-audio-get-levels`\n- `allow-audio-get-scope`\n- `allow-audio-shutdown`"
         },
         {
           "description": "Allows the main webview to use the native Bevy renderer commands.\n#### This permission set includes:\n\n- `allow-bevy-native-start`\n- `allow-bevy-native-apply-ops`\n- `allow-bevy-native-resize`",
@@ -379,6 +379,12 @@
           "type": "string",
           "const": "health-bridge",
           "markdownDescription": "Allows the main webview to use the single gated health command. The command itself checks the per-page channel token, the verified account and the local association before any Health Connect read.\n#### This permission set includes:\n\n- `allow-health-invoke`"
+        },
+        {
+          "description": "Allows the main webview to read this Mac's own address book and agenda for the canonical import, and the installation identity that keeps its checkpoints across rebuilt apps. The system prompts for Contacts and Calendar access before any read.\n#### This permission set includes:\n\n- `allow-macos-contacts-snapshot`\n- `allow-native-calendar-snapshot`\n- `allow-native-import-device-id`",
+          "type": "string",
+          "const": "personal-import",
+          "markdownDescription": "Allows the main webview to read this Mac's own address book and agenda for the canonical import, and the installation identity that keeps its checkpoints across rebuilt apps. The system prompts for Contacts and Calendar access before any read.\n#### This permission set includes:\n\n- `allow-macos-contacts-snapshot`\n- `allow-native-calendar-snapshot`\n- `allow-native-import-device-id`"
         },
         {
           "description": "Lets the developer taxonomy editor read and save eVe/intuition/menu/context_menus.json (writes only in debug builds).\n#### This permission set includes:\n\n- `allow-taxonomy-read`\n- `allow-taxonomy-save`",
@@ -435,6 +441,42 @@
           "markdownDescription": "Enables the audio_load_clip_from_bytes command."
         },
         {
+          "description": "Enables the audio_measure_input_latency command.",
+          "type": "string",
+          "const": "allow-audio-measure-input-latency",
+          "markdownDescription": "Enables the audio_measure_input_latency command."
+        },
+        {
+          "description": "Enables the audio_mix_apply command.",
+          "type": "string",
+          "const": "allow-audio-mix-apply",
+          "markdownDescription": "Enables the audio_mix_apply command."
+        },
+        {
+          "description": "Enables the audio_mix_cut_tail command.",
+          "type": "string",
+          "const": "allow-audio-mix-cut-tail",
+          "markdownDescription": "Enables the audio_mix_cut_tail command."
+        },
+        {
+          "description": "Enables the audio_mix_devices command.",
+          "type": "string",
+          "const": "allow-audio-mix-devices",
+          "markdownDescription": "Enables the audio_mix_devices command."
+        },
+        {
+          "description": "Enables the audio_mix_levels command.",
+          "type": "string",
+          "const": "allow-audio-mix-levels",
+          "markdownDescription": "Enables the audio_mix_levels command."
+        },
+        {
+          "description": "Enables the audio_mix_module_state command.",
+          "type": "string",
+          "const": "allow-audio-mix-module-state",
+          "markdownDescription": "Enables the audio_mix_module_state command."
+        },
+        {
           "description": "Enables the audio_play command.",
           "type": "string",
           "const": "allow-audio-play",
@@ -459,10 +501,34 @@
           "markdownDescription": "Enables the audio_record_stop command."
         },
         {
+          "description": "Enables the audio_render_clock command.",
+          "type": "string",
+          "const": "allow-audio-render-clock",
+          "markdownDescription": "Enables the audio_render_clock command."
+        },
+        {
+          "description": "Enables the audio_schedule_instances command.",
+          "type": "string",
+          "const": "allow-audio-schedule-instances",
+          "markdownDescription": "Enables the audio_schedule_instances command."
+        },
+        {
+          "description": "Enables the audio_set_pan command.",
+          "type": "string",
+          "const": "allow-audio-set-pan",
+          "markdownDescription": "Enables the audio_set_pan command."
+        },
+        {
           "description": "Enables the audio_set_playback_rate command.",
           "type": "string",
           "const": "allow-audio-set-playback-rate",
           "markdownDescription": "Enables the audio_set_playback_rate command."
+        },
+        {
+          "description": "Enables the audio_set_voice_end command.",
+          "type": "string",
+          "const": "allow-audio-set-voice-end",
+          "markdownDescription": "Enables the audio_set_voice_end command."
         },
         {
           "description": "Enables the audio_set_volume command.",
@@ -487,6 +553,24 @@
           "type": "string",
           "const": "allow-audio-stop-instance",
           "markdownDescription": "Enables the audio_stop_instance command."
+        },
+        {
+          "description": "Enables the audio_wake_read command.",
+          "type": "string",
+          "const": "allow-audio-wake-read",
+          "markdownDescription": "Enables the audio_wake_read command."
+        },
+        {
+          "description": "Enables the audio_wake_start command.",
+          "type": "string",
+          "const": "allow-audio-wake-start",
+          "markdownDescription": "Enables the audio_wake_start command."
+        },
+        {
+          "description": "Enables the audio_wake_stop command.",
+          "type": "string",
+          "const": "allow-audio-wake-stop",
+          "markdownDescription": "Enables the audio_wake_stop command."
         },
         {
           "description": "Enables the bevy_native_apply_ops command.",
@@ -543,6 +627,24 @@
           "markdownDescription": "Enables the health_invoke command."
         },
         {
+          "description": "Enables the macos_contacts_snapshot command.",
+          "type": "string",
+          "const": "allow-macos-contacts-snapshot",
+          "markdownDescription": "Enables the macos_contacts_snapshot command."
+        },
+        {
+          "description": "Enables the native_calendar_snapshot command.",
+          "type": "string",
+          "const": "allow-native-calendar-snapshot",
+          "markdownDescription": "Enables the native_calendar_snapshot command."
+        },
+        {
+          "description": "Enables the native_import_device_id command.",
+          "type": "string",
+          "const": "allow-native-import-device-id",
+          "markdownDescription": "Enables the native_import_device_id command."
+        },
+        {
           "description": "Enables the taxonomy_read command.",
           "type": "string",
           "const": "allow-taxonomy-read",
@@ -559,6 +661,12 @@
           "type": "string",
           "const": "auth-device",
           "markdownDescription": "Allows the main application to sign authentication challenges with its protected device key."
+        },
+        {
+          "description": "Allows the canonical main page to use native OS notification and call capabilities.",
+          "type": "string",
+          "const": "notifications",
+          "markdownDescription": "Allows the canonical main page to use native OS notification and call capabilities."
         },
         {
           "description": "No features are enabled by default, as we believe\nthe clipboard can be inherently dangerous and it is \napplication specific if read and/or write access is needed.\n\nClipboard interaction needs to be explicitly enabled.\n",

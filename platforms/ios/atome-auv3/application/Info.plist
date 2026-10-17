@@ -83,7 +83,7 @@
 		<true/>
 	</dict>
 	<key>NSAppleMusicUsageDescription</key>
-	<string>Atome accède à votre bibliothèque Musique pour importer les titres que vous choisissez.</string>
+	<string>Atome accède à votre bibliothèque Musique pour rechercher et lire les morceaux demandés, créer vos playlists et y ajouter les titres de votre choix.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Read selected calendars into your private Atome workspace.</string>
 	<key>NSCalendarsUsageDescription</key>
@@ -96,6 +96,8 @@
 	<string>Atome a besoin d'accéder aux documents pour sauvegarder et charger vos projets</string>
 	<key>NSFileProviderDomainUsageDescription</key>
 	<string>Atome utilise le système de fichiers iOS pour gérer vos projets</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Atome utilise Face ID pour confirmer que c'est bien vous qui approuvez un nouvel appareil ou une action sur votre compte.</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Atome lit uniquement les données de santé que vous choisissez d'afficher dans vos moniteurs (rubrique Moniteur du Dashboard) et dans vos critères dynamiques. Ces données restent sur cet appareil.</string>
 	<key>NSHealthUpdateUsageDescription</key>

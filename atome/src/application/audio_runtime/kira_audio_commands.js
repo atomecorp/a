@@ -25,6 +25,26 @@ const optionalNonNegativeNumber = (value) => {
 };
 const clamp = (value, min, max) => Math.min(max, Math.max(min, Number(value) || 0));
 
+// The timeline window of a scheduled voice, rendered on every frame by the
+// engine (atome-mix-graph `VoiceEnvelope`): null when absent or empty.
+export const normalizeKiraVoiceEnvelope = (input) => {
+    if (!input || typeof input !== 'object') return null;
+    const durationSeconds = Number(input.durationSeconds ?? input.duration_seconds);
+    if (!(durationSeconds > 0) || !Number.isFinite(durationSeconds)) return null;
+    return {
+        offsetSeconds: Math.max(0, finiteNumber(input.offsetSeconds ?? input.offset_seconds, 0)),
+        durationSeconds,
+        fadeInSeconds: Math.max(0, finiteNumber(input.fadeInSeconds ?? input.fade_in_seconds, 0)),
+        fadeOutSeconds: Math.max(0, finiteNumber(input.fadeOutSeconds ?? input.fade_out_seconds, 0)),
+        // Where a loop pass stops the voice before the clip's end.
+        endSeconds: optionalNonNegativeNumber(input.endSeconds ?? input.end_seconds),
+        // A cell's attack (from the clip time its cell started) and release (to the voice's end).
+        attackStartSeconds: finiteNumber(input.attackStartSeconds ?? input.attack_start_seconds, 0),
+        attackSeconds: Math.max(0, finiteNumber(input.attackSeconds ?? input.attack_seconds, 0)),
+        releaseSeconds: Math.max(0, finiteNumber(input.releaseSeconds ?? input.release_seconds, 0))
+    };
+};
+
 export const normalizeKiraPlayInstancePayload = (input = {}) => {
     const source = input && typeof input === 'object' ? input : {};
     const assetId = safeString(source.assetId || source.asset_id || source.id || source.clipId || source.clip_id);

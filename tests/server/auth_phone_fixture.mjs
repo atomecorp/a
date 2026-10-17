@@ -18,6 +18,8 @@ export function fixture({ failDelivery = false, dailyLimit = 20, screenPassword 
     const accounts = new Map();
     const messages = [];
     const disconnected = [];
+    const attempts = new Map();
+    const notices = [];
     const query = async (method, sql, params = []) => db.prepare(sql)[method](...params);
     const transaction = (work) => {
         const result = tail.then(async () => {
@@ -34,7 +36,8 @@ export function fixture({ failDelivery = false, dailyLimit = 20, screenPassword 
         deleteAccount: async id => { for (const [phone, value] of accounts) if (value.user_id === id) accounts.delete(phone); },
         createAccount: async (phone) => { const account = { user_id: crypto.randomUUID(), username: 'User', phone }; accounts.set(phone, account); return account; },
         sendLink: async (phone, url) => { messages.push({ phone, url }); if (failDelivery) throw new Error('provider_failed'); },
-        issueAccess: async ({ sessionId }) => `test-access:${sessionId}`, disconnectSession: async (id) => disconnected.push(id) });
+        issueAccess: async ({ sessionId }) => `test-access:${sessionId}`, disconnectSession: async (id) => disconnected.push(id),
+        notify: async (principalId, notice, options = {}) => notices.push({ principalId, ...notice, options }) });
     const device = () => {
         const keys = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
         const { jwk, keyId } = publicDeviceKey(keys.publicKey.export({ format: 'jwk' }));
@@ -44,13 +47,20 @@ export function fixture({ failDelivery = false, dailyLimit = 20, screenPassword 
     };
     async function start(key, phone = '+33612345678') {
         const attempt = await auth.start({ phone, publicKey: key.jwk, clientNonce: randomHandle() }, '192.0.2.1');
-        if (!attempt.paymentRequired) return attempt;
-        const { challenge } = await auth.getChallenge({ attemptId: attempt.attemptId, keyId: key.keyId, purpose: 'simulate-payment' }, '192.0.2.1');
-        return auth.simulatePayment({ attemptId: attempt.attemptId, method: 'card', ...key.sign(challenge) });
+        attempts.set(attempt.attemptId, { key, pairingCode: attempt.pairingCode });
+        return attempt;
+    }
+    async function complete(input) {
+        const result = await auth.complete(input);
+        if (!result.paymentRequired) return result;
+        const { key } = attempts.get(input.attemptId);
+        const { challenge } = await auth.getChallenge({ attemptId: input.attemptId, keyId: key.keyId, purpose: 'simulate-payment' }, '192.0.2.1');
+        return auth.simulatePayment({ attemptId: input.attemptId, method: 'card', ...key.sign(challenge) });
     }
     async function input(key, attemptId, purpose = 'consume') {
         const { challenge } = await auth.getChallenge({ attemptId, keyId: key.keyId, purpose }, '192.0.2.1');
-        return { attemptId, action: purpose, ...key.sign(challenge), token: parseAuthLink(messages.at(-1).url).token };
+        return { attemptId, action: purpose, ...key.sign(challenge), pairingCode: attempts.get(attemptId)?.pairingCode, token: parseAuthLink(messages.at(-1).url).token };
     }
-    return { now: () => clock, auth, db, accounts, messages, disconnected, device, start, input, advance: (ms) => { clock += ms; } };
+    return { now: () => clock, auth, complete, db, query, transaction, accounts, messages, disconnected, notices, device, start, input,
+        advance: (ms) => { clock += ms; } };
 }

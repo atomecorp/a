@@ -1,6 +1,6 @@
 /** Native OS tokens/inbox feed the existing authenticated WebSocket and tools. */
-export function installCommunicationPushClient({ env, send, ensureSession, readRemoteSession, execute } = {}) {
-    const invoke = env?.__ATOME_IOS_NATIVE_INVOKE;
+export function installCommunicationPushClient({ env, send, ensureSession, readRemoteSession, execute,
+    invoke = env?.__ATOME_IOS_NATIVE_INVOKE } = {}) {
     if (typeof invoke !== 'function') return null;
     let running = null, stopped = false, pendingRun = false;
     const listeners = new AbortController();
@@ -12,14 +12,6 @@ export function installCommunicationPushClient({ env, send, ensureSession, readR
             await ensureSession();
             const account = await readRemoteSession();
             if (!account?.userId) return;
-            const installation = await invoke('notifications_tokens', {});
-            for (const [kind, deviceToken] of Object.entries(installation.tokens || {})) {
-                const response = await send({ type: 'auth', action: 'push-register', installationId: installation.installationId,
-                    kind, deviceToken, environment: installation.environment });
-                if (!response?.ok) throw new Error(response?.error || 'push_registration_failed');
-            }
-            const pruned = await send({ type: 'auth', action: 'push-prune', installationId: installation.installationId, kinds: Object.keys(installation.tokens || {}) });
-            if (!pruned?.ok) throw new Error(pruned?.error || 'push_registration_failed');
             const pending = await invoke('notifications_take', {});
             for (const item of pending.items || []) {
                 if (item.principal_id !== account.userId) continue;
@@ -31,6 +23,15 @@ export function installCommunicationPushClient({ env, send, ensureSession, readR
                 if (item.action === 'answer') await invoke('notifications_call_result', { room_id: item.room_id, ok: result?.ok === true });
                 if (result?.ok || item.action !== 'open') await invoke('notifications_ack', { id: item.notification_id, action: item.action });
             }
+            // A token refresh failure must not prevent a user answering a real call.
+            const installation = await invoke('notifications_tokens', {});
+            for (const [kind, deviceToken] of Object.entries(installation.tokens || {})) {
+                const response = await send({ type: 'auth', action: 'push-register', installationId: installation.installationId,
+                    kind, deviceToken, provider: installation.provider || 'apns', environment: installation.environment });
+                if (!response?.ok) throw new Error(response?.error || 'push_registration_failed');
+            }
+            const pruned = await send({ type: 'auth', action: 'push-prune', installationId: installation.installationId, kinds: Object.keys(installation.tokens || {}) });
+            if (!pruned?.ok) throw new Error(pruned?.error || 'push_registration_failed');
         })().catch(report)
             .finally(() => { running = null; if (pendingRun) { pendingRun = false; void run(); } });
         return running;

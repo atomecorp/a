@@ -3,7 +3,8 @@
 
 use crate::{MixGraph, Program, StripLevel};
 use kira::backend::Backend;
-use kira::sound::static_sound::{StaticSoundData, StaticSoundHandle};
+use crate::voice::VoiceSound;
+use kira::sound::static_sound::StaticSoundHandle;
 use kira::track::{MainTrackBuilder, TrackBuilder, TrackHandle};
 use kira::AudioManager;
 use std::collections::HashMap;
@@ -65,7 +66,7 @@ impl MixHost {
     }
 
     // Starts the voice on its routed strip; the routing is consumed at start.
-    pub fn play<B: Backend>(&mut self, manager: &mut AudioManager<B>, voice_id: &str, sound: StaticSoundData) -> Result<StaticSoundHandle, String> {
+    pub fn play<B: Backend>(&mut self, manager: &mut AudioManager<B>, voice_id: &str, sound: VoiceSound) -> Result<StaticSoundHandle, String> {
         let strip = self.voice_strips.remove(voice_id).and_then(|strip_id| self.strips.get_mut(&strip_id));
         match strip {
             Some(track) => track.play(sound).map_err(|error| format!("mix strip play: {error}")),

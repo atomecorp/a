@@ -194,6 +194,16 @@ test('Tauri capability authorizes the registered audio_get_scope command', async
     assert.match(permissions, /"allow-audio-get-scope"/);
     assert.match(permissions, /identifier = "allow-audio-get-scope"[\s\S]*commands\.allow = \["audio_get_scope"\]/);
     assert.equal(JSON.parse(capability).permissions.includes('audio-engine'), true);
+    // A registered command missing from the set is refused at runtime
+    // ("<command> not allowed"): the launched app then loses the mix graph.
+    const registered = [...libSource.matchAll(/audio_engine::bridge::(audio_[a-z_]+)/g)].map((match) => match[1]);
+    const set = permissions.slice(permissions.indexOf('[[set]]'), permissions.indexOf('[[permission]]'));
+    assert.equal(registered.includes('audio_mix_apply'), true);
+    for (const command of registered) {
+        const identifier = `allow-${command.replaceAll('_', '-')}`;
+        assert.match(set, new RegExp(`"${identifier}"`), `${command} missing from the audio-engine set`);
+        assert.match(permissions, new RegExp(`identifier = "${identifier}"\\ndescription = "[^"]*"\\ncommands\\.allow = \\["${command}"\\]`), `${command} has no permission`);
+    }
 });
 
 test('Tauri callback scope publisher is fixed-size and lock-free', async () => {

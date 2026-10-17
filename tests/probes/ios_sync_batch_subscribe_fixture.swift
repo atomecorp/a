@@ -11,11 +11,14 @@ final class iCloudFileManager {
 final class LocalHTTPServer {
     static let shared = LocalHTTPServer()
     let announced = DispatchSemaphore(value: 0)
+    let ready = DispatchSemaphore(value: 0)
     var projections: [[String: Any]] = []
     func handleFastifySyncMessage(_ text: String) {
         guard let data = text.data(using: .utf8),
-              let message = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              message["type"] as? String == "sync:projection-ready" else { return }
+              let message = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+        if message["type"] as? String == "sync:status", let status = message["data"] as? [String: Any],
+           status["connection_state"] as? String == "connected", status["restore_state"] as? String == "ready" { ready.signal() }
+        guard message["type"] as? String == "sync:projection-ready" else { return }
         projections.append(message)
         announced.signal()
     }
@@ -25,9 +28,16 @@ try AiSRuntime.execute(db, "INSERT INTO auth_local_grants (grant_id,local_princi
 let result = FastifySyncClient.configureRemote(["remote_user_id":"remote", "remote_token":"fixture-token",
     "remote_url":CommandLine.arguments[2], "environment_fingerprint":"fixture"], localUserId:"local")
 precondition(result["success"] as? Bool == true)
+if CommandLine.arguments.last == "health" {
+    precondition(LocalHTTPServer.shared.ready.wait(timeout: .now() + 15) == .success)
+    FastifySyncClient.shared.connectIfConfigured()
+    FastifySyncClient.shared.connectIfConfigured()
+    precondition(LocalHTTPServer.shared.ready.wait(timeout: .now() + 20) == .success, "silent OPEN connection must reconnect after its single bounded ping probe")
+} else {
 precondition(LocalHTTPServer.shared.announced.wait(timeout: .now() + 15) == .success, "a batch replay that applied an event must be announced")
 // The empty batches that follow must not announce anything.
 Thread.sleep(forTimeInterval: 1.5)
+}
 FastifySyncClient.shared.disconnect()
 UserDefaults(suiteName:SharedBus.appGroupSuite)?.removePersistentDomain(forName:SharedBus.appGroupSuite)
 let output = try JSONSerialization.data(withJSONObject: LocalHTTPServer.shared.projections)

@@ -56,18 +56,70 @@ export const dismissMainPalette = async (page, projectId) => {
     });
 };
 
+// Mystic items of the open menu, by key (`..._item_<key>_<n>`).
+const mysticItemTargets = (page) => page.evaluate(() => {
+    const tree = window.eveBevyUiRuntime?.state?.trees?.get?.('eve_bevy_ui_mystic')?.tree || null;
+    const ids = [];
+    const visit = (node) => { if (!node || typeof node !== 'object') return; ids.push(String(node.id || '')); (node.children || []).forEach(visit); };
+    visit(tree?.root);
+    return ids.filter((id) => /_item_[a-z_]+?_\d+$/.test(id));
+});
+
+// Opens the project's Mystic on an empty spot of the Natural surface: the first
+// candidate point that neither a BevyUI node nor an Atome claims.
+const openBackgroundMystic = async (page, projectId) => {
+    const candidates = await page.evaluate(async (pid) => {
+        const surface = document.getElementById('eve_surface_project');
+        const rect = surface?.getBoundingClientRect?.();
+        if (!rect) return [];
+        const records = window.eveToolBase?.getProjectSceneState?.(pid)?.records || [];
+        const fractions = [[0.5, 0.18], [0.18, 0.5], [0.82, 0.5], [0.5, 0.82], [0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75], [0.5, 0.5]];
+        return fractions.map(([fx, fy]) => ({ x: rect.x + rect.width * fx, y: rect.y + rect.height * fy }))
+            .filter((point) => !window.eveBevyUiRuntime?.hitTestAtClientPoint?.({ surface, clientX: point.x, clientY: point.y }))
+            .filter((point) => !records.some((record) => {
+                const id = String(record.id || '');
+                const box = record.bounds || record.clientBounds || null;
+                return !id.startsWith('__eve_') && box && point.x >= box.x && point.x <= box.x + box.width
+                    && point.y >= box.y && point.y <= box.y + box.height;
+            }));
+    }, projectId);
+    const tried = [];
+    for (const point of candidates) {
+        await page.mouse.click(point.x, point.y, { button: 'right' });
+        const opened = await waitFor(page, async () => {
+            const mystic = await import('/eVe/intuition/mystic/index.js');
+            return { ok: mystic.isMysticMenuOpen?.() === true };
+        }, null, 4000).catch(() => ({ ok: false }));
+        await wait(300);
+        const ids = opened.ok ? await mysticItemTargets(page) : [];
+        const importId = ids.find((id) => /_item_import_\d+$/.test(id));
+        if (importId) return importId;
+        tried.push({ point, ids });
+        await page.evaluate(async () => (await import('/eVe/intuition/mystic/index.js')).closeMysticMenu?.());
+    }
+    throw new Error(`background_mystic_import_missing:${JSON.stringify(tried)}`);
+};
+
+// Import is the project's `import` command (Mystic, project rail), which opens
+// the Media panel; files from the disk enter through its single external door
+// (`media_import_system`). The Capture palette only records.
 export const importThroughMenu = async ({ page, projectId, filePath, expectedKind }) => {
     const before = new Set((await readRecords(page, projectId)).map((record) => record.id));
     await dismissMainPalette(page, projectId);
-    await clickCanvasTarget(page, await visibleMenuTool(page, projectId, 'capture'));
-    await waitFor(page, async () => {
-        const registry = await import('/eVe/intuition/ribbon/bevy_ui_product_registry.js');
-        const measure = registry.getMainMenuRuntime()?.measure?.() || {};
-        return { ok: measure.activePaletteKey === 'capture' && measure.paletteMotionActive === false, measure };
-    });
-    const importTool = await visibleMenuTool(page, projectId, 'import');
+    const importItemId = await openBackgroundMystic(page, projectId);
+    const importItem = await awaitBevyUiNodeTarget(page, { nodeId: importItemId, treeId: 'eve_bevy_ui_mystic' });
+    assert(importItem, `mystic_import_item_not_actionable:${importItemId}`);
+    await clickCanvasTarget(page, importItem);
+    const external = await awaitBevyUiNodeTarget(page, { nodeId: 'media_import_system', treeId: 'eve_bevy_panel_media' });
+    assert(external, 'media_panel_external_door_missing');
+    // What the import did, for the failure message: requests and console.
+    const trail = [];
+    const onResponse = (response) => { if (!/\.(js|mjs|css|png|svg|wasm|json)(\?|$)/.test(response.url())) trail.push(`${response.status()} ${response.request().method()} ${response.url().slice(-90)}`); };
+    const onFailed = (request) => trail.push(`FAILED ${request.method()} ${request.url().slice(-90)} ${request.failure()?.errorText || ''}`);
+    const onConsole = (message) => trail.push(`console.${message.type()} ${message.text().slice(0, 160)}`);
+    page.on('response', onResponse); page.on('requestfailed', onFailed); page.on('console', onConsole);
     const chooserPromise = page.waitForEvent('filechooser');
-    await clickCanvasTarget(page, importTool);
+    await clickCanvasTarget(page, external);
     const chooser = await chooserPromise;
     await chooser.setFiles(filePath);
     const imported = await waitFor(page, async ({ pid, known, kind }) => {
@@ -80,8 +132,20 @@ export const importThroughMenu = async ({ page, projectId, filePath, expectedKin
             return id && !id.startsWith('__eve_') && !known.includes(id)
                 && (value.includes(kind) || (kind === 'audio' && value.includes('sound')));
         });
-        return { ok: Boolean(record), id: String(record?.id || record?.atome_id || ''), record: record || null };
-    }, { pid: projectId, known: [...before], kind: expectedKind }, 45000);
+        const fresh = records.filter((entry) => !known.includes(String(entry.id || entry.atome_id || ''))
+            && !String(entry.id || '').startsWith('__eve_'))
+            .map((entry) => ({ id: entry.id, type: entry.type, kind: (entry.properties || entry.props || {}).kind }));
+        return { ok: Boolean(record), id: String(record?.id || record?.atome_id || ''), record: record || null,
+            fresh: fresh.slice(0, 8), media_open: Boolean(window.eveBevyUiRuntime?.state?.trees?.get?.('eve_bevy_panel_media')),
+            sw_controlled: Boolean(navigator.serviceWorker?.controller), offline_events: window.__probeOfflineEvents || [],
+            sw_registration: await navigator.serviceWorker?.getRegistration?.().then((registration) => registration ? {
+                installing: registration.installing?.state || null, waiting: registration.waiting?.state || null, active: registration.active?.state || null
+            } : 'none').catch((error) => String(error)) };
+    }, { pid: projectId, known: [...before], kind: expectedKind }, 45000).catch((error) => {
+        throw new Error(`${error.message}:trail:${JSON.stringify(trail.slice(-40))}`);
+    }).finally(() => {
+        page.off('response', onResponse); page.off('requestfailed', onFailed); page.off('console', onConsole);
+    });
     await waitForStableScene(page, projectId);
     return imported.id;
 };
@@ -119,9 +183,12 @@ export const createTextThroughMenu = async ({ page, projectId, value, point }) =
         ok: !document.querySelector('#eve_hidden_text_service [data-role="active-text-editor"]'),
         editor: Boolean(document.querySelector('#eve_hidden_text_service [data-role="active-text-editor"]'))
     }));
-    // Text is a latch. Toggle the same real BevyUI tool off to commit and close
-    // the canonical editor; clicking the canvas again would create a second Atome.
-    await clickCanvasTarget(page, await visibleMenuTool(page, projectId, 'text_create'));
+    // Text is a latch. Toggle it off to commit and close the canonical editor;
+    // clicking the canvas again would create a second Atome. Once chosen, the
+    // latched Text is shown by its palette slot, Create, which turns it off (R4).
+    if (await page.evaluate(() => window.__eveTextTool?.isActive?.() === true)) {
+        await clickCanvasTarget(page, await visibleMenuTool(page, projectId, 'create'));
+    }
     await waitFor(page, async () => {
         const textState = await import('/eVe/domains/rendering/project_scene_text_edit_state.js');
         const activeEdit = textState.getActiveProjectTextEdit();

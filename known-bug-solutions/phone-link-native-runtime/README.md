@@ -63,9 +63,12 @@ signed challenge. IndexedDB is a best-effort cache, not the native authority.
 Guest resumption consults the active guest registry first, while a new UUID is
 still forbidden from claiming an existing account.
 
-Cross-device links now have a distinct confirmation step. The opener sends only
-`phone-link-confirm { attemptId, token }`; the server hashes and verifies the
-one-use SMS secret, marks that attempt approved and notifies the WebSocket that
+Cross-device links now have a distinct confirmation step. As of 2026-10-15,
+opening a foreign link only presents the canonical Matrix pairing screen. The
+opener must transfer the eight-digit code displayed on the requesting device and
+send `phone-link-confirm { attemptId, token, pairingCode }`; the server verifies
+both proofs, with five failed guesses persisted across restart, then marks that
+attempt approved and notifies the WebSocket that
 previously subscribed with a signed `phone-link-resume`. The opener receives no
 account session. Only the originating device can sign the final resume challenge
 with the public key stored on that attempt, so the resulting session is bound to

@@ -84,9 +84,9 @@ test('SyncEngine authenticates, subscribes, projects winners and persists its cu
         lww_decisions: { left: { winner: false }, top: { winner: true } },
         projection: { atome_id: 'shape-a', properties: { left: 2, top: 4 } }
     });
-    assert.equal(env.dispatched.length, 1);
-    assert.equal(env.dispatched[0].type, 'squirrel:atome-updated');
-    assert.deepEqual(env.dispatched[0].detail.properties, { top: 4 });
+    const updates = env.dispatched.filter(event => event.type === 'squirrel:atome-updated');
+    assert.equal(updates.length, 1);
+    assert.deepEqual(updates[0].detail.properties, { top: 4 });
     assert.deepEqual(socket.sent.at(-1), { type: 'ack', stream: 'stream-a', sequence: 1 });
     assert.equal(engine.getState().cursors['stream-a'], 1);
 
@@ -106,7 +106,7 @@ test('SyncEngine authenticates, subscribes, projects winners and persists its cu
         type: 'event', event_id: 'event-1', stream: 'stream-a', sequence: 1,
         atome_id: 'shape-a', kind: 'set', patch: { props: { top: 4 } }
     });
-    assert.equal(env.dispatched.length, 2);
+    assert.equal(env.dispatched.filter(event => event.type.startsWith('squirrel:atome-')).length, 2);
 
     // The scope is written once per burst of messages, not once per message.
     engine.flushPersist();
@@ -264,4 +264,46 @@ test('SyncEngine never writes a scope it did not load under another account key'
     const stored = JSON.parse(env.localStorage.getItem('squirrel_sync_streams_v1'))[key];
     assert.deepEqual(new Set(stored), new Set(['stream-a', 'stream-b', 'stream-c', 'directory.public']));
     assert.equal(JSON.parse(env.localStorage.getItem('squirrel_sync_cursors_v1'))[key]['stream-a'], 7);
+});
+
+test('negotiated batch receipts settle once and include streams already caught up', async () => {
+    FakeSocket.instances.length = 0;
+    const env = createEnv();
+    const engine = new SyncEngine({ env, WebSocketClass: FakeSocket, token: () => 'signed-token' });
+    await engine.connect();
+    const socket = FakeSocket.instances.at(-1); socket.open();
+    socket.receive({ type: 'welcome', capabilities: ['subscribe-batch', 'subscribe-batch-settlement'] });
+    socket.receive({ type: 'registered', streams: Array.from({ length: 600 }, (_, i) => `stream-${i}`) });
+    const [first, second] = socket.sent.filter(message => message.type === 'subscribe');
+    assert.equal(engine.getState().pending_replay_count, 2);
+    socket.receive({ type: 'replay-complete', subscription_id: 'unrelated', streams: [] });
+    socket.receive({ type: 'replay-complete', streams: [] });
+    assert.equal(engine.getState().pending_replay_count, 2);
+    const receipt = { type: 'replay-complete', subscription_id: first.subscription_id,
+        streams: [], settled_streams: [{ stream: 'stream-0', cursor: 7 }] };
+    socket.receive(receipt); socket.receive(receipt);
+    assert.equal(engine.getState().pending_replay_count, 1);
+    assert.equal(engine.getState().cursors['stream-0'], 7);
+    socket.receive({ type: 'replay-complete', subscription_id: second.subscription_id, settled_streams: [], streams: [] });
+    assert.equal(engine.getState().pending_replay_count, 0);
+    engine.disconnect();
+});
+
+test('streams announced one by one are subscribed together in one batch', async () => {
+    FakeSocket.instances = [];
+    const env = createEnv();
+    const engine = new SyncEngine({ env, WebSocketClass: FakeSocket, token: () => 'signed-token' });
+    assert.equal(await engine.connect(), true);
+    const socket = FakeSocket.instances.at(-1);
+    socket.open();
+    socket.receive({ type: 'welcome', capabilities: ['subscribe-batch'] });
+    socket.receive({ type: 'registered', streams: [] });
+    const before = socket.sent.filter(message => message.type === 'subscribe').length;
+    for (const stream of ['s1', 's2', 's3', 's4']) socket.receive({ type: 'stream-available', stream });
+    assert.equal(socket.sent.filter(message => message.type === 'subscribe').length, before);
+    await new Promise(resolve => setTimeout(resolve, 80));
+    const subscribes = socket.sent.filter(message => message.type === 'subscribe').slice(before);
+    assert.equal(subscribes.length, 1);
+    assert.deepEqual(subscribes[0].streams.map(entry => entry.stream), ['s1', 's2', 's3', 's4']);
+    engine.disconnect();
 });

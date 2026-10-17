@@ -1,6 +1,6 @@
 import { test, expect } from 'vitest';
 import { createLocalContactsSource } from '../../atome/src/squirrel/contacts/local_source.js';
-import { createCanonicalImport } from '../../atome/src/squirrel/shared/canonical_import.js';
+import { createCanonicalImport, createImportSnapshot } from '../../atome/src/squirrel/shared/canonical_import.js';
 import { normalizeImportedEvent } from '../../atome/src/squirrel/calendar/import_source.js';
 
 function fixture() {
@@ -28,13 +28,13 @@ function fixture() {
 }
 const meta = { source_key: 'account/collection', cursor: 'token-1', complete: true };
 
-test('import survives a new source instance, preserves identities and never merges shared numbers', async () => {
+test('import survives a new source instance and preserves contacts with distinct phone identities', async () => {
     const f = fixture(), source = createLocalContactsSource(f);
-    await source.importContacts([{ id: 'a', name: 'Alex', phone: '0600' }, { id: 'b', name: 'Alex', phone: '0600' }], meta);
+    await source.importContacts([{ id: 'a', name: 'Alex', phone: '0600' }, { id: 'b', name: 'Alex', phone: '0800' }], meta);
     const first = source.listContactsSync().items;
     expect(first).toHaveLength(2);
     const count = f.writes.length;
-    await source.importContacts([{ id: 'a', name: 'Alex', phone: '0600' }, { id: 'b', name: 'Alex', phone: '0600' }], meta);
+    await source.importContacts([{ id: 'a', name: 'Alex', phone: '0600' }, { id: 'b', name: 'Alex', phone: '0800' }], meta);
     expect(f.writes).toHaveLength(count);
     await source.importContacts([{ id: 'a', name: 'Alex', phone: '0700' }], { ...meta, cursor: 'token-2' });
     const restarted = createLocalContactsSource(f);
@@ -126,4 +126,32 @@ test('delayed DAV observations cannot overwrite a newer accepted observation and
     const other=createLocalContactsSource(fixture());
     await other.importContacts([{id:'a',name:'New'}],meta);
     expect(other.listContactsSync().items[0].exchange_uid).toBe(source.listContactsSync().items[0].exchange_uid);
+});
+
+test('the pages of one import pass read each table once and see their own writes',async()=>{
+    const f=fixture(),store=createCanonicalImport({...f,type:'calendar_event',normalize:normalizeImportedEvent});
+    const reads=[];const list=f.api().listStateCurrent;f.api().listStateCurrent=(project,options)=>{reads.push(options.atomeType);return list(project,options);};
+    const snapshot=createImportSnapshot();
+    const event=(id,day)=>({id,title:id,start:`2026-10-0${day}T09:00:00Z`,end:`2026-10-0${day}T10:00:00Z`,timezone:'UTC',calendarId:'cal',sequence:1});
+    await store.collect([event('a',1)],{...meta,snapshot});
+    const firstPass=reads.length;
+    await store.collect([event('b',2),event('a',1)],{...meta,snapshot});
+    expect(reads.length).toBe(firstPass);
+    expect([...f.records.values()].filter(row=>row.type==='calendar_event').length).toBe(2);
+    await store.collect([event('a',1)],meta);
+    expect(reads.length).toBeGreaterThan(firstPass);
+});
+
+test('removals inside one import pass read the origins once and suppress each removed record',async()=>{
+    const f=fixture(),store=createCanonicalImport({...f,type:'contact',normalize:input=>({name:input.name})});
+    await store.collect(['a','b','c'].map(id=>({id,name:id})),{...meta});
+    const ids=[...f.records.values()].filter(row=>row.type==='contact').map(row=>row.atome_id);
+    const reads=[];const list=f.api().listStateCurrent;f.api().listStateCurrent=(project,options)=>{reads.push(options.atomeType);return list(project,options);};
+    const snapshot=createImportSnapshot();
+    for(const id of ids)await store.remove(id,{reason:'import_duplicate',snapshot});
+    expect(reads.filter(type=>type==='import_origin').length).toBe(1);
+    const origins=[...f.records.values()].filter(row=>row.type==='import_origin'&&row.properties.domain_type==='contact');
+    expect(origins.length).toBe(3);
+    expect(origins.every(row=>row.properties.suppressed===true&&row.properties.suppressed_reason==='import_duplicate')).toBe(true);
+    expect([...f.records.values()].filter(row=>row.type==='contact'&&!row.deleted_at).length).toBe(0);
 });

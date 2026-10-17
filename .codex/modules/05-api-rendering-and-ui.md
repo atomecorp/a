@@ -23,6 +23,18 @@ Two narrowly bounded exceptions exist:
 
 REST fallbacks, HTTP polling, duplicated or hybrid application transports outside these exceptions, and scattered communication implementations are forbidden. Native exceptions do not override the owning runtime's filesystem, security, or realtime constraints in module 06.
 
+## Mandatory zen interface contract
+
+Every interface must always remain zen: calm, visually quiet, uncluttered, and limited to the user's requested content and interactions. This is a mandatory acceptance criterion for every new or modified interface, panel, dialog, tool, template, and assembly, across all runtimes.
+
+- Never add unnecessary labels or repeat information already conveyed by the content or interaction.
+- Never add visible text unless the user explicitly requests it. Do not spontaneously add headings, captions, button labels, explanations, instructions, hints, placeholders, tooltips, onboarding copy, status prose, technical information, or decorative text. A request for a feature alone does not authorize this extra copy. Display explicitly requested textual content without surrounding unsolicited explanations.
+- Never add buttons or other controls beyond those needed for the requested interaction. Do not add convenience actions, informational badges, help sections, or debug indicators on your own initiative.
+- Compose the existing canonical controls and design tokens into the smallest coherent interface. Do not create a new control, local visual variant, or parallel implementation to achieve this restraint.
+- Preserve the existing accessibility contract, including necessary nonvisual accessible names. Accessibility metadata must not introduce unsolicited visible labels or text.
+
+Before accepting a UI change, inspect every visible text item and control against the user's request and remove unsolicited copy, redundant labels, and superfluous controls introduced by the change. Localization of text does not authorize displaying it. Do not treat an empty area as a reason to fill it with information.
+
 ## Canonical UI controls and tools
 
 Use Squirrel APIs and canonical Atome/Squirrel component systems for DOM creation, controls, and events. Direct DOM manipulation is forbidden unless explicitly required within an authorized canonical creation path. `document.createElement`, `innerHTML`, manual listeners/selectors, string-generated DOM trees, and unmanaged nodes must not become competing UI implementations. Approved projection/event-resolution paths remain constrained by module 01. Do not use browser system dialogs such as `confirm()` or `alert()`; product dialogs belong to the canonical webview UI. Platform file pickers and credential adapters remain bounded by the native exception above.

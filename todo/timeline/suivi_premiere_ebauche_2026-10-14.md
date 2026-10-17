@@ -1,5 +1,7 @@
 # Timeline — suivi de la première ébauche (14 oct. 2026)
 
+> 2026-10-16 documentary reconciliation: the initial 14 October “Reste à faire” section is historical. Its Cells/Scenes, basic comping/punch, native fades, loop and shared iOS engine creation items are superseded by the dated 15 October continuation below and current owners; do not reopen them as development tasks. Keep the later concrete remainder and platform acceptance evidence. The single active scope is ATM-2010 in `todo/execution_order.md`.
+
 Référence : `timeline_cellules_cahier_des_charges_v1.6.md` et les deux maquettes validées.
 
 ## Livré
@@ -44,3 +46,20 @@ Référence : `timeline_cellules_cahier_des_charges_v1.6.md` et les deux maquett
 - **Plugins (prévu, non réalisé)** : insertion par piste dans la chaîne Kira, latence déclarée compensée, réglages dans le modèle de la piste (§11.13).
 - **iOS** : pas encore de calage à l'échantillon près.
 - **Lecture en boucle du ruban** dans le moteur.
+
+## Suite du 15 oct. 2026 (todo/audio_to_finalize.md)
+
+- **Livré** : Scènes (bande de la règle), Cellules (vue seule ou côte à côte, Édition/Jeu, lasso, réglages en lot, MIDI, projection Scènes), transport des cellules à la trame (quantisation, passes, Follow Actions, arrêt exact, attaque/relâchement), enregistrement dans une cellule vide, comping (prises en boucle, choix de prise), punch in/out, outils de blocs (joindre, couper, rogner, boucle, étirer, fondus), fondus et enveloppes natives à l'échantillon, lecture en boucle du ruban, métronome natif, calibration de l'entrée, iOS sur le moteur natif partagé.
+- **Preuves** : sonde de synchro 13/13 (±1 échantillon, punch, prises en boucle, prise de cellule), Cellules 22/22, Scènes 14/14, outils de blocs 11/11 ; Node : cellules, prises, jonction, enregistrement de cellule.
+- **Reste** : gestes tactiles et latence sur appareils réels, Échantillons (reportés), interface de comping au-delà de « couper + choisir », règle d'ordre de la Liste (à valider), enregistrement MIDI sur bloc, plugins.
+
+## Recette « comme un utilisateur » (15 oct. 2026, soir)
+
+Souris et tactile réels, Playwright fenêtré, `PROBE_ISOLATED=1` : `temp/timeline/ux/timeline_user_acceptance.probe.mjs` **32/32**, synchro `timeline_sync_real_app.probe.mjs` **13/13** (seule).
+
+- **Corrigé** : un clip ne bougeait qu'après un rognage (clips bout à bout refusés en silence par le noyau) → il se pose sur la place libre dans le sens du geste ; les bords s'arrêtent aux voisins ; le début d'un clip bouclé ne l'écrase plus.
+- **Corrigé** : la lecture s'arrêtait au dernier clip (tête bloquée au-delà) → lecture ouverte sauf boucle ; Stop garde la position.
+- **Corrigé** : le défilement du bas (ligne du projet) pilotait la Liste → il pilote et montre la Timeline.
+- **Corrigé** : prise à la volée + région armée de même source → plus d'erreur « source occupée » ; saisie du nombre de prises (unité « × »).
+- **Design** : fond sombre de la vue (`timeline.surfaceFill`), Scènes vertes comme les maquettes.
+- **Non testé** : Tauri lancé, iOS/AUv3, vrai micro/interface (latence matérielle).

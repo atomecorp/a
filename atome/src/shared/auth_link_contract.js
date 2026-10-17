@@ -5,6 +5,9 @@ export const AUTH_LINK_TTL_MS = 5 * 60 * 1000;
 export const AUTH_ACCESS_TTL_SECONDS = 15 * 60;
 export const AUTH_SESSION_IDLE_MS = 30 * 24 * 60 * 60 * 1000;
 export const AUTH_SESSION_MAX_MS = 90 * 24 * 60 * 60 * 1000;
+// A shared device keeps no long session: each opening is approved again (V1 §6.4).
+export const AUTH_SHARED_SESSION_IDLE_MS = 2 * 60 * 60 * 1000;
+export const AUTH_SHARED_SESSION_MAX_MS = 12 * 60 * 60 * 1000;
 
 export async function authPasswordRequestDigest(password, currentPassword = '') {
     if (typeof password !== 'string' || typeof currentPassword !== 'string') throw new Error('auth_password_invalid');

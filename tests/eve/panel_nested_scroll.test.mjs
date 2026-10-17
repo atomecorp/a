@@ -92,7 +92,8 @@ test.each([['up', false], ['down', false], ['up', true], ['down', true]])('openi
         await vi.waitFor(() => expect(reveals.at(-1)?.nodeId).toBe('nested_section_header'));
         const after = locateBevyUiNode({ node: projected.at(-1).root, nodeId: 'eve_bevy_panel_nested_anchor_panel' }).box;
         expect(after.y + after.height).toBe(before.y + before.height);
-        expect(after.y + after.height).toBe(726);
+        // Above the 74 px menu band, by the panels' dock gap.
+        expect(after.y + after.height).toBe(800 - 74 - T.dockGapPx);
         await bevyPanelRuntimeState.mounted.get('nested_anchor').refreshPromise;
         expect(reveals.at(-1)).toMatchObject({ nodeId: 'nested_section_header', align: direction === 'up' ? 'end' : 'start' });
         reveals.length = 0;

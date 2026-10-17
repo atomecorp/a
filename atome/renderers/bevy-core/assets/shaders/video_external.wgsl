@@ -60,7 +60,10 @@ const FILTER_LUMA: vec3<f32> = vec3<f32>(0.2126, 0.7152, 0.0722);
 // sRGB->linear decode. base = (opacity, brightness, contrast, saturate);
 // filters = (grayscale, sepia, invert, hue-radians). Identity = (_,1,1,1)/(0,0,0,0).
 fn apply_color_filters(color_in: vec3<f32>, base: vec4<f32>, filters: vec4<f32>) -> vec3<f32> {
-    var c = color_in * base.y;                           // brightness
+    // External texture samples are not clamped: the browser YUV->RGB conversion
+    // yields out-of-gamut values (measured (-0.96, 0.37, -1.09) for a camera take
+    // displayed as (0,83,0)). CSS filters act on the clamped sRGB image.
+    var c = clamp(color_in, vec3<f32>(0.0), vec3<f32>(1.0)) * base.y; // brightness
     c = (c - vec3<f32>(0.5)) * base.z + vec3<f32>(0.5);  // contrast
     let h = filters.w;                                   // hue-rotate (W3C matrix)
     if (h != 0.0) {

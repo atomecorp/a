@@ -52,7 +52,7 @@ describe('device authentication keys', () => {
         expect(a.scope).toMatch(/^[a-f0-9]{64}$/);
         expect(b.scope).toBe(a.scope);
         expect(b.keyId).toBe(a.keyId);
-        expect(calls.filter(({ action }) => action === 'public')).toHaveLength(1);
+        expect(calls.filter(({ action }) => action === 'public')).toHaveLength(2);
         expect(await next.read('lookup-key')).toBeUndefined();
         await next.close();
     });
@@ -102,4 +102,17 @@ test('native clear failure retains both descriptors rather than falsely reportin
  const record={phone:'+33612345678',userId:'qa-A',session:{id:'qa-session',generation:3,keyId:'qa-device'}};
  const store=createAuthDeviceStore({indexedDB:new IDBFactory(),crypto:crypto.webcrypto,nativeSession:{read:async()=>({remoteSessionKnown:true,remoteSession:record,remotePrincipal:'qa-A',keyId:'qa-device'}),clear:async()=>{throw new Error('auth_proof_invalid');}}});
  await store.put('session',record);await expect(store.remove('session')).rejects.toThrow('auth_proof_invalid');expect(await store.read('session')).toEqual(record);await store.close();
+});
+
+test('native enrolled scope remains usable when the optional WebView database never opens', async () => {
+    const calls = [];
+    const store = createAuthDeviceStore({ indexedDB: { open: () => ({}) }, crypto: crypto.webcrypto,
+        nativeKey: async request => { calls.push(request); return request.action === 'public'
+            ? { x: Buffer.alloc(32, 1).toString('base64url'), y: Buffer.alloc(32, 2).toString('base64url') } : 'native-proof'; } });
+    const key = await store.forScope('persisted-enrollment');
+    const proof = await key.sign({ keyId: key.keyId, purpose: 'local-resume', reference: 'grant:4', challenge: 'nonce', nonce: 'nonce', issuedAt: 1 });
+    expect(proof.signature).toBe('native-proof');
+    expect(calls.map(call => [call.action, call.scope])).toEqual([
+        ['public', 'persisted-enrollment'], ['sign', 'persisted-enrollment']
+    ]);
 });

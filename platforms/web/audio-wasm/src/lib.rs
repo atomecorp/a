@@ -7,6 +7,7 @@ mod mix;
 mod scheduled_backend;
 
 use scheduled_backend::ScheduledContextBackend;
+use atome_mix_graph::voice::{ScheduledVoice, VoiceRequest, VoiceSound};
 use kira::sound::static_sound::{StaticSoundData, StaticSoundHandle, StaticSoundSettings};
 use kira::{AudioManager, AudioManagerSettings, Decibels, Frame, Panning, PlaybackRate, Tween};
 use std::collections::HashMap;
@@ -259,86 +260,19 @@ pub fn audio_render_clock() -> js_sys::Object {
     scheduled_backend::render_clock()
 }
 
-fn gain_to_decibels(gain: f64) -> Decibels {
-    let clamped = gain.clamp(0.000_001, 16.0);
-    Decibels((20.0 * clamped.log10()) as f32)
-}
-
-fn crop_duration_within_available_audio(
-    requested_duration: Option<f64>,
-    available_duration: f64,
-) -> Option<f64> {
-    requested_duration
-        .filter(|value| value.is_finite() && *value > 0.0)
-        .map(|value| value.max(0.001))
-        .filter(|value| *value < available_duration)
-}
-
-// The sound one voice plays: the clip's window from `start_seconds`, cropped,
-// looped, with its gain, pan and rate.
-#[allow(clippy::too_many_arguments)]
-fn build_voice_sound(
-    engine: &WasmAudioEngine,
-    asset_id: &str,
-    start_seconds: f64,
-    duration_seconds: Option<f64>,
-    gain: f64,
-    pan: f64,
-    rate: f64,
-    loop_start_seconds: Option<f64>,
-    loop_end_seconds: Option<f64>,
-) -> Result<StaticSoundData, JsValue> {
-    let sound_data_template = engine
-        .clips
-        .get(asset_id)
-        .map(|clip| clip.data.clone())
+fn voice_sound(engine: &WasmAudioEngine, asset_id: &str, request: &VoiceRequest) -> Result<VoiceSound, JsValue> {
+    let data = engine.clips.get(asset_id).map(|clip| clip.data.clone())
         .ok_or_else(|| JsValue::from_str(&format!("Clip '{asset_id}' not found")))?;
-    let start = start_seconds.max(0.0);
-    let source_duration = sound_data_template.duration().as_secs_f64();
-    if start >= source_duration {
-        return Err(JsValue::from_str(&format!(
-            "Start position {start:.6} exceeds clip duration {source_duration:.6}"
-        )));
-    }
-    let available_duration = source_duration - start;
-    let requested_rate = rate.max(0.0001);
-    let crop_duration = crop_duration_within_available_audio(duration_seconds, available_duration);
-    let loop_start = loop_start_seconds.filter(|value| value.is_finite() && *value >= 0.0);
-    let loop_end = loop_end_seconds.filter(|value| value.is_finite() && *value > 0.0);
-
-    let mut sound_data = sound_data_template;
-    if let Some(duration) = crop_duration {
-        let slice_end = start + duration;
-        sound_data = sound_data.slice(start..slice_end);
-    } else if start > 0.0 {
-        sound_data = sound_data.start_position(start);
-    }
-
-    if let (Some(loop_start), Some(loop_end)) = (loop_start, loop_end) {
-        if loop_end > loop_start {
-            if crop_duration.is_some() {
-                let relative_loop_start = (loop_start - start).max(0.0);
-                let relative_loop_end = (loop_end - start).max(relative_loop_start + 0.0001);
-                sound_data = sound_data.loop_region(relative_loop_start..relative_loop_end);
-            } else {
-                sound_data = sound_data.loop_region(loop_start..loop_end);
-            }
-        }
-    }
-
-    Ok(sound_data
-        .volume(gain_to_decibels(gain))
-        .panning(Panning(pan.clamp(-1.0, 1.0) as f32))
-        .playback_rate(PlaybackRate(requested_rate)))
+    atome_mix_graph::voice::build_voice_sound(data, request).map_err(|error| JsValue::from_str(&format!("Clip '{asset_id}': {error}")))
 }
 
-fn start_voice(engine: &mut WasmAudioEngine, voice_id: &str, sound_data: StaticSoundData) -> Result<(), JsValue> {
+fn start_voice(engine: &mut WasmAudioEngine, voice_id: &str, sound: VoiceSound) -> Result<(), JsValue> {
     if let Some(mut existing_voice) = engine.voices.remove(voice_id) {
         existing_voice.handle.stop(Tween::default());
     }
     ensure_audio_manager(engine)?;
     let manager = engine.manager.as_mut().ok_or_else(|| JsValue::from_str("Audio manager not initialized"))?;
-    let handle = engine.mix.play(manager, voice_id, sound_data).map_err(|e| JsValue::from_str(&format!("Play error: {e}")))?;
+    let handle = engine.mix.play(manager, voice_id, sound).map_err(|e| JsValue::from_str(&format!("Play error: {e}")))?;
     engine.voices.insert(voice_id.to_string(), VoiceEntry { handle });
     Ok(())
 }
@@ -357,48 +291,52 @@ pub fn audio_play_instance(
     loop_end_seconds: Option<f64>,
     strip_id: Option<String>,
 ) -> Result<f64, JsValue> {
+    let request = VoiceRequest { start_seconds, duration_seconds, gain, pan, rate, loop_start_seconds, loop_end_seconds, envelope: None };
     let mut guard = ENGINE.lock().map_err(|e| JsValue::from_str(&format!("Lock error: {e}")))?;
     let engine = guard.as_mut().ok_or_else(|| JsValue::from_str("Audio engine not initialized"))?;
     engine.mix.route_voice(voice_id, strip_id.as_deref());
-    let sound_data = build_voice_sound(
-        engine, asset_id, start_seconds, duration_seconds, gain, pan, rate, loop_start_seconds, loop_end_seconds,
-    )?;
+    let sound = voice_sound(engine, asset_id, &request)?;
     scheduled_backend::cancel_scheduled(voice_id);
-    start_voice(engine, voice_id, sound_data)?;
+    start_voice(engine, voice_id, sound)?;
     // The rendered frame this voice starts on: every voice started before the
     // next render pump shares it.
     Ok(scheduled_backend::next_render_frame())
 }
 
-/// Starts a voice exactly on rendered frame `start_render_frame`: the render
-/// loop stops there, starts it, and renders on. A frame already rendered
-/// starts it on the next block instead; the returned frame says which.
-#[allow(clippy::too_many_arguments)]
+/// Starts each voice exactly on its rendered frame (`ScheduledVoice` list, as
+/// the native `audio_schedule_instances`): the render loop stops there, starts
+/// it, and renders on. A frame already rendered starts it on the next block
+/// instead; the returned frames say which.
 #[wasm_bindgen]
-pub fn audio_schedule_instance(
-    asset_id: &str,
-    voice_id: &str,
-    start_seconds: f64,
-    duration_seconds: Option<f64>,
-    gain: f64,
-    pan: f64,
-    rate: f64,
-    start_render_frame: f64,
-    strip_id: Option<String>,
-) -> Result<f64, JsValue> {
-    let mut guard = ENGINE.lock().map_err(|e| JsValue::from_str(&format!("Lock error: {e}")))?;
-    let engine = guard.as_mut().ok_or_else(|| JsValue::from_str("Audio engine not initialized"))?;
-    engine.mix.route_voice(voice_id, strip_id.as_deref());
-    let sound_data = build_voice_sound(engine, asset_id, start_seconds, duration_seconds, gain, pan, rate, None, None)?;
-    drop(guard);
-    Ok(scheduled_backend::schedule(voice_id, sound_data, start_render_frame.max(0.0) as u64) as f64)
+pub fn audio_schedule_voices(voices: JsValue) -> Result<Vec<f64>, JsValue> {
+    let voices: Vec<ScheduledVoice> = serde_wasm_bindgen::from_value(voices)
+        .map_err(|error| JsValue::from_str(&format!("Invalid scheduled voices: {error}")))?;
+    let mut sounds = Vec::with_capacity(voices.len());
+    {
+        let mut guard = ENGINE.lock().map_err(|e| JsValue::from_str(&format!("Lock error: {e}")))?;
+        let engine = guard.as_mut().ok_or_else(|| JsValue::from_str("Audio engine not initialized"))?;
+        for voice in &voices {
+            engine.mix.route_voice(&voice.voice_id, voice.strip_id.as_deref());
+            sounds.push(voice_sound(engine, &voice.asset_id, &voice.voice)?.controlled(&voice.voice_id));
+        }
+    }
+    Ok(voices.iter().zip(sounds)
+        .map(|(voice, sound)| scheduled_backend::schedule(&voice.voice_id, sound, voice.start_render_frame) as f64)
+        .collect())
+}
+
+/// A late end for a scheduled or sounding voice: `end_frame` frames after its
+/// first one, fading over `release_frames`. Returns whether the voice is known.
+#[wasm_bindgen]
+pub fn audio_set_voice_end(voice_id: &str, end_frame: f64, release_frames: f64) -> bool {
+    atome_mix_graph::voice_control::set_end(voice_id, end_frame.max(0.0) as u64, release_frames.max(0.0) as u64)
 }
 
 // Called by the render loop at the exact frame a scheduled voice is due.
-fn start_due_voice(voice_id: &str, sound_data: StaticSoundData) {
+fn start_due_voice(voice_id: &str, sound: VoiceSound) {
     if let Ok(mut guard) = ENGINE.lock() {
         if let Some(engine) = guard.as_mut() {
-            let _ = start_voice(engine, voice_id, sound_data);
+            let _ = start_voice(engine, voice_id, sound);
         }
     }
 }
@@ -523,38 +461,4 @@ pub fn audio_shutdown() -> Result<(), JsValue> {
         .map_err(|e| JsValue::from_str(&format!("Lock error: {e}")))?;
     *guard = None;
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::crop_duration_within_available_audio;
-
-    #[test]
-    fn container_duration_cannot_extend_decoded_audio() {
-        assert_eq!(
-            crop_duration_within_available_audio(Some(3.626), 3.562_667),
-            None
-        );
-        assert_eq!(
-            crop_duration_within_available_audio(Some(23.953_144), 23.936),
-            None
-        );
-    }
-
-    #[test]
-    fn explicit_shorter_crop_is_preserved() {
-        assert_eq!(
-            crop_duration_within_available_audio(Some(1.25), 3.562_667),
-            Some(1.25)
-        );
-    }
-
-    #[test]
-    fn natural_duration_requires_no_slice() {
-        assert_eq!(crop_duration_within_available_audio(None, 3.562_667), None);
-        assert_eq!(
-            crop_duration_within_available_audio(Some(3.562_667), 3.562_667),
-            None
-        );
-    }
 }

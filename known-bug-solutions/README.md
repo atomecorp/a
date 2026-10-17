@@ -10,6 +10,27 @@ the established solution before attempting a new implementation.
 
 | Symptom | Folder |
 | --- | --- |
+| Tauri: project opening 10–25 s; return to the home stuck grey in `transition` | [home-return-stuck-in-transition](home-return-stuck-in-transition/README.md) |
+| Home/projects repeatedly reload after restart or suspension; interrupted iOS reconstruction restarts at zero | [durable-startup-sync](durable-startup-sync/README.md) |
+| Home opens another Dashboard than chosen; false « liaison avec le serveur a échoué »; lift on a channel does nothing; TV sound without picture | [home-wrong-dashboard-and-false-link-errors](home-wrong-dashboard-and-false-link-errors/README.md) |
+| Input calibration reports no impulse on a high-latency output | [calibration-impulse-unheard-high-latency](calibration-impulse-unheard-high-latency/README.md) |
+| Shrinking a Timeline clip by its end loops it instead of cropping | [timeline-crop-becomes-loop](timeline-crop-becomes-loop/README.md) |
+| A Timeline clip moves only after it has been cropped (clips back to back) | [timeline-clip-moves-only-after-crop](timeline-clip-moves-only-after-crop/README.md) |
+| Timeline Play stops at the last clip; Stop rewinds; the bottom scrub does nothing | [timeline-transport-stops-at-content-end](timeline-transport-stops-at-content-end/README.md) |
+| Mix/Timeline of a selected Molecule shows the project | [molecule-activity-shows-project](molecule-activity-shows-project/README.md) |
+| Ribbon shows only the Atome after a sign-in that settles before the workspace | [ribbon-atom-only-after-sign-in](ribbon-atom-only-after-sign-in/README.md) |
+| Web import creates nothing on a first visit, or imported sound is silent in a Molecule | [web-import-first-visit-and-duration](web-import-first-visit-and-duration/README.md) |
+| Natural: Molecule Play fails, Stop swaps its rail, a video plays the List way | [natural-molecule-play-and-rail](natural-molecule-play-and-rail/README.md) |
+| The contextual rail re-renders on every transport tick while playing | [rail-rerender-each-transport-tick](rail-rerender-each-transport-tick/README.md) |
+| Include wraps the target Molecule instead of adding to it | [include-wraps-target-molecule](include-wraps-target-molecule/README.md) |
+| Matrix drag throws `px is not defined` | [matrix-drag-media-card-px](matrix-drag-media-card-px/README.md) |
+| Web render clock becomes null seconds after boot; takes lose sample accuracy | [kira-backend-double-evaluation](kira-backend-double-evaluation/README.md) |
+| Web takes shorter than recorded, later material too early | [recorder-inactive-input-drops-time](recorder-inactive-input-drops-time/README.md) |
+| Video picture runs ahead of its sound during playback | [video-picture-ahead-of-sound](video-picture-ahead-of-sound/README.md) |
+| Mixer strips cannot be scrolled by a finger drag | [mixer-strips-never-drag-scroll](mixer-strips-never-drag-scroll/README.md) |
+| A successful grouped preference/grant write still reads as missing and empties the editor | [batch-write-retains-missing-state](batch-write-retains-missing-state/README.md) |
+| Sending to a contact from the Dashboard fails with `project_work_mode_editing_blocked` | [communication-blocked-by-consultation](communication-blocked-by-consultation/README.md) |
+| iOS: nothing loads after returning from background (« certaines données n'ont pas pu être chargées ») | [ios-local-server-dies-after-background](ios-local-server-dies-after-background/README.md) |
 | Dashboard wallpaper returns to a default or previous choice; project default greys diverge | [wallpaper-selection-races](wallpaper-selection-races/README.md) |
 | Nested User accordions shift or lose their open anchor; List Play covers the hierarchy cap | [nested-panel-anchor-and-row-seams](nested-panel-anchor-and-row-seams/README.md) |
 | Native builds repeatedly fill the disk with Rust objects and per-run Xcode caches | [build-cache-disk-exhaustion](build-cache-disk-exhaustion/README.md) |
@@ -83,3 +104,9 @@ the established solution before attempting a new implementation.
 - [End-anchored List loses visible rows after scrub](project-list-virtual-window/README.md): retain the shared virtualizer window when consuming the end anchor.
 
 - [iOS restore identity, durable retry and Dashboard error recovery](ios-sync-restoration/README.md): actual-owner regressions; full physical-account recovery remains a separate acceptance check.
+
+- [Calls straight to voicemail, or connected without media](calls-silent-or-straight-to-voicemail/README.md): presence renewal; mediasoup must announce a public address.
+
+- [iOS takes time out: wake listener holds the microphone](ios-takes-blocked-by-wake-listener/README.md): suspend `AtomeVoice.wake` for the take.
+
+- [Communication tool unfolds again after being folded](comm-tool-reopens-after-fold/README.md): acknowledged notifications no longer unfold it; only new ones do.

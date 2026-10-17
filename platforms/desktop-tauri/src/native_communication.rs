@@ -3,8 +3,10 @@ use tauri::{AppHandle, Runtime, WebviewWindow};
 
 #[tauri::command]
 pub async fn notifications_invoke<R: Runtime>(app: AppHandle<R>, window: WebviewWindow<R>, command: String, payload: Value) -> Result<Value,String> {
-    if window.label() != "main" || !matches!(window.url().ok().as_ref().map(|url| (url.scheme(),url.host_str(),url.port())),
-        Some(("http",Some("127.0.0.1"|"localhost"),Some(3000)))) { return Err("notifications_window_forbidden".into()); }
+    if window.label() != "main" || !window.url().is_ok_and(|url| url.scheme() == "http"
+        && matches!(url.host_str(), Some("127.0.0.1"|"localhost")) && url.port() == Some(3000)) {
+        return Err("notifications_window_forbidden".into());
+    }
     if !cfg!(target_os = "android") { return Err("notifications_host_unsupported".into()); }
     if !matches!(command.as_str(),"notifications_tokens"|"notifications_take"|"notifications_ack"|"notifications_enable"
         |"notifications_call_result"|"notifications_call_end"|"notifications_logout") { return Err("notifications_command_invalid".into()); }

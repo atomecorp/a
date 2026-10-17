@@ -1,3 +1,4 @@
+import { socketHealthMixin } from './websocket_health.js';
 // Extracted from adole.js: TauriWebSocket transport class + per-backend WS singletons.
 import { messageHandlerMixin } from './adole_websocket_message.js';
 import {
@@ -14,6 +15,16 @@ import {
 import {
     checkConnection
 } from './adole_connection.js';
+
+// A key-bound session token (`cnf.pop`) is accepted on a connection only after
+// that connection signed a fresh challenge with the session key. The account
+// owner registers the prover; the transport runs it once per opened socket.
+let connectionProver = null;
+export const setConnectionProver = (prover) => { connectionProver = typeof prover === 'function' ? prover : null; };
+const PROOF_ACTIONS = new Set(['connection-challenge', 'connection-proof']);
+const tokenClaims = (token) => {
+    try { return JSON.parse(atob(String(token).split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); } catch (_) { return null; }
+};
 
 class TauriWebSocket {
     constructor(url, backend = 'tauri') {
@@ -34,6 +45,16 @@ class TauriWebSocket {
         // compare against this instead of guessing from `isConnected`, which is
         // also true for the socket they already announced on.
         this.connectionGeneration = 0;
+        this.reconnectAttempt = 0;
+        this.heartbeat = null;
+        this.env = globalThis.window;
+        // Returning to the foreground (or the iOS local server restarting) is
+        // when a socket may have died silently; one deduplicated check covers it.
+        this.onForeground = () => {
+            if (this.env?.document?.visibilityState !== 'hidden') void this.verifyConnection();
+        };
+        this.env?.addEventListener?.('local-server-ready', this.onForeground);
+        this.env?.document?.addEventListener?.('visibilitychange', this.onForeground);
     }
 
     async connect() {
@@ -74,11 +95,19 @@ class TauriWebSocket {
                 socket.onopen = () => {
                     if (this.disposed || this.socket !== socket) return;
                     this.clearConnectionTimer();
+                    clearTimeout(this.reconnectTimer);
+                    this.reconnectTimer = null;
                     this.isConnecting = false;
                     this.isConnected = true;
                     this.connectionGeneration += 1;
                     this.startPing();
+                    if (this.backend === 'fastify') void this.announcePresence(socket);
                     globalThis.window?.dispatchEvent(new CustomEvent('squirrel:auth-transport-open', { detail: { backend: this.backend } }));
+                    // Only a REconnection announces itself: reads that failed while the
+                    // link was down retry; the first open has nothing to recover.
+                    if (this.backend === 'tauri' && this.connectionGeneration > 1) {
+                        this.env?.dispatchEvent(new CustomEvent('squirrel:local-connection-ready'));
+                    }
                     resolve(true);
                 };
 
@@ -96,6 +125,7 @@ class TauriWebSocket {
 
                 socket.onmessage = (event) => {
                     if (this.disposed || this.socket !== socket) return;
+                    this.noteInbound();
                     this.handleMessage(event.data);
                 };
 
@@ -120,6 +150,7 @@ class TauriWebSocket {
         this.isConnected = false;
         this.isConnecting = false;
         this.stopPing();
+        this.finishHeartbeat(false);
 
         for (const pending of this.pendingRequests.values()) {
             clearTimeout(pending.timeout);
@@ -131,7 +162,7 @@ class TauriWebSocket {
             this.reconnectTimer = setTimeout(() => {
                 this.reconnectTimer = null;
                 this.silentConnect();
-            }, 5000);
+            }, Math.min(30000, 1000 * (2 ** this.reconnectAttempt++)));
         }
     }
 
@@ -141,11 +172,39 @@ class TauriWebSocket {
         await this.connect();
     }
 
+    // One proof per opened socket and key; a failure leaves the next request to try again.
+    ensureConnectionProof(token) {
+        const kid = tokenClaims(token)?.cnf?.pop === true ? tokenClaims(token).cnf.kid : null;
+        if (!kid || this.backend !== 'fastify') return Promise.resolve();
+        const mark = `${this.connectionGeneration}:${kid}`;
+        if (this.provenConnection === mark) return Promise.resolve();
+        if (this.connectionProof?.mark === mark) return this.connectionProof.task;
+        if (!connectionProver) return Promise.reject(new Error('auth_connection_proof_unavailable'));
+        const task = connectionProver(token, (message) => this.send(message)).then(() => {
+            if (this.connectionGeneration === Number(mark.split(':')[0])) this.provenConnection = mark;
+        }).finally(() => { if (this.connectionProof?.task === task) this.connectionProof = null; });
+        this.connectionProof = { mark, task };
+        return task;
+    }
+
+    // A reopened socket belongs to nobody until it carries the session token: until then
+    // the server counts this device as offline and a call to it goes straight to voicemail.
+    async announcePresence(socket = this.socket) {
+        try {
+            const { FastifyAdapter } = await import('./adole.js');
+            const token = FastifyAdapter.getToken?.();
+            if (!token || this.socket !== socket || socket.readyState !== WebSocket.OPEN) return;
+            await this.ensureConnectionProof(token);
+            if (this.socket !== socket || socket.readyState !== WebSocket.OPEN) return;
+            socket.send(JSON.stringify({ type: 'auth', action: 'me', token, requestId: `presence_${Date.now()}` }));
+        } catch (_) { /* presence is best effort; the next request attaches anyway */ }
+    }
+
     startPing() {
         this.stopPing();
         this.pingTimer = setInterval(() => {
             if (this.isConnected && this.socket?.readyState === WebSocket.OPEN) {
-                this.socket.send(JSON.stringify({ type: 'ping' }));
+                void this.verifyConnection();
             }
         }, 30000);
     }
@@ -163,9 +222,17 @@ class TauriWebSocket {
         this.connectionTimer = null;
     }
 
+    onHealthTimeout(socket) {
+        this.handleDisconnect({ socket });
+        this.socket = null;
+        try { socket.close(); } catch (_) { }
+    }
+
     dispose() {
         if (this.disposed) return;
         this.disposed = true;
+        this.env?.removeEventListener?.('local-server-ready', this.onForeground);
+        this.env?.document?.removeEventListener?.('visibilitychange', this.onForeground);
         if (this.reconnectTimer) {
             clearTimeout(this.reconnectTimer);
             this.reconnectTimer = null;
@@ -201,6 +268,11 @@ class TauriWebSocket {
             if (this.isConnected) this.handleDisconnect();
             return { ok: false, success: false, error: 'Server unreachable', offline: true, status: 0 };
         }
+        if (message.token && !(message.type === 'auth' && PROOF_ACTIONS.has(message.action))) {
+            try { await this.ensureConnectionProof(message.token); } catch (error) {
+                return { ok: false, success: false, error: error.message || 'auth_connection_proof_required', status: 0 };
+            }
+        }
 
         const requestId = message.requestId || message.request_id || `ws_${++this.requestCounter}_${Date.now()}`;
         message.requestId = requestId;
@@ -212,6 +284,7 @@ class TauriWebSocket {
         const timeout = setTimeout(() => {
             this.pendingRequests.delete(requestId);
             resolve({ ok: false, success: false, error: 'Request timeout', status: 0 });
+            void this.verifyConnection();
         }, Math.max(1, Math.min(Number(timeoutMs) || 10000, 180000)));
         const settle = resolve;
         const cancel = () => {
@@ -236,6 +309,11 @@ class TauriWebSocket {
         if (!connected || this.socket?.readyState !== WebSocket.OPEN) {
             return { ok: false, success: false, error: 'Server unreachable', offline: true, status: 0 };
         }
+        if (message.token) {
+            try { await this.ensureConnectionProof(message.token); } catch (error) {
+                return { ok: false, success: false, error: error.message || 'auth_connection_proof_required', status: 0 };
+            }
+        }
 
         try {
             this.socket.send(JSON.stringify(message));
@@ -251,7 +329,7 @@ class TauriWebSocket {
     }
 }
 
-Object.assign(TauriWebSocket.prototype, messageHandlerMixin);
+Object.assign(TauriWebSocket.prototype, messageHandlerMixin, socketHealthMixin);
 
 // Singleton WebSocket instances
 let _tauriWs = null;

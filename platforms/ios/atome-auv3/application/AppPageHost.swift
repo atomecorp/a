@@ -71,6 +71,8 @@ final class AppPageHost {
                 AppNativeHealthController.shared.handle(command: command, payload: payload, completion: completion)
             } else if AppNativeGpsController.canHandle(command: command) {
                 AppNativeGpsController.shared.handle(command: command, payload: payload, completion: completion)
+            } else if AppNativeAppleMusicController.canHandle(command) {
+                AppNativeAppleMusicController.handle(payload, completion: completion)
             } else if AppNativeClipboardController.canHandle(command: command) {
                 AppNativeClipboardController.shared.handle(command: command, payload: payload, completion: completion)
             } else if AppNativeBevyRendererController.canHandle(command: command) {

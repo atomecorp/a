@@ -5,6 +5,7 @@ import { guardDirectMessage } from './communication_delivery.js';
 import { persistCommunicationMessage, readConversation, readPersistedCommunicationMessage } from './communication_messages.js';
 import { pushNotificationToUserStack } from './notificationStack.js';
 import { contactBookPhone } from '../atome/src/shared/contact_book_hash.js';
+import { authorizeCommunicationPriority } from './communication_priority.js';
 
 const deliveriesInFlight = new Map();
 const acquireDelivery = async (owner, messageId) => {
@@ -46,12 +47,16 @@ export async function handleWsCommunication({ data, connection, safeSend, relati
         if (!sender || !target) throw new Error('contact_required');
         const targetId = String(target.user_id);
         if (!rateAllowed(userId)) throw new Error('direct_message_rate_limited');
-        const guarded = guardDirectMessage(data.message, { userId, username: sender.username });
+        const guarded = guardDirectMessage(data.message, { userId, username: sender.username, phone: sender.phone });
         if (!guarded.ok) throw new Error(guarded.error);
         const verdict = await relations.canCommunicate(userId, targetId);
         if (!verdict.ok && verdict.silent) { reply({ success: true, delivered: false, queued: true }); return; }
         if (!verdict.ok) throw new Error(verdict.error);
         const params = guarded.params;
+        params.priority = await authorizeCommunicationPriority({ vaultRouter: connection._wsApiVaultRouter,
+            recipientId: targetId, sender: { userId, phone: sender.phone }, priority: params.priority });
+        params.action = { kind: 'conversation', contactId: userId, messageId: params.id };
+        const deliveryText = JSON.stringify({ command: 'eve-comm-share', params });
         if (guarded.kind === 'share-request') {
             const shared = await db.query('all', `SELECT share_id, atome_id FROM sync_share_requests
                 WHERE owner_id = ? AND principal_id = ? AND status IN ('pending', 'accepted', 'active')
@@ -66,29 +71,32 @@ export async function handleWsCommunication({ data, connection, safeSend, relati
         releaseDelivery = await acquireDelivery(userId, params.id);
         const prior = await readPersistedCommunicationMessage(connection._wsApiVaultRouter, userId, params.id);
         if (prior) {
-            if (prior.to_user_id !== targetId || prior.message !== (params.message || params.text || '') || JSON.stringify(prior.atome_ids) !== JSON.stringify(params.atomeIds || [])) throw new Error('direct_message_id_conflict');
+            if (prior.to_user_id !== targetId || prior.message !== (params.message || params.text || '') || (prior.priority || 'normal') !== params.priority
+                || JSON.stringify(prior.atome_ids) !== JSON.stringify(params.atomeIds || [])) throw new Error('direct_message_id_conflict');
             reply({ success: true, duplicate: true, message_id: params.id, receiver_id: targetId });
             return;
         }
         const timestamp = new Date().toISOString();
-        let properties = { message_id: params.id, from_id: userId, from_name: sender.username,
+        let properties = { message_id: params.id, from_id: userId, from_name: sender.username, from_phone: sender.phone || null,
             to_user_id: targetId, timestamp, subject: params.subject || '', message: params.message || params.text || '',
             atome_ids: Array.isArray(params.atomeIds) ? params.atomeIds : [], kind: guarded.kind,
             request_atome_id: params.requestAtomeId || null, request_id: params.requestId || null,
-            mode: params.shareMode || null, share_type: params.shareType || null, unread: true, box: 'inbox' };
+            mode: params.shareMode || null, share_type: params.shareType || null, unread: true, box: 'inbox',
+            priority: params.priority, action: params.action };
         // Received correspondence is committed first. Stable event identities
         // make a retry after a partial delivery harmless.
         const received = await readPersistedCommunicationMessage(connection._wsApiVaultRouter, targetId, params.id);
         if (received) {
-            if (received.from_id !== userId || received.message !== properties.message || JSON.stringify(received.atome_ids) !== JSON.stringify(properties.atome_ids)) throw new Error('direct_message_id_conflict');
+            if (received.from_id !== userId || received.message !== properties.message || (received.priority || 'normal') !== params.priority
+                || JSON.stringify(received.atome_ids) !== JSON.stringify(properties.atome_ids)) throw new Error('direct_message_id_conflict');
             properties = received;
         } else await persistCommunicationMessage(connection._wsApiVaultRouter, targetId, properties);
         const stacked = await pushNotificationToUserStack({ userId: targetId, authorId: userId, deferPush: true,
             notification: { ...properties, id: params.id } });
         if (!stacked.ok) throw new Error(stacked.error);
         await persistCommunicationMessage(connection._wsApiVaultRouter, userId, { ...properties, unread: false, box: 'sent' });
-        const payload = { type: 'console-message', message: guarded.text,
-            from: { userId, username: sender.username }, to: { userId: targetId }, timestamp };
+        const payload = { type: 'console-message', message: deliveryText,
+            from: { userId, username: sender.username, phone: sender.phone || null }, to: { userId: targetId }, timestamp };
         const delivery = deliver(targetId, payload, { scope: 'ws/api', op: 'direct-message', targetUserId: targetId });
         const queueSize = delivery.delivered ? 0 : enqueue(targetId, payload);
         reply({ success: true, ...delivery, queued: !delivery.delivered, queueSize, message_id: params.id,

@@ -17,7 +17,7 @@ case "$UNAME_VALUE" in
   Darwin*)
     for ARG in "$@"; do
       case "$ARG" in
-        --help|-h|--status|--stop|--logs)
+        --help|-h|--status|--stop|--logs|--dry-run|--doctor)
           RUN_ENTRYPOINT_OVERRIDE="./run.sh" exec "$ROOT_DIR/scripts/setup/run_unix.sh" "$@"
           ;;
       esac

@@ -7,9 +7,10 @@ export const audio_load_clip_from_bytes: (a: number, b: number, c: number, d: nu
 export const audio_play: (a: number, b: number) => [number, number, number];
 export const audio_play_instance: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number) => [number, number, number];
 export const audio_render_clock: () => any;
-export const audio_schedule_instance: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number) => [number, number, number];
+export const audio_schedule_voices: (a: any) => [number, number, number, number];
 export const audio_set_pan: (a: number, b: number, c: number) => [number, number];
 export const audio_set_playback_rate: (a: number, b: number, c: number) => [number, number];
+export const audio_set_voice_end: (a: number, b: number, c: number, d: number) => number;
 export const audio_set_volume: (a: number, b: number, c: number) => [number, number];
 export const audio_shared_context: () => [number, number, number];
 export const audio_shutdown: () => [number, number];
@@ -27,5 +28,6 @@ export const __externref_table_alloc: () => number;
 export const __wbindgen_export_4: WebAssembly.Table;
 export const __wbindgen_export_5: WebAssembly.Table;
 export const __externref_table_dealloc: (a: number) => void;
+export const __wbindgen_free: (a: number, b: number, c: number) => void;
 export const _dyn_core__ops__function__FnMut_____Output___R_as_wasm_bindgen__closure__WasmClosure___describe__invoke__hcf52cdcb78971e82: (a: number, b: number) => void;
 export const __wbindgen_start: () => void;

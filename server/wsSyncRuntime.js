@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { wsSendJson } from './wsSend.js';
 
-const CONTROL_TYPES = new Set(['auth', 'register', 'subscribe', 'unsubscribe', 'ack', 'ping']);
+const CONTROL_TYPES = new Set(['auth', 'auth-challenge', 'register', 'subscribe', 'unsubscribe', 'ack', 'ping']);
 const SUBSCRIBE_BATCH_LIMIT = 500;
 const DIRECTORY_STREAM = 'directory.public';
 
@@ -33,6 +33,7 @@ export class WsSyncRuntime {
     constructor(options = {}) {
         this.authenticateRequest = options.authenticateRequest;
         this.authenticateMessage = options.authenticateMessage;
+        this.issueChallenge = options.issueChallenge;
         this.validatePrincipal = options.validatePrincipal;
         this.isProvisioned = options.isProvisioned;
         this.getVersion = options.getVersion || (async () => ({}));
@@ -97,7 +98,7 @@ export class WsSyncRuntime {
             connection_id: record.connectionId,
             server: 'fastify',
             version: version?.version || null,
-            capabilities: ['register', 'subscribe', 'subscribe-batch', 'unsubscribe', 'ack', 'ping', 'replay'],
+            capabilities: ['register', 'subscribe', 'subscribe-batch', 'subscribe-batch-settlement', 'unsubscribe', 'ack', 'ping', 'replay'],
             timestamp: new Date().toISOString()
         });
         return true;
@@ -163,6 +164,12 @@ export class WsSyncRuntime {
             return;
         }
         if (!record.authenticated) {
+            // A key-bound token first asks for the challenge its key signs.
+            if (type === 'auth-challenge' && typeof this.issueChallenge === 'function') {
+                try { this.safeSend(record.connection, { type: 'auth-challenge', challenge: await this.issueChallenge(record.connection, message) }); }
+                catch (_) { this.close(record, 'authentication_invalid'); }
+                return;
+            }
             if (type !== 'auth') {
                 this.close(record, 'authentication_required');
                 return;
@@ -220,7 +227,7 @@ export class WsSyncRuntime {
 
     async subscribe(record, message) {
         if (Array.isArray(message.streams)) {
-            await this.subscribeBatch(record, message.streams);
+            await this.subscribeBatch(record, message.streams, message.subscription_id);
             return;
         }
         const stream = String(message.stream || message.stream_id || '').trim();
@@ -247,7 +254,11 @@ export class WsSyncRuntime {
     // A reconnection subscribes every stream it holds, thousands of them: one message carries
     // up to SUBSCRIBE_BATCH_LIMIT cursors, access and heads are read in bulk, only the streams
     // behind their head are replayed, and one `replay-complete` lists those streams.
-    async subscribeBatch(record, entries) {
+    async subscribeBatch(record, entries, subscriptionId) {
+        if (subscriptionId !== undefined && (typeof subscriptionId !== 'string' || !subscriptionId.length || subscriptionId.length > 128)) {
+            this.safeSend(record.connection, { type: 'error', code: 'subscription_id_invalid' });
+            return;
+        }
         if (!record.source) {
             this.safeSend(record.connection, { type: 'error', code: 'register_required' });
             return;
@@ -271,18 +282,29 @@ export class WsSyncRuntime {
         }
         if (denied.length) this.safeSend(record.connection, { type: 'error', code: 'stream_access_denied', streams: denied });
         const replayed = [];
+        const settled = [];
         if (directoryCursor != null) {
             record.subscriptions.set(DIRECTORY_STREAM, { cursor: directoryCursor, acked: directoryCursor });
             const reached = await this.replayDirectory(record, { announce: false });
-            if (reached != null) replayed.push({ stream: DIRECTORY_STREAM, cursor: reached });
+            if (reached != null) {
+                replayed.push({ stream: DIRECTORY_STREAM, cursor: reached });
+                settled.push({ stream: DIRECTORY_STREAM, cursor: reached });
+            }
         }
         for (const [stream, cursor] of cursors) {
             if (record.closed) return;
-            if (!heads.has(stream) || heads.get(stream) <= cursor) continue;
+            if (!heads.has(stream)) continue;
+            if (heads.get(stream) <= cursor) {
+                settled.push({ stream, cursor: Math.min(cursor, heads.get(stream)) });
+                continue;
+            }
             const reached = await this.replay(record, stream, { announce: false });
-            if (reached != null) replayed.push({ stream, cursor: reached });
+            if (reached != null) { replayed.push({ stream, cursor: reached }); settled.push({ stream, cursor: reached }); }
         }
-        if (!record.closed) this.safeSend(record.connection, { type: 'replay-complete', streams: replayed });
+        if (!record.closed) this.safeSend(record.connection, {
+            type: 'replay-complete', streams: replayed,
+            ...(subscriptionId ? { subscription_id: subscriptionId, settled_streams: settled } : {})
+        });
     }
 
     unsubscribe(record, message) {

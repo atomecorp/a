@@ -47,6 +47,19 @@ const fixture = () => {
 };
 
 describe('purposeful Programme collection through canonical Atomes', () => {
+    it('keeps Nutrition questions and their consent separate, preserving shared facts when one question is deferred', async () => {
+        const f = fixture();
+        const base = { brick_id: 'nutrition', preference_key: 'food_preferences' };
+        const answer = await f.invoke('collection_answer', { ...base, answer_status: 'answered', answer_value: 'Chosen vegetables', uncertain: false });
+        expect(answer).toMatchObject({ ok: true, question: { key: 'food_preferences', value: 'Chosen vegetables' } });
+        expect(answer.purpose_id).toBe('p:nutrition:question:food_preferences');
+        const id = programPreferenceId('alice', 'food_preferences'), original = structuredClone(f.records.get(id));
+        expect(await f.invoke('collection_read', { brick_id: 'nutrition', preference_key: 'intolerances' }))
+            .toMatchObject({ permissions: { preferences: false }, sources: [], question: { status: 'missing' } });
+        expect(await f.invoke('collection_answer', { ...base, answer_status: 'later' })).toMatchObject({ question: { status: 'later', value: null } });
+        expect(f.records.get(id)).toEqual(original);
+        expect(await f.invoke('collection_read', { brick_id: 'nutrition', preference_key: 'equipment' })).toMatchObject({ ok: false, error: 'program_collection_question_mismatch' });
+    });
     it('asks only the selected decision and reads no preferences/journal before consent', async () => {
         const f = fixture(), id = f.preference('allergies', 'Declared test allergy'); f.journal('note', 'Other test declaration');
         expect(await f.invoke()).toMatchObject({ ok: true, question: { key: 'starting_state', status: 'missing', value: null }, manual_available: true });

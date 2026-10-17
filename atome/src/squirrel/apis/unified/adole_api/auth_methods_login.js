@@ -1,9 +1,10 @@
 import { getFastifyHttpBaseUrl } from '../adole_backend.js';
-import { requeueRefusedBrowserWorkspaceEvents, synchronizeBrowserWorkspace } from './browser_workspace.js';
+import { requeueRefusedBrowserWorkspaceEvents, synchronizeBrowserWorkspace, subscribeBrowserWorkspaceChanges } from './browser_workspace.js';
 // Application authentication owner: remote proof exchange and local authorization
 // are separate lifecycles. Neither a cached phone nor an expired bearer unlocks data.
 import { TauriAdapter, FastifyAdapter } from '../adole.js';
 import { createAuthDeviceStore } from '../../../security/auth_device.js';
+import { readOptionalAuthCache } from '../../../security/auth_optional_cache.js';
 import { createPhoneLinkClient } from '../../../security/auth_phone_link_client.js';
 import { normalizePhone, normalizeUser } from './auth_core.js';
 import { isTauriRuntime } from './runtime.js';
@@ -15,8 +16,25 @@ let renewal = null;
 let localRenewal = null;
 let localExpiresAt = 0;
 let remoteExpiresAt = 0;
+let remoteRenewalTimer = null;
+// The server session lives 15 min and was renewed only when a request needed it: an idle
+// device lost its presence and every call to it went straight to voicemail. It is renewed
+// on schedule while signed in (the renewal re-announces presence, see FastifyAdapter.setToken).
+const scheduleRemoteRenewal = () => {
+    const env = globalThis.window;
+    if (!env?.setTimeout) return;
+    if (remoteRenewalTimer) env.clearTimeout(remoteRenewalTimer);
+    remoteRenewalTimer = env.setTimeout(() => {
+        remoteRenewalTimer = null;
+        if (getSessionState().mode !== 'authenticated') return;
+        ensureRemoteSession().catch(() => {
+            // Transport down: retry soon; the reopened socket re-announces itself anyway.
+            if (getSessionState().mode === 'authenticated') remoteRenewalTimer = env.setTimeout(scheduleRemoteRenewal, 30000);
+        });
+    }, Math.max(1000, remoteExpiresAt - Date.now() + 1000));
+};
 
-function deviceStore() {
+export function deviceStore() {
     if (devices) return devices;
     const env = globalThis.window || globalThis;
     const nativeKey = isTauriRuntime() ? async (fields) => {
@@ -71,8 +89,7 @@ async function localRequest(action, fields = {}) {
 }
 
 async function readNativeSessionGrant() {
-    let cached;
-    try { cached = await deviceStore().read('local-grant'); } catch (_) { /* optional WebView cache */ }
+    const cached = await readOptionalAuthCache(() => deviceStore().read('local-grant'));
     return (await localRequest('local-session-describe', { grantId: cached?.localSession?.id, includeLocked: true })).localGrant;
 }
 
@@ -99,10 +116,11 @@ function installLocal(result, backend) {
     return { ok: true, authenticated: true, user, backend };
 }
 
-async function installRemote(result, { attemptId } = {}) {
+// The session's key is named by its account scope (V1) or, for phone accounts, its phone.
+export async function installRemote(result, { attemptId, scope, renewal = false } = {}) {
     const store = deviceStore();
-    const phone = result.user.phone;
-    const device = await store.forPhone(phone);
+    const phone = result.user.phone || null;
+    const device = scope ? await store.forScope(scope) : await store.forPhone(phone);
     let local;
     if (isTauriRuntime()) {
         const fields = { scope: device.scope, keyId: device.keyId,
@@ -121,15 +139,22 @@ async function installRemote(result, { attemptId } = {}) {
         }
     } else {
         local = result;
-        await store.put('local-grant', { phone, keyId: device.keyId, user: normalizeUser(result.user), locked: false });
+        await store.put('local-grant', { phone, ...(scope ? { scope } : {}), keyId: device.keyId, user: normalizeUser(result.user), locked: false });
     }
     await setBrowserWorkspaceIdentity(local.user);
     FastifyAdapter.setToken(result.token);
     remoteExpiresAt = Date.now() + 840000;
+    scheduleRemoteRenewal();
     local.user = { ...local.user, first_launch_version: result.user.first_launch_version || null };
     installLocal(local, isTauriRuntime() ? 'tauri' : 'fastify');
+    // Every account opened in this browser stays listed for switching (§6.5).
+    if (!isTauriRuntime()) {
+        const record = await store.read('session');
+        if (record?.userId === result.user.id) await store.put(`account:${result.user.id}`, { ...record, user: normalizeUser(local.user), handle: result.user.handle || null });
+    }
     globalThis.window?.dispatchEvent(new CustomEvent('squirrel:remote-session-ready', { detail: { userId: result.user.id, user: result.user } }));
-    if (attemptId || result.passwordAuthenticated) globalThis.window?.dispatchEvent(new CustomEvent('squirrel:phone-login-complete', {
+    // A sign-in that opens the workspace (phone, password, or a V1 creation, pairing or recovery).
+    if (attemptId || (scope && !renewal) || result.passwordAuthenticated) globalThis.window?.dispatchEvent(new CustomEvent('squirrel:phone-login-complete', {
         detail: { newAccount: result.newAccount === true, user: result.user }
     }));
 }
@@ -147,7 +172,8 @@ export function phoneLinkClient() {
             return env.__TAURI_INTERNALS__.invoke('auth_development_request', { message });
         }
         return FastifyAdapter.ws.send(message);
-    }, installSession: installRemote });
+    }, installSession: installRemote, connectionProof: !isTauriRuntime(), onPending: detail => globalThis.window?.dispatchEvent(
+        new CustomEvent('squirrel:phone-login-pending', { detail })) });
     return client;
 }
 
@@ -157,12 +183,12 @@ export async function restoreLocalAuthorization() {
     if (isTauriRuntime()) {
         // SQLite + platform keystore are the native authority. IndexedDB is a
         // cache and may be absent after a WebView origin/storage migration.
-        try { record = await store.read('local-grant'); } catch (_) { /* optional native cache */ }
+        record = await readOptionalAuthCache(() => store.read('local-grant'));
         const described = await localRequest('local-session-describe', {
             grantId: record?.localSession?.id || undefined
         });
         record = described.localGrant;
-        if (record) try { await store.put('local-grant', record); } catch (_) { /* optional native cache */ }
+        if (record) void readOptionalAuthCache(() => store.put('local-grant', record));
     } else record = await store.read('local-grant');
     if (!record || record.locked) return { authenticated: false };
     const device = record.scope ? await store.forScope(record.scope) : await store.forPhone(record.phone);
@@ -255,20 +281,35 @@ let communicationPushClient = null;
 // Vider la file d'envoi du workspace navigateur AVANT une action serveur qui porte sur un
 // objet cree localement (partager un projet tout juste cree echouait : `share_owner_required`).
 // Une passe suffit : une demande recue pendant une passe en cours la fait relancer.
-export async function flushBrowserWorkspace() {
+// On Tauri the objects to share are delivered from the native queue right away: the
+// queue is ordered by creation and may hold a whole workspace republication.
+export async function flushBrowserWorkspace({ atomeIds = [] } = {}) {
     if (typeof workspaceSynchronize !== 'function') return { ok: true, skipped: true };
     await workspaceSynchronize();
+    const ids = [...new Set((Array.isArray(atomeIds) ? atomeIds : []).map(id => String(id || '').trim()).filter(Boolean))];
+    if (isTauriRuntime() && ids.length) {
+        const flushed = await TauriAdapter.sync.flush({ atome_ids: ids });
+        if (!flushed?.success && !flushed?.ok) throw new Error(flushed?.error || 'workspace_flush_failed');
+        return { ok: true, ...(flushed.data || {}) };
+    }
     return { ok: true };
 }
 export async function initializePhoneLinks() {
     const env = globalThis.window;
     if (!env || linksInitialized) return;
     linksInitialized = true;
-    if (typeof env.__ATOME_IOS_NATIVE_INVOKE === 'function') {
+    if (typeof env.__ATOME_IOS_NATIVE_INVOKE === 'function' || env.__ATOME_ANDROID_NATIVE__ === true) {
         const [{ installCommunicationPushClient }, { executeNativeNotificationAction }] = await Promise.all([
             import('../../../security/communication_push_client.js'), import('../../../../../../eVe/domains/visio/native_notification_actions.js')
         ]);
-        communicationPushClient = installCommunicationPushClient({ env, ensureSession: ensureRemoteSession,
+        const invoke = env.__ATOME_ANDROID_NATIVE__ === true ? async (command, payload) => {
+            const nativeInvoke = env.__TAURI_INTERNALS__?.invoke || env.__TAURI__?.core?.invoke || env.__TAURI__?.invoke;
+            if (typeof nativeInvoke !== 'function') throw new Error('notifications_host_unavailable');
+            const result = await nativeInvoke('notifications_invoke', { command, payload });
+            if (!result?.ok) throw new Error(result?.error || 'notifications_host_unavailable');
+            return result;
+        } : env.__ATOME_IOS_NATIVE_INVOKE;
+        communicationPushClient = installCommunicationPushClient({ env, invoke, ensureSession: ensureRemoteSession,
             readRemoteSession: () => deviceStore().read('session'), execute: executeNativeNotificationAction,
             send: message => FastifyAdapter.ws.send({ ...message, token: FastifyAdapter.getToken() }) });
     }
@@ -278,7 +319,11 @@ export async function initializePhoneLinks() {
     }));
     const resume = async () => {
         if (!await deviceStore().read('attempt')) return;
-        try { await phoneLinkClient().resume(); } catch (error) { report(error); }
+        try { await phoneLinkClient().resume(); } catch (error) {
+            // Another trigger (notice, focus, reconnection) completed it meanwhile.
+            if (error?.message === 'auth_attempt_expired' && !await deviceStore().read('attempt')) return;
+            report(error);
+        }
     };
     const takeNativeLink = async () => {
         if (typeof env.__ATOME_IOS_NATIVE_INVOKE !== 'function') return;
@@ -287,8 +332,9 @@ export async function initializePhoneLinks() {
     };
     const synchronize = async () => {
         if (isTauriRuntime()) {
-            const { configureTauriRemoteSync } = await import('./auth_fastify_token.js');
-            const result = await configureTauriRemoteSync();
+            // Configured once per session pair, not before every share.
+            const { ensureFastifyToken } = await import('./auth_fastify_token.js');
+            const result = await ensureFastifyToken();
             if (!result.ok) throw new Error(result.reason);
             return;
         }
@@ -306,7 +352,24 @@ export async function initializePhoneLinks() {
             } });
     };
     workspaceSynchronize = synchronize;
-    const requestSync = () => { void synchronize().catch(error => env.dispatchEvent(new CustomEvent('squirrel:workspace-sync-paused', { detail: { code: error.message } }))); };
+    let syncRetryTimer = null, syncFailures = 0;
+    const cancelSyncRetry = () => { clearTimeout(syncRetryTimer); syncRetryTimer = null; syncFailures = 0; };
+    const requestSync = () => {
+        if (getSessionState().mode !== 'authenticated') { cancelSyncRetry(); return; }
+        const principal = getSessionState().user?.id, environment = getFastifyHttpBaseUrl();
+        const current = () => getSessionState().user?.id === principal && getFastifyHttpBaseUrl() === environment;
+        void synchronize().then(() => { if (current()) cancelSyncRetry(); }, error => {
+            if (!current()) return;
+            env.dispatchEvent(new CustomEvent('squirrel:workspace-sync-paused', { detail: { code: error.message } }));
+            if (!syncRetryTimer && getSessionState().mode === 'authenticated') {
+                syncRetryTimer = setTimeout(() => { syncRetryTimer = null; requestSync(); }, Math.min(30000, 1000 * 2 ** Math.min(syncFailures++, 5)));
+            }
+        });
+    };
+    listeners.signal.addEventListener('abort', cancelSyncRetry, { once: true });
+    listeners.signal.addEventListener('abort', subscribeBrowserWorkspaceChanges(env, requestSync), { once: true });
+    env.addEventListener('squirrel:user-logged-out', cancelSyncRetry, { signal: listeners.signal });
+    env.addEventListener('squirrel:auth-transport-open', requestSync, { signal: listeners.signal });
     env.addEventListener('squirrel:remote-session-ready', () => {
         void requeueRefusedBrowserWorkspaceEvents().then(requestSync, (error) => {
             env.dispatchEvent(new CustomEvent('squirrel:workspace-sync-paused', { detail: { code: error.message } }));
@@ -316,8 +379,25 @@ export async function initializePhoneLinks() {
     env.addEventListener('squirrel:workspace-outbox-ready', requestSync, { signal: listeners.signal });
     env.addEventListener('online', requestSync, { signal: listeners.signal });
     env.addEventListener('squirrel:phone-link-ready', resume, { signal: listeners.signal });
+    // The SMS link is often opened elsewhere (browser, phone). The ready notice
+    // only reaches the socket that last asked; coming back to the app must not
+    // depend on it having survived.
+    const resumeOnReturn = async () => {
+        const pending = await phoneLinkClient().pendingAttempt().catch(() => null);
+        if (pending && !pending.paymentRequired) await resume();
+    };
+    env.addEventListener('focus', () => { void resumeOnReturn(); }, { signal: listeners.signal });
+    env.document?.addEventListener('visibilitychange', () => {
+        if (env.document.visibilityState === 'visible') void resumeOnReturn();
+    }, { signal: listeners.signal });
     env.addEventListener('squirrel:auth-transport-open', (event) => {
         if (event.detail?.backend === 'fastify') void resume();
+    }, { signal: listeners.signal });
+    // The transport announces itself on every open; a session installed later (sign-in on
+    // an open socket) makes this device reachable for calls right away.
+    env.addEventListener('squirrel:remote-session-ready', () => {
+        const token = FastifyAdapter.getToken?.();
+        if (token) void FastifyAdapter.ws.send({ type: 'auth', action: 'me', token }).catch(() => null);
     }, { signal: listeners.signal });
     env.addEventListener('atome:auth-link-available', () => { void takeNativeLink().catch(report); }, { signal: listeners.signal });
     env.addEventListener('online', () => { void phoneLinkClient().retryRevocations().catch(report); void resume(); }, { signal: listeners.signal });
@@ -331,11 +411,12 @@ export async function initializePhoneLinks() {
 
 export const loginMethods = {
     async enableNotifications() {
-        if (!communicationPushClient) throw new Error('ios_notifications_unavailable');
+        if (!communicationPushClient) throw new Error('notifications_host_unavailable');
         return communicationPushClient.enable();
     },
     async loginWithPassword(phone, password) { return phoneLinkClient().passwordLogin(normalizePhone(phone), password); },
     async setPassword(password, currentPassword) { return phoneLinkClient().setPassword(password, currentPassword); },
+    async hasKnownPassword(phone) { return phoneLinkClient().hasPassword(normalizePhone(phone)); },
     async startPhoneLogin(phone) {
         const result = await phoneLinkClient().start(normalizePhone(phone));
         if (!result) throw new Error('auth_phone_link_empty_result');
@@ -346,6 +427,7 @@ export const loginMethods = {
     async getPendingPhoneLogin() { return phoneLinkClient().pendingAttempt(); },
     async simulatePhonePayment(method) { return phoneLinkClient().simulatePayment(method); },
     async completePhoneLogin(link) { return phoneLinkClient().consumeLink(link); },
+    async confirmPhoneLogin(code) { return phoneLinkClient().confirmLink(code); },
     async cancelPhoneLogin() { return phoneLinkClient().cancel(); },
     ensureLocalSession
 };

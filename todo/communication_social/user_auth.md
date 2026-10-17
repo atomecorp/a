@@ -10,6 +10,10 @@ If any instruction in this file conflicts with ../../AGENTS.md, ../../AGENTS.md 
 
 # User Authentication - Production TODO
 
+## 2026-10-16 — Reconciliation of the user-confirmed SMS baseline
+
+The user explicitly confirmed in this conversation that SMS is received and sign-in works. That existing functional baseline is complete for backlog purposes and must not be recreated or kept as a prerequisite delivery task. This is user-reported evidence, not a new Codex carrier/device run. Later 2026-10-14/15 password, pairing, deadline and security changes retain their own deployment/platform verification limits; they do not invalidate or silently broaden the earlier confirmation. ATM-2001 tracks only that remaining evolution/activation. Historical statements below about missing SMS receipt proof are dated provenance, not the current baseline status.
+
 ## 2026-10-14 — ATM-2001 implementation update (partial acceptance)
 
 The optional-password work is implemented through the existing phone-link and device-session owners on /ws/api. First enrollment remains compulsory SMS with its existing payment/device proof; guests stay independent. FirstLaunch offers password or SMS for every submitted number, avoiding account flags. Home Security sets a password only after trusted-session proof; replacement also checks the current password and revokes other sessions. No SMS-only password reset or legacy authentication endpoint was added.

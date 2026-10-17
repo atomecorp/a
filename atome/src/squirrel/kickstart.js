@@ -69,6 +69,10 @@ function kickstartIsLocalAxumLikePage() {
   }
   if (!kickstartIsLoopbackHost(host)) return false;
   const effectivePort = kickstartPositivePort(window.location.port, protocol === 'https:' ? 443 : 80);
+  // A Fastify page on another loopback port (an isolated instance) says so:
+  // forced Fastify, or the server config naming this very port.
+  if (window.__SQUIRREL_FORCE_FASTIFY__ === true) return false;
+  if (kickstartPositivePort(window.__SQUIRREL_SERVER_CONFIG__?.fastify?.port, 0) === effectivePort) return false;
   return effectivePort > 0 && effectivePort !== 3001;
 }
 

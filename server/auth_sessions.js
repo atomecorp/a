@@ -1,29 +1,34 @@
 import { randomHandle, reject, requireHandle } from './auth_link_security.js';
-import { AUTH_SESSION_IDLE_MS, AUTH_SESSION_MAX_MS } from '../atome/src/shared/auth_link_contract.js';
+import { AUTH_SESSION_IDLE_MS, AUTH_SESSION_MAX_MS, AUTH_SHARED_SESSION_IDLE_MS, AUTH_SHARED_SESSION_MAX_MS } from '../atome/src/shared/auth_link_contract.js';
 
 // Persistent device-bound sessions replace password-backed relogin. A session
 // handle alone is not a credential: renewal always consumes a fresh signature.
-export function createDeviceSessions({ query, transaction, proof, now, issueAccess, findById, disconnectSession, deleteAccount }) {
+export function createDeviceSessions({ query, transaction, proof, now, issueAccess, findById, disconnectSession, deleteAccount, handles }) {
     const read = async (id) => {
         requireHandle(id);
         const row = await query('get', `SELECT s.*, k.public_key, k.revoked_ms AS key_revoked_ms,
-            k.restricted_until_ms FROM auth_device_sessions s
+            k.restricted_until_ms, k.connection_proof, k.device_class FROM auth_device_sessions s
             JOIN auth_device_keys k ON k.key_id = s.key_id WHERE session_id = ?`, [id]);
         if (!row || row.revoked_ms !== null || row.key_revoked_ms !== null
             || row.idle_expires_ms <= now() || row.expires_ms <= now()) reject('auth_session_invalid');
         return row;
     };
     const result = async (row, account) => ({
-        ok: true, token: await issueAccess({ principalId: row.principal_id, keyId: row.key_id, sessionId: row.session_id }),
+        ok: true, token: await issueAccess({ principalId: row.principal_id, keyId: row.key_id, sessionId: row.session_id,
+            pop: row.connection_proof === 1 }),
         session: { id: row.session_id, generation: row.generation, keyId: row.key_id,
             expiresAt: row.expires_ms, idleExpiresAt: row.idle_expires_ms },
-        user: { id: account.user_id, user_id: account.user_id, username: account.username, phone: account.phone,
+        user: { id: account.user_id, user_id: account.user_id, username: account.username, phone: account.phone || null,
+            // Every account has a public routing handle; older accounts receive theirs here.
+            handle: handles ? await handles.assign(account.user_id, account.username) : null,
             first_launch_version: account.first_launch_version || null }
     });
+    const idleFor = (deviceClass) => (deviceClass === 'shared' ? AUTH_SHARED_SESSION_IDLE_MS : AUTH_SESSION_IDLE_MS);
     async function create(account, keyId) {
-        const row = { session_id: randomHandle(), principal_id: account.user_id, key_id: keyId,
-            generation: 0, created_ms: now(), idle_expires_ms: now() + AUTH_SESSION_IDLE_MS,
-            expires_ms: now() + AUTH_SESSION_MAX_MS };
+        const key = await query('get', 'SELECT connection_proof, device_class FROM auth_device_keys WHERE key_id = ?', [keyId]);
+        const row = { session_id: randomHandle(), principal_id: account.user_id, key_id: keyId, connection_proof: key?.connection_proof || 0,
+            generation: 0, created_ms: now(), idle_expires_ms: now() + idleFor(key?.device_class),
+            expires_ms: now() + (key?.device_class === 'shared' ? AUTH_SHARED_SESSION_MAX_MS : AUTH_SESSION_MAX_MS) };
         await query('run', `INSERT INTO auth_device_sessions VALUES (?, ?, ?, 0, ?, ?, ?, NULL)`,
             [row.session_id, row.principal_id, keyId, row.created_ms, row.idle_expires_ms, row.expires_ms]);
         await proof.audit('session_created', account.user_id, row.session_id);
@@ -45,7 +50,7 @@ export function createDeviceSessions({ query, transaction, proof, now, issueAcce
         return `${sessionId}:${generation}`;
     };
     async function getChallenge({ sessionId, purpose, generation, targetKeyId, newPhone, requestDigest }, network) {
-        if (!['renew', 'local-bind', 'logout', 'logout-all', 'revoke-device', 'delete-account', 'change-phone', 'set-password'].includes(purpose)) reject('auth_request_invalid');
+        if (!['renew', 'local-bind', 'logout', 'logout-all', 'revoke-device', 'delete-account', 'change-phone', 'set-password', 'not-my-account'].includes(purpose)) reject('auth_request_invalid');
         return transaction(async () => {
             await proof.limit(`session-challenge:${proof.keyedIndex(String(network))}`, 60, 60000);
             const row = await read(sessionId);
@@ -65,8 +70,13 @@ export function createDeviceSessions({ query, transaction, proof, now, issueAcce
             }
             const account = await findById(row.principal_id);
             if (!account) reject('auth_session_invalid');
+            // A client that proves its key on each connection says so once; there is no way back.
+            if (input.pop === true && row.connection_proof !== 1) {
+                await query('run', 'UPDATE auth_device_keys SET connection_proof = 1 WHERE key_id = ?', [row.key_id]);
+                row.connection_proof = 1;
+            }
             row.generation += 1;
-            row.idle_expires_ms = Math.min(now() + AUTH_SESSION_IDLE_MS, row.expires_ms);
+            row.idle_expires_ms = Math.min(now() + idleFor(row.device_class), row.expires_ms);
             await query('run', 'UPDATE auth_device_sessions SET generation = ?, idle_expires_ms = ? WHERE session_id = ?',
                 [row.generation, row.idle_expires_ms, row.session_id]);
             await proof.audit('session_refreshed', row.principal_id, row.session_id);

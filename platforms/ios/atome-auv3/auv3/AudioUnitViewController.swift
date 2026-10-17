@@ -82,45 +82,27 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
             // data next to the real-time audio thread: an explicit, clean refusal.
             completion(["ok": false, "error": "health_host_unsupported"], nil)
         } else if command == "audio_init" {
-            let sampleRate: Double
-            let channels: UInt32
-            if let au = self.audioUnit as? auv3Utils,
-               au.outputBusses.count > 0 {
-                let outputFormat = au.outputBusses[0].format
-                sampleRate = outputFormat.sampleRate
-                channels = outputFormat.channelCount
-            } else {
-                sampleRate = 0
-                channels = 0
+            // The native Kira engine runs on the host's clock: the render block
+            // pulls it (todo/audio_to_finalize §6.1, step C).
+            guard let au = self.audioUnit as? auv3Utils, au.outputBusses.count > 0 else {
+                completion(["success": false], "AUv3 audio unit unavailable")
+                return
             }
-            print("[AUV3_AUDIO_INIT] success sample_rate=\(sampleRate) channels=\(channels)")
+            let outputFormat = au.outputBusses[0].format
+            guard atome_ios_audio_host_start(UInt32(outputFormat.sampleRate.rounded())) else {
+                completion(["success": false], "audio_engine_host_start_failed")
+                return
+            }
+            au.kiraEngineStarted = true
             completion([
                 "success": true,
                 "runtime": "ios_auv3",
-                "sample_rate": sampleRate,
-                "channels": channels
+                "sample_rate": outputFormat.sampleRate,
+                "channels": outputFormat.channelCount
             ], nil)
-        } else if command == "audio_load_clip_from_bytes" {
-            self.handleAudioLoadClipFromBytes(payload: payload, completion: completion)
-        } else if command == "audio_play" || command == "audio_play_instance" {
-            guard let au = self.audioUnit as? auv3Utils else {
-                completion(["success": false], "AUv3 audio unit unavailable")
-                return
-            }
-            au.setPlayActive(true)
-            completion(["success": true], nil)
-        } else if command == "audio_stop" || command == "audio_stop_instance" {
-            guard let au = self.audioUnit as? auv3Utils else {
-                completion(["success": false], "AUv3 audio unit unavailable")
-                return
-            }
-            au.setPlayActive(false)
-            completion(["success": true], nil)
-        } else if command == "audio_destroy_clip" {
-            if let au = self.audioUnit as? auv3Utils {
-                au.setPlayActive(false)
-            }
-            completion(["success": true], nil)
+        } else if NativeKiraEngine.commands.contains(command) {
+            let (result, error) = NativeKiraEngine.run(command, payload)
+            completion(result, error)
         } else {
             completion(["success": false], "Unsupported native invoke command in AUv3: \(command)")
         }
@@ -134,73 +116,6 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
     // will load the real bundled 'src/index.html' after the placeholder.
     }
 
-    private func audioBytes(from payload: [String: Any]) -> Data? {
-        if let data = payload["bytes"] as? Data {
-            return data
-        }
-        if let numbers = payload["bytes"] as? [NSNumber] {
-            return Data(numbers.map { UInt8(truncating: $0) })
-        }
-        if let ints = payload["bytes"] as? [Int] {
-            return Data(ints.map { UInt8(truncatingIfNeeded: $0) })
-        }
-        if let doubles = payload["bytes"] as? [Double] {
-            return Data(doubles.map { UInt8(truncatingIfNeeded: Int($0)) })
-        }
-        return nil
-    }
-
-    private func inferredAudioExtension(for data: Data) -> String {
-        let prefix = Array(data.prefix(12))
-        if prefix.count >= 4,
-           prefix[0] == 0x52, prefix[1] == 0x49, prefix[2] == 0x46, prefix[3] == 0x46 {
-            return "wav"
-        }
-        if prefix.count >= 8,
-           prefix[4] == 0x66, prefix[5] == 0x74, prefix[6] == 0x79, prefix[7] == 0x70 {
-            return "m4a"
-        }
-        if prefix.count >= 4,
-           prefix[0] == 0x4f, prefix[1] == 0x67, prefix[2] == 0x67, prefix[3] == 0x53 {
-            return "ogg"
-        }
-        return "wav"
-    }
-
-    private func sanitizedAudioClipId(_ value: Any?) -> String {
-        let raw = String(describing: value ?? "clip").trimmingCharacters(in: .whitespacesAndNewlines)
-        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_."))
-        let sanitized = raw.unicodeScalars.map { allowed.contains($0) ? String($0) : "_" }.joined()
-        let id = sanitized.trimmingCharacters(in: CharacterSet(charactersIn: "._-"))
-        return id.isEmpty ? "clip" : id
-    }
-
-    private func handleAudioLoadClipFromBytes(payload: [String: Any],
-                                             completion: @escaping ([String: Any], String?) -> Void) {
-        guard let data = audioBytes(from: payload), !data.isEmpty else {
-            completion(["success": false], "audio_load_clip_from_bytes missing bytes")
-            return
-        }
-        let id = sanitizedAudioClipId(payload["id"])
-        let ext = inferredAudioExtension(for: data)
-        do {
-            let directory = FileManager.default.temporaryDirectory.appendingPathComponent("atome-auv3-clips", isDirectory: true)
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            let url = directory.appendingPathComponent("\(id).\(ext)")
-            try data.write(to: url, options: [.atomic])
-            if let au = self.audioUnit as? auv3Utils {
-                au.loadLocalFile(url.path)
-            }
-            completion([
-                "success": true,
-                "id": id,
-                "path": url.path,
-                "bytes": data.count
-            ], nil)
-        } catch {
-            completion(["success": false, "id": id], "audio_load_clip_from_bytes failed: \(error.localizedDescription)")
-        }
-    }
 
     public func createAudioUnit(with componentDescription: AudioComponentDescription) throws -> AUAudioUnit {
         audioUnit = try auv3Utils(componentDescription: componentDescription, options: [])

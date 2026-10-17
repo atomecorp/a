@@ -1,7 +1,28 @@
 use super::local_atome::{LocalAtomeState, RemoteSyncCredential};
 use serde_json::Value as JsonValue;
 use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
+
+// Media the server refused for good (gone, never uploaded, not shared with this account).
+// Recovery runs on every sync reconnection: without this memory each one re-requested the
+// same files (~22 failed downloads a minute against atome.one, 15 Oct. 2026).
+const REFUSED_MEDIA_RETRY: Duration = Duration::from_secs(6 * 3600);
+fn refused_media() -> &'static Mutex<HashMap<String, Instant>> {
+    static REFUSED: OnceLock<Mutex<HashMap<String, Instant>>> = OnceLock::new();
+    REFUSED.get_or_init(|| Mutex::new(HashMap::new()))
+}
+fn media_refused_recently(key: &str) -> bool {
+    refused_media().lock().ok().and_then(|map| map.get(key).copied())
+        .is_some_and(|at| at.elapsed() < REFUSED_MEDIA_RETRY)
+}
+fn remember_media_outcome(key: &str, refused: bool) {
+    if let Ok(mut map) = refused_media().lock() {
+        if refused { map.insert(key.to_string(), Instant::now()); } else { map.remove(key); }
+    }
+}
 
 fn local_media_path(
     storage_root: &Path,
@@ -224,6 +245,7 @@ pub(super) async fn recover_inbound_media(
         if !name.is_empty() && !name.contains('/') && !name.contains('\\')
             && media_owner.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
             && state.storage_root().join("data/users").join(media_owner).join("Downloads").join(name).is_file() { continue; }
+        if media_refused_recently(&format!("{local_user_id}:{id}")) { continue; }
         let event = serde_json::json!({"atome_id":id,"vault_principal_id":owner,"patch":{"props":props}});
         if let Err(error) = download_inbound_media(state, remote_url, local_user_id, credential, &event).await {
             eprintln!("[sync-media] recovery failed for {id}: {error}");
@@ -261,7 +283,13 @@ pub(super) async fn download_inbound_media(
     // The asset ID selects canonical metadata and ACLs, avoiding filename collisions across owners.
     let mut response = client.get(format!("{}/api/uploads/{}", remote_url.trim_end_matches('/'), urlencoding::encode(asset_id)))
         .bearer_auth(&credential.token).send().await.map_err(|e| format!("inbound_media_download:{e}"))?;
-    if !response.status().is_success() { return Err(format!("inbound_media_http:{}", response.status())); }
+    let refused_key = format!("{local_user_id}:{asset_id}");
+    let status = response.status();
+    if !status.is_success() {
+        remember_media_outcome(&refused_key, matches!(status.as_u16(), 403 | 404 | 410));
+        return Err(format!("inbound_media_http:{status}"));
+    }
+    remember_media_outcome(&refused_key, false);
     const LIMIT: usize = 256 * 1024 * 1024;
     if response.content_length().is_some_and(|length| length > LIMIT as u64) { return Err("inbound_media_size_limit".into()); }
     let mut bytes = Vec::new();

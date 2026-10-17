@@ -1,2 +1,9 @@
 [env]
 MACOSX_DEPLOYMENT_TARGET = "11.0"
+
+# Android 64-bit releases must support 16 KB pages, including with the installed NDK r27.
+[target.aarch64-linux-android]
+rustflags = ["-C", "link-arg=-Wl,-z,max-page-size=16384", "-C", "link-arg=-Wl,-z,common-page-size=16384"]
+
+[target.x86_64-linux-android]
+rustflags = ["-C", "link-arg=-Wl,-z,max-page-size=16384", "-C", "link-arg=-Wl,-z,common-page-size=16384"]

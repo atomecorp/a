@@ -3,6 +3,18 @@ import WebKit
 import OSLog
 
 extension WebViewManager {
+    // The page reaches the local server (its offline backend) on this port.
+    static func announceLocalHTTPPort(_ port: UInt16, to target: WKWebView? = nil) {
+        let js = """
+        window.__ATOME_LOCAL_HTTP_PORT__=\(port);
+        window.ATOME_LOCAL_HTTP_PORT=\(port);
+        window.__LOCAL_HTTP_PORT=\(port);
+        window.__SQUIRREL_TAURI_LOCAL_PORT__=\(port);
+        try { window.dispatchEvent(new CustomEvent('local-server-ready')); } catch(e) {}
+        """
+        DispatchQueue.main.async { (target ?? WebViewManager.webView)?.evaluateJavaScript(js, completionHandler: nil) }
+    }
+
     // MARK: - WKUIDelegate (media capture)
 
     // WebKit shows its own per-origin permission prompt on top of the AVFoundation
@@ -44,17 +56,8 @@ extension WebViewManager {
     log.debug("didFinish; frame=\(String(describing: webView.frame.debugDescription)) bounds=\(String(describing: webView.bounds.debugDescription))")
         // Keep post-navigation work limited to product initialization. The
         // historical red-div smoke-test IPC must never run in an installed app.
-        if FeatureFlags.startLocalHTTPServer {
-            if let p = LocalHTTPServer.shared.port {
-                let js = """
-                window.__ATOME_LOCAL_HTTP_PORT__=\(p);
-                window.ATOME_LOCAL_HTTP_PORT=\(p);
-                window.__LOCAL_HTTP_PORT=\(p);
-                window.__SQUIRREL_TAURI_LOCAL_PORT__=\(p);
-                try { window.dispatchEvent(new CustomEvent('local-server-ready')); } catch(e) {}
-                """
-                webView.evaluateJavaScript(js, completionHandler: nil)
-            }
+        if FeatureFlags.startLocalHTTPServer, let p = LocalHTTPServer.shared.port {
+            WebViewManager.announceLocalHTTPPort(p, to: webView)
         }
     // Inject AUv3 / App context flag early for JS platform detection
     let isExtension: Bool = Bundle.main.bundlePath.hasSuffix(".appex")

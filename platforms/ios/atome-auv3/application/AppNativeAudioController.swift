@@ -7,48 +7,10 @@ import UIKit
 final class AppNativeAudioController: NSObject, @unchecked Sendable {
     static let shared = AppNativeAudioController()
 
-    struct ClipEntry {
-        let id: String
-        let url: URL
-        let path: String
-        let sampleRate: Double
-        let durationSeconds: Double
-        let isAudioFile: Bool
-        let processingFormat: AVAudioFormat?
-        let asset: AVURLAsset?
-        let audioTrack: AVAssetTrack?
-        let cachedBuffer: AVAudioPCMBuffer?
-    }
-
-    final class VoiceEntry {
-        let voiceId: String
-        let assetId: String
-        let playerNode: AVAudioPlayerNode
-        let rateNode: AVAudioUnitVarispeed
-        var stopWorkItem: DispatchWorkItem?
-        var audioFiles: [AVAudioFile] = []
-
-        init(voiceId: String,
-             assetId: String,
-             playerNode: AVAudioPlayerNode,
-             rateNode: AVAudioUnitVarispeed) {
-            self.voiceId = voiceId
-            self.assetId = assetId
-            self.playerNode = playerNode
-            self.rateNode = rateNode
-        }
-    }
-
     let queue = DispatchQueue(label: "atome.app.native_audio", qos: .userInitiated)
-    let engine = AVAudioEngine()
     let recordingEngine = AVAudioEngine()
-    let nativeRecorderBackend = AUv3NativeRecorderBackend()
-    let maxCachedVideoAudioDurationSeconds: Double = 45.0
     let recordingScopeBinCount = 64
 
-    var clips: [String: ClipEntry] = [:]
-    var pendingClipLoads: [String: UUID] = [:]
-    var voices: [String: VoiceEntry] = [:]
     var audioSessionConsumers = AppNativeAudioConsumerRegistry()
     var systemOwnsAudioActivation = false
     var captureGate = AppNativeAudioCaptureGate()
@@ -61,18 +23,12 @@ final class AppNativeAudioController: NSObject, @unchecked Sendable {
     var wakeCaptureFailed = false
     var wakeCaptureInterrupted = false
     var wakeCaptureBackground = false
-    var playbackEngineNeedsReset = false
-    var playbackRouteSignature = ""
-    var playbackEngineIdlePause: DispatchWorkItem?
     var activeRecordingSessionId: String?
     var activeRecordingFileName: String?
     var activeRecordingPath: String?
     var activeRecordingAbsolutePath: String?
     var activeRecordingSampleRate: Double = 0
     var activeRecordingChannels: Int = 0
-    var recordingChannelPointers: [UnsafePointer<Float>?] = Array(repeating: nil, count: 8)
-    var recordingScopeMinima = [Float](repeating: 0, count: 64)
-    var recordingScopeMaxima = [Float](repeating: 0, count: 64)
     var recordingScopePairs = [Float](repeating: 0, count: 128)
     var recordingScopeLastSequence: UInt64 = 0
     var recordingScopeMonitorGeneration: UInt64 = 0
@@ -177,43 +133,6 @@ final class AppNativeAudioController: NSObject, @unchecked Sendable {
         return ""
     }
 
-    func resolveDouble(_ payload: [String: Any], _ keys: [String], fallback: Double) -> Double {
-        for key in keys {
-            if let value = payload[key] as? NSNumber {
-                return value.doubleValue
-            }
-            if let value = payload[key] as? Double {
-                return value
-            }
-            if let value = payload[key] as? Float {
-                return Double(value)
-            }
-            if let value = payload[key] as? String, let parsed = Double(value) {
-                return parsed
-            }
-        }
-        return fallback
-    }
-
-    func resolveOptionalDouble(_ payload: [String: Any], _ keys: [String]) -> Double? {
-        let marker = Double.nan
-        let value = resolveDouble(payload, keys, fallback: marker)
-        return value.isNaN ? nil : value
-    }
-
-    func clamp(_ value: Double, min minValue: Double, max maxValue: Double) -> Double {
-        Swift.min(maxValue, Swift.max(minValue, value))
-    }
-
-    func gainToLinear(_ gain: Double) -> Float {
-        Float(clamp(gain, min: 0, max: 4))
-    }
-
-    func decibelsToLinear(_ db: Double) -> Float {
-        let linear = pow(10.0, db / 20.0)
-        return Float(clamp(linear, min: 0, max: 4))
-    }
-
     @objc private func handleWakeBackground() {
         queue.async { self.wakeCaptureBackground = true; self.stopWakeCapture() }
     }
@@ -229,7 +148,6 @@ final class AppNativeAudioController: NSObject, @unchecked Sendable {
         let optionsValue = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
         let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
         queue.async {
-            self.playbackEngineNeedsReset = true
             guard interruptionType == .ended else {
                 self.wakeCaptureInterrupted = true
                 self.captureGate.cancel()
@@ -249,7 +167,6 @@ final class AppNativeAudioController: NSObject, @unchecked Sendable {
 
     @objc private func handleAudioSessionRouteChange(_ notification: Notification) {
         queue.async {
-            self.playbackEngineNeedsReset = true
             guard !self.audioSessionConsumers.captureConsumerIds.isEmpty else { return }
             AppNativeAudioDiagnostics.log(
                 "session route_changed \(self.audioSessionDiagnosticSnapshot())"
@@ -259,7 +176,6 @@ final class AppNativeAudioController: NSObject, @unchecked Sendable {
 
     @objc private func handleAudioSessionMediaServicesReset(_ notification: Notification) {
         queue.async {
-            self.playbackEngineNeedsReset = true
             // The media server rebuilt every session: nothing we applied
             // survives, so re-assert the plan for the current consumers.
             AppNativeAudioDiagnostics.log("session media_services_reset")

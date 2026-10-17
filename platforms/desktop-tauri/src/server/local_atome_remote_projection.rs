@@ -11,6 +11,11 @@ pub(super) fn ensure_schema(db: &Connection) -> Result<(), rusqlite::Error> {
          );
          CREATE INDEX IF NOT EXISTS idx_remote_projection_atome_key
            ON remote_projection_access(atome_id, particle_key);
+         CREATE TABLE IF NOT EXISTS remote_bootstrap_delivered (
+            remote_user_id TEXT NOT NULL, atome_id TEXT NOT NULL,
+            digest TEXT NOT NULL, delivered_at TEXT NOT NULL,
+            PRIMARY KEY (remote_user_id, atome_id)
+         );
          CREATE TABLE IF NOT EXISTS remote_sync_stream_cursors (
             local_user_id TEXT NOT NULL, remote_user_id TEXT NOT NULL,
             stream_id TEXT NOT NULL, last_sequence INTEGER NOT NULL DEFAULT 0,

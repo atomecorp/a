@@ -228,11 +228,12 @@ export function audio_init() {
 
 /**
  * @param {string} id
+ * @param {number} rate
  */
-export function audio_destroy_clip(id) {
+export function audio_set_playback_rate(id, rate) {
     const ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.audio_destroy_clip(ptr0, len0);
+    const ret = wasm.audio_set_playback_rate(ptr0, len0, rate);
     if (ret[1]) {
         throw takeFromExternrefTable0(ret[0]);
     }
@@ -251,12 +252,12 @@ export function audio_shared_context() {
 }
 
 /**
- * @param {string} voice_id
+ * @param {string} id
  */
-export function audio_stop_instance(voice_id) {
-    const ptr0 = passStringToWasm0(voice_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+export function audio_stop(id) {
+    const ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.audio_stop_instance(ptr0, len0);
+    const ret = wasm.audio_stop(ptr0, len0);
     if (ret[1]) {
         throw takeFromExternrefTable0(ret[0]);
     }
@@ -299,44 +300,49 @@ export function audio_render_clock() {
 }
 
 /**
- * @param {string} id
+ * A late end for a scheduled or sounding voice: `end_frame` frames after its
+ * first one, fading over `release_frames`. Returns whether the voice is known.
+ * @param {string} voice_id
+ * @param {number} end_frame
+ * @param {number} release_frames
+ * @returns {boolean}
  */
-export function audio_stop(id) {
-    const ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+export function audio_set_voice_end(voice_id, end_frame, release_frames) {
+    const ptr0 = passStringToWasm0(voice_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.audio_stop(ptr0, len0);
-    if (ret[1]) {
-        throw takeFromExternrefTable0(ret[0]);
-    }
+    const ret = wasm.audio_set_voice_end(ptr0, len0, end_frame, release_frames);
+    return ret !== 0;
 }
 
-/**
- * Starts a voice exactly on rendered frame `start_render_frame`: the render
- * loop stops there, starts it, and renders on. A frame already rendered
- * starts it on the next block instead; the returned frame says which.
- * @param {string} asset_id
- * @param {string} voice_id
- * @param {number} start_seconds
- * @param {number | null | undefined} duration_seconds
- * @param {number} gain
- * @param {number} pan
- * @param {number} rate
- * @param {number} start_render_frame
- * @param {string | null} [strip_id]
- * @returns {number}
- */
-export function audio_schedule_instance(asset_id, voice_id, start_seconds, duration_seconds, gain, pan, rate, start_render_frame, strip_id) {
-    const ptr0 = passStringToWasm0(asset_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(voice_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len1 = WASM_VECTOR_LEN;
-    var ptr2 = isLikeNone(strip_id) ? 0 : passStringToWasm0(strip_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    var len2 = WASM_VECTOR_LEN;
-    const ret = wasm.audio_schedule_instance(ptr0, len0, ptr1, len1, start_seconds, !isLikeNone(duration_seconds), isLikeNone(duration_seconds) ? 0 : duration_seconds, gain, pan, rate, start_render_frame, ptr2, len2);
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
+let cachedFloat64ArrayMemory0 = null;
+
+function getFloat64ArrayMemory0() {
+    if (cachedFloat64ArrayMemory0 === null || cachedFloat64ArrayMemory0.byteLength === 0) {
+        cachedFloat64ArrayMemory0 = new Float64Array(wasm.memory.buffer);
     }
-    return ret[0];
+    return cachedFloat64ArrayMemory0;
+}
+
+function getArrayF64FromWasm0(ptr, len) {
+    ptr = ptr >>> 0;
+    return getFloat64ArrayMemory0().subarray(ptr / 8, ptr / 8 + len);
+}
+/**
+ * Starts each voice exactly on its rendered frame (`ScheduledVoice` list, as
+ * the native `audio_schedule_instances`): the render loop stops there, starts
+ * it, and renders on. A frame already rendered starts it on the next block
+ * instead; the returned frames say which.
+ * @param {any} voices
+ * @returns {Float64Array}
+ */
+export function audio_schedule_voices(voices) {
+    const ret = wasm.audio_schedule_voices(voices);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v1 = getArrayF64FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 8, 8);
+    return v1;
 }
 
 /**
@@ -351,6 +357,13 @@ export function audio_play(id) {
         throw takeFromExternrefTable0(ret[1]);
     }
     return ret[0];
+}
+
+export function audio_shutdown() {
+    const ret = wasm.audio_shutdown();
+    if (ret[1]) {
+        throw takeFromExternrefTable0(ret[0]);
+    }
 }
 
 function passArray8ToWasm0(arg, malloc) {
@@ -376,6 +389,18 @@ export function audio_load_clip_from_bytes(id, data) {
         throw takeFromExternrefTable0(ret[1]);
     }
     return ret[0];
+}
+
+/**
+ * @param {string} voice_id
+ */
+export function audio_stop_instance(voice_id) {
+    const ptr0 = passStringToWasm0(voice_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.audio_stop_instance(ptr0, len0);
+    if (ret[1]) {
+        throw takeFromExternrefTable0(ret[0]);
+    }
 }
 
 /**
@@ -406,19 +431,11 @@ export function audio_set_pan(id, pan) {
 
 /**
  * @param {string} id
- * @param {number} rate
  */
-export function audio_set_playback_rate(id, rate) {
+export function audio_destroy_clip(id) {
     const ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.audio_set_playback_rate(ptr0, len0, rate);
-    if (ret[1]) {
-        throw takeFromExternrefTable0(ret[0]);
-    }
-}
-
-export function audio_shutdown() {
-    const ret = wasm.audio_shutdown();
+    const ret = wasm.audio_destroy_clip(ptr0, len0);
     if (ret[1]) {
         throw takeFromExternrefTable0(ret[0]);
     }
@@ -494,7 +511,7 @@ export function audio_mix_cut_tail(module_id) {
     }
 }
 
-function __wbg_adapter_48(arg0, arg1) {
+function __wbg_adapter_50(arg0, arg1) {
     wasm._dyn_core__ops__function__FnMut_____Output___R_as_wasm_bindgen__closure__WasmClosure___describe__invoke__hcf52cdcb78971e82(arg0, arg1);
 }
 
@@ -752,6 +769,10 @@ function __wbg_get_imports() {
         const ret = arg0.value;
         return ret;
     };
+    imports.wbg.__wbindgen_as_number = function(arg0) {
+        const ret = +arg0;
+        return ret;
+    };
     imports.wbg.__wbindgen_bigint_from_i64 = function(arg0) {
         const ret = arg0;
         return ret;
@@ -780,8 +801,8 @@ function __wbg_get_imports() {
         const ret = false;
         return ret;
     };
-    imports.wbg.__wbindgen_closure_wrapper1307 = function(arg0, arg1, arg2) {
-        const ret = makeMutClosure(arg0, arg1, 50, __wbg_adapter_48);
+    imports.wbg.__wbindgen_closure_wrapper1227 = function(arg0, arg1, arg2) {
+        const ret = makeMutClosure(arg0, arg1, 50, __wbg_adapter_50);
         return ret;
     };
     imports.wbg.__wbindgen_debug_string = function(arg0, arg1) {
@@ -876,6 +897,7 @@ function __wbg_finalize_init(instance, module) {
     __wbg_init.__wbindgen_wasm_module = module;
     cachedDataViewMemory0 = null;
     cachedFloat32ArrayMemory0 = null;
+    cachedFloat64ArrayMemory0 = null;
     cachedUint8ArrayMemory0 = null;
 
 

@@ -1,6 +1,6 @@
 import { assert, clickCanvasTarget, wait, waitFor } from './molecule_ui_acceptance_support.mjs';
 import {
-    drag, dropChoiceToolIds, readMembership, reloadProjection, screenshot, structuredDropTarget,
+    drag, offeredDropChoices, readMembership, reloadProjection, screenshot, structuredDropTarget,
     switchView, waitForMolecule
 } from './molecule_ui_drop_core.mjs';
 import {
@@ -50,8 +50,8 @@ export const validateListMoleculeDrop = async ({ page, project, fixture, report,
     const plain = await readMembership(page, { sourceId: fixture.imageId, targetId: fixture.audioId });
     assert(plain.sourceParent === project.id && plain.targetParent === project.id,
         `list_plain_drop_combined:${JSON.stringify(plain)}`);
-    const listChoices = await dropChoiceToolIds(page);
-    assert(listChoices.length === 6, `list_drop_choices_missing:${JSON.stringify(listChoices)}`);
+    const listChoices = await offeredDropChoices(page);
+    assert(listChoices.ok, `list_drop_choices_missing:${JSON.stringify(listChoices)}`);
     await drag({
         page, source: image, destination: overlapDestination, holdMs: 700, railChoice: 'front',
         armedShot: () => screenshot({

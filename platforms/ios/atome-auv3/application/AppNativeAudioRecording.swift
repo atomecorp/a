@@ -76,44 +76,16 @@ extension AppNativeAudioController {
                         userId: userId
                     )
 
-                    let input = self.recordingEngine.inputNode
-                    let format = input.outputFormat(forBus: 0)
-                    guard format.sampleRate > 0, format.channelCount > 0 else {
-                        self.complete(
-                            completion,
-                            payload: ["success": false],
-                            error: "microphone_input_format_unavailable"
-                        )
-                        return
+                    // The native Kira engine records (atome-audio-engine): its capture
+                    // clock places a take on the frame the playback was heard on.
+                    let (started, startError) = NativeKiraEngine.run("audio_record_start", [
+                        "sessionId": sessionId, "filePath": url.path, "sampleRate": 0, "channels": 0
+                    ])
+                    if let startError {
+                        throw NSError(domain: "AppNativeAudioController", code: 21, userInfo: [NSLocalizedDescriptionKey: startError])
                     }
-                    guard format.commonFormat == .pcmFormatFloat32,
-                          format.sampleRate <= Double(UInt32.max),
-                          format.channelCount <= UInt32(self.recordingChannelPointers.count) else {
-                        self.complete(
-                            completion,
-                            payload: ["success": false],
-                            error: "microphone_input_format_unsupported"
-                        )
-                        return
-                    }
-
-                    input.removeTap(onBus: 0)
-                    let sampleRate = UInt32(format.sampleRate.rounded())
-                    let channels = UInt16(format.channelCount)
-                    guard self.nativeRecorderBackend.start(
-                        withPath: url.path,
-                        sampleRate: sampleRate,
-                        channels: channels,
-                        source: "mic"
-                    ) else {
-                        let message = self.nativeRecorderBackend.lastErrorMessage.isEmpty
-                            ? "Recorder start failed"
-                            : self.nativeRecorderBackend.lastErrorMessage
-                        throw NSError(domain: "AppNativeAudioController", code: 21, userInfo: [
-                            NSLocalizedDescriptionKey: message
-                        ])
-                    }
-
+                    let sampleRate = (started["sample_rate"] as? NSNumber)?.doubleValue ?? 0
+                    let channels = (started["channels"] as? NSNumber)?.intValue ?? 0
                     let relativePath = SandboxPathValidator.sanitizedRelativePath(filePath)
                         .flatMap { $0.isEmpty ? nil : $0 }
                         ?? "data/users/\(userId.isEmpty ? "anonymous" : userId)/recordings/\(fileName)"
@@ -121,37 +93,9 @@ extension AppNativeAudioController {
                     self.activeRecordingFileName = fileName
                     self.activeRecordingPath = relativePath
                     self.activeRecordingAbsolutePath = url.path
-                    self.activeRecordingSampleRate = format.sampleRate
-                    self.activeRecordingChannels = Int(format.channelCount)
+                    self.activeRecordingSampleRate = sampleRate
+                    self.activeRecordingChannels = channels
                     self.activeRecordingConsumerId = consumerId
-
-                    input.installTap(
-                        onBus: 0,
-                        bufferSize: 1024,
-                        format: format
-                    ) { [weak controller = self] buffer, _ in
-                        controller?.pushRecordingBuffer(buffer)
-                    }
-                    self.recordingEngine.prepare()
-                    do {
-                        try self.recordingEngine.start()
-                    } catch {
-                        input.removeTap(onBus: 0)
-                        self.recordingEngine.stop()
-                        var duration: Double = 0
-                        var frameCount: UInt64 = 0
-                        var overrunFrames: UInt64 = 0
-                        var discontinuityFrames: UInt64 = 0
-                        _ = self.nativeRecorderBackend.stop(
-                            withDuration: &duration,
-                            frameCount: &frameCount,
-                            overrunFrames: &overrunFrames,
-                            discontinuityFrames: &discontinuityFrames
-                        )
-                        try? FileManager.default.removeItem(at: url)
-                        self.resetActiveRecordingState()
-                        throw error
-                    }
 
                     self.startRecordingScopeMonitor(sessionId: sessionId)
                     recordingStarted = true
@@ -161,11 +105,10 @@ extension AppNativeAudioController {
                         "file_name": fileName,
                         "file_path": relativePath,
                         "absolute_file_path": url.path,
-                        "sample_rate": format.sampleRate,
-                        "channels": Int(format.channelCount)
+                        "sample_rate": sampleRate,
+                        "channels": channels
                     ])
                 } catch {
-                    self.recordingEngine.stop()
                     self.resetActiveRecordingState()
                     self.complete(
                         completion,
@@ -174,57 +117,6 @@ extension AppNativeAudioController {
                     )
                 }
             }
-        }
-    }
-
-    func pushRecordingBuffer(_ buffer: AVAudioPCMBuffer) {
-        let frames = UInt32(buffer.frameLength)
-        guard frames > 0 else { return }
-        let channels = Int(buffer.format.channelCount)
-        guard buffer.format.commonFormat == .pcmFormatFloat32,
-              channels > 0,
-              channels <= recordingChannelPointers.count else {
-            nativeRecorderBackend.reportDiscontinuityFrames(frames)
-            return
-        }
-
-        let buffers = UnsafeMutableAudioBufferListPointer(buffer.mutableAudioBufferList)
-        if buffer.format.isInterleaved || buffers.count == 1 {
-            guard let data = buffers[0].mData else {
-                nativeRecorderBackend.reportDiscontinuityFrames(frames)
-                return
-            }
-            nativeRecorderBackend.pushInterleavedFloat32(
-                data.assumingMemoryBound(to: Float.self),
-                channels: UInt16(channels),
-                frames: frames
-            )
-            return
-        }
-
-        guard buffers.count >= channels else {
-            nativeRecorderBackend.reportDiscontinuityFrames(frames)
-            return
-        }
-        for channel in 0..<channels {
-            guard let data = buffers[channel].mData else {
-                nativeRecorderBackend.reportDiscontinuityFrames(frames)
-                return
-            }
-            recordingChannelPointers[channel] = UnsafePointer(
-                data.assumingMemoryBound(to: Float.self)
-            )
-        }
-        recordingChannelPointers.withUnsafeBufferPointer { pointers in
-            guard let base = pointers.baseAddress else {
-                nativeRecorderBackend.reportDiscontinuityFrames(frames)
-                return
-            }
-            nativeRecorderBackend.pushPlanarFloat32(
-                base,
-                channels: UInt16(channels),
-                frames: frames
-            )
         }
     }
 
@@ -254,21 +146,12 @@ extension AppNativeAudioController {
         let sampleRate = activeRecordingSampleRate
         let channels = activeRecordingChannels
 
-        recordingEngine.inputNode.removeTap(onBus: 0)
-        recordingEngine.stop()
         stopRecordingScopeMonitor()
-        var duration: Double = 0
-        var frameCount: UInt64 = 0
-        var overrunFrames: UInt64 = 0
-        var discontinuityFrames: UInt64 = 0
-        let stopped = nativeRecorderBackend.stop(
-            withDuration: &duration,
-            frameCount: &frameCount,
-            overrunFrames: &overrunFrames,
-            discontinuityFrames: &discontinuityFrames
-        )
-        let stopError = nativeRecorderBackend.lastErrorMessage
-        recordingEngine.reset()
+        let (stopped, stopError) = NativeKiraEngine.run("audio_record_stop", ["sessionId": sessionId])
+        let duration = (stopped["duration_sec"] as? NSNumber)?.doubleValue ?? 0
+        let frameCount = (stopped["frame_count"] as? NSNumber)?.uint64Value ?? 0
+        let overrunFrames = (stopped["overrun_frames"] as? NSNumber)?.uint64Value ?? 0
+        let discontinuityFrames: UInt64 = 0
 
         let fileExists = !absolutePath.isEmpty
             && FileManager.default.fileExists(atPath: absolutePath)
@@ -284,13 +167,13 @@ extension AppNativeAudioController {
             : []
         resetActiveRecordingState()
 
-        guard stopped, frameCount > 0, fileExists, fileSize > 44 else {
+        guard stopError == nil, frameCount > 0, fileExists, fileSize > 44 else {
             if fileExists {
                 try? FileManager.default.removeItem(atPath: absolutePath)
             }
             let discarded = absolutePath.isEmpty
                 || !FileManager.default.fileExists(atPath: absolutePath)
-            let message = stopError.isEmpty ? "audio_recording_empty_or_invalid" : stopError
+            let message = stopError ?? "audio_recording_empty_or_invalid"
             complete(completion, payload: [
                 "success": false,
                 "session_id": sessionId,
@@ -320,7 +203,8 @@ extension AppNativeAudioController {
             "absolute_file_path": absolutePath,
             "size_bytes": fileSize,
             "peaks": waveformPeaks,
-            "waveform_peaks": waveformPeaks
+            "waveform_peaks": waveformPeaks,
+            "capture_clock": stopped["capture_clock"] ?? NSNull()
         ])
     }
 
@@ -373,20 +257,10 @@ extension AppNativeAudioController {
     func shutdownAudioRecording() {
         captureGate.cancel()
         guard activeRecordingSessionId != nil else { return }
-        recordingEngine.inputNode.removeTap(onBus: 0)
-        recordingEngine.stop()
         stopRecordingScopeMonitor()
-        var duration: Double = 0
-        var frameCount: UInt64 = 0
-        var overrunFrames: UInt64 = 0
-        var discontinuityFrames: UInt64 = 0
-        _ = nativeRecorderBackend.stop(
-            withDuration: &duration,
-            frameCount: &frameCount,
-            overrunFrames: &overrunFrames,
-            discontinuityFrames: &discontinuityFrames
-        )
-        recordingEngine.reset()
+        if let sessionId = activeRecordingSessionId {
+            _ = NativeKiraEngine.run("audio_record_stop", ["sessionId": sessionId])
+        }
         resetActiveRecordingState()
     }
 

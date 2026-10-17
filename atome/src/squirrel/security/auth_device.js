@@ -1,4 +1,5 @@
 import { authSigningMessage } from '../../shared/auth_link_contract.js';
+import { readOptionalAuthCache } from './auth_optional_cache.js';
 
 const encode = (bytes) => btoa(String.fromCharCode(...new Uint8Array(bytes))).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
 const hex = (bytes) => Array.from(new Uint8Array(bytes), (value) => value.toString(16).padStart(2, '0')).join('');
@@ -89,17 +90,26 @@ export function createAuthDeviceStore({ indexedDB = globalThis.indexedDB, crypto
     }
     async function forScope(scope) {
         let record = null;
-        try { record = await read(`key:${scope}`); } catch (_) { /* native keystore can operate without Web storage */ }
-        if (!record) {
-            if (nativeKey) {
-                const publicKey = await nativeKey({ action: 'public', scope });
-                const candidate = { publicKey, native: true, scope };
-                try { record = await insertOnce(`key:${scope}`, candidate); } catch (_) { record = candidate; }
-            } else {
-                const pair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign', 'verify']);
-                const publicKey = await crypto.subtle.exportKey('jwk', pair.publicKey);
-                record = await insertOnce(`key:${scope}`, { publicKey, privateKey: pair.privateKey, native: false, scope });
+        if (nativeKey) record = await readOptionalAuthCache(() => read(`key:${scope}`));
+        else record = await read(`key:${scope}`);
+        if (nativeKey && (!record || record.native)) {
+            // The platform keystore is the authority and its key can change
+            // underneath this cache (another build, a recreated pair). Announcing a
+            // cached public half that no longer matches the signing key gets every
+            // proof refused, so always read the current one.
+            const signingScope = record?.scope || scope;
+            const publicKey = await nativeKey({ action: 'public', scope: signingScope });
+            const candidate = { publicKey, native: true, scope: signingScope };
+            if (!record) {
+                record = await readOptionalAuthCache(() => insertOnce(`key:${scope}`, candidate)) || candidate;
+            } else if (record.publicKey?.x !== publicKey.x || record.publicKey?.y !== publicKey.y) {
+                void readOptionalAuthCache(() => put(`key:${scope}`, candidate));
             }
+            record = candidate;
+        } else if (!record) {
+            const pair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign', 'verify']);
+            const publicKey = await crypto.subtle.exportKey('jwk', pair.publicKey);
+            record = await insertOnce(`key:${scope}`, { publicKey, privateKey: pair.privateKey, native: false, scope });
         }
         if (record.native !== Boolean(nativeKey)) throw new Error('auth_device_provider_mismatch');
         const { x, y } = record.publicKey;

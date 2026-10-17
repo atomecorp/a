@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The dot of the Atom logo (atome.svg `atomeCanvas-oval`), alone in the logo's own 236 box: it lays exactly over atome_curve.svg. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="236" height="236" viewBox="0 0 236 236">
+    <defs>
+        <linearGradient id="atomeDotFill" x1="20" y1="16" x2="86" y2="84" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#ff2aa0"/>
+            <stop offset="1" stop-color="#ff0f6e"/>
+        </linearGradient>
+    </defs>
+    <ellipse cx="51.75" cy="50.1" rx="34.3" ry="33.8" fill="url(#atomeDotFill)"/>
+</svg>

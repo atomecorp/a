@@ -3,10 +3,12 @@
 // auth_state; the method bodies live in the two method-group modules below.
 import { loginMethods } from './auth_methods_login.js';
 import { sessionAccountMethods } from './auth_methods_session_account.js';
+import { accountMethods } from './auth_methods_account.js';
 
 export const auth = {
     ...loginMethods,
-    ...sessionAccountMethods
+    ...sessionAccountMethods,
+    ...accountMethods
 };
 
 export default auth;

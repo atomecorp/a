@@ -40,8 +40,9 @@ try {
     await page.goto(process.env.ADOLE_TEST_URL || 'http://127.0.0.1:3001', { waitUntil: 'commit' });
     await waitFor(page, () => !!window.__DEBUG__ || !!document.getElementById('intuition'), null, 30000);
     await waitFor(page, () => window.eveBevyUiRuntime?.state?.trees?.has('eve_bevy_panel_first_launch'), null, 45000);
-    await click('__eve_dashboard_card_template_controls___first_launch_first_launch_access_free');
-    await stage('goals'); step('Guest entered through the real access card');
+    // The guest workspace has no card of its own since authentication V1 (offline start of « Commencer »).
+    await page.evaluate(async () => (await import('/eVe/domains/user/first_launch_runtime.js')).invokeFirstLaunch({ operation: 'guest' }));
+    await stage('goals'); step('Guest entered through the first-launch guest operation');
     await templateControl('goal', 'journal');
     await waitFor(page, async () => !(await import('/eVe/domains/user/first_launch_runtime.js')).getFirstLaunchRuntime()?.state.active, null, 45000);
     step('QA guest setup complete');

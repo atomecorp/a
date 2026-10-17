@@ -55,21 +55,30 @@ export function createAuthProofSecurity({ query, transaction, masterSecret, now 
             [result.challenge, purpose, reference, keyId, result.nonce, result.issuedAt, result.issuedAt + 60000]);
         return result;
     }
-    async function consumeProof({ challengeId, signature }, purpose, reference, publicKey) {
+    // One fresh challenge, bound to purpose, reference and key, is consumed once
+    // by a proof over its signing message: a device signature (`consumeProof`)
+    // or a WebAuthn assertion whose challenge is the message digest.
+    async function consumeChallenge(challengeId, purpose, reference, keyId, verify) {
         requireHandle(challengeId);
-        if (typeof signature !== 'string' || !/^[A-Za-z0-9_-]{86,96}$/.test(signature)) reject();
-        const { keyId, jwk } = publicDeviceKey(publicKey);
         const proof = await query('get', 'SELECT * FROM auth_device_challenges WHERE challenge_id = ?', [challengeId]);
         if (!proof || proof.consumed_ms !== null || proof.expires_ms <= now()
             || proof.purpose !== purpose || proof.reference_id !== reference || proof.key_id !== keyId) reject();
-        const bytes = Buffer.from(authSigningMessage({ purpose, reference, keyId,
+        const message = Buffer.from(authSigningMessage({ purpose, reference, keyId,
             challenge: challengeId, nonce: proof.nonce, issuedAt: proof.issued_ms }));
-        const encodedSignature = Buffer.from(signature, 'base64url');
-        if (!crypto.verify('sha256', bytes, { key: crypto.createPublicKey({ key: jwk, format: 'jwk' }),
-            dsaEncoding: encodedSignature.length === 64 ? 'ieee-p1363' : 'der' }, encodedSignature)) reject();
+        const outcome = await verify(message);
         const result = await query('run', `UPDATE auth_device_challenges SET consumed_ms = ?
             WHERE challenge_id = ? AND consumed_ms IS NULL`, [now(), challengeId]);
         if (Number(result.changes) !== 1) reject();
+        return outcome;
+    }
+    async function consumeProof({ challengeId, signature }, purpose, reference, publicKey) {
+        if (typeof signature !== 'string' || !/^[A-Za-z0-9_-]{86,96}$/.test(signature)) reject();
+        const { keyId, jwk } = publicDeviceKey(publicKey);
+        await consumeChallenge(challengeId, purpose, reference, keyId, (bytes) => {
+            const encodedSignature = Buffer.from(signature, 'base64url');
+            if (!crypto.verify('sha256', bytes, { key: crypto.createPublicKey({ key: jwk, format: 'jwk' }),
+                dsaEncoding: encodedSignature.length === 64 ? 'ieee-p1363' : 'der' }, encodedSignature)) reject();
+        });
     }
     async function cleanup() {
         await transaction(async () => {
@@ -79,7 +88,12 @@ export function createAuthProofSecurity({ query, transaction, masterSecret, now 
             await query('run', 'DELETE FROM auth_link_attempts WHERE expires_ms <= ?', [now()]);
             await query('run', 'DELETE FROM auth_send_limits WHERE reset_ms <= ?', [now()]);
             await query('run', 'DELETE FROM auth_security_events WHERE created_ms < ?', [now() - 180 * 86400000]);
+            await query('run', `UPDATE auth_pair_requests SET state = 'expired'
+                WHERE expires_ms <= ? AND state IN ('pending', 'approved')`, [now()]);
+            await query('run', 'DELETE FROM auth_pair_requests WHERE expires_ms <= ?', [now() - 86400000]);
+            await query('run', `UPDATE auth_recovery_requests SET state = 'expired'
+                WHERE expires_ms <= ? AND state = 'pending'`, [now()]);
         });
     }
-    return { keyedIndex, sealPhone, openPhone, audit, limit, challenge, consumeProof, cleanup };
+    return { keyedIndex, sealPhone, openPhone, audit, limit, challenge, consumeChallenge, consumeProof, cleanup };
 }

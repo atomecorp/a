@@ -213,7 +213,7 @@ fn procedural_sdf_mystic_mode_is_one_isolated_turning_tile_branch() {
     assert!(shader.contains("let candidate_aside = along * eye / denominator"));
     assert!(shader.contains("let candidate_bside = across * depth / eye"));
     assert!(shader.contains("let source = select(tile.xy + vec2(aside, bside), tile.xy + vec2(bside, aside), turning_y)"));
-    assert!(shader.contains("mix(plate, tint.rgb, tint.a)"));
+    assert!(shader.contains("mix(plate, mix(tint.rgb, family.rgb, family.a), tint.a)"));
     assert!(shader.contains("material.mystic_tile_colors[index]"));
     assert!(shader.contains("material.mystic_tile_motion[index]"));
     // The back face carries the workspace WHOLE — no fade gating its opacity — and
@@ -249,7 +249,7 @@ fn procedural_sdf_mystic_mode_is_one_isolated_turning_tile_branch() {
     // wallpaper alone, blurred (never the tile beneath), and a light outline on
     // its menu face: no tint, no colour, no resting shadow.
     assert!(shader.contains("let ghost = motion.w < -0.5;"));
-    assert!(shader.contains("plate_color = mix(intuition_mystic_back_blur(ghost_uv, surface), vec3(1.0), outline_dose);"));
+    assert!(shader.contains("plate_color = mix(intuition_mystic_back_blur(ghost_uv, surface), vec3(0.62), outline_dose);"));
     assert!(shader.contains("fn intuition_mystic_back_blur(uv: vec2<f32>, surface: vec2<f32>) -> vec3<f32>"));
     assert!(shader.contains("let shadowless = select(ghost, previous_ghost || previous_absent, cosine >= 0.0);"));
     assert!(shader.contains("* lifted * select(1.0, 0.0, shadowless)"));

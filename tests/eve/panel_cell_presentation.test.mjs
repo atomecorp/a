@@ -19,6 +19,15 @@ beforeEach(() => {
 });
 const cell = { x: 380, y: 400, width: 60, height: 60 };
 
+test('reduced motion opens and closes the same panel without interpolated frames', async () => {
+    const presenter = createPanelCellPresentation('quiet', { reducedMotion: () => true });
+    await presenter.open({ rect: cell });
+    expect(fixture.motion).not.toHaveBeenCalled();
+    expect(fixture.opacity.mock.calls.at(-1)[0].opacity).toBe(1);
+    await presenter.close(); expect(fixture.motion).not.toHaveBeenCalled();
+    expect(fixture.mounted.size).toBe(0);
+});
+
 test('cell expansion reaches the standard shell, then reveals its content and collapses to its source', async () => {
     const presenter = createPanelCellPresentation('fixture');
     expect(await presenter.open({ rect: cell })).toMatchObject({ ok: true, superseded: false });

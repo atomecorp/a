@@ -1,4 +1,4 @@
-import { createCanonicalImport, IMPORT_SOURCE_TYPE, importIdentity, importRecordId, importRecordProps } from './canonical_import.js';
+import { createCanonicalImport, createImportSnapshot, IMPORT_SOURCE_TYPE, importIdentity, importRecordId, importRecordProps } from './canonical_import.js';
 import { getLocalSurfaceId } from '../apis/unified/adole_api/surfaces.js';
 import { getSessionState } from '../apis/unified/adole_api/session.js';
 import { sameImportValue } from './import_reconciliation.js';
@@ -12,8 +12,24 @@ const FORMERLY_DEVICE_SCOPED = new Set(['macos_contacts', 'native_calendar']);
 const sourceKeyFor = (id) => id;
 
 /** One cancellable, serialized collector per configured source and account. */
+// This installation's identity for native imports. In Tauri it is kept by the app
+// (its data folder survives a rebuilt debug app, its WebView storage does not):
+// otherwise every rebuild was a new device, the imports stopped resuming and later
+// re-read the whole agenda history. A browser keeps its surface id.
+let installationDevice = null;
+export const resolveImportDevice = (env = globalThis) => installationDevice || (installationDevice = (async () => {
+    const surface = getLocalSurfaceId();
+    const invoke = (env.window || env)?.__TAURI_INTERNALS__?.invoke;
+    if (typeof invoke !== 'function') return surface;
+    const id = String(await invoke('native_import_device_id', { candidate: surface }) || '');
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) throw new Error('import_device_id_invalid');
+    return id;
+})().catch((error) => { installationDevice = null; throw error; }));
+
 export function createImportLifecycle({ domain, run, restore, env = globalThis, api, session = getSessionState,
-    device = getLocalSurfaceId, intervalMs = 300000, recoveryVersion = '' } = {}) {
+    device = null, intervalMs = 300000, recoveryVersion = '' } = {}) {
+    let deviceId = '';
+    const ensureDevice = async () => (deviceId ||= device ? device() : await resolveImportDevice(env));
     const store = createCanonicalImport({ type: domain, api, session });
     const active = new Map();
     let timer = null, generation = 0, disposed = false, resuming = null, owner = null;
@@ -34,6 +50,8 @@ export function createImportLifecycle({ domain, run, restore, env = globalThis, 
         const currentGeneration = generation;
         entry.running = (async () => {
             let result, recovering = null;
+            // The pages of this pass share their table reads (canonical_import.js).
+            const snapshot = createImportSnapshot();
             while (entry.pending && currentGeneration === generation && !entry.controller.signal.aborted) {
                 entry.pending = false;
                 const context = store.capture();
@@ -49,7 +67,7 @@ export function createImportLifecycle({ domain, run, restore, env = globalThis, 
                     ...(FORMERLY_DEVICE_SCOPED.has(id) && !entry.config.source_key ? { legacy_source_prefix: `${id}/` } : {}),
                     device_id: entry.deviceId, cursor, incremental: cursor != null,
                     ...(recovering ? { restore_suppressed: true } : {}),
-                    signal: entry.controller.signal, checkSession: context.check });
+                    signal: entry.controller.signal, checkSession: context.check, snapshot });
                 context.check();
                 if (currentGeneration === generation) notify(id, result, typeof result?.changed === 'number' ? result.changed : null);
                 if (result?.ok === true && result.more === true) entry.pending = true;
@@ -85,7 +103,7 @@ export function createImportLifecycle({ domain, run, restore, env = globalThis, 
         timer = null;
     };
     const install = async (id, config, context) => {
-        const deviceId = device();
+        const deviceId = await ensureDevice();
         const sourceKey = String(config.source_key || sourceKeyFor(id, deviceId));
         const checkpointId = `source_${await importIdentity([context.owner, domain, sourceKey, deviceId])}`;
         context.check();
@@ -135,9 +153,10 @@ export function createImportLifecycle({ domain, run, restore, env = globalThis, 
         const resumeGeneration = generation;
         resuming = (async () => {
             const context = store.capture(), rows = await store.list(IMPORT_SOURCE_TYPE, context);
+            const currentDevice = await ensureDevice();
             for (const row of rows) {
                 const props = importRecordProps(row);
-                if (!props.enabled || props.domain_type !== domain || props.device_id !== device()) continue;
+                if (!props.enabled || props.domain_type !== domain || props.device_id !== currentDevice) continue;
                 await restore?.(props.source_id, props.config || {});
                 context.check();
                 const entry = await install(props.source_id, props.config || {}, context);

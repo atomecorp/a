@@ -59,6 +59,9 @@ macro_rules! eprintln {
 pub mod local_auth;
 // Local atome storage module
 pub mod local_atome;
+mod local_atome_state;
+mod local_atome_sync_progress;
+mod local_atome_sync_commands;
 mod local_atome_conflicts;
 mod local_atome_extended;
 mod local_atome_remote_projection;
@@ -3766,6 +3769,40 @@ async fn extract_audio_handler(
     }
 }
 
+// A take discarded after the native recorder already wrote its file (a voicemail the
+// caller cancels): only the signed-in user's own recordings directory is touched.
+async fn delete_recording_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<MediaTokenQuery>,
+    AxumPath(recording_id): AxumPath<String>,
+) -> impl IntoResponse {
+    if sanitize_recording_id(&recording_id).is_none() {
+        return (StatusCode::BAD_REQUEST, Json(json!({ "success": false, "error": "Invalid recording id" }))).into_response();
+    }
+    let Some(auth_state) = &state.auth_state else {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "success": false, "error": "Auth state not initialized" }))).into_response();
+    };
+    let Some(user_id) = resolve_media_authenticated_user(&headers, &query, auth_state) else {
+        return (StatusCode::UNAUTHORIZED, Json(json!({ "success": false, "error": "Unauthorized" }))).into_response();
+    };
+    let recordings_dir = match resolve_user_storage_dir(&state, &user_id, LocalStorageRoot::Recordings).await {
+        Ok(dir) => dir,
+        Err(_) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "success": false, "error": "Failed to resolve recordings directory" }))).into_response();
+        }
+    };
+    let path = recordings_dir.join(sanitize_file_name(&recording_id));
+    if !path.starts_with(&recordings_dir) {
+        return (StatusCode::BAD_REQUEST, Json(json!({ "success": false, "error": "Invalid recording id" }))).into_response();
+    }
+    match tokio::fs::remove_file(&path).await {
+        Ok(()) => Json(json!({ "success": true, "deleted": true })).into_response(),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Json(json!({ "success": true, "deleted": false })).into_response(),
+        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "success": false, "error": "Recording delete failed" }))).into_response(),
+    }
+}
+
 async fn download_recording_handler(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -5247,7 +5284,7 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
         .route("/api/uploads/:file", get(download_upload_handler))
         .route("/api/clipboard/files", post(clipboard_import_handler))
         .route("/api/extract-audio/:file", get(extract_audio_handler))
-        .route("/api/recordings/:id", get(download_recording_handler))
+        .route("/api/recordings/:id", get(download_recording_handler).delete(delete_recording_handler))
         .route("/api/user-recordings", post(user_recordings_upload_handler))
         .route("/api/admin/apply-update", post(update_file_handler))
         .route("/api/admin/batch-update", post(batch_update_handler))

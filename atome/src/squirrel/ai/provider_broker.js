@@ -70,14 +70,25 @@ const PROVIDER_ACTION_TIMEOUT_MS = Object.freeze({
     'social.status': 300000,
     'social.cancel': 60000,
     'social.handoff': 15000,
-    'social.confirm': 15000
+    'social.confirm': 15000,
+    'music.get_state': 30000, 'music.connect': 15000, 'music.await_connection': 660000,
+    'music.cancel_connection': 15000, 'music.disconnect': 15000
 });
 const DEFAULT_PROVIDER_TIMEOUT_MS = 180000;
 
-// The transport's own shape for “nobody answered”: it RESOLVES with this rather
-// than rejecting, so it must not be read as a refusal by the provider.
-const isTransportSilence = (result) => result?.status === 0
-    || String(result?.error || '').trim().toLowerCase() === 'request timeout';
+// The transport RESOLVES its own failures (status 0) rather than rejecting, so
+// none of them may be read as a refusal by the provider. Only a timeout is
+// silence from the far end; the others say the link itself was not there —
+// not open yet while the app starts, lost mid-request, or the send failed —
+// and blaming a missing server route for those is false (the same route
+// answers a moment later).
+const isTransportTimeout = (result) => String(result?.error || '').trim().toLowerCase() === 'request timeout';
+const isTransportFailure = (result) => result?.status === 0 && !isTransportTimeout(result);
+// The frame never left this device (no open link): replaying it is always safe.
+const neverSent = (result) => isTransportFailure(result) && String(result?.error || '') === 'Server unreachable';
+// A voice connection not yet answered opens no billed turn: a new offer simply
+// replaces it, so it is replayed once like the idempotent actions.
+const isReplayableOnLinkLoss = (action) => IDEMPOTENT_PROVIDER_ACTIONS.has(action) || action === 'realtime-connect';
 
 // Online provider traffic uses the platform’s authenticated application socket. The application never retrieves a stored OpenAI credential.
 export const requestProviderService = async (action, payload = {}, {
@@ -136,6 +147,12 @@ export const requestProviderService = async (action, payload = {}, {
     try {
         let result = await attempt();
         signal?.throwIfAborted();
+        // The transport reopens its link on the next send; replaying is safe when
+        // the frame never left, or for the actions a replay cannot double.
+        if (neverSent(result) || (isTransportFailure(result) && isReplayableOnLinkLoss(action))) {
+            result = await attempt();
+            signal?.throwIfAborted();
+        }
         let linkReason = null;
         if (result?.ok !== true && result?.success !== true
             && relinkNative && isRelinkable(action, String(result?.error || ''))) {
@@ -154,9 +171,9 @@ export const requestProviderService = async (action, payload = {}, {
             // it answers `ping`, `auth` and `atome` on the same connection. A
             // remote that answers everything EXCEPT this route is a remote that
             // does not implement it yet.
-            const error = new Error(isTransportSilence(result)
-                ? 'provider_route_unanswered'
-                : (result?.error || 'provider_request_failed'));
+            const error = new Error(isTransportTimeout(result) ? 'provider_route_unanswered'
+                : isTransportFailure(result) ? 'provider_connection_failed'
+                    : (result?.error || 'provider_request_failed'));
             error.http_status = result?.http_status;
             if (result?.detail) error.detail = result.detail;
             if (result?.provider_code) error.provider_code = result.provider_code;

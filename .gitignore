@@ -50,6 +50,9 @@ tests/*
 !tests/
 !tests/tv/
 !tests/tv/*.test.mjs
+!tests/apple_music/
+!tests/apple_music/*.test.mjs
+!tests/apple_music/native_request.probe.swift
 !tests/database/
 tests/database/*
 !tests/database/adole_event_replay_rebuild.test.mjs
@@ -60,10 +63,14 @@ tests/database/*
 !tests/database/adole_restart_safe_interactions.test.mjs
 !tests/server/
 tests/server/*
+!tests/server/durable_event_retry.test.mjs
+!tests/server/communication_priority.test.mjs
+!tests/server/ws_communication_corrections.test.mjs
 !tests/server/auth_phone_fixture.mjs
 !tests/server/auth_phone_link.test.mjs
 !tests/server/auth_password.test.mjs
 !tests/server/communication_push.test.mjs
+!tests/server/fcm_transport.test.mjs
 !tests/server/ws_youtube_search.test.mjs
 !tests/server/ws_tv_catalog.test.mjs
 !tests/server/principal_file_migration.test.mjs
@@ -99,6 +106,12 @@ tests/shared/*
 !tests/shared/semantic_rename_contract.test.mjs
 !tests/eve/
 tests/eve/*
+!tests/eve/workspace_bootstrap_nonblocking.test.mjs
+!tests/eve/sync_status.test.mjs
+!tests/eve/websocket_recovery.test.mjs
+!tests/eve/dashboard_eve_corrections.test.mjs
+!tests/eve/dashboard_eve_interactions.test.mjs
+!tests/eve/workspace_eve_startup.test.mjs
 !tests/eve/personal_contact_profile.test.mjs
 !tests/eve/calendar_next_events.test.mjs
 !tests/eve/dashboard_upcoming_calendar.test.mjs
@@ -163,6 +176,7 @@ tests/rendering/*
 !tests/eve/render_surface_resize_reconciliation.test.mjs
 !tests/eve/selected_project_media_playback_runtime.test.mjs
 !tests/eve/bevy_panel_home_contract.test.mjs
+!tests/eve/home_versions.test.mjs
 !tests/eve/sync_engine.test.mjs
 !tests/eve/sync_environment.test.mjs
 !tests/eve/bevy_panel_info_contract.test.mjs
@@ -193,6 +207,7 @@ tests/rendering/*
 !tests/eve/project_scene_gesture_performance.test.mjs
 !tests/eve/bevy_projection_adapter_contract.test.mjs
 !tests/eve/bevy_ui_main_menu_contract.test.mjs
+!tests/eve/bevy_ui_main_menu_fold.test.mjs
 !tests/eve/assistant_session_controller.test.mjs
 !tests/eve/assistant_image_identity.test.mjs
 !tests/eve/assistant_turn_taking.test.mjs
@@ -319,6 +334,8 @@ server/data/*.json
 .watcher.pid
 platforms/desktop-tauri/Cargo.lock
 platforms/desktop-tauri/gen/android-webroot/
+platforms/desktop-tauri/vendor/tauri-plugin-mobile-host/android/.tauri/
+platforms/desktop-tauri/vendor/tauri-plugin-mobile-host/android/build/
 platforms/desktop-tauri/gen/schemas/acl-manifests.json
 platforms/desktop-tauri/gen/schemas/desktop-schema.json
 atome/src/assets/videos/avengers.mp4
@@ -458,3 +475,7 @@ tests/squirrel/*
 
 !tests/eve/program_session_contract.test.mjs
 !tests/eve/program_nutrition.test.mjs
+
+# Music provider contract, authorization and receipt regressions
+!tests/music/
+!tests/music/**

@@ -82,7 +82,7 @@ test('import and random download apply the media before awaiting canonical persi
     const previousWindow = globalThis.window;
     globalThis.window = {};
     const order = [];
-    assetBox.sendFileToServer.mockImplementation(async file => ({ ok: true, mediaUrl: `/media/${file.name}`, fileName: file.name }));
+    assetBox.sendFileToServer.mockImplementation(async file => ({ ok: true, mediaUrl: `/media/${file.name}`, fileName: file.name, atomeId: `media_${file.name}` }));
     assetBox.fetchRemoteWallpaperFile.mockResolvedValue({ ok: true, file: { name: 'random.png', type: 'image/png' } });
     const image = createBackgroundImage({
         applyBackgroundParams: (params) => order.push(`apply:${params.backgroundImageUrl}`),
@@ -107,10 +107,34 @@ test('import and random download apply the media before awaiting canonical persi
     }
 });
 
+test('a stored wallpaper names its account-wide media atome, never only its device path', async () => {
+    const previousWindow = globalThis.window;
+    globalThis.window = {};
+    const applied = [];
+    assetBox.sendFileToServer.mockImplementation(async file => ({ ok: true, created: true, atomeId: 'media_atome_1',
+        mediaUrl: `/file/data/users/phone/Downloads/${file.name}`, fileName: file.name, filePath: `Downloads/${file.name}` }));
+    const image = createBackgroundImage({
+        applyBackgroundParams: (params) => applied.push(params),
+        schedulePreferenceSave: async () => ({ ok: true })
+    });
+    try {
+        await image.importBackgroundImageFile({ name: 'phone.png', type: 'image/png' });
+        const options = assetBox.sendFileToServer.mock.calls[0][1];
+        assert.equal(options.scope, 'global');
+        assert.notEqual(options.createAtome, false);
+        assert.equal(applied[0].backgroundImageAtomeId, 'media_atome_1');
+        assetBox.sendFileToServer.mockImplementation(async file => ({ ok: true, created: true, mediaUrl: `/media/${file.name}`, fileName: file.name }));
+        assert.deepEqual(await image.importBackgroundImageFile({ name: 'orphan.png', type: 'image/png' }), { ok: false, reason: 'media_atome_missing' });
+        assert.equal(applied.length, 1);
+    } finally {
+        globalThis.window = previousWindow;
+    }
+});
+
 test('Background persistence failures remain explicit alongside the applied image', async () => {
     const previousWindow = globalThis.window;
     globalThis.window = {};
-    assetBox.sendFileToServer.mockImplementation(async file => ({ ok: true, mediaUrl: `/media/${file.name}`, fileName: file.name }));
+    assetBox.sendFileToServer.mockImplementation(async file => ({ ok: true, mediaUrl: `/media/${file.name}`, fileName: file.name, atomeId: `media_${file.name}` }));
     assetBox.fetchRemoteWallpaperFile.mockResolvedValue({ ok: true, file: { name: 'random.png', type: 'image/png' } });
     const image = createBackgroundImage({
         applyBackgroundParams: () => {},

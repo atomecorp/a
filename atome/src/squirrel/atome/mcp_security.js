@@ -10,6 +10,7 @@ import {
 import { renderPrompt } from './mcp_resources.js';
 import { resolveRateLimitRule, sanitizeConfirmationParams } from './mcp_security_policy.js';
 import { stableStringify } from '../ai/agent_gateway_normalize.js';
+import { getSessionState } from '../apis/unified/adole_api/session.js';
 
 const MCP_SECURITY_JOURNAL_LIMIT = 200;
 const MCP_IDEMPOTENCY_LIMIT = 200;
@@ -49,6 +50,10 @@ const DEFAULT_ACTOR_CAPABILITIES = Object.freeze([
     'tv.control',
     'youtube.read',
     'youtube.control',
+    'apple_music.read',
+    'apple_music.control',
+    'apple_music.write',
+    'music.read', 'music.control', 'music.write',
     'audit.read'
 ]);
 
@@ -187,7 +192,9 @@ export function buildIdempotencyCacheKey(method, params = {}, policy = {}) {
     const key = String(params?.idempotency_key || params?.idempotencyKey || '').trim();
     if (!key) return null;
     if (policy?.idempotent !== true) return null;
-    return `${String(method || '').trim()}:${String(policy.subject || '').trim()}:${key}`;
+    // A native library receipt must never be served to a later account or another delegated actor.
+    return JSON.stringify([getSessionState().user?.id || '', resolveActorProfile(params).actor_id,
+        String(method || '').trim(), String(policy.subject || '').trim(), key]);
 }
 
 export function readIdempotencyRecord(method, params = {}, policy = {}) {

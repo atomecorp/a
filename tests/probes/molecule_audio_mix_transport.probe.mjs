@@ -82,7 +82,7 @@ normalSession.runtimeClips.set('video_clip', {
 normalSession.runtimeClips.set('audio_clip', {
     clipId: 'audio_clip', assetId: 'audio_asset', voiceId: 'audio_voice',
     previewVoiceId: 'audio_preview', audioAvailable: true, audioLoading: null,
-    audioLoadError: '', audioSource: null, playing: false, lastGain: null, video: null
+    audioLoadError: '', audioSource: null, playing: false, lastGain: null, liveVoiceIds: new Set(), video: null
 });
 
 await normalSession._playActiveVoices(0, normalClips, {});
@@ -183,13 +183,13 @@ failureSession.audio = {
 failureSession.runtimeClips.set('first_audio', {
     clipId: 'first_audio', assetId: 'first_asset', voiceId: 'first_voice',
     previewVoiceId: 'first_preview', audioAvailable: true, audioLoading: null,
-    audioLoadError: '', audioSource: null, playing: false, lastGain: null, video: null
+    audioLoadError: '', audioSource: null, playing: false, lastGain: null, liveVoiceIds: new Set(), video: null
 });
 failureSession.runtimeClips.set('failing_video', {
     clipId: 'failing_video', assetId: 'video_asset', voiceId: 'video_voice',
     previewVoiceId: 'video_preview', audioAvailable: false, audioLoading: null,
     audioLoadError: '', audioSource: buildVideoAudioSource({ url: '/api/uploads/failing.m4v?media_user_id=probe_owner' }),
-    playing: false, lastGain: null, video: null
+    playing: false, lastGain: null, video: null, liveVoiceIds: new Set()
 });
 
 await assert.rejects(

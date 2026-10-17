@@ -74,6 +74,11 @@ impl LiveInput {
         }
     }
 
+    // Frames waiting to be pulled (0 while the ring is busy).
+    pub fn available(&self) -> usize {
+        self.ring.try_lock().map(|guard| guard.2).unwrap_or(0)
+    }
+
     pub fn pull(&self, out: &mut [Frame]) {
         out.fill(Frame::ZERO);
         let Ok(mut guard) = self.ring.try_lock() else { return };

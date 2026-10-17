@@ -17,7 +17,8 @@ import {
 } from './session.js';
 import { adapters, normalizePhone, getPrimaryBackend, getSecondaryBackend, hasToken, hasAuthenticatedToken } from './auth_core.js';
 import { ensureFastifyToken } from './auth_fastify_token.js';
-import { restoreLocalAuthorization, recoverDesktopAuthorization, lockLocalAuthorization, phoneLinkClient, initializePhoneLinks, setBrowserWorkspaceIdentity, flushBrowserWorkspace } from './auth_methods_login.js';
+import { restoreLocalAuthorization, recoverDesktopAuthorization, lockLocalAuthorization, phoneLinkClient, initializePhoneLinks, setBrowserWorkspaceIdentity, flushBrowserWorkspace, deviceStore } from './auth_methods_login.js';
+import { clearGuestWorkspace as clearWorkspaceStore } from './guest_workspace_store.js';
 import { transferGuestWorkspace } from './auth_workspace.js';
 import { requireAuth, normalizeSessionUser } from './auth_state.js';
 import { auth } from './auth.js';
@@ -39,7 +40,10 @@ export const sessionAccountMethods = {
                 new Promise((resolve) => setTimeout(resolve, LOGOUT_WORKSPACE_FLUSH_BUDGET_MS))
             ]);
         }
+        const closing = isTauriRuntime() ? null : await deviceStore().read('session');
         const revoked = await phoneLinkClient().revoke('logout', undefined, lockLocalAuthorization);
+        // A shared device keeps no data of the account it closes (V1 §6.4).
+        if (closing?.deviceClass === 'shared') await clearWorkspaceStore(closing.userId);
         TauriAdapter.clearToken();
         FastifyAdapter.clearToken();
         clearSessionState();

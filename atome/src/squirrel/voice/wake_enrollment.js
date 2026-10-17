@@ -4,8 +4,8 @@ import { trainWakeClassifier, scoreWakeWindow, serializeWakeClassifier } from '.
 // verifier is a logistic regression), ~10 s of other speech and ~5 s of the room.
 export const WAKE_ENROLLMENT_TAKES = 4;
 const TAKE_LISTEN_MS = 3500;
-const FREE_SPEECH_MS = 10000;
-const AMBIENT_MS = 5000;
+export const FREE_SPEECH_MS = 10000;
+export const AMBIENT_MS = 5000;
 const MAX_RETRIES_PER_TAKE = 2;
 // Below this base score the take most likely did not contain the phrase.
 const TAKE_MIN_SCORE = 0.02;

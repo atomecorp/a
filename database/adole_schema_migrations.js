@@ -426,7 +426,26 @@ async function refreshUsersView(query) {
         GROUP BY a.atome_id;
     COMMIT;`);
 }
+// Device keys gained a role, an assurance and a device grouping (authentication
+// V1). Existing keys are silent session keys of a personal device.
+async function ensureAuthDeviceKeyColumns(query) {
+    for (const [column, ddl] of [
+        ['key_role', "ALTER TABLE auth_device_keys ADD COLUMN key_role TEXT NOT NULL DEFAULT 'session'"],
+        ['device_id', 'ALTER TABLE auth_device_keys ADD COLUMN device_id TEXT'],
+        ['assurance', "ALTER TABLE auth_device_keys ADD COLUMN assurance TEXT NOT NULL DEFAULT 'software'"],
+        ['device_class', "ALTER TABLE auth_device_keys ADD COLUMN device_class TEXT NOT NULL DEFAULT 'personal'"],
+        ['platform', 'ALTER TABLE auth_device_keys ADD COLUMN platform TEXT'],
+        ['label', 'ALTER TABLE auth_device_keys ADD COLUMN label TEXT'],
+        ['enrolled_by', 'ALTER TABLE auth_device_keys ADD COLUMN enrolled_by TEXT'],
+        ['credential_id', 'ALTER TABLE auth_device_keys ADD COLUMN credential_id TEXT'],
+        ['sign_count', 'ALTER TABLE auth_device_keys ADD COLUMN sign_count INTEGER NOT NULL DEFAULT 0'],
+        ['last_seen_ms', 'ALTER TABLE auth_device_keys ADD COLUMN last_seen_ms INTEGER'],
+        ['connection_proof', 'ALTER TABLE auth_device_keys ADD COLUMN connection_proof INTEGER NOT NULL DEFAULT 0']
+    ]) await ensureColumn({ query, table: 'auth_device_keys', column, ddl });
+}
+
 async function prepareAdoleSchemaColumns(query) {
+    await ensureAuthDeviceKeyColumns(query);
     await ensurePermissionsColumns(query);
     await ensureSnapshotColumns(query);
     await ensureEventColumns(query);

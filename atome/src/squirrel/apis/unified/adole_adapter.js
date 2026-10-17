@@ -45,7 +45,15 @@ function createWebSocketAdapter(tokenKey, backend = 'tauri') {
 
         isAvailable: () => getWs().isAvailable(),
         getToken: () => getToken(tokenKey),
-        setToken: (token) => setToken(tokenKey, token),
+        setToken: (token) => {
+            setToken(tokenKey, token);
+            // A signed-in device must be reachable (incoming calls): the session token makes
+            // the open socket announce itself, or opens it, which then announces on open.
+            if (resolvedBackend !== 'fastify' || !token) return;
+            const ws = getWs();
+            if (ws?.isConnected) void ws.announcePresence?.();
+            else void ws?.silentConnect?.();
+        },
         clearToken: () => clearToken(tokenKey),
         ws: {
             // Bumped by the transport on every successful open. Consumers that must
@@ -318,6 +326,12 @@ function createWebSocketAdapter(tokenKey, backend = 'tauri') {
             async getPending() {
                 const token = getToken(tokenKey);
                 return getWs().send({ type: 'sync', action: 'get-pending', token });
+            },
+            // Delivers the queued events of these atomes (and of their queued ancestors) now.
+            async flush(data = {}) {
+                const token = getToken(tokenKey);
+                return getWs().send({ type: 'sync', action: 'flush', token, atome_ids: data.atome_ids || data.atomeIds || [] },
+                    { timeoutMs: 120000 });
             },
             async push(data = {}) {
                 const token = getToken(tokenKey);

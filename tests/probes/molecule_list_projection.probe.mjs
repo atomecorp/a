@@ -3,6 +3,21 @@ import test from 'node:test';
 
 import { createProjectViewListContent } from '../../eVe/domains/rendering/project_view_list_content.js';
 import { createLargeVirtualizedMoleculeFixture } from '../fixtures/molecule/canonical_v2_fixtures.mjs';
+import { invokeProjectViewNavigation, resetProjectViewNavigation } from '../../eVe/domains/rendering/project_view_navigation.js';
+
+// The List mounts on a navigation level restored by its canonical owner (the
+// `ui.matrix.navigation` command at boot): the owner runs here with its own
+// dependencies injected — a project workspace, its user, its reader.
+const resumeNavigation = async (projectId) => {
+    const windowRef = { __eveWorkspaceMode: { mode: 'project', projectId }, dispatchEvent: () => true,
+        CustomEvent: class { constructor(type, options) { this.type = type; this.detail = options?.detail; } } };
+    resetProjectViewNavigation(projectId, 'Project');
+    const restored = await invokeProjectViewNavigation({ operation: 'restore', project_id: projectId }, {
+        windowRef, actor: () => 'probe_user',
+        read: async (id) => (id === projectId ? { id: projectId, type: 'project', owner_id: 'probe_user', properties: { name: 'Project' } } : null)
+    });
+    assert.equal(restored.ok, true, JSON.stringify(restored));
+};
 
 const moleculeOwner = {
     id: 'molecule_owner', atome_id: 'molecule_owner', project_id: 'project_list', type: 'group',
@@ -28,6 +43,7 @@ test('Molecule disclosure includes canonical members beyond the first store page
         id: `root_${index}`, project_id: 'project_list', type: 'shape', properties: { name: `Root ${index}` }
     })), { id: 'late_member', project_id: 'project_list', parent_id: 'molecule_owner',
         type: 'text', properties: { name: 'Later page', text: 'Member' } }];
+    await resumeNavigation('project_list');
     const content = createProjectViewListContent({ requestRefresh: () => {} });
     await content.load({ projectId: 'project_list', readList: async (_id, options) => ({
         records: records.slice(options.offset, options.offset + options.limit), totalCount: records.length
@@ -38,6 +54,7 @@ test('Molecule disclosure includes canonical members beyond the first store page
 });
 
 test('Molecule List expands a schema-v2 Molecule to its direct Atomes only', async () => {
+    await resumeNavigation('project_list');
     const content = createProjectViewListContent({ requestRefresh: () => {} });
     await content.load({
         projectId: 'project_list',
@@ -78,6 +95,7 @@ test('Molecule List never projects a large internal track graph outside Timeline
         project_id: timeline.project_id, type: 'group',
         properties: { name: 'Large Molecule', molecule_timeline: timeline }
     };
+    await resumeNavigation(timeline.project_id);
     const content = createProjectViewListContent({ requestRefresh: () => {} });
     await content.load({
         projectId: timeline.project_id,
@@ -92,6 +110,7 @@ test('Molecule List never projects a large internal track graph outside Timeline
 });
 
 test('Molecule List footer selection contract selects the first canonical Atome and preserves an empty level', async () => {
+    await resumeNavigation('project_footer');
     const content = createProjectViewListContent({ requestRefresh: () => {} });
     await content.load({
         projectId: 'project_footer',
@@ -103,6 +122,7 @@ test('Molecule List footer selection contract selects the first canonical Atome 
     assert.deepEqual(await content.selectFirstEntry(), { ok: true, selectedId: 'first', revealed: false });
     assert.equal(content.readState().primaryId, 'first');
 
+    await resumeNavigation('project_empty');
     const empty = createProjectViewListContent({ requestRefresh: () => {} });
     await empty.load({ projectId: 'project_empty', readList: async () => ({ records: [], totalCount: 0 }) });
     assert.deepEqual(await empty.selectFirstEntry(), { ok: true, empty: true, selectedId: null });

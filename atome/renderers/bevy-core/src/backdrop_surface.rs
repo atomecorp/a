@@ -155,6 +155,28 @@ pub fn resize_backdrop_surface(world: &mut World, entity: Entity, logical_size: 
     // The shader rebuilds the rounded rectangle from `mesh.uv * size_radius.xy`.
     // Left at the spawn size, a wider mesh stretched the corners by new/old
     // width (a widened ribbon tool drew a long flat arc instead of its radius).
+    write_backdrop_shape(world, entity, Some(logical_size))
+}
+
+/// Follows a corner radius patch: the patch only rewrites `AtomeCornerRadius`,
+/// and a glass disc born small then grown kept rounding with its spawn radius
+/// (a large square past the disc).
+pub fn sync_backdrop_surface_corner_radius(world: &mut World, entity: Entity) -> Result<(), String> {
+    if world.get::<MeshMaterial2d<BackdropSurfaceMaterial>>(entity).is_none() {
+        return Ok(());
+    }
+    write_backdrop_shape(world, entity, None)
+}
+
+/// Writes the size (when given) and the corner radius the shader rounds with.
+/// The radius is the node's `AtomeCornerRadius`, never a value derived from a
+/// previous size: the shader alone clamps it to half the shortest side, so a
+/// glass shrunk then grown again finds its large radius back. The glass rounds
+/// its four corners alike; per-corner radii keep the largest one.
+fn write_backdrop_shape(world: &mut World, entity: Entity, logical_size: Option<[f32; 2]>) -> Result<(), String> {
+    let radius = world
+        .get::<crate::components::AtomeCornerRadius>(entity)
+        .map(|radii| radii.0.into_iter().fold(0.0_f32, f32::max));
     let handle = world
         .get::<MeshMaterial2d<BackdropSurfaceMaterial>>(entity)
         .map(|material| material.0.clone())
@@ -164,8 +186,13 @@ pub fn resize_backdrop_surface(world: &mut World, entity: Entity, logical_size: 
         .ok_or_else(|| "bevy_backdrop_surface_assets_required".to_string())?;
     let mut material =
         materials.get_mut(&handle).ok_or_else(|| "bevy_backdrop_surface_material_missing".to_string())?;
-    material.uniform.size_radius.x = logical_size[0].max(1.0);
-    material.uniform.size_radius.y = logical_size[1].max(1.0);
+    if let Some([width, height]) = logical_size {
+        material.uniform.size_radius.x = width.max(1.0);
+        material.uniform.size_radius.y = height.max(1.0);
+    }
+    if let Some(radius) = radius {
+        material.uniform.size_radius.z = radius;
+    }
     Ok(())
 }
 

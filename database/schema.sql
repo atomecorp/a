@@ -431,6 +431,13 @@ CREATE INDEX IF NOT EXISTS idx_sync_queue_next_retry ON sync_queue(next_retry_at
 CREATE INDEX IF NOT EXISTS idx_sync_queue_dispatch
     ON sync_queue(target_server, created_at)
     WHERE status IN ('pending', 'error');
+-- Delivery status and dispatch read one account's rows (`payload.actor.id`):
+-- without this index every status read decoded the JSON of the whole queue.
+CREATE INDEX IF NOT EXISTS idx_sync_queue_actor
+    ON sync_queue(target_server, json_extract(payload, '$.actor.id'), created_at);
+-- Republishing an account's state checks, per Atome, whether its event is already
+-- queued: without this index each check read the whole queue.
+CREATE INDEX IF NOT EXISTS idx_sync_queue_atome ON sync_queue(atome_id);
 
 -- ============================================================================
 -- 9. Principal identity and credential aliases
@@ -603,15 +610,87 @@ CREATE TABLE IF NOT EXISTS auth_link_attempts (
     approved_by TEXT
 );
 CREATE INDEX IF NOT EXISTS auth_link_attempt_expiry ON auth_link_attempts(expires_ms);
+-- One account x one device holds a silent `session` key and, where the platform
+-- verifies its user, an `approve` key (both public halves only). `device_id`
+-- groups the two; rows enrolled before it existed are their own device.
 CREATE TABLE IF NOT EXISTS auth_device_keys (
     key_id TEXT PRIMARY KEY,
     principal_id TEXT NOT NULL,
     public_key TEXT NOT NULL,
     enrolled_ms INTEGER NOT NULL,
     restricted_until_ms INTEGER NOT NULL,
-    revoked_ms INTEGER
+    revoked_ms INTEGER,
+    key_role TEXT NOT NULL DEFAULT 'session',
+    device_id TEXT,
+    assurance TEXT NOT NULL DEFAULT 'software',
+    device_class TEXT NOT NULL DEFAULT 'personal',
+    platform TEXT,
+    label TEXT,
+    enrolled_by TEXT,
+    credential_id TEXT,
+    sign_count INTEGER NOT NULL DEFAULT 0,
+    last_seen_ms INTEGER,
+    -- 1 once the client proves its key on each /ws/api connection: its access
+    -- tokens are then useless without that proof.
+    connection_proof INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS auth_device_principal ON auth_device_keys(principal_id);
+CREATE INDEX IF NOT EXISTS auth_device_group ON auth_device_keys(device_id);
+
+-- Public, non-secret routing name of an account (`jean-4821`): it only says
+-- whose devices receive an approval request. Knowing it proves nothing.
+CREATE TABLE IF NOT EXISTS auth_handles (
+    handle TEXT PRIMARY KEY,
+    principal_id TEXT NOT NULL UNIQUE,
+    created_ms INTEGER NOT NULL
+);
+
+-- A new device asking an enrolled one (`enroll`) or a shared device asking its
+-- owner (`shared_open`). The code is stored keyed-hashed; the match number is
+-- shown on the requester and chosen among three on the approver.
+CREATE TABLE IF NOT EXISTS auth_pair_requests (
+    request_id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    requester_device_id TEXT NOT NULL,
+    requester_session_key TEXT NOT NULL,
+    requester_approve_key TEXT,
+    device_meta TEXT NOT NULL,
+    device_class TEXT NOT NULL,
+    code_hash TEXT,
+    match_number INTEGER NOT NULL,
+    choices TEXT NOT NULL,
+    target_principal TEXT,
+    state TEXT NOT NULL,
+    approved_by TEXT,
+    created_ms INTEGER NOT NULL,
+    expires_ms INTEGER NOT NULL,
+    failed_attempts INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS auth_pair_expiry ON auth_pair_requests(expires_ms);
+CREATE INDEX IF NOT EXISTS auth_pair_code ON auth_pair_requests(code_hash, state);
+CREATE INDEX IF NOT EXISTS auth_pair_target ON auth_pair_requests(target_principal, state);
+
+-- Only a verifier of the recovery code is kept: SHA-256 of a domain-separated
+-- principal + code. A new code replaces the previous one.
+CREATE TABLE IF NOT EXISTS auth_recovery_codes (
+    principal_id TEXT PRIMARY KEY,
+    verifier TEXT NOT NULL,
+    created_ms INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS auth_recovery_requests (
+    request_id TEXT PRIMARY KEY,
+    principal_id TEXT NOT NULL,
+    channel TEXT NOT NULL,
+    requester_device_id TEXT NOT NULL,
+    requester_session_key TEXT NOT NULL,
+    requester_approve_key TEXT,
+    device_meta TEXT NOT NULL,
+    state TEXT NOT NULL,
+    not_before_ms INTEGER NOT NULL,
+    expires_ms INTEGER NOT NULL,
+    created_ms INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS auth_recovery_principal ON auth_recovery_requests(principal_id, state);
 CREATE TABLE IF NOT EXISTS auth_device_sessions (
     session_id TEXT PRIMARY KEY,
     principal_id TEXT NOT NULL,

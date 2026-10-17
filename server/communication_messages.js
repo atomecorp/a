@@ -23,7 +23,7 @@ export async function readPersistedCommunicationMessage(vaultRouter, owner, mess
     return state?.properties || null;
 }
 
-export async function readConversation(vaultRouter, userId, { contactId, cursor = null, limit = 30 } = {}) {
+export async function readConversation(vaultRouter, userId, { contactId, cursor = null, messageId = null, limit = 30 } = {}) {
     if (!vaultRouter) throw new Error('conversation_vault_unavailable');
     if (typeof contactId !== 'string' || !contactId.trim() || contactId.length > 200) throw new Error('conversation_contact_invalid');
     limit = Math.max(1, Math.min(100, Math.trunc(Number(limit) || 30)));
@@ -40,7 +40,7 @@ export async function readConversation(vaultRouter, userId, { contactId, cursor 
         }
         oldCursor = old.nextCursor;
     } while (oldCursor);
-    const page = await vaultRouter.provider.request(userId, 'communication:list', { contactId, cursor, limit });
+    const page = await vaultRouter.provider.request(userId, 'communication:list', { contactId, cursor, messageId, limit });
     const items = await Promise.all((page?.items || []).map(async (item) => ({ ...item,
         media: await readableMedia(vaultRouter, userId, item.atome_ids) })));
     return { ...page, items };

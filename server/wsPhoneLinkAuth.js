@@ -10,15 +10,18 @@ import { generateOpaquePrincipalId } from './auth_crypto.js';
 import { AUTH_LINK_ORIGIN, AUTH_ACCESS_TTL_SECONDS } from '../atome/src/shared/auth_link_contract.js';
 import { attachWsApiClientToUser, detachWsApiClient, wsApiConnections } from './wsApiState.js';
 import { createCommunicationPush } from './communication_push.js';
+import { ACCOUNT_ACTIONS, ACCOUNT_PUBLIC_ERRORS, createWsAccountAuth } from './wsAccountAuth.js';
 
 const ACTIONS = new Set(['phone-link-start', 'phone-link-simulate-payment', 'phone-link-resend', 'phone-change-start', 'phone-link-challenge', 'phone-link-consume',
     'phone-link-approve', 'phone-link-confirm', 'phone-link-resume', 'phone-link-cancel', 'session-challenge',
     'session-delete-account', 'session-renew', 'session-local-bind', 'session-logout', 'session-logout-all', 'session-revoke-device',
     'password-login-challenge', 'password-login', 'session-set-password']);
 const PUBLIC_ERRORS = new Set(['auth_phone_e164_required', 'auth_rate_limited', 'sms_delivery_unavailable',
+    'auth_attempt_expired', 'auth_pairing_invalid', 'auth_pairing_locked',
     'sms_configuration_required', 'auth_trusted_phone_required', 'auth_session_invalid',
     'auth_session_stale', 'auth_session_reused', 'auth_device_cooling_off', 'auth_password_rejected',
-    'auth_password_too_short', 'auth_password_compromised', 'auth_password_screening_unavailable', 'auth_argon2_unavailable']);
+    'auth_password_too_short', 'auth_password_compromised', 'auth_password_screening_unavailable', 'auth_argon2_unavailable',
+    ...ACCOUNT_PUBLIC_ERRORS]);
 
 export function createWsPhoneLinkHandler({ projectRoot, jwtSecret, sendLink, database = db } = {}) {
     loadLocalSmsConfig(projectRoot);
@@ -46,6 +49,16 @@ export function createWsPhoneLinkHandler({ projectRoot, jwtSecret, sendLink, dat
         ? async (_phone, link) => ({ accepted: true, provider: 'local-development', developmentLink: link })
         : (phone, link) => createOvhSmsProvider().sendValidationLink(phone, link));
     const dataSource = database.getDataSourceAdapter();
+    // Notices to an account's devices are owned by the V1 account transport.
+    let accountAuth = null;
+    const notify = (principalId, notice, options) => accountAuth.notify(principalId, notice, options);
+    const disconnectSession = async (sessionId) => {
+        for (const connection of wsApiConnections) {
+            if (connection._wsApiSessionId !== sessionId) continue;
+            detachWsApiClient(connection);
+            setImmediate(() => connection.close(4001, 'session_revoked'));
+        }
+    };
     const service = createPhoneLinkAuth({
         query: database.query, transaction: database.withTransaction,
         masterSecret: jwtSecret(), dailyLimit: Number(process.env.AUTH_SMS_DAILY_LIMIT || 20),
@@ -59,24 +72,28 @@ export function createWsPhoneLinkHandler({ projectRoot, jwtSecret, sendLink, dat
             return { ...account, first_launch_version: 1 };
         },
         sendLink: deliverLink,
-        issueAccess: ({ principalId, keyId, sessionId }) => jwt.sign(
-            { sub: principalId, userId: principalId, sid: sessionId, cnf: { kid: keyId }, auth_version: 1 },
+        issueAccess: ({ principalId, keyId, sessionId, pop = false }) => jwt.sign(
+            { sub: principalId, userId: principalId, sid: sessionId, cnf: { kid: keyId, ...(pop ? { pop: true } : {}) }, auth_version: 1 },
             jwtSecret(), { algorithm: 'HS256', issuer: AUTH_LINK_ORIGIN, audience: 'atome-ws', expiresIn: AUTH_ACCESS_TTL_SECONDS }),
-        disconnectSession: async (sessionId) => {
-            for (const connection of wsApiConnections) {
-                if (connection._wsApiSessionId !== sessionId) continue;
-                detachWsApiClient(connection);
-                setImmediate(() => connection.close(4001, 'session_revoked'));
-            }
-        }
+        disconnectSession,
+        notify
     });
+    accountAuth = createWsAccountAuth({ service, database, jwtSecret, disconnectSession,
+        findById: (id) => findUserById(dataSource, id),
+        // An account without phone, email or password: its first launch runs.
+        createAccount: async () => {
+            const id = generateOpaquePrincipalId();
+            const account = await createUserAtome(dataSource, id, `user_${id}`, null, 'private', { first_launch_version: 1 });
+            return { ...account, first_launch_version: 1 };
+        } });
 
     async function handle(message, connection, network) {
         if (message?.type !== 'auth') return null;
         const requestId = message.requestId || message.request_id;
         try {
             let result;
-            if (!ACTIONS.has(message.action)) {
+            if (ACCOUNT_ACTIONS.has(message.action)) result = await accountAuth.handle(message, connection, network);
+            else if (!ACTIONS.has(message.action)) {
                 if (!['me', 'get-user', 'list-users', 'update-user', 'push-register', 'push-prune'].includes(message.action)) {
                     return { type: 'auth-response', requestId, success: false, ok: false, error: 'auth_protocol_upgrade_required' };
                 }
@@ -108,7 +125,7 @@ export function createWsPhoneLinkHandler({ projectRoot, jwtSecret, sendLink, dat
                 }
                 return { type: 'auth-response', requestId, success: true, ...result };
             }
-            switch (message.action) {
+            if (!result) switch (message.action) {
                 case 'password-login-challenge': result = await service.passwords.challenge(message, network); break;
                 case 'password-login': result = await service.passwords.login(message, network); break;
                 case 'session-set-password': result = await service.passwords.set(message); break;
@@ -152,6 +169,8 @@ export function createWsPhoneLinkHandler({ projectRoot, jwtSecret, sendLink, dat
                 });
                 connection._wsApiDeviceClaims = claims;
                 connection._wsApiAuthExpMs = claims.exp * 1000;
+                // The session was issued to a request this connection signed with that key.
+                connection._wsApiProvenKeyId = claims.cnf.kid;
                 await refreshDirectoryProfile(connection, result.user.id);
             }
             return { type: 'auth-response', requestId, success: result.ok === true, ...result };

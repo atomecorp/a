@@ -1,4 +1,6 @@
+import { getWorkspaceSyncStatus } from './adole_api/sync_status.js';
 import auth from './adole_api/auth.js';
+import { accountMethods } from './adole_api/auth_methods_account.js';
 import { flushBrowserWorkspace } from './adole_api/auth_methods_login.js';
 import {
   create_project,
@@ -78,7 +80,11 @@ export const AdoleAPI = {
     resendPhoneLogin: auth.resendPhoneLogin,
     getPendingPhoneLogin: auth.getPendingPhoneLogin,
     completePhoneLogin: auth.completePhoneLogin,
+    confirmPhoneLogin: auth.confirmPhoneLogin,
     cancelPhoneLogin: auth.cancelPhoneLogin,
+    loginWithPassword: auth.loginWithPassword,
+    setPassword: auth.setPassword,
+    hasKnownPassword: auth.hasKnownPassword,
     ensureLocalSession: auth.ensureLocalSession,
     logout: auth.logout,
     current: auth.current,
@@ -92,7 +98,9 @@ export const AdoleAPI = {
     clearFastifyToken: auth.clearFastifyToken,
     isAuthenticated: () => getSessionState().mode === 'authenticated',
     getAuthenticatedUser: () => (getSessionState().mode === 'authenticated' ? getSessionState().user : null),
-    requireAuth: auth.requireAuth
+    requireAuth: auth.requireAuth,
+    // Authentication V1: accounts without phone, pairing, devices and recovery.
+    ...accountMethods
   },
   projects: {
     create: create_project,
@@ -158,6 +166,7 @@ export const AdoleAPI = {
     listPrivacyRules: list_property_privacy_rules
   },
   sync: {
+    getStatus: getWorkspaceSyncStatus,
     sync: auth.sync,
     // Envoie au serveur ce que le workspace navigateur a cree localement (web seulement).
     flushWorkspace: flushBrowserWorkspace,
@@ -181,8 +190,8 @@ export const AdoleAPI = {
     }
   },
   communication: {
-    readConversation: async ({ contactId, targetPhone = '', cursor = null, limit = 30 } = {}) => {
-      const result = await fastifyCall({ type: 'conversation', contactId, targetPhone, cursor, limit }, 'communication_auth_unavailable');
+    readConversation: async ({ contactId, targetPhone = '', cursor = null, messageId = null, limit = 30 } = {}) => {
+      const result = await fastifyCall({ type: 'conversation', contactId, targetPhone, cursor, messageId, limit }, 'communication_auth_unavailable');
       if (!result.ok) throw new Error(result.error || 'conversation_read_failed');
       return result;
     },
@@ -214,6 +223,7 @@ export const AdoleAPI = {
     },
     // La pile de notifications telle que le serveur l'a ecrite (jamais la copie locale).
     readNotifications: () => fastifyCall({ type: 'notification-stack', action: 'read' }, 'communication_auth_unavailable'),
+    publishNotification: notification => fastifyCall({ type: 'notification-stack', action: 'publish', notification }, 'communication_auth_unavailable'),
     removeNotification: async ({ notificationId = null } = {}) => {
       const prepared = await auth.ensureFastifyToken();
       if (!prepared?.ok) throw new Error(prepared?.error || prepared?.reason || 'communication_auth_unavailable');

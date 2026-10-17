@@ -4,7 +4,7 @@ import { readPasswordCredential } from '../database/auth_credentials.js';
 import { authPasswordRequestDigest } from '../atome/src/shared/auth_link_contract.js';
 
 // Credentials belong to protected identity storage, never Atome state/history.
-export function createPasswordAuth({ query, transaction, proof, sessions, findByPhone, findById,
+export function createPasswordAuth({ query, transaction, proof, sessions, devices, findByPhone, findById,
     now = Date.now, screen = screenPassword, disconnectSession }) {
     let dummy;
     const credential = id => readPasswordCredential(query, id);
@@ -66,8 +66,8 @@ export function createPasswordAuth({ query, transaction, proof, sessions, findBy
             const device = await query('get', 'SELECT * FROM auth_device_keys WHERE key_id = ?', [keyId]);
             if (device && (device.revoked_ms !== null || device.principal_id !== account.user_id)) reject('auth_password_rejected');
             if (!device) {
-                await query('run', 'INSERT INTO auth_device_keys VALUES (?, ?, ?, ?, ?, NULL)',
-                    [keyId, account.user_id, JSON.stringify(jwk), now(), now() + 86400000]);
+                await devices.enroll({ keyId, principalId: account.user_id, jwk, enrolledBy: 'password',
+                    restrictedUntil: now() + 86400000 });
                 await proof.audit('device_enrolled', account.user_id, keyId);
             }
             if (upgraded) {

@@ -112,28 +112,8 @@ pub fn filter_sync_event_for_user(
 // STATE & TYPES
 // =============================================================================
 
-#[derive(Clone)]
-pub struct LocalAtomeState {
-    pub db: Arc<Mutex<Connection>>,
-    storage_root: PathBuf,
-    pub recent_request_ids: Arc<Mutex<DedupeCache>>,
-    pub recent_fingerprints: Arc<Mutex<FingerprintCache>>,
-    pub(crate) remote_sync_credentials: Arc<Mutex<HashMap<String, RemoteSyncCredential>>>,
-}
-
-impl LocalAtomeState {
-    pub(crate) fn storage_root(&self) -> &Path {
-        &self.storage_root
-    }
-}
-
-#[derive(Clone)]
-pub(crate) struct RemoteSyncCredential {
-    pub(crate) remote_user_id: String,
-    pub(crate) token: String,
-    pub(crate) remote_url: String,
-    pub(crate) environment_fingerprint: String,
-}
+pub use super::local_atome_state::LocalAtomeState;
+pub(crate) use super::local_atome_state::RemoteSyncCredential;
 
 pub(crate) fn configure_remote_sync_credential(
     state: &LocalAtomeState,
@@ -175,6 +155,7 @@ pub(crate) fn clear_remote_sync_credential(
         .lock()
         .map_err(|_| "remote_sync_credentials_unavailable".to_string())?;
     credentials.remove(local_user_id);
+    if let Ok(mut progress) = state.sync_progress.lock() { progress.remove(local_user_id); }
     Ok(())
 }
 
@@ -2450,6 +2431,7 @@ mod state_current_type_filter_tests {
             recent_request_ids: Arc::new(Mutex::new(DedupeCache::new(32))),
             recent_fingerprints: Arc::new(Mutex::new(FingerprintCache::new(32, 750))),
             remote_sync_credentials: Arc::new(Mutex::new(HashMap::new())),
+            sync_progress: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -2604,6 +2586,43 @@ fn event_parent_id(event: &EventRecord) -> Option<&str> {
         .as_ref()?
         .get("parent_id")?
         .as_str()
+}
+
+// Queued deliveries of precise atomes, oldest first, whatever their retry delay:
+// a share needs them on the server now, not after the rest of the queue.
+pub(super) fn list_sync_queue_for_atomes(
+    db: &Connection,
+    target_server: &str,
+    actor_id: &str,
+    atome_ids: &[String],
+) -> Result<Vec<SyncQueueItem>, String> {
+    if atome_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let marks = vec!["?"; atome_ids.len()].join(",");
+    let mut stmt = db
+        .prepare(&format!(
+            "SELECT queue_id, payload, attempts
+             FROM sync_queue
+             WHERE target_server = ?1
+               AND json_extract(payload, '$.actor.id') = ?2
+               AND status IN ('pending', 'error')
+               AND atome_id IN ({marks})
+             ORDER BY created_at ASC, queue_id ASC"
+        ))
+        .map_err(|e| e.to_string())?;
+    let mut params: Vec<&dyn rusqlite::ToSql> = vec![&target_server, &actor_id];
+    params.extend(atome_ids.iter().map(|id| id as &dyn rusqlite::ToSql));
+    let rows = stmt
+        .query_map(params.as_slice(), |row| {
+            Ok(SyncQueueItem {
+                queue_id: row.get(0)?,
+                payload: row.get(1)?,
+                attempts: row.get::<_, i64>(2)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+    Ok(rows.filter_map(|r| r.ok()).collect())
 }
 
 pub(super) fn list_sync_queue_for_actor(
@@ -3191,6 +3210,7 @@ mod property_commit_security_tests {
             recent_request_ids: Arc::new(Mutex::new(DedupeCache::new(32))),
             recent_fingerprints: Arc::new(Mutex::new(FingerprintCache::new(32, 750))),
             remote_sync_credentials: Arc::new(Mutex::new(HashMap::new())),
+            sync_progress: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -4165,5 +4185,6 @@ pub fn create_state(data_dir: PathBuf, storage_root: PathBuf) -> LocalAtomeState
         recent_request_ids: Arc::new(Mutex::new(DedupeCache::new(2000))),
         recent_fingerprints: Arc::new(Mutex::new(FingerprintCache::new(5000, 750))),
         remote_sync_credentials: Arc::new(Mutex::new(HashMap::new())),
+        sync_progress: Arc::new(Mutex::new(HashMap::new())),
     }
 }

@@ -4,15 +4,14 @@ import { requestProviderService } from '../ai/provider_broker.js';
 import { OPENAI_MODALITY_MODELS, OPENAI_VAD_SCHEMA } from '../ai/model_catalog_registry.js';
 import { getAudioPlaybackAPI } from '../../application/audio_runtime/audio_playback_api.js';
 import { openAiFailure } from '../ai/openai_stream.js';
-
-const FAREWELL_DEADLINE_MS = 6000;
+import { createVoiceInputMeter } from './voice_input_meter.js';
 
 // WebRTC owns duplex media delivery. AudioPlaybackAPI owns audible output;
 // the assistant owns focus and the conversation owns public transcript turns.
 export const createRealtimeSession = ({
     env = globalThis, request = requestProviderService,
     playback = getAudioPlaybackAPI(env), onTurn = async () => {}, onTool = async () => {},
-    history = () => [], onUsage = () => {}, tools = [], createTools = null, voice = 'marin', locale = '', readyLine = '', farewellLine = '', suspendWhenHidden = true, vad = { type: 'server_vad', threshold: 0.5, silence_duration_ms: 500, prefix_padding_ms: 300 }, deviceId = ''
+    history = () => [], onUsage = () => {}, tools = [], createTools = null, voice = 'marin', locale = '', announceReady = null, suspendWhenHidden = true, vad = { type: 'server_vad', threshold: 0.5, silence_duration_ms: 500, prefix_padding_ms: 300 }, deviceId = ''
 } = {}) => {
     // Interface language (ISO-639-1): a transcription hint and the reply language,
     // otherwise ambient noise is transcribed and answered in any language.
@@ -29,9 +28,7 @@ export const createRealtimeSession = ({
     let toolSession = null, toolQueue = Promise.resolve();
     let state = { phase: 'closed', sessionId: null, error: '', connected: false };
     const transcripts = new Map(), heardResponses = new Map();
-    // Out-of-band "ready" and "farewell" announcements: spoken, never part of the conversation.
-    const announcements = new Set();
-    let currentResponse = null, farewell = null;
+    let currentResponse = null;
     const flushTranscript = async (responseId, heard) => {
         heardResponses.set(responseId, heard);
         if (heardResponses.size > 128) heardResponses.delete(heardResponses.keys().next().value);
@@ -40,14 +37,40 @@ export const createRealtimeSession = ({
         for (const [, turn] of ready) await onTurn({ id: turn.id, role: 'assistant', text: turn.text, heard, interrupted: !heard });
     };
     const listeners = new Set();
+    // The level of the voice heard (the remote track, measured, never owned):
+    // the frames the local backend publishes from its TTS, for the assistant's visuals.
+    const frameListeners = new Set();
+    let outputMeter = null;
+    const publishFrame = frame => frameListeners.forEach(fn => fn(frame));
+    const stopOutputMeter = () => {
+        const meter = outputMeter, sessionId = state.sessionId; outputMeter = null;
+        if (meter) void meter.stop().then(() => publishFrame({ session_id: sessionId, rms: 0 }));
+    };
+    const meterOutput = (stream, sessionId) => {
+        stopOutputMeter();
+        const meter = outputMeter = createVoiceInputMeter({ env, onFrame: ({ rms }) => publishFrame({ session_id: sessionId, rms }) });
+        void meter.start({ stream }).catch(error => writeVoiceDiagnostic(env, 'voice.realtime.output_meter.failed', { error: error.message }));
+    };
     const snapshot = () => ({ ...state,
         microphoneActive: listening && Boolean(stream?.getAudioTracks().some(track => track.readyState === 'live' && track.enabled !== false)) });
     const emit = patch => { state = { ...state, ...patch }; listeners.forEach(fn => fn(snapshot())); };
     const send = event => {
         if (channel?.readyState === 'open') channel.send(JSON.stringify(event));
     };
-    const announce = (purpose, line) => send({ type: 'response.create', response: { conversation: 'none', input: [],
-        output_modalities: ['audio'], metadata: { purpose }, instructions: `Say exactly this sentence and nothing else: "${line}"` } });
+    const setInput = enabled => stream?.getAudioTracks().forEach(track => { track.enabled = enabled; });
+    // eVe says she is ready in her own voice, played locally once the session can
+    // hear and answer: the microphone stays shut meanwhile, and whatever it took
+    // in is cleared, so the session never answers her own sentence.
+    const announceReadiness = async token => {
+        if (!announceReady) return emit({ phase: listening ? 'listening' : 'idle', connected: true });
+        setInput(false);
+        emit({ phase: 'speaking', connected: true });
+        await announceReady();
+        if (token !== generation || !listening) return;
+        send({ type: 'input_audio_buffer.clear' });
+        setInput(true);
+        emit({ phase: 'listening' });
+    };
     const stopCapture = () => {
         listening = false;
         stream?.getTracks().forEach(track => track.stop());
@@ -57,16 +80,15 @@ export const createRealtimeSession = ({
         });
     };
     const close = async () => {
-        farewell?.resolve();
         generation++; abort?.abort(); abort = null;
         unsubscribeLifecycle(); unsubscribeLifecycle = () => {};
-        stopCapture(); toolSession = null; playback.stopStream({ id: state.sessionId });
+        stopCapture(); stopOutputMeter(); toolSession = null; playback.stopStream({ id: state.sessionId });
         channel?.close(); peer?.close(); channel = null; peer = null;
         unsubscribeControl(); unsubscribeControl = () => {};
         const id = remoteId; remoteId = null;
         emit({ phase: 'closed', sessionId: null, error: '', connected: false });
         const unfinished = [...transcripts.values()];
-        transcripts.clear(); heardResponses.clear(); announcements.clear(); currentResponse = null;
+        transcripts.clear(); heardResponses.clear(); currentResponse = null;
         const results = await Promise.allSettled([
             ...(id ? [request('realtime-close', { session_id: id })] : []),
             ...unfinished.map(turn => onTurn({ id: turn.id, role: 'assistant', text: turn.text, heard: false, interrupted: true }))
@@ -81,15 +103,15 @@ export const createRealtimeSession = ({
         if (event.type === 'error') throw openAiFailure(event, 'realtime_provider_error');
         if (event.type === 'response.done' && event.response?.status === 'failed') throw openAiFailure(event, 'provider_response_failed');
         if (event.type === 'input_audio_buffer.speech_started' && listening) emit({ phase: 'listening' });
-        const purpose = event.type === 'response.created' ? event.response?.metadata?.purpose : '';
-        if (purpose === 'ready' || purpose === 'farewell') announcements.add(event.response.id);
-        if (purpose === 'farewell' && farewell) farewell.id = event.response.id;
         if (event.type === 'response.created' && listening) emit({ phase: 'responding' });
         if (event.type === 'conversation.item.input_audio_transcription.completed' && listening) {
             onUsage(event.usage, OPENAI_MODALITY_MODELS.transcription);
             await onTurn({ id: event.item_id, role: 'user', text: event.transcript });
         }
         if (event.type === 'output_audio_buffer.started') currentResponse = event.response_id;
+        // The voice is heard from the first sample to the last, beyond `response.done`.
+        if (event.type === 'output_audio_buffer.started' && listening) emit({ phase: 'speaking' });
+        if (['output_audio_buffer.stopped', 'output_audio_buffer.cleared'].includes(event.type) && listening && state.phase === 'speaking') emit({ phase: 'listening' });
         if (event.type === 'output_audio_buffer.cleared' || event.type === 'input_audio_buffer.speech_started') {
             const responseId = event.response_id || currentResponse;
             if (responseId) await flushTranscript(responseId, false);
@@ -97,10 +119,8 @@ export const createRealtimeSession = ({
         if (event.type === 'output_audio_buffer.stopped') {
             await flushTranscript(event.response_id, heardResponses.get(event.response_id) !== false);
             currentResponse = null;
-            if (farewell?.id === event.response_id) farewell.resolve();
         }
-        if (event.type === 'response.done' && farewell?.id === event.response?.id && event.response?.status !== 'completed') farewell.resolve();
-        if (event.type === 'response.output_audio_transcript.done' && listening && !announcements.has(event.response_id)) {
+        if (event.type === 'response.output_audio_transcript.done' && listening) {
             const responseId = event.response_id || currentResponse;
             transcripts.set(event.item_id, { id: event.item_id, text: event.transcript, responseId });
             if (heardResponses.has(responseId)) await flushTranscript(responseId, heardResponses.get(responseId));
@@ -115,7 +135,10 @@ export const createRealtimeSession = ({
                 { type: 'response.create' }
             ] }, { signal: abort.signal });
         }
-        if (event.type === 'response.done' && listening) { onUsage(event.response?.usage, event.response?.model || OPENAI_MODALITY_MODELS.voice); emit({ phase: 'listening' }); }
+        if (event.type === 'response.done' && listening) {
+            onUsage(event.response?.usage, event.response?.model || OPENAI_MODALITY_MODELS.voice);
+            if (state.phase !== 'speaking') emit({ phase: 'listening' });
+        }
     };
     const fail = async (error, token = generation) => {
         if (token !== generation) return;
@@ -189,7 +212,7 @@ export const createRealtimeSession = ({
                 void playback.playStream({ id: playbackId, stream: event.streams[0] })
                     .then(() => {
                         if (token !== generation) playback.stopStream({ id: playbackId });
-                        else playback.muteStream({ id: playbackId, muted: !listening });
+                        else { playback.muteStream({ id: playbackId, muted: !listening }); meterOutput(event.streams[0], playbackId); }
                     }).catch(failCurrent);
             };
             connection.onconnectionstatechange = () => {
@@ -199,10 +222,7 @@ export const createRealtimeSession = ({
             };
             channel = connection.createDataChannel('oai-events');
             channel.onopen = () => {
-                if (token !== generation) return;
-                emit({ phase: listening ? 'listening' : 'idle', connected: true });
-                // Tell the user the wait is over, in the interface language.
-                if (readyLine) announce('ready', readyLine);
+                if (token === generation) void announceReadiness(token).catch(failCurrent);
             };
             channel.onmessage = event => {
                 // Serialize tool calls while keeping speech and interruption events responsive.
@@ -250,22 +270,10 @@ export const createRealtimeSession = ({
             await fail(error); throw error;
         }
     };
-    // A hang-up stops listening at once, then lets the spoken farewell finish
-    // within a bounded delay before releasing the transport.
-    const end = async ({ speakFarewell = false } = {}) => {
-        if (speakFarewell && farewellLine && state.connected && channel?.readyState === 'open' && !farewell) {
-            listening = false; stopCapture();
-            send({ type: 'response.cancel' }); send({ type: 'output_audio_buffer.clear' }); send({ type: 'input_audio_buffer.clear' });
-            await new Promise(resolve => {
-                const deadline = (env.setTimeout || globalThis.setTimeout)(() => farewell?.resolve(), FAREWELL_DEADLINE_MS);
-                farewell = { id: null, resolve: () => { (env.clearTimeout || globalThis.clearTimeout)(deadline); farewell = null; resolve(); } };
-                announce('farewell', farewellLine);
-            });
-        }
-        return close();
-    };
+    // A hang-up releases the transport at once: the farewell is eVe's own voice,
+    // spoken by the assistant, not by the model.
     return Object.freeze({
-        open, close: end, pause,
+        open, close, pause,
         async configure(options = {}) {
             const nextVad = options.vad === undefined ? turnDetection : validateVad(options.vad);
             const nextDevice = options.deviceId === undefined ? deviceId : String(options.deviceId);
@@ -274,6 +282,8 @@ export const createRealtimeSession = ({
         },
         resume: open,
         getState: snapshot,
-        subscribe(fn) { listeners.add(fn); fn(snapshot()); return () => listeners.delete(fn); }
+        subscribe(fn) { listeners.add(fn); fn(snapshot()); return () => listeners.delete(fn); },
+        // `{ session_id, rms }` of the voice heard, every display frame while it plays.
+        subscribeFrames(fn) { frameListeners.add(fn); return () => frameListeners.delete(fn); }
     });
 };

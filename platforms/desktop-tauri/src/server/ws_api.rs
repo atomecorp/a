@@ -60,8 +60,21 @@ pub(super) async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
     println!("🔗 New WebSocket API connection");
 
     let mut provider = ProviderRelay::default();
+    let mut sync_events = super::sync_event_sender().subscribe();
+    let mut observed_token: Option<String> = None;
     loop {
         let msg = tokio::select! {
+            notification = sync_events.recv() => {
+                if let Ok(payload) = notification {
+                    if matches!(payload["type"].as_str(), Some("sync:status" | "sync:projection-ready")) {
+                        let user = state.auth_state.as_ref().and_then(|auth| local_auth::verified_user_id_from_token(auth, observed_token.as_deref()));
+                        if user.as_deref().is_some_and(|id| payload["local_user_id"].as_str() == Some(id)) {
+                            if socket.send(Message::Text(payload.to_string())).await.is_err() { break; }
+                        }
+                    }
+                }
+                continue;
+            },
             incoming = socket.next() => { let Some(incoming) = incoming else { break; }; incoming },
             response = provider.receive() => {
                 if let Some(response) = response {
@@ -95,6 +108,9 @@ pub(super) async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
                 };
 
                 let msg_type = data.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                if let Some(token) = data["token"].as_str() {
+                    observed_token = ws_authenticated_user(&data, &state).ok().map(|_| token.to_string());
+                }
                 let request_id = data
                     .get("requestId")
                     .or_else(|| data.get("request_id"))
@@ -104,6 +120,9 @@ pub(super) async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
 
                 // Handle ping/pong
                 if msg_type == "ping" {
+                    if let Some(user) = state.auth_state.as_ref().and_then(|auth| local_auth::verified_user_id_from_token(auth, observed_token.as_deref())) {
+                        super::broadcast_sync_event(json!({"type":"sync:connection-check", "local_user_id":user}));
+                    }
                     let _ = socket
                         .send(Message::Text(json!({"type": "pong"}).to_string()))
                         .await;

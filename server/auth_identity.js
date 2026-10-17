@@ -231,6 +231,8 @@ async function migrateLegacyUser(dataSource, legacy) {
     return principalId;
 }
 
+// A user without phone or password used to be a stale guest workspace; since
+// authentication V1 an account holding device keys is a real principal.
 export async function migrateLegacyPhonePrincipals(dataSource) {
     await assertIdentitySchema(dataSource);
     return withTransaction(async () => {
@@ -240,7 +242,8 @@ export async function migrateLegacyPhonePrincipals(dataSource) {
             EXISTS(SELECT 1 FROM particles p WHERE p.atome_id = atomes.atome_id AND p.particle_key = 'password_hash') AS has_password
             FROM atomes WHERE atome_type = 'user'
             AND NOT EXISTS (SELECT 1 FROM principal_phone_credentials c
-                WHERE c.principal_id = atomes.atome_id)`);
+                WHERE c.principal_id = atomes.atome_id)
+            AND NOT EXISTS (SELECT 1 FROM auth_device_keys k WHERE k.principal_id = atomes.atome_id)`);
         const migrated = [];
         const credentialless = (legacyUsers || []).filter((legacy) => !legacy.has_phone && !legacy.has_password);
         if (credentialless.length) {
@@ -250,12 +253,14 @@ export async function migrateLegacyPhonePrincipals(dataSource) {
                 SELECT a.atome_id, 'active', ? FROM atomes a
                 WHERE a.atome_type = 'user'
                 AND NOT EXISTS (SELECT 1 FROM principal_phone_credentials c WHERE c.principal_id = a.atome_id)
+                AND NOT EXISTS (SELECT 1 FROM auth_device_keys k WHERE k.principal_id = a.atome_id)
                 AND NOT EXISTS (SELECT 1 FROM particles p WHERE p.atome_id = a.atome_id
                     AND p.particle_key IN ('phone', 'password_hash'))
                 ON CONFLICT(guest_principal_id) DO NOTHING`, [classifiedAt]);
             await rows(dataSource, `UPDATE atomes SET atome_type = 'guest_workspace', updated_at = ?
                 WHERE atome_type = 'user'
                 AND NOT EXISTS (SELECT 1 FROM principal_phone_credentials c WHERE c.principal_id = atomes.atome_id)
+                AND NOT EXISTS (SELECT 1 FROM auth_device_keys k WHERE k.principal_id = atomes.atome_id)
                 AND NOT EXISTS (SELECT 1 FROM particles p WHERE p.atome_id = atomes.atome_id
                     AND p.particle_key IN ('phone', 'password_hash'))`, [classifiedAt]);
             migrated.push(...credentialless.map((legacy) => legacy.atome_id));

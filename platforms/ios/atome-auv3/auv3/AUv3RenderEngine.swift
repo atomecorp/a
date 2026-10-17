@@ -375,6 +375,10 @@ extension auv3Utils {
                                               renderStartFrame: renderStartFrame)
             }
 
+            // The native Kira engine (Molecule playback, mixer graph) on the host's clock.
+            strongSelf.mixKiraEngine(bufferList: bufferList, frameCount: frameCount, timestamp: timestamp,
+                                     channels: outChannels, interleaved: outInterleaved, isFloat32: outIsFloat32)
+
             // Optional debug capture of ch0 (mix) at low cost
             if strongSelf.dbgCaptureEnabled, bufferList.numberOfBuffers > 0 {
                 let buf = bufferList.buffer(at: 0)

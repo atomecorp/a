@@ -7,30 +7,34 @@ describe('phone-link client serialization', () => {
         let result;
         const socket = { pendingRequests: new Map([['request', { timeout: null, resolve: value => { result = value; } }]]), ...messageHandlerMixin };
         socket.handleMessage(JSON.stringify({ type: 'auth-response', requestId: 'request', success: true,
-            paymentRequired: true, payment: { mode: 'simulated' }, developmentLink: 'local-test-link', newAccount: true }));
-        expect(result).toMatchObject({ ok: true, paymentRequired: true, payment: { mode: 'simulated' }, developmentLink: 'local-test-link', newAccount: true });
+            paymentRequired: true, payment: { mode: 'simulated' }, developmentLink: 'local-test-link', newAccount: true, serverNow: 123, pairingCode: '12345678' }));
+        expect(result).toMatchObject({ ok: true, paymentRequired: true, payment: { mode: 'simulated' }, developmentLink: 'local-test-link', newAccount: true, serverNow: 123, pairingCode: '12345678' });
     });
-    it('restores a payment-required attempt without SMS proof and signs simulation before subscribing', async () => {
-        const records = new Map(), actions = [], now = 1800000000000;
+    it('restores a verified payment and revalidates without another SMS or deadline reset', async () => {
+        const records = new Map(), actions = [], initial = 1800000000000;
+        let clock = initial, verified = false;
         const device = { keyId: 'device', publicKey: {}, sign: async () => ({ challengeId: 'signed', signature: 'proof' }) };
         const devices = { forPhone: async () => device, randomHandle: () => 'nonce', put: async (key, value) => records.set(key, value),
             read: async key => records.get(key), remove: async key => records.delete(key) };
         const send = async message => {
             actions.push(message.action);
-            if (message.action === 'phone-link-start') return { ok: true, attemptId: 'attempt', expiresAt: now + 60000, paymentRequired: true };
-            if (message.action === 'phone-link-challenge') return { ok: true, challenge: { purpose: message.purpose, reference: 'attempt', issuedAt: now, nonce: 'server:nonce' } };
-            return { ok: true, pending: true };
+            if (message.action === 'phone-link-start') return { ok: true, attemptId: 'attempt', expiresAt: initial + 300000, serverNow: clock, pairingCode: '12345678' };
+            if (message.action === 'phone-link-challenge') return { ok: true, challenge: { purpose: message.purpose, reference: 'attempt', issuedAt: clock, nonce: 'server:nonce' } };
+            if (message.action === 'phone-link-simulate-payment') return { ok: true, token: 'access', user: { id: 'user', phone: '+33612345678' }, session: { keyId: device.keyId } };
+            return { ok: true, pending: true, expiresAt: initial + 300000, serverNow: clock, pairingCode: '12345678', ...(verified ? { paymentRequired: true } : {}) };
         };
-        const client = createPhoneLinkClient({ devices, send, installSession: async () => {}, locks: null, now: () => now });
-        expect(await client.start('+33612345678')).toMatchObject({ paymentRequired: true });
-        const resumed = createPhoneLinkClient({ devices, send, installSession: async () => {}, locks: null, now: () => now });
-        expect(await resumed.pendingAttempt()).toEqual({ phone: '+33612345678', expiresAt: now + 60000, paymentRequired: true });
-        expect(await resumed.resume()).toMatchObject({ paymentRequired: true }); expect(actions).toEqual(['phone-link-start']);
-        await resumed.simulatePayment('card');
-        expect(actions).toEqual(['phone-link-start', 'phone-link-challenge', 'phone-link-simulate-payment', 'phone-link-challenge', 'phone-link-resume']);
-        expect(records.get('attempt').paymentRequired).toBe(false);
-        await resumed.resend();
-        expect(actions.slice(-4)).toEqual(['phone-link-challenge', 'phone-link-resend', 'phone-link-challenge', 'phone-link-resume']);
+        const make = () => createPhoneLinkClient({ devices, send, installSession: async () => {}, locks: null, now: () => clock });
+        await make().start('+33612345678');
+        clock += 120000;
+        const resumed = make();
+        expect(await resumed.pendingAttempt()).toMatchObject({ expiresAt: initial + 300000, pairingCode: '12345678', paymentRequired: false });
+        await resumed.resume();
+        expect((await resumed.pendingAttempt()).expiresAt - clock).toBe(180000);
+        verified = true; await resumed.resume();
+        expect(await make().pendingAttempt()).toMatchObject({ paymentRequired: true, expiresAt: initial + 300000 });
+        expect(actions.filter(action => action === 'phone-link-start')).toHaveLength(1);
+        expect(await resumed.simulatePayment('card')).toMatchObject({ token: 'access' });
+        expect(records.has('attempt')).toBe(false);
     });
     it('consumes a local development link through the normal signed proof flow', async () => {
         const records = new Map();
@@ -108,7 +112,7 @@ describe('phone-link client serialization', () => {
         expect(actions).toEqual(['phone-link-start', 'phone-link-challenge', 'phone-link-resume']);
     });
 
-    it('confirms a foreign SMS link without requiring or installing a session on its opener', async () => {
+    it('requires a transferred pairing code before confirming a foreign link', async () => {
         const actions = [];
         let installed = false;
         const devices = {
@@ -128,8 +132,13 @@ describe('phone-link client serialization', () => {
         const attemptId = 'a'.repeat(43);
         const token = 'b'.repeat(43);
         await expect(client.consumeLink(`https://atome.one/auth/v/${attemptId}#t=${token}`))
-            .resolves.toEqual({ ok: true, approved: true });
-        expect(actions).toEqual([{ type: 'auth', action: 'phone-link-confirm', attemptId, token }]);
+            .resolves.toEqual({ ok: true, confirmationRequired: true });
+        expect(actions).toEqual([]);
+        expect(await client.pendingAttempt()).toEqual({ confirmationRequired: true });
+        await expect(client.confirmLink('bad')).rejects.toThrow('auth_pairing_invalid');
+        expect(actions).toEqual([]);
+        await expect(client.confirmLink('1234 5678')).resolves.toEqual({ ok: true, approved: true });
+        expect(actions).toEqual([{ type: 'auth', action: 'phone-link-confirm', attemptId, token, pairingCode: '12345678' }]);
         expect(installed).toBe(false);
     });
 });

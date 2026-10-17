@@ -8,11 +8,11 @@ import { saveExportFile } from '../shared/file_export.js';
 
 export const socialRequest = (action, payload = {}, options = {}) => requestProviderService(`social.${action}`, payload, options);
 
-const OFFICIAL_HOSTS = /^(www\.)?(tiktok\.com|instagram\.com|facebook\.com)$/;
+const OFFICIAL_HOSTS = /^(?:(www\.)?(tiktok\.com|instagram\.com|facebook\.com|deezer\.com)|accounts\.spotify\.com|open\.spotify\.com)$/;
 const isOfficialUrl = (value) => {
     try {
         const url = new URL(value);
-        return url.protocol === 'https:' && OFFICIAL_HOSTS.test(url.hostname);
+        return url.protocol === 'https:' && !url.username && !url.password && !url.port && OFFICIAL_HOSTS.test(url.hostname);
     } catch { return false; }
 };
 

@@ -69,7 +69,12 @@ test('strips, tiles and the node contract (only interactive kinds carry handlers
     assert.ok(ids.includes('molecule_mix_strip_voice_audio_in'));
     assert.ok(ids.includes('molecule_mix_strip_voice_audio_add'));
     assert.ok(ids.includes('molecule_mix_strip_voice_audio_out'));
-    assert.ok(ids.includes('molecule_mix_strip_voice_audio_outline_bridge'), 'the selected module joins its zone');
+    // The selected module and its zone are lit as an active tool is.
+    const selectedIndex = ids.findIndex((id) => /^molecule_mix_strip_voice_audio_module_\d+_glow$/.test(id));
+    assert.ok(selectedIndex >= 0, 'the selected module carries the active-tool glow');
+    const zone = nodes.find((entry) => entry.id === 'molecule_mix_strip_voice_audio_zone');
+    assert.ok(Array.isArray(zone.style.surfacePaint?.border?.color) && zone.style.shadow, 'its zone wears the same edge and halo');
+    assert.equal(ids.some((id) => /_outline_(zone|tile|bridge)$/.test(id)), false, 'no private outline remains');
     assert.ok(ids.includes('molecule_mix_zone_voice_audio_fader'), 'Volume selected shows the big fader');
     // Native video group: closed, so only its master (video) strip shows, with a chevron.
     assert.ok(ids.includes('molecule_mix_strip_film_video_chevron'));

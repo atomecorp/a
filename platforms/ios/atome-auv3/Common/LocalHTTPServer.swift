@@ -21,6 +21,10 @@ final class LocalHTTPServer {
     private let queue = DispatchQueue(label: "local.http.server.queue")
     private(set) var port: UInt16?
     private var started = false
+    // Failed reopenings of the same port; past two, any free port is taken and announced.
+    private var samePortFailures = 0
+    // Set when the app went to the background (back through `.inactive` to `.active`).
+    private var backgrounded = false
 
     // Simple cache of file lengths to avoid stat() every range chunk
     private var lengthCache: [String: UInt64] = [:]
@@ -55,39 +59,80 @@ final class LocalHTTPServer {
     func start(preferredPort: UInt16? = nil) {
         guard !started else { return }
         started = true
+        queue.async { [weak self] in self?.openListener(preferredPort: preferredPort) }
+    }
+
+    // iOS reclaims the listening socket of a suspended app (opening the SMS link in
+    // Messages is enough) and the page, which works offline through this server,
+    // finds nothing on its port. The listener may even still report `ready` (measured
+    // on iPadOS 27): `reopen` rebinds it regardless, on returning to the foreground.
+    func ensureListening(reopen: Bool = false) {
         queue.async { [weak self] in
-            guard let self = self else { return }
-            do {
-                let params = NWParameters.tcp
-                params.allowLocalEndpointReuse = true
-                if let p = preferredPort, let nwPort = NWEndpoint.Port(rawValue: p) {
-                    self.listener = try NWListener(using: params, on: nwPort)
-                } else {
-                    self.listener = try NWListener(using: params)
+            guard let self = self, self.started else { return }
+            if !reopen, let listener = self.listener, case .ready = listener.state { return }
+            self.openListener(preferredPort: self.samePortFailures < 2 ? self.port : nil)
+        }
+    }
+
+    func noteBackgrounded() { queue.async { [weak self] in self?.backgrounded = true } }
+
+    // Only a real return from the background lost the socket; rebinding at launch
+    // would drop the server exactly while the workspace boots through it.
+    func resumeFromBackground() {
+        queue.async { [weak self] in
+            guard let self = self, self.backgrounded else { return }
+            self.backgrounded = false
+            self.ensureListening(reopen: true)
+        }
+    }
+
+    // Runs on `queue`. The same port keeps the page's address valid; another port is
+    // announced to the page.
+    private func openListener(preferredPort: UInt16?) {
+        listener?.stateUpdateHandler = nil
+        listener?.cancel()
+        listener = nil
+        do {
+            let params = NWParameters.tcp
+            params.allowLocalEndpointReuse = true
+            let created: NWListener
+            if let p = preferredPort, let nwPort = NWEndpoint.Port(rawValue: p) {
+                created = try NWListener(using: params, on: nwPort)
+            } else {
+                created = try NWListener(using: params)
+            }
+            created.newConnectionHandler = { [weak self] connection in
+                self?.handle(connection: connection)
+            }
+            created.stateUpdateHandler = { [weak self, weak created] state in
+                guard let self = self, let created = created, created === self.listener else { return }
+                switch state {
+                case .ready:
+                    self.samePortFailures = 0
+                    guard let port = created.port?.rawValue else { return }
+                    let previous = self.port
+                    self.port = port
+                    if let previous = previous, previous != port { WebViewManager.announceLocalHTTPPort(port) }
+                case .failed(let error):
+                    print("❌ LocalHTTPServer failed: \(error); reopening")
+                    if preferredPort != nil { self.samePortFailures += 1 }
+                    self.queue.asyncAfter(deadline: .now() + 1) { [weak self] in self?.ensureListening() }
+                default: break
                 }
-                self.listener?.newConnectionHandler = { [weak self] connection in
-                    self?.handle(connection: connection)
-                }
-                self.listener?.stateUpdateHandler = { [weak self] state in
-                    guard let self = self else { return }
-                    switch state {
-                    case .ready:
-                        if let port = self.listener?.port?.rawValue { self.port = port }
-                    case .failed(let error):
-                        print("❌ LocalHTTPServer failed: \(error)")
-                    case .cancelled:
-                        break
-                    default: break
-                    }
-                }
-                self.listener?.start(queue: self.queue)
-            } catch {
-                print("❌ LocalHTTPServer listener error: \(error)")
+            }
+            listener = created
+            created.start(queue: queue)
+        } catch {
+            print("❌ LocalHTTPServer listener error: \(error)")
+            if preferredPort != nil {
+                samePortFailures += 1
+                openListener(preferredPort: nil)
             }
         }
     }
 
     func stop() {
+        listener?.stateUpdateHandler = nil
         listener?.cancel()
         listener = nil
         started = false
@@ -461,6 +506,11 @@ final class LocalHTTPServer {
             return
         }
 
+        if let token = payload["token"] as? String,
+           let userId = AiSRuntime.resolveAuthenticatedUserId(token: token, userIdHint: nil, phoneHint: nil),
+           var state = wsStates[connectionId] {
+            state.authenticatedUserId = userId; state.authToken = token; wsStates[connectionId] = state
+        }
         if type == "register" {
             if let provided = payload["clientId"] as? String {
                 let id = ObjectIdentifier(connection)
@@ -541,6 +591,21 @@ final class LocalHTTPServer {
         if type == "snapshot" {
             let response = AiSRuntime.handleSnapshotMessage(payload)
             sendWebSocketJson(response, on: connection)
+            return
+        }
+
+        if type == "sync" && (payload["action"] as? String) == "flush" {
+            let requestId = payload["requestId"] ?? NSNull()
+            guard AiSRuntime.resolveAuthenticatedUserId(token: payload["token"] as? String, userIdHint: nil, phoneHint: nil) != nil else {
+                sendWebSocketJson(["type": "sync-response", "requestId": requestId, "success": false, "error": "Access denied"], on: connection)
+                return
+            }
+            let atomeIds = (payload["atome_ids"] as? [Any] ?? []).compactMap { $0 as? String }
+            FastifySyncClient.shared.flush(atomeIds: atomeIds) { [weak self] result in
+                var response = result
+                response["type"] = "sync-response"; response["requestId"] = requestId
+                self?.queue.async { self?.sendWebSocketJson(response, on: connection) }
+            }
             return
         }
 
@@ -645,7 +710,15 @@ final class LocalHTTPServer {
             return
         }
         if shouldBroadcastLocalEvent(payload: payload) {
-            broadcastWebSocketText(text)
+            guard let principal = payload["local_user_id"] as? String else { return }
+            queue.async { [weak self] in
+                guard let self else { return }
+                for (id, connection) in self.wsConnections {
+                    guard let state = self.wsStates[id], state.authenticatedUserId == principal,
+                          AiSRuntime.resolveAuthenticatedUserId(token: state.authToken, userIdHint: nil, phoneHint: nil) == principal else { continue }
+                    self.sendWebSocketFrame(opcode: 0x1, payload: data, on: connection)
+                }
+            }
         }
     }
 
@@ -1880,13 +1953,6 @@ enum AiSRuntime {
     CREATE INDEX IF NOT EXISTS idx_events_project ON events(project_id);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_events_stream_sequence
         ON events(stream_id, sequence) WHERE stream_id IS NOT NULL AND sequence IS NOT NULL;
-    CREATE TABLE IF NOT EXISTS remote_sync_stream_cursors (
-        principal_id TEXT NOT NULL,
-        stream_id TEXT NOT NULL,
-        last_sequence INTEGER NOT NULL DEFAULT 0,
-        updated_at TEXT NOT NULL,
-        PRIMARY KEY (principal_id, stream_id)
-    );
     CREATE TABLE IF NOT EXISTS snapshots (
         snapshot_id INTEGER PRIMARY KEY AUTOINCREMENT,
         atome_id TEXT,
@@ -1965,35 +2031,6 @@ enum AiSRuntime {
             } catch {
                 return eventsResponse(requestId: requestId, success: false, error: error.localizedDescription)
             }
-        }
-    }
-
-    static func handleSyncMessage(_ message: [String: Any]) -> [String: Any] {
-        queue.sync {
-            let requestId = stringValue(message["requestId"])
-            let action = stringValue(message["action"])
-            guard let localToken = normalizedOptionalString(message["token"]),
-                  let claims = try? verifyToken(localToken),
-                  normalizedOptionalString(claims["sub"]) != nil else {
-                return ["type":"sync-response", "requestId":requestId, "success":false, "error":"Access denied"]
-            }
-            if action == "configure-remote" || action == "clear-remote" {
-                return FastifySyncClient.configureRemote(message, localUserId: stringValue(claims["sub"]))
-            }
-            if action == "get-pending" {
-                do {
-                    let db = try openDatabase()
-                    let rows = try query(db, """
-                        SELECT q.queue_id, q.atome_id, q.operation, q.created_at FROM sync_queue q
-                        JOIN atomes a ON a.atome_id = q.atome_id
-                        WHERE q.status IN ('pending', 'syncing', 'failed') AND a.owner_id = ? ORDER BY q.queue_id
-                        """, [.text(stringValue(claims["sub"]))])
-                    return ["type":"sync-response", "requestId":requestId, "success":true, "changes":rows]
-                } catch {
-                    return ["type":"sync-response", "requestId":requestId, "success":false, "error":error.localizedDescription]
-                }
-            }
-            return ["type":"sync-response", "requestId":requestId, "success":false, "error":"Unknown sync action"]
         }
     }
 

@@ -5,8 +5,10 @@ import CryptoKit
 enum AuthDeviceKey {
     private static let queue = DispatchQueue(label: "one.atome.auth.device")
 
-    private static func key(scope: String) throws -> SecKey {
-        let tag = Data("one.atome.auth.device.\(scope)".utf8)
+    // The silent session key, or the approve key (authentication V1): the approve key's
+    // private half is used only after the OS verifies the user (Face ID, Touch ID or passcode).
+    private static func key(scope: String, approve: Bool = false) throws -> SecKey {
+        let tag = Data((approve ? "one.atome.auth.approve.\(scope)" : "one.atome.auth.device.\(scope)").utf8)
         let query: [String: Any] = [
             kSecClass as String: kSecClassKey,
             kSecAttrApplicationTag as String: tag,
@@ -18,8 +20,8 @@ enum AuthDeviceKey {
         if status == errSecSuccess, let item = item { return item as! SecKey }
         guard status == errSecItemNotFound else { throw Failure.unavailable }
         var error: Unmanaged<CFError>?
-        guard let access = SecAccessControlCreateWithFlags(nil,
-            kSecAttrAccessibleWhenUnlockedThisDeviceOnly, .privateKeyUsage, &error) else { throw Failure.unavailable }
+        guard let access = SecAccessControlCreateWithFlags(nil, kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+            approve ? [.privateKeyUsage, .userPresence] : .privateKeyUsage, &error) else { throw Failure.unavailable }
         let attributes: [String: Any] = [
             kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
             kSecAttrKeySizeInBits as String: 256,
@@ -64,10 +66,10 @@ enum AuthDeviceKey {
             do {
                 guard let scope = payload["scope"] as? String, scope.count == 64,
                     scope.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil,
-                    let action = payload["action"] as? String, ["public", "sign"].contains(action) else { throw Failure.invalid }
-                let privateKey = try key(scope: scope)
+                    let action = payload["action"] as? String, ["public", "sign", "approve-public", "approve-sign"].contains(action) else { throw Failure.invalid }
+                let privateKey = try key(scope: scope, approve: action.hasPrefix("approve-"))
                 var error: Unmanaged<CFError>?
-                if action == "public" {
+                if action == "public" || action == "approve-public" {
                     guard let publicKey = SecKeyCopyPublicKey(privateKey),
                         let encoded = SecKeyCopyExternalRepresentation(publicKey, &error) as Data?,
                         encoded.count == 65, encoded[0] == 4 else { throw Failure.unavailable }

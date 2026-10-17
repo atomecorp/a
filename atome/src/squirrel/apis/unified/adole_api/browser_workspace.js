@@ -2,11 +2,33 @@
 // Local commits never wait for a remote session; only this outbox needs network.
 import { getSessionState } from './session.js';
 import { isTauriRuntime } from './runtime.js';
+import { getFastifyHttpBaseUrl } from '../adole_backend.js';
 import { commitWorkspaceEvents, getGuestAtome, listGuestAtomes, listWorkspaceEvents,
     oldestPendingWorkspaceEvent, acknowledgeWorkspaceEvent, parkRefusedWorkspaceEvent, requeueRefusedWorkspaceEvents, importWorkspaceStates, listGuestFiles, acknowledgeWorkspaceFile } from './guest_workspace_store.js';
 
 const owns = message => ['events', 'state-current', 'atome'].includes(message?.type);
 export function ownsBrowserWorkspaceMessage(message) { return !isTauriRuntime() && owns(message); }
+
+// Realtime frames invalidate the local projection; the existing recovery pass
+// imports authoritative pages and preserves pending local writes. Coalesce a
+// replay burst so it does not enumerate the workspace for every event.
+export function subscribeBrowserWorkspaceChanges(env, requestSync) {
+    if (isTauriRuntime() || !env?.addEventListener) return () => {};
+    let timer = null;
+    const cancel = () => { clearTimeout(timer); timer = null; };
+    const changed = event => {
+        if (event.detail?.origin !== 'ws/sync' || event.detail?.durable !== true || timer) return;
+        timer = setTimeout(() => { timer = null; requestSync(); }, 250);
+    };
+    const names = ['squirrel:atome-updated', 'squirrel:atome-restored', 'squirrel:atome-deleted'];
+    for (const name of names) env.addEventListener(name, changed);
+    env.addEventListener('squirrel:user-logged-out', cancel);
+    return () => {
+        cancel();
+        for (const name of names) env.removeEventListener(name, changed);
+        env.removeEventListener('squirrel:user-logged-out', cancel);
+    };
+}
 
 // Local storage authorizes by the session's owner namespace. Project that
 // existing authority for readers such as contextual menus; never persist it or
@@ -67,6 +89,15 @@ export async function requeueRefusedBrowserWorkspaceEvents() {
 
 let synchronization;
 let synchronizationRequested = false;
+let progress = null;
+const environment = () => String(globalThis.window?.__SQUIRREL_ENVIRONMENT_FINGERPRINT__ || getFastifyHttpBaseUrl() || '');
+export const readBrowserWorkspaceSyncProgress = () => progress?.principal_id === getSessionState().user?.id
+    && progress.environment_fingerprint === environment() ? { ...progress } : null;
+const publishProgress = (owner, fingerprint, restore, error = null) => {
+    if (getSessionState().user?.id !== owner || environment() !== fingerprint) return;
+    progress = { principal_id: owner, environment_fingerprint: fingerprint, restore_state: restore, last_error_code: error };
+    globalThis.window?.dispatchEvent(new CustomEvent('squirrel:sync:status', { detail: { principal_id: owner } }));
+};
 // Un commit arrive PENDANT une passe n'est pas dans la liste qu'elle a deja lue : il etait
 // laisse en attente jusqu'au commit suivant (la derniere modification avant fermeture ou
 // deconnexion ne partait jamais). Une demande recue en cours de passe relance une passe.
@@ -80,7 +111,15 @@ export function synchronizeBrowserWorkspace(transport) {
         let result;
         do {
             synchronizationRequested = false;
-            result = await synchronizeBrowserWorkspaceOnce(transport);
+            const owner = getSessionState().user?.id, fingerprint = environment();
+            publishProgress(owner, fingerprint, 'receiving');
+            try {
+                result = await synchronizeBrowserWorkspaceOnce(transport);
+                publishProgress(owner, fingerprint, result?.ok ? 'ready' : 'unknown');
+            } catch (error) {
+                publishProgress(owner, fingerprint, 'error', String(error?.message || 'workspace_sync_failed'));
+                throw error;
+            }
         } while (synchronizationRequested && result?.ok === true);
         return result;
     })().finally(() => { synchronization = null; });
@@ -127,6 +166,12 @@ async function synchronizeBrowserWorkspaceOnce({ send, ensureSession, uploadFile
         const response = await send({ type: 'state-current', action: 'list', owner_id: owner, include_deleted: true, limit: 250, offset });
         if (!response?.ok || !Array.isArray(response.states)) throw new Error(response?.error || 'workspace_sync_failed');
         await importWorkspaceStates(owner, response.states);
+        stillAuthorized();
+        // Each committed page is available immediately; readers coalesce this
+        // invalidation and never wait for enumeration to finish.
+        if (response.states.length) globalThis.window?.dispatchEvent(new CustomEvent('squirrel:sync:projection-ready', {
+            detail: { principal_id: owner, replay: true }
+        }));
         if (response.states.length < 250) break;
     }
     stillAuthorized();

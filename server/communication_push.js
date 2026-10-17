@@ -9,7 +9,7 @@ export function createCommunicationPush({ query, transport = createApnsTransport
         if (!claims?.sub || !claims.sid || !claims.cnf?.kid) throw new Error('auth_session_invalid');
         const provider = input.provider || 'apns';
         const validToken = provider === 'apns' ? /^[a-f0-9]{64,200}$/.test(input.deviceToken)
-            : /^[A-Za-z0-9_:.-]{32,4096}$/.test(input.deviceToken) && input.environment === 'production';
+            : /^[A-Za-z0-9_-]{22}$/.test(input.deviceToken) && input.environment === 'production';
         if (!['apns', 'fcm'].includes(provider) || !validToken || !/^[a-f0-9-]{36}$/.test(input.installationId)
             || !['alert', 'voip'].includes(input.kind) || !['sandbox', 'production'].includes(input.environment)) throw new Error('push_registration_invalid');
         const row = await query('get', 'SELECT key_id,provider FROM auth_push_installations WHERE installation_id = ? AND kind = ?', [input.installationId, input.kind]);
@@ -19,8 +19,8 @@ export function createCommunicationPush({ query, transport = createApnsTransport
             const count = await query('get', 'SELECT count(*) AS total FROM auth_push_installations WHERE principal_id=? AND kind=?', [claims.sub, input.kind]);
             if (count.total >= 20) throw new Error('push_installation_limit');
         }
-        await query('run', 'DELETE FROM auth_push_installations WHERE token = ? AND kind = ? AND environment = ? AND key_id = ?',
-            [input.deviceToken, input.kind, input.environment, claims.cnf.kid]);
+        await query('run', 'DELETE FROM auth_push_installations WHERE token = ? AND kind = ? AND environment = ? AND key_id = ? AND provider = ?',
+            [input.deviceToken, input.kind, input.environment, claims.cnf.kid, provider]);
         await query('run', `INSERT INTO auth_push_installations
             (installation_id,kind,principal_id,key_id,session_id,token,environment,updated_ms,provider) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(installation_id, kind) DO UPDATE SET principal_id=excluded.principal_id, session_id=excluded.session_id,
@@ -38,11 +38,12 @@ export function createCommunicationPush({ query, transport = createApnsTransport
     }
     async function deliver(principal, item) {
         if (!transport.configured() && !androidTransport.configured()) return { ok: false, error: 'push_configuration_required' };
+        const control = item.kind === 'call-state' && /^[a-f0-9-]{36}$/.test(item.room_id);
         const call = item.kind === 'call-invitation' && /^[a-f0-9-]{36}$/.test(item.room_id)
             && Number(item.expires_at) > now();
-        const kind = call ? 'voip' : 'alert';
+        const kind = call || control ? 'voip' : 'alert';
         if (item.kind === 'call-invitation' && !call) return { ok: true, expired: true };
-        const expiresAt = call ? Number(item.expires_at) : now() + 86400000;
+        const expiresAt = call ? Number(item.expires_at) : now() + (control ? 60000 : 86400000);
         const installations = await query('all', `SELECT i.* FROM auth_push_installations i
             JOIN auth_device_sessions s ON s.session_id=i.session_id
             JOIN auth_device_keys k ON k.key_id=i.key_id
@@ -53,6 +54,9 @@ export function createCommunicationPush({ query, transport = createApnsTransport
         await query('run', 'DELETE FROM auth_push_deliveries WHERE expires_ms <= ?', [now()]);
         for (let offset = 0; offset < installations.length; offset += 4) await Promise.all(installations.slice(offset, offset + 4).map(async installation => {
             const deliveryTransport = installation.provider === 'fcm' ? androidTransport : transport;
+            // Apple VoIP pushes are exclusively new calls; Android controls
+            // only stop an existing system projection via the same transport.
+            if (control && installation.provider !== 'fcm') return;
             if (!deliveryTransport.configured()) { results.push({ ok: false, error: 'push_configuration_required' }); return; }
             if (call && now() >= expiresAt) { results.push({ ok: false, error: 'push_call_expired' }); return; }
             const id = digest([principal, installation.installation_id, kind, item.id]);
@@ -63,9 +67,11 @@ export function createCommunicationPush({ query, transport = createApnsTransport
             // No message, phone, bearer, photo or caller name is exposed on the lock screen.
             const payload = { aps: call ? {} : { alert: { title: 'Atome', 'loc-key': 'ATOME_NOTIFICATION' }, sound: 'default' },
                 atome: { principal_id: principal, notification_id: item.id, peer_id: item.from_id,
-                    ...(call ? { room_id: item.room_id, call_mode: item.call_mode, expires_at: expiresAt } : {}) } };
+                    ...(call || control ? { room_id: item.room_id, call_mode: item.call_mode, expires_at: expiresAt } : {}),
+                    ...(control ? { status: item.status, accepted_principal_id: item.acceptedPrincipalId,
+                        accepted_key_id: item.acceptedKeyId } : {}) } };
             let result;
-            try { result = await deliveryTransport.send(installation, payload, { voip: call, expiresAt, collapseId: id }); }
+            try { result = await deliveryTransport.send(installation, payload, { voip: call, control, expiresAt, collapseId: id }); }
             catch { result = { ok: false, error: 'push_transport_uncertain' }; }
             const state = result.ok ? 'accepted' : result.status === 429 || result.status >= 500 ? 'retry' : 'failed';
             await query('run', 'UPDATE auth_push_deliveries SET state=? WHERE delivery_id=?', [state, id]);

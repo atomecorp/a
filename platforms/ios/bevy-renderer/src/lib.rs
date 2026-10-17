@@ -1,3 +1,4 @@
+mod audio;
 use atome_bevy_renderer_core::{AtomeBevyRendererConfig, AtomeRenderScene};
 use std::ffi::{c_char, CStr};
 

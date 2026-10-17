@@ -172,7 +172,7 @@ export const createContactsService = ({
             source_key: options.source_key || source.source_key || source.source_id,
             cursor: sourcePull.cursor, complete: sourcePull.complete === true, full_snapshot: options.incremental !== true && sourcePull.mode !== 'delta',
             removed_ids: sourcePull.removed_ids || [], removed_hrefs: sourcePull.removed_hrefs || [], groups: sourcePull.groups || [],
-            device_id: options.device_id, signal: options.signal, checkSession, legacy_source_prefix: options.legacy_source_prefix,
+            device_id: options.device_id, signal: options.signal, checkSession, legacy_source_prefix: options.legacy_source_prefix, snapshot: options.snapshot,
             restore_suppressed: options.restore_suppressed === true,
             personal_candidates: sourcePull.personal_candidates
         });

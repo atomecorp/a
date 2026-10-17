@@ -1,0 +1,481 @@
+{
+ "voice": "fr_FR-siwis-medium",
+ "locale": "fr",
+ "sampleRate": 22050,
+ "model": {
+  "sha256": "641d1ab097da2b81128c076810edb052b385decc8be3381814802a64a73baf99",
+  "license": "CC-BY-4.0",
+  "card": "fr_FR-siwis-medium/MODEL_CARD",
+  "source": "https://datashare.is.ed.ac.uk/handle/10283/2353"
+ },
+ "lines": {
+  "Bonjour, je ne suis pas encore tout à fait prête, je te préviens dès que je le suis.": {
+   "file": "c50c94f1726d905f.wav",
+   "samples": 96000,
+   "phonemes": "^bɔ̃ʒuʁ , ʒə nə sɥi pa ɑ̃koʁ tu a fɛ pʁɛt , ʒə tə pʁevjɛ̃ dɛ kə ʒə lə sɥi .$",
+   "sha256": "e31c77dc5a4496197bd820a75430f0fe7ce29aa595afff452d8f735ef19901a2"
+  },
+  "Ça y est, je t’écoute.": {
+   "file": "2b27eecc19952275.wav",
+   "samples": 33792,
+   "phonemes": "^sa i ɛ , ʒə tekut .$",
+   "sha256": "ee9d914a8a3183dd05dfe5c7bad7558c63da3ba72432bbaa766c9dd270b87148"
+  },
+  "Voilà, je suis prête, je t’écoute.": {
+   "file": "4edf545c478f181e.wav",
+   "samples": 53760,
+   "phonemes": "^vwala , ʒə sɥi pʁɛt , ʒə tekut .$",
+   "sha256": "52a1711d1d5c41c795d12076fe2c755476e51732cc05f437969768d4699944a9"
+  },
+  "Je suis là, qu’est-ce que tu souhaites faire ?": {
+   "file": "f4a7024d61443d6c.wav",
+   "samples": 49920,
+   "phonemes": "^ʒə sɥi la , kɛsə kə ty swɛt fɛʁ ?$",
+   "sha256": "bd299a1b5e03bedb63340ccf255bc57cc44c1a3879e753af5aadc5f7903a6207"
+  },
+  "Me voilà, je t’écoute.": {
+   "file": "da3791828dd14813.wav",
+   "samples": 36864,
+   "phonemes": "^mə vwala , ʒə tekut .$",
+   "sha256": "68991e95797523ed87a2ee29cdd61b68756be6dcddd5f0fd467e0d87269a90de"
+  },
+  "C’est bon, je suis prête !": {
+   "file": "495310a64fd85b18.wav",
+   "samples": 41728,
+   "phonemes": "^sɛ bɔ̃ , ʒə sɥi pʁɛt !$",
+   "sha256": "40591be1a4318156efc3be5082d7b9fce3ce8c70eec3b0dd2ffda830a4980e0b"
+  },
+  "Je suis disponible, on peut commencer.": {
+   "file": "b11eace3d7792b0b.wav",
+   "samples": 54016,
+   "phonemes": "^ʒə sɥi disponibl , ɔ̃ pø komɑ̃se .$",
+   "sha256": "a7f4a1e6a5dbdd8d34fe466895463e3387cd404c635e27b265f05ea96f058268"
+  },
+  "Salut, à plus tard.": {
+   "file": "a4a6dcd4c6e463a1.wav",
+   "samples": 25856,
+   "phonemes": "^saly , a ply taʁ .$",
+   "sha256": "55832b1e196ba7c89eb59ec7f681e5c65e330dcfecd8b3e29fceaf42e4de9538"
+  },
+  "Le profil de cette discussion est incompatible avec le registre actuel.": {
+   "file": "92306174d9374e2f.wav",
+   "samples": 91136,
+   "phonemes": "^lə pʁofil də sɛt diskysjɔ̃ ɛ ɛ̃kɔ̃patibl avɛk lə ʁəʒistʁ aktyɛl .$",
+   "sha256": "c267c7863cacc4cb1a1741523712021abf292bdb4492c2a4d2461a40cba0d563"
+  },
+  "L'assistant vocal est indisponible.": {
+   "file": "a49bbcde624f0bd9.wav",
+   "samples": 40192,
+   "phonemes": "^lasistɑ̃ vokal ɛ ɛ̃disponibl .$",
+   "sha256": "392d4c7fbeabb542ae0152ff9abe8027ddb4d7edff5e920ee57f19cca8834650"
+  },
+  "Erreur de l’assistant : la cause n’a pas été fournie par le service.": {
+   "file": "c0abc11b2976a587.wav",
+   "samples": 86016,
+   "phonemes": "^ɛʁœʁ də lasistɑ̃ : la koz na pa ete fuʁni paʁ lə sɛʁvis .$",
+   "sha256": "c151f81c03ea75355ee5452eb111dd8785a904df6adcae2e5d4c5674f22e55be"
+  },
+  "OpenAI a refusé la clé API enregistrée.": {
+   "file": "17f6cd014057a91c.wav",
+   "samples": 52992,
+   "phonemes": "^opɛnai a ʁəfyze la kle apei ɑ̃ʁəʒistʁe .$",
+   "sha256": "38de8a669c87be4f3f17d7219e40be1c125ac69d2e55a97416815d9b035a38e1"
+  },
+  "OpenAI a refusé les paramètres de la demande.": {
+   "file": "ef2c23bd18553b54.wav",
+   "samples": 59648,
+   "phonemes": "^opɛnai a ʁəfyze le paʁamɛtʁ də la dəmɑ̃d .$",
+   "sha256": "2203824e1acb4c99c2a7e968fc493ca03e898769d548972b1330c0658df2dd33"
+  },
+  "Le service a refusé l’accès demandé.": {
+   "file": "ea019cf403955aad.wav",
+   "samples": 44800,
+   "phonemes": "^lə sɛʁvis a ʁəfyze laksɛ dəmɑ̃de .$",
+   "sha256": "30e14fe7deebc8ef31eba739d4fa1d2f9e9216c4feb634c4559c04bf9dc9bf10"
+  },
+  "Le service IA a rencontré une erreur interne.": {
+   "file": "07399246d000b32e.wav",
+   "samples": 55040,
+   "phonemes": "^lə sɛʁvis ia a ʁɑ̃kɔ̃tʁe yn ɛʁœʁ ɛ̃tɛʁn .$",
+   "sha256": "a3a1c0cb23be8e0c695008b5692012d6f0e0b74e89562b7a10b1077c132474c4"
+  },
+  "La session vocale a expiré. Réactive le micro.": {
+   "file": "cd8d0162eae00c95.wav",
+   "samples": 70656,
+   "phonemes": "^la sɛsjɔ̃ vokal a ɛkspiʁe . ʁeaktiv lə mikʁo .$",
+   "sha256": "bc09c4998d43f15ffc39b63f2a976e407cd8b67e73baf1b657cc4927a7efc7a5"
+  },
+  "La conversation dépasse la capacité du modèle.": {
+   "file": "0b2893d4ea840ede.wav",
+   "samples": 60160,
+   "phonemes": "^la kɔ̃vɛʁsasjɔ̃ depas la kapasite dy modɛl .$",
+   "sha256": "06afb3389e2626d57df3de3cb298d519ffbcac4416a3a4a0c88ec1f339704c7f"
+  },
+  "Aucune clé API OpenAI n’est configurée pour ce compte.": {
+   "file": "32f22d4212471534.wav",
+   "samples": 65792,
+   "phonemes": "^okyn kle apei opɛnai nɛ kɔ̃fiɡyʁe puʁ sə kɔ̃t .$",
+   "sha256": "d00031e4556a6d747abf600e55d1aeb03d48d753ffde187fee6fb9256a15fd40"
+  },
+  "Connecte-toi pour activer l’assistant.": {
+   "file": "bd3915d35036e388.wav",
+   "samples": 42496,
+   "phonemes": "^konɛkttwa puʁ aktive lasistɑ̃ .$",
+   "sha256": "94bff3176efe67c65a758a6b9437ef69dc204b9a3316fcac6c3604ead94dfe41"
+  },
+  "Le compte ne peut pas accéder à la configuration IA du coffre.": {
+   "file": "210ff778de0ba9c6.wav",
+   "samples": 67840,
+   "phonemes": "^lə kɔ̃t nə pø pa aksede a la kɔ̃fiɡyʁasjɔ̃ ia dy kofʁ .$",
+   "sha256": "38e00c5fc4a82b0db12f1f6232742bdc79c7d9f2762a9876aa39c9a14b3a4379"
+  },
+  "La session de cet appareil sur atome.one a expiré. Confirme à nouveau ton numéro pour utiliser l’assistant.": {
+   "file": "f54535ecf4e7ccdb.wav",
+   "samples": 129024,
+   "phonemes": "^la sɛsjɔ̃ də sɛt apaʁɛj syʁ atom pwɛ̃ wan a ɛkspiʁe . kɔ̃fiʁm a nuvo tɔ̃ nymeʁo puʁ ytilize lasistɑ̃ .$",
+   "sha256": "e83889f1e3c06921d539c12f4d343a9d1018282168fbae3f7db8ba3f189a113c"
+  },
+  "atome.one a fermé la session de cet appareil. Confirme à nouveau ton numéro pour utiliser l’assistant.": {
+   "file": "4935476c0f023796.wav",
+   "samples": 121344,
+   "phonemes": "^atom pwɛ̃ wan a fɛʁme la sɛsjɔ̃ də sɛt apaʁɛj . kɔ̃fiʁm a nuvo tɔ̃ nymeʁo puʁ ytilize lasistɑ̃ .$",
+   "sha256": "4b6dd3c267c7d7c129ab4e015b6bb6373f392f736bc83cd288b8478692a31fee"
+  },
+  "Connecte-toi à ton compte pour utiliser l’assistant.": {
+   "file": "259df3a2663bd2cb.wav",
+   "samples": 55552,
+   "phonemes": "^konɛkttwa a tɔ̃ kɔ̃t puʁ ytilize lasistɑ̃ .$",
+   "sha256": "68d101162be08b38c0af097c5df2abbe7685c470b91275a63f001896ad6869a6"
+  },
+  "Le coffre contenant la clé API est verrouillé.": {
+   "file": "35f1fee36cab4e62.wav",
+   "samples": 49408,
+   "phonemes": "^lə kofʁ kɔ̃tənɑ̃ la kle apei ɛ vɛʁuje .$",
+   "sha256": "81777ce1f6a8d8de2e5211175f2b56cf77fb66ec0df1f1cd3dd1dd18ad768f1e"
+  },
+  "Le coffre contenant la clé API n’a pas pu être ouvert.": {
+   "file": "6ca46083631caee9.wav",
+   "samples": 57856,
+   "phonemes": "^lə kofʁ kɔ̃tənɑ̃ la kle apei na pa py ɛtʁ uvɛʁ .$",
+   "sha256": "065bff648e72d2800c6eb06032e27d0a33c5a884a8415d86e9f755452f49b00c"
+  },
+  "Le service vocal est indisponible. Tu peux écrire dans Message.": {
+   "file": "fae5776d0804cb7a.wav",
+   "samples": 81664,
+   "phonemes": "^lə sɛʁvis vokal ɛ ɛ̃disponibl . ty pø ekʁiʁ dɑ̃ mɛsaʒ .$",
+   "sha256": "e636885071534f5d8b13d5fa69796eb74cc87ede9a106134b3501f7414f57917"
+  },
+  "Précise ta demande d’image dans Message.": {
+   "file": "8c174cc0881609ed.wav",
+   "samples": 47872,
+   "phonemes": "^pʁesiz ta dəmɑ̃d dimaʒ dɑ̃ mɛsaʒ .$",
+   "sha256": "196973f19affa50e29e4b0840f2eb680eb68cedcbabb65ef71893751169b3259"
+  },
+  "Indique le texte à prononcer dans Message.": {
+   "file": "b43474c05de2d414.wav",
+   "samples": 49408,
+   "phonemes": "^ɛ̃dik lə tɛkst a pʁonɔ̃se dɑ̃ mɛsaʒ .$",
+   "sha256": "49bb05320271a120ce21b6543dab68d251472465137220ecb8852e832b2ca4d5"
+  },
+  "Choisis un projet avant de créer un objet.": {
+   "file": "b90ab851de05f532.wav",
+   "samples": 44544,
+   "phonemes": "^ʃwazi œ̃ pʁoʒɛ avɑ̃ də kʁee œ̃ obʒɛ .$",
+   "sha256": "b8c90628cd214ff82fe5f177852c4de09de207e63d1c26b6cac867a1fd429257"
+  },
+  "Choisis un projet avant cette demande.": {
+   "file": "a33b9c8753bd095f.wav",
+   "samples": 44544,
+   "phonemes": "^ʃwazi œ̃ pʁoʒɛ avɑ̃ sɛt dəmɑ̃d .$",
+   "sha256": "ffb787e2637f23029462386dafa833c5027f47e4ed4a7ebef7a91a8097eacc21"
+  },
+  "La connexion vocale OpenAI a été refusée sans cause détaillée.": {
+   "file": "580b3543400708a9.wav",
+   "samples": 67328,
+   "phonemes": "^la konɛksjɔ̃ vokal opɛnai a ete ʁəfyze sɑ̃ koz detaje .$",
+   "sha256": "60e54a40ef03c6a00d43832f29c21dc354e04f23ebe8ae898802b4878259b8e7"
+  },
+  "OpenAI a interrompu la réponse sans fournir de cause détaillée.": {
+   "file": "d4a8431af95f963e.wav",
+   "samples": 80384,
+   "phonemes": "^opɛnai a ɛ̃tɛʁɔ̃py la ʁepɔ̃s sɑ̃ fuʁniʁ də koz detaje .$",
+   "sha256": "2902ed20c4e0af91338b1c9da22c4e2c47ed1a0469b002170b4b358e6c63614d"
+  },
+  "OpenAI a signalé une erreur vocale sans fournir de cause détaillée.": {
+   "file": "ac0806abf8d4a451.wav",
+   "samples": 74752,
+   "phonemes": "^opɛnai a siɲale yn ɛʁœʁ vokal sɑ̃ fuʁniʁ də koz detaje .$",
+   "sha256": "2c6870d55139a74c3543de95d7fe47989226214a76b4af8a17f3c017b567e07b"
+  },
+  "Impossible d’ouvrir le panneau requis. Réessaie.": {
+   "file": "20c58e6c1fbcd518.wav",
+   "samples": 61440,
+   "phonemes": "^ɛ̃posibl duvʁiʁ lə pano ʁəki . ʁeesɛ .$",
+   "sha256": "a148a191618eab9941c8b1d701db89fd5dc63d74adfea315a106075283318849"
+  },
+  "Ton profil n’autorise pas cet outil. Aucune autorisation supplémentaire n’a été accordée.": {
+   "file": "eb8141d0d41bfd3f.wav",
+   "samples": 102144,
+   "phonemes": "^tɔ̃ pʁofil notoʁiz pa sɛt util . okyn otoʁizasjɔ̃ syplemɑ̃tɛʁ na ete akoʁde .$",
+   "sha256": "102e25c36e1f0dfb2710de30219b1cb5ea4346dd4cef5206451d1d55d3d06d96"
+  },
+  "Impossible de lire la configuration OpenAI depuis le coffre. Réessaie ; ta clé enregistrée est conservée.": {
+   "file": "a75c90296014501d.wav",
+   "samples": 129024,
+   "phonemes": "^ɛ̃posibl də liʁ la kɔ̃fiɡyʁasjɔ̃ opɛnai dəpɥi lə kofʁ . ʁeesɛ ; ta kle ɑ̃ʁəʒistʁe ɛ kɔ̃sɛʁve .$",
+   "sha256": "d427b38fea0217b8741ba4d8f64c66b8d0ca6a8025098f7db7f237cd8c5160a6"
+  },
+  "Le serveur atome n’a pas répondu à la demande IA. S’il n’est pas à jour, mets-le à jour.": {
+   "file": "c7d5ad0eaa616363.wav",
+   "samples": 102144,
+   "phonemes": "^lə sɛʁvœʁ atom na pa ʁepɔ̃dy a la dəmɑ̃d ia . sil nɛ pa a ʒuʁ , mɛlə a ʒuʁ .$",
+   "sha256": "2cd0da80beeb449674d972f8f69fb95f324e3b9938cafd1aa1e2a0f5b3bd1e4b"
+  },
+  "La liaison avec le serveur a échoué. Vérifie le réseau puis réessaie.": {
+   "file": "aebcdedfd87b0818.wav",
+   "samples": 84736,
+   "phonemes": "^la ljɛzɔ̃ avɛk lə sɛʁvœʁ a eʃwe . veʁifi lə ʁezo pɥi ʁeesɛ .$",
+   "sha256": "60472796061f7f11646098a1306aa0a08cf0882aa80e4b99a6df489dae8c9c38"
+  },
+  "La liaison avec le serveur a été coupée. Réessaie.": {
+   "file": "cdf5637d045479d3.wav",
+   "samples": 67072,
+   "phonemes": "^la ljɛzɔ̃ avɛk lə sɛʁvœʁ a ete kupe . ʁeesɛ .$",
+   "sha256": "73ead9484da83bb37082320773f895116e373cef64a0e6db39dcddb937475079"
+  },
+  "Le serveur n’a pas répondu. Réessaie.": {
+   "file": "33f909aeed8d723b.wav",
+   "samples": 54016,
+   "phonemes": "^lə sɛʁvœʁ na pa ʁepɔ̃dy . ʁeesɛ .$",
+   "sha256": "76f562c2adf7e78228abb3a1333cae833cf2eeaf9dbd5fd9ed1f91768b0e1a1b"
+  },
+  "Crédit ou plafond de dépenses OpenAI atteint.": {
+   "file": "e5943a7fb5a6de38.wav",
+   "samples": 58624,
+   "phonemes": "^kʁedi u plafɔ̃ də depɑ̃s opɛnai atɛ̃ .$",
+   "sha256": "860adc4b87706fb9224a46c350dba754d097eae9a2e24a3c25998ca6c399a511"
+  },
+  "OpenAI limite les requêtes. Réessaie dans un instant.": {
+   "file": "1a4d032aaec1eeb9.wav",
+   "samples": 72960,
+   "phonemes": "^opɛnai limit le ʁəkɛt . ʁeesɛ dɑ̃ œ̃ ɛ̃stɑ̃ .$",
+   "sha256": "b18cdb6e832dbd54e326014d2680c91699ad504dc4ffe62b79a6d3561dea8a34"
+  },
+  "OpenAI refuse la demande (HTTP 429) : limite de requêtes ou crédit du compte épuisé. Vérifie le crédit OpenAI puis réessaie.": {
+   "file": "d0aa3b231dfc15d1.wav",
+   "samples": 172032,
+   "phonemes": "^opɛnai ʁəfyz la dəmɑ̃d ( aʃtetepe katʁ sɑ̃ vɛ̃nœf ) : limit də ʁəkɛt u kʁedi dy kɔ̃t epɥize . veʁifi lə kʁedi opɛnai pɥi ʁeesɛ .$",
+   "sha256": "79456e286fa65feb6c623f02cd4df492b31ce705f7ec00cffa79ad18d5359c57"
+  },
+  "Ce modèle n’est pas disponible pour le compte configuré.": {
+   "file": "f8a012137e590cc6.wav",
+   "samples": 59136,
+   "phonemes": "^sə modɛl nɛ pa disponibl puʁ lə kɔ̃t kɔ̃fiɡyʁe .$",
+   "sha256": "a552659ede5c47572c8031845b640be745b36045377ee198b329f13d792d22df"
+  },
+  "Voix déconnectée. Touche l’assistant pour reprendre.": {
+   "file": "39112be7facd6988.wav",
+   "samples": 64768,
+   "phonemes": "^vwa dekonɛkte . tuʃ lasistɑ̃ puʁ ʁəpʁɑ̃dʁ .$",
+   "sha256": "443b3964697e63ff744e113f915c260dc6e7dedd97d402c863327027f128a799"
+  },
+  "L’accès au micro a été refusé. Tu peux continuer par écrit.": {
+   "file": "b0c209a805e9d2ea.wav",
+   "samples": 77056,
+   "phonemes": "^laksɛ o mikʁo a ete ʁəfyze . ty pø kɔ̃tinye paʁ ekʁi .$",
+   "sha256": "f651afe35546d1f1b5a11b7003edda7887a88981dbd73fb119c323c2039fa501"
+  },
+  "Le micro est indisponible. Reconnecte-le puis touche l’assistant.": {
+   "file": "2679a366225d3ca7.wav",
+   "samples": 85504,
+   "phonemes": "^lə mikʁo ɛ ɛ̃disponibl . ʁəkonɛktlə pɥi tuʃ lasistɑ̃ .$",
+   "sha256": "5d8bc40ca52bd99319328e934a27c99d035e999ec23bd0134dd90d0c14ed016a"
+  },
+  "Cette discussion conservée a été supprimée. Elle n’a pas été recréée.": {
+   "file": "22bb414e218b8b35.wav",
+   "samples": 79616,
+   "phonemes": "^sɛt diskysjɔ̃ kɔ̃sɛʁve a ete sypʁime . ɛl na pa ete ʁəkʁee .$",
+   "sha256": "fc3fca61c11ece3869729fa97e841c135f5acc6b1b253b6a73a6aa96a23d3ed5"
+  },
+  "Le compte a changé. La demande a été interrompue.": {
+   "file": "38704a4713dbef52.wav",
+   "samples": 61952,
+   "phonemes": "^lə kɔ̃t a ʃɑ̃ʒe . la dəmɑ̃d a ete ɛ̃tɛʁɔ̃py .$",
+   "sha256": "2b6709481c4aa2d4385f1c958b3d764bcc66772ece75540671bb46d7b0f9ae8e"
+  },
+  "Une demande est encore en cours.": {
+   "file": "2b7b20a320dcad1e.wav",
+   "samples": 37376,
+   "phonemes": "^yn dəmɑ̃d ɛ ɑ̃koʁ ɑ̃ kuʁ .$",
+   "sha256": "e9a84e906a58bce90b1770bab9883155096520fdd3e59fd4e0f4999043e471f5"
+  },
+  "Ce niveau de raisonnement n’est pas disponible pour ce modèle.": {
+   "file": "f771cc47b9eb36bc.wav",
+   "samples": 67072,
+   "phonemes": "^sə nivo də ʁɛzonəmɑ̃ nɛ pa disponibl puʁ sə modɛl .$",
+   "sha256": "cd91e615f9e1c1067559aa7c162b9e08fb5c7940f8aec005a1df90afb673c753"
+  },
+  "Sélectionne une image à retoucher.": {
+   "file": "9f336ca33cf24faa.wav",
+   "samples": 35584,
+   "phonemes": "^selɛksjon yn imaʒ a ʁətuʃe .$",
+   "sha256": "049a6528c3465b57f152abe9f8db55723e052074c926f87fc9218d029eba7b12"
+  },
+  "Joins l’image avant de l’utiliser.": {
+   "file": "f5dd5a9d13dd2667.wav",
+   "samples": 40192,
+   "phonemes": "^ʒwɛ̃ limaʒ avɑ̃ də lytilize .$",
+   "sha256": "e6ba39b413868d3b49b2ba3d151b1b705da828d6ad2db846bcf85e209919756c"
+  },
+  "L’activation vocale ne fonctionne pas sur cet appareil pour le moment.": {
+   "file": "c669b3715ee80dd2.wav",
+   "samples": 73216,
+   "phonemes": "^laktivasjɔ̃ vokal nə fɔ̃ksjon pa syʁ sɛt apaʁɛj puʁ lə momɑ̃ .$",
+   "sha256": "af03fbb9d1b9ee2bea45a594dd9de5c76dc23930d359fc849f07b79bac22dc3c"
+  },
+  "L’activation vocale n’est pas disponible : le modèle de la phrase est absent.": {
+   "file": "bfd97af5fbe9fcc2.wav",
+   "samples": 111360,
+   "phonemes": "^laktivasjɔ̃ vokal nɛ pa disponibl : lə modɛl də la fʁaz ɛ absɑ̃ .$",
+   "sha256": "28b449f6c79fbe36def0bf5a12b8f775443c179ba9abf7c3e78b3dfa91174d91"
+  },
+  "L’activation vocale ne peut pas écouter : l’accès au micro est refusé.": {
+   "file": "3514138aef454230.wav",
+   "samples": 90880,
+   "phonemes": "^laktivasjɔ̃ vokal nə pø pa ekute : laksɛ o mikʁo ɛ ʁəfyze .$",
+   "sha256": "a5f40f76909ef7eb653f29dc3aab6ebec9785e1bfc0939393a7719d2d8447027"
+  },
+  "Le micro est déjà utilisé par une autre fonction.": {
+   "file": "d12a6925d584bfcd.wav",
+   "samples": 71424,
+   "phonemes": "^lə mikʁo ɛ deʒa ytilize paʁ yn otʁ fɔ̃ksjɔ̃ .$",
+   "sha256": "5342ae2b9bf6ccef349b23916127d195bdb7fb12157a1f48ca23f333dc42a31f"
+  },
+  "Le moteur d’écoute n’a pas pu démarrer sur cet appareil.": {
+   "file": "49afaf38c8b1f1d1.wav",
+   "samples": 63744,
+   "phonemes": "^lə motœʁ dekut na pa py demaʁe syʁ sɛt apaʁɛj .$",
+   "sha256": "3faeb7fb4e7590c57379039ec317b347a31bc8206d9a2a27a323e6c61f7d4663"
+  },
+  "L’écoute est déjà occupée. Réessaie dans un instant.": {
+   "file": "a97cd57621428a34.wav",
+   "samples": 65280,
+   "phonemes": "^lekut ɛ deʒa okype . ʁeesɛ dɑ̃ œ̃ ɛ̃stɑ̃ .$",
+   "sha256": "ab7cbb2e80b4ede3fb5657a8d790460025faab4333f6eac73d74a175a9f440ae"
+  },
+  "Le micro s’est arrêté pendant l’écoute.": {
+   "file": "4a9ea7a649a9526f.wav",
+   "samples": 47104,
+   "phonemes": "^lə mikʁo sɛ aʁɛte pɑ̃dɑ̃ lekut .$",
+   "sha256": "4752ea505704ed7563e1cb1b73eb72328a8a565e3dd6a6756171ce88545c5be7"
+  },
+  "Cet appareil n’arrive pas à suivre l’écoute en temps réel.": {
+   "file": "f64c7de9e97ee65b.wav",
+   "samples": 59136,
+   "phonemes": "^sɛt apaʁɛj naʁiv pa a sɥivʁ lekut ɑ̃ tɑ̃ ʁeɛl .$",
+   "sha256": "29c0e646d96abe3f95310facd23b7a5f412c0b692596ac9d745e343e3d944e85"
+  },
+  "Le micro n’est pas accessible dans cette version de l’application.": {
+   "file": "1f38b3fbcdd0f0eb.wav",
+   "samples": 75264,
+   "phonemes": "^lə mikʁo nɛ pa aksɛsibl dɑ̃ sɛt vɛʁsjɔ̃ də laplikasjɔ̃ .$",
+   "sha256": "568f25b7ed97409f5ed1eab3b0f005477bfee3c2c8a50170fd87ac1bb4b21e71"
+  },
+  "Je n’ai pas entendu la phrase. L’apprentissage est annulé, tu peux recommencer.": {
+   "file": "8e2e8cc061ca9d7e.wav",
+   "samples": 92672,
+   "phonemes": "^ʒə nɛ pa ɑ̃tɑ̃dy la fʁaz . lapʁɑ̃tisaʒ ɛ anyle , ty pø ʁəkomɑ̃se .$",
+   "sha256": "bc8ab29165cadf818cf9d5f9f50c55a3304dd1b1e5a1026b309ba4d12d129225"
+  },
+  "Les enregistrements ne sont pas assez nets. Recommence dans un endroit plus calme.": {
+   "file": "cd97232f7253cc21.wav",
+   "samples": 89856,
+   "phonemes": "^le ɑ̃ʁəʒistʁəmɑ̃ nə sɔ̃ pa ase nɛ . ʁəkomɑ̃s dɑ̃ œ̃ ɑ̃dʁwa ply kalm .$",
+   "sha256": "6001b20f3d7e8688583fa554df902df84ef69b4163dfa98b9936568ce9b8562f"
+  },
+  "Je n’ai pas reçu assez de son. Vérifie le micro et recommence.": {
+   "file": "ef4e55a852d0dae7.wav",
+   "samples": 86784,
+   "phonemes": "^ʒə nɛ pa ʁəsy ase də sɔ̃ . veʁifi lə mikʁo e ʁəkomɑ̃s .$",
+   "sha256": "931fa9547679f4c31fe9a8b8327a29c5c2a1a8d7f935df81d43c22f9c53c457b"
+  },
+  "Apprentissage arrêté.": {
+   "file": "7877d66e7bbfdb31.wav",
+   "samples": 32512,
+   "phonemes": "^apʁɑ̃tisaʒ aʁɛte .$",
+   "sha256": "ab4cae7554a915fe7dace78f9df1e90d691bf14761fbb9c7d1a47fe1e74fbb26"
+  },
+  "Connecte-toi pour enregistrer ta voix sur cet appareil.": {
+   "file": "31502c22eb395ab6.wav",
+   "samples": 53760,
+   "phonemes": "^konɛkttwa puʁ ɑ̃ʁəʒistʁe ta vwa syʁ sɛt apaʁɛj .$",
+   "sha256": "66070919119681d28d49bfa7778421989ffde27a44ea87dfce62f8842729c10a"
+  },
+  "Déverrouille le coffre de cet appareil pour enregistrer ta voix.": {
+   "file": "abdbbb98ad99e2df.wav",
+   "samples": 71168,
+   "phonemes": "^devɛʁuj lə kofʁ də sɛt apaʁɛj puʁ ɑ̃ʁəʒistʁe ta vwa .$",
+   "sha256": "dac99cc901f78a83c2822789e6875ebe00d9d8f6db601c2a463173aff3789c96"
+  },
+  "Je vais apprendre ta voix. Je vais te demander de dire la phrase 4 fois.": {
+   "file": "dd51313d3cd048b5.wav",
+   "samples": 78592,
+   "phonemes": "^ʒə vɛ apʁɑ̃dʁ ta vwa . ʒə vɛ tə dəmɑ̃de də diʁ la fʁaz katʁ fwa .$",
+   "sha256": "477e7ee69900df218f11f767482ad9decbd022fc326ec211bc351d16ab42b185"
+  },
+  "Phrase 1 sur 4 : dis « Ève, écoute-moi ».": {
+   "file": "d5387c3238eb3b74.wav",
+   "samples": 63232,
+   "phonemes": "^fʁaz œ̃ syʁ katʁ : di ɛv , ekutmwa .$",
+   "sha256": "063d92aa9e11dbd08ea57dbfd7766c548b90ecadfaefe803470f0a319f3543a4"
+  },
+  "Je n’ai pas bien entendu. Répète : « Ève, écoute-moi ».": {
+   "file": "f4f46b20cc06c599.wav",
+   "samples": 71680,
+   "phonemes": "^ʒə nɛ pa bjɛ̃ ɑ̃tɑ̃dy . ʁepɛt : ɛv , ekutmwa .$",
+   "sha256": "42ee996bd9eccd389521cc33081f1ba5a583e847e1bfaaa01bf10bc7d0571b3d"
+  },
+  "Phrase 2 sur 4 : dis « Ève, écoute-moi ».": {
+   "file": "5ccd4920cf5777bd.wav",
+   "samples": 68352,
+   "phonemes": "^fʁaz dø syʁ katʁ : di ɛv , ekutmwa .$",
+   "sha256": "d13ffeb7191ad44439aade9bb3037569b14265eb189d3adc6134411eb5fda2e0"
+  },
+  "Phrase 3 sur 4 : dis « Ève, écoute-moi ».": {
+   "file": "614996dafa79feb6.wav",
+   "samples": 63488,
+   "phonemes": "^fʁaz tʁwa syʁ katʁ : di ɛv , ekutmwa .$",
+   "sha256": "8564980173ce5039a5e9861d6f70c75acb43e1bcb2ba1eacd6cae5b39dea781c"
+  },
+  "Phrase 4 sur 4 : dis « Ève, écoute-moi ».": {
+   "file": "2efa2c460fb9d639.wav",
+   "samples": 68096,
+   "phonemes": "^fʁaz katʁ syʁ katʁ : di ɛv , ekutmwa .$",
+   "sha256": "5b7ff7dede456a084a177b42c706e5bbf96ce06362692220351eac6a5b003909"
+  },
+  "Maintenant, parle librement pendant 10 secondes, de ce que tu veux.": {
+   "file": "a4d72861ed7708f5.wav",
+   "samples": 80640,
+   "phonemes": "^mɛ̃tənɑ̃ , paʁl libʁəmɑ̃ pɑ̃dɑ̃ dis səkɔ̃d , də sə kə ty vø .$",
+   "sha256": "f945ba091210b1762aa677258fa6109e47bcb9f944938598721dde0ba23e2b25"
+  },
+  "Merci. Ne dis plus rien pendant 5 secondes.": {
+   "file": "bcce157b8b0e7090.wav",
+   "samples": 68608,
+   "phonemes": "^mɛʁsi . nə di ply ʁjɛ̃ pɑ̃dɑ̃ sɛ̃k səkɔ̃d .$",
+   "sha256": "a2ce089ff88e2cbafc00ea717c96eb8502dc255b819388e05518ee91911a5b79"
+  },
+  "J’apprends ta voix.": {
+   "file": "2721e94d09ccbcc4.wav",
+   "samples": 23296,
+   "phonemes": "^ʒapʁɑ̃ ta vwa .$",
+   "sha256": "5a4866097076e465699b3e99d774ea77e0fa583a0b290319444b33b48e090305"
+  },
+  "C’est fait. Je reconnais mieux ta voix.": {
+   "file": "53e4ab9019065cd6.wav",
+   "samples": 48128,
+   "phonemes": "^sɛ fɛ . ʒə ʁəkonɛ mjø ta vwa .$",
+   "sha256": "cdbc853d42d5a3bce4502bca903f8c09d32eaba547d5894d6c0e96e6732b9851"
+  }
+ }
+}

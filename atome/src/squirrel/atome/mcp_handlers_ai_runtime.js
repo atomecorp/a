@@ -69,7 +69,11 @@ export const createMcpAiRuntimeHandlers = () => ({
             throw new Error('Runtime V2 invokeBatch is not available');
         }
         const events = Array.isArray(params?.events) ? params.events : [];
-        const normalizedEvents = events.map((entry) => buildRuntimeInvocationPayload(entry, {
+        const normalizedEvents = events.map((entry, index) => buildRuntimeInvocationPayload({ ...entry,
+            ...(params.actor ? { actor: params.actor } : {}),
+            ...(params.dry_run === true ? { dry_run: true } : {}),
+            ...(params.idempotency_key ? { idempotency_key: params.idempotency_key + ':' + index } : {})
+        }, {
             action: 'pointer.click',
             presentation: 'mcp',
             layer: 'atome_mcp_runtime_batch_call'

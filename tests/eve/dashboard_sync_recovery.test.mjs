@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import { createDashboardDataAdapters } from '../../eVe/domains/dashboard/dashboard_data_adapters.js';
 
 test('a shared generic-source failure keeps successful Dashboard categories and reports only failed sources', async () => {
@@ -62,7 +62,7 @@ test('persisted native replay invalidates cached empty rows and clears the Dashb
         data.connectProjectChanges();
         restored = true;
         env.dispatchEvent(new CustomEvent('squirrel:sync:projection-ready', { detail: { replay: true } }));
-        for (let tick = 0; tick < 30 && !painted; tick++) await Promise.resolve();
+        await vi.waitFor(() => assert.equal(painted?.[0]?.id, 'restored-project'));
         assert.equal(painted?.[0]?.id, 'restored-project');
         assert.equal(state.postOpenHydrationError, '');
         data.disconnectProjectChanges();

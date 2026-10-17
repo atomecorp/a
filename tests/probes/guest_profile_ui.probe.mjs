@@ -18,8 +18,8 @@ try {
  await page.goto('http://127.0.0.1:3001', { waitUntil: 'commit' });
  await waitFor(page, () => !!window.eveBevyUiRuntime?.state?.trees?.size, null, 45000);
  await new Promise(resolve => setTimeout(resolve, 1500));
- const access = await awaitBevyUiNodeTarget(page, { nodeId: '__eve_dashboard_card_template_controls___first_launch_first_launch_access_free' });
- await clickCanvasTarget(page, access);
+ // The guest workspace has no card of its own since authentication V1 (offline start of « Commencer »).
+ await page.evaluate(async () => (await import('/eVe/domains/user/first_launch_runtime.js')).invokeFirstLaunch({ operation: 'guest' }));
  await new Promise(resolve => setTimeout(resolve, 2500));
  const movement = await page.evaluate(() => {const all=[];const visit=n=>{if(n)all.push(n);for(const c of n?.children||[])visit(c);};for(const e of window.eveBevyUiRuntime.state.trees.values())visit(e.tree.root);const title=all.find(n=>n.text==='Bougez plus');const id=title?.id?.replace('__eve_dashboard_content_title_', '__eve_dashboard_card_');return all.find(n=>n.id===id)?.id;});
  await clickCanvasTarget(page, await awaitBevyUiNodeTarget(page, { nodeId: movement }));

@@ -7,7 +7,7 @@
 // stretch all begin on the same rendered frame.
 
 use kira::backend::{Backend, Renderer};
-use kira::sound::static_sound::StaticSoundData;
+use atome_mix_graph::voice::VoiceSound;
 use std::cell::{Cell, RefCell};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
@@ -38,11 +38,11 @@ struct RenderClock {
 // A voice waiting for its exact rendered frame.
 struct PendingStart {
     voice_id: String,
-    sound: StaticSoundData,
+    sound: VoiceSound,
     frame: u64,
 }
 
-type StartHook = fn(&str, StaticSoundData);
+type StartHook = fn(&str, VoiceSound);
 
 thread_local! {
     static CLOCK: RefCell<Option<RenderClock>> = const { RefCell::new(None) };
@@ -62,7 +62,7 @@ pub fn install_start_hook(hook: StartHook) {
     START_HOOK.with(|cell| cell.set(Some(hook)));
 }
 
-fn start_now(voice_id: &str, sound: StaticSoundData) {
+fn start_now(voice_id: &str, sound: VoiceSound) {
     if let Some(hook) = START_HOOK.with(|cell| cell.get()) {
         hook(voice_id, sound);
     }
@@ -71,7 +71,7 @@ fn start_now(voice_id: &str, sound: StaticSoundData) {
 // Queues a voice for rendered frame `frame`; a frame already rendered becomes
 // the next block's first frame. Never starts it inline: the caller holds the
 // engine. Returns the frame the voice will start on.
-pub fn schedule(voice_id: &str, sound: StaticSoundData, frame: u64) -> u64 {
+pub fn schedule(voice_id: &str, sound: VoiceSound, frame: u64) -> u64 {
     cancel_scheduled(voice_id);
     let start = frame.max(next_render_frame().max(0.0) as u64);
     PENDING.with(|pending| pending.borrow_mut().push(PendingStart { voice_id: voice_id.to_string(), sound, frame: start }));

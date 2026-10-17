@@ -1,3 +1,5 @@
+2026-10-16 Communication keeps existing compose/conversation controls and adds a native three-level priority selector near send. Server authorization derives VIP from the recipient's favorites. Existing eVe search field hosts the same notification stack with Urgent/Messages and Saisie/Ouvrir/Suivant; actions route through the canonical gateway to a scoped conversation/message or declared command. Calendar uses self-only communication.notification.publish and ui.panel.open for its existing Calendar surface. Dashboard Atom is Assistant in grids/rubrics, first-click reveal in solo; Retour exclusively navigates. No new provider or alternate messaging surface/store. Validation: FRAMEWORK_STATE, approved eVe corrections entry.
+
 # Tool surface map — clé de menu ↔ `tool_id`
 
 2026-10-02 The existing Contact and Calendar surfaces expose explicit VCF/ICS export and collector stop/native options. VCF/ICS selected through the existing Import/Finder file path invoke the same public tool contracts; AI/MCP registration shares `atome/src/shared/personal_import_tools.js`. Existing source selection, project tasks and explicitly confirmed external push remain. Acceptance: `eVe/documentations/PERSONAL_IMPORT_VALIDATION_2026-10-02.md`.
@@ -70,6 +72,15 @@ Code : `eVe/intuition/tools/core/exposable_tools.js` ; branché dans `finder_dat
 | catalogue › placeholder | `placeholder_max_chars` | `ui.placeholder.max_chars.apply` | Caractères |
 | main › create | `generator` | `ui.generator.create` | Générateur (armement direct ; sa liste de rail est `generator.option_keys`, projetée par le registre ; chaque case porte `ui.generator.run` + `generator_id`) |
 | main › create | `shape_create` | `ui.shape.create` | Shape (armement direct : ses 4 variantes et leurs paramètres sont les cases du rail) |
+
+Timeline, Cellules et Mixage ne sont plus dans « Vue » (16 oct. 2026) : ce sont les choix de l'outil
+de rail **Multipiste** (`container_multitrack`, `domains/rendering/project_view_multitrack_tool.js`),
+présent dans le rail de niveau des vues Liste, Matrice, Timeline et Mixage et dans le rail du fond de
+projet en Disposition : Timeline · Cellules › Pistes / Scènes / Côte à côte · Mixage.
+Piste sélectionnée : la case de rail **Enregistrer** (`timeline_record`) contient Audio / Vidéo
+(`ui.capture.audio|video`) : un toucher prend à la tête de lecture sur cette piste, une source glissée hors
+du rail sur une piste y pose une région Record ; pendant la prise la case devient **Arrêter**
+(`timeline_record_stop`).
 
 ## Rail de l'outil armé (`context_menus.json` → `menus.sidebar.tools`)
 

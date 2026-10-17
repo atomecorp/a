@@ -1,10 +1,21 @@
+import { socketHealthMixin } from './websocket_health.js';
 import { CONFIG } from './adole_backend.js';
 import { getToken } from './adole_connection.js';
+
+// A key-bound token (`cnf.pop`) is accepted only after this connection signs a
+// fresh challenge with the session key; the account owner registers the signer.
+let connectionSigner = null;
+export const setSyncConnectionSigner = (signer) => { connectionSigner = typeof signer === 'function' ? signer : null; };
+const boundToKey = (token) => {
+    try { return JSON.parse(atob(String(token).split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).cnf?.pop === true; } catch (_) { return false; }
+};
 
 const DEVICE_KEY = 'squirrel_sync_device_id_v1';
 const STREAMS_KEY = 'squirrel_sync_streams_v1';
 const CURSORS_KEY = 'squirrel_sync_cursors_v1';
 const PERSIST_DELAY_MS = 250;
+// Streams announced within this window go out in one `subscribe`.
+const SUBSCRIBE_COALESCE_MS = 50;
 // Server limit for one `subscribe` carrying many cursors (`subscribe-batch` capability).
 const SUBSCRIBE_BATCH_SIZE = 500;
 
@@ -56,12 +67,19 @@ export class SyncEngine {
         this.token = options.token || (() => getToken(CONFIG.FASTIFY_TOKEN_KEY));
         this.socket = null;
         this.connected = false;
+        this.serverVersion = null;
         this.registered = false;
         this.error = '';
         this.reconnectTimer = null;
         this.reconnectAttempt = 0;
         this.batchSubscribe = false;
         this.pendingReplays = 0;
+        this.batchSettlement = false;
+        this.pendingSubscriptions = new Set();
+        this.subscribedStreams = new Set();
+        this.subscribeQueue = new Set();
+        this.subscribeTimer = null;
+        this.subscriptionSerial = 0;
         this.seenEventIds = new Set();
         this.streams = new Set();
         this.cursors = {};
@@ -71,6 +89,7 @@ export class SyncEngine {
         this.boundLogin = () => this.retry();
         this.boundLogout = () => this.disconnect();
         this.boundOnline = () => this.retry();
+        this.boundForeground = () => { if (this.env?.document?.visibilityState !== 'hidden') void this.verifyConnection(); };
         this.boundPageHide = () => this.flushPersist();
         this.source = this.loadDeviceSource();
         this.loadScope();
@@ -140,6 +159,7 @@ export class SyncEngine {
         this.env?.addEventListener?.('squirrel:user-logged-out', this.boundLogout);
         this.env?.addEventListener?.('online', this.boundOnline);
         this.env?.addEventListener?.('pagehide', this.boundPageHide);
+        this.env?.document?.addEventListener?.('visibilitychange', this.boundForeground);
         if (principalId(this.env) && this.token()) void this.connect();
         return this;
     }
@@ -147,7 +167,9 @@ export class SyncEngine {
     getState() {
         return {
             connected: this.connected,
+            serverVersion: this.connected ? this.serverVersion : null,
             registered: this.registered,
+            pending_replay_count: this.pendingReplays,
             source: this.source,
             principal_id: principalId(this.env) || null,
             environment_fingerprint: this.scopeKey(),
@@ -166,7 +188,7 @@ export class SyncEngine {
         const url = syncUrl(this.env);
         const authToken = this.token();
         if (!url || !authToken || !principalId(this.env) || !this.WebSocketClass) return false;
-        if (this.socket?.readyState === this.WebSocketClass.OPEN) return true;
+        if (this.socket && [0, this.WebSocketClass.OPEN].includes(this.socket.readyState)) return true;
         this.disconnect({ reconnect: false });
         this.flushPersist();
         this.loadScope();
@@ -176,17 +198,21 @@ export class SyncEngine {
             if (this.socket !== socket) return;
             this.error = '';
             this.pendingReplays = 0;
-            socket.send(JSON.stringify({ type: 'auth', token: authToken }));
+            this.pendingSubscriptions.clear();
+            this.subscribedStreams.clear();
+            socket.send(JSON.stringify(boundToKey(authToken) ? { type: 'auth-challenge', token: authToken } : { type: 'auth', token: authToken }));
         };
+        this.authToken = authToken;
         // A replaced socket still delivers its in-flight frames; they belong to no current subscription.
-        socket.onmessage = (event) => { if (this.socket === socket) this.handleMessage(event.data); };
+        socket.onmessage = (event) => {
+            if (this.socket !== socket) return;
+            this.noteInbound();
+            this.handleMessage(event.data);
+        };
         socket.onerror = () => { this.error = 'sync_connection_error'; };
         socket.onclose = () => {
             if (this.socket !== socket) return;
-            this.socket = null;
-            this.connected = false;
-            this.registered = false;
-            this.scheduleReconnect();
+            this.disconnect({ reconnect: true });
         };
         return true;
     }
@@ -200,9 +226,23 @@ export class SyncEngine {
     handleMessage(raw) {
         let message;
         try { message = JSON.parse(raw); } catch (_) { this.error = 'sync_invalid_json'; return; }
+        if (message.type === 'pong') { this.finishHeartbeat(true); return; }
+        if (message.type === 'auth-challenge') {
+            const socket = this.socket, token = this.authToken;
+            if (!connectionSigner) { this.error = 'sync_connection_proof_unavailable'; this.disconnect({ reconnect: true }); return; }
+            void Promise.resolve(connectionSigner(message.challenge)).then((signed) => {
+                if (this.socket === socket) this.send({ type: 'auth', token, ...signed });
+            }, (error) => { this.error = error?.message || 'sync_connection_proof_failed'; if (this.socket === socket) this.disconnect({ reconnect: true }); });
+            return;
+        }
         if (message.type === 'welcome') {
             this.connected = true;
+            this.publishStatus();
+            if (this.installed && !this.healthTimer) { this.healthTimer = setInterval(() => { void this.verifyConnection(); }, 30000); this.healthTimer.unref?.(); }
+            this.serverVersion = typeof message.version === 'string' && message.version.trim()
+                ? message.version.trim() : null;
             this.batchSubscribe = Array.isArray(message.capabilities) && message.capabilities.includes('subscribe-batch');
+            this.batchSettlement = Array.isArray(message.capabilities) && message.capabilities.includes('subscribe-batch-settlement');
             this.send({ type: 'register', source: this.source, capabilities: ['events', 'replay'] });
             return;
         }
@@ -210,6 +250,7 @@ export class SyncEngine {
             this.observeEvents((message.streams || []).map((stream) => ({ stream_id: stream })));
             this.registered = true;
             this.subscribeAll();
+            this.publishStatus();
             return;
         }
         if (message.type === 'stream-available') {
@@ -221,7 +262,9 @@ export class SyncEngine {
             return;
         }
         if (message.type === 'replay-complete') {
-            const completed = Array.isArray(message.streams) ? message.streams : [message];
+            if (this.batchSubscribe && this.batchSettlement && !message.subscription_id) return;
+            if (message.subscription_id && !this.pendingSubscriptions.delete(message.subscription_id)) return;
+            const completed = message.settled_streams || (Array.isArray(message.streams) ? message.streams : [message]);
             for (const entry of completed) this.persistCursor(entry?.stream, entry?.cursor);
             this.settleReplay();
             return;
@@ -229,17 +272,18 @@ export class SyncEngine {
         if (message.type === 'revoked') {
             this.streams.delete(String(message.stream || ''));
             this.persistScope();
-            this.settleReplay();
+            if (!this.batchSubscribe) this.settleReplay();
             return;
         }
         if (message.type === 'error') {
             this.error = String(message.code || 'sync_error');
+            this.publishStatus();
             if (message.code !== 'stream_access_denied') return;
             // A batch denial names streams this account no longer reaches: stop resubscribing them.
             if (Array.isArray(message.streams)) {
                 for (const stream of message.streams) this.streams.delete(String(stream));
                 this.schedulePersist();
-            } else this.settleReplay();
+            } else if (!this.batchSubscribe) this.settleReplay();
         }
     }
 
@@ -325,25 +369,39 @@ export class SyncEngine {
         this.send({ type: 'ack', stream, sequence });
     }
 
+    // Streams announced one by one (`stream-available`, local commits) are subscribed
+    // together: an import creating thousands of Atomes sent one `subscribe` each.
     subscribe(stream) {
         const id = String(stream || '').trim();
         if (!id || !this.registered) return false;
-        if (!this.send({ type: 'subscribe', stream: id, cursor: Number(this.cursors[id]) || 0 })) return false;
-        this.pendingReplays += 1;
+        this.subscribeQueue.add(id);
+        if (!this.subscribeTimer) this.subscribeTimer = setTimeout(() => {
+            this.subscribeTimer = null;
+            const ids = Array.from(this.subscribeQueue);
+            this.subscribeQueue.clear();
+            if (this.registered) this.subscribeStreams(ids);
+        }, SUBSCRIBE_COALESCE_MS);
         return true;
     }
 
     // One message per SUBSCRIBE_BATCH_SIZE streams when the server accepts it, instead of one per stream.
     subscribeAll() {
-        const streams = Array.from(this.streams);
-        if (!this.batchSubscribe) {
-            for (const stream of streams) this.subscribe(stream);
-            return;
-        }
-        for (let index = 0; index < streams.length; index += SUBSCRIBE_BATCH_SIZE) {
-            const batch = streams.slice(index, index + SUBSCRIBE_BATCH_SIZE)
+        this.subscribeStreams(Array.from(this.streams));
+    }
+
+    subscribeStreams(candidates) {
+        const streams = candidates.filter(stream => !this.subscribedStreams.has(stream));
+        const size = this.batchSubscribe ? SUBSCRIBE_BATCH_SIZE : 1;
+        for (let index = 0; index < streams.length; index += size) {
+            const batch = streams.slice(index, index + size)
                 .map((stream) => ({ stream, cursor: Number(this.cursors[stream]) || 0 }));
-            if (this.send({ type: 'subscribe', streams: batch })) this.pendingReplays += 1;
+            const id = this.batchSubscribe && this.batchSettlement ? `${this.source}:${++this.subscriptionSerial}` : null;
+            const message = this.batchSubscribe ? { streams: batch } : batch[0];
+            if (this.send({ type: 'subscribe', ...message, ...(id ? { subscription_id: id } : {}) })) {
+                batch.forEach(entry => this.subscribedStreams.add(entry.stream));
+                if (id) this.pendingSubscriptions.add(id);
+                this.pendingReplays += 1;
+            }
         }
     }
 
@@ -352,7 +410,10 @@ export class SyncEngine {
     settleReplay() {
         this.pendingReplays = Math.max(0, this.pendingReplays - 1);
         if (this.pendingReplays === 0) this.reconnectAttempt = 0;
+        this.publishStatus();
     }
+
+    publishStatus() { this.dispatch('squirrel:sync:status', { principal_id: principalId(this.env) }); }
 
     observeEvents(events = []) {
         if (this.scopeKey() !== this.loadedScopeKey) {
@@ -383,13 +444,19 @@ export class SyncEngine {
         }, delay);
     }
 
+    onHealthTimeout() { this.disconnect({ reconnect: true }); }
+
     disconnect({ reconnect = false } = {}) {
+        this.finishHeartbeat(false);
+        clearTimeout(this.subscribeTimer); this.subscribeTimer = null; this.subscribeQueue.clear();
+        clearInterval(this.healthTimer); this.healthTimer = null;
         if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
         this.reconnectTimer = null;
         const socket = this.socket;
         this.socket = null;
         this.connected = false;
         this.registered = false;
+        this.publishStatus();
         if (socket) socket.close();
         if (reconnect) this.scheduleReconnect();
     }
@@ -403,6 +470,8 @@ export class SyncEngine {
         this.error = '';
     }
 }
+
+Object.assign(SyncEngine.prototype, socketHealthMixin);
 
 let singleton = null;
 

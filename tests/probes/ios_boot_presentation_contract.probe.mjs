@@ -241,3 +241,7 @@ try {
 } finally { Date.now = realNow; }
 
 console.log('iOS boot presentation contract probes passed');
+window.close();
+// This standalone probe installs multiple complete page lifecycles. Their
+// product background owners intentionally outlive the presentation assertions.
+process.exit(0);

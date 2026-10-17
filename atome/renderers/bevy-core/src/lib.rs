@@ -86,3 +86,7 @@ mod login_light_tests;
 #[cfg(test)]
 #[path = "../../../../tests/rendering/backdrop_composition.rs"]
 mod backdrop_composition_tests;
+
+#[cfg(test)]
+#[path = "../../../../tests/rendering/backdrop_corner_radius.rs"]
+mod backdrop_corner_radius_tests;

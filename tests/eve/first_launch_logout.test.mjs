@@ -35,7 +35,8 @@ const setup = async () => {
     const win = dom.window;
     vi.stubGlobal('window', win); vi.stubGlobal('document', win.document); vi.stubGlobal('CustomEvent', win.CustomEvent);
     setSessionState({ mode: 'logged_out', user: null }, { persist: false, silent: true });
-    const api = { auth: { getPendingPhoneLogin: vi.fn(async () => null) }, security: { isAuthenticated: () => false, isAnonymous: () => false } };
+    const api = { auth: { getPendingPhoneLogin: vi.fn(async () => null), hasKnownPassword: vi.fn(async () => true),
+        getPendingPairing: vi.fn(async () => null), getPendingRecovery: vi.fn(async () => null), listLocalAccounts: vi.fn(async () => []) }, security: { isAuthenticated: () => false, isAnonymous: () => false } };
     win.AdoleAPI = api; win.__authCheckComplete = true;
     win.__authCheckResult = { complete: true, authenticated: false, anonymous: false };
     win.__eveWorkspaceMode = { mode: 'project', projectId: 'outgoing' };
@@ -52,6 +53,23 @@ const setup = async () => {
 };
 
 describe('logout first-launch ownership', () => {
+    it('keeps foreign pairing open on an already authenticated phone and restores its workspace on dismissal', async () => {
+        const f = await setup(); transport.cleanup = null;
+        const user = { id: 'existing' };
+        f.api.security.isAuthenticated = () => true; f.api.auth.getCurrentInfo = () => user;
+        f.win.__authCheckResult = { complete: true, authenticated: true, userId: user.id };
+        setSessionState({ mode: 'authenticated', user }, { persist: false, silent: true });
+        f.api.auth.getPendingPhoneLogin.mockResolvedValue({ confirmationRequired: true });
+        f.api.auth.cancelPhoneLogin = vi.fn(async () => { f.api.auth.getPendingPhoneLogin.mockResolvedValue(null); return { ok: true }; });
+        f.win.dispatchEvent(new f.win.CustomEvent('squirrel:phone-login-pending', { detail: { confirmationRequired: true } }));
+        await vi.waitFor(() => expect(f.flow()?.state.stage).toBe('pairing'));
+        f.gate.syncMainMenuAuthContent({ force: true });
+        expect(f.gate.isWorkspaceActiveForMainMenu()).toBe(false);
+        expect(f.flow().isOpen()).toBe(true);
+        await f.flow().handle({ operation: 'dismiss_link' });
+        expect(getSessionState()).toMatchObject({ mode: 'authenticated', user: { id: 'existing' } });
+        expect(f.gate.isWorkspaceActiveForMainMenu()).toBe(true);
+    });
     it('keeps adoption choices and logout inside the standard Home fixed strip', async () => {
         const f = await setup();
         f.api.security.guestAdoptionStatus = () => ({ pending: false });
@@ -63,10 +81,11 @@ describe('logout first-launch ownership', () => {
         expect(fixed[0].kind).toBe('column');
         expect(fixed[0].style.size[0]).toBe(452);
         expect(fixed[0].style.size[1]).toBeGreaterThanOrEqual(fixed[0].children.reduce((sum, entry) => sum + entry.style.size[1], 0));
-        fixed[0].children.find(entry => entry.id === 'home_session_exit').on.activate();
+        const find = entries => entries.flatMap(entry => [entry, ...find(entry.children || [])]);
+        find(fixed).find(entry => entry.id === 'home_session_exit').on.activate();
         expect(actions).toEqual([{ type: 'home.session.exit' }]);
     });
-    it('resumes an authenticated first-launch account before the workspace readiness gate', async () => {
+    it('admits a restored account without waiting for persisted first-launch progress', async () => {
         const f = await setup(); transport.cleanup = null;
         await f.home.openLoginSequenceAfterAuthCheck(); await f.flow().close();
         const user = { id: 'pending-account', first_launch_version: 1 };
@@ -74,9 +93,9 @@ describe('logout first-launch ownership', () => {
         f.win.__authCheckResult = { complete: true, authenticated: true, userId: user.id };
         setSessionState({ mode: 'authenticated', user }, { persist: false, silent: true });
         const resumed = vi.spyOn(f.flow(), 'authenticated').mockResolvedValue(true);
-        expect(f.gate.isWorkspaceActiveForMainMenu()).toBe(false);
+        expect(f.gate.isWorkspaceActiveForMainMenu()).toBe(true);
         await f.gate.openInitialLoginSequence();
-        expect(resumed).toHaveBeenCalledWith({ user });
+        expect(resumed).not.toHaveBeenCalled();
         expect(f.failures).toEqual([]);
     });
     it('allows a restored legacy account to leave the public login presentation', async () => {
@@ -101,7 +120,7 @@ describe('logout first-launch ownership', () => {
         expect(await transport.presentations.at(-1).activate({ operation: 'authenticate', value: '' })).toMatchObject({ ok: true });
         expect(f.flow().state.stage).toBe('billing');
         expect(await transport.presentations.at(-1).activate({ operation: 'pay', value: '' })).toMatchObject({ ok: true });
-        expect(f.flow().state.stage).toBe('sms');
+        expect(f.flow().state.stage).toBe('billing');
         expect(await transport.presentations.at(-1).activate({ operation: 'change_phone', value: '' })).toMatchObject({ ok: true });
         expect(f.flow().state.stage).toBe('phone');
         expect(f.api.auth.simulatePhonePayment).toHaveBeenCalledWith('card'); expect(f.api.auth.cancelPhoneLogin).toHaveBeenCalledTimes(1);

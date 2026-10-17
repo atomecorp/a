@@ -1,12 +1,13 @@
 import { PERSONAL_IMPORT_TOOLS } from '#shared/personal_import_tools.js';
 import { TV_COMMANDS } from '../tv/contracts.js';
 import { YOUTUBE_COMMANDS } from '../youtube/contracts.js';
+import { APPLE_MUSIC_COMMANDS } from '../apple_music/contracts.js';
+import { MUSIC_COMMANDS } from '../music/contracts.js';
 import { SOCIAL_COMMANDS } from '../social/contracts.js';
-const SOCIAL_CONFIRMED = ['social.connect', 'social.publish', 'social.disconnect'];
 import { cloneValue } from './mcp_core.js';
 import { listMcpPromptEntries, listMcpResourceEntries } from './mcp_resources.js';
 import { normalizeRuntimeToolIdentifier } from './mcp_runtime.js';
-
+const SOCIAL_CONFIRMED = ['social.connect', 'social.publish', 'social.disconnect'];
 const MCP_RATE_LIMIT_RULES = Object.freeze([
     {
         id: 'mail.send',
@@ -41,7 +42,6 @@ const MCP_RATE_LIMIT_RULES = Object.freeze([
         retryable_errors: ['mcp_confirmation_required']
     }
 ]);
-
 export function resolveResourceCapability(uri = '') {
     const normalized = String(uri || '').trim();
     if (normalized.startsWith('runtime://')) return ['runtime.read'];
@@ -53,7 +53,6 @@ export function resolveResourceCapability(uri = '') {
     if (normalized.startsWith('security://')) return ['mcp.security.read'];
     return ['mcp.read'];
 }
-
 export function resolvePromptCapability(name = '') {
     const normalized = String(name || '').trim();
     if (normalized.startsWith('mail_')) return ['mail.read'];
@@ -63,7 +62,6 @@ export function resolvePromptCapability(name = '') {
     if (normalized.startsWith('voice_')) return ['voice.read'];
     return ['mcp.read'];
 }
-
 export function listRateLimitRules() {
     return MCP_RATE_LIMIT_RULES.map((entry) => cloneValue(entry));
 }
@@ -73,7 +71,7 @@ export function resolveRateLimitRule(method, params = {}, policy = {}) {
     if (normalizedMethod === 'mail.send') {
         return MCP_RATE_LIMIT_RULES.find((entry) => entry.id === 'mail.send') || null;
     }
-    if (normalizedMethod === 'calendar.create' || normalizedMethod === 'calendar.update' || normalizedMethod === 'calendar.delete' || normalizedMethod === 'calendar.share') {
+    if (['calendar.create', 'calendar.update', 'calendar.delete', 'calendar.share'].includes(normalizedMethod)) {
         return MCP_RATE_LIMIT_RULES.find((entry) => entry.id === 'calendar.write') || null;
     }
     if (
@@ -126,7 +124,7 @@ export function listAclRules() {
             { subject: 'calendar.update', access: 'confirm', required_capabilities: ['calendar.write'] },
             { subject: 'calendar.delete', access: 'confirm', required_capabilities: ['calendar.write'] },
             { subject: 'calendar.share', access: 'confirm', required_capabilities: ['calendar.write', 'share.write'] },
-            ...[...TV_COMMANDS, ...YOUTUBE_COMMANDS].map(command => ({ subject: command.name, required_capabilities: [command.capability], access: 'allow' })),
+            ...[...TV_COMMANDS, ...YOUTUBE_COMMANDS, ...APPLE_MUSIC_COMMANDS, ...MUSIC_COMMANDS].map(command => ({ subject: command.name, required_capabilities: [command.capability], access: 'allow' })),
             ...SOCIAL_COMMANDS.map(command => ({ subject: command.name, required_capabilities: [command.capability], access: SOCIAL_CONFIRMED.includes(command.name) ? 'confirm' : 'allow' })),
             {
                 subject: 'runtime.tools.call:ui.capture.*',
@@ -279,15 +277,15 @@ export function resolveAccessPolicy(method, params = {}) {
             idempotent: true
         };
     }
-    // Contract commands (TV, social), direct or via runtime.tools.call. Social connect, publish
-    // and disconnect act on an external account (SOCIAL_CONFIRMED) and need confirmation.
+    // Direct and runtime calls share the exact contract capability and external-write policy.
     const contractId = normalizedMethod === 'runtime.tools.call' ? normalizeRuntimeToolIdentifier(params) : normalizedMethod;
-    const contract = [...TV_COMMANDS, ...YOUTUBE_COMMANDS, ...SOCIAL_COMMANDS].find(entry => entry.name === contractId);
+    const contract = [...TV_COMMANDS, ...YOUTUBE_COMMANDS, ...SOCIAL_COMMANDS, ...APPLE_MUSIC_COMMANDS, ...MUSIC_COMMANDS].find(entry => entry.name === contractId);
     if (contract || normalizedMethod.startsWith('tv.')) {
         const confirm = SOCIAL_CONFIRMED.includes(contract?.name);
         return { ...defaultPolicy, scope: 'tool', subject: contractId, required_capabilities: [contract?.capability || 'tv.control'],
             ...(confirm ? { access: 'confirm', confirmation_required: true, proposal_required: contract.name === 'social.publish', sensitive: true } : {}),
-            ...(contract?.name.startsWith('social.') ? { idempotent: contract.name !== 'social.connect' } : {}) };
+            ...(contract?.name.startsWith('social.') ? { idempotent: contract.name !== 'social.connect' } : {}),
+            ...(contract?.access === 'write' && /^(apple_music|music)\./.test(contract.name) ? { idempotent: true } : {}) };
     }
     if (normalizedMethod === 'runtime.tools.call') {
         const toolId = normalizeRuntimeToolIdentifier(params);
@@ -325,30 +323,22 @@ export function resolveAccessPolicy(method, params = {}) {
     }
     if (normalizedMethod === 'runtime.tools.batch_call') {
         const events = Array.isArray(params?.events) ? params.events : [];
-        const sensitive = events.some((entry) => isSensitiveRuntimeTool(normalizeRuntimeToolIdentifier(entry)));
-        return sensitive
-            ? {
-                ...defaultPolicy,
-                scope: 'tool',
-                subject: 'runtime.tools.batch_call:sensitive_batch',
-                access: 'confirm',
-                required_capabilities: ['runtime.execute', 'runtime.sensitive'],
-                confirmation_required: true,
-                proposal_required: true,
-                sandbox_profile: 'desktop_local_owner',
-                sensitive: true,
-                idempotent: true
-            }
-            : {
-                ...defaultPolicy,
-                scope: 'tool',
-                subject: 'runtime.tools.batch_call',
-                required_capabilities: ['runtime.execute']
-            };
+        const policies = events.map(entry => resolveAccessPolicy('runtime.tools.call', entry));
+        const sensitive = policies.some(policy => policy.sensitive || policy.confirmation_required);
+        return { ...defaultPolicy, scope: 'tool',
+            subject: sensitive ? 'runtime.tools.batch_call:sensitive_batch' : 'runtime.tools.batch_call',
+            required_capabilities: [...new Set(['runtime.execute', ...policies.flatMap(policy => policy.required_capabilities)])],
+            idempotent: policies.some(policy => policy.idempotent),
+            ...(sensitive ? { access: 'confirm', confirmation_required: true, proposal_required: true,
+                sandbox_profile: 'desktop_local_owner', sensitive: true } : {}) };
     }
     if (normalizedMethod === 'mcp.toolchains.execute') {
         const steps = Array.isArray(params?.steps) ? params.steps : [];
-        const requiredCapabilities = ['runtime.execute'];
+        const requiredCapabilities = ['runtime.execute', ...steps.flatMap(step => {
+            const name = step?.method === 'runtime.tools.call' ? normalizeRuntimeToolIdentifier(step.params || {}) : step?.method;
+            const music = [...APPLE_MUSIC_COMMANDS, ...MUSIC_COMMANDS].find(command => command.name === name);
+            return music ? [music.capability] : [];
+        })];
         const sensitive = steps.some((step) => {
             const stepMethod = String(step?.method || '').trim();
             if (stepMethod === 'runtime.tools.call') {

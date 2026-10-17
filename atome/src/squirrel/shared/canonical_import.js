@@ -18,6 +18,23 @@ export async function importIdentity(parts) {
     return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
+// An import cycle (every page of one pass over a source) reads each table once:
+// the lifecycle hands its pages one snapshot, and this module's own writes keep it
+// current. A history import used to reread the calendar and its 8000+ origins
+// (13 s of local database on Tauri) for each year it imported. Outside a cycle,
+// and at the start of every cycle, tables are read afresh.
+export const createImportSnapshot = () => new Map();
+const applySnapshotWrite = (rows, id, kind, props, owner) => {
+    const index = rows.findIndex(row => importRecordId(row) === id);
+    const current = index >= 0 ? rows[index] : null;
+    const next = kind === 'set'
+        ? { ...(current || { atome_id: id, owner_id: owner }), properties: { ...importRecordProps(current), ...props } }
+        : current && { ...current, deleted: kind === 'delete', deleted_at: kind === 'delete' ? new Date().toISOString() : null,
+            properties: { ...importRecordProps(current), __deleted: kind === 'delete' } };
+    if (!next) return;
+    if (index >= 0) rows[index] = next; else rows.push(next);
+};
+
 /** Durable import bookkeeping uses the same private Atomes as domain objects. */
 // Fusion d'une observation dans une fiche deja presente (meme identite metier) :
 // ce qui est deja rempli gagne (les modifications de l'utilisateur), le vide est
@@ -63,7 +80,9 @@ export function createCanonicalImport({ type, api = () => globalThis.window?.Ato
         if (!store?.commit || !store?.listStateCurrent) throw new Error('canonical_import_api_unavailable');
         return { owner, check, store };
     };
-    const list = async (recordType = type, context = capture()) => {
+    const list = async (recordType = type, context = capture(), snapshot = null) => {
+        const key = `${context.owner}|${recordType}`;
+        if (snapshot?.has(key)) return snapshot.get(key).slice();
         const rows = [];
         // Import bookkeeping reaches tens of thousands of rows (contacts and
         // calendars share the origins): 1000-row pages keep a full read to a few
@@ -74,15 +93,20 @@ export function createCanonicalImport({ type, api = () => globalThis.window?.Ato
             context.check();
             if (!Array.isArray(page)) throw new Error('canonical_import_read_invalid');
             rows.push(...page.filter(row => !row.owner_id || String(row.owner_id) === context.owner));
-            if (page.length < 1000) return rows;
+            if (page.length < 1000) break;
         }
+        snapshot?.set(key, rows);
+        return rows.slice();
     };
-    const write = async (id, recordType, props, context, kind = 'set') => {
+    const write = async (id, recordType, props, context, kind = 'set', snapshot = null) => {
         context.check();
+        const written = kind === 'set' ? importData({ ...props, access: 'private', visibility: 'private' }) : null;
         const result = await context.store.commit({ kind, atome_id: id, type: recordType, scope: 'global',
-            ...(kind === 'set' ? { props: importData({ ...props, access: 'private', visibility: 'private' }) } : {}) });
+            ...(kind === 'set' ? { props: written } : {}) });
         context.check();
-        if (result?.ok !== true) throw new Error(result?.error || 'canonical_import_commit_failed');
+        if (result?.ok !== true) { snapshot?.delete(`${context.owner}|${recordType}`); throw new Error(result?.error || 'canonical_import_commit_failed'); }
+        const rows = snapshot?.get(`${context.owner}|${recordType}`);
+        if (rows) applySnapshotWrite(rows, id, kind, written, context.owner);
         return result;
     };
     const identify = async (input, source, context) => {
@@ -127,9 +151,9 @@ export function createCanonicalImport({ type, api = () => globalThis.window?.Ato
         const live = candidates.find(props => byId.has(props.canonical_id) && !importRecordDeleted(byId.get(props.canonical_id)));
         return live || candidates[0] || null;
     };
-    const resolveIds = async (items, source, { legacy_source_prefix: prefix } = {}) => {
+    const resolveIds = async (items, source, { legacy_source_prefix: prefix, snapshot = null } = {}) => {
         const context = capture();
-        const [records, origins] = await Promise.all([prefix || identityKeys ? list(type, context) : [], list(IMPORT_ORIGIN_TYPE, context)]);
+        const [records, origins] = await Promise.all([prefix || identityKeys ? list(type, context, snapshot) : [], list(IMPORT_ORIGIN_TYPE, context, snapshot)]);
         const byId = new Map(records.map(row => [importRecordId(row), row]));
         const byIdentity = identityIndex(records);
         const byOrigin = new Map(origins.map(row => [importRecordId(row), importRecordProps(row)]));
@@ -154,7 +178,8 @@ export function createCanonicalImport({ type, api = () => globalThis.window?.Ato
         const source = String(meta.source_key || meta.imported_from_source || '').trim();
         if (!source) throw new Error('import_source_identity_required');
         if (meta.signal?.aborted) throw new Error('import_cancelled');
-        const [records, origins] = await Promise.all([list(type, context), list(IMPORT_ORIGIN_TYPE, context)]);
+        const snapshot = meta.snapshot || null;
+        const [records, origins] = await Promise.all([list(type, context, snapshot), list(IMPORT_ORIGIN_TYPE, context, snapshot)]);
         const byId = new Map(records.map(row => [importRecordId(row), row]));
         const byOrigin = new Map(origins.map(row => [importRecordId(row), importRecordProps(row)]));
         const former = formerOrigins(byOrigin, source, meta.legacy_source_prefix);
@@ -178,7 +203,7 @@ export function createCanonicalImport({ type, api = () => globalThis.window?.Ato
             const userDeleted = old?.suppressed_reason === 'user_delete';
             if ((old?.suppressed || importRecordDeleted(record)) && (userDeleted || meta.restore_suppressed !== true)) { skipped += 1; continue; }
             if (record && importRecordDeleted(record)) {
-                await write(recordId, type, null, context, 'restore');
+                await write(recordId, type, null, context, 'restore', snapshot);
                 record = { ...record, deleted: false, deleted_at: null, properties: { ...importRecordProps(record), __deleted: false } };
             }
             const normalized = importData(normalize(input));
@@ -195,7 +220,7 @@ export function createCanonicalImport({ type, api = () => globalThis.window?.Ato
             if (!old) await write(originId, IMPORT_ORIGIN_TYPE, { canonical_id: recordId, domain_type: type,
                 source_key: source, external_id: externalId, recurrence_id: occurrence, pending: true, baseline: normalized,
                 source_collection: input.source_collection || input.raw?.source_collection || '',
-                external_href: externalHref(input) }, context);
+                external_href: externalHref(input) }, context, 'set', snapshot);
             const merged = old && record ? reconcileImport(current, old.baseline, normalized, old.conflicts, fieldGroups)
                 : matched && record ? { properties: mergeIntoExisting(current, normalized, { recordId }), conflicts: {} }
                     : { properties: normalized, conflicts: {} };
@@ -203,7 +228,7 @@ export function createCanonicalImport({ type, api = () => globalThis.window?.Ato
             const next = { ...merged.properties, access: 'private', visibility: 'private',
                 exchange_uid: current.exchange_uid || input.uid || input.exchange_uid || recordId };
             if (!record || !sameImportValue(current, next)) {
-                await write(recordId, type, next, context);
+                await write(recordId, type, next, context, 'set', snapshot);
                 const stored = { atome_id: recordId, owner_id: context.owner, properties: next };
                 byId.set(recordId, stored);
                 for (const keyValue of (typeof identityKeys === 'function' ? identityKeys(next) : null) || []) if (keyValue && !byIdentity.has(keyValue)) byIdentity.set(keyValue, recordId);
@@ -214,29 +239,29 @@ export function createCanonicalImport({ type, api = () => globalThis.window?.Ato
                 conflicts: merged.conflicts, pending: false, removed: false, suppressed: false, access: 'private', visibility: 'private',
                 source_collection: input.source_collection || input.raw?.source_collection || '',
                 external_href: externalHref(input) };
-            if (!sameImportValue(old, origin)) await write(originId, IMPORT_ORIGIN_TYPE, origin, context);
+            if (!sameImportValue(old, origin)) await write(originId, IMPORT_ORIGIN_TYPE, origin, context, 'set', snapshot);
             byOrigin.set(originId, origin);
         }
         for (const href of meta.removed_hrefs || []) {
             for (const [id, old] of byOrigin) {
                 if (old.domain_type === type && old.source_key === source && old.external_href === href && !old.removed)
-                    await write(id, IMPORT_ORIGIN_TYPE, { ...old, removed: true }, context);
+                    await write(id, IMPORT_ORIGIN_TYPE, { ...old, removed: true }, context, 'set', snapshot);
             }
         }
         // Only explicit deletion evidence counts; absent or partial snapshots never do.
         for (const externalId of meta.removed_ids || []) {
             for (const [id, old] of byOrigin) {
                 if (old.domain_type === type && old.source_key === source && old.external_id === String(externalId) && !old.removed) {
-                    await write(id, IMPORT_ORIGIN_TYPE, { ...old, removed: true }, context);
+                    await write(id, IMPORT_ORIGIN_TYPE, { ...old, removed: true }, context, 'set', snapshot);
                 }
             }
         }
         if (meta.complete === true && meta.cursor != null) {
             const checkpointId = `source_${await importIdentity([context.owner, type, source, meta.device_id || 'connector'])}`;
-            const prior = (await list(IMPORT_SOURCE_TYPE, context)).find(row => importRecordId(row) === checkpointId);
+            const prior = (await list(IMPORT_SOURCE_TYPE, context, snapshot)).find(row => importRecordId(row) === checkpointId);
             const checkpoint = { ...importRecordProps(prior), domain_type: type, source_key: source, device_id: meta.device_id || 'connector', cursor: meta.cursor,
                 coverage: meta.coverage || null };
-            if (!sameImportValue(importRecordProps(prior), checkpoint)) await write(checkpointId, IMPORT_SOURCE_TYPE, checkpoint, context);
+            if (!sameImportValue(importRecordProps(prior), checkpoint)) await write(checkpointId, IMPORT_SOURCE_TYPE, checkpoint, context, 'set', snapshot);
         }
         return { ok: true, imported: items.length, changed, skipped, merged_into_existing, durability: 'canonical_commit',
             correspondences: [...byOrigin.values()].filter(p => p.domain_type === type && p.source_key === source),
@@ -266,12 +291,13 @@ export function createCanonicalImport({ type, api = () => globalThis.window?.Ato
         }
         return { ok: true };
     };
-    const suppress = async (id, { reason = 'user_delete' } = {}) => {
-        const context = capture();
-        for (const origin of await list(IMPORT_ORIGIN_TYPE, context)) {
+    // Inside an import pass, `snapshot` serves the origins already read: a cleanup
+    // removing hundreds of former copies reread every origin for each of them.
+    const suppress = async (id, { reason = 'user_delete', context = capture(), snapshot = null } = {}) => {
+        for (const origin of await list(IMPORT_ORIGIN_TYPE, context, snapshot)) {
             const props = importRecordProps(origin);
             if (props.domain_type === type && props.canonical_id === id && !props.suppressed)
-                await write(importRecordId(origin), IMPORT_ORIGIN_TYPE, { ...props, suppressed: true, suppressed_reason: reason }, context);
+                await write(importRecordId(origin), IMPORT_ORIGIN_TYPE, { ...props, suppressed: true, suppressed_reason: reason }, context, 'set', snapshot);
         }
     };
     // Ecriture d'un seul enregistrement : jamais de reecriture globale depuis une
@@ -281,9 +307,10 @@ export function createCanonicalImport({ type, api = () => globalThis.window?.Ato
         await write(id, type, importData(normalize(input)), context);
         return { ok: true };
     };
-    const remove = async (id, { reason = 'user_delete' } = {}) => {
-        await suppress(id, { reason });
-        await write(id, type, null, capture(), 'delete');
+    const remove = async (id, { reason = 'user_delete', snapshot = null } = {}) => {
+        const context = capture();
+        await suppress(id, { reason, context, snapshot });
+        await write(id, type, null, context, 'delete', snapshot);
         return { ok: true };
     };
     return { list, collect, create, replace, update, remove, capture, write, suppress, resolveIds };

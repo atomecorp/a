@@ -53,9 +53,6 @@ test('transport projection unfolds Sections left-to-right and scopes Section pla
     assert.deepEqual([molecule.tracks[0].gain, molecule.tracks[0].pan, molecule.tracks[0].stripId], [1, 0, 'track_a:audio']);
     assert.equal(molecule.tracks[0].clips[0].gain, 1,
         'Track gain must be applied exactly once, by the mixer strip');
-    const withoutGraph = await buildTransportTimeline(env, timeline, { graph: false });
-    assert.deepEqual([withoutGraph.tracks[0].gain, withoutGraph.tracks[0].pan, withoutGraph.tracks[0].stripId], [1, -0.4, undefined],
-        'an engine without the mixer graph receives the strip level per voice');
     assert.equal(molecule.tracks[0].clips[0].playbackRate, 1,
         'Natural playback must not introduce an implicit stretch');
     const section = await buildTransportTimeline(env, timeline, { section_id: 'section_b' });

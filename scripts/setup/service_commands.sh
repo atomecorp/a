@@ -32,6 +32,7 @@ print_usage() {
     echo "      apk --prod        Build a signed release APK"
     echo "      apk --aab         Emit an Android App Bundle instead of an APK"
     echo "      apk --doctor      Report the Android toolchain and stop"
+    echo "      apk --play-internal  Google Play internal release (Android_testflight_generator)"
     echo "      apk --help        Show all Android build options"
     echo ""
     echo "  -h, --help            Show this help message"
@@ -404,8 +405,7 @@ dispatch_service_command_if_requested() {
                 echo "ERROR: Missing Android build script: $android_apk_script"
                 exit 1
             fi
-            chmod +x "$android_apk_script"
-            "$android_apk_script" "$@"
+            bash "$android_apk_script" "$@"
             exit $?
             ;;
     esac

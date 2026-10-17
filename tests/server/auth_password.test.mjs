@@ -8,7 +8,7 @@ const passphrase = '  Une phrase Unicode 🙂 très longue '.repeat(3);
 async function enrolled() {
     const f = fixture({ screenPassword: async value => { if (value.includes('compromised')) throw new Error('auth_password_compromised'); } });
     const device = f.device(), attempt = await f.start(device);
-    const result = await f.auth.complete(await f.input(device, attempt.attemptId));
+    const result = await f.complete(await f.input(device, attempt.attemptId));
     return { ...f, key: device, result };
 }
 async function set(f, password, currentPassword = '') {

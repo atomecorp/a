@@ -71,7 +71,7 @@ import './auv3_host_bridge.js';
   }
 
   // API facade: routes to active backend
-  const immediateNames = new Set(['create_clip', 'destroy_clip', 'unlock', 'play', 'play_instance', 'stop', 'stop_clip', 'stop_instance', 'jump', 'set_param', 'shared_context', 'render_clock', 'schedule_instance', 'schedule_instances', 'mix_apply', 'mix_levels', 'mix_cut_tail', 'mix_module_state', 'mix_output_devices', 'mix_live_push']);
+  const immediateNames = new Set(['create_clip', 'destroy_clip', 'unlock', 'play', 'play_instance', 'stop', 'stop_clip', 'stop_instance', 'jump', 'set_param', 'shared_context', 'render_clock', 'schedule_instances', 'set_voice_end', 'mix_apply', 'mix_levels', 'mix_cut_tail', 'mix_module_state', 'mix_output_devices', 'mix_live_push']);
   const callBackendMethod = (name, arg) => {
     if (!active || !backends[active] || typeof backends[active][name] !== 'function') {
       return false;

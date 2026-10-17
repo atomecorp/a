@@ -7,7 +7,7 @@ import { expandCanonicalListMolecule, selectListRow, startMoleculePlayback, wait
 
 import { FIXTURES, writeToneWav, importThroughMenu, createTextThroughMenu, reloadBrowserProject } from "./molecule_ui_media_fixture.mjs";
 import { readMolecule, assertMembership, absorbMember, absorbListMember, extractionSnapshot, enterListMolecule, enterMatrixMolecule, reorderListMemberToFront, verifyReorderedMemberAfterReload, extractListMember } from "./molecule_ui_hierarchy_gestures.mjs";
-import { openMolecule, transportProof, stopMolecule, playStandaloneVideo, assertDepthTransportContinuity, summarizeTransportProof, applyDepth, windowState } from "./molecule_ui_media_playback_evidence.mjs";
+import { openMolecule, transportProof, stopMolecule, playStandaloneVideo, assertDepthTransportContinuity, assertTransportUndisturbed, summarizeTransportProof, applyDepth, windowState } from "./molecule_ui_media_playback_evidence.mjs";
 
 export const expectedTimelineDuration = (timeline) => {
     const sampleRate = Math.max(1, Number(timeline?.timebase?.sample_rate || 48000));
@@ -194,7 +194,9 @@ export const runLayeredMediaMoleculeAcceptance = async ({ page, report, ensurePr
         return {
             ok: status.exists === true && status.active === true && status.paused === false
                 && status.readyState >= 2 && status.frameVersion > 0
-                && Number(status.playbackRate) === 1,
+                // Not stretched: the clip runs at speed 1; the decoder's rate is
+                // only the sound-clock follow's nudge (bevy_video_clock_follow.js).
+                && Number(status.timeline?.speed ?? 1) === 1 && Math.abs(Number(status.playbackRate) - 1) <= 0.08 + 1e-9,
             status
         };
     }, videoId, 15000);
@@ -326,11 +328,19 @@ export const runLayeredMediaMoleculeAcceptance = async ({ page, report, ensurePr
 
     // Reading-order drag persists across List/Matrix while preserving the
     // Natural visual stack and the running transport. Depth has separate tools.
+    // The run started before the structural edits is near its end by now (the
+    // Molecule lasts its longest sound): measure the reorder against a fresh run.
+    const hierarchyRunning = await page.evaluate(async () => (await import(
+        '/eVe/domains/rendering/project_view_transport_runtime.js')).projectViewTransport.read().playing === true);
+    if (hierarchyRunning) await stopMolecule(page);
+    await openMolecule(page, project.id, videoId, moleculeId);
+    await startMoleculePlayback(page, moleculeId, members);
+    const hierarchyBaseline = await transportProof(page, moleculeId, project.id);
     const hierarchyReorder = await reorderListMemberToFront({
         page, project, moleculeId, memberId: videoId, memberIds: members, report, outDir
     });
     const hierarchyTransportSamples = [await transportProof(page, moleculeId, project.id)];
-    assertDepthTransportContinuity(finalMix, hierarchyTransportSamples);
+    assertDepthTransportContinuity(hierarchyBaseline, hierarchyTransportSamples);
     if (hierarchyTransportSamples.at(-1)?.transport?.playing === true) await stopMolecule(page);
     await reloadBrowserProject(page, project);
     const hierarchyAfterReload = await verifyReorderedMemberAfterReload({
@@ -347,13 +357,13 @@ export const runLayeredMediaMoleculeAcceptance = async ({ page, report, ensurePr
     // Later image/audio additions also have a visual projection. Put the text
     // explicitly at the top first so the following two commands isolate the
     // requested video-versus-text depth contract.
-    await applyDepth({ page, projectId: project.id, memberId: textId, action: 'front' });
-    const depthTransportSamples = [await transportProof(page, moleculeId, project.id)];
-    await applyDepth({ page, projectId: project.id, memberId: videoId, action: 'front' });
-    depthTransportSamples.push(await transportProof(page, moleculeId, project.id));
-    await applyDepth({ page, projectId: project.id, memberId: videoId, action: 'back' });
-    depthTransportSamples.push(await transportProof(page, moleculeId, project.id));
-    assertDepthTransportContinuity(depthBaseline, depthTransportSamples);
+    const measure = () => transportProof(page, moleculeId, project.id);
+    const depthTransportSamples = [];
+    for (const [memberId, action] of [[textId, 'front'], [videoId, 'front'], [videoId, 'back']]) {
+        const around = await applyDepth({ page, projectId: project.id, memberId, action, measure });
+        assertTransportUndisturbed(around.before, around.after, `layered_depth_${action}`);
+        depthTransportSamples.push(around.after);
+    }
     const activeAfterDepth = depthTransportSamples.at(-1)?.transport?.playing === true;
     if (activeAfterDepth) await stopMolecule(page);
 

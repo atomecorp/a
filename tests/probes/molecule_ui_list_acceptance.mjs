@@ -2,7 +2,58 @@ import path from 'node:path';
 import { analyzePngSignal, assert, awaitBevyUiNodeTarget, clickCanvasTarget, diffPng, findBevyUiNodeTarget, findBevyUiNodeTargets, readBevyUiHit, visibleMenuTool, wait, waitFor, waitForStableScene } from "./molecule_ui_acceptance_support.mjs";
 const clickMenuTarget = clickCanvasTarget;
 
+// The List orders loose Atomes before Molecules: the fixture's Molecule row is
+// found by its id, never assumed at index 0.
+const moleculeRowIndex = (page, ownerId) => page.evaluate(async (id) => {
+    const { readProjectViewSurfaceState } = await import('/eVe/domains/rendering/project_view_surface_runtime.js');
+    return (readProjectViewSurfaceState().content?.entries || []).findIndex((entry) => entry.id === id);
+}, ownerId);
+
+// Opens the Mystic menu of the selected subject: in a structured view Mystic is
+// blocked on the BevyUI rows and opens on the subject's visual preview
+// (`context_target.js#readProjectViewVisualPoint`); resolves with its item keys.
+const mysticItemIds = (page) => page.evaluate(() => {
+    const tree = window.eveBevyUiRuntime?.state?.trees?.get?.('eve_bevy_ui_mystic')?.tree || null;
+    const ids = [];
+    const visit = (node) => { if (!node || typeof node !== 'object') return; ids.push(String(node.id || '')); (node.children || []).forEach(visit); };
+    visit(tree?.root);
+    return ids;
+});
+const openRowMystic = async (page) => {
+    const visual = await awaitBevyUiNodeTarget(page, { nodeId: 'project_view_visual_preview', treeId: 'eve_bevy_ui_project_view' });
+    assert(visual, 'project_view_visual_preview_missing');
+    await page.mouse.click(visual.x, visual.y, { button: 'right' });
+    const opened = await waitFor(page, async () => {
+        const mystic = await import('/eVe/intuition/mystic/index.js');
+        return { ok: mystic.isMysticMenuOpen?.() === true };
+    });
+    assert(opened.ok, 'molecule_mystic_not_open');
+    await wait(400);
+    return [...new Set((await mysticItemIds(page)).map((id) => id.match(/_item_([a-z_]+?)_\d/)?.[1]).filter(Boolean))];
+};
+const mysticItemTarget = async (page, key) => {
+    const nodeId = (await mysticItemIds(page)).find((id) => new RegExp(`_item_${key}_\\d+$`).test(id));
+    return nodeId ? findBevyUiNodeTarget(page, { nodeId, treeId: 'eve_bevy_ui_mystic', step: 2 }) : null;
+};
+
+// The ids the contextual rail projects now (diagnostic of a missing tool).
+const railNodeIds = (page) => page.evaluate(async () => {
+    const { readProjectViewSurfaceState } = await import('/eVe/domains/rendering/project_view_surface_runtime.js');
+    const registry = await import('/eVe/intuition/runtime/eve_intuition/atome_contextual_edit_registry.js');
+    const content = readProjectViewSurfaceState().content || {};
+    const rail = registry.getAtomeContextualEditApi()?.readState?.() || {};
+    const context = { primaryId: content.primaryId, selectedIds: content.selectedIds, entry0: content.entries?.[0] ? { id: content.entries[0].id, entity: content.entries[0].visualRecord?.properties?.molecule_entity, type: content.entries[0].visualRecord?.type } : null,
+        railTarget: rail.activeAtomeId || rail.atomeId || null, railKind: rail.kind || null };
+    const root = window.eveBevyUiRuntime?.state?.trees?.get?.('eve_bevy_panel_atome_contextual_edit')?.tree?.root;
+    const ids = [];
+    const visit = (node) => { if (!node) return; if (/^atome_contextual_tool_[^]*$/.test(String(node.id)) && !/_(label|icon|ground|glass)$/.test(String(node.id))) ids.push(String(node.id)); (node.children || []).forEach(visit); };
+    visit(root);
+    return { context, ids: ids.filter((id) => !/_(background|corner)$/.test(id)) };
+});
+
 export const runMoleculeListAcceptance = async ({ page, project, fixture, report, check, OUT_DIR, EXPECTED_HANDEDNESS, projectViewNode, readAcceptanceState }) => {
+    // The member row the accordion revealed, shared by the following checks.
+    let memberEntryIndex = null;
         report.measurements.viewport_geometry = await page.evaluate(() => {
             const canvas = document.getElementById('eve_surface_project');
             const view = document.getElementById('view');
@@ -39,7 +90,12 @@ export const runMoleculeListAcceptance = async ({ page, project, fixture, report
         });
 
         await check('the fixed menu exposes the required tool order', async () => {
-            const expected = ['atome', 'home', 'find', 'capture', 'time', 'communicate', 'mode', 'view', 'create'];
+            // Every root of the ribbon (the account level's canonical taxonomy) is
+            // reachable, in order, and the tools a Molecule needs are among them.
+            const expected = await page.evaluate(async () => (await import('/eVe/intuition/ribbon/bevy_ui_product_registry.js'))
+                .getMainMenuRuntime()?.measure?.()?.rootKeys || []);
+            const required = ['atome', 'find', 'capture', 'communicate', 'view', 'create'];
+            assert(required.every((key) => expected.includes(key)), `required_menu_tools_missing:${JSON.stringify({ expected, required })}`);
             const projected = [];
             for (const key of expected) {
                 const target = await visibleMenuTool(page, project.id, key);
@@ -106,13 +162,15 @@ export const runMoleculeListAcceptance = async ({ page, project, fixture, report
         report.screenshots.push(listShot);
 
         await check('a real Molecule accordion exposes only its direct Atomes', async () => {
+            const row = await moleculeRowIndex(page, fixture.ownerId);
+            assert(row >= 0, 'molecule_row_missing');
             const moleculeChevron = await awaitBevyUiNodeTarget(page, {
-                nodeId: 'project_view_list_entry_0_hierarchy_chevron',
+                nodeId: `project_view_list_entry_${row}_hierarchy_chevron`,
                 treeId: 'eve_bevy_ui_project_view'
             });
             assert(moleculeChevron, 'molecule_chevron_not_actionable');
             const moleculeHit = await readBevyUiHit(page, moleculeChevron);
-            assert(String(moleculeHit.nodeId || '').includes('project_view_list_entry_0_hierarchy_chevron'),
+            assert(String(moleculeHit.nodeId || '').includes(`project_view_list_entry_${row}_hierarchy_chevron`),
                 `molecule_chevron_hit_mismatch:${JSON.stringify({ moleculeChevron, moleculeHit })}`);
             await clickCanvasTarget(page, moleculeChevron);
             const expandedMolecule = await waitFor(page, async () => {
@@ -188,24 +246,31 @@ export const runMoleculeListAcceptance = async ({ page, project, fixture, report
             return selected;
         });
 
-        await check('selecting a Molecule exposes the canonical Delete action in its contextual rail', async () => {
-            const molecule = await projectViewNode(page, project.id, 'project_view_list_entry_0_name');
+        // Canonical taxonomy (eVe/intuition/menu/context_menus.json): a selected
+        // Molecule's rail (`menus.sidebar.objects.molecule` + the List's own
+        // actions) offers Enter and Ungroup; Delete and Info are its Mystic items
+        // (`menus.mystic.objects.molecule`) — the List keeps Info out of the rail.
+        await check('selecting a Molecule exposes its rail, and Delete in its Mystic menu', async () => {
+            const row = await moleculeRowIndex(page, fixture.ownerId);
+            assert(row >= 0, 'molecule_row_missing');
+            const molecule = await projectViewNode(page, project.id, `project_view_list_entry_${row}_name`);
             await clickCanvasTarget(page, molecule);
-            const remove = await awaitBevyUiNodeTarget(page, {
-                nodeId: 'atome_contextual_tool_delete',
-                treeId: 'eve_bevy_panel_atome_contextual_edit'
-            });
-            assert(remove, 'molecule_delete_not_actionable');
-            const hit = await readBevyUiHit(page, remove);
-            assert(String(hit.nodeId || '').endsWith('atome_contextual_tool_delete'),
-                `molecule_delete_hit_mismatch:${JSON.stringify({ remove, hit })}`);
-
             await waitFor(page, async (pid) => {
                 const { readActiveMoleculeTarget } = await import('/eVe/domains/rendering/project_view_molecule_workspace_state.js');
                 const target = readActiveMoleculeTarget(pid);
                 return { ok: target?.entity_type === 'molecule', target };
             }, project.id);
-            return { node: remove.id, hit };
+            for (const key of ['molecule_enter', 'ungroup']) {
+                const tool = await awaitBevyUiNodeTarget(page, { nodeId: `atome_contextual_tool_${key}`, treeId: 'eve_bevy_panel_atome_contextual_edit' });
+                assert(tool, `molecule_rail_${key}_missing:${JSON.stringify(await railNodeIds(page))}`);
+            }
+            const items = await openRowMystic(page);
+            assert(items.includes('delete') && items.includes('info'), `molecule_mystic_items:${JSON.stringify(items)}`);
+            await page.evaluate(async () => (await import('/eVe/intuition/mystic/index.js')).closeMysticMenu?.());
+            await waitForStableScene(page, project.id);
+            assert(await awaitBevyUiNodeTarget(page, { nodeId: `project_view_list_entry_${row}_name`, treeId: 'eve_bevy_ui_project_view' }),
+                'molecule_row_not_actionable_after_mystic');
+            return { row, items };
         });
 
         await check('the contextual rail does not cover visible Molecule row content', async () => {
@@ -233,38 +298,13 @@ export const runMoleculeListAcceptance = async ({ page, project, fixture, report
         });
 
         await check('a real Info click opens the canonical track property panel', async () => {
-            // Attendre la projection plutot que de la supposer : un seul balayage
-            // repondait `null` quand le panneau contextuel n'etait pas encore
-            // peint, ce qui arrive sur le rasteriseur logiciel d'un run headless.
-            // L'assertion est inchangee — seule la patience l'est.
-            let info = null;
-            let stableSamples = 0;
-            let previousSignature = '';
-            const readinessSamples = [];
-            const infoDeadline = Date.now() + 30000;
-            while (!info && Date.now() < infoDeadline) {
-                const candidate = await findBevyUiNodeTarget(page, {
-                    nodeId: 'atome_contextual_tool_molecule_info',
-                    treeId: 'eve_bevy_panel_atome_contextual_edit',
-                    step: 2
-                });
-                const hit = candidate ? await readBevyUiHit(page, candidate) : null;
-                const signature = candidate && hit?.nodeId === candidate.id
-                    ? JSON.stringify({ id: candidate.id, x: candidate.x, y: candidate.y, box: hit.box || null })
-                    : '';
-                stableSamples = signature && signature === previousSignature ? stableSamples + 1 : 0;
-                readinessSamples.push({ signature, stableSamples });
-                if (readinessSamples.length > 20) readinessSamples.shift();
-                previousSignature = signature;
-                if (stableSamples >= 1) info = candidate;
-                else await wait(120);
-            }
-            assert(info, `molecule_info_not_actionable:${JSON.stringify(readinessSamples)}`);
-            const hit = await readBevyUiHit(page, info);
-            assert(String(hit.nodeId || '').endsWith('atome_contextual_tool_molecule_info'),
-                `molecule_info_hit_mismatch:${JSON.stringify({ info, hit })}`);
+            // Info of a Molecule in the List is its Mystic item (see above).
+            const items = await openRowMystic(page);
+            assert(items.includes('info'), `molecule_info_not_actionable:${JSON.stringify(items)}`);
+            const info = await mysticItemTarget(page, 'info');
+            assert(info, 'molecule_info_item_not_actionable');
             await clickCanvasTarget(page, info);
-            const opened = await waitFor(page, async (pid) => {
+            const opened = await waitFor(page, async ({ pid, ownerId }) => {
                 const records = window.eveToolBase?.getProjectSceneState?.(pid)?.records || [];
                 const ids = records.map((record) => String(record.id || ''));
                 const infoRecords = ids.filter((id) => id.includes('eve_bevy_panel_info'));
@@ -273,13 +313,13 @@ export const runMoleculeListAcceptance = async ({ page, project, fixture, report
                 const { infoRuntime } = await import('/eVe/intuition/runtime/bevy_panel/bevy_panel_info_runtime.js');
                 const panelRuntime = await import('/eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js');
                 const properties = infoRuntime.surface.readState()?.primary?.properties || {};
+                const primary = infoRuntime.surface.readState()?.primary || {};
                 return {
+                    // The Info panel of this Molecule (its tempo, quantization and
+                    // metronome are the Timeline rail's own tools now).
                     ok: (infoRecords.some((id) => id.includes('eve_bevy_panel_info_panel')) || infoTree)
-                        // This context is the Molecule owner, not one of its
-                        // tracks. Track-only fields must not be required here.
-                        && Object.hasOwn(properties, 'tempo')
-                        && Object.hasOwn(properties, 'quantization')
-                        && Object.hasOwn(properties, 'metronome'),
+                        && (String(primary.id || primary.atome_id || '') === ownerId
+                            || properties.molecule_timeline?.owner_atome_id === ownerId),
                     properties, info_tree: infoTree,
                     info_record_count: infoRecords.length,
                     panel_open: panelRuntime.isBevyPanelSurfaceOpen('info'),
@@ -290,7 +330,7 @@ export const runMoleculeListAcceptance = async ({ page, project, fixture, report
                     info_routing: (window.atome?.tools?.gatewayRoutingLog || [])
                         .filter((entry) => String(entry?.tool_id || '').includes('info')).slice(-6)
                 };
-            }, project.id);
+            }, { pid: project.id, ownerId: fixture.ownerId });
             await waitForStableScene(page, project.id);
             const close = await findBevyUiNodeTarget(page, {
                 nodeId: 'eve_bevy_panel_info_footer_close',

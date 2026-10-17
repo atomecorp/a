@@ -5,13 +5,13 @@ import {
     analyzePngSignal,
     assert,
     clickCanvasTarget,
-    findBevyUiNodeTarget,
     playwrightPointForClientTarget,
     visibleMenuTool,
     wait,
     waitFor,
     waitForStableScene
 } from './molecule_ui_acceptance_support.mjs';
+import { contextualTool } from './molecule_ui_drop_playback_support.mjs';
 
 const MEDIA = Object.freeze({
     image: '/atome/src/assets/images/green_planet.png',
@@ -99,8 +99,10 @@ export const switchView = async (page, projectId, mode) => {
             if (node?.id === 'eve_bevy_ui_main_menu_tool_view_icon') icon = node.image?.source || '';
             nodes.push(...(node?.children || []));
         }
-        const expected = { list: 'hamburger', table: 'grid', natural: 'tool' }[mode];
-        return { ok: icon.endsWith('/' + expected + '.svg'), icon, expected };
+        // A palette slot keeps its own icon, never the chosen child's
+        // (bevy_ui_main_menu_model.js, 2026-09-24): View stays the eye in every mode.
+        const expected = 'visible_true';
+        return { ok: icon.endsWith('/' + expected + '.svg'), icon, expected, mode };
     }, mode);
     if (mode === 'list' || mode === 'table') {
         await waitFor(page, async ({ expectedMode, expectedProjectId }) => {
@@ -165,6 +167,21 @@ export const dropChoiceToolIds = (page) => page.evaluate(() => {
         .filter((id) => id.startsWith('atome_contextual_tool_drop_choice_'));
 });
 
+// The offered set is the canonical owner's definitions for the pending drop
+// (project_view_drop_choice_rail.js), never a count copied into the probe: every
+// defined choice must be a rail tool, and the rail offers no other choice.
+export const offeredDropChoices = (page) => page.evaluate(async () => {
+    const rail = await import('/eVe/domains/rendering/project_view_drop_choice_rail.js');
+    const expected = rail.dropChoiceRailDefinitions().map((definition) => `atome_contextual_tool_${definition.key}`);
+    const tree = (window.eveBevyUiRuntime?.readOverlayDiagnostics?.()?.trees || [])
+        .find((entry) => entry.id === 'eve_bevy_panel_atome_contextual_edit');
+    const ids = (tree?.interactiveNodes || []).map((entry) => String(entry.id || entry));
+    const offered = ids.filter((id) => expected.includes(id));
+    const foreign = ids.filter((id) => id.startsWith('atome_contextual_tool_drop_choice_')
+        && !expected.some((tool) => id === tool || id.startsWith(`${tool}_`)));
+    return { ok: expected.length > 0 && offered.length === expected.length && !foreign.length, expected, offered, foreign };
+});
+
 export const chooseDropChoice = async (page, choice) => {
     const nodeId = `atome_contextual_tool_drop_choice_${choice}`;
     await waitFor(page, (expected) => {
@@ -173,9 +190,8 @@ export const chooseDropChoice = async (page, choice) => {
         const ids = (tree?.interactiveNodes || []).map((entry) => String(entry.id || entry));
         return { ok: ids.includes(expected), ids };
     }, nodeId);
-    const target = await findBevyUiNodeTarget(page, {
-        nodeId, treeId: 'eve_bevy_panel_atome_contextual_edit', step: 2
-    });
+    // The choice joins the end of the rail: a long rail scrolls it into view.
+    const target = await contextualTool(page, [nodeId]);
     assert(target, `drop_choice_tool_missing:${nodeId}`);
     await clickCanvasTarget(page, target);
     await page.evaluate(async () => {

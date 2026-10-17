@@ -66,6 +66,22 @@ pub(crate) fn enqueue_current_user_state_sync(
             )
             .as_bytes(),
         ));
+        // This exact state version already reached this remote account, or is already
+        // queued: re-enqueueing it would push the whole workspace to the end of the queue
+        // on every configuration (each share, each session resume) and it would never drain.
+        let event_id = format!("remote-state-bootstrap-v2:{}:{}:{}", remote_user_id, atome_id, digest);
+        let known: bool = db
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM remote_bootstrap_delivered
+                                WHERE remote_user_id = ?1 AND atome_id = ?2 AND digest = ?3)
+                     OR EXISTS(SELECT 1 FROM sync_queue WHERE atome_id = ?2 AND json_extract(payload, '$.id') = ?4)",
+                rusqlite::params![remote_user_id, atome_id, digest, event_id],
+                |row| row.get(0),
+            )
+            .map_err(|error| error.to_string())?;
+        if known {
+            continue;
+        }
         db.execute(
             "DELETE FROM sync_queue
              WHERE atome_id = ?1
@@ -89,10 +105,7 @@ pub(crate) fn enqueue_current_user_state_sync(
         enqueue_sync_event(
             &db,
             &EventRecord {
-                id: format!(
-                    "remote-state-bootstrap-v2:{}:{}:{}",
-                    remote_user_id, atome_id, digest
-                ),
+                id: event_id,
                 ts: updated_at,
                 atome_id: Some(atome_id),
                 project_id: if global_scope { None } else { project_id },

@@ -2,6 +2,7 @@ import {
   buildTauriKiraAudioPayload,
   KIRA_AUDIO_COMMANDS,
   normalizeKiraPlayInstancePayload,
+  normalizeKiraVoiceEnvelope,
   normalizeKiraStopInstancePayload
 } from './kira_audio_commands.js';
 import {
@@ -9,6 +10,7 @@ import {
   isIosHostAppRuntime,
   resolveAudioRuntime
 } from './runtime_audio_backend.js';
+import { createKiraClipMeta, isAuv3NativeRuntime, postAuv3LocalClipLoad } from './kira_backend_support.js';
 
 // Kira backend for Squirrel.av.audio
 // Routes audio commands to either Tauri invoke (native) or WASM module (web).
@@ -37,46 +39,10 @@ import {
     }
   }
 
-  function isAuv3NativeRuntime() {
-    var runtime = resolveAudioRuntime(window);
-    return runtime.playback === 'ios_auv3_native' || runtime.record === 'ios_auv3_native' || runtime.runtime === 'ios_auv3';
-  }
-
   function rejectIosHostAppBytesLoad(context) {
     var error = new Error('[backend.kira] iOS host app native playback requires a local media path');
     emitError(context, error);
     return Promise.reject(error);
-  }
-
-  function normalizeAuv3LocalPath(source) {
-    if (!source) return '';
-    var value = String(source).trim();
-    if (!value || value.startsWith('blob:') || value.startsWith('data:')) return '';
-    try {
-      var parsed = new URL(value, 'atome:///');
-      if (parsed.protocol === 'http:' || parsed.protocol === 'https:' || parsed.protocol === 'atome:' || parsed.protocol === 'file:') {
-        value = parsed.pathname || value;
-      }
-    } catch (_) { }
-    value = value
-      .replace(/^file:\/\/\/file\//, '')
-      .replace(/^file:\/\//, '')
-      .replace(/^\/file\//, '')
-      .replace(/^\/+/, '');
-    if (value.startsWith('api/recordings/')) return 'recordings/' + value.slice('api/recordings/'.length);
-    if (value.startsWith('api/uploads/')) return value.slice('api/uploads/'.length);
-    return value;
-  }
-
-  function postAuv3LocalClipLoad(source) {
-    var relativePath = normalizeAuv3LocalPath(source);
-    var bridge = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.atome;
-    if (!relativePath || !bridge || typeof bridge.postMessage !== 'function') return false;
-    bridge.postMessage({
-      action: 'loadLocalPath',
-      relativePath: relativePath
-    });
-    return true;
   }
 
   function invoke(cmd, args) {
@@ -211,15 +177,9 @@ import {
       });
   }
 
-  // In-memory state for markers/sprites (JS-side, synchronized with facade)
-  var clipMeta = new Map(); // id -> { markers: Map, sprites: Map }
-
-  function ensureClipMeta(id) {
-    if (!clipMeta.has(id)) {
-      clipMeta.set(id, { markers: new Map(), sprites: new Map() });
-    }
-    return clipMeta.get(id);
-  }
+  // Markers and sprites of each clip, kept JS-side (`kira_backend_support.js`).
+  var clipMeta = createKiraClipMeta();
+  var ensureClipMeta = clipMeta.ensure;
 
   var backend = {
     prewarm() {
@@ -302,27 +262,32 @@ import {
       return mode === 'wasm' && wasm && wasmAudioManagerReady ? wasm.audio_render_clock() : null;
     },
 
-    // Many voices in one call (one native round trip); resolves with their start frames.
+    // Many voices in one call (one native round trip), each started on its own
+    // rendered frame with its loop and envelope; resolves with their start frames.
     schedule_instances(list) {
-      if (mode === 'tauri') return invoke('audio_schedule_instances', { voices: list.map(function (arg) { return Object.assign(buildTauriKiraAudioPayload(KIRA_AUDIO_COMMANDS.PLAY_INSTANCE, normalizeKiraPlayInstancePayload(arg)), { startRenderFrame: Number(arg.startRenderFrame) }); }) }).then(function (r) { return r.start_render_frames; });
-      return Promise.all(list.map(function (arg) { return backend.schedule_instance(arg); }));
-    },
-
-    // Starts a voice exactly on a rendered frame of the engine.
-    schedule_instance(arg) {
-      var payload = normalizeKiraPlayInstancePayload(arg);
-      var frame = Number(arg && (arg.startRenderFrame != null ? arg.startRenderFrame : arg.start_render_frame));
-      if (!payload.assetId || !payload.voiceId || !Number.isFinite(frame)) {
-        return Promise.reject(new Error('[backend.kira] schedule_instance requires asset, voice and frame'));
-      }
-      if (mode === 'tauri') return invoke('audio_schedule_instance', Object.assign(buildTauriKiraAudioPayload(KIRA_AUDIO_COMMANDS.PLAY_INSTANCE, payload),
-        { startRenderFrame: frame })).then(function (r) { return Number(r && r.start_render_frame); });
+      var voices = list.map(function (arg) {
+        var payload = normalizeKiraPlayInstancePayload(arg);
+        var frame = Number(arg && arg.startRenderFrame);
+        if (!payload.assetId || !payload.voiceId || !Number.isFinite(frame)) {
+          throw new Error('[backend.kira] schedule_instances requires asset, voice and frame');
+        }
+        return Object.assign(buildTauriKiraAudioPayload(KIRA_AUDIO_COMMANDS.PLAY_INSTANCE, payload),
+          { startRenderFrame: Math.max(0, Math.round(frame)), envelope: normalizeKiraVoiceEnvelope(arg.envelope) });
+      });
+      if (mode === 'tauri') return invoke('audio_schedule_instances', { voices: voices }).then(function (r) { return r.start_render_frames; });
       if (mode !== 'wasm') return Promise.reject(new Error('[backend.kira] sample-accurate scheduling requires a Kira engine'));
       return ensureRuntimeMode({ audioManager: true }).then(function () {
-        return wasm.audio_schedule_instance(payload.assetId, payload.voiceId, payload.startSeconds,
-          payload.durationSeconds == null ? undefined : payload.durationSeconds, payload.gain, payload.pan, payload.rate, frame,
-          payload.stripId == null ? undefined : payload.stripId);
+        return Array.from(wasm.audio_schedule_voices(voices));
       });
+    },
+
+    // A late end for a scheduled or sounding voice (frames of its own count).
+    set_voice_end(arg) {
+      var voiceId = String((arg && (arg.voiceId || arg.voice_id)) || '');
+      var endFrame = Math.max(0, Math.round(Number(arg && arg.endFrame) || 0));
+      var releaseFrames = Math.max(0, Math.round(Number(arg && arg.releaseFrames) || 0));
+      if (mode === 'tauri') return invoke('audio_set_voice_end', { voiceId: voiceId, endFrame: endFrame, releaseFrames: releaseFrames });
+      return mode === 'wasm' && wasm && wasmAudioManagerReady ? wasm.audio_set_voice_end(voiceId, endFrame, releaseFrames) : false;
     },
 
     play(arg) {
@@ -477,45 +442,7 @@ import {
       }
     },
 
-    add_marker(arg) {
-      if (!arg || !arg.clip_id || !arg.name) return;
-      var meta = ensureClipMeta(arg.clip_id);
-      meta.markers.set(arg.name, { name: arg.name, frame: arg.frame || 0 });
-    },
-
-    remove_marker(arg) {
-      if (!arg || !arg.clip_id || !arg.name) return;
-      var meta = clipMeta.get(arg.clip_id);
-      if (meta) meta.markers.delete(arg.name);
-    },
-
-    set_marker_follow_actions(arg) {
-      if (!arg || !arg.clip_id || !arg.marker) return;
-      var meta = ensureClipMeta(arg.clip_id);
-      var m = meta.markers.get(arg.marker);
-      if (m) m.followActions = arg.actions || [];
-    },
-
-    clear_marker_follow_actions(arg) {
-      if (!arg || !arg.clip_id || !arg.marker) return;
-      var meta = clipMeta.get(arg.clip_id);
-      if (meta) {
-        var m = meta.markers.get(arg.marker);
-        if (m) m.followActions = [];
-      }
-    },
-
-    query_clip(arg) {
-      var id = arg && (arg.id || arg.clip_id) || '';
-      if (!id) return null;
-      var meta = clipMeta.get(id);
-      if (!meta) return null;
-      return {
-        id: id,
-        markers: Array.from(meta.markers.values()),
-        sprites: Array.from(meta.sprites.values())
-      };
-    },
+    ...clipMeta.methods,
 
     dispatch_batch(batch) {
       for (var i = 0; i < batch.length; i++) {

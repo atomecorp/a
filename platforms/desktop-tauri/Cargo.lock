@@ -483,6 +483,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "atome-audio-engine"
+version = "0.1.0"
+dependencies = [
+ "atome-mix-graph",
+ "cpal 0.15.3",
+ "hound",
+ "kira",
+ "once_cell",
+ "ringbuf",
+ "serde",
+ "serde_json",
+ "symphonia",
+]
+
+[[package]]
 name = "atome-bevy-renderer-core"
 version = "0.1.0"
 dependencies = [
@@ -7715,6 +7730,7 @@ dependencies = [
 name = "squirrel"
 version = "0.1.0"
 dependencies = [
+ "atome-audio-engine",
  "atome-bevy-renderer-core",
  "atome-mix-graph",
  "axum",
@@ -7728,6 +7744,7 @@ dependencies = [
  "futures-util",
  "hex",
  "hound",
+ "jni 0.21.1",
  "jsonwebtoken",
  "kira",
  "midir",
@@ -7746,6 +7763,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-clipboard-manager",
  "tauri-plugin-health",
+ "tauri-plugin-mobile-host",
  "tauri-plugin-opener",
  "tauri-plugin-stt",
  "tempfile",
@@ -8341,6 +8359,15 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-health"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "tauri",
+ "tauri-plugin",
+]
+
+[[package]]
+name = "tauri-plugin-mobile-host"
 version = "0.1.0"
 dependencies = [
  "serde_json",

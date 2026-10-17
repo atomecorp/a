@@ -42,43 +42,60 @@ final class FastifySyncClient {
     var syncTask: URLSessionWebSocketTask?
     var configuration: Configuration?
     private var remoteAccessToken = ""
-    private var activePrincipalId = ""
+    var activePrincipalId = ""
     var outboxTask: URLSessionWebSocketTask?
     var outboxSession: URLSession?
     var outboxRows: [[String: Any]] = []
     var outboxRetry: DispatchWorkItem?
-    private var subscribedStreams: Set<String> = []
+    // Media of the next batch is being uploaded: no second drain meanwhile.
+    var outboxUploading = false
+    // Rows of a refused batch still to be pushed one by one.
+    var outboxIsolation = 0
+    // Callers waiting for given Atomes to reach the server (`sync` / `flush`).
+    var flushWaiters: [(atomeIds: [String], deadline: Date, reply: ([String: Any]) -> Void)] = []
+    var subscribedStreams: Set<String> = []
     // Streams whose current replay applied at least one event: only those changed the
     // projection. Every connection replays thousands of per-atome streams, almost all
     // empty, and announcing each one made the Dashboard reload continuously.
-    private var replayDeliveredStreams: Set<String> = []
-    private var connecting = false
-    private var connected = false
-    private var reconnectDelay: TimeInterval = 1
+    var replayDeliveredStreams: Set<String> = []
+    var connecting = false
+    var connected = false
+    var reconnectDelay: TimeInterval = 1
     // Server limit for one `subscribe` carrying many cursors (`subscribe-batch` capability).
-    private static let subscribeBatchSize = 500
-    private var batchSubscribe = false
+    static let subscribeBatchSize = 500
+    var batchSubscribe = false
     // Subscriptions of this connection not yet answered. The backoff resets only once every one
     // is answered, so a server closing right after authentication keeps backing off.
-    private var pendingReplays = 0
-
-    func connectIfConfigured() {
-        queue.async { [weak self] in self?.connectLocked() }
-    }
+    var pendingReplays = 0
+    var batchSettlement = false
+    var pendingSubscriptions: Set<String> = []
+    var replayFailed = false
+    var registeredSession = false
+    var lastSyncError: String?
+    // Token the current `/ws/sync` socket authenticated with.
+    var sessionToken = ""
+    let progress = AiSRuntime.syncProgress
+    private var reconnectWork: DispatchWorkItem?
+    var healthDeadline: DispatchWorkItem?
+    var projectionNotice: DispatchWorkItem?
 
     // The application re-publishes the same remote configuration before every
     // authenticated request. Tearing the client down each time also closed the
     // provider channels, so the socket carrying an assistant request died of the
     // very call that prepared it, and the user read `provider_connection_closed`.
-    // Token renewal reconnects sync only. Account, server or environment changes
-    // still disconnect provider channels.
+    // Token renewal (every ~14 min, and on each return to the foreground) keeps the same
+    // principal: the new token is used from the next connection and outbox push on, and the
+    // authenticated socket and in-flight push stay up. Fastify closes the socket itself
+    // (`authentication_expired`) when the token it authenticated expires. Only a session
+    // still waiting for its authentication restarts with the new token. Account, server or
+    // environment changes still disconnect everything, provider channels included.
     func reloadConfiguration() {
         queue.async { [weak self] in
             guard let self else { return }
             let next = self.resolveConfiguration()
             if let next, let current = self.configuration, current.sameIdentity(as: next) {
-                if current.token != next.token { self.cancelOutbox(); self.scheduleReconnectLocked() }
                 self.configuration = next
+                if current.token != next.token, !self.registeredSession { self.scheduleReconnectLocked() }
                 self.connectLocked(); return
             }
             self.disconnectLocked()
@@ -99,11 +116,13 @@ final class FastifySyncClient {
         queue.async { [weak self] in self?.drainOutbox() }
     }
 
-    private func connectLocked() {
+    func connectLocked() {
         guard !connecting, !connected, let config = resolveConfiguration() else { return }
         do { try AiSRuntime.prepareRemoteSync(principalId: config.principalId, localPrincipalId: config.localPrincipalId) }
         catch { notifyLocal(["type":"sync:persistence-error", "error":error.localizedDescription]); return }
         connecting = true
+        reconnectWork?.cancel(); reconnectWork = nil
+        replayFailed = false
         configuration = config
         activePrincipalId = config.principalId
         let session = URLSession(configuration: .default)
@@ -115,8 +134,10 @@ final class FastifySyncClient {
         connected = true
         connecting = false
         pendingReplays = 0
+        sessionToken = config.token
         sendJSON(["type":"auth", "token":config.token], task: task)
         receiveNext(task)
+        publishProgress()
         scheduleHeartbeat(task)
     }
 
@@ -147,8 +168,10 @@ final class FastifySyncClient {
 
     private func handle(_ payload: [String: Any], task: URLSessionWebSocketTask) {
         let type = payload["type"] as? String ?? ""
+        if type == "pong" { healthDeadline?.cancel(); healthDeadline = nil; return }
         if type == "welcome" {
             batchSubscribe = (payload["capabilities"] as? [String] ?? []).contains("subscribe-batch")
+            batchSettlement = (payload["capabilities"] as? [String] ?? []).contains("subscribe-batch-settlement")
             sendJSON([
                 "type":"register", "source":deviceSource(),
                 "capabilities":["sqlite-projection", "offline-lww"]
@@ -160,19 +183,16 @@ final class FastifySyncClient {
                 activePrincipalId = principal
             }
             guard activePrincipalId == configuration?.principalId else { disconnectLocked(); return }
+            // An authenticated, registered connection supersedes every error of the previous one.
+            lastSyncError = nil
+            registeredSession = true
             subscribeAvailableStreams(task, announced: payload["streams"] as? [String] ?? [])
             drainOutbox()
+            publishProgress()
             return
         }
         if type == "replay-complete" {
-            // A batch answer lists every replayed stream; a single answer names one.
-            let streams = (payload["streams"] as? [[String: Any]])?.compactMap { $0["stream"] as? String }
-                ?? [payload["stream"] as? String].compactMap { $0 }
-            do { try AiSRuntime.completeRemoteReplay(principalId: activePrincipalId, streamIds: streams) }
-            catch { notifyLocal(["type":"sync:persistence-error", "error":error.localizedDescription]) }
-            let delivered = streams.filter { replayDeliveredStreams.remove($0) != nil }
-            if !delivered.isEmpty { notifyLocal(["type":"sync:projection-ready", "streams":delivered, "replay":true]) }
-            settleReplay()
+            completeSubscription(payload)
             return
         }
         if type == "stream-available", let stream = payload["stream"] as? String {
@@ -186,12 +206,19 @@ final class FastifySyncClient {
         if type == "revoked", let stream = payload["stream"] as? String {
             subscribedStreams.remove(stream)
             notifyLocal(payload)
-            settleReplay()
+            if !batchSubscribe { settleReplay() }
             return
         }
         if type == "error", let code = payload["code"] as? String {
-            if ["authentication_expired", "authentication_invalid"].contains(code) { scheduleReconnectLocked() }
-            else if code == "stream_access_denied", payload["stream"] is String { settleReplay() }
+            let authentication = ["authentication_expired", "authentication_invalid"].contains(code)
+            // A revoked stream answers its subscription with a denial at every connection:
+            // normal authorization, not a synchronization failure. Neither is the expiry of a
+            // token already renewed: the reconnection authenticates with the new one.
+            let renewed = authentication && configuration.map { $0.token != sessionToken } == true
+            if code != "stream_access_denied" && !renewed { lastSyncError = code }
+            if authentication { scheduleReconnectLocked() }
+            else if code == "stream_access_denied", payload["stream"] is String, !batchSubscribe { settleReplay() }
+            publishProgress()
         }
     }
 
@@ -202,12 +229,16 @@ final class FastifySyncClient {
               let stream = payload["stream"] as? String,
               let sequence = number(payload["sequence"]), sequence > 0 else { return }
         do {
-            let inserted = try AiSRuntime.persistRemoteSyncEnvelope(
+            let delivery = try AiSRuntime.persistRemoteSyncEnvelope(
                 payload, principalId: activePrincipalId, localPrincipalId: configuration?.localPrincipalId
             )
-            if inserted && payload["replay"] as? Bool == true { replayDeliveredStreams.insert(stream) }
-            if inserted && payload["replay"] as? Bool != true && payload["source"] as? String != deviceSource() {
+            if delivery == .applied && payload["replay"] as? Bool == true { stageProjectionNotice(stream) }
+            if delivery == .applied && payload["replay"] as? Bool != true && payload["source"] as? String != deviceSource() {
                 notifyLocal(["type":"sync:projection-ready", "stream":stream, "replay":false])
+            }
+            // Recorded in `remote_sync_rejected_events`; acknowledged so delivery moves on.
+            if case .rejected(let reason) = delivery {
+                notifyLocal(["type":"sync:event-rejected", "stream":stream, "sequence":sequence, "error":reason])
             }
             sendJSON(["type":"ack", "stream":stream, "sequence":sequence], task: task)
         } catch {
@@ -216,79 +247,57 @@ final class FastifySyncClient {
         }
     }
 
-    func subscribeAvailableStreams(
-        _ task: URLSessionWebSocketTask, announced: [String] = []
-    ) {
-        guard !activePrincipalId.isEmpty else { return }
-        var cursors = AiSRuntime.remoteSyncCursors(principalId: activePrincipalId)
-        cursors.append(("directory.public", 0))
-        var known: [String: Int64] = [:]
-        for (stream, cursor) in cursors { known[stream] = cursor }
-        cursors.append(contentsOf: announced.map { ($0, known[$0] ?? 0) })
-        var pending: [[String: Any]] = []
-        for (stream, cursor) in cursors where !subscribedStreams.contains(stream) {
-            pending.append(["stream":stream, "cursor":cursor])
-            subscribedStreams.insert(stream)
-        }
-        let size = batchSubscribe ? Self.subscribeBatchSize : 1
-        for start in stride(from: 0, to: pending.count, by: size) {
-            let batch = Array(pending[start..<min(start + size, pending.count)])
-            let message: [String: Any] = batchSubscribe
-                ? ["type":"subscribe", "streams":batch]
-                : batch[0].merging(["type":"subscribe"]) { $1 }
-            sendJSON(message, task: task)
-            pendingReplays += 1
-        }
-    }
-
-    private func settleReplay() {
-        pendingReplays = max(0, pendingReplays - 1)
-        if pendingReplays == 0 { reconnectDelay = 1 }
-    }
-
-    private func sendJSON(_ payload: [String: Any], task: URLSessionWebSocketTask) {
+    func sendJSON(_ payload: [String: Any], task: URLSessionWebSocketTask) {
         guard JSONSerialization.isValidJSONObject(payload),
               let data = try? JSONSerialization.data(withJSONObject: payload) else { return }
         task.send(.string(String(decoding: data, as: UTF8.self))) { [weak self] error in
-            if error != nil { self?.queue.async { self?.scheduleReconnectLocked() } }
+            if error != nil { self?.queue.async { guard let self, self.syncTask === task else { return }; self.scheduleReconnectLocked() } }
         }
     }
 
     func notifyLocal(_ payload: [String: Any]) {
-        guard let data = try? JSONSerialization.data(withJSONObject: payload) else { return }
+        let type = payload["type"] as? String ?? ""
+        if type == "sync:persistence-error" { replayFailed = true }
+        if ["sync:persistence-error", "sync:delivery-error"].contains(type) { lastSyncError = payload["error"] as? String; publishProgress() }
+        if type == "sync:delivery-complete" { lastSyncError = nil; publishProgress() }
+        var scoped = payload
+        scoped["local_user_id"] = configuration?.localPrincipalId
+        guard let data = try? JSONSerialization.data(withJSONObject: scoped) else { return }
         LocalHTTPServer.shared.handleFastifySyncMessage(String(decoding: data, as: UTF8.self))
         NotificationCenter.default.post(
             name: Notification.Name("AtomeRemoteSyncEvent"), object: nil, userInfo: payload
         )
     }
 
-    private func scheduleHeartbeat(_ task: URLSessionWebSocketTask) {
-        queue.asyncAfter(deadline: .now() + 20) { [weak self] in
-            guard let self, self.syncTask === task, self.connected else { return }
-            self.sendJSON(["type":"ping"], task: task)
-            self.subscribeAvailableStreams(task)
-            self.drainOutbox()
-            self.scheduleHeartbeat(task)
-        }
-    }
-
-    private func scheduleReconnectLocked() {
+    func scheduleReconnectLocked() {
         guard connected || connecting else { return }
+        healthDeadline?.cancel(); healthDeadline = nil
+        flushProjectionNotice()
         connected = false
         connecting = false
+        registeredSession = false
+        pendingSubscriptions.removeAll()
         subscribedStreams.removeAll()
         replayDeliveredStreams.removeAll()
         syncTask?.cancel(with: .goingAway, reason: nil)
         syncTask = nil
         session?.invalidateAndCancel()
         session = nil
+        publishProgress()
         let delay = reconnectDelay
         reconnectDelay = min(reconnectDelay * 2, 30)
-        queue.asyncAfter(deadline: .now() + delay) { [weak self] in self?.connectLocked() }
+        reconnectWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.connectLocked() }
+        reconnectWork = work
+        queue.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     private func disconnectLocked() {
-        cancelOutbox()
+        reconnectWork?.cancel(); reconnectWork = nil
+        healthDeadline?.cancel(); healthDeadline = nil
+        projectionNotice?.cancel(); projectionNotice = nil
+        registeredSession = false; pendingSubscriptions.removeAll(); pendingReplays = 0
+        cancelOutbox(); outboxIsolation = 0
         providerChannels.values.forEach { $0.close() }
         providerChannels.removeAll()
         connected = false
@@ -297,6 +306,7 @@ final class FastifySyncClient {
         replayDeliveredStreams.removeAll()
         configuration = nil
         activePrincipalId = ""
+        progress.replace([:])
         syncTask?.cancel(with: .normalClosure, reason: nil)
         syncTask = nil
         session?.invalidateAndCancel()

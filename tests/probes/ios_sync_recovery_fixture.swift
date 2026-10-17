@@ -31,7 +31,7 @@ extension AiSRuntime {
         shared["vault_principal_id"] = "foreign-account"
         _ = try persistRemoteSyncEnvelope(shared, principalId:"cloud-account")
         check(try getStateCurrent(db, atomeId:"shared-project")?["owner_id"] as? String == "foreign-account", "foreign vault ownership must survive")
-        check(try listStateCurrent(db, projectId:nil, ownerId:"local-account", limit:100, offset:0).count == 1, "foreign state must not acquire local write rights")
+        check(try listStateCurrent(db, projectId:nil, ownerId:"local-account", limit:100, offset:0).count == 2, "shared projects must be readable without changing their owner")
         var profile = envelope
         profile["event_id"] = "profile-event"; profile["atome_id"] = "cloud-account"; profile["sequence"] = 2
         profile["patch"] = ["scope":"global", "props":["type":"user", "nickname":"Restored profile"]]
@@ -103,9 +103,9 @@ extension AiSRuntime {
         _ = try persistRemoteSyncEnvelope(older, principalId:"cloud-account")
         check(try query(db, "SELECT atome_id FROM atomes WHERE atome_id='offline-project' AND deleted_at IS NULL").count == 1, "newer winning restore must clear the tombstone")
         try execute(db, "UPDATE remote_sync_stream_cursors SET projection_version=0 WHERE stream_id='own-stream'")
-        check(remoteSyncCursors(principalId:"cloud-account").contains { $0.0 == "own-stream" && $0.1 == 0 }, "legacy projections must request replay")
-        try completeRemoteReplay(principalId:"cloud-account", streamIds:["own-stream"])
-        check(remoteSyncCursors(principalId:"cloud-account").contains { $0.0 == "own-stream" && $0.1 == 7 }, "successful replay must retain the durable cursor")
+        check(try remoteSyncCursors(principalId:"cloud-account").contains { $0.0 == "own-stream" && $0.1 == 0 }, "legacy projections must request replay")
+        try completeRemoteReplay(principalId:"cloud-account", streamIds:["own-stream"], cursors:["own-stream":7])
+        check(try remoteSyncCursors(principalId:"cloud-account").contains { $0.0 == "own-stream" && $0.1 == 7 }, "successful replay must retain the durable cursor")
         print("AiS sync recovery checks passed")
     }
 }

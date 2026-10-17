@@ -13,7 +13,7 @@ test('native iOS subscribes in batches and announces one projection per applying
     const batches = [];
     server.on('connection', (socket, request) => {
         if (request.url !== '/ws/sync') return;
-        socket.send(JSON.stringify({ type: 'welcome', capabilities: ['subscribe', 'subscribe-batch'] }));
+        socket.send(JSON.stringify({ type: 'welcome', capabilities: ['subscribe', 'subscribe-batch', 'subscribe-batch-settlement'] }));
         socket.on('message', raw => {
             const message = JSON.parse(String(raw));
             if (message.type === 'register') socket.send(JSON.stringify({ type: 'registered', principal_id: 'remote', streams }));
@@ -25,8 +25,8 @@ test('native iOS subscribes in batches and announces one projection per applying
                     vault_principal_id: 'remote', atome_id: 'batch-shape', kind: 'set',
                     patch: { props: { type: 'shape', left: 1 } }, timestamp: new Date().toISOString()
                 }));
-                socket.send(JSON.stringify({ type: 'replay-complete', streams: [{ stream: 'stream-1', cursor: 1 }] }));
-            } else socket.send(JSON.stringify({ type: 'replay-complete', streams: [] }));
+                socket.send(JSON.stringify({ type: 'replay-complete', subscription_id: message.subscription_id, settled_streams: message.streams.map(entry => ({...entry, cursor: entry.stream === 'stream-1' ? 1 : entry.cursor})), streams: [{ stream: 'stream-1', cursor: 1 }] }));
+            } else socket.send(JSON.stringify({ type: 'replay-complete', subscription_id: message.subscription_id, settled_streams: message.streams, streams: [] }));
         });
     });
     let build;
@@ -43,8 +43,9 @@ test('native iOS subscribes in batches and announces one projection per applying
         // 1 200 announced streams + directory.public: three messages instead of 1 201.
         assert.deepEqual(batches.map(batch => batch.streams?.length), [500, 500, 201]);
         assert.equal(batches.some(batch => 'stream' in batch), false);
+        assert.equal(new Set(batches.map(batch => batch.subscription_id)).size, 3);
         const projections = JSON.parse(output.trim().split('\n').at(-1));
-        assert.deepEqual(projections, [{ type: 'sync:projection-ready', streams: ['stream-1'], replay: true }]);
+        assert.deepEqual(projections, [{ type: 'sync:projection-ready', streams: ['stream-1'], replay: true, local_user_id: 'local' }]);
     } finally {
         for (const client of server.clients) client.terminate();
         await new Promise(resolve => server.close(resolve));

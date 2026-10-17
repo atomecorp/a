@@ -60,7 +60,7 @@ async function createUserAtomeInTransaction(dataSource, userId, username, phone,
                 await updateUserParticle(dataSource, userId, key, value);
             }
 
-            await assignVerifiedPhone(dataSource, userId, phone, { now });
+            if (phone !== null) await assignVerifiedPhone(dataSource, userId, phone, { now });
             await upsertUserStateCurrent(dataSource, userId, username, normalizedVisibility, now, optionalParticles);
 
             return {
@@ -86,7 +86,7 @@ async function createUserAtomeInTransaction(dataSource, userId, username, phone,
                 await updateUserParticle(dataSource, userId, key, value);
             }
 
-            await assignVerifiedPhone(dataSource, userId, phone, { now });
+            if (phone !== null) await assignVerifiedPhone(dataSource, userId, phone, { now });
             await upsertUserStateCurrent(dataSource, userId, username, normalizedVisibility, now, optionalParticles);
 
             return {
@@ -121,7 +121,8 @@ async function createUserAtomeInTransaction(dataSource, userId, username, phone,
         await updateUserParticle(dataSource, userId, key, value);
     }
 
-    await assignVerifiedPhone(dataSource, userId, phone, { now });
+    // Accounts created without a phone (authentication V1) pass `null`.
+    if (phone !== null) await assignVerifiedPhone(dataSource, userId, phone, { now });
     await upsertUserStateCurrent(dataSource, userId, username, normalizedVisibility, now, optionalParticles);
 
     return {

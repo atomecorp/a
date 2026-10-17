@@ -13,9 +13,10 @@ import { getVideoAiService } from './ai_video/index.js';
 import { VIDEO_AI_ERRORS } from './ai_video/service.js';
 import { handleSocialAction } from './social/social_operations.js';
 import { readSocialConfig } from './social/social_sessions.js';
+import { handleMusicAction, musicReceiptApi } from './music/music_operations.js';
 
 const operations = new WeakMap();
-const SOCIAL_TIMEOUT_MS = Object.freeze({ models: 15000, 'social.connect.await': 11 * 60_000, 'social.publish': 20 * 60_000, 'social.status': 5 * 60_000 });
+const SOCIAL_TIMEOUT_MS = Object.freeze({ models: 15000, 'music.await_connection': 11 * 60_000, 'social.connect.await': 11 * 60_000, 'social.publish': 20 * 60_000, 'social.status': 5 * 60_000 });
 const ROOT = 'https://api.openai.com/v1';
 const ROUTES = Object.freeze({
     models: ['GET', '/models'],
@@ -184,6 +185,17 @@ export const handleWsAiProviderOperation = async (message, connection, {
             const data = await listProviderModelCatalog({ provider: credentialProvider, key, fetchImpl, signal: controller.signal });
             if (resolvePrincipal(connection, message) !== principal) throw new Error('provider_principal_changed');
             return reply(true, { data });
+        }
+        if (action.startsWith('music.')) {
+            const check = () => {
+                if (resolvePrincipal(connection, message) !== principal) throw new Error('provider_principal_changed');
+                controller.signal.throwIfAborted();
+            };
+            const data = await handleMusicAction(action, message.payload?.input || {}, {
+                principal, vault, fetchImpl, signal: controller.signal, check,
+                idempotencyKey: String(message.payload?.idempotency_key || ''),
+                receiptApi: musicReceiptApi(connection, message.token, check) });
+            check(); return reply(true, { data });
         }
         if (action.startsWith('social.')) {
             const data = await handleSocialAction(action, message.payload || {}, {

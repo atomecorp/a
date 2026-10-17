@@ -54,7 +54,6 @@ import {
     selectUndoTransaction
 } from './adole_history_transactions.js';
 import {
-    assertIdempotentEventReplay,
     eventDeletedPropertyKeys,
     extractEventPatch,
     resolveEventPayload,
@@ -1492,7 +1491,7 @@ export async function appendEvent(event, options = {}) {
             [normalized.id]
         );
         if (existing) {
-            assertIdempotentEventReplay(existing, normalized);
+            eventMutations.assertReplay(existing, normalized);
             normalized = {
                 ...existing,
                 payload: safeParseJson(existing.payload),
@@ -1581,7 +1580,7 @@ export async function appendEvents(events, options = {}) {
                 [normalized.id]
             );
             if (existing) {
-                assertIdempotentEventReplay(existing, normalized);
+                eventMutations.assertReplay(existing, normalized);
                 results.push({
                     ...existing,
                     payload: safeParseJson(existing.payload),

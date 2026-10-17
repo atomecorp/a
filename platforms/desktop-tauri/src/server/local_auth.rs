@@ -12,7 +12,9 @@ use super::local_atome::LocalAtomeState;
 #[path = "local_auth_accounts.rs"] mod accounts;
 #[path = "local_auth_tokens.rs"] mod tokens;
 #[path = "local_auth_device.rs"] mod device;
+#[cfg(target_os = "android")]
 #[path = "local_auth_notifications.rs"] mod notifications;
+#[cfg(target_os = "android")]
 pub(crate) use notifications::notification_storage;
 
 #[derive(Clone)]

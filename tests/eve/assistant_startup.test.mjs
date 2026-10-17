@@ -1,6 +1,7 @@
 import { test, expect, vi } from 'vitest';
 import { createEveAssistantRuntime } from '../../eVe/voice/assistant/assistant_runtime.js';
 import { getSessionState, setSessionState } from '../../atome/src/squirrel/apis/unified/adole_api/session.js';
+import { eveTList } from '../../eVe/i18n/i18n.js';
 
 const binding = vi.hoisted(() => ({ create: null }));
 vi.mock('../../atome/src/squirrel/voice/assistant_session_controller.js', () => ({
@@ -17,10 +18,15 @@ const deferred = () => {
 };
 const harness = (providerResolver = async () => ({ ok: true, providerId: 'openai' }), openAiSettings, overrides = {}) => {
     let time = 0, sequence = 0, connected = false;
-    const frames = new Map(), renders = [], changes = [], commands = [];
+    const frames = new Map(), renders = [], changes = [], commands = [], listeners = new Map();
+    // eVe's recorded voice (the page's voice line player), observed.
+    const voiceLines = { prepare: vi.fn(async () => ({})), say: vi.fn(async () => ({ promise: Promise.resolve() })),
+        stop: vi.fn(async () => {}), subscribeFrames: () => () => {} };
+    const session = {};
     const controller = { open: vi.fn(async () => {}), pause: vi.fn(async () => {}),
         resume: vi.fn(async () => {}), close: vi.fn(async () => {}) };
-    binding.create = async ({ onSession }) => {
+    binding.create = async (options) => {
+        const { onSession } = options; session.options = options;
         controller.pause.mockImplementation(async () => {
             connected = false;
             onSession({ phase: 'idle', connected: false, microphoneActive: false, error: '', sessionId: null });
@@ -34,7 +40,8 @@ const harness = (providerResolver = async () => ({ ok: true, providerId: 'openai
     const dock = { open: vi.fn(async () => {}), close: vi.fn(async () => {}), refresh() {}, blur() {},
         toggleInput: vi.fn(async () => { api.focusText(); return { open: true }; }) };
     const api = createEveAssistantRuntime({
-        env: { crypto: globalThis.crypto, addEventListener() {}, removeEventListener() {},
+        env: { crypto: globalThis.crypto, __eveVoiceLines: voiceLines,
+            addEventListener: (type, listener) => listeners.set(type, listener), removeEventListener: type => listeners.delete(type),
             matchMedia: () => ({ matches: true, addEventListener() {}, removeEventListener() {} }) },
         providerResolver, ...(openAiSettings ? { openAiSettings } : {}), dockFactory: () => dock, now: () => time,
         requestFrame: callback => { frames.set(++sequence, callback); return sequence; },
@@ -49,41 +56,57 @@ const harness = (providerResolver = async () => ({ ok: true, providerId: 'openai
         await flush();
     };
     api.subscribe(state => changes.push(state));
-    return { api, dock, controller, renders, changes, commands, flush, advance,
+    return { api, dock, controller, renders, changes, commands, flush, advance, voiceLines, session,
+        touch: () => listeners.get('pointerdown')?.(),
         async dispose() { const closed = api.close(); await advance(); await closed; await api.dispose(); } };
 };
 
-test('slow startup paints before provider lookup and announces once after 500 ms', async () => {
+test('slow startup paints before provider lookup and says the welcome once after 1.2 s', async () => {
     vi.useFakeTimers();
     const provider = deferred();
-    const audio = { loadTransientAsset: vi.fn(async () => {}), startVoice: vi.fn(async () => {}),
-        stopVoice: vi.fn(async () => {}), releaseTransientAsset: vi.fn(async () => {}) };
-    const h = harness(() => provider.promise, undefined, { audio,
-        announcementBytes: async () => [{ pcm: Array(22050).fill(.1), sampleRate: 22050, phonemes: [] }, null] });
+    const h = harness(() => provider.promise);
     try {
         const opening = h.api.open();
         expect(h.api.getState()).toMatchObject({ active: true, phase: 'opening', connected: false });
         expect(h.dock.open).toHaveBeenCalledOnce(); await h.flush();
-        await vi.advanceTimersByTimeAsync(499); expect(audio.startVoice).not.toHaveBeenCalled();
-        await vi.advanceTimersByTimeAsync(1); expect(audio.startVoice).toHaveBeenCalledOnce();
+        await vi.advanceTimersByTimeAsync(1199); expect(h.voiceLines.say).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(1); expect(h.voiceLines.say).toHaveBeenCalledExactlyOnceWith('eve.voice.assistant.startup_line');
         provider.resolve({ ok: true, providerId: 'openai' }); await opening; await h.flush();
         await vi.advanceTimersByTimeAsync(2000);
-        expect(audio.startVoice).toHaveBeenCalledOnce(); expect(audio.releaseTransientAsset).toHaveBeenCalledOnce();
+        expect(h.voiceLines.say).toHaveBeenCalledOnce();
         expect(h.api.getState()).toMatchObject({ connected: true, microphoneActive: true });
     } finally { provider.resolve({ ok: true, providerId: 'openai' }); await h.dispose(); vi.useRealTimers(); }
 });
 
+test('a touch before the welcome means the user is busy: it is not said', async () => {
+    vi.useFakeTimers(); const provider = deferred();
+    const h = harness(() => provider.promise);
+    try {
+        const opening = h.api.open(); await h.flush();
+        await vi.advanceTimersByTimeAsync(800); h.touch();
+        await vi.advanceTimersByTimeAsync(2000); expect(h.voiceLines.say).not.toHaveBeenCalled();
+        provider.resolve({ ok: true, providerId: 'openai' }); await opening;
+    } finally { provider.resolve({ ok: true, providerId: 'openai' }); await h.dispose(); vi.useRealTimers(); }
+});
+
+test('eVe says she is ready through the session, in her recorded voice', async () => {
+    const h = harness();
+    try {
+        await h.api.open(); await h.flush();
+        await h.session.options.announceReady();
+        expect(eveTList('eve.voice.assistant.ready_lines.direct')).toContain(h.voiceLines.say.mock.calls.at(-1)[0]);
+    } finally { await h.dispose(); }
+});
+
 test('closing during preparation suppresses delayed audio and obsolete provider results', async () => {
     vi.useFakeTimers(); const provider = deferred();
-    const audio = { loadTransientAsset: vi.fn(), startVoice: vi.fn() };
-    const h = harness(() => provider.promise, undefined, { audio,
-        announcementBytes: async () => [{ pcm: [.1], sampleRate: 22050, phonemes: [] }, null] });
+    const h = harness(() => provider.promise);
     try {
         const opening = h.api.open(); await h.flush();
         const closing = h.api.close(); await h.advance(); await closing;
-        await vi.advanceTimersByTimeAsync(1000);
+        await vi.advanceTimersByTimeAsync(2000);
         provider.resolve({ ok: true, providerId: 'openai' }); await opening;
-        expect(audio.startVoice).not.toHaveBeenCalled(); expect(h.controller.open).not.toHaveBeenCalled();
+        expect(h.voiceLines.say).not.toHaveBeenCalled(); expect(h.controller.open).not.toHaveBeenCalled();
         expect(h.api.getState().active).toBe(false);
     } finally { provider.resolve({ ok: true, providerId: 'openai' }); await h.dispose(); vi.useRealTimers(); }
 });

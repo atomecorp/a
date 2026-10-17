@@ -150,8 +150,8 @@ static NSDictionary *readContacts(NSDictionary *options) {
         for (CNLabeledValue<NSDateComponents *> *entry in contact.dates)
             [extra addObject:@{@"name": @"X-ABDATE", @"value": contactDate(entry.value), @"params": @{@"TYPE": entry.label ?: @"other"}}];
         for (CNLabeledValue<CNSocialProfile *> *entry in contact.socialProfiles)
-            [extra addObject:@{@"name": @"X-SOCIALPROFILE", @"value": entry.value.urlString,
-                @"params": @{@"TYPE": entry.value.service, @"X-USER": entry.value.username}}];
+            [extra addObject:@{@"name": @"X-SOCIALPROFILE", @"value": entry.value.urlString ?: @"",
+                @"params": @{@"TYPE": entry.value.service ?: @"", @"X-USER": entry.value.username ?: @""}}];
         for (CNLabeledValue<CNInstantMessageAddress *> *entry in contact.instantMessageAddresses)
             [extra addObject:@{@"name": @"IMPP", @"value": [NSString stringWithFormat:@"%@:%@", entry.value.service, entry.value.username],
                 @"params": @{@"TYPE": entry.label ?: @"other"}}];
@@ -220,7 +220,14 @@ char *atome_personal_read(const char *domain, const char *json, void (*callback)
         initialize(); changed = callback;
         NSData *data = [[NSString stringWithUTF8String:json] dataUsingEncoding:NSUTF8StringEncoding];
         NSDictionary *options = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
-        NSDictionary *result = strcmp(domain, "contact") == 0 ? readContacts(options) : readCalendar(options);
+        NSDictionary *result;
+        // An Objective-C exception must not unwind into the Rust caller (the app aborts):
+        // the page receives it as this read's error instead.
+        @try { result = strcmp(domain, "contact") == 0 ? readContacts(options) : readCalendar(options); }
+        @catch (NSException *exception) {
+            result = @{ @"ok": @NO, @"error": @"native_import_exception",
+                        @"exception": exception.name ?: @"", @"reason": exception.reason ?: @"" };
+        }
         NSData *output = [NSJSONSerialization dataWithJSONObject:result options:0 error:nil];
         if (!output) return strdup("{\"ok\":false,\"error\":\"native_import_json_failed\"}");
         return strdup([[NSString alloc] initWithData:output encoding:NSUTF8StringEncoding].UTF8String);

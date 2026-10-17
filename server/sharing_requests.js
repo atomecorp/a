@@ -8,6 +8,7 @@
 import db, { withTransaction } from '../database/adole.js';
 import { v4 as uuidv4 } from 'uuid';
 import { pushNotificationToUserStack } from './notificationStack.js';
+import { findUserById } from './auth_users.js';
 import { createShare } from './sharingPermissionService.js';
 import {
     atomeCreatorIdOf,
@@ -203,6 +204,8 @@ export async function createShareRequest({ sharerId, targetUserId, targetPhone, 
                 share_type: baseParticles.share_type || null,
                 request_atome_id: inboxId || null,
                 from_id: sharerId,
+                // The sharer as the recipient's book knows them (see communication_delivery).
+                from_phone: (await findUserById(db.getDataSourceAdapter(), sharerId).catch(() => null))?.phone || null,
                 to_user_id: targetUserId,
                 timestamp: new Date().toISOString(),
                 unread: true,

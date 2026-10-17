@@ -38,7 +38,7 @@ beforeEach(async () => {
     await import('../../eVe/domains/dashboard/workspace_surface_preference.js');
 });
 
-test('readStartupView resolves the stored workspace surface, not a written-once default', async () => {
+test('readStartupView always chooses home despite stored surfaces or legacy overrides', async () => {
     const env = installWindow();
     try {
         const { readStartupView, readWorkspaceSurfacePreference } = await import(
@@ -50,18 +50,18 @@ test('readStartupView resolves the stored workspace surface, not a written-once 
         assert.equal(readStartupView(), 'dashboard');
 
         env.window.__eveProfilePreferences = { workspace: { startup_view: 'project' } };
-        assert.equal(readStartupView(), 'project');
+        assert.equal(readStartupView(), 'dashboard');
 
         // The removed legacy global is not a startup-view source anymore.
         env.window.__eveProfilePreferences = {};
         env.window.eveUserPreferences = { startup_view: 'dashboard' };
-        assert.equal(readStartupView(), 'project');
+        assert.equal(readStartupView(), 'dashboard');
 
         // The explicit focused-contract override stays authoritative.
         env.window.__eveStartupView = 'dashboard';
         assert.equal(readStartupView(), 'dashboard');
         env.window.__eveStartupView = 'project';
-        assert.equal(readStartupView(), 'project');
+        assert.equal(readStartupView(), 'dashboard');
         env.window.__eveStartupView = null;
     } finally {
         env.restore();

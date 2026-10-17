@@ -16,6 +16,11 @@ const mediaAuth = vi.hoisted(() => ({
     buildUserHeaders: vi.fn(), getCloudToken: vi.fn(), getLocalToken: vi.fn()
 }));
 vi.mock('../../eVe/domains/media/asset_box_auth.js', () => mediaAuth);
+// The canonical media owner a media-atome wallpaper is read through.
+const mediaOwner = vi.hoisted(() => ({
+    isLocalNativeBackendRuntime: vi.fn(), ensureMediaLocallyAvailable: vi.fn(), buildLocalAuthHeaders: vi.fn()
+}));
+vi.mock('../../eVe/domains/media/api/media_api_shared.js', () => mediaOwner);
 const videoSource = vi.hoisted(() => ({ register: vi.fn() }));
 vi.mock('../../eVe/domains/rendering/bevy_video_stream_source_runtime.js', () => ({
     registerBevyVideoStreamSource: videoSource.register
@@ -37,7 +42,7 @@ const createCanvasContext = () => ({
 });
 let restoreGlobals = null;
 let fetchMock = null;
-const bootBackgroundRuntime = async ({ currentUser = null, embedded = false, preferences = null } = {}) => {
+const bootBackgroundRuntime = async ({ currentUser = null, embedded = false, preferences = null, authSettled = !currentUser } = {}) => {
     const dom = new JSDOM('<!doctype html><html><body><div id="view"></div></body></html>', {
         url: 'http://127.0.0.1:3001/'
     });
@@ -50,6 +55,8 @@ const bootBackgroundRuntime = async ({ currentUser = null, embedded = false, pre
     window.requestAnimationFrame = (callback) => window.setTimeout(() => callback(0), 0);
     window.cancelAnimationFrame = () => {};
     if (currentUser) window.__currentUser = currentUser;
+    // The session module publishes a settled check without an account this way.
+    if (authSettled) Object.assign(window, { __authCheckComplete: true, __authCheckResult: { authenticated: false, userId: null, anonymous: false } });
     const previous = {
         window: globalThis.window,
         document: globalThis.document,
@@ -78,6 +85,7 @@ const bootBackgroundRuntime = async ({ currentUser = null, embedded = false, pre
     vi.resetModules();
     const background = await import('../../eVe/user/background.js');
     background.startUserBackgroundRuntime();
+    for (let turn = 0; turn < 5; turn += 1) await Promise.resolve();
     return { window, background, surfaces };
 };
 beforeEach(() => {
@@ -85,6 +93,9 @@ beforeEach(() => {
     mediaAuth.getCloudToken.mockReset().mockReturnValue('cloud-memory-session');
     mediaAuth.getLocalToken.mockReset().mockReturnValue('native-memory-session');
     videoSource.register.mockReset();
+    mediaOwner.isLocalNativeBackendRuntime.mockReset().mockReturnValue(false);
+    mediaOwner.ensureMediaLocallyAvailable.mockReset();
+    mediaOwner.buildLocalAuthHeaders.mockReset().mockReturnValue({ Authorization: 'Bearer native-memory-session', 'X-User-Id': 'account' });
     profileApi.loadUserProfile.mockReset();
     profileApi.upsertUserProfile.mockReset();
     assetBox.sendFileToServer.mockReset();
@@ -328,14 +339,70 @@ test.each([false, true])('a protected video uses its current session before star
     assert.equal(options.loop, true);
     assert.equal(options.muted, true);
 });
+test('a wallpaper naming its media atome is read from that atome, never from the picking device path', async () => {
+    const { window } = await bootBackgroundRuntime();
+    const blobUrl = 'blob:synced-wallpaper';
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue(blobUrl);
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    // The preference arrives first: this device has not received the atome yet.
+    let synced = false;
+    window.Atome = { getStateCurrent: async (id) => (synced ? { ok: true, state: { id, owner_id: 'account', properties: {
+        kind: 'image', file_name: 'phone_wallpaper.png', file_path: 'Downloads/phone_wallpaper.png', media_user_id: 'account' } } } : null) };
+    fetchMock.mockImplementation(async () => ({ ok: true, status: 200, blob: async () => new Blob(['png'], { type: 'image/png' }) }));
+    // The preference as another device saved it: its own local path plus the atome.
+    window.dispatchEvent(new window.CustomEvent('eve:profile-preferences-updated', {detail: {
+        source: 'background_panel', preferences: {background: {
+            backgroundSource: 'image', backgroundMediaKind: 'image',
+            backgroundImageUrl: '/file/data/users/phone-principal/Downloads/phone_wallpaper.png',
+            backgroundImageFilePath: 'data/users/phone-principal/Downloads/phone_wallpaper.png',
+            backgroundImageAtomeId: 'wallpaper_media'
+        }}
+    }}));
+    await vi.waitFor(() => assert.equal(window.__eveSurfaceBackgroundImageError?.error, 'background_media_atome_unavailable'));
+    assert.equal(fetchMock.mock.calls.length, 0, 'the picking device path is never requested');
+    synced = true;
+    window.dispatchEvent(new window.CustomEvent('squirrel:atome-updated', { detail: { atome_id: 'wallpaper_media' } }));
+    await vi.waitFor(() => assert.equal(window.__eveSurfaceBackground.sourceUrl, blobUrl));
+    assert.deepEqual(fetchMock.mock.calls.map(([url]) => url), ['http://127.0.0.1:3001/api/uploads/phone_wallpaper.png?media_user_id=account']);
+    assert.equal(fetchMock.mock.calls[0][1].headers.Authorization, 'Bearer cloud-memory-session');
+    assert.equal(window.__eveSurfaceBackground.signature, 'image:cover:atome:wallpaper_media');
+    assert.equal(window.__eveSurfaceBackgroundImageError, undefined, 'the painted wallpaper clears its own refusal');
+});
+test('a native host makes the media atome file local before painting it', async () => {
+    const { window } = await bootBackgroundRuntime({ embedded: true });
+    const blobUrl = 'blob:native-synced-wallpaper';
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue(blobUrl);
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    mediaOwner.isLocalNativeBackendRuntime.mockReturnValue(true);
+    mediaOwner.ensureMediaLocallyAvailable.mockResolvedValue({ ok: true, userId: 'account',
+        localUrl: 'http://127.0.0.1:3000/api/uploads/phone_wallpaper.png?media_user_id=account' });
+    window.Atome = { getStateCurrent: async (id) => ({ ok: true, state: { id, owner_id: 'this-device-principal', properties: {
+        kind: 'image', file_name: 'phone_wallpaper.png', media_user_id: 'account', mediaUserId: 'picking-device-principal' } } }) };
+    fetchMock.mockImplementation(async () => ({ ok: true, status: 200, blob: async () => new Blob(['png'], { type: 'image/png' }) }));
+    window.dispatchEvent(new window.CustomEvent('eve:profile-preferences-updated', {detail: {
+        source: 'background_panel', preferences: {background: {
+            backgroundSource: 'image', backgroundMediaKind: 'image',
+            backgroundImageUrl: '/file/data/users/phone-principal/Downloads/phone_wallpaper.png',
+            backgroundImageAtomeId: 'wallpaper_media'
+        }}
+    }}));
+    await vi.waitFor(() => assert.equal(window.__eveSurfaceBackground.sourceUrl, blobUrl));
+    assert.deepEqual(mediaOwner.ensureMediaLocallyAvailable.mock.calls[0], ['phone_wallpaper.png', { source: 'upload', userId: 'account' }]);
+    assert.deepEqual(fetchMock.mock.calls.map(([url]) => url), ['http://127.0.0.1:3000/api/uploads/phone_wallpaper.png?media_user_id=account']);
+    assert.equal(fetchMock.mock.calls[0][1].headers.Authorization, 'Bearer native-memory-session');
+    // The local server serves the folder the availability owner found the file in.
+    assert.deepEqual(mediaOwner.buildLocalAuthHeaders.mock.calls.at(-1), [{ 'X-User-Id': 'account' }]);
+});
 const { createBackgroundImage } = await import('../../eVe/intuition/tools/background_image.js');
 test.each([{ name: 'wallpaper.mov', type: 'video/quicktime' }, { name: 'wallpaper.WEBM', type: '' }])('a video import uses the canonical local upload without forcing cloud ($name)', async (file) => {
-    assetBox.sendFileToServer.mockResolvedValue({ ok: true, mediaUrl: '/api/uploads/wallpaper.mov', fileName: file.name });
+    assetBox.sendFileToServer.mockResolvedValue({ ok: true, mediaUrl: '/api/uploads/wallpaper.mov', fileName: file.name, atomeId: 'wallpaper_media' });
     const patches = [];
     const image = createBackgroundImage({ applyBackgroundParams: params => patches.push(params), schedulePreferenceSave: async () => ({ ok: true }) });
     const result = await image.importBackgroundImageFile(file);
     assert.equal(result.ok, true);
-    assert.deepEqual(assetBox.sendFileToServer.mock.calls[0][1], { typeOverride: 'video', createAtome: false });
+    // The account-wide media atome is what carries the file to the other devices.
+    assert.deepEqual(assetBox.sendFileToServer.mock.calls[0][1], { typeOverride: 'video', scope: 'global' });
+    assert.equal(patches[0].backgroundImageAtomeId, 'wallpaper_media');
     assert.equal(patches[0].backgroundMediaKind, 'video');
     assert.equal(patches[0].backgroundImageUrl, '/api/uploads/wallpaper.mov');
 });
@@ -518,4 +585,31 @@ test('an unchanged wallpaper signature still publishes the other profile prefere
     win.dispatchEvent(new win.CustomEvent('squirrel:auth-checked'));
     await vi.waitFor(() => assert.deepEqual(win.__eveProfilePreferences.dashboard?.health_monitors?.ids, ['steps', 'heart_rate']));
     assert.ok(events.some(prefs => prefs.dashboard), 'consumers must be told about the published preferences');
+});
+
+test('an account with its own wallpaper never shows the bundled default first (no double boot)', async () => {
+    let release;
+    profileApi.loadUserProfile.mockReturnValue(new Promise((resolve) => { release = resolve; }));
+    const { window, surfaces } = await bootBackgroundRuntime({ currentUser: { id: 'user-ada' } });
+    assert.equal(window.eveBackground.getParams().backgroundSource, 'unresolved');
+    assert.equal(window.__eveSurfaceBackground.mode, 'generated', 'the plain base colour waits for the profile');
+    release({ ok: true, profile: { preferences: { background: {
+        backgroundSource: 'image', backgroundImageUrl: '/assets/images/ada.png', backgroundImageFileName: 'ada.png' } } } });
+    await vi.waitFor(() => assert.equal(window.__eveSurfaceBackground.sourceUrl, '/assets/images/ada.png'));
+    assert.equal(surfaces.some((detail) => String(detail.sourceUrl || '').includes('eVe.mp4')), false);
+});
+test('an unreadable profile keeps the base colour and is read again, never the default', async () => {
+    vi.useFakeTimers();
+    profileApi.loadUserProfile.mockResolvedValueOnce({ ok: false, error: 'offline' })
+        .mockResolvedValue({ ok: true, profile: { preferences: { background: {
+            backgroundSource: 'image', backgroundImageUrl: '/assets/images/ada.png' } } } });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { window, surfaces } = await bootBackgroundRuntime({ currentUser: { id: 'user-ada' } });
+    await vi.advanceTimersByTimeAsync(0);
+    assert.equal(window.eveBackground.getParams().backgroundSource, 'unresolved');
+    assert.equal(warn.mock.calls.length, 1);
+    await vi.advanceTimersByTimeAsync(1000);
+    assert.equal(profileApi.loadUserProfile.mock.calls.length, 2);
+    assert.equal(window.eveBackground.getParams().backgroundImageUrl, '/assets/images/ada.png');
+    assert.equal(surfaces.some((detail) => String(detail.sourceUrl || '').includes('eVe.mp4')), false);
 });

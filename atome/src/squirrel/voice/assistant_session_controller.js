@@ -390,10 +390,10 @@ export const createVoiceAssistantSessionController = ({
     return Object.freeze({ close, getState: () => cloneState(state), open, respond, pause, resume, subscribe });
 };
 
-// Provider choice shares the assistant lifecycle contract. Only the local
-// speech backend publishes viseme/input frames; Realtime delivers media tracks.
+// Provider choice shares the assistant lifecycle contract. The local speech
+// backend publishes viseme/input frames; Realtime publishes the level of the voice heard.
 export const bindVoiceAssistantSession = async ({
-    env, voiceApi, provider, conversation, onSession, onSpeech, onInput, translate, locale = '', keepWhenHidden = false
+    env, voiceApi, provider, conversation, onSession, onSpeech, onInput, translate, locale = '', keepWhenHidden = false, announceReady = null
 }) => {
     if (provider && provider.ok !== true) throw new Error(provider.error || 'no_active_ai_provider');
     const remote = provider?.ok && provider.providerId === 'openai';
@@ -403,8 +403,7 @@ export const bindVoiceAssistantSession = async ({
             onTurn: turn => conversation.appendVoiceTurn(turn),
             createTools: options => conversation.createVoiceTools(options),
             onUsage: (usage, model) => conversation.recordUsage(usage, model), locale, suspendWhenHidden: !keepWhenHidden,
-            readyLine: translate('eve.voice.assistant.ready_greeting'),
-            farewellLine: translate('eve.voice.assistant.closing_greeting')
+            announceReady
         })
         : createVoiceAssistantSessionController({ voiceApi,
             openingGreeting: translate('eve.voice.assistant.opening_greeting'),
@@ -414,7 +413,8 @@ export const bindVoiceAssistantSession = async ({
     const unsubscribeSession = controller.subscribe(onSession);
     const frameSubscriptions = [];
     try {
-        if (!remote) {
+        if (remote) frameSubscriptions.push(controller.subscribeFrames(onSpeech));
+        else {
             if (typeof voiceApi.subscribeTtsFrames !== 'function') throw new Error('eve_voice_assistant_tts_frames_unavailable');
             if (typeof voiceApi.subscribeInputFrames !== 'function') throw new Error('eve_voice_assistant_input_frames_unavailable');
             frameSubscriptions.push(voiceApi.subscribeTtsFrames(onSpeech), voiceApi.subscribeInputFrames(onInput));

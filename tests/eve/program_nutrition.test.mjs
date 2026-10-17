@@ -21,7 +21,7 @@ const fixture = async ({ presentationFactory = createMatrixTemplateRuntime } = {
     const dom = new JSDOM('<body><div id="eve_surface_project"></div></body>', { url: 'http://localhost:3001', pretendToBeVisual: true });
     vi.stubGlobal('window', dom.window); vi.stubGlobal('document', dom.window.document);
     const records = new Map(), events = new Map(); let actor = 'alice', sequence = 0;
-    const runtime = createProjectProgramRuntime({ actor: () => actor, project: () => '', read: async id => structuredClone(records.get(id)),
+    const runtime = createProjectProgramRuntime({ actor: () => actor, project: () => '', now: () => '2030-01-07T11:00:00Z', read: async id => structuredClone(records.get(id)),
         list: async () => [...records.values()], commitActivity: async event => {
             if (events.has(event.id)) { assertIdempotentEventReplay(events.get(event.id), event); return { ok: true }; }
             const previous = records.get(event.atome_id), type = event.type || previous?.type, properties = { ...previous?.properties, ...event.props };
@@ -53,6 +53,62 @@ const fixture = async ({ presentationFactory = createMatrixTemplateRuntime } = {
 };
 
 describe('explicit reusable Nutrition composition', () => {
+    it('assembles optional portions and preparation, declines without erasing choices and explicitly resumes', async () => {
+        const f = await fixture({ presentationFactory: createProgramNutritionPresentation });
+        try {
+            await f.activate('mode_meal'); await f.activate('meal_type_lunch'); await f.activate('add'); await f.activate('group_drink');
+            f.input('food', 'Chosen drink'); f.input('portion', '125,5'); await f.activate('apply');
+            expect(f.readProjection().notice).not.toBe(''); expect(f.gateway).not.toHaveBeenCalled();
+            await f.activate('unit_ml'); await f.activate('apply'); await f.activate('planning_planned'); await f.activate('options');
+            f.input('preparation_minutes', '0'); f.input('shopping_notes', 'Chosen shopping note'); f.input('recipe_source', 'Chosen recipe source');
+            await f.activate('done'); await f.activate('save'); await vi.waitFor(() => expect(f.control.isActive()).toBe(false));
+            const chosen = structuredClone(f.records.get('activity').properties.program_activity.nutrition);
+            expect(chosen).toMatchObject({ planning_state: 'planned', preparation_minutes: 0, shopping_notes: 'Chosen shopping note', recipe_source: 'Chosen recipe source' });
+            expect(chosen.components[0].portion).toEqual({ value: 125.5, unit: 'ml' });
+            expect((await f.runtime.invoke({ operation: 'session_prepare', activity_id: 'activity', session_id: 'before_decline',
+                session_steps: [{ id: 'one', label: 'One' }], recorded_at: '2030-01-07T10:01:00Z' })).ok).toBe(true);
+            await f.control.open(f.records.get('activity'), 600); await f.activate('decline'); await f.activate('save');
+            await vi.waitFor(() => expect(f.control.isActive()).toBe(false));
+            expect(f.records.get('activity').properties.program_activity).toMatchObject({ version: 3, nutrition_declined: true, nutrition: chosen });
+            expect(await f.runtime.invoke({ operation: 'session_prepare', activity_id: 'activity', session_id: 'refused', session_steps: [{ id: 'one', label: 'One' }], recorded_at: '2030-01-07T10:02:00Z' }))
+                .toMatchObject({ ok: false, error: 'program_nutrition_declined' });
+            expect(await f.runtime.invoke({ operation: 'session_transition', activity_id: 'activity', session_id: 'before_decline', base_revision: 0,
+                session_transition: { request_id: 'start', action: 'start', recorded_at: '2030-01-07T10:02:00Z' } }))
+                .toMatchObject({ ok: false, error: 'program_nutrition_declined' });
+            expect((await f.runtime.invoke({ operation: 'activity_read' })).consumptions).toEqual([]);
+            await f.control.open(f.records.get('activity'), 600); await f.activate('mode_meal'); await f.activate('meal_type_lunch');
+            await f.activate('component_food_1'); await f.activate('unit_none'); await f.activate('apply'); await f.activate('save');
+            await vi.waitFor(() => expect(f.control.isActive()).toBe(false));
+            const resumed = f.records.get('activity').properties.program_activity;
+            expect(resumed).toMatchObject({ version: 4, nutrition_declined: false });
+            expect(resumed.nutrition.components[0]).not.toHaveProperty('portion'); expect(resumed.nutrition.preparation_minutes).toBe(0);
+        } finally { await f.close(); }
+    });
+
+    it('declares only a dated saved meal, retries exactly after lost acknowledgement and preserves its historical snapshot', async () => {
+        const f = await fixture({ presentationFactory: createProgramNutritionPresentation });
+        try {
+            await f.activate('mode_meal'); await f.activate('meal_type_lunch'); await f.activate('add'); await f.activate('group_fruit');
+            f.input('food', 'Original fruit'); await f.activate('apply'); await f.activate('save');
+            await vi.waitFor(() => expect(f.control.isActive()).toBe(false)); f.onSaved.mockClear(); f.gateway.mockClear();
+            await f.control.open(f.records.get('activity'), 600); await f.activate('consume'); await f.activate('save');
+            expect(f.readProjection()).toMatchObject({ pending: false }); expect(f.gateway).not.toHaveBeenCalled();
+            f.input('consumed_at', '2030-01-07T12:00:00Z'); await f.activate('save'); expect(f.readProjection().pending).toBe(false);
+            f.input('consumed_at', '2029-12-31T10:00:30Z');
+            f.gateway.mockImplementationOnce(async payload => { expect((await f.runtime.invoke(payload.input)).ok).toBe(true); throw new Error('lost_ack'); });
+            await f.activate('save'); await vi.waitFor(() => expect(f.readProjection().pending).toBe(true));
+            const intent = structuredClone(f.gateway.mock.calls[0][0]), before = await f.runtime.invoke({ operation: 'activity_read' });
+            expect(before.consumptions).toHaveLength(1); expect(before.occurrences).toHaveLength(0); expect(before.realized_count).toBe(0);
+            expect(before.consumptions[0]).toMatchObject({ activity_version: 2, date: '2029-12-31T10:00:30Z', meal: { components: [{ food: 'Original fruit' }] } });
+            const updated = structuredClone(f.records.get('activity').properties.program_activity); updated.nutrition.components[0].food = 'Later fruit';
+            expect((await f.runtime.invoke({ operation: 'activity_revise', activity_id: 'activity', base_activity_version: 2, activity: updated, recorded_at: '2030-01-07T10:03:00Z' })).ok).toBe(true);
+            await f.activate('save'); await vi.waitFor(() => expect(f.onSaved).toHaveBeenCalledTimes(1));
+            expect(f.gateway.mock.calls[1][0]).toEqual(intent);
+            const after = await f.runtime.invoke({ operation: 'activity_read' }); expect(after.consumptions).toEqual(before.consumptions);
+            expect(after.activities[0].properties.program_activity.nutrition.components[0].food).toBe('Later fruit');
+            expect(await f.runtime.invoke({ ...intent.input, consumed_at: '2030-01-07T10:00:40Z' })).toMatchObject({ ok: false, error: 'event_id_conflict' });
+        } finally { await f.close(); }
+    });
     it('composes the Action editor with the same native presentation and preserves a single canonical activity', async () => {
         const f = await fixture({ presentationFactory: createProgramNutritionPresentation });
         try {

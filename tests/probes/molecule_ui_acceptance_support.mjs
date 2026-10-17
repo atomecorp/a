@@ -49,7 +49,10 @@ export const waitForStableScene = async (page, projectId, consecutiveSamples = 4
             const menu = getMainMenuRuntime()?.measure?.() || {};
             const surface = document.getElementById('eve_surface_project');
             const surfaceSize = readRenderSurfaceSize(surface);
-            const records = window.eveToolBase?.getProjectSceneState?.(pid)?.records || [];
+            // BevyUI overlay records are covered by `uiVersions`; their geometry also
+            // carries playback motion (progress bars) that never settles while playing.
+            const records = (window.eveToolBase?.getProjectSceneState?.(pid)?.records || [])
+                .filter((record) => !String(record.id || '').startsWith('__eve_bevy_ui_'));
             return JSON.stringify({
                 paletteMotionActive: menu.paletteMotionActive === true || window.eveBevyUiRuntime?.state?.renderQueues?.size > 0,
                 uiVersions: [...(window.eveBevyUiRuntime?.state?.renderVersions?.entries?.() || [])],

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Android counterpart of XCode_testflight_generator: Google Play internal testing.
+# The canonical Android lane owns compilation, signing and release orchestration.
+set -Eeuo pipefail
+REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+exec bash "$REPO_ROOT/scripts/android/apk.sh" --play-internal "$@"

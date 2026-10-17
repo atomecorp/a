@@ -135,7 +135,7 @@ export const createMacosContactsSource = ({
             return {
                 ok: false,
                 error: response?.error || 'macos_contacts_snapshot_failed',
-                message: response?.message || null,
+                message: response?.message || response?.reason || null,
                 permission,
                 source_id
             };

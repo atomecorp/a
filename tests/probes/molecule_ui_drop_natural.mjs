@@ -3,13 +3,13 @@ import {
     assert, clickCanvasTarget, recordCenter, wait, waitFor, waitForStableScene
 } from './molecule_ui_acceptance_support.mjs';
 import {
-    drag, dropChoiceToolIds, readMembership, reloadProjection, screenshot, stateParentId,
+    drag, offeredDropChoices, readMembership, reloadProjection, screenshot, stateParentId,
     switchView, waitForMolecule
 } from './molecule_ui_drop_core.mjs';
 import {
     assertNoParasites, chooseMoleculePlaybackMode, contextualTool, disarmMemberPlayback,
     expandCanonicalListMolecule, memberPlayTool, playbackSnapshot, selectListRow,
-    startMoleculePlayback, waitForContextualTarget, waitForPlaybackEnd
+    moleculePlaybackState, startMoleculePlayback, waitForContextualTarget, waitForPlaybackEnd
 } from './molecule_ui_drop_playback_support.mjs';
 
 const CORE_ONLY = process.env.MOLECULE_UI_DROP_CORE_ONLY === '1';
@@ -44,8 +44,8 @@ export const validateNaturalMoleculeDrop = async ({ page, project, fixture, repo
     });
     assert(plainMembership.sourceParent === project.id && plainMembership.targetParent === project.id,
         `natural_plain_drop_combined:${JSON.stringify(plainMembership)}`);
-    const offeredChoices = await dropChoiceToolIds(page);
-    assert(offeredChoices.length === 6, `natural_drop_choices_missing:${JSON.stringify(offeredChoices)}`);
+    const offeredChoices = await offeredDropChoices(page);
+    assert(offeredChoices.ok, `natural_drop_choices_missing:${JSON.stringify(offeredChoices)}`);
     source = await recordCenter(page, project.id, (record) => record.id === fixture.imageId, { sceneCoordinates: true });
     assert(Math.hypot(source.x - plainTrace.releasePoint.x, source.y - plainTrace.releasePoint.y) <= 3,
         `natural_plain_drop_position:${JSON.stringify({ source, plainTrace })}`);
@@ -59,8 +59,11 @@ export const validateNaturalMoleculeDrop = async ({ page, project, fixture, repo
         };
     }
     let armed = null;
+    // The plain drop left the image exactly on the target: a real drag must travel
+    // through a clear waypoint before coming back (a zero-distance press is no drag).
     const dragTrace = await drag({
         page, source, destination: target, holdMs: 700, railChoice: 'front',
+        waypoint: { x: target.x < 600 ? 900 : 220, y: 180 },
         armedShot: async () => {
             const pointBeforeScreenshot = await page.evaluate(async () => {
                 const { getRenderSurfaceState } = await import('/eVe/domains/rendering/surface_runtime.js');
@@ -212,10 +215,18 @@ export const validateNaturalMoleculeDrop = async ({ page, project, fixture, repo
         };
     }, moleculeId);
     await screenshot({ page, report, outDir, name: 'drop_natural_owner_entered' });
-    const memberBefore = await page.evaluate(async (ids) => Promise.all(ids.map((id) => window.Atome.getStateCurrent(id))), [
-        fixture.audioId, fixture.imageId
-    ]);
     const memberDragSource = await recordCenter(page, project.id, (record) => record.id === fixture.audioId, { sceneCoordinates: true });
+    // The members overlap exactly (the plain drop landed on the target): the press
+    // takes the one on top, which is the member this check moves.
+    const grabbedId = await page.evaluate(async ({ point, ids }) => {
+        const { getRenderSurfaceState } = await import('/eVe/domains/rendering/surface_runtime.js');
+        const { hitTestRenderScene } = await import('/eVe/domains/rendering/scene_graph.js');
+        const scene = getRenderSurfaceState(document.getElementById('eve_surface_project'))?.scene || null;
+        const hit = String(hitTestRenderScene(scene, point)?.id || '');
+        return ids.includes(hit) ? hit : ids[0];
+    }, { point: { x: memberDragSource.x, y: memberDragSource.y }, ids: [fixture.audioId, fixture.imageId] });
+    const memberIds = grabbedId === fixture.imageId ? [fixture.imageId, fixture.audioId] : [fixture.audioId, fixture.imageId];
+    const memberBefore = await page.evaluate(async (ids) => Promise.all(ids.map((id) => window.Atome.getStateCurrent(id))), memberIds);
     await drag({
         page,
         source: memberDragSource,
@@ -249,7 +260,7 @@ export const validateNaturalMoleculeDrop = async ({ page, project, fixture, repo
                 && number(ownerProps.width) === right - left && number(ownerProps.height) === bottom - top,
             ownerProps, movedProps, siblingProps
         };
-    }, { ownerId: moleculeId, movedId: fixture.audioId, siblingId: fixture.imageId, before: memberBefore });
+    }, { ownerId: moleculeId, movedId: memberIds[0], siblingId: memberIds[1], before: memberBefore });
     const exitTarget = await recordCenter(page, project.id, (record) => record.id === fixture.spareId, { sceneCoordinates: true });
     await clickCanvasTarget(page, exitTarget);
     await waitFor(page, async (expectedId) => {
@@ -267,10 +278,16 @@ export const validateNaturalMoleculeDrop = async ({ page, project, fixture, repo
     await chooseMoleculePlaybackMode(page, moleculeId, 'simultaneous');
     await startMoleculePlayback(page, moleculeId, [fixture.audioId, fixture.imageId]);
     await wait(500);
-    const progressed = await playbackSnapshot(page, [fixture.audioId, fixture.imageId]);
+    const progressed = await moleculePlaybackState(page, moleculeId);
     assert(progressed.playing, `natural_molecule_not_progressing:${JSON.stringify(progressed)}`);
     await screenshot({ page, report, outDir, name: 'drop_natural_molecule_progress' });
-    const ended = await waitForPlaybackEnd(page, 8000);
+    const ended = await waitFor(page, async (id) => {
+        const { ensureMoleculeEngine } = await import('/eVe/core/media_engine/molecule.js');
+        const { projectViewTransport } = await import('/eVe/domains/rendering/project_view_transport_runtime.js');
+        const native = ensureMoleculeEngine().getSession(`molecule_transport_${id}`)?.getTransportState?.() || null;
+        const view = projectViewTransport.read();
+        return { ok: native?.playing !== true && view.playing !== true, state: { native, view: { status: view.status } } };
+    }, moleculeId, 8000);
     const activity = await contextualTool(page, ['atome_contextual_tool_activity']);
     assert(activity, 'natural_molecule_activity_missing');
     await clickCanvasTarget(page, activity);
@@ -290,7 +307,12 @@ export const validateNaturalMoleculeDrop = async ({ page, project, fixture, repo
         return { ok: state.mode === 'list', state };
     });
     await waitForStableScene(page, project.id);
-    await expandCanonicalListMolecule(page, [fixture.audioId, fixture.imageId]);
+    // A Molecule's Activity shows the Molecule itself (as Mix and Timeline do):
+    // its members are then the rows; at the project level they are expanded.
+    const listLevel = await page.evaluate(async () => (await import('/eVe/domains/rendering/project_view_navigation.js')).readState().current);
+    if (listLevel?.entity !== 'molecule' || listLevel.id !== moleculeId) {
+        await expandCanonicalListMolecule(page, [fixture.audioId, fixture.imageId]);
+    }
     await screenshot({ page, report, outDir, name: 'drop_natural_entered' });
     const children = [];
     for (const memberId of [fixture.audioId, fixture.imageId]) {
@@ -298,10 +320,16 @@ export const validateNaturalMoleculeDrop = async ({ page, project, fixture, repo
         const play = await memberPlayTool(page);
         assert(play, `natural_member_play_missing:${memberId}`);
         await clickCanvasTarget(page, play);
+        // A List row's Play runs on the project view's transport (structured
+        // rail); the item player remains the owner of a lone object's playback.
         const started = await waitFor(page, async (id) => {
             const { projectViewPlayback } = await import('/eVe/domains/rendering/project_view_playback_runtime.js');
-            const state = projectViewPlayback.readState();
-            return { ok: state.playing === true && state.playingIds.includes(id), state };
+            const { projectViewTransport } = await import('/eVe/domains/rendering/project_view_transport_runtime.js');
+            const item = projectViewPlayback.readState();
+            const transport = projectViewTransport.read();
+            return { ok: (item.playing === true && item.playingIds.includes(id))
+                || (transport.playing === true && transport.activeLeafIds.includes(id)),
+            state: { item, transport: { status: transport.status, activeLeafIds: transport.activeLeafIds } } };
         }, memberId);
         await wait(400);
         await screenshot({ page, report, outDir, name: `drop_natural_member_${memberId === fixture.audioId ? 'audio' : 'image'}_progress` });

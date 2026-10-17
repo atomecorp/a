@@ -8,7 +8,7 @@ Common preconditions: authorized isolated accounts A/B, disposable uniquely iden
 
 ## SCN-2001 — First connection and SMS device handoff
 
-Linked task: ATM-2001. Goal: authenticate through the current SMS flow without trusting previews or another device's session.
+Linked task: ATM-2001. Goal: authenticate through the current SMS flow without trusting previews or another device's session. The user confirmed the existing receipt/sign-in baseline; retain this permanent regression scenario without reopening initial SMS development. Later pairing/deadline/password changes need their own scoped results.
 
 Actors/data: isolated account A, its authorized test number and two real devices. Start with the application's canonical phone-entry action; request the real SMS. Observe carrier receipt, open the link on the same or second authorized device, and complete the originating device's proof. Repeat the applicable expiry, replay and cancellation cases using isolated attempts. Restart the client and verify authorized session resumption.
 
@@ -38,10 +38,10 @@ Cleanup: retain the proven backup until comparison is complete; remove only auth
 
 ## SCN-2004 — Optional password after SMS-verified account setup
 
-Linked task: ATM-2001, future evolution only. This scenario is a specification and is not runnable as current acceptance until the feature is implemented through verified existing owners.
+Linked task: ATM-2001. Reconciled 2026-10-16: optional password is implemented through the current owners (2026-10-14 evidence); this is now a permanent acceptance scenario, not a future implementation ticket. Execution still requires the actual configured server, isolated accounts and authorized devices.
 
 Actors/data: isolated A verified by SMS and an otherwise equivalent account with no password. Inside A's authenticated account, set an optional password through the canonical account action. On a later connection enter its phone number, choose password or SMS, and exercise valid/invalid credentials and the existing recovery contract. Repeat on the account without a password.
 
-Expected: the first connection still requires SMS. Password/SMS choice appears only for an already verified account with a defined password; otherwise the SMS flow remains available. Apply the existing credential-hashing, rate-limit, privacy and recovery contracts; never re-enable a removed legacy login route as a substitute.
+Expected: first enrollment still requires SMS. Existing FirstLaunch offers password or SMS without exposing whether the number has an account or password; successful password authentication requires an existing protected credential, and SMS remains available. This reflects the current anti-enumeration contract documented on 2026-10-14 and server/auth_password.js, superseding the earlier conditional-visibility wording. Apply the current credential-hashing, rate-limit, device-proof and recovery contracts; do not infer an implemented Recovery Kit or re-enable a removed legacy login route. Missing password screening configuration blocks setup explicitly and is not simulated as success.
 
 Cleanup: use only isolated credentials, revoke test sessions when authorized, and retain no password or reusable SMS link in evidence.

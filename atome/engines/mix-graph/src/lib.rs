@@ -6,15 +6,21 @@
 //! position, buses, sidechain keys, latency compensation, bypass with effect
 //! tails, meters, main output on/off and extra hardware channel pairs.
 
+pub mod delay;
 pub mod dsp;
 pub mod effects;
 pub mod graph;
 pub mod host;
 pub mod module;
 pub mod program;
+pub mod resample;
 pub mod shared;
+pub mod voice;
+pub mod voice_control;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod voice_tests;
 
 use effects::{build_effect, requires_rebuild, retune, EffectHandle};
 use graph::{Graph, StripParts};

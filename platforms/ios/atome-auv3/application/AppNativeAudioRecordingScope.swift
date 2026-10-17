@@ -29,46 +29,27 @@ extension AppNativeAudioController {
     }
 
     func publishRecordingScope(sessionId: String) {
-        var binCount: UInt16 = 0
-        var sequence: UInt64 = 0
-        var sampleRate: UInt32 = 0
-        var channels: UInt16 = 0
-        var rms: Float = 0
-        var peak: Float = 0
-        let copied = recordingScopeMinima.withUnsafeMutableBufferPointer { minima in
-            recordingScopeMaxima.withUnsafeMutableBufferPointer { maxima in
-                guard let minimumBase = minima.baseAddress,
-                      let maximumBase = maxima.baseAddress else { return false }
-                return nativeRecorderBackend.copyScopeMinima(
-                    minimumBase,
-                    maxima: maximumBase,
-                    capacity: UInt16(recordingScopeBinCount),
-                    binCount: &binCount,
-                    sequence: &sequence,
-                    sampleRate: &sampleRate,
-                    channels: &channels,
-                    rms: &rms,
-                    peak: &peak
-                )
-            }
-        }
-        guard copied,
+        // The engine's lock-free scope of the recording input (atome-audio-engine).
+        let (scope, error) = NativeKiraEngine.run("audio_get_scope", [:])
+        guard error == nil, scope["available"] as? Bool == true,
+              let sequence = (scope["sequence"] as? NSNumber)?.uint64Value,
               sequence != recordingScopeLastSequence,
-              binCount == UInt16(recordingScopeBinCount) else { return }
+              let pairs = scope["pairs"] as? [[NSNumber]],
+              pairs.count == recordingScopeBinCount else { return }
         recordingScopeLastSequence = sequence
-        for index in 0..<recordingScopeBinCount {
-            recordingScopePairs[index * 2] = recordingScopeMinima[index]
-            recordingScopePairs[(index * 2) + 1] = recordingScopeMaxima[index]
+        for (index, pair) in pairs.enumerated() where pair.count == 2 {
+            recordingScopePairs[index * 2] = pair[0].floatValue
+            recordingScopePairs[(index * 2) + 1] = pair[1].floatValue
         }
         emitRecordingEvent(type: "record_scope", payload: [
             "session_id": sessionId,
             "sequence": NSNumber(value: sequence),
-            "sample_rate": sampleRate,
-            "channels": channels,
-            "bin_count": binCount,
+            "sample_rate": scope["sample_rate"] ?? 0,
+            "channels": scope["channels"] ?? 0,
+            "bin_count": recordingScopeBinCount,
             "min_max_pairs": recordingScopePairs,
-            "rms": rms,
-            "peak": peak
+            "rms": scope["rms"] ?? 0,
+            "peak": scope["peak"] ?? 0
         ])
     }
 

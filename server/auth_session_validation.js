@@ -13,10 +13,23 @@ export async function assertDeviceSessionClaims(claims, query = db.query, now = 
     return claims;
 }
 
+// A token bound to its key (`cnf.pop`) is accepted on a /ws/api connection only
+// once that connection signed a fresh challenge with the same key: a copied
+// bearer alone opens nothing.
+const assertConnectionProof = (connection, claims) => {
+    if (claims.cnf?.pop === true && connection?._wsApiRequiresProof === true
+        && connection._wsApiProvenKeyId !== claims.cnf.kid) throw new Error('auth_connection_proof_required');
+};
+
+export async function readDeviceSessionToken(token, secret) {
+    const claims = jwt.verify(token, secret, { algorithms: ['HS256'] });
+    return assertDeviceSessionClaims(claims);
+}
+
 export async function validateConnectionDeviceSession(connection, token, secret) {
     if (token) {
-        const claims = jwt.verify(token, secret, { algorithms: ['HS256'] });
-        await assertDeviceSessionClaims(claims);
+        const claims = await readDeviceSessionToken(token, secret);
+        assertConnectionProof(connection, claims);
         connection._wsApiSessionId = claims.sid || null;
         connection._wsApiDeviceClaims = claims.sid ? claims : null;
         return claims;
@@ -24,6 +37,7 @@ export async function validateConnectionDeviceSession(connection, token, secret)
     if (connection?._wsApiDeviceClaims) {
         if (connection._wsApiDeviceClaims.exp * 1000 <= Date.now()) throw new Error('auth_session_invalid');
         await assertDeviceSessionClaims(connection._wsApiDeviceClaims);
+        assertConnectionProof(connection, connection._wsApiDeviceClaims);
     }
     return null;
 }

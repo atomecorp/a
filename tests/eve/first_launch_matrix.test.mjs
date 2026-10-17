@@ -12,6 +12,39 @@ import { initialProgram, validateProgramBricks } from '../../eVe/domains/program
 import { programMonitorSources } from '../../eVe/domains/programs/program_monitor_sources.js';
 
 describe('first launch canonical composition', () => {
+    it('projects live SMS values and pairing controls without persisting proof material in template atoms', async () => {
+        const previousWindow = globalThis.window, previousDocument = globalThis.document;
+        const dom = new JSDOM('<canvas id="eve_surface_project"></canvas>');
+        globalThis.window = dom.window; globalThis.document = dom.window.document;
+        const trees = [], uiRuntime = { mountTree: async ({ tree }) => trees.push(tree), unmountTree: async () => {}, updateTreeMotion: async () => ({ ok: true }) };
+        const walk = node => [node, ...(node.children || []).flatMap(walk)];
+        let remaining = '04:31';
+        try {
+            for (const stage of ['sms', 'pairing', 'confirmed']) {
+                const spec = FIRST_LAUNCH_TEMPLATES['first_launch_' + stage];
+                const records = spec.atoms.filter(atom => atom.props.template_control?.kind !== 'logo')
+                    .map(atom => ({ id: atom.ref, parent_id: atom.parent_ref, properties: atom.props }));
+                const before = JSON.stringify(records);
+                const runtime = createMatrixTemplateRuntime({ treeId: stage, records, uiRuntime,
+                    readBounds: () => ({ x: 0, y: 0, width: 390, height: 844 }),
+                    readValues: () => ({ sms_remaining: remaining, pairing_display: '1234 5678' }), activate: async () => ({ ok: true }) });
+                try {
+                    await runtime.open();
+                    let nodes = walk(trees.at(-1).root);
+                    if (stage === 'sms') {
+                        expect(nodes.find(node => node.id === 'countdown').text).toBe('04:31');
+                        expect(nodes.find(node => node.id === 'pairing_code').text).toBe('1234 5678');
+                        remaining = '04:30'; await runtime.render(); nodes = walk(trees.at(-1).root);
+                        expect(nodes.find(node => node.id === 'countdown').text).toBe('04:30');
+                    }
+                    if (stage === 'pairing') expect(nodes.find(node => node.id === 'confirm').on.activate).toBeTypeOf('function');
+                    expect(JSON.stringify(records)).toBe(before);
+                    expect(document.querySelectorAll('canvas')).toHaveLength(1);
+                    expect(document.querySelectorAll('[data-atome-id]')).toHaveLength(0);
+                } finally { await runtime.destroy(); }
+            }
+        } finally { globalThis.window = previousWindow; globalThis.document = previousDocument; dom.window.close(); }
+    });
     it('uses beginner only for explicit initialization and never enrolls legacy accounts', () => {
         expect(firstLaunchRequired({ id: 'old' }, {})).toBe(false);
         expect(firstLaunchRequired({ id: 'new', first_launch_version: 1 }, {})).toBe(true);
@@ -152,7 +185,7 @@ it('projects native panel controls and Dashboard material without a private skin
     const walk = node => [node, ...(node.children || []).flatMap(walk)];
     try {
         for (const key of ['first_launch_access', 'first_launch_phone', 'first_launch_billing', 'first_launch_sms', 'first_launch_welcome', 'first_launch_profile', 'first_launch_goals', 'first_launch_sleep', 'first_launch_program']) {
-            const records = FIRST_LAUNCH_TEMPLATES[key].atoms.filter(atom => atom.props.template_control?.kind !== 'logo')
+            const records = FIRST_LAUNCH_TEMPLATES[key].atoms.filter(atom => !['logo', 'atom'].includes(atom.props.template_control?.kind))
                 .map(atom => ({ id: atom.ref, parent_id: atom.parent_ref, properties: atom.props }));
             const draft = [];
             const runtime = createMatrixTemplateRuntime({ treeId: key, records, uiRuntime, writeDraft: (key, value) => draft.push([key, value]),
@@ -218,7 +251,10 @@ it('projects native panel controls and Dashboard material without a private skin
                     for (const property of ['top', 'height', 'material', 'clip', 'corner_radius']) expect(band[property]).toEqual(standard[property]);
                     const icon = nodes.find(node => node.id === `__eve_dashboard_content_icon_${base}`).style;
                     expect(icon.position[0] + icon.size[0] / 2).toBe(card.style.size[0] / 2);
-                    expect(icon.position[1] + icon.size[1] / 2).toBe(card.style.size[1] / 2);
+                    // The shared label-band layout keeps its glyph in the
+                    // content area above the title, rather than under its band.
+                    expect(icon.position[1]).toBeGreaterThanOrEqual(0);
+                    expect(icon.position[1] + icon.size[1]).toBeLessThanOrEqual(band.top);
                     const title = nodes.find(node => node.id === `__eve_dashboard_content_title_${base}`).style;
                     expect(title.position[1] + title.size[1]).toBe(card.style.size[1]);
                     expect(title.font_size).toBe(DASHBOARD_VISUAL_TOKENS.labelText.font_size);

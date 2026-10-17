@@ -10,6 +10,7 @@ import { reportRuntimeError } from '../../runtime_errors.js';
 // Server pushes with no request id: re-emitted on `window` as `squirrel:<type>`.
 // Value = how to build the event detail from the message.
 const PUSH_EVENTS = {
+    'sync:status': message => ({ principal_id: message.data?.principal_id || null }),
     'visio-event': message => ({ roomId: message.room_id, event: message.data }),
     // Native SQLite has committed the cloud projection; consumers re-read the canonical API.
     // A replay announces every stream it changed at once (`streams`), a live event its own `stream`.
@@ -19,6 +20,11 @@ const PUSH_EVENTS = {
         replay: message.replay === true
     }),
     'phone-link-ready': message => ({ attemptId: message.attemptId }),
+    // Authentication V1: notices to an account's devices and the answer to a waiting new device.
+    'auth-notice': message => ({ kind: message.kind || null, pairId: message.pairId || null, recoveryId: message.recoveryId || null,
+        deviceId: message.deviceId || null, label: message.label || '', platform: message.platform || '',
+        notBefore: message.notBefore || null, reason: message.reason || null }),
+    'auth-pair-update': message => ({ pairId: message.pairId || null, state: message.state || null }),
     'ai-realtime-event': message => ({ session_id: message.session_id, event: message.event }),
     'surface-presence': (message) => ({
         event: message.event || null,
@@ -170,6 +176,8 @@ const RESPONSE_PAYLOADS = {
         newAccount: message.newAccount,
         attemptId: message.attemptId,
         expiresAt: message.expiresAt,
+        serverNow: message.serverNow,
+        pairingCode: message.pairingCode,
         challenge: message.challenge,
         session: message.session,
         pending: message.pending,
@@ -177,6 +185,24 @@ const RESPONSE_PAYLOADS = {
         user: message.user,
         token: message.token,
         userId: message.userId,
+        // Authentication V1: approve-key registration, pairing, devices, recovery.
+        register: message.register,
+        credentialId: message.credentialId,
+        canApprove: message.canApprove,
+        probationUntil: message.probationUntil,
+        pairId: message.pairId,
+        code: message.code,
+        matchNumber: message.matchNumber,
+        request: message.request,
+        state: message.state,
+        rejected: message.rejected,
+        recoveryId: message.recoveryId,
+        notBefore: message.notBefore,
+        recoveryPending: message.recoveryPending,
+        recoveryCodeRequired: message.recoveryCodeRequired,
+        devices: message.devices,
+        handle: message.handle,
+        recoveryCode: message.recoveryCode,
 
         context: message.context
     }),
@@ -295,7 +321,7 @@ export const messageHandlerMixin = {
 
         try {
             const type = message.type;
-            if (type === 'pong') return;
+            if (type === 'pong') { this.finishHeartbeat?.(true); return; }
 
             if (type === 'console-message') {
                 handleConsoleMessage(message);

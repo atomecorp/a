@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The curve of the Atom logo (atome.svg `atomeCanvas-bezier`), alone in the logo's own 236 box: it lays exactly under atome_dot.svg. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="236" height="236" viewBox="0 0 236 236">
+    <defs>
+        <linearGradient id="atomeCurveFill" x1="200" y1="66" x2="110" y2="221" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#ff1494"/>
+            <stop offset="1" stop-color="#ff3d5f"/>
+        </linearGradient>
+    </defs>
+    <path fill-rule="evenodd" fill="url(#atomeCurveFill)" d="M 201.8,65.36 C 180.67,65.73 168.45,83.93 168.48,99.11 168.51,114.27 178.53,117.65 180,142.93 180.41,173.74 140.83,195.01 118.41,195.3 30.59,196.43 8.36,124.6 8.16,104.34 8.06,94.53 -0.32,93.8 -0.13,104.59 1.07,171.11 54.47,221.71 118.68,220.92 188.71,220.06 238.29,164.21 236.3,98.07 235.75,80.27 220.58,65.02 201.8,65.4 L 201.8,65.36 Z M 201.8,65.36"/>
+</svg>

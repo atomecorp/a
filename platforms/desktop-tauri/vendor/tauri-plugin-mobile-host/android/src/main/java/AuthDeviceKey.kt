@@ -4,6 +4,7 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyInfo
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import android.os.Build
 import java.security.KeyFactory
 import java.security.KeyPairGenerator
 import java.security.KeyStore
@@ -16,6 +17,10 @@ import org.json.JSONObject
 // this non-exportable Android Keystore capability is invoked.
 object AuthDeviceKey {
     private fun encode(bytes: ByteArray) = Base64.encodeToString(bytes, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
+    @Suppress("DEPRECATION") // Public legacy query is required on supported API29/30.
+    private fun hardware(info: KeyInfo) = if (Build.VERSION.SDK_INT >= 31)
+        info.securityLevel == KeyProperties.SECURITY_LEVEL_TRUSTED_ENVIRONMENT || info.securityLevel == KeyProperties.SECURITY_LEVEL_STRONGBOX
+        else info.isInsideSecureHardware
     @Synchronized fun handle(args: JSONObject): Any {
         val scope = args.getString("scope")
         require(scope.matches(Regex("[a-fA-F0-9]{64}"))) { "auth_device_scope_invalid" }
@@ -30,7 +35,7 @@ object AuthDeviceKey {
         }
         val key = store.getKey(alias, null) as java.security.PrivateKey
         val info = KeyFactory.getInstance(key.algorithm, "AndroidKeyStore").getKeySpec(key, KeyInfo::class.java)
-        check(info.isInsideSecureHardware) { "auth_protected_device_key_unavailable" }
+        check(hardware(info)) { "auth_protected_device_key_unavailable" }
         val public = store.getCertificate(alias).publicKey as ECPublicKey
         return when (args.getString("action")) {
             "public" -> {

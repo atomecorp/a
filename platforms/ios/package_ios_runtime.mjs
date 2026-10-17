@@ -39,7 +39,10 @@ const RAW_SCRIPT_PATHS = new Set([
     'src/wasm/renderer_version.mjs',
     'src/wasm/gps_navigation_engine.js',
     // ONNX Runtime Web imports its wasm factory by URL at runtime (local TTS and wake workers).
-    'src/assets/vendor/onnxruntime-web/ort-wasm-simd-threaded.mjs'
+    'src/assets/vendor/onnxruntime-web/ort-wasm-simd-threaded.mjs',
+    // Loaded by URL at runtime, never bundled: calls (visio_call_runtime) and Audio to MIDI.
+    'src/assets/vendor/mediasoup-client/mediasoup_client.bundle.js',
+    'src/assets/vendor/basic-pitch/basic_pitch.bundle.js'
 ]);
 const SKIP_RUNTIME_PATHS = new Set([
     'src/assets/videos/JeezsFire.mp4',

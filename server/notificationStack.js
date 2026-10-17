@@ -1,6 +1,16 @@
 import { getAtome } from '../database/adole.js';
 import { commitAtomeEvent } from './atomeRoutes.orm.js';
 import { communicationPush } from './communication_push.js';
+import { normalizeCommunicationPriority, normalizeCommunicationAction } from '../atome/src/shared/communication_contract.js';
+
+const stackWrites = new Map();
+const serializeStack = (userId, write) => {
+    const key = String(userId || '');
+    const pending = (stackWrites.get(key) || Promise.resolve()).catch(() => null).then(write);
+    const tail = pending.catch(() => null); stackWrites.set(key, tail);
+    void tail.then(() => { if (stackWrites.get(key) === tail) stackWrites.delete(key); });
+    return pending;
+};
 
 const writeStack = async (userId, stack) => {
     const result = await commitAtomeEvent({ authenticatedUserId: userId, event: {
@@ -67,6 +77,9 @@ const normalizeNotification = (input = {}) => {
         archived: input.archived === true,
         todo: input.todo === true,
         urgent: input.urgent === true,
+        priority: normalizeCommunicationPriority(input.priority),
+        action: normalizeCommunicationAction(input.action),
+        severity: input.severity === 'critical' ? 'critical' : input.severity === 'warning' ? 'warning' : 'info',
         publication: input.publication && typeof input.publication === 'object' ? input.publication : null,
         // Visio : la salle a rejoindre et la raison d'un refus survivent au rechargement.
         room_id: input.room_id || input.roomId || null,
@@ -78,7 +91,7 @@ const normalizeNotification = (input = {}) => {
     };
 };
 
-export async function pushNotificationToUserStack({
+async function pushToStack({
     userId,
     notification,
     maxKeep = 200,
@@ -93,12 +106,17 @@ export async function pushNotificationToUserStack({
     if (!userAtome) return { ok: false, error: 'user_atome_missing' };
 
     const existing = resolveStack(userAtome);
+    const previous = existing.find(item => String(item?.id || item?.message_id) === String(normalized.id));
+    if (previous) for (const flag of ['unread', 'archived', 'todo', 'urgent']) normalized[flag] = previous[flag] === true;
     const deduped = existing.filter((item) => {
         const itemId = item?.id || item?.message_id || null;
         return itemId && String(itemId) !== String(normalized.id);
     });
     deduped.push(normalized);
-    const trimmed = deduped.length > maxKeep ? deduped.slice(deduped.length - maxKeep) : deduped;
+    const pending = deduped.filter(item => item.unread !== false && item.archived !== true);
+    const retained = new Set(pending.map(item => String(item.id || item.message_id)));
+    deduped.slice(-maxKeep).forEach(item => retained.add(String(item.id || item.message_id)));
+    const trimmed = deduped.filter(item => retained.has(String(item.id || item.message_id)));
 
     await writeStack(userId, trimmed);
     const deliverPush = async () => {
@@ -117,7 +135,7 @@ export async function readNotificationStack(userId) {
     return { ok: true, count: stack.length, stack };
 }
 
-export async function updateNotificationInUserStack({
+async function updateInStack({
     userId,
     notificationId,
     patch = {},
@@ -149,7 +167,7 @@ export async function updateNotificationInUserStack({
 
 // Removes the item from this user's own stack only ("retirer pour moi").
 // Other recipients' stacks and any `type:'message'` atome are untouched.
-export async function removeNotificationFromUserStack({
+async function removeFromStack({
     userId,
     notificationId,
     authorId = null
@@ -166,3 +184,24 @@ export async function removeNotificationFromUserStack({
     await writeStack(userId, next);
     return { ok: true, count: next.length, stack: next, removed_id: notificationId };
 }
+
+export const pushNotificationToUserStack = input => serializeStack(input?.userId, () => pushToStack(input));
+
+// Self notices reuse this same transaction lane. A retry cannot restore an
+// already-read notice to unread or replace a message delivered by another peer.
+export const publishOwnNotification = input => serializeStack(input?.userId, async () => {
+    const current = await readNotificationStack(input.userId);
+    if (!current.ok) return current;
+    const existing = current.stack.find(item => String(item.id || item.message_id) === input.notification.id);
+    if (existing) {
+        if (existing.from_id !== input.userId || existing.kind !== input.notification.kind || existing.message !== input.notification.message
+            || JSON.stringify(existing.action) !== JSON.stringify(input.notification.action)) throw new Error('notification_id_conflict');
+        return { ok: true, duplicate: true, notification: existing, stack: current.stack };
+    }
+    const result = await pushToStack({ ...input, deferPush: true });
+    return { ok: result.ok, notification: result.stack?.find(item => item.id === input.notification.id), stack: result.stack, error: result.error };
+});
+
+export const updateNotificationInUserStack = input => serializeStack(input?.userId, () => updateInStack(input));
+
+export const removeNotificationFromUserStack = input => serializeStack(input?.userId, () => removeFromStack(input));

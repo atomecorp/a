@@ -50,7 +50,8 @@ export const exerciseTimelineEditingGestures = async ({ page, ownerId, clipId } 
         const state = await window.Atome.getStateCurrent(owner);
         const timeline = state?.molecule_timeline || state?.props?.molecule_timeline || state?.properties?.molecule_timeline;
         const entry = timeline?.clips?.find((candidate) => candidate.clip_id === id);
-        return { ok: Boolean(entry) && entry.timeline.duration_frames < previous, duration_frames: entry?.timeline.duration_frames, previous };
+        return { ok: Boolean(entry) && entry.timeline.duration_frames < previous, duration_frames: entry?.timeline.duration_frames, previous,
+            snap: timeline?.view?.snap || 'off', x_zoom: timeline?.view?.x_zoom ?? 1 };
     }, { owner: ownerId, id: clipId, previous: previousDuration });
-    return { cropped };
+    return { cropped, clip_width_px: clip.hit?.box?.width ?? null };
 };

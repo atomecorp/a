@@ -87,6 +87,19 @@ describe('Runtime V2 built-in tool fast path', () => {
         expect(handler).toBeTypeOf('function');
         expect(storageList).not.toHaveBeenCalled();
     });
+    it('registers the typed ribbon fold command and delegates to the canonical menu owner', async () => {
+        const { setMainMenuRuntime } = await import('../../eVe/intuition/ribbon/bevy_ui_product_registry.js');
+        const applyToolsCollapsed = vi.fn(async collapsed => ({ ok: true, collapsed }));
+        setMainMenuRuntime({ applyToolsCollapsed }, window);
+        try {
+            const tool = await toolRuntimeV2.resolveTool('ui.main_menu.tools.set');
+            expect(tool.input_schema.properties.collapsed.type).toBe('boolean');
+            expect(tool.behavior.effects.commit).toBe('persistent');
+            const handler = window.atome.tools.handlers.get('ui.main_menu.tools.set');
+            expect(await handler({ input: { collapsed: true } })).toEqual({ ok: true, collapsed: true });
+            expect(applyToolsCollapsed).toHaveBeenCalledExactlyOnceWith(true);
+        } finally { setMainMenuRuntime(null, window); }
+    });
     it('executes the first preuploaded drop without bootstrap or an upload API', async () => {
         const { createProjectDropExternalRuntime } = await import('../../eVe/intuition/tools/project_drop_external_runtime.js');
         const boot = vi.spyOn(toolRuntimeV2, 'bootstrap').mockImplementation(() => { throw new Error('bootstrap_forbidden'); });

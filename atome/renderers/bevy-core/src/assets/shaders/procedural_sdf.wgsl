@@ -559,8 +559,8 @@ const INTUITION_MYSTIC_EYE_MIN: f32 = 0.02;
 // no colour, no resting shadow — with a light outline of this width and dose.
 const INTUITION_MYSTIC_GHOST_BLUR_PX: f32 = 28.0;
 const INTUITION_MYSTIC_GHOST_BLUR_TAPS: i32 = 32;
-const INTUITION_MYSTIC_GHOST_OUTLINE_PX: f32 = 1.25;
-const INTUITION_MYSTIC_GHOST_OUTLINE_DOSE: f32 = 0.45;
+const INTUITION_MYSTIC_GHOST_OUTLINE_PX: f32 = 0.75;
+const INTUITION_MYSTIC_GHOST_OUTLINE_DOSE: f32 = 0.22;
 
 // The menu plate of one cell: the shared system glass, tinted by the family of the
 // rung the tile reached, with the light rim that keeps a plate from reading as a
@@ -706,7 +706,7 @@ fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32
                 let source = select(tile.xy + vec2(-aside, bside), tile.xy + vec2(bside, -aside), turning_y);
                 let face_uv = vec2(source.x / surface.x, 1.0 - source.y / surface.y);
                 if ghost {
-                    plate_color = mix(intuition_mystic_back_blur(ghost_uv, surface), vec3(1.0), outline_dose);
+                plate_color = mix(intuition_mystic_back_blur(ghost_uv, surface), vec3(0.62), outline_dose);
                 } else {
                     let content = textureSampleLevel(menu_face, menu_face_sampler, face_uv, 0.0);
                     plate_color = intuition_mystic_plate(box_distance, face_uv, family, glass_mix, tint);
@@ -725,7 +725,7 @@ fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32
                 );
                 let previous = textureSampleLevel(menu_front, menu_front_sampler, source_uv, 0.0);
                 if previous_ghost {
-                    plate_color = mix(intuition_mystic_back_blur(ghost_uv, surface), vec3(1.0), outline_dose);
+                    plate_color = mix(intuition_mystic_back_blur(ghost_uv, surface), vec3(0.62), outline_dose);
                 } else if level_turn {
                     // The previous level's plate: the same glass, with the face it carried.
                     plate_color = intuition_mystic_plate(box_distance, source_uv, family, glass_mix, tint);

@@ -22,6 +22,7 @@ import { createDirectoryPublicService } from './directoryPublicService.js';
 import {
   authenticateWsSyncMessage,
   authenticateWsSyncRequest,
+  issueWsSyncChallenge,
   validateWsSyncPrincipal
 } from './wsSyncSecurity.js';
 
@@ -136,8 +137,9 @@ import { executeShellCommand } from './shell.js';
 import { ensureUserHome } from './userHome.js';
 import { createVisioService } from './visio.js';
 import { handleWsCommunication } from './wsCommunicationOperations.js';
-import { pushNotificationToUserStack, updateNotificationInUserStack, removeNotificationFromUserStack, readNotificationStack } from './notificationStack.js';
+import { pushNotificationToUserStack } from './notificationStack.js';
 import { createCommunicationRelations } from './communication_relations.js';
+import { handleWsNotificationOperation } from './wsNotificationOperations.js';
 import { createNotificationDelivery, createRateLimiter } from './communication_delivery.js';
 import { createNewsBroadcast } from './news_broadcast.js';
 import {
@@ -171,6 +173,7 @@ const userVaultRouter = createUserVaultRouter({
 const wsSyncRuntime = createWsSyncRuntime({
   authenticateRequest: authenticateWsSyncRequest,
   authenticateMessage: authenticateWsSyncMessage,
+  issueChallenge: issueWsSyncChallenge,
   validatePrincipal: validateWsSyncPrincipal,
   isProvisioned: isWsApiPrincipalProvisioned,
   getVersion: getLocalVersion,
@@ -2130,6 +2133,8 @@ async function startServer() {
         try { wsApiConnections.add(connection); } catch (error) {
           console.warn("[server] operation failed", error);
         }
+        // Key-bound tokens need a signed connection proof here (auth_session_validation.js).
+        connection._wsApiRequiresProof = true;
         connection._wsApiVaultRouter = userVaultRouter;
         connection._wsApiSyncRuntime = wsSyncRuntime;
         connection._wsApiDirectoryService = directoryPublicService;
@@ -2137,7 +2142,8 @@ async function startServer() {
         try {
           const requestUser = await validateToken(request);
           const requestUserId = resolveUserId(requestUser);
-          if (requestUserId) {
+          // A key-bound token proves nothing before the connection proof.
+          if (requestUserId && requestUser?.cnf?.pop !== true) {
             attachWsApiClientToUser(connection, requestUserId);
             if (requestUser && typeof requestUser.exp === 'number') {
               connection._wsApiAuthExpMs = requestUser.exp * 1000;
@@ -2218,46 +2224,7 @@ async function startServer() {
           }
 
           if (data.type === 'notification-stack') {
-            const requestId = data.requestId || data.request_id;
-            const attachedUserId = connection && connection._wsApiUserId
-              ? String(connection._wsApiUserId)
-              : null;
-            if (!attachedUserId || !await isWsApiPrincipalProvisioned(attachedUserId)) {
-              safeSend({
-                type: 'notification-stack-response', requestId, success: false,
-                error: attachedUserId ? 'remote_account_not_provisioned' : 'Unauthenticated ws/api connection'
-              });
-              return;
-            }
-            // `read` : la pile telle que le serveur l'a ecrite. Le navigateur n'en avait qu'une
-            // copie locale en retard (workspace IndexedDB), d'ou des notifications perdues.
-            if (data.action === 'read') {
-              const result = await readNotificationStack(attachedUserId);
-              safeSend({ type: 'notification-stack-response', requestId, success: result.ok === true, ...result });
-              return;
-            }
-            if (data.action !== 'update' && data.action !== 'remove') {
-              safeSend({
-                type: 'notification-stack-response', requestId, success: false,
-                error: 'notification_stack_action_unsupported'
-              });
-              return;
-            }
-            const result = data.action === 'remove' ? await removeNotificationFromUserStack({
-              userId: attachedUserId,
-              authorId: attachedUserId,
-              notificationId: data.notificationId || data.notification_id || data.id || null
-            }) : await updateNotificationInUserStack({
-              userId: attachedUserId,
-              authorId: attachedUserId,
-              notificationId: data.notificationId || data.notification_id || data.id || null,
-              patch: data.patch && typeof data.patch === 'object' ? data.patch : {}
-            });
-            safeSend({
-              type: 'notification-stack-response', requestId,
-              success: result.ok === true,
-              ...result
-            });
+            safeSend(await handleWsNotificationOperation(data, connection));
             return;
           }
 

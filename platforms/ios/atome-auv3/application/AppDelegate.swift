@@ -42,8 +42,13 @@ struct atomeApp: App {
         .onChange(of: scenePhase) { _, newPhase in
             switch newPhase {
             case .active:
+                LocalHTTPServer.shared.resumeFromBackground()
+                FastifySyncClient.shared.connectIfConfigured()
                 AppNativeCommunication.shared.resume()
-            case .background, .inactive:
+            case .background:
+                LocalHTTPServer.shared.noteBackgrounded()
+                ActiveScenePoller.shared.stop()
+            case .inactive:
                 ActiveScenePoller.shared.stop()
             @unknown default:
                 break

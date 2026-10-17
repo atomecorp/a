@@ -47,6 +47,32 @@ const PROJECT_SUBTREES: [(&str, &str); 2] = [
 /// Root-level files that belong to the project rather than to the frontend.
 const PROJECT_FILES: [&str; 1] = ["version.txt"];
 
+/// Content identity of the derived bundled payload, independent of entry order.
+/// Equal sizes and the same product version do not imply equal release contents.
+fn manifest_contents<K: AsRef<str>, B: AsRef<[u8]>>(
+    version: &str,
+    mut entries: Vec<(K, B)>,
+) -> String {
+    use sha2::{Digest, Sha256};
+    entries.sort_by(|(left, _), (right, _)| left.as_ref().cmp(right.as_ref()));
+    let mut digest = Sha256::new();
+    let mut bytes = 0usize;
+    for (key, content) in &entries {
+        let key = key.as_ref();
+        let content = content.as_ref();
+        digest.update((key.len() as u64).to_le_bytes());
+        digest.update(key.as_bytes());
+        digest.update((content.len() as u64).to_le_bytes());
+        digest.update(content);
+        bytes += content.len();
+    }
+    format!(
+        "version={version}\nassets={}\nbytes={bytes}\nsha256={:x}\n",
+        entries.len(),
+        digest.finalize()
+    )
+}
+
 /// Maps an embedded asset path to its destination under the project root.
 /// Returns `None` for paths that carry no file (a directory entry).
 fn project_relative_path(asset_path: &str) -> Result<Option<PathBuf>, String> {
@@ -83,20 +109,11 @@ mod extraction {
 
     use tauri::Manager;
 
-    use super::{project_relative_path, MANIFEST_FILE};
+    use super::{manifest_contents, project_relative_path, MANIFEST_FILE};
 
     fn is_safe_relative_path(path: &Path) -> bool {
         path.components()
             .all(|component| matches!(component, Component::Normal(_)))
-    }
-
-    fn manifest_contents(asset_count: usize, asset_bytes: usize) -> String {
-        format!(
-            "version={}\nassets={}\nbytes={}\n",
-            env!("CARGO_PKG_VERSION"),
-            asset_count,
-            asset_bytes
-        )
     }
 
     /// Extracts every embedded asset into `app_data_dir/squirrel/project` and
@@ -125,11 +142,10 @@ mod extraction {
             );
         }
 
-        let asset_bytes: usize = resolver
-            .iter()
-            .map(|(_key, stored_bytes)| stored_bytes.len())
-            .sum();
-        let expected_manifest = manifest_contents(entries.len(), asset_bytes);
+        let expected_manifest = manifest_contents(
+            env!("CARGO_PKG_VERSION"),
+            resolver.iter().collect::<Vec<_>>(),
+        );
 
         if fs::read_to_string(&manifest_path).ok().as_deref() == Some(expected_manifest.as_str()) {
             println!(
@@ -183,6 +199,10 @@ mod extraction {
 
 #[cfg(target_os = "android")]
 pub use extraction::materialize_project_root;
+
+#[cfg(test)]
+#[path = "../../../tests/android/assets_manifest_tests.rs"]
+mod release_asset_tests;
 
 #[cfg(test)]
 mod tests {

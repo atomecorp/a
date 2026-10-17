@@ -1,7 +1,7 @@
 
 import { assert, awaitBevyUiNodeTarget, clickCanvasTarget, recordCenter, playwrightPointForClientTarget, wait, waitFor, waitForStableScene } from "./molecule_ui_acceptance_support.mjs";
-import { drag, screenshot, structuredDropTarget, switchView } from "./molecule_ui_drop_core.mjs";
-import { listNode, structuredRows } from "./molecule_ui_drop_playback_support.mjs";
+import { chooseDropChoice, drag, screenshot, structuredDropTarget, switchView } from "./molecule_ui_drop_core.mjs";
+import { expandCanonicalListMolecule, listFrontRow, listNode, structuredRows } from "./molecule_ui_drop_playback_support.mjs";
 
 
 
@@ -140,6 +140,14 @@ export const absorbListMember = async ({
     await wait(700);
     await screenshot({ page, report, outDir, name: shotName, preservePointer: true });
     await page.mouse.up();
+    // A drop over another row only records a pending choice: the composition is
+    // the rail's Include tool (project_view_drop_choice_rail.js), as in Natural.
+    await wait(300);
+    const pending = await waitFor(page, async () => {
+        const rail = await import('/eVe/domains/rendering/project_view_drop_choice_rail.js');
+        return { ok: true, pending: rail.readPendingDropChoice() };
+    });
+    if (pending.pending) await chooseDropChoice(page, 'front');
     await waitFor(page, async ({ sourceId: dragged, targetId: target, projectId, expectedParent }) => {
         const parent = (state) => String(state?.parent_id || state?.parentId
             || state?.properties?.parent_id || state?.props?.parent_id || state?.meta?.parent_id || '');
@@ -262,12 +270,13 @@ export const enterMatrixMolecule = async (page, projectId, moleculeId, expectedC
 export const reorderListMemberToFront = async ({ page, project, moleculeId, memberId, memberIds, report, outDir }) => {
     await enterListMolecule(page, project.id, moleculeId);
     const beforeRows = await structuredRows(page);
+    const { up } = await listFrontRow(page, beforeRows);
     const beforeDepth = await page.evaluate(async (ids) => Promise.all(ids.map(async (id) => {
         const state = await window.Atome.getStateCurrent(id);
         const props = state?.properties || state?.props || {};
         return { id, z: Number(props.zIndex ?? props.z_index ?? 0), renderLayer: props.renderLayer == null && props.render_layer == null ? null : Number(props.renderLayer ?? props.render_layer) };
     })), memberIds);
-    const readPersisted = () => waitFor(page, async ({ projectId, expectedIds, movedId, beforeDepth }) => {
+    const readPersisted = () => waitFor(page, async ({ projectId, expectedIds, movedId, beforeDepth, up }) => {
         const rows = (await import('/eVe/domains/rendering/project_view_surface_runtime.js'))
             .readProjectViewSurfaceState().content?.entries || [];
         const rowIds = rows.map((entry) => String(entry.id || ''));
@@ -287,7 +296,7 @@ export const reorderListMemberToFront = async ({ page, project, moleculeId, memb
             event?.tx_id || event?.txId || event?.transaction_id || ''
         ) === txId) : [];
         return {
-            ok: rowIds[0] === movedId
+            ok: (up ? rowIds.at(-1) : rowIds[0]) === movedId
                 && ordered[0]?.id === movedId
                 && ordered.every(item => beforeDepth.some(previous => previous.id === item.id
                     && previous.z === item.z && previous.renderLayer === item.renderLayer))
@@ -299,17 +308,18 @@ export const reorderListMemberToFront = async ({ page, project, moleculeId, memb
                 kind: String(event?.kind || ''), props: eventProps(event)
             }))
         };
-    }, { projectId: project.id, expectedIds: memberIds, movedId: memberId, beforeDepth }, 12000);
+    }, { projectId: project.id, expectedIds: memberIds, movedId: memberId, beforeDepth, up }, 12000);
     const gestureAttempts = [];
     let persisted = null;
     for (let attempt = 1; attempt <= 2 && !persisted; attempt += 1) {
         const currentRows = await structuredRows(page);
         const sourceRow = currentRows.find((entry) => entry.id === memberId);
         assert(sourceRow, `layered_list_reorder_source_missing:${JSON.stringify({ memberId, currentRows })}`);
-        if (sourceRow.index > 0) {
+        const front = await listFrontRow(page, currentRows);
+        if (sourceRow.index !== front.index) {
             const source = await listNode(page, `project_view_list_entry_${sourceRow.index}_name`);
             const destination = await structuredDropTarget(page, {
-                layout: 'list', sourceId: memberId, targetIndex: 0, kind: 'insert', edge: 'before'
+                layout: 'list', sourceId: memberId, targetIndex: front.index, kind: 'insert', edge: front.edge
             });
             assert(source && destination,
                 `layered_list_reorder_targets_missing:${JSON.stringify({ memberId, sourceRow, destination })}`);
@@ -370,7 +380,7 @@ export const reorderListMemberToFront = async ({ page, project, moleculeId, memb
 export const verifyReorderedMemberAfterReload = async ({ page, project, moleculeId, memberId, memberIds, txId, beforeDepth }) => {
     await enterListMolecule(page, project.id, moleculeId);
     const listRows = await structuredRows(page);
-    assert(listRows[0]?.id === memberId,
+    assert(listRows[(await listFrontRow(page, listRows)).index]?.id === memberId,
         `layered_list_reorder_not_persisted:${JSON.stringify(listRows)}`);
     const database = await page.evaluate(async ({ projectId, expectedIds, transactionId }) => {
         const states = await Promise.all(expectedIds.map((id) => window.Atome.getStateCurrent(id)));
@@ -425,29 +435,44 @@ export const verifyReorderedMemberAfterReload = async ({ page, project, molecule
     return { listRows, database, projected };
 };
 
+// The List shows the hierarchy inline: a member leaves its Molecule by being
+// dropped in an insert slot beside a row of the level above
+// (project_view_list_drag_runtime.js, `insert` across parents).
 export const extractListMember = async ({ page, project, moleculeId, memberId, report, outDir, shotName }) => {
-    await enterListMolecule(page, project.id, moleculeId);
+    await switchView(page, project.id, 'list');
+    const level = await page.evaluate(async () => (await import('/eVe/domains/rendering/project_view_navigation.js')).readState().current);
+    if (level?.entity === 'molecule') {
+        await page.evaluate(async () => (await import('/eVe/domains/rendering/project_view_surface_runtime.js'))
+            .readMountedProjectViewContent()?.leaveLevel?.());
+        await waitForStableScene(page, project.id);
+    }
+    await expandCanonicalListMolecule(page, [memberId]);
     const rows = await structuredRows(page);
-    const row = rows.find((entry) => entry.id === memberId);
-    assert(row && row.depth === 0, `layered_extract_member_row_missing:${memberId}:${JSON.stringify(rows)}`);
-    const [source, back] = await Promise.all([
-        awaitBevyUiNodeTarget(page, {
-            nodeId: `project_view_list_entry_${row.index}_name`,
-            treeId: 'eve_bevy_ui_project_view', step: 2
-        }),
-        awaitBevyUiNodeTarget(page, {
-            nodePrefix: 'project_view_footer_back', treeId: 'eve_bevy_ui_project_view', step: 2
-        })
-    ]);
-    assert(source && back, `layered_extract_targets_missing:${memberId}:${JSON.stringify({
-        source: source?.id || null, back: back?.id || null, row
-    })}`);
-    await drag({
-        page, source, destination: back, holdMs: 180,
-        armedShot: shotName
-            ? () => screenshot({ page, report, outDir, name: shotName, preservePointer: true })
-            : null
-    });
+    const row = rows.find((entry) => entry.id === memberId && entry.depth === 1);
+    const ownerRow = rows.find((entry) => entry.id === moleculeId && entry.depth === 0);
+    assert(row && ownerRow, `layered_extract_member_row_missing:${memberId}:${JSON.stringify(rows)}`);
+    const source = await awaitBevyUiNodeTarget(page, {
+        nodeId: `project_view_list_entry_${row.index}_name`, treeId: 'eve_bevy_ui_project_view', step: 2
+    }, { timeoutMs: 15000, intervalMs: 150 });
+    assert(source, `layered_extract_source_missing:${JSON.stringify(row)}`);
+    const from = await playwrightPointForClientTarget(page, source);
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await wait(120);
+    let destination = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+        destination = await structuredDropTarget(page, {
+            layout: 'list', sourceId: memberId, targetIndex: ownerRow.index, kind: 'insert', edge: 'after'
+        }) || await structuredDropTarget(page, {
+            layout: 'list', sourceId: memberId, targetIndex: ownerRow.index, kind: 'insert', edge: 'before'
+        });
+        assert(destination, `layered_extract_destination_missing:${JSON.stringify({ row, ownerRow, attempt })}`);
+        const point = await playwrightPointForClientTarget(page, destination);
+        await page.mouse.move(point.x, point.y, { steps: attempt === 0 ? 16 : 4 });
+        await wait(140);
+    }
+    if (shotName) await screenshot({ page, report, outDir, name: shotName, preservePointer: true });
+    await page.mouse.up();
     const extracted = await waitFor(page, async ({ molecule, member }) => {
         const [owner, state, navigation, selection] = await Promise.all([
             window.Atome.getStateCurrent(molecule), window.Atome.getStateCurrent(member),

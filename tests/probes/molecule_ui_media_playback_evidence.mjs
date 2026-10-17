@@ -13,12 +13,11 @@ export const openMolecule = async (page, projectId, memberId, moleculeId) => {
     const navigation = await page.evaluate(async () => (await import(
         '/eVe/domains/rendering/project_view_navigation.js'
     )).readState());
+    // The List has no Back of its own since its footer became the project row
+    // (2026-10-09): the level is left through the List's own `leaveLevel`.
     if (navigation.current?.entity === 'molecule') {
-        const back = await awaitBevyUiNodeTarget(page, {
-            nodeId: 'project_view_footer_back', treeId: 'eve_bevy_ui_project_view', step: 2
-        }, { timeoutMs: 15000, intervalMs: 150 });
-        assert(back, `layered_open_molecule_back_missing:${JSON.stringify(navigation)}`);
-        await clickCanvasTarget(page, back);
+        await page.evaluate(async () => (await import('/eVe/domains/rendering/project_view_surface_runtime.js'))
+            .readMountedProjectViewContent()?.leaveLevel?.());
         await waitFor(page, async () => {
             const current = (await import('/eVe/domains/rendering/project_view_navigation.js')).readState().current;
             return { ok: current?.entity === 'project', current };
@@ -31,12 +30,15 @@ export const openMolecule = async (page, projectId, memberId, moleculeId) => {
 };
 
 export const transportProof = (page, moleculeId, projectId = '') => page.evaluate(async ({ id, pid }) => {
-    const [{ ensureMoleculeEngine }, { projectViewPlayback }, decode] = await Promise.all([
+    const [{ ensureMoleculeEngine }, { projectViewPlayback }, decode, { PROJECT_VIEW_TRANSPORT_SESSION_ID, projectViewTransport }] = await Promise.all([
         import('/eVe/core/media_engine/molecule.js'),
         import('/eVe/domains/rendering/project_view_playback_runtime.js'),
-        import('/eVe/domains/rendering/bevy_video_decode_source_runtime.js')
+        import('/eVe/domains/rendering/bevy_video_decode_source_runtime.js'),
+        import('/eVe/domains/rendering/project_view_transport_runtime.js')
     ]);
-    const session = ensureMoleculeEngine().getSession(`molecule_transport_${id}`);
+    // A Molecule plays on the project view's transport session, in Natural as in
+    // the List (project_view_transport_runtime.js), never on a session of its own.
+    const session = ensureMoleculeEngine().getSession(PROJECT_VIEW_TRANSPORT_SESSION_ID);
     const runtime = session ? [...session.runtimeClips.entries()].map(([clipId, clip]) => ({
         clipId, kind: clip.kind, playing: clip.playing === true,
         audioAvailable: clip.audioAvailable === true,
@@ -65,6 +67,11 @@ export const transportProof = (page, moleculeId, projectId = '') => page.evaluat
     ]).filter(Boolean))];
     return {
         transport: session?.getTransportState?.() || null,
+        structured: (({ status, rootId, selectionIds, activeLeafIds, localDurationsById, durationSeconds }) => ({
+            status, rootId, selectionIds, activeLeafIds, localDurationsById, durationSeconds
+        }))(projectViewTransport.read()),
+        timelineClips: (session?.timeline?.tracks || []).flatMap((track) => track.clips || [])
+            .map((clip) => ({ id: clip.id, kind: clip.kind, start: clip.start, duration: clip.duration, source: clip.source?.atome_id || '' })),
         activeClips: session?.getState?.().active_clips || [],
         voices: session ? [...session.voiceState.entries()].map(([clipId, voice]) => ({ clipId, ...voice })) : [],
         runtime,
@@ -255,6 +262,23 @@ export const playStandaloneVideo = async ({ page, projectId, videoId, report, ou
     return { started, frameDiff, naturalEnd, replay, stopped, afterStop, naturalReconcile };
 };
 
+// A command that must not touch playback: same session, no rewind, the same
+// voices (or the natural end of the run), and an idle transport stays put.
+export const assertTransportUndisturbed = (before, after, label = 'transport') => {
+    const was = before?.transport || {};
+    const now = after?.transport || {};
+    assert(String(now.session_id || '') === String(was.session_id || ''), `${label}_session_changed:${JSON.stringify({ was, now })}`);
+    if (was.playing === true) {
+        const ended = now.playing !== true && Math.abs(Number(now.duration || 0) - Number(now.position || 0)) <= 0.25;
+        assert(Number(now.position || 0) + 0.05 >= Number(was.position || 0), `${label}_rewound:${was.position}:${now.position}`);
+        assert(ended || (now.playing === true && after.voices.length === before.voices.length),
+            `${label}_voices_changed:${JSON.stringify({ before: before.voices, after: after.voices, now })}`);
+        return;
+    }
+    assert(now.playing !== true && Math.abs(Number(now.position || 0) - Number(was.position || 0)) <= 0.05,
+        `${label}_idle_moved:${JSON.stringify({ was, now })}`);
+};
+
 export const assertDepthTransportContinuity = (before, samples) => {
     const sessionId = String(before?.transport?.session_id || '');
     assert(sessionId, `layered_depth_session_missing:${JSON.stringify(before)}`);
@@ -306,7 +330,10 @@ export const summarizeTransportProof = (proof = {}) => ({
     }
 });
 
-export const applyDepth = async ({ page, projectId, memberId, action }) => {
+// `measure` (optional) reads the transport right before and right after the
+// z-order action itself: selecting the member in the List retargets a running
+// transport by design (project_view_playback_follow.js), the depth must not.
+export const applyDepth = async ({ page, projectId, memberId, action, measure = null }) => {
     await switchView(page, projectId, 'list');
     await dismissMainPalette(page, projectId);
     const navigation = await page.evaluate(async () => (await import(
@@ -339,6 +366,7 @@ export const applyDepth = async ({ page, projectId, memberId, action }) => {
         const value = Number(props.zIndex ?? props.z_index);
         return Number.isFinite(value) ? value : null;
     }, memberId);
+    const measuredBefore = typeof measure === 'function' ? await measure() : null;
     await clickCanvasTarget(page, actionTool);
     await waitFor(page, async ({ project, member, before }) => {
         const state = await window.Atome.getStateCurrent(member);
@@ -348,15 +376,23 @@ export const applyDepth = async ({ page, projectId, memberId, action }) => {
             .find((entry) => String(entry.id || entry.atome_id || '') === member);
         const projectedProps = record?.properties || record?.props || {};
         const projected = Number(projectedProps.zIndex ?? projectedProps.z_index);
+        const pick = (value) => ({ zIndex: value.zIndex, z_index: value.z_index, renderLayer: value.renderLayer, render_layer: value.render_layer, hierarchy_order: value.hierarchy_order });
+        const parent = String(state?.parent_id || state?.meta?.parent_id || props.parent_id || '');
+        const records = window.eveToolBase?.getProjectSceneState?.(project)?.records || [];
         return {
             ok: Number.isFinite(canonical) && canonical !== before
                 && Number.isFinite(projected) && projected === canonical,
             canonical: Number.isFinite(canonical) ? canonical : null,
             projected: Number.isFinite(projected) ? projected : null,
-            before
+            before, canonicalProps: pick(props), projectedProps: pick(projectedProps),
+            sameIdRecords: records.filter((entry) => String(entry.id || entry.atome_id || '') === member).length,
+            siblings: records.filter((entry) => String(entry.parent_id || entry.properties?.parent_id || '') === parent)
+                .map((entry) => [entry.id, entry.properties?.zIndex ?? entry.properties?.z_index])
         };
     }, { project: projectId, member: memberId, before: beforeStack });
+    const measuredAfter = typeof measure === 'function' ? await measure() : null;
     await waitForStableScene(page, projectId);
+    return measure ? { before: measuredBefore, after: measuredAfter } : null;
 };
 
 export const windowState = (page, projectId, videoId, textId) => page.evaluate(async ({ project, video, text }) => {

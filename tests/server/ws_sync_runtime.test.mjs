@@ -285,7 +285,7 @@ test('ws/sync answers a subscription batch with bulk heads and one replay-comple
     ] });
 
     // Up-to-date and empty streams cost no vault replay request and no message.
-    assert.deepEqual(replays, ['stream-a']);
+    assert.deepEqual(replays, ['stream-a', 'stream-a']);
     assert.deepEqual(connection.sent.map((entry) => entry.type), ['error', 'event', 'event', 'replay-complete']);
     assert.deepEqual(connection.sent[0], { type: 'error', code: 'stream_access_denied', streams: ['stream-denied'] });
     assert.deepEqual(connection.sent.at(-1), { type: 'replay-complete', streams: [{ stream: 'stream-a', cursor: 2 }] });
@@ -306,4 +306,16 @@ test('ws/sync bounds a subscription batch and keeps the connection open', async 
     await emitJson(connection, { type: 'subscribe', streams });
     assert.deepEqual(connection.sent.at(-1), { type: 'error', code: 'subscribe_batch_too_large', limit: 500 });
     assert.equal(connection.closed, null);
+});
+
+test('batch settlement confirms caught-up streams and correlates the subscription without changing legacy replies', async t => {
+    const runtime = createFixture({ access: (_principal, stream) => stream !== 'denied' });
+    t.after(() => runtime.stop());
+    const connection = new FakeConnection();
+    await runtime.attach(connection, { principal: 'user-a' });
+    await emitJson(connection, { type: 'register', source: 'device' });
+    await emitJson(connection, { type: 'subscribe', subscription_id: 'batch-1', streams: [{ stream: 'stream-a', cursor: 0 }, { stream: 'denied', cursor: 0 }] });
+    assert.deepEqual(connection.sent.at(-1), { type: 'replay-complete', subscription_id: 'batch-1', streams: [], settled_streams: [{ stream: 'stream-a', cursor: 0 }] });
+    await emitJson(connection, { type: 'subscribe', streams: [{ stream: 'stream-a', cursor: 0 }] });
+    assert.deepEqual(connection.sent.at(-1), { type: 'replay-complete', streams: [] });
 });

@@ -48,10 +48,10 @@ extension AiSRuntime {
             return stateCurrentResponse(requestId: requestId, success: false, error: "State not found")
         }
         let userId = stringValue(claims["sub"])
-        guard canReadState(state: state, userId: userId) else {
+        guard canReadState(db, state: state, userId: userId) else {
             return stateCurrentResponse(requestId: requestId, success: false, error: "Access denied")
         }
-        state["capabilities"] = try projectStateCurrentCapabilities(state, userId: userId)
+        state["capabilities"] = try projectStateCurrentCapabilities(db, state, userId: userId)
         // Same optimistic commit metadata as Fastify, including versioned
         // tombstones. This exposes counters only, never the deleted values.
         let versions = try query(db, "SELECT particle_key, version FROM particles WHERE atome_id=?", [.text(atomeId)])
@@ -90,7 +90,7 @@ extension AiSRuntime {
             includeDeleted: includeDeleted
         ).map { state in
             var state = state
-            state["capabilities"] = try projectStateCurrentCapabilities(state, userId: ownerId)
+            state["capabilities"] = try projectStateCurrentCapabilities(db, state, userId: ownerId)
             return state
         }
         let total = includeTotal
@@ -121,25 +121,27 @@ extension AiSRuntime {
 
     // Access projection of the two read responses, shared with Axum
     // (`project_capabilities_for_read`) and Fastify
-    // (`projectAtomeCapabilitiesForRead`). AiS authorizes reads by local
-    // ownership only, so a row accepted by `canReadState` carries full rights on
-    // every key it exposes. The `permissions` table is not served on iOS yet;
-    // when it is, it narrows these grants here and nowhere else.
-    private static func projectStateCurrentCapabilities(_ state: [String: Any], userId: String) throws -> [String: Any] {
-        guard canReadState(state: state, userId: userId) else {
+    // (`projectAtomeCapabilitiesForRead`). An owned row carries full rights on
+    // every key it exposes; a row shared to this user (see `sharedWithLocalUserSQL`)
+    // is read-only here, the server staying the authority of any write. The
+    // `permissions` table is not served on iOS yet; when it is, it narrows these
+    // grants here and nowhere else.
+    private static func projectStateCurrentCapabilities(_ db: OpaquePointer?, _ state: [String: Any], userId: String) throws -> [String: Any] {
+        guard canReadState(db, state: state, userId: userId) else {
             throw AiSError("state_current capabilities requested for a non-readable record")
         }
+        let full = ownsState(state, userId: userId)
         let properties = state["properties"] as? [String: Any] ?? [:]
         var propertyCapabilities: [String: Any] = [:]
         for key in properties.keys {
-            propertyCapabilities[key] = ["write": true, "delete": true, "share": true]
+            propertyCapabilities[key] = ["write": full, "delete": full, "share": full]
         }
         return [
             "read": true,
-            "write": true,
-            "create": true,
-            "delete": true,
-            "share": true,
+            "write": full,
+            "create": full,
+            "delete": full,
+            "share": full,
             "properties": propertyCapabilities
         ]
     }
@@ -200,7 +202,8 @@ extension AiSRuntime {
             }
         }
         if let ownerId, !ownerId.isEmpty {
-            conditions.append("(COALESCE(sc.owner_id, a.owner_id) = ? OR COALESCE(sc.owner_id, a.owner_id) IS NULL)")
+            conditions.append("(COALESCE(sc.owner_id, a.owner_id) = ? OR COALESCE(sc.owner_id, a.owner_id) IS NULL OR \(sharedWithLocalUserSQL))")
+            bindings.append(.text(ownerId))
             bindings.append(.text(ownerId))
         }
         if excludeSystem {
@@ -254,7 +257,8 @@ extension AiSRuntime {
             }
         }
         if let ownerId, !ownerId.isEmpty {
-            conditions.append("(COALESCE(sc.owner_id, a.owner_id) = ? OR COALESCE(sc.owner_id, a.owner_id) IS NULL)")
+            conditions.append("(COALESCE(sc.owner_id, a.owner_id) = ? OR COALESCE(sc.owner_id, a.owner_id) IS NULL OR \(sharedWithLocalUserSQL))")
+            bindings.append(.text(ownerId))
             bindings.append(.text(ownerId))
         }
         if excludeSystem {
@@ -333,9 +337,29 @@ extension AiSRuntime {
         return state
     }
 
-    private static func canReadState(state: [String: Any], userId: String) -> Bool {
+    private static func ownsState(_ state: [String: Any], userId: String) -> Bool {
         let ownerId = normalizedOptionalString(state["owner_id"] ?? state["ownerId"])
         return ownerId == nil || ownerId == userId
+    }
+
+    // An Atome of another account is here only because the server streamed it to the
+    // remote account bound to this local user (a share it granted): such a record is
+    // readable by that user, read-only. Anything else stays owner-only.
+    static let sharedWithLocalUserSQL = """
+        EXISTS (SELECT 1 FROM events e
+                JOIN remote_sync_stream_cursors c ON c.stream_id = e.stream_id
+                JOIN auth_local_grants g ON g.remote_principal = c.principal_id AND g.locked = 0
+                WHERE e.atome_id = sc.atome_id AND g.local_principal = ?)
+        """
+
+    private static func sharedWithLocalUser(_ db: OpaquePointer?, atomeId: String, userId: String) -> Bool {
+        guard !atomeId.isEmpty, let rows = try? query(db, "SELECT 1 FROM state_current sc WHERE sc.atome_id = ? AND \(sharedWithLocalUserSQL) LIMIT 1",
+                                                       [.text(atomeId), .text(userId)]) else { return false }
+        return !rows.isEmpty
+    }
+
+    private static func canReadState(_ db: OpaquePointer?, state: [String: Any], userId: String) -> Bool {
+        ownsState(state, userId: userId) || sharedWithLocalUser(db, atomeId: stringValue(state["atome_id"] ?? state["id"]), userId: userId)
     }
 
     static func upsertStateCurrent(_ db: OpaquePointer?, atomeId: String, ownerId: String, projectId: String? = nil, clearProjectId: Bool = false, properties: [String: Any], now: String) throws {

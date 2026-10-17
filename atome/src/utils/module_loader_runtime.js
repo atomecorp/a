@@ -11,6 +11,22 @@ const resolveModulePath = (descriptor, baseUrl) => {
     return baseUrl ? new URL(rawModulePath, baseUrl).href : rawModulePath;
 };
 
+// One evaluation per module id: two loaders may reach the same module through
+// different URLs (`/atome/src/...` from eVe, `/squirrel/...` through the
+// `#squirrel/` import map). A stateful owner evaluated twice (the Kira backend)
+// would re-register an uninitialized instance over the running one.
+const MODULES_BY_ID = globalThis.__ATOME_MODULES_BY_ID__ || (globalThis.__ATOME_MODULES_BY_ID__ = new Map());
+
+const importOnce = (moduleId, load) => {
+    if (!MODULES_BY_ID.has(moduleId)) {
+        MODULES_BY_ID.set(moduleId, load().catch((error) => {
+            MODULES_BY_ID.delete(moduleId);
+            throw error;
+        }));
+    }
+    return MODULES_BY_ID.get(moduleId);
+};
+
 const loadSingleModule = async ({ entry, baseUrl, logPrefix, onModuleStart, onModuleLoaded, onModuleError }) => {
     const descriptor = resolveDescriptor(entry);
     const moduleId = String(descriptor.id || descriptor.path || 'module');
@@ -22,9 +38,9 @@ const loadSingleModule = async ({ entry, baseUrl, logPrefix, onModuleStart, onMo
             onModuleStart({ descriptor, moduleId, modulePath });
         }
         const packagedLoader = globalThis.__ATOME_PACKAGED_MODULES__?.[moduleId];
-        const moduleNamespace = typeof packagedLoader === 'function'
-            ? await packagedLoader()
-            : await import(modulePath);
+        const moduleNamespace = await importOnce(moduleId, () => (typeof packagedLoader === 'function'
+            ? packagedLoader()
+            : import(modulePath)));
         const totalMs = perfElapsedMs(moduleStart);
 
         if (typeof onModuleLoaded === 'function') {
