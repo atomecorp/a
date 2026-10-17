@@ -85,7 +85,7 @@ test('native restart restores an unlocked grant from SQLite and its exact keysto
 
 test('desktop public-key requests satisfy the complete Tauri command contract', () => {
     const browser = read('atome/src/squirrel/apis/unified/adole_api/auth_methods_login.js');
-    expect(browser).toMatch(/invoke\('auth_device_key', \{[\s\S]*message: fields\.message \?\? null,[\s\S]*signature: fields\.signature \?\? null/);
+    expect(browser).toMatch(/invoke\('auth_device_key', \{[\s\S]*message: fields\.action === 'public' && fields\.known \? JSON\.stringify\(fields\.known\) : fields\.message \?\? null,[\s\S]*signature: fields\.signature \?\? null/);
 });
 
 test('local binding compares the enrolled key id without exporting a persisted macOS public key', () => {

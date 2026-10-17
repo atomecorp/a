@@ -56,6 +56,8 @@ test('native iOS defers decoded project images until after the Bevy startup peak
     assert.equal(shouldDeferIOSBootImageTextureResolution(image, nativeWindow), true);
     assert.equal(shouldDeferIOSBootImageTextureResolution(image, {}), false);
     assert.equal(shouldDeferIOSBootImageTextureResolution({ ...image, kind: 'shape' }, nativeWindow), false);
+    // The home's Atom: its pictures start with their glass.
+    assert.equal(shouldDeferIOSBootImageTextureResolution({ ...image, id: '__eve_dashboard_eve_disc_home' }, nativeWindow), false);
 });
 
 test('Bevy web runtime keeps broken initial deferred media present without blocking valid nodes', async () => {

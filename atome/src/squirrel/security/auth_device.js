@@ -98,7 +98,11 @@ export function createAuthDeviceStore({ indexedDB = globalThis.indexedDB, crypto
             // cached public half that no longer matches the signing key gets every
             // proof refused, so always read the current one.
             const signingScope = record?.scope || scope;
-            const publicKey = await nativeKey({ action: 'public', scope: signingScope });
+            // The point announced before travels along: the desktop keystore may
+            // refuse a rebuilt app its export, and then checks this one against
+            // the key itself (auth_device.rs#known_public_point).
+            const known = record?.native && record.publicKey?.x ? { x: record.publicKey.x, y: record.publicKey.y } : null;
+            const publicKey = await nativeKey({ action: 'public', scope: signingScope, ...(known ? { known } : {}) });
             const candidate = { publicKey, native: true, scope: signingScope };
             if (!record) {
                 record = await readOptionalAuthCache(() => insertOnce(`key:${scope}`, candidate)) || candidate;

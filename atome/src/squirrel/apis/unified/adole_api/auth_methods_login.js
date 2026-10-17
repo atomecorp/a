@@ -39,7 +39,8 @@ export function deviceStore() {
     const env = globalThis.window || globalThis;
     const nativeKey = isTauriRuntime() ? async (fields) => {
         if (typeof env.__ATOME_IOS_NATIVE_INVOKE === 'function') {
-            const result = await env.__ATOME_IOS_NATIVE_INVOKE('auth_device_key', fields);
+            const { known: _known, ...iosFields } = fields;
+            const result = await env.__ATOME_IOS_NATIVE_INVOKE('auth_device_key', iosFields);
             return fields.action === 'public' ? result.publicKey : result.signature;
         }
         const invoke = env.__TAURI_INTERNALS__?.invoke || env.__TAURI__?.core?.invoke || env.__TAURI__?.invoke;
@@ -48,13 +49,15 @@ export function deviceStore() {
         // handler. `message` and `signature` are Option<String> in Rust, but
         // they still need to be present in the JS payload: omitting them makes
         // the public-key request fail before phone-link-start reaches the
-        // server. Explicit nulls deserialize to None.
+        // server. Explicit nulls deserialize to None. A Tauri command rejects
+        // with the Rust error string: as an Error it keeps its name up to the
+        // caller (a bare string lost it and logout failed without a reason).
         return invoke('auth_device_key', {
             action: fields.action,
             scope: fields.scope,
-            message: fields.message ?? null,
+            message: fields.action === 'public' && fields.known ? JSON.stringify(fields.known) : fields.message ?? null,
             signature: fields.signature ?? null
-        });
+        }).catch((error) => { throw error instanceof Error ? error : new Error(String(error)); });
     } : null;
     const nativeSession = (typeof env.__ATOME_IOS_NATIVE_INVOKE === 'function' || isTauriRuntime()) ? {
         read: readNativeSessionGrant,

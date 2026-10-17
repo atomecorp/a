@@ -1813,14 +1813,13 @@ extension LocalHTTPServer {
 
 enum AiSRuntime {
     static let queue = DispatchQueue(label: "ais.runtime.queue")
-    private static var db: OpaquePointer?
     private static let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
     private static let reservedUserParticleKeys: Set<String> = [
         "id", "atome_id", "user_id", "type", "kind", "owner_id", "creator_id",
         "created_at", "updated_at", "deleted_at", "sync_status", "last_sync",
         "password_hash", "phone", "username", "visibility", "access"
     ]
-    private static let schemaSQL = """
+    static let schemaSQL = """
     PRAGMA foreign_keys = ON;
     CREATE TABLE IF NOT EXISTS atomes (
         atome_id TEXT PRIMARY KEY,
@@ -2369,31 +2368,6 @@ enum AiSRuntime {
             createdBy: stringValue(claims["sub"])
         )
         return snapshotResponse(requestId: requestId, success: true, snapshotId: snapshotId)
-    }
-
-    static func openDatabase() throws -> OpaquePointer? {
-        if let existing = db {
-            return existing
-        }
-        guard let root = SandboxPathValidator.primaryRoot() ?? SandboxPathValidator.pluginContainerRoot() else {
-            throw AiSError("AiS storage root unavailable")
-        }
-        let databaseURL = root.appendingPathComponent("adole.db", isDirectory: false)
-        var handle: OpaquePointer?
-        let rc = sqlite3_open_v2(databaseURL.path, &handle, SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX, nil)
-        guard rc == SQLITE_OK, let opened = handle else {
-            throw AiSError("Unable to open AiS database")
-        }
-        sqlite3_busy_timeout(opened, 2000)
-        guard sqlite3_exec(opened, schemaSQL, nil, nil, nil) == SQLITE_OK else {
-            let message = String(cString: sqlite3_errmsg(opened))
-            sqlite3_close(opened)
-            throw AiSError(message)
-        }
-        try ensureSyncSchema(opened)
-        try ensureLocalAuthSchema(opened)
-        db = opened
-        return opened
     }
 
     private static func serializeAtome(

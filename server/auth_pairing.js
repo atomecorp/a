@@ -136,6 +136,13 @@ export function createPairing({ query, transaction, proof, sessions, devices, ha
         if (outcome.error) reject(outcome.error);
         return { ok: true, request: outcome.request };
     }
+    // Requests still waiting for this account: a device that was asleep when the
+    // notice went out (live sockets only) finds them when it comes back.
+    async function pending(_input, claims) {
+        const rows = await query('all', `SELECT * FROM auth_pair_requests WHERE target_principal = ? AND state = 'pending'
+            AND expires_ms > ? ORDER BY created_ms DESC LIMIT 5`, [claims.sub, now()]);
+        return { ok: true, requests: rows.map(describe) };
+    }
     async function view({ pairId }, claims) {
         const row = await read(pairId);
         if (row.target_principal !== claims.sub || row.state !== 'pending') reject('auth_pair_unknown');
@@ -251,5 +258,5 @@ export function createPairing({ query, transaction, proof, sessions, devices, ha
         await notify(outcome.principalId, { kind: 'auth-device-revoked', deviceId: outcome.deviceId, reason: 'not_my_account' });
         return { ok: true };
     }
-    return { startChallenge, start, sharedOpenChallenge, sharedOpenStart, claim, view, approveChallenge, approve, requesterChallenge, status, complete, cancel, notMine, read };
+    return { startChallenge, start, sharedOpenChallenge, sharedOpenStart, claim, pending, view, approveChallenge, approve, requesterChallenge, status, complete, cancel, notMine, read };
 }

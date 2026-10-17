@@ -235,6 +235,53 @@ mod macos {
         search
     }
 
+    // SHA-1 (FIPS 180-4), only to compare a public point with the key's
+    // application label, which macOS sets to SHA-1 of that point.
+    fn sha1(data: &[u8]) -> [u8; 20] {
+        let mut h: [u32; 5] = [0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0];
+        let mut message = data.to_vec();
+        message.push(0x80);
+        while message.len() % 64 != 56 { message.push(0); }
+        message.extend_from_slice(&((data.len() as u64) * 8).to_be_bytes());
+        for chunk in message.chunks(64) {
+            let mut w = [0u32; 80];
+            for i in 0..16 { w[i] = u32::from_be_bytes([chunk[4 * i], chunk[4 * i + 1], chunk[4 * i + 2], chunk[4 * i + 3]]); }
+            for i in 16..80 { w[i] = (w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16]).rotate_left(1); }
+            let (mut a, mut b, mut c, mut d, mut e) = (h[0], h[1], h[2], h[3], h[4]);
+            for (i, word) in w.iter().enumerate() {
+                let (f, k) = match i {
+                    0..=19 => ((b & c) | (!b & d), 0x5A827999),
+                    20..=39 => (b ^ c ^ d, 0x6ED9EBA1),
+                    40..=59 => ((b & c) | (b & d) | (c & d), 0x8F1BBCDC),
+                    _ => (b ^ c ^ d, 0xCA62C1D6),
+                };
+                let t = a.rotate_left(5).wrapping_add(f).wrapping_add(e).wrapping_add(k).wrapping_add(*word);
+                e = d; d = c; c = b.rotate_left(30); b = a; a = t;
+            }
+            for (slot, value) in h.iter_mut().zip([a, b, c, d, e]) { *slot = slot.wrapping_add(value); }
+        }
+        let mut out = [0u8; 20];
+        for (i, word) in h.iter().enumerate() { out[4 * i..4 * i + 4].copy_from_slice(&word.to_be_bytes()); }
+        out
+    }
+
+    // A rebuilt app (new code signature) may sign with the private key yet be
+    // refused the public point's export (CSSMERR_CSP_OPERATION_AUTH_DENIED, no
+    // prompt): the stored item is only a 96-byte CSSM header. The point this
+    // app announced before is then accepted only if it is this key's own:
+    // its SHA-1 equals the private key's application label.
+    #[cfg(test)]
+    pub(crate) fn sha1_for_tests(data: &[u8]) -> [u8; 20] { sha1(data) }
+
+    fn known_public_point(private: &SecKey, known: Option<&str>) -> Option<Vec<u8>> {
+        let known: Value = serde_json::from_str(known?).ok()?;
+        let x = URL_SAFE_NO_PAD.decode(known.get("x")?.as_str()?).ok()?;
+        let y = URL_SAFE_NO_PAD.decode(known.get("y")?.as_str()?).ok()?;
+        if x.len() != 32 || y.len() != 32 { return None; }
+        let point = [vec![4u8], x, y].concat();
+        (private.application_label()? == sha1(&point)).then_some(point)
+    }
+
     fn public_key_bytes(private: &SecKey, scope: &str) -> Result<Vec<u8>, String> {
         // A public SecKey reference loaded from the file keychain can expose an
         // internal 96-byte block (or no external representation at all), while
@@ -274,7 +321,9 @@ mod macos {
         }
         let key = key(scope)?;
         if action == "public" {
-            let bytes = public_key_bytes(&key, scope)?;
+            // `message` may carry the point this app announced before ({x, y}).
+            let bytes = public_key_bytes(&key, scope)
+                .or_else(|error| known_public_point(&key, message).ok_or(error))?;
             if bytes.len() != 65 || bytes[0] != 4 {
                 return Err("auth_device_public_key_invalid".into());
             }
@@ -315,5 +364,14 @@ mod macos {
             )
             .map_err(|_| "auth_device_signature_failed")?;
         Ok(json!(URL_SAFE_NO_PAD.encode(signature)))
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod device_key_label_tests {
+    #[test]
+    fn sha1_matches_the_standard_vectors() {
+        assert_eq!(hex::encode(super::macos::sha1_for_tests(b"abc")), "a9993e364706816aba3e25717850c26c9cd0d89d");
+        assert_eq!(hex::encode(super::macos::sha1_for_tests(b"")), "da39a3ee5e6b4b0d3255bfef95601890afd80709");
     }
 }

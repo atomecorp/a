@@ -194,6 +194,7 @@ const RESPONSE_PAYLOADS = {
         code: message.code,
         matchNumber: message.matchNumber,
         request: message.request,
+        requests: message.requests,
         state: message.state,
         rejected: message.rejected,
         recoveryId: message.recoveryId,

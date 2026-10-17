@@ -13,12 +13,12 @@ import { createCommunicationPush } from './communication_push.js';
 import { ACCOUNT_ACTIONS, ACCOUNT_PUBLIC_ERRORS, createWsAccountAuth } from './wsAccountAuth.js';
 
 const ACTIONS = new Set(['phone-link-start', 'phone-link-simulate-payment', 'phone-link-resend', 'phone-change-start', 'phone-link-challenge', 'phone-link-consume',
-    'phone-link-approve', 'phone-link-confirm', 'phone-link-resume', 'phone-link-cancel', 'session-challenge',
+    'phone-link-confirm', 'phone-link-resume', 'phone-link-cancel', 'session-challenge',
     'session-delete-account', 'session-renew', 'session-local-bind', 'session-logout', 'session-logout-all', 'session-revoke-device',
     'password-login-challenge', 'password-login', 'session-set-password']);
 const PUBLIC_ERRORS = new Set(['auth_phone_e164_required', 'auth_rate_limited', 'sms_delivery_unavailable',
     'auth_attempt_expired', 'auth_pairing_invalid', 'auth_pairing_locked',
-    'sms_configuration_required', 'auth_trusted_phone_required', 'auth_session_invalid',
+    'sms_configuration_required', 'auth_session_invalid',
     'auth_session_stale', 'auth_session_reused', 'auth_device_cooling_off', 'auth_password_rejected',
     'auth_password_too_short', 'auth_password_compromised', 'auth_password_screening_unavailable', 'auth_argon2_unavailable',
     ...ACCOUNT_PUBLIC_ERRORS]);
@@ -139,7 +139,6 @@ export function createWsPhoneLinkHandler({ projectRoot, jwtSecret, sendLink, dat
                     connection._authLinkAttemptId = message.attemptId;
                     result = await service.complete({ ...message, action: 'resume' });
                     break;
-                case 'phone-link-approve': result = await service.approve(message); break;
                 case 'phone-link-confirm': result = await service.confirm(message); break;
                 case 'phone-link-cancel': result = await service.cancel(message); break;
                 case 'session-challenge': result = await service.sessions.getChallenge(message, network); break;
@@ -153,7 +152,7 @@ export function createWsPhoneLinkHandler({ projectRoot, jwtSecret, sendLink, dat
                 case 'session-local-bind': result = await service.sessions.localBind(message); break;
                 default: result = await service.sessions.revoke({ ...message, action: message.action.slice('session-'.length) });
             }
-            if (['phone-link-approve', 'phone-link-confirm'].includes(message.action) && result.approved) {
+            if (message.action === 'phone-link-confirm' && result.approved) {
                 for (const origin of wsApiConnections) {
                     if (origin._authLinkAttemptId === message.attemptId && origin.readyState === 1) {
                         origin.send(JSON.stringify({ type: 'phone-link-ready', attemptId: message.attemptId }));

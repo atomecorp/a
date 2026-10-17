@@ -14,10 +14,9 @@ const node = () => ({ id: 'photo', kind: 'image', renderLayer: 0, opacity: 1, bo
 
 test('image density follows zoom and DPR from original source coordinates on Web and iOS', () => {
     const photo = node();
-    const raster = (zoom, ios = false) => resolveImageRasterSize({ node: photo, size: photo.bounds, ratio: 2, view: { zoom }, ios });
+    const raster = (zoom) => resolveImageRasterSize({ node: photo, size: photo.bounds, ratio: 2, view: { zoom } });
     expect([raster(1).width, raster(1).height]).toEqual([200, 100]);
     expect([raster(4).width, raster(4).height]).toEqual([800, 400]);
-    expect([raster(4, true).width, raster(4, true).height]).toEqual([800, 400]);
     expect([raster(20).width, raster(20).height]).toEqual([2000, 1000]);
     photo.localTransform = { scaleX: 2, scaleY: 1 };
     expect(raster(4).width).toBe(1600);
@@ -25,7 +24,14 @@ test('image density follows zoom and DPR from original source coordinates on Web
     photo.content.sourceRect = { x: 500, y: 0, width: 1000, height: 500 };
     expect(raster(4).width).toBe(1600);
     const ui = { ...photo, id: '__eve_dashboard_photo' };
-    expect(resolveImageRasterSize({ node: ui, size: { width: 2000, height: 1000 }, view: { zoom: 8 }, ios: true }).width).toBe(512);
+    expect(resolveImageRasterSize({ node: ui, size: { width: 2000, height: 1000 }, view: { zoom: 8 } }).width).toBe(1024);
+});
+
+test('an interface picture shrunk for its arrival is rasterized at its own box, a project image at its footprint', () => {
+    const picture = { id: '__eve_dashboard_eve_disc_qa', kind: 'image', content: { source: '/disc.svg' }, localTransform: { scaleX: 0.08, scaleY: 0.08 } };
+    expect(resolveImageRasterSize({ node: picture, size: { width: 300, height: 300 }, ratio: 3, view: { zoom: 1 } }).width).toBe(900);
+    const project = { ...node(), id: 'photo', content: { source: '/photo.png' }, localTransform: { scaleX: 0.5, scaleY: 0.5 } };
+    expect(resolveImageRasterSize({ node: project, size: { width: 100, height: 50 }, ratio: 2, view: { zoom: 1 } }).width).toBe(100);
 });
 
 test('zoom and resize decode the same original, reuse matching rasters and release scratch resources', async () => {

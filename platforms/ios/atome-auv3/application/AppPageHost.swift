@@ -81,6 +81,8 @@ final class AppPageHost {
                 NativeCalendarAlarm.shared.handle(command: command, payload: payload, completion: completion)
             } else if AssistantRequestInbox.canHandle(command: command) {
                 AssistantRequestInbox.shared.handle(command: command, payload: payload, completion: completion)
+            } else if AppWorkspaceResume.canHandle(command: command) {
+                AppWorkspaceResume.shared.handle(command: command, payload: payload, completion: completion)
             } else if CarPlayAssistantLink.canHandle(command: command) {
                 CarPlayAssistantLink.shared.handle(command: command, payload: payload, completion: completion)
             } else {

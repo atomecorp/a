@@ -98,15 +98,11 @@ export function createPhoneLinkAuth({ query, transaction, findByPhone, findById,
         });
     }
     async function getChallenge({ attemptId, keyId, purpose }, network) {
-        if (!['consume', 'approve', 'resume', 'resend', 'cancel', 'simulate-payment'].includes(purpose)) reject('auth_request_invalid');
+        if (!['consume', 'resume', 'resend', 'cancel', 'simulate-payment'].includes(purpose)) reject('auth_request_invalid');
         return transaction(async () => {
             await proof.limit(`challenge:${proof.keyedIndex(String(network))}`, 60, 60000);
             const value = await attempt(attemptId, { forCancellation: purpose === 'cancel' });
-            if (purpose === 'approve') {
-                const device = await query('get', 'SELECT * FROM auth_device_keys WHERE key_id = ?', [keyId]);
-                if (!device || device.revoked_ms !== null || device.principal_id !== value.candidate_id
-                    || device.restricted_until_ms > now()) reject('auth_trusted_phone_required');
-            } else if (value.key_id !== keyId) reject();
+            if (value.key_id !== keyId) reject();
             return { ok: true, challenge: await proof.challenge(purpose, attemptId, keyId, value.client_nonce) };
         });
     }
@@ -185,24 +181,6 @@ export function createPhoneLinkAuth({ query, transaction, findByPhone, findById,
         if (Number(changed.changes) !== 1) reject();
         return { ...await sessions.create(account, value.key_id), newAccount: !existing && !changing };
     }
-    async function approve(input) {
-        await requirePairing(await attempt(input.attemptId), input.pairingCode, input.token);
-        return transaction(async () => {
-            const value = await attempt(input.attemptId);
-            if (value.state !== 'sent') reject();
-            requireHandle(input.token);
-            if (digest(input.token) !== value.token_hash) reject();
-            const device = await query('get', 'SELECT * FROM auth_device_keys WHERE key_id = ?', [input.keyId]);
-            if (!device || device.principal_id !== value.candidate_id || device.revoked_ms !== null
-                || device.restricted_until_ms > now()) reject('auth_trusted_phone_required');
-            if ((await findByPhone(proof.openPhone(value.phone_sealed)))?.user_id !== value.candidate_id) reject();
-            await proof.consumeProof(input, 'approve', input.attemptId, JSON.parse(device.public_key));
-            await query('run', "UPDATE auth_link_attempts SET state = 'approved', approved_by = ? WHERE attempt_id = ?",
-                [device.key_id, input.attemptId]);
-            await proof.audit('phone_proof_received', device.principal_id, input.attemptId);
-            return { ok: true, approved: true };
-        });
-    }
     async function confirm(input) {
         // Commit failed guesses independently of the approval transaction.
         await requirePairing(await attempt(input.attemptId), input.pairingCode, input.token);
@@ -246,5 +224,5 @@ export function createPhoneLinkAuth({ query, transaction, findByPhone, findById,
         if (keyId !== authorization.key_id) reject();
         return start({ ...input, phone: input.newPhone }, network, authorization);
     }
-    return { start, simulatePayment, resend, startPhoneChange, getChallenge, complete, approve, confirm, cancel, sessions, passwords, proof, devices, handles };
+    return { start, simulatePayment, resend, startPhoneChange, getChallenge, complete, confirm, cancel, sessions, passwords, proof, devices, handles };
 }

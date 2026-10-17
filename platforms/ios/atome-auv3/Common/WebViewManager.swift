@@ -37,6 +37,9 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     static var bootMilestones: [String: Int] = [:]
     static var bootPresentationHandler: (([String: Any]) -> Void)?
     static var bootFailureHandler: ((String, [String: Any]) -> Void)?
+    static var bootRestartHandler: (() -> Void)?
+    // Injected by the app target: reloads a presented page the system terminated.
+    static var presentedPageTerminationHandler: (() -> Void)?
     static var bootTerminalFailure = false
     static let bootWatchdog = BootStallWatchdog()
 
@@ -79,9 +82,9 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     static var safeModeExitWork: DispatchWorkItem?
     static let inboundLimit: Int = 24
 
-    private static var mainLoadDone: Bool = false
+    static var mainLoadDone: Bool = false
     private static var mainLoadAttempts: Int = 0
-    private static var mainLoadTimer: Timer?
+    static var mainLoadTimer: Timer?
     private static var storedMainURL: URL?
     static var runningInExtension: Bool = false
 
@@ -91,28 +94,6 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     static let nonCriticalUpdateInterval: CFTimeInterval = 0.2 // ULTRA: 5 FPS for non-timecode updates (instead of 10)
 
     var terminateRetryCount = 0
-
-    static func retryMainPageAfterUserRequest() {
-        guard let webView else { return }
-        webView.stopLoading()
-        mainLoadTimer?.invalidate()
-        mainLoadTimer = nil
-        shared.terminateRetryCount = 0
-        mainLoadDone = false
-        resetBootTelemetry()
-        startBootWatchdog()
-        markBootMilestone("retry_requested")
-        markPageLoading()
-        if FeatureFlags.registerCustomScheme, let entry = URL(string: "atome:///src/index.html") {
-            markBootMilestone("navigation_requested")
-            webView.load(URLRequest(url: entry))
-            mainLoadDone = true
-        } else if let entry = Bundle.main.url(forResource: "src/index", withExtension: "html") {
-            markBootMilestone("navigation_requested")
-            webView.loadFileURL(entry, allowingReadAccessTo: Bundle.main.bundleURL)
-            mainLoadDone = true
-        }
-    }
 
     static func setupWebView(for webView: WKWebView, audioController: AudioControllerProtocol? = nil) {
         if FeatureFlags.mainThreadPrecondition {

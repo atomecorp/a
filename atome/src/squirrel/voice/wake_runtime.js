@@ -78,8 +78,10 @@ export const createWakeRuntime = ({ env = globalThis, backend = createWakeDetect
             await release();
             if (token !== generation) return snapshot();
             if (!desired()) {
-                // Switched off: the engine's memory is returned; suspensions keep it for a fast resume.
-                if (!enabled || disposed) backend.release?.();
+                // Switched off or sent to the background: the engine's memory is returned (a
+                // suspended app with less memory is reclaimed later). Other suspensions keep it
+                // for a fast resume.
+                if (!enabled || disposed || !foreground()) backend.release?.();
                 return emit(!enabled ? 'off' : blockers.has('assistant') ? 'assistant' : 'suspended');
             }
             emit('starting');

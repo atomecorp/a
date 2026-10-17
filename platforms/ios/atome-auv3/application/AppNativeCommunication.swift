@@ -216,6 +216,7 @@ final class AppNativeCommunication: NSObject, PKPushRegistryDelegate, CXProvider
 
 final class AtomeApplicationDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions options: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        AppBackgroundLifecycle.shared.install()
         AppNativeCommunication.shared.start(); return true
     }
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken token: Data) {

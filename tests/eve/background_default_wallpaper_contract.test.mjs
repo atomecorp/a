@@ -613,3 +613,46 @@ test('an unreadable profile keeps the base colour and is read again, never the d
     assert.equal(window.eveBackground.getParams().backgroundImageUrl, '/assets/images/ada.png');
     assert.equal(surfaces.some((detail) => String(detail.sourceUrl || '').includes('eVe.mp4')), false);
 });
+test('a launch presents the account\'s last wallpaper and its file before the profile is read', async () => {
+    const { IDBFactory } = await import('fake-indexeddb');
+    globalThis.indexedDB = new IDBFactory();
+    try {
+        const own = { backgroundSource: 'image', backgroundImageUrl: STORED_BACKGROUND_URL, backgroundImageFileName: 'ada.png' };
+        profileApi.loadUserProfile.mockResolvedValue({ ok: true, profile: { preferences: { background: own } } });
+        const first = await bootBackgroundRuntime({ currentUser: { id: 'user-ada' } });
+        fetchMock.mockImplementation(async () => ({ ok: true, status: 200, blob: async () => new Blob(['png'], { type: 'image/png' }) }));
+        first.window.dispatchEvent(new first.window.Event('squirrel:workspace-synchronized'));
+        await vi.waitFor(() => assert.match(String(first.window.__eveSurfaceBackground.sourceUrl), /^blob:/));
+        const { createLastKnownStore } = await import('../../eVe/domains/user/last_known_store.js');
+        const store = createLastKnownStore({ name: 'eve_background_presented', store: 'owners' });
+        await vi.waitFor(async () => assert.ok((await store.read('user-ada'))?.file?.bytes instanceof ArrayBuffer));
+        restoreGlobals(); first.window.close();
+        // The next launch: the profile and the file are still on their way.
+        profileApi.loadUserProfile.mockReset().mockReturnValue(new Promise(() => {}));
+        const fetchesBefore = fetchMock.mock.calls.length;
+        const next = await bootBackgroundRuntime({ currentUser: { id: 'user-ada' } });
+        await vi.waitFor(() => assert.match(String(next.window.__eveSurfaceBackground.sourceUrl), /^blob:/));
+        assert.equal(next.window.eveBackground.getParams().backgroundImageUrl, STORED_BACKGROUND_URL);
+        assert.equal(next.surfaces.some((detail) => String(detail.sourceUrl || '').includes('eVe.mp4')), false);
+        assert.equal(fetchMock.mock.calls.length, 0, `no file fetch before the profile (had ${fetchesBefore} on the first launch)`);
+        // Another account never sees it; a logout forgets it.
+        next.window.dispatchEvent(new next.window.CustomEvent('squirrel:user-logged-out', { detail: { reason: 'logout', previousUserId: 'user-ada' } }));
+        await vi.waitFor(async () => assert.equal(await store.read('user-ada'), null));
+    } finally { delete globalThis.indexedDB; }
+});
+test('a partial preference publication at launch never resolves the wallpaper to the default', async () => {
+    let release;
+    profileApi.loadUserProfile.mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+    const { window: win, surfaces } = await bootBackgroundRuntime({ currentUser: { id: 'user-ada' } });
+    await vi.waitFor(() => assert.equal(typeof release, 'function'));
+    // The workspace owner publishes what it read: the workspace and the level, no wallpaper.
+    win.__eveProfilePreferences = { workspace: { startup_view: 'dashboard' }, visual: { level: 'beginner' } };
+    win.dispatchEvent(new win.CustomEvent('eve:profile-preferences-updated', { detail: { source: 'workspace_surface', preferences: win.__eveProfilePreferences } }));
+    await flush();
+    assert.equal(win.eveBackground.getParams().backgroundSource, 'unresolved');
+    release({ ok: true, profile: { preferences: { workspace: { startup_view: 'dashboard' }, background: {
+        backgroundSource: 'image', backgroundImageUrl: '/assets/images/ada.png', backgroundImageFileName: 'ada.png' } } } });
+    await vi.waitFor(() => assert.equal(win.__eveSurfaceBackground.sourceUrl, '/assets/images/ada.png'));
+    assert.equal(win.__eveProfilePreferences.visual.level, 'beginner', 'the newer publication keeps its keys');
+    assert.equal(surfaces.some((detail) => String(detail.sourceUrl || '').includes('eVe.mp4')), false);
+});

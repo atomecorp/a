@@ -15,9 +15,11 @@ contained concurrent source-tree copies in both the app and AUv3.
 - `AudioSchemeHandler.swift` resolves from `atome_runtime`, streams large
   responses, retains compatible `/src`, `/eVe`, `/wasm`, and `/vendor` URLs,
   and reports only aggregate boot metrics.
-- `WebViewManager` records monotonic milestones and treats WebContent
-  termination as terminal. Only the native Retry button may start another page
-  load.
+- `WebViewManager` records monotonic milestones and treats a WebContent
+  termination before presentation as terminal: only the native Retry button may
+  start another page load. Since 2026-10-17 a page that had been presented is
+  reloaded by the app host, at most once per 120 s
+  ([ios-app-restarts-after-switching-apps](../ios-app-restarts-after-switching-apps/README.md)).
 - `boot_runtime.js` publishes versioned presentation readiness after the
   canonical WebGPU workspace and Main Toolbar are presented. An unauthenticated
   login mount has a separate readiness message and makes no workspace claim.

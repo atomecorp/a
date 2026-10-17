@@ -117,11 +117,39 @@ extension WebViewManager {
 
     static func installBootPresentationHandlers(
         onReady: @escaping ([String: Any]) -> Void,
-        onFailure: @escaping (String, [String: Any]) -> Void
+        onFailure: @escaping (String, [String: Any]) -> Void,
+        onRestart: @escaping () -> Void
     ) {
         bootPresentationHandler = onReady
         bootFailureHandler = onFailure
+        bootRestartHandler = onRestart
         if bootPresented { DispatchQueue.main.async { onReady([:]) } }
+    }
+
+    // Boots the main page again: a retry the user asked for after a failure, or a
+    // presented page the system terminated.
+    static func reloadMainPage(reason: String) {
+        dispatchPrecondition(condition: .onQueue(.main))
+        guard let webView else { return }
+        webView.stopLoading()
+        mainLoadTimer?.invalidate()
+        mainLoadTimer = nil
+        shared.terminateRetryCount = 0
+        mainLoadDone = false
+        resetBootTelemetry()
+        bootRestartHandler?()
+        startBootWatchdog()
+        markBootMilestone(reason)
+        markPageLoading()
+        if FeatureFlags.registerCustomScheme, let entry = URL(string: "atome:///src/index.html") {
+            markBootMilestone("navigation_requested")
+            webView.load(URLRequest(url: entry))
+            mainLoadDone = true
+        } else if let entry = Bundle.main.url(forResource: "src/index", withExtension: "html") {
+            markBootMilestone("navigation_requested")
+            webView.loadFileURL(entry, allowingReadAccessTo: Bundle.main.bundleURL)
+            mainLoadDone = true
+        }
     }
 
     static func handleBootPresentationReady(_ body: [String: Any]) {

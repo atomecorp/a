@@ -21,6 +21,19 @@ describe('device authentication keys', () => {
         expect(other.keyId).not.toBe(b.keyId);
         await next.close();
     });
+    it('hands the point announced before to a native keystore that may refuse its export', async () => {
+        const indexedDB = new IDBFactory();
+        const point = { x: Buffer.alloc(32, 1).toString('base64url'), y: Buffer.alloc(32, 2).toString('base64url') };
+        const calls = [];
+        const nativeKey = async (request) => { calls.push(request); return point; };
+        const scope = 'a'.repeat(64);
+        const first = createAuthDeviceStore({ indexedDB, crypto: crypto.webcrypto, nativeKey });
+        await first.forScope(scope); await first.close();
+        expect(calls[0].known).toBeUndefined();
+        const next = createAuthDeviceStore({ indexedDB, crypto: crypto.webcrypto, nativeKey });
+        await next.forScope(scope); await next.close();
+        expect(calls[1]).toMatchObject({ action: 'public', scope, known: point });
+    });
     it('converges concurrent first-use tabs onto one identity', async () => {
         const indexedDB = new IDBFactory();
         const a = createAuthDeviceStore({ indexedDB, crypto: crypto.webcrypto });

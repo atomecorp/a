@@ -58,8 +58,14 @@ struct atomeApp: App {
 }
 
 struct ContentView: View {
+    // Restoration state of this window scene: see AppWorkspaceResume.
+    @SceneStorage("atome.workspace.resume") private var workspaceResume = ""
+    @ObservedObject private var resume = AppWorkspaceResume.shared
+
     var body: some View {
         WebViewContainer()
             .ignoresSafeArea(.container, edges: .all)
+            .onAppear { resume.restore(workspaceResume) }
+            .onChange(of: resume.stored) { _, value in workspaceResume = value }
     }
 }

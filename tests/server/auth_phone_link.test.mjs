@@ -75,16 +75,12 @@ describe('persistent phone-link protocol', () => {
             .toEqual({ principal_id: 'existing-id', channel: 'phone_recovery', state: 'pending' });
         expect(f.notices).toMatchObject([{ principalId: 'existing-id', kind: 'auth-recovery-started' }]);
     });
-    it('requires both a trusted phone and the originating computer', async () => {
+    it('has no signed approval of an SMS attempt: enrolled devices approve through pairing', async () => {
         const f = fixture(); const phone = f.device(); const first = await f.start(phone);
         await f.complete(await f.input(phone, first.attemptId)); f.advance(60001);
         const computer = f.device(); const next = await f.start(computer);
-        expect(await f.complete(await f.input(computer, next.attemptId, 'resume'))).toMatchObject({ pending: true });
-        const approval = await f.input(phone, next.attemptId, 'approve');
-        expect(await f.auth.approve({ ...approval, keyId: phone.keyId })).toEqual({ ok: true, approved: true });
-        expect(f.db.prepare('SELECT count(*) AS n FROM auth_device_sessions').get().n).toBe(1);
-        expect(await f.complete(await f.input(computer, next.attemptId, 'resume'))).toMatchObject({ ok: true, recoveryPending: true });
-        expect(f.db.prepare('SELECT count(*) AS n FROM auth_device_sessions').get().n).toBe(1);
+        await expect(f.input(phone, next.attemptId, 'approve')).rejects.toThrow('auth_request_invalid');
+        expect(f.auth.approve).toBeUndefined();
     });
     it('lets the SMS link approve another device without authenticating the opener', async () => {
         const f = fixture();
@@ -143,13 +139,6 @@ describe('SMS security boundaries', () => {
         await expect(restarted.confirm({ ...input, pairingCode: a.pairingCode })).rejects.toThrow('auth_pairing_locked');
         expect(f.db.prepare('SELECT count(*) AS n FROM auth_device_sessions').get().n).toBe(0);
         expect(await f.auth.complete({ ...await f.input(key, a.attemptId, 'resume') })).toMatchObject({ pending: true });
-    });
-    it('does not let the signed approval path bypass the transferred code', async () => {
-        const f = fixture(), phone = f.device(), a = await f.start(phone);
-        await f.complete(await f.input(phone, a.attemptId)); f.advance(60001);
-        const computer = f.device(), b = await f.start(computer), input = await f.input(phone, b.attemptId, 'approve');
-        await expect(f.auth.approve({ ...input, keyId: phone.keyId, pairingCode: undefined })).rejects.toThrow('auth_pairing_invalid');
-        expect(await f.auth.approve({ ...input, keyId: phone.keyId })).toMatchObject({ approved: true });
     });
     it('keeps an approved attempt subject to its original deadline', async () => {
         const f = fixture(), key = f.device(), a = await f.start(key), input = await f.input(key, a.attemptId);

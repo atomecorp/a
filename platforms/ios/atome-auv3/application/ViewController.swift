@@ -42,7 +42,8 @@ final class FullscreenWebViewController: UIViewController {
         super.viewDidLoad()
         WebViewManager.installBootPresentationHandlers(
             onReady: { [weak self] _ in self?.hideBootOverlay() },
-            onFailure: { [weak self] reason, _ in self?.showBootFailure(reason: reason) }
+            onFailure: { [weak self] reason, _ in self?.showBootFailure(reason: reason) },
+            onRestart: { [weak self] in self?.showBootOverlay() }
         )
         WebViewManager.startBootWatchdog()
         view.insetsLayoutMarginsFromSafeArea = true
@@ -131,6 +132,20 @@ final class FullscreenWebViewController: UIViewController {
         ])
     }
 
+    // The launch state, for a page booted again.
+    private func showBootOverlay() {
+        bootOverlay.layer.removeAllAnimations()
+        bootOverlay.backgroundColor = bootBackgroundColor
+        bootOverlay.isOpaque = true
+        bootOverlay.isUserInteractionEnabled = true
+        bootOverlay.alpha = 1
+        bootOverlay.isHidden = false
+        bootLogo.isHidden = false
+        bootStatusLabel.backgroundColor = .clear
+        bootStatusLabel.text = "Ouverture…"
+        bootRetryButton.isHidden = true
+    }
+
     private func hideBootOverlay() {
         guard !bootOverlay.isHidden else { return }
         UIView.animate(withDuration: 0.16, delay: 0, options: [.curveEaseOut]) {
@@ -173,9 +188,8 @@ final class FullscreenWebViewController: UIViewController {
     }
 
     @objc private func retryBoot() {
+        WebViewManager.reloadMainPage(reason: "retry_requested")
         bootStatusLabel.text = "Nouvelle tentative…"
-        bootRetryButton.isHidden = true
-        WebViewManager.retryMainPageAfterUserRequest()
     }
 }
 

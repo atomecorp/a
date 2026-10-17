@@ -11,13 +11,13 @@ import { wsApiConnections } from './wsApiState.js';
 // number matching, recovery, device management. Same `auth` / `auth-response`
 // envelope as the phone-link owner, which delegates these actions here.
 export const ACCOUNT_ACTIONS = new Set(['account-create-challenge', 'account-create', 'approve-key-add-challenge', 'approve-key-add',
-    'approval-challenge', 'pair-start-challenge', 'pair-start', 'pair-claim', 'pair-view', 'pair-approve',
+    'approval-challenge', 'pair-start-challenge', 'pair-start', 'pair-claim', 'pair-pending', 'pair-view', 'pair-approve',
     'pair-requester-challenge', 'pair-status', 'pair-complete', 'pair-cancel', 'not-my-account',
     'recovery-code-set', 'recovery-start-challenge', 'recovery-start', 'recovery-cancel', 'recovery-requester-challenge',
     'recovery-status', 'recovery-complete', 'devices-list', 'device-rename', 'device-revoke', 'device-class',
     'connection-challenge', 'connection-proof', 'shared-open-challenge', 'shared-open-start']);
 // Actions answered only for an authenticated connection (bearer of this account).
-const AUTHENTICATED = new Set(['pair-claim', 'pair-view', 'devices-list', 'device-rename']);
+const AUTHENTICATED = new Set(['pair-claim', 'pair-pending', 'pair-view', 'devices-list', 'device-rename']);
 export const ACCOUNT_PUBLIC_ERRORS = ['auth_device_class_required', 'auth_payment_method_invalid', 'auth_approve_key_required',
     'auth_user_verification_required', 'auth_webauthn_rejected', 'auth_webauthn_invalid', 'auth_webauthn_attestation_unsupported',
     'auth_webauthn_algorithm_unsupported', 'auth_webauthn_counter_regressed', 'auth_pairing_invalid', 'auth_pairing_locked',
@@ -83,6 +83,7 @@ export function createWsAccountAuth({ service, database, jwtSecret, createAccoun
                 return result;
             }
             case 'pair-claim': return pairing.claim(message, claims);
+            case 'pair-pending': return pairing.pending(message, claims);
             case 'pair-view': return pairing.view(message, claims);
             case 'pair-approve': {
                 const result = await pairing.approve(message);

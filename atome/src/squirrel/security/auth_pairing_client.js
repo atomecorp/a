@@ -46,12 +46,15 @@ export function createPairingClient({ devices, approver, send, token, ensureSess
         return record;
     }
     const deviceOf = (record) => (record.scope ? devices.forScope(record.scope) : devices.forPhone(record.phone));
+    // A session enrolled by SMS before V1 has no scope of its own: its device key's
+    // (the phone scope) also names its approve key.
+    const scopeOf = async (record) => record.scope || (await deviceOf(record)).scope;
     // Approve-class purposes: the server names the challenge, the approve key proves the user.
     async function approval(purpose, extra = {}) {
         const record = await sessionRecord();
         const fields = { sessionId: record.session.id, generation: record.session.generation };
         const response = await request('approval-challenge', { ...fields, purpose, ...extra });
-        const stored = record.scope ? await devices.read(`approve:${record.scope}`) : null;
+        const stored = await devices.read(`approve:${await scopeOf(record)}`);
         if (!stored) throw new Error('auth_approve_key_required');
         const challenge = checkChallenge(response.challenge, purpose);
         return { ...fields, approval: await approver.approve(challenge, stored) };
@@ -127,6 +130,13 @@ export function createPairingClient({ devices, approver, send, token, ensureSess
         // Approver side: a typed or dictated code, or a notice naming the request.
         claimPairing: (code) => authenticated('pair-claim', { code: String(code || '').replace(/\D/g, '') }),
         viewPairing: (pairId) => authenticated('pair-view', { pairId }),
+        // Requests waiting for this account, newest first; only a device holding
+        // an approve key can answer them, the others are not asked.
+        async pendingPairRequests() {
+            const record = await devices.read('session');
+            if (!record?.session?.id || !await devices.read(`approve:${await scopeOf(record)}`)) return [];
+            return (await authenticated('pair-pending')).requests || [];
+        },
         refusePairing: (pairId) => authenticated('pair-cancel', { pairId }),
         async approvePairing(pairId, choice) {
             const fields = await approval('pair-approve', { pairId, choice: Number(choice) });
@@ -184,15 +194,15 @@ export function createPairingClient({ devices, approver, send, token, ensureSess
         // A device enrolled before approve keys (or after losing its own) adds one.
         async addApproveKey() {
             const record = await sessionRecord();
-            if (!record.scope) throw new Error('auth_approve_key_required');
+            const scope = await scopeOf(record);
             const device = await deviceOf(record);
             const fields = { sessionId: record.session.id, generation: record.session.generation };
             const pre = await request('approve-key-add-challenge', fields);
             const signed = await device.sign(checkChallenge(pre.challenge, 'approve-key-add', `${fields.sessionId}:${fields.generation}`));
-            const approve = await registerApprove(pre.register, 'personal', record.scope);
+            const approve = await registerApprove(pre.register, 'personal', scope);
             if (!approve) throw new Error('auth_approve_key_unavailable');
             const result = await request('approve-key-add', { ...fields, ...signed, approve: approve.approve });
-            await devices.put(`approve:${record.scope}`, approve.record);
+            await devices.put(`approve:${scope}`, approve.record);
             return result;
         },
         listDevices: () => authenticated('devices-list'),

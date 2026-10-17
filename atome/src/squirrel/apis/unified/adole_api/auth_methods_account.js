@@ -88,6 +88,7 @@ export const accountMethods = {
     cancelPairing: () => pairingClient().cancelPairing(),
     claimPairing: (code) => pairingClient().claimPairing(code),
     viewPairing: (pairId) => pairingClient().viewPairing(pairId),
+    listPendingPairRequests: () => pairingClient().pendingPairRequests(),
     refusePairing: (pairId) => pairingClient().refusePairing(pairId),
     approvePairing: (pairId, choice) => pairingClient().approvePairing(pairId, choice),
     notMyAccount: () => pairingClient().notMyAccount(),

@@ -80,10 +80,20 @@ extension WebViewManager {
         }
     }
 
+    // iOS reclaims the web content of a backgrounded app under memory pressure: a
+    // page that had been presented is booted again by its host. A page that never
+    // reached its presentation stays on the failure surface, so a page that cannot
+    // boot is not reloaded in a loop.
     public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        let presented = WebViewManager.bootPresented
         WebViewManager.markPageLoading()
         self.terminateRetryCount += 1
-        log.error("WebContent terminated; automatic reload disabled; count=\(self.terminateRetryCount)")
+        if presented, let reload = WebViewManager.presentedPageTerminationHandler {
+            log.error("WebContent terminated after presentation; reloading; count=\(self.terminateRetryCount)")
+            reload()
+            return
+        }
+        log.error("WebContent terminated before presentation; no automatic reload; count=\(self.terminateRetryCount)")
         WebViewManager.reportBootFailure(reason: "web_content_terminated")
     }
 }
