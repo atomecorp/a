@@ -4,6 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { planResidueCleanup } from './workspace_residue_retention.mjs';
 
 const scriptPath = fileURLToPath(import.meta.url);
 const projectRoot = path.resolve(path.dirname(scriptPath), '..');
@@ -38,7 +39,7 @@ function assertContained(file, container) {
 
 export function planBuildCleanup({ root = projectRoot,
     derivedData = path.join(os.homedir(), 'Library/Developer/Xcode/DerivedData'), phase = 'end',
-    readWorkspace = workspaceOf } = {}) {
+    readWorkspace = workspaceOf, converge = true, residue = null } = {}) {
     if (!['start', 'end'].includes(phase)) throw new Error('build_cache_phase_invalid');
     root = fs.realpathSync(root);
     const target = path.join(root, 'platforms/desktop-tauri/target');
@@ -61,6 +62,8 @@ export function planBuildCleanup({ root = projectRoot,
         selected.add(file);
         plan.push({ path: file, reason, container });
     };
+    if (phase === 'end' && residue) planResidueCleanup({ root, ...residue }, add);
+    if (!converge) return { plan, kept };
     const profiles = ['debug', 'release'].map(name => {
         const folder = path.join(target, name);
         const bundle = path.join(folder, 'bundle/macos/atome.app');
@@ -156,26 +159,31 @@ export function planBuildCleanup({ root = projectRoot,
 }
 
 export function cleanBuildCaches(options = {}) {
-    const busy = (options.compilerCheck || activeCompilers)();
-    if (busy.length) return { status: 'deferred', reason: 'build-owner-active', compilers: [...new Set(busy)] };
-    const result = planBuildCleanup(options);
+    const compilers = options.compilerCheck || activeCompilers;
+    const busy = [...new Set(compilers())];
+    // Profile convergence waits for builds; age-based residue is unused by definition.
+    if (busy.length && !options.residue) return { status: 'deferred', reason: 'build-owner-active', compilers: busy };
+    const result = planBuildCleanup({ ...options, converge: !busy.length });
     const counts = {};
     for (const item of result.plan) counts[item.reason] = (counts[item.reason] || 0) + 1;
     if (options.apply) {
         // Recheck immediately before mutation; never stop or signal a build.
-        if ((options.compilerCheck || activeCompilers)().length) return { status: 'deferred', reason: 'compiler-started' };
+        if (!busy.length && compilers().length) return { status: 'deferred', reason: 'compiler-started' };
         for (const item of result.plan) {
             assertContained(item.path, item.container);
             fs.rmSync(item.path, { recursive: true, force: true });
         }
     }
-    return { status: options.apply ? 'cleaned' : 'preview', removed: result.plan.length, categories: counts, kept: result.kept };
+    const report = { status: options.apply ? 'cleaned' : 'preview', removed: result.plan.length, categories: counts, kept: result.kept };
+    return busy.length ? { ...report, convergence: 'deferred', compilers: busy } : report;
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === scriptPath) {
     try {
         const phase = process.argv.find(value => value.startsWith('--phase='))?.slice(8) || 'end';
-        const report = cleanBuildCaches({ apply: process.argv.includes('--apply'), phase });
+        const scratch = path.join('/private/tmp', `claude-${process.getuid()}`, fs.realpathSync(projectRoot).replaceAll(path.sep, '-'));
+        const deviceSupport = path.join(os.homedir(), 'Library/Developer/Xcode/iOS DeviceSupport');
+        const report = cleanBuildCaches({ apply: process.argv.includes('--apply'), phase, residue: { scratch, deviceSupport } });
         process.stdout.write(`[build-cache] ${JSON.stringify(report)}\n`);
     } catch (error) {
         process.stderr.write(`[build-cache] ${error.message}\n`);

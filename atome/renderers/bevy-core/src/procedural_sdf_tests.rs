@@ -245,14 +245,16 @@ fn procedural_sdf_mystic_mode_is_one_isolated_turning_tile_branch() {
     assert!(shader.contains("let level_turn = material.mystic_style.z > 0.5;"));
     assert!(shader.contains("let previous_kind = select(0.0, round(abs(motion.z)) - 1.0, level_turn);"));
     assert!(shader.contains("plate_color = intuition_mystic_plate(box_distance, source_uv, family, glass_mix, tint);"));
-    // An empty grid cell (`motion.w < 0`, never a folded palette) shows the
-    // wallpaper alone, blurred (never the tile beneath), and a light outline on
-    // its menu face: no tint, no colour, no resting shadow.
+    // An empty grid cell (`motion.w < 0`, never a folded palette) is invisible on
+    // its menu face: no plate at all, so its hole shows the background alone, like
+    // the seams between tiles (never the tile beneath) — no outline, no frost, no
+    // shadow. The same holds, in a level turn, for a cell that showed nothing or
+    // an empty one.
     assert!(shader.contains("let ghost = motion.w < -0.5;"));
-    assert!(shader.contains("plate_color = mix(intuition_mystic_back_blur(ghost_uv, surface), vec3(0.62), outline_dose);"));
-    assert!(shader.contains("fn intuition_mystic_back_blur(uv: vec2<f32>, surface: vec2<f32>) -> vec3<f32>"));
-    assert!(shader.contains("let shadowless = select(ghost, previous_ghost || previous_absent, cosine >= 0.0);"));
-    assert!(shader.contains("* lifted * select(1.0, 0.0, shadowless)"));
+    assert!(shader.contains("let faceless = select(ghost, previous_ghost || previous_absent, cosine >= 0.0);"));
+    assert!(shader.contains("if faceless { plate_mask = 0.0; }"));
+    assert!(shader.contains("* lifted * select(1.0, 0.0, faceless)"));
+    assert!(!shader.contains("intuition_mystic_back_blur"));
     // Every mystic uniform is declared, and in the bind group order.
     let mut order = vec![shader.find("liquid_drop_count: vec4<f32>").expect("liquid drop count")];
     for field in ["mystic_tiles", "mystic_tile_motion", "mystic_tile_colors", "mystic_count", "mystic_style"] {

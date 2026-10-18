@@ -80,6 +80,8 @@ All temporary files belong exclusively under the main repository's `temp/`: prob
 
 Never create temporary files in source, documentation, tools, repository root, or elsewhere. When working from eVe or another subdirectory, resolve these paths against the main repository root, not the current directory.
 
+When a task ends, run `npm run clean:build-cache` from the main root. Its owner, [build_cache_retention](../../scripts/build_cache_retention.md), removes stale `temp/` outputs (keeping reusable probe sources), unused Cargo units and superseded build caches. Put a `.retain` file in a `temp/` folder whose content cannot be regenerated.
+
 ## Git operations
 
 Git inspection is allowed as needed. Git writes require an explicit user request for conflict resolution or integration; a coding request, status inspection, or observed conflict alone does not authorize them.

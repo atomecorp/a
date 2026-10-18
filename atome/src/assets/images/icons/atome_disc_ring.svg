@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- The neon ring of the eVe Dashboard Atom disc: pink to violet, with its glow,
-     over atome_disc.svg (same 300 box, the disc edge at radius 112). Like the rim
+<!-- The neon ring of the eVe Dashboard Atom disc: pink to violet, over its glow
+     (atome_disc_glow.svg, a picture of its own so that it can breathe) and
+     atome_disc.svg (same 300 box, the disc edge at radius 112). Like the rim
      of a bubble, the ring is not even: each band is the space between two circles
      whose centres barely differ, so it thins and fades towards the upper right
      and thickens on the pink side. -->
@@ -11,12 +12,7 @@
             <stop offset="0.55" stop-color="#d23cff" stop-opacity="0.9"/>
             <stop offset="1" stop-color="#7b3dff" stop-opacity="0.55"/>
         </linearGradient>
-        <filter id="atomeRingGlow" x="-30%" y="-30%" width="160%" height="160%">
-            <feGaussianBlur stdDeviation="9"/>
-        </filter>
     </defs>
-    <path fill="url(#atomeRingStroke)" fill-rule="evenodd" fill-opacity="0.75" filter="url(#atomeRingGlow)"
-        d="M30 150a120 120 0 1 0 240 0a120 120 0 1 0 -240 0Z M44.9 148.6a106.5 106.5 0 1 0 213 0a106.5 106.5 0 1 0 -213 0Z"/>
     <path fill="url(#atomeRingStroke)" fill-rule="evenodd"
         d="M36.6 150a113.4 113.4 0 1 0 226.8 0a113.4 113.4 0 1 0 -226.8 0Z M39.4 149.1a111.5 111.5 0 1 0 223 0a111.5 111.5 0 1 0 -223 0Z"/>
 </svg>

@@ -6,6 +6,7 @@ import { controlProviderRealtime } from './providerRealtimeSession.js';
 import { resolveWsApiPrincipal, isWsApiPrincipalProvisioned } from './wsApiIdentity.js';
 import { wsResponse } from './wsResponse.js';
 import { resolveProviderCredentialVault } from './providerCredentialVault.js';
+import { getProviderSharedGrant } from './providerSharedGrant.js';
 import { openAiFailure, readOpenAiEvents, readProviderBytes } from '../atome/src/squirrel/ai/openai_stream.js';
 import { getAudioAiService } from './ai_audio/index.js';
 import { AUDIO_AI_ERRORS } from './ai_audio/service.js';
@@ -131,7 +132,8 @@ export const handleWsAiProviderOperation = async (message, connection, {
     resolveVault = resolveProviderCredentialVault,
     fetchImpl = globalThis.fetch, realtime = controlProviderRealtime,
     audio = getAudioAiService(),
-    video = getVideoAiService()
+    video = getVideoAiService(),
+    sharedGrant = getProviderSharedGrant()
 } = {}) => {
     if (message?.type !== 'ai-provider') return null;
     const reply = (ok, fields) => wsResponse('ai-provider', message, ok, fields);
@@ -180,7 +182,8 @@ export const handleWsAiProviderOperation = async (message, connection, {
             return reply(true, await vault.store(credentialProvider, candidate));
         }
         if (action === 'models') {
-            const key = credentialProvider === 'openai' ? await vault.read('openai') : message.payload?.key;
+            const key = credentialProvider === 'openai'
+                ? await vault.read('openai') || await sharedGrant.claim(principal, action) : message.payload?.key;
             if (!key) throw new Error('no_ai_key_configured');
             const data = await listProviderModelCatalog({ provider: credentialProvider, key, fetchImpl, signal: controller.signal });
             if (resolvePrincipal(connection, message) !== principal) throw new Error('provider_principal_changed');
@@ -229,9 +232,13 @@ export const handleWsAiProviderOperation = async (message, connection, {
             active.forEach(pending => { if (pending !== entry && pending.principal === principal && pending.provider === 'openai') pending.controller.abort(); });
             return reply(true, vault.remove('openai'));
         }
-        const key = await vault.read('openai');
+        const ownKey = await vault.read('openai');
+        const key = ownKey || await sharedGrant.claim(principal, action);
+        // Usage on the platform key is metered per seat; an own key is not.
+        const recordUsage = response => (!ownKey && action === 'responses' ? sharedGrant.recordTokens(principal, response?.usage) : null);
         if (action === 'credential.status') return reply(true, { configured: Boolean(key) });
-        if (!key) throw new Error('no_ai_key_configured');
+        // Closing a voice session needs no key: a revoked seat must still end it.
+        if (!key && action !== 'realtime-close') throw new Error('no_ai_key_configured');
         if (action.startsWith('realtime-')) return reply(true, { data: await realtime({ action,
             payload: message.payload || {}, connection, principal, key, signal: controller.signal, fetchImpl }) });
         const route = ROUTES[action];
@@ -275,6 +282,7 @@ export const handleWsAiProviderOperation = async (message, connection, {
                 }
             }
             if (!result) throw new Error('provider_stream_incomplete');
+            await recordUsage(result);
             return reply(true, { data: result });
         }
         if (['speech', 'files.content', 'skills.content', 'skills.versions.content', 'containers.files.content'].includes(action)) {
@@ -284,6 +292,7 @@ export const handleWsAiProviderOperation = async (message, connection, {
         }
         const data = JSON.parse(new TextDecoder().decode(await readProviderBytes(upstream.body, { signal: controller.signal })));
         if (resolvePrincipal(connection, message) !== principal) throw new Error('provider_principal_changed');
+        await recordUsage(data);
         return reply(true, { data: hosted ? hosted.accept(data) : data });
     } catch (error) {
         const known = /^(?:provider_|social_|not_authenticated|no_ai_key_configured|invalid_api_key|insufficient_quota|rate_limit_exceeded)/;

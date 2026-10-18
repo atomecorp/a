@@ -31,3 +31,25 @@ CREATE TABLE IF NOT EXISTS auth_push_deliveries (
     state TEXT NOT NULL,
     expires_ms INTEGER NOT NULL
 );
+
+-- Bounded test seats on the platform OpenAI key. A revoked row also blocks a
+-- principal that never held a seat.
+CREATE TABLE IF NOT EXISTS provider_shared_seats (
+    principal_id TEXT PRIMARY KEY,
+    state TEXT NOT NULL CHECK(state IN ('active', 'revoked')),
+    granted_by TEXT NOT NULL CHECK(granted_by IN ('auto', 'admin')),
+    claimed_ms INTEGER NOT NULL,
+    revoked_ms INTEGER
+);
+CREATE TABLE IF NOT EXISTS provider_shared_usage (
+    principal_id TEXT NOT NULL,
+    day TEXT NOT NULL,
+    operations INTEGER NOT NULL DEFAULT 0,
+    tokens INTEGER NOT NULL DEFAULT 0,
+    realtime INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (principal_id, day)
+);
+CREATE TABLE IF NOT EXISTS provider_shared_settings (
+    name TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);

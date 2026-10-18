@@ -25,7 +25,10 @@ const videoSource = vi.hoisted(() => ({ register: vi.fn() }));
 vi.mock('../../eVe/domains/rendering/bevy_video_stream_source_runtime.js', () => ({
     registerBevyVideoStreamSource: videoSource.register
 }));
-const DEFAULT_BACKGROUND_URL = '/assets/videos/eVe.mp4';
+const DEFAULT_BACKGROUND_URL = '/assets/images/Background/Dark_Back.PNG';
+const DEFAULT_BACKGROUND_FILE = 'Dark_Back.PNG';
+// A wallpaper video chosen by the user (the bundled default is an image).
+const VIDEO_WALLPAPER_URL = '/assets/videos/eVe.mp4';
 const STORED_BACKGROUND_URL = '/api/uploads/ada.png';
 const createCanvasContext = () => ({
     clearRect() {},
@@ -112,22 +115,22 @@ afterEach(async () => {
     vi.restoreAllMocks();
     vi.useRealTimers();
 });
-test('a session without a stored background paints the bundled eVe.mp4 without touching the profile', async () => {
+test('a session without a stored background paints the bundled Dark_Back.PNG without touching the profile', async () => {
     const { window, background } = await bootBackgroundRuntime();
     const api = window.eveBackground;
     const params = api.getParams();
     assert.equal(typeof background.defaultUserBackgroundParams, 'function');
     assert.equal(params.backgroundSource, 'image');
     assert.equal(params.backgroundImageUrl, DEFAULT_BACKGROUND_URL);
-    assert.equal(params.backgroundImageFileName, 'eVe.mp4');
-    assert.equal(params.backgroundMediaKind, 'video');
+    assert.equal(params.backgroundImageFileName, DEFAULT_BACKGROUND_FILE);
+    assert.equal(params.backgroundMediaKind, 'image');
     assert.equal(api.defaults.backgroundSource, 'image');
     assert.equal(api.defaults.backgroundImageUrl, DEFAULT_BACKGROUND_URL);
-    assert.equal(api.defaults.backgroundImageFileName, 'eVe.mp4');
+    assert.equal(api.defaults.backgroundImageFileName, DEFAULT_BACKGROUND_FILE);
     const published = window.__eveSurfaceBackground;
-    assert.equal(published.signature, `video:cover:${DEFAULT_BACKGROUND_URL}`);
+    assert.equal(published.signature, `image:cover:${DEFAULT_BACKGROUND_URL}`);
     assert.equal(published.mode, 'image');
-    assert.equal(published.mediaKind, 'video');
+    assert.equal(published.mediaKind, 'image');
     assert.equal(published.sourceUrl, DEFAULT_BACKGROUND_URL);
     assert.equal(fetchMock.mock.calls.length, 0);
     assert.equal(profileApi.loadUserProfile.mock.calls.length, 0, 'a guest session has no profile to read');
@@ -137,13 +140,13 @@ test('a fresh iOS installation publishes the exact bundled wallpaper path with a
     const { window, background } = await bootBackgroundRuntime({ embedded: true });
     const { DEFAULT_BACKGROUND_MEDIA_ASSET } = await import('../../eVe/domains/rendering/user_background_image_fit.js');
     const fileName = DEFAULT_BACKGROUND_MEDIA_ASSET.split('/').pop();
-    const bundledFiles = readdirSync(new URL('../../atome/src/assets/videos/', import.meta.url));
+    const bundledFiles = readdirSync(new URL('../../atome/src/assets/images/Background/', import.meta.url));
     assert.ok(bundledFiles.includes(fileName), 'the URL must match the bundled filename case exactly');
     const params = background.defaultUserBackgroundParams();
-    assert.equal(params.backgroundImageUrl, './assets/videos/eVe.mp4');
+    assert.equal(params.backgroundImageUrl, './assets/images/Background/Dark_Back.PNG');
     assert.equal(window.__eveSurfaceBackground.sourceUrl, params.backgroundImageUrl);
     assert.equal(window.__eveSurfaceBackground.mode, 'image');
-    assert.equal(window.__eveSurfaceBackground.mediaKind, 'video');
+    assert.equal(window.__eveSurfaceBackground.mediaKind, 'image');
     assert.equal(window.__eveSurfaceBackground.fit, 'cover');
     assert.equal(profileApi.upsertUserProfile.mock.calls.length, 0);
 });
@@ -189,7 +192,7 @@ test('another owner without a stored background resolves back to the bundled def
     await vi.advanceTimersByTimeAsync(0);
     assert.equal(window.eveBackground.getParams().backgroundImageUrl, DEFAULT_BACKGROUND_URL);
     assert.equal(window.eveBackground.getParams().backgroundSource, 'image');
-    assert.equal(window.eveBackground.getParams().backgroundImageFileName, 'eVe.mp4');
+    assert.equal(window.eveBackground.getParams().backgroundImageFileName, DEFAULT_BACKGROUND_FILE);
     assert.equal(profileApi.upsertUserProfile.mock.calls.length, 0, 'switching owner must not write a background');
 });
 test('a settled session never re-reads the profile on a timer', async () => {
@@ -226,7 +229,7 @@ test('a pattern or colour edit takes the render back from the selected image', a
         params: {
             backgroundSource: 'image',
             backgroundImageUrl: DEFAULT_BACKGROUND_URL,
-            backgroundImageFileName: 'eVe.mp4',
+            backgroundImageFileName: DEFAULT_BACKGROUND_FILE,
             backgroundColorR: 245
         },
         saved: [],
@@ -422,8 +425,9 @@ test.each(['video', 'image'])('use selection preserves the selected %s kind with
         assert.equal(assetBox.sendFileToServer.mock.calls.length, 0);
     } finally { globalThis.window = previousWindow; }
 });
-test('authentication paints the bundled default video from the Dashboard playback owner', async () => {
+test('authentication paints a video wallpaper from the Dashboard playback owner', async () => {
     const { window } = await bootBackgroundRuntime();
+    window.eveBackground.setParams({ backgroundSource: 'image', backgroundMediaKind: 'video', backgroundImageUrl: VIDEO_WALLPAPER_URL });
     const { surface } = installCoverCanvasHarness(window);
     const video = { videoWidth: 1920, videoHeight: 1080, readyState: 2, seeking: false };
     videoSource.register.mockResolvedValue({ ok: true, video, dispose() {} });
@@ -437,13 +441,14 @@ test('authentication paints the bundled default video from the Dashboard playbac
         await runtime.ensureBevySurfaceBackgroundApplied(surface, result);
         assert.equal(result.mediaKind, 'video');
         assert.equal(videoSource.register.mock.calls.length, 1, 'login shares one decoder with the Dashboard');
-        assert.equal(videoSource.register.mock.calls[0][0].source, DEFAULT_BACKGROUND_URL);
+        assert.equal(videoSource.register.mock.calls[0][0].source, VIDEO_WALLPAPER_URL);
         for (const key of ['autoplay', 'loop', 'muted']) assert.equal(videoSource.register.mock.calls[0][0][key], true);
         assert.equal(patches.at(-1).video.width, 1920);
     } finally { /* The canonical background owner releases its decoder at teardown. */ }
 });
 test('logout authentication remains paintable while the video decoder is waiting', async () => {
     const { window } = await bootBackgroundRuntime();
+    window.eveBackground.setParams({ backgroundSource: 'image', backgroundMediaKind: 'video', backgroundImageUrl: VIDEO_WALLPAPER_URL });
     const { surface } = installCoverCanvasHarness(window);
     const runtime = await import('../../eVe/domains/rendering/bevy_surface_background_runtime.js');
     let finishDecode;
@@ -465,14 +470,14 @@ test('logout authentication remains paintable while the video decoder is waiting
         assert.equal(videoSource.register.mock.calls.length, 1, 'pending frames share the same decoder');
     } finally { /* Decoder release belongs to the background owner. */ }
 });
-test('logout immediately restores the public bundled video before any profile read', async () => {
+test('logout immediately restores the public bundled wallpaper before any profile read', async () => {
     const { window } = await bootBackgroundRuntime();
     window.eveBackground.setParams({ backgroundSource: 'image', backgroundMediaKind: 'image', backgroundImageUrl: '/custom.png' });
     window.dispatchEvent(new window.CustomEvent('squirrel:user-logged-out'));
     assert.equal(window.eveBackground.getParams().backgroundImageUrl, DEFAULT_BACKGROUND_URL);
-    assert.equal(window.eveBackground.getParams().backgroundMediaKind, 'video');
+    assert.equal(window.eveBackground.getParams().backgroundMediaKind, 'image');
     assert.equal(window.__eveSurfaceBackground.sourceUrl, DEFAULT_BACKGROUND_URL);
-    assert.equal(window.__eveSurfaceBackground.mediaKind, 'video');
+    assert.equal(window.__eveSurfaceBackground.mediaKind, 'image');
     assert.equal(profileApi.upsertUserProfile.mock.calls.length, 0);
 });
 
@@ -596,7 +601,7 @@ test('an account with its own wallpaper never shows the bundled default first (n
     release({ ok: true, profile: { preferences: { background: {
         backgroundSource: 'image', backgroundImageUrl: '/assets/images/ada.png', backgroundImageFileName: 'ada.png' } } } });
     await vi.waitFor(() => assert.equal(window.__eveSurfaceBackground.sourceUrl, '/assets/images/ada.png'));
-    assert.equal(surfaces.some((detail) => String(detail.sourceUrl || '').includes('eVe.mp4')), false);
+    assert.equal(surfaces.some((detail) => String(detail.sourceUrl || '').includes(DEFAULT_BACKGROUND_FILE)), false);
 });
 test('an unreadable profile keeps the base colour and is read again, never the default', async () => {
     vi.useFakeTimers();
@@ -611,7 +616,7 @@ test('an unreadable profile keeps the base colour and is read again, never the d
     await vi.advanceTimersByTimeAsync(1000);
     assert.equal(profileApi.loadUserProfile.mock.calls.length, 2);
     assert.equal(window.eveBackground.getParams().backgroundImageUrl, '/assets/images/ada.png');
-    assert.equal(surfaces.some((detail) => String(detail.sourceUrl || '').includes('eVe.mp4')), false);
+    assert.equal(surfaces.some((detail) => String(detail.sourceUrl || '').includes(DEFAULT_BACKGROUND_FILE)), false);
 });
 test('a launch presents the account\'s last wallpaper and its file before the profile is read', async () => {
     const { IDBFactory } = await import('fake-indexeddb');
@@ -633,7 +638,7 @@ test('a launch presents the account\'s last wallpaper and its file before the pr
         const next = await bootBackgroundRuntime({ currentUser: { id: 'user-ada' } });
         await vi.waitFor(() => assert.match(String(next.window.__eveSurfaceBackground.sourceUrl), /^blob:/));
         assert.equal(next.window.eveBackground.getParams().backgroundImageUrl, STORED_BACKGROUND_URL);
-        assert.equal(next.surfaces.some((detail) => String(detail.sourceUrl || '').includes('eVe.mp4')), false);
+        assert.equal(next.surfaces.some((detail) => String(detail.sourceUrl || '').includes(DEFAULT_BACKGROUND_FILE)), false);
         assert.equal(fetchMock.mock.calls.length, 0, `no file fetch before the profile (had ${fetchesBefore} on the first launch)`);
         // Another account never sees it; a logout forgets it.
         next.window.dispatchEvent(new next.window.CustomEvent('squirrel:user-logged-out', { detail: { reason: 'logout', previousUserId: 'user-ada' } }));
@@ -654,5 +659,5 @@ test('a partial preference publication at launch never resolves the wallpaper to
         backgroundSource: 'image', backgroundImageUrl: '/assets/images/ada.png', backgroundImageFileName: 'ada.png' } } } });
     await vi.waitFor(() => assert.equal(win.__eveSurfaceBackground.sourceUrl, '/assets/images/ada.png'));
     assert.equal(win.__eveProfilePreferences.visual.level, 'beginner', 'the newer publication keeps its keys');
-    assert.equal(surfaces.some((detail) => String(detail.sourceUrl || '').includes('eVe.mp4')), false);
+    assert.equal(surfaces.some((detail) => String(detail.sourceUrl || '').includes(DEFAULT_BACKGROUND_FILE)), false);
 });

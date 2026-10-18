@@ -157,3 +157,68 @@ test('run.sh executes cleanup around its child and preserves the child exit stat
     expect(spawnSync('/bin/bash', [run, '--help'], { env }).status).toBe(7);
     expect(fs.readFileSync(log, 'utf8')).toBe('run\n');
 });
+
+const DAY_SECONDS = 86_400;
+function age(file, days) {
+    const time = Date.now() / 1000 - days * DAY_SECONDS;
+    if (fs.lstatSync(file).isDirectory()) fs.readdirSync(file).forEach(name => age(path.join(file, name), days));
+    fs.utimesSync(file, time, time);
+}
+
+test('residue removes whole unused Cargo units and superseded incremental configurations', () => {
+    const f = fixture(), profile = 'platforms/desktop-tauri/target/debug', old = '0123456789abcdef', used = 'fedcba9876543210';
+    f.put('platforms/desktop-tauri/target/CACHEDIR.TAG');
+    for (const hash of [old, used]) {
+        f.put(`${profile}/.fingerprint/crate-${hash}/lib-crate`);
+        f.put(`${profile}/deps/libcrate-${hash}.rlib`);
+        f.put(`${profile}/build/crate-${hash}/output`);
+    }
+    f.put(`${profile}/deps/libsquirrel_lib.rlib`);
+    for (const [index, days] of [5, 4, 1, 0].entries()) f.put(`${profile}/incremental/squirrel_lib-${index}abc/s-session/query`);
+    for (const file of ['.fingerprint', 'deps', 'build'].map(store => path.join(f.root, profile, store))) age(file, 10);
+    // A no-op build reads the fingerprint only; that keeps the whole unit.
+    const touched = Date.now() / 1000;
+    fs.utimesSync(path.join(f.root, profile, `.fingerprint/crate-${used}/lib-crate`), touched, touched - 10 * DAY_SECONDS);
+    [5, 4, 1].forEach((days, index) => age(path.join(f.root, profile, `incremental/squirrel_lib-${index}abc`), days));
+    const report = cleanBuildCaches({ ...f.options, apply: true, residue: {} });
+    for (const file of [`.fingerprint/crate-${old}`, `deps/libcrate-${old}.rlib`, `build/crate-${old}`]) expect(f.exists(`${profile}/${file}`)).toBe(false);
+    for (const file of [`.fingerprint/crate-${used}`, `deps/libcrate-${used}.rlib`, `build/crate-${used}`, 'deps/libsquirrel_lib.rlib']) expect(f.exists(`${profile}/${file}`)).toBe(true);
+    expect(f.exists(`${profile}/incremental/squirrel_lib-0abc`)).toBe(false);
+    expect(f.exists(`${profile}/incremental/squirrel_lib-1abc`)).toBe(false);
+    expect(f.exists(`${profile}/incremental/squirrel_lib-2abc`)).toBe(true);
+    expect(f.exists(`${profile}/incremental/squirrel_lib-3abc`)).toBe(true);
+    expect(report.categories['superseded-incremental-cache']).toBe(2);
+});
+
+test('stale temp work keeps reusable probe sources and retained folders', () => {
+    const f = fixture();
+    f.put('temp/old-probe/run.probe.mjs');
+    f.put('temp/old-probe/shot.png');
+    f.put('temp/old-probe/chromium_profile/Default/Preferences');
+    f.put('temp/old-probe/reports/trace.json', 'x'.repeat(200 * 1024));
+    f.put('temp/old-output/frame.png');
+    f.put('temp/android-sdk/.retain');
+    f.put('temp/android-sdk/system.img');
+    f.put('temp/current-task/shot.png');
+    for (const name of ['old-probe', 'old-output', 'android-sdk']) age(path.join(f.root, 'temp', name), 3);
+    cleanBuildCaches({ ...f.options, apply: true, residue: {} });
+    expect(f.exists('temp/old-probe/run.probe.mjs')).toBe(true);
+    for (const file of ['temp/old-probe/shot.png', 'temp/old-probe/chromium_profile', 'temp/old-probe/reports', 'temp/old-output']) expect(f.exists(file)).toBe(false);
+    expect(f.exists('temp/android-sdk/system.img')).toBe(true);
+    expect(f.exists('temp/current-task/shot.png')).toBe(true);
+});
+
+test('residue proceeds while a build runs; profile convergence waits', () => {
+    const f = fixture(), scratch = path.join(f.root, 'scratch'), symbols = path.join(f.root, 'symbols');
+    f.put('platforms/desktop-tauri/target/debug/deps/old.rcgu.o');
+    f.put('temp/old-output/frame.png'); age(path.join(f.root, 'temp/old-output'), 3);
+    f.put('scratch/old-session/build.wasm'); age(path.join(scratch, 'old-session'), 3);
+    f.put('scratch/current-session/out.txt');
+    f.put('symbols/iPad17,1 27.2 (24B5099f)/Symbols/a'); age(path.join(symbols, 'iPad17,1 27.2 (24B5099f)'), 4);
+    f.put('symbols/iPad17,1 27.2 (24B5110a)/Symbols/a');
+    const report = cleanBuildCaches({ ...f.options, apply: true, compilerCheck: () => ['rustc'], residue: { scratch, deviceSupport: symbols } });
+    expect(report).toMatchObject({ status: 'cleaned', convergence: 'deferred', compilers: ['rustc'] });
+    expect(f.exists('platforms/desktop-tauri/target/debug/deps/old.rcgu.o')).toBe(true);
+    for (const file of ['temp/old-output', 'scratch/old-session', 'symbols/iPad17,1 27.2 (24B5099f)']) expect(f.exists(file)).toBe(false);
+    for (const file of ['scratch/current-session/out.txt', 'symbols/iPad17,1 27.2 (24B5110a)/Symbols/a']) expect(f.exists(file)).toBe(true);
+});

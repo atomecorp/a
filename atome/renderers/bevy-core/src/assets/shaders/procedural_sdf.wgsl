@@ -554,14 +554,6 @@ const INTUITION_MYSTIC_PI: f32 = 3.14159265;
 // Projection denominator guard: a point of the plate can never reach the eye plane,
 // and the Rust validation already bounds the perspective.
 const INTUITION_MYSTIC_EYE_MIN: f32 = 0.02;
-// An empty cell of a grid (`mystic_tile_motion.w < 0`, a tile never folded): its
-// menu face is the BACKGROUND alone, blurred — never the tile beneath it, no tint,
-// no colour, no resting shadow — with a light outline of this width and dose.
-const INTUITION_MYSTIC_GHOST_BLUR_PX: f32 = 28.0;
-const INTUITION_MYSTIC_GHOST_BLUR_TAPS: i32 = 32;
-const INTUITION_MYSTIC_GHOST_OUTLINE_PX: f32 = 0.75;
-const INTUITION_MYSTIC_GHOST_OUTLINE_DOSE: f32 = 0.22;
-
 // The menu plate of one cell: the shared system glass, tinted by the family of the
 // rung the tile reached, with the light rim that keeps a plate from reading as a
 // hole in the image. `box_distance` is that cell's own rounded box.
@@ -572,23 +564,6 @@ fn intuition_mystic_plate(box_distance: f32, screen_uv: vec2<f32>, family: vec4<
     // Family hue belongs inside the tint; preserve the common live-backdrop share.
     plate = mix(plate, mix(tint.rgb, family.rgb, family.a), tint.a);
     return plate;
-}
-
-// The background capture (`menu_back`: the wallpaper alone) blurred around `uv`:
-// a Vogel disk (golden-angle spiral) of taps, Gaussian-weighted, so the frost is
-// smooth — no rings, no doubled edges — without a pyramid of its own.
-fn intuition_mystic_back_blur(uv: vec2<f32>, surface: vec2<f32>) -> vec3<f32> {
-    var sum = vec3(0.0);
-    var weight = 0.0;
-    for (var tap = 0; tap < INTUITION_MYSTIC_GHOST_BLUR_TAPS; tap = tap + 1) {
-        let radius = sqrt((f32(tap) + 0.5) / f32(INTUITION_MYSTIC_GHOST_BLUR_TAPS));
-        let angle = f32(tap) * 2.39996323;
-        let offset = vec2(cos(angle), -sin(angle)) * radius * INTUITION_MYSTIC_GHOST_BLUR_PX / surface;
-        let tap_weight = exp(-2.0 * radius * radius);
-        sum += textureSampleLevel(menu_back, menu_back_sampler, clamp(uv + offset, vec2(0.0), vec2(1.0)), 0.0).rgb * tap_weight;
-        weight += tap_weight;
-    }
-    return sum / max(weight, 0.0001);
 }
 
 fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32> {
@@ -670,7 +645,8 @@ fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32
         // plate turned. A pixel that never projects onto the plate plane (the
         // profile line, where the plate stands edge-on) keeps the cell's own
         // footprint, which is where that plate stands.
-        // `motion.w`: the side of the folded corner, in pixels (0 = none).
+        // `motion.w`: the side of the folded corner, in pixels (0 = none); below
+        // zero, an empty cell of a grid (a tile is never folded negatively).
         let fold = clamp(motion.w, 0.0, half_side);
         let ghost = motion.w < -0.5;
         let footprint_distance = sd_mystic_tile(delta, half_side, clamp(tile.w, 0.0, half_side), fold);
@@ -695,23 +671,21 @@ fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32
                 plate_mask = 1.0 - smoothstep(-softness, softness, box_distance);
             }
         }
-        if previous_absent && cosine >= 0.0 { plate_mask = 0.0; }
-        let outline_dose = INTUITION_MYSTIC_GHOST_OUTLINE_DOSE * (1.0 - smoothstep(0.0, INTUITION_MYSTIC_GHOST_OUTLINE_PX,
-            abs(box_distance + INTUITION_MYSTIC_GHOST_OUTLINE_PX)));
-        let ghost_uv = clamp(vec2(pixel_position.x / surface.x, 1.0 - (pixel_position.y / surface.y)), vec2(0.0), vec2(1.0));
+        // A side with no face of its own — an empty cell's menu side, or, in a
+        // level turn, a cell that showed nothing or an empty one — paints no plate:
+        // the hole below shows the background alone, like the seams between tiles.
+        // No outline, no frost, no tint, no shadow; the other side turns as usual.
+        let faceless = select(ghost, previous_ghost || previous_absent, cosine >= 0.0);
+        if faceless { plate_mask = 0.0; }
         if plate_mask > 0.002 {
             var plate_color = vec3(0.0);
             if cosine < 0.0 {
                 // MENU side: the shared system surface, tinted by the rung.
                 let source = select(tile.xy + vec2(-aside, bside), tile.xy + vec2(bside, -aside), turning_y);
                 let face_uv = vec2(source.x / surface.x, 1.0 - source.y / surface.y);
-                if ghost {
-                plate_color = mix(intuition_mystic_back_blur(ghost_uv, surface), vec3(0.62), outline_dose);
-                } else {
-                    let content = textureSampleLevel(menu_face, menu_face_sampler, face_uv, 0.0);
-                    plate_color = intuition_mystic_plate(box_distance, face_uv, family, glass_mix, tint);
-                    plate_color = mix(plate_color, content.rgb / max(content.a, 0.001), content.a);
-                }
+                let content = textureSampleLevel(menu_face, menu_face_sampler, face_uv, 0.0);
+                plate_color = intuition_mystic_plate(box_distance, face_uv, family, glass_mix, tint);
+                plate_color = mix(plate_color, content.rgb / max(content.a, 0.001), content.a);
             } else {
                 // WORKSPACE side: the piece of image the plate was cut from, still
                 // carried by it — FULLY opaque, so the picture really leaves with
@@ -724,9 +698,7 @@ fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32
                     vec2(1.0)
                 );
                 let previous = textureSampleLevel(menu_front, menu_front_sampler, source_uv, 0.0);
-                if previous_ghost {
-                    plate_color = mix(intuition_mystic_back_blur(ghost_uv, surface), vec3(0.62), outline_dose);
-                } else if level_turn {
+                if level_turn {
                     // The previous level's plate: the same glass, with the face it carried.
                     plate_color = intuition_mystic_plate(box_distance, source_uv, family, glass_mix, tint);
                     plate_color = mix(plate_color, previous.rgb / max(previous.a, 0.001), previous.a);
@@ -748,9 +720,8 @@ fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32
         // `mystic_style.y` (the open menu reads as raised tools, like the
         // ribbon and the rail); a turning plate casts its full contact shadow.
         let lifted = max(abs(sine), clamp(material.mystic_style.y, 0.0, 1.0) * select(0.0, 1.0, cosine < 0.0 || level_turn));
-        let shadowless = select(ghost, previous_ghost || previous_absent, cosine >= 0.0);
         let shadow_value = (1.0 - smoothstep(0.0, shadow_blur, max(contact_distance, 0.0)))
-            * shadow_dose * (1.0 - plate_mask) * lifted * select(1.0, 0.0, shadowless);
+            * shadow_dose * (1.0 - plate_mask) * lifted * select(1.0, 0.0, faceless);
         let shadow_contribution = shadow_value * (1.0 - alpha);
         color = color * alpha + shadow_color * shadow_contribution;
         alpha = alpha + shadow_contribution;
