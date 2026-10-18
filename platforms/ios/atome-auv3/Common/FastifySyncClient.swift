@@ -78,6 +78,9 @@ final class FastifySyncClient {
     private var reconnectWork: DispatchWorkItem?
     var healthDeadline: DispatchWorkItem?
     var projectionNotice: DispatchWorkItem?
+    // Received events not persisted yet (FastifySyncInbound.swift).
+    var inboundRun: [[String: Any]] = []
+    var inboundFlush: DispatchWorkItem?
 
     // The application re-publishes the same remote configuration before every
     // authenticated request. Tearing the client down each time also closed the
@@ -168,7 +171,11 @@ final class FastifySyncClient {
 
     private func handle(_ payload: [String: Any], task: URLSessionWebSocketTask) {
         let type = payload["type"] as? String ?? ""
+        if type == "event" { receiveEvent(payload, task: task); return }
+        // Transport answers read nothing the pending events write: the run stays open.
         if type == "pong" { healthDeadline?.cancel(); healthDeadline = nil; return }
+        if type == "acked" { return }
+        persistInboundRun(task)
         if type == "welcome" {
             batchSubscribe = (payload["capabilities"] as? [String] ?? []).contains("subscribe-batch")
             batchSettlement = (payload["capabilities"] as? [String] ?? []).contains("subscribe-batch-settlement")
@@ -199,10 +206,7 @@ final class FastifySyncClient {
             subscribeAvailableStreams(task, announced: [stream])
             return
         }
-        if type == "event" {
-            persistDeliverAndAcknowledge(payload, task: task)
-            return
-        }
+
         if type == "revoked", let stream = payload["stream"] as? String {
             subscribedStreams.remove(stream)
             notifyLocal(payload)
@@ -219,31 +223,6 @@ final class FastifySyncClient {
             if authentication { scheduleReconnectLocked() }
             else if code == "stream_access_denied", payload["stream"] is String, !batchSubscribe { settleReplay() }
             publishProgress()
-        }
-    }
-
-    private func persistDeliverAndAcknowledge(
-        _ payload: [String: Any], task: URLSessionWebSocketTask
-    ) {
-        guard !activePrincipalId.isEmpty,
-              let stream = payload["stream"] as? String,
-              let sequence = number(payload["sequence"]), sequence > 0 else { return }
-        do {
-            let delivery = try AiSRuntime.persistRemoteSyncEnvelope(
-                payload, principalId: activePrincipalId, localPrincipalId: configuration?.localPrincipalId
-            )
-            if delivery == .applied && payload["replay"] as? Bool == true { stageProjectionNotice(stream) }
-            if delivery == .applied && payload["replay"] as? Bool != true && payload["source"] as? String != deviceSource() {
-                notifyLocal(["type":"sync:projection-ready", "stream":stream, "replay":false])
-            }
-            // Recorded in `remote_sync_rejected_events`; acknowledged so delivery moves on.
-            if case .rejected(let reason) = delivery {
-                notifyLocal(["type":"sync:event-rejected", "stream":stream, "sequence":sequence, "error":reason])
-            }
-            sendJSON(["type":"ack", "stream":stream, "sequence":sequence], task: task)
-        } catch {
-            notifyLocal(["type":"sync:persistence-error", "stream":stream, "error":error.localizedDescription])
-            scheduleReconnectLocked()
         }
     }
 
@@ -271,6 +250,7 @@ final class FastifySyncClient {
 
     func scheduleReconnectLocked() {
         guard connected || connecting else { return }
+        dropInboundRun()
         healthDeadline?.cancel(); healthDeadline = nil
         flushProjectionNotice()
         connected = false
@@ -294,6 +274,7 @@ final class FastifySyncClient {
 
     private func disconnectLocked() {
         reconnectWork?.cancel(); reconnectWork = nil
+        dropInboundRun()
         healthDeadline?.cancel(); healthDeadline = nil
         projectionNotice?.cancel(); projectionNotice = nil
         registeredSession = false; pendingSubscriptions.removeAll(); pendingReplays = 0
@@ -350,7 +331,7 @@ final class FastifySyncClient {
         return "ios:\(value)"
     }
 
-    private func number(_ value: Any?) -> Int64? {
+    func number(_ value: Any?) -> Int64? {
         if let number = value as? NSNumber { return number.int64Value }
         if let text = value as? String { return Int64(text) }
         return nil

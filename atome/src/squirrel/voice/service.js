@@ -21,7 +21,6 @@ import { resolveSpeechLocale } from './service_speech.js';
 import { resolveVoiceProviders } from './service_providers.js';
 import { startBrowserRecognition } from './service_browser_stt.js';
 import { startTauriRecognition } from './service_tauri_stt.js';
-import { settleTtsStop, startSpeechSynthesis } from './service_tts_runtime.js';
 import { createTtsRuntime } from './tts_runtime.js';
 import { createVoiceInputMeterRuntime } from './service_input_meter.js';
 import { createWakeRuntime } from './wake_runtime.js';
@@ -30,7 +29,8 @@ export { VOICE_V1_PROVIDER_DECISION, resolveVoiceProviders } from './service_pro
 export const createVoiceService = ({
     env = globalThis,
     sessionRuntime = createVoiceSessionRuntime(),
-    aiPlanner = null
+    aiPlanner = null,
+    localTts: injectedLocalTts = null
 } = {}) => {
     const providers = resolveVoiceProviders(env);
     debugVoiceService('providers_resolved', {
@@ -39,7 +39,6 @@ export const createVoiceService = ({
         capture: providers?.capture?.selected || null
     }, env);
     const sttSessions = new Map();
-    const ttsSessions = new Map();
     const processingTasks = new Map();
     const telemetry = createVoiceLatencyTelemetry({ env });
     telemetry.attachRuntime(sessionRuntime);
@@ -57,8 +56,7 @@ export const createVoiceService = ({
         env,
         providers,
         sessionRuntime,
-        sttSessions,
-        ttsSessions
+        sttSessions
     };
 
     const inputMeter = createVoiceInputMeterRuntime({
@@ -66,7 +64,10 @@ export const createVoiceService = ({
         sessionRuntime,
         sttProvider: providers.stt.selected
     });
-    const localTts = createTtsRuntime({ env });
+    // One voice everywhere (eVe's own, local ONNX `fr_FR-siwis-medium`): every
+    // phrase on every platform. The system speech synthesis it replaces spoke
+    // with a different, low-quality voice in the macOS WebView.
+    const localTts = injectedLocalTts || createTtsRuntime({ env });
     const openaiTts = createTtsRuntime({ env, provider: 'openai', synthesize: async (text, signal) => {
         const result = await requestProviderService('speech', {
             model: OPENAI_MODALITY_MODELS.tts, voice: 'marin', input: text, response_format: 'pcm'
@@ -127,7 +128,7 @@ export const createVoiceService = ({
             });
             await (started?.promise || Promise.resolve(started));
         } catch (error) {
-            if (options?.engine === 'local_onnx') throw error;
+            if (options?.engine !== 'openai') throw error;
         }
         return response;
     };
@@ -210,39 +211,31 @@ export const createVoiceService = ({
         startBrowserRecognition,
         startTauriRecognition
     });
+    // Stops whichever engine speaks for this session.
+    const stopSpeech = async (sessionId, reason) => {
+        const remote = await openaiTts.stop(sessionId, reason);
+        if (remote.stopped) return remote;
+        const local = await localTts.stop(sessionId, reason);
+        return local.stopped ? local : null;
+    };
     const tts = {
         async speak(text, options = {}) {
-            if (['local_onnx', 'openai'].includes(options.engine)) {
-                const session = ensureSession(options);
-                sessionRuntime.startSpeaking(session.session_id, { text, voice_id: options.engine === 'openai' ? 'marin' : 'fr_FR-siwis-medium' });
-                const started = await (options.engine === 'openai' ? openaiTts : localTts).speak(session.session_id, text);
-                started.promise.then(
-                    () => sessionRuntime.finishSpeaking(session.session_id, { reason: 'done' }),
-                    (error) => sessionRuntime.interrupt(session.session_id, { reason: `tts_error:${error?.message || error}` })
-                );
-                return started;
-            }
-            ensureSupported('tts', providers.tts.selected);
+            const openai = options.engine === 'openai';
             const session = ensureSession(options);
-            if (providers.tts.selected === 'browser_speech_synthesis') {
-                return startSpeechSynthesis(runtimeContext, session.session_id, text, options);
-            }
-            throw new Error(`Unsupported TTS provider bridge: ${providers.tts.selected}`);
+            sessionRuntime.startSpeaking(session.session_id, { text, voice_id: openai ? 'marin' : 'fr_FR-siwis-medium' });
+            const started = await (openai ? openaiTts : localTts).speak(session.session_id, text);
+            started.promise.then(
+                () => sessionRuntime.finishSpeaking(session.session_id, { reason: 'done' }),
+                (error) => sessionRuntime.interrupt(session.session_id, { reason: `tts_error:${error?.message || error}` })
+            );
+            return started;
         },
+        // Stopping the voice stops the turn it speaks for (processing included).
         async stop(sessionId, { reason = 'tts_stop' } = {}) {
-            const remote = await openaiTts.stop(sessionId, reason);
-            if (remote.stopped) { sessionRuntime.finishSpeaking(sessionId, { reason: 'interrupted' }); return remote; }
-            if (ttsSessions.has(String(sessionId)) === false) {
-                const stopped = await localTts.stop(sessionId, reason);
-                if (stopped.stopped) {
-                    sessionRuntime.finishSpeaking(sessionId, { reason: 'interrupted' });
-                    return stopped;
-                }
-            }
-            return settleTtsStop(runtimeContext, sessionId, {
-                reason,
-                interruptRuntime: true
-            });
+            const stopped = await stopSpeech(sessionId, reason);
+            sessionRuntime.publishEvent(sessionId, 'voice.cancel.requested', { source: 'tts' });
+            sessionRuntime.interrupt(sessionId, { reason });
+            return stopped || { session_id: sessionId, provider: providers.tts.selected, stopped: true };
         },
         preloadLocal: () => localTts.preload(),
         subscribeFrames: (listener) => localTts.subscribeFrames(listener)
@@ -356,22 +349,12 @@ export const createVoiceService = ({
         } = {}) {
             const parsed = utterance ? normalizeLocalVoiceCommand(utterance) : null;
             if (parsed) {
-                if (ttsSessions.has(String(sessionId))) {
-                    await settleTtsStop(runtimeContext, sessionId, {
-                        reason: `local_${parsed.command}`,
-                        interruptRuntime: false
-                    });
-                }
+                await stopSpeech(sessionId, `local_${parsed.command}`);
                 return sessionRuntime.handleLocalCommand(sessionId, utterance, {
                     intent_id
                 });
             }
-            if (ttsSessions.has(String(sessionId))) {
-                await settleTtsStop(runtimeContext, sessionId, {
-                    reason,
-                    interruptRuntime: false
-                });
-            }
+            await stopSpeech(sessionId, reason);
             return sessionRuntime.interrupt(sessionId, { reason, utterance });
         },
         takePendingFollowup(sessionId, options = {}) {

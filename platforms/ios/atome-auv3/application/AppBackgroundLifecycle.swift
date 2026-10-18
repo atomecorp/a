@@ -70,6 +70,11 @@ final class AppBackgroundLifecycle {
         center.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [unowned self] _ in
             self.enterForeground()
         }
+        center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { _ in
+            LocalHTTPServer.shared.resumeFromBackground()
+            FastifySyncClient.shared.connectIfConfigured()
+            AppNativeCommunication.shared.resume()
+        }
     }
 
     private var isBackgrounded: Bool {
@@ -86,11 +91,12 @@ final class AppBackgroundLifecycle {
 
     private func enterBackground() {
         setBackgrounded(true)
+        LocalHTTPServer.shared.noteBackgrounded()
         AiSRuntime.coverQueuedWork()
         // The sync socket dies with the suspension. Closing it now ends the replays
         // and pushes that would keep the database busy in background time; events
         // still to push stay in the durable outbox and leave on reconnection
-        // (`connectIfConfigured` on activation).
+        // (`connectIfConfigured` on every activation).
         FastifySyncClient.shared.disconnect()
     }
 

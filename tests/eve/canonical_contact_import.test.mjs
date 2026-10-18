@@ -155,3 +155,24 @@ test('removals inside one import pass read the origins once and suppress each re
     expect(origins.every(row=>row.properties.suppressed===true&&row.properties.suppressed_reason==='import_duplicate')).toBe(true);
     expect([...f.records.values()].filter(row=>row.type==='contact'&&!row.deleted_at).length).toBe(0);
 });
+
+// The iOS read projection adds `type` to `properties` and a `set` merges into the stored
+// record (AiSRuntimeStateCurrent `serializeStateCurrentRow`): an unchanged pass must not write.
+test('an unchanged pass writes nothing when reads project the record type into its properties',async()=>{
+    const f=fixture(),api=f.api(),list=api.listStateCurrent,commit=api.commit;
+    api.listStateCurrent=async(...args)=>(await list(...args)).map(row=>({...row,properties:{type:row.type,...row.properties}}));
+    api.commit=async event=>{
+        const previous=f.records.get(event.atome_id)?.properties;
+        const result=await commit(event);
+        if(event.kind==='set'&&previous)f.records.get(event.atome_id).properties={...previous,...event.props};
+        return result;
+    };
+    const store=createCanonicalImport({...f,type:'contact',normalize:input=>({name:input.name})});
+    const items=['a','b','c'].map(id=>({id,name:id}));
+    await store.collect(items,meta);
+    const count=f.writes.length;
+    await store.collect(items,meta);
+    expect(f.writes).toHaveLength(count);
+    await store.collect([{id:'a',name:'renamed'}],meta);
+    expect(f.writes.slice(count).map(event=>event.type).sort()).toEqual(['contact','import_origin']);
+});

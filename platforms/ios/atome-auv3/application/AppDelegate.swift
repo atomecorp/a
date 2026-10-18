@@ -12,7 +12,6 @@ import UIKit
 struct atomeApp: App {
     @UIApplicationDelegateAdaptor(AtomeApplicationDelegate.self) private var applicationDelegate
     @StateObject private var fileManager: iCloudFileManager
-    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         WebViewManager.resetBootTelemetry()
@@ -37,22 +36,6 @@ struct atomeApp: App {
                 .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
                     if let url = activity.webpageURL { AuthLinkInbox.receive(url) }
                 }
-        }
-        // React to scene lifecycle to flush inbox only when foregroundActive
-        .onChange(of: scenePhase) { _, newPhase in
-            switch newPhase {
-            case .active:
-                LocalHTTPServer.shared.resumeFromBackground()
-                FastifySyncClient.shared.connectIfConfigured()
-                AppNativeCommunication.shared.resume()
-            case .background:
-                LocalHTTPServer.shared.noteBackgrounded()
-                ActiveScenePoller.shared.stop()
-            case .inactive:
-                ActiveScenePoller.shared.stop()
-            @unknown default:
-                break
-            }
         }
     }
 }

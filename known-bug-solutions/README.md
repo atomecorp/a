@@ -31,6 +31,7 @@ the established solution before attempting a new implementation.
 | A successful grouped preference/grant write still reads as missing and empties the editor | [batch-write-retains-missing-state](batch-write-retains-missing-state/README.md) |
 | Sending to a contact from the Dashboard fails with `project_work_mode_editing_blocked` | [communication-blocked-by-consultation](communication-blocked-by-consultation/README.md) |
 | iOS: switching to another app restarts atome from the beginning (SIGKILL `0xdead10cc`) | [ios-app-restarts-after-switching-apps](ios-app-restarts-after-switching-apps/README.md) |
+| iOS: ~300 000 pending deliveries, slow state listings, daily `diskwrites_resource`, other devices writing MB/s while they replay | [ios-outbox-backlog-unchanged-import-origins](ios-outbox-backlog-unchanged-import-origins/README.md) |
 | iOS: nothing loads after returning from background (« certaines données n'ont pas pu être chargées ») | [ios-local-server-dies-after-background](ios-local-server-dies-after-background/README.md) |
 | Dashboard wallpaper returns to a default or previous choice; project default greys diverge | [wallpaper-selection-races](wallpaper-selection-races/README.md) |
 | Nested User accordions shift or lose their open anchor; List Play covers the hierarchy cap | [nested-panel-anchor-and-row-seams](nested-panel-anchor-and-row-seams/README.md) |

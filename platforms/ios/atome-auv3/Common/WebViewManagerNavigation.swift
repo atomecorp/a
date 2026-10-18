@@ -87,13 +87,12 @@ extension WebViewManager {
     public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         let presented = WebViewManager.bootPresented
         WebViewManager.markPageLoading()
-        self.terminateRetryCount += 1
         if presented, let reload = WebViewManager.presentedPageTerminationHandler {
-            log.error("WebContent terminated after presentation; reloading; count=\(self.terminateRetryCount)")
+            log.error("WebContent terminated after presentation; reloading")
             reload()
             return
         }
-        log.error("WebContent terminated before presentation; no automatic reload; count=\(self.terminateRetryCount)")
+        log.error("WebContent terminated before presentation; no automatic reload")
         WebViewManager.reportBootFailure(reason: "web_content_terminated")
     }
 }

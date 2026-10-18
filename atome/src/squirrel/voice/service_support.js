@@ -24,10 +24,6 @@ export const debugVoiceService = (event, payload = {}, env = globalThis) => writ
 
 export const getSpeechRecognitionCtor = (env) => readEnv(env, 'SpeechRecognition') || readEnv(env, 'webkitSpeechRecognition') || null;
 
-export const getSpeechSynthesisUtteranceCtor = (env) => readEnv(env, 'SpeechSynthesisUtterance') || null;
-
-export const getSpeechSynthesis = (env) => readEnv(env, 'speechSynthesis') || null;
-
 export const getTauriSttBridge = (env) => {
     const tauri = readEnv(env, '__TAURI__');
     if (tauri?.stt && typeof tauri.stt.start === 'function') {

@@ -88,8 +88,7 @@ export const createVoiceProbeController = ({
                 markFailed(error?.message || error);
             });
         const speaking = await api.speak(input.value || 'Message de test.', {
-            session_id: sessionId,
-            voiceId: 'system-fr'
+            session_id: sessionId
         });
         speaking?.promise
             ?.then(async (result) => {

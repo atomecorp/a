@@ -134,7 +134,6 @@ extension WebViewManager {
         webView.stopLoading()
         mainLoadTimer?.invalidate()
         mainLoadTimer = nil
-        shared.terminateRetryCount = 0
         mainLoadDone = false
         resetBootTelemetry()
         bootRestartHandler?()

@@ -1,5 +1,5 @@
 import { getSessionState } from '../apis/unified/adole_api/session.js';
-import { importData, reconcileImport, sameImportValue, compareImportVersion } from './import_reconciliation.js';
+import { importData, reconcileImport, sameImportValue, importPatchChanges, compareImportVersion } from './import_reconciliation.js';
 
 export const IMPORT_ORIGIN_TYPE = 'import_origin';
 export const IMPORT_SOURCE_TYPE = 'import_source_state';
@@ -239,7 +239,8 @@ export function createCanonicalImport({ type, api = () => globalThis.window?.Ato
                 conflicts: merged.conflicts, pending: false, removed: false, suppressed: false, access: 'private', visibility: 'private',
                 source_collection: input.source_collection || input.raw?.source_collection || '',
                 external_href: externalHref(input) };
-            if (!sameImportValue(old, origin)) await write(originId, IMPORT_ORIGIN_TYPE, origin, context, 'set', snapshot);
+            // Compared with the record stored under this id: an origin adopted from a former key is written anew.
+            if (importPatchChanges(byOrigin.get(originId), origin)) await write(originId, IMPORT_ORIGIN_TYPE, origin, context, 'set', snapshot);
             byOrigin.set(originId, origin);
         }
         for (const href of meta.removed_hrefs || []) {
@@ -286,7 +287,7 @@ export function createCanonicalImport({ type, api = () => globalThis.window?.Ato
                 await write(id, type, null, context, 'delete');
             } else {
                 const props = { ...importData(normalize(input)), exchange_uid: importRecordProps(row).exchange_uid };
-                if (!sameImportValue(importRecordProps(row), props)) await write(id, type, props, context);
+                if (importPatchChanges(importRecordProps(row), props)) await write(id, type, props, context);
             }
         }
         return { ok: true };

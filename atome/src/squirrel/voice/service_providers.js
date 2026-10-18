@@ -1,5 +1,5 @@
 import { resolveVoiceCaptureProvider } from '../../application/audio_runtime/runtime_audio_backend.js';
-import { DEFAULT_LANG, getSpeechRecognitionCtor, getSpeechSynthesis, getSpeechSynthesisUtteranceCtor, getTauriSttBridge, readEnv } from './service_support.js';
+import { DEFAULT_LANG, getSpeechRecognitionCtor, getTauriSttBridge, readEnv } from './service_support.js';
 
 export const VOICE_V1_PROVIDER_DECISION = Object.freeze({
     stt: {
@@ -9,8 +9,7 @@ export const VOICE_V1_PROVIDER_DECISION = Object.freeze({
         lang: DEFAULT_LANG
     },
     tts: {
-        primary: 'browser_speech_synthesis',
-        fallback: 'tauri_native_tts',
+        primary: 'local_onnx',
         interruptible: true,
         lang: DEFAULT_LANG
     },
@@ -44,8 +43,6 @@ const resolvePreferredSttProvider = (env, {
 export const resolveVoiceProviders = (env = globalThis) => {
     const recognitionCtor = getSpeechRecognitionCtor(env);
     const tauriStt = getTauriSttBridge(env);
-    const synth = getSpeechSynthesis(env);
-    const utteranceCtor = getSpeechSynthesisUtteranceCtor(env);
     const recordStart = readEnv(env, 'record_start');
     const recordStop = readEnv(env, 'record_stop');
 
@@ -54,9 +51,6 @@ export const resolveVoiceProviders = (env = globalThis) => {
         hasTauriStt: !!tauriStt
     });
 
-    const ttsSelected = (synth && utteranceCtor)
-        ? 'browser_speech_synthesis'
-        : 'unsupported';
 
     const providerHint = resolveVoiceCaptureProvider(env);
     const captureSelected = (() => {
@@ -77,10 +71,9 @@ export const resolveVoiceProviders = (env = globalThis) => {
             lang: DEFAULT_LANG
         },
         tts: {
-            selected: ttsSelected,
+            selected: VOICE_V1_PROVIDER_DECISION.tts.primary,
             preferred: VOICE_V1_PROVIDER_DECISION.tts.primary,
-            fallback: VOICE_V1_PROVIDER_DECISION.tts.fallback,
-            interruptible: ttsSelected === 'browser_speech_synthesis',
+            interruptible: true,
             lang: DEFAULT_LANG
         },
         capture: {

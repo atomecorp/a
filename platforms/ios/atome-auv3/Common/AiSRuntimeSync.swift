@@ -1,7 +1,8 @@
 import Foundation
 import SQLite3
 
-// SQLite synchronization storage, owned by the canonical AiS database queue.
+// SQLite synchronization storage, owned by the canonical AiS database queue. The
+// outbox of this device's own events lives in AiSRuntimeOutbox.swift.
 extension AiSRuntime {
     // A read-only transport snapshot, never an authority for project contents.
     final class SyncProgress {
@@ -16,13 +17,6 @@ extension AiSRuntime {
 
     static let syncProgress = SyncProgress()
 
-    static func remoteSyncPendingCount(localPrincipalId: String) throws -> Int {
-        try queue.sync {
-            let db = try openDatabase()
-            let rows = try query(db, "SELECT COUNT(*) AS count FROM sync_queue WHERE target_server = 'fastify' AND status != 'synced' AND json_extract(payload, '$.actor.id') = ?", [.text(localPrincipalId)])
-            return Int(intValue(rows.first?["count"], defaultValue: 0))
-        }
-    }
     static func ensureSyncSchema(_ db: OpaquePointer?) throws {
         let existing = Set(try query(db, "PRAGMA table_info(events)").compactMap { $0["name"] as? String })
         for (column, type) in [("stream_id", "TEXT"), ("sequence", "INTEGER"), ("source", "TEXT"),
@@ -54,149 +48,15 @@ extension AiSRuntime {
                 event_id TEXT NOT NULL, error TEXT NOT NULL, envelope TEXT NOT NULL, rejected_at TEXT NOT NULL,
                 PRIMARY KEY (principal_id, stream_id, sequence))
             """)
-        let columns = Set(try query(db, "PRAGMA table_info(sync_queue)").compactMap { $0["name"] as? String })
-        for column in ["event_id", "next_retry_at", "last_error"] where !columns.contains(column) {
-            try execute(db, "ALTER TABLE sync_queue ADD COLUMN \(column) TEXT")
-        }
         try execute(db, "CREATE INDEX IF NOT EXISTS idx_events_source_actor_ts ON events(source, json_extract(actor, '$.id'), ts)")
-        try execute(db, "CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_queue_event_target ON sync_queue(event_id, target_server) WHERE event_id IS NOT NULL")
+        try ensureOutboxSchema(db)
     }
 
-    static func enqueueSyncEvent(_ db: OpaquePointer?, event: [String: Any]) throws {
-        let id = stringValue(event["id"]), atomeId = stringValue(event["atome_id"])
-        guard !id.isEmpty, !atomeId.isEmpty else { return }
-        guard !atomeId.lowercased().hasPrefix("tool.ui."), !atomeId.lowercased().hasPrefix("tool_ui.") else { return }
-        try execute(db, """
-            INSERT OR IGNORE INTO sync_queue (event_id, atome_id, operation, payload, target_server, status)
-            VALUES (?, ?, 'events:commit', ?, 'fastify', 'pending')
-            """, [.text(id), .text(atomeId), .text(try jsonString(event))])
-    }
-
-    private static func verifiedSyncPrincipal(_ db: OpaquePointer?, remote: String, local: String?) throws -> String {
+    static func verifiedSyncPrincipal(_ db: OpaquePointer?, remote: String, local: String?) throws -> String {
         let rows = try query(db, "SELECT DISTINCT local_principal FROM auth_local_grants WHERE remote_principal = ? AND locked = 0", [.text(remote)])
         guard rows.count == 1, let principal = normalizedOptionalString(rows.first?["local_principal"]),
               local == nil || local == principal else { throw AiSError("sync_identity_binding_unavailable") }
         return principal
-    }
-
-    static func prepareRemoteSync(principalId: String, localPrincipalId: String) throws {
-        try queue.sync {
-            let db = try openDatabase()
-            _ = try verifiedSyncPrincipal(db, remote: principalId, local: localPrincipalId)
-            try execute(db, "SAVEPOINT ais_sync_prepare")
-            do {
-                try execute(db, "UPDATE sync_queue SET status = 'pending' WHERE target_server = 'fastify' AND status = 'syncing' AND json_extract(payload, '$.actor.id') = ?", [.text(localPrincipalId)])
-                try enqueueLegacySyncEvents(db, localPrincipalId: localPrincipalId)
-                try execute(db, "RELEASE ais_sync_prepare")
-            } catch {
-                try execute(db, "ROLLBACK TO ais_sync_prepare"); try execute(db, "RELEASE ais_sync_prepare")
-                throw error
-            }
-        }
-    }
-
-    private static func enqueueLegacySyncEvents(_ db: OpaquePointer?, localPrincipalId: String) throws {
-        // Repair the old send-once path without replacing history with a snapshot.
-        // Already accepted events retain their IDs and are deduplicated by Fastify.
-        let rows = try query(db, """
-            SELECT e.id, e.ts, e.atome_id, e.project_id, e.kind, e.payload, e.actor, e.tx_id, e.gesture_id
-            FROM events e LEFT JOIN sync_queue q ON q.event_id = e.id AND q.target_server = 'fastify'
-            WHERE e.source = 'ais' AND json_extract(e.actor, '$.id') = ? AND q.queue_id IS NULL
-              AND e.atome_id IS NOT NULL AND lower(e.atome_id) NOT LIKE 'tool.ui.%'
-              AND lower(e.atome_id) NOT LIKE 'tool_ui.%' ORDER BY e.ts, e.rowid LIMIT 50
-            """, [.text(localPrincipalId)])
-        for row in rows {
-            var event = row
-            event["payload"] = parseJSONValue(stringValue(row["payload"]))
-            event["actor"] = parseJSONValue(stringValue(row["actor"]))
-            try enqueueSyncEvent(db, event: event)
-        }
-    }
-
-    // Due rows only, as Tauri's worker: a row waiting for its retry never holds back the
-    // rows behind it. Fastify reconciles out-of-order offline events (`offline-lww`).
-    static func pendingRemoteSync(principalId: String, localPrincipalId: String, limit: Int = 50) throws -> [[String: Any]] {
-        try queue.sync {
-            let db = try openDatabase()
-            _ = try verifiedSyncPrincipal(db, remote: principalId, local: localPrincipalId)
-            try enqueueLegacySyncEvents(db, localPrincipalId: localPrincipalId)
-            let rows = try query(db, """
-                SELECT queue_id, event_id, payload, attempts FROM sync_queue
-                WHERE target_server = 'fastify' AND status NOT IN ('synced', 'rejected') AND json_extract(payload, '$.actor.id') = ?
-                  AND (next_retry_at IS NULL OR julianday(next_retry_at) <= julianday('now'))
-                ORDER BY created_at, queue_id LIMIT ?
-                """, [.text(localPrincipalId), .int(Int64(max(1, limit)))])
-            var batch: [[String: Any]] = [], bytes = 0
-            for row in rows {
-                let size = stringValue(row["payload"]).utf8.count
-                if !batch.isEmpty && bytes + size > 1_000_000 { break }
-                batch.append(row); bytes += size
-            }
-            return batch
-        }
-    }
-
-    /// Outbox events of these Atomes the server has not acknowledged yet, with the last
-    /// delivery error among them.
-    static func undeliveredRemoteSync(localPrincipalId: String, atomeIds: [String]) throws -> (count: Int, lastError: String?) {
-        let ids = atomeIds.filter { !$0.isEmpty }
-        guard !ids.isEmpty else { return (0, nil) }
-        return try queue.sync { () throws -> (count: Int, lastError: String?) in
-            let db = try openDatabase()
-            try enqueueLegacySyncEvents(db, localPrincipalId: localPrincipalId)
-            let marks = Array(repeating: "?", count: ids.count).joined(separator: ",")
-            let rows = try query(db, """
-                SELECT COUNT(*) AS owed, MAX(last_error) AS last_error FROM sync_queue
-                WHERE target_server = 'fastify' AND status != 'synced' AND json_extract(payload, '$.actor.id') = ?
-                AND json_extract(payload, '$.atome_id') IN (\(marks))
-                """, [.text(localPrincipalId)] + ids.map { .text($0) })
-            return (Int(intValue(rows.first?["owed"], defaultValue: 0)), normalizedOptionalString(rows.first?["last_error"]))
-        }
-    }
-
-    // `rejected` is terminal: Fastify refuses this exact event, so a retry cannot change the
-    // outcome. The row stays in the queue (counted as undelivered) instead of looping.
-    static func finishRemoteSync(_ rows: [[String: Any]], localPrincipalId: String, error: String? = nil, rejected: Bool = false) throws {
-        try queue.sync {
-            let db = try openDatabase()
-            try execute(db, "SAVEPOINT ais_sync_receipt")
-            do {
-                for row in rows {
-                    let attempts = intValue(row["attempts"], defaultValue: 0) + 1
-                    let retry = ISO8601DateFormatter().string(from: Date().addingTimeInterval(min(pow(2, Double(min(attempts, 6))), 60)))
-                    try execute(db, """
-                        UPDATE sync_queue SET status = ?, attempts = ?, next_retry_at = ?, last_error = ?
-                        WHERE queue_id = ? AND event_id = ? AND json_extract(payload, '$.actor.id') = ?
-                        """, [.text(error == nil ? "synced" : (rejected ? "rejected" : "failed")), .int(attempts),
-                              error == nil || rejected ? .null : .text(retry),
-                              error.map(SQLiteBinding.text) ?? .null, .int(intValue(row["queue_id"], defaultValue: -1)),
-                              .text(stringValue(row["event_id"])), .text(localPrincipalId)])
-                }
-                try execute(db, "RELEASE ais_sync_receipt")
-            } catch {
-                try execute(db, "ROLLBACK TO ais_sync_receipt"); try execute(db, "RELEASE ais_sync_receipt")
-                throw error
-            }
-        }
-    }
-
-    static func outboundSyncEvent(_ row: [String: Any], localPrincipalId: String, principalId: String) throws -> [String: Any] {
-        guard var event = parseJSONValue(stringValue(row["payload"])) as? [String: Any],
-              resolveActorId(event["actor"]) == localPrincipalId else { throw AiSError("sync_event_principal_mismatch") }
-        event["actor"] = ["type":"user", "id":principalId]
-        if stringValue(event["atome_id"]) == localPrincipalId { event["atome_id"] = principalId }
-        let identityKeys = ["owner", "ownerId", "owner_id", "creator", "creatorId", "creator_id", "_pending_owner_id"]
-        for key in identityKeys { event.removeValue(forKey: key) }
-        if var payload = event["payload"] as? [String: Any] {
-            for key in identityKeys { payload.removeValue(forKey: key) }
-            for key in ["parent_id", "parentId"] where stringValue(payload[key]) == localPrincipalId { payload[key] = principalId }
-            if var props = payload["props"] as? [String: Any] {
-                for key in identityKeys { props.removeValue(forKey: key) }
-                payload["props"] = props
-            }
-            event["payload"] = payload
-        }
-        return event
     }
 
     static func registerRemoteSyncStream(principalId: String, streamId: String) throws {
@@ -244,64 +104,163 @@ extension AiSRuntime {
     private static let transientSQLiteCodes: Set<Int32> = [SQLITE_BUSY, SQLITE_LOCKED, SQLITE_NOMEM,
         SQLITE_READONLY, SQLITE_IOERR, SQLITE_FULL, SQLITE_CANTOPEN, SQLITE_INTERRUPT]
 
-    // A transient storage failure is thrown and the cursor stays put for a later delivery.
-    // An envelope this device cannot project is recorded whole and its sequence passed, so
-    // one poisoned event no longer turns every reconnection into the same failing replay.
-    static func persistRemoteSyncEnvelope(_ envelope: [String: Any], principalId: String, localPrincipalId: String? = nil) throws -> RemoteSyncDelivery {
+    // A replay delivers events back to back: a run of them is persisted in one
+    // transaction, each envelope in its own savepoint. One transaction per envelope wrote
+    // about 200 KB each on the iPad (rollback journal and page rewrites at every COMMIT).
+    // A transient storage failure rolls the whole run back and is thrown: no cursor moved,
+    // the next connection replays it. An envelope this device cannot project is recorded
+    // whole and its sequence passed, so one poisoned event no longer turns every
+    // reconnection into the same failing replay.
+    static func persistRemoteSyncEnvelopes(_ envelopes: [[String: Any]], principalId: String, localPrincipalId: String? = nil) throws -> [RemoteSyncDelivery] {
         try queue.sync {
             let db = try openDatabase()
             let local = try verifiedSyncPrincipal(db, remote: principalId, local: localPrincipalId)
-            let eventId = stringValue(envelope["event_id"] ?? envelope["id"]), streamId = stringValue(envelope["stream"] ?? envelope["stream_id"])
-            let sequence = intValue(envelope["sequence"], defaultValue: 0)
-            guard !streamId.isEmpty, sequence > 0 else { throw AiSError("sync_envelope_invalid") }
-            func reject(_ reason: String) throws -> RemoteSyncDelivery {
-                try rejectRemoteSyncEnvelope(db, envelope, principalId: principalId, streamId: streamId,
-                                             sequence: sequence, eventId: eventId, reason: reason)
-                return .rejected(reason)
-            }
-            if streamId == "directory.public", stringValue(envelope["kind"]) == "directory.invalidate" {
-                try advanceRemoteSyncCursor(db, principalId: principalId, streamId: streamId, sequence: sequence)
-                return .applied
-            }
-            guard !eventId.isEmpty else { return try reject("sync_envelope_invalid") }
-            guard let vault = normalizedOptionalString(envelope["vault_principal_id"]) else { return try reject("sync_vault_owner_missing") }
-            var event: [String: Any] = ["id":eventId, "ts":stringValue(envelope["timestamp"] ?? envelope["ts"]),
-                "kind":stringValue(envelope["kind"]), "payload":envelope["patch"] ?? [:],
-                "actor":["type":"user", "id":principalId], "stream_id":streamId, "sequence":sequence,
-                "source":envelope["source"] ?? NSNull(), "lww_decisions":envelope["lww_decisions"] ?? NSNull(),
-                "projection":envelope["projection"] ?? NSNull()]
-            for key in ["atome_id", "project_id", "tx_id", "gesture_id"] { if let value = envelope[key] { event[key] = value } }
             try execute(db, "BEGIN IMMEDIATE")
-            let applied: Bool
             do {
-                applied = try applyRemoteSyncEvent(db, event: event, vault: vault, remote: principalId, local: local)
+                let deliveries = try envelopes.map { try persistRemoteSyncEnvelope(db, $0, remote: principalId, local: local) }
+                try execute(db, "COMMIT")
+                return deliveries
             } catch {
-                let code = sqlite3_errcode(db) & 0xff
-                try execute(db, "ROLLBACK")
-                if transientSQLiteCodes.contains(code) { throw error }
-                return try reject(error.localizedDescription)
+                // An interrupt, I/O error or full disk may already have rolled it back.
+                if sqlite3_get_autocommit(db) == 0 { try execute(db, "ROLLBACK") }
+                throw error
             }
-            do { try execute(db, "COMMIT") } catch { try execute(db, "ROLLBACK"); throw error }
-            return applied ? .applied : .unchanged
         }
     }
 
-    // Runs inside the caller's transaction. A duplicate may repair a legacy projection or
-    // reconcile our own committed event; one already projected at this cursor is unchanged.
+    private static func persistRemoteSyncEnvelope(_ db: OpaquePointer?, _ envelope: [String: Any], remote principalId: String, local: String) throws -> RemoteSyncDelivery {
+        let eventId = stringValue(envelope["event_id"] ?? envelope["id"]), streamId = stringValue(envelope["stream"] ?? envelope["stream_id"])
+        let sequence = intValue(envelope["sequence"], defaultValue: 0)
+        guard !streamId.isEmpty, sequence > 0 else { throw AiSError("sync_envelope_invalid") }
+        func reject(_ reason: String) throws -> RemoteSyncDelivery {
+            try rejectRemoteSyncEnvelope(db, envelope, principalId: principalId, streamId: streamId,
+                                         sequence: sequence, eventId: eventId, reason: reason)
+            return .rejected(reason)
+        }
+        if streamId == "directory.public", stringValue(envelope["kind"]) == "directory.invalidate" {
+            try advanceRemoteSyncCursor(db, principalId: principalId, streamId: streamId, sequence: sequence)
+            return .applied
+        }
+        guard !eventId.isEmpty else { return try reject("sync_envelope_invalid") }
+        guard let vault = normalizedOptionalString(envelope["vault_principal_id"]) else { return try reject("sync_vault_owner_missing") }
+        var event: [String: Any] = ["id":eventId, "ts":stringValue(envelope["timestamp"] ?? envelope["ts"]),
+            "kind":stringValue(envelope["kind"]), "payload":envelope["patch"] ?? [:],
+            "actor":["type":"user", "id":principalId], "stream_id":streamId, "sequence":sequence,
+            "source":envelope["source"] ?? NSNull(), "lww_decisions":envelope["lww_decisions"] ?? NSNull(),
+            "projection":envelope["projection"] ?? NSNull()]
+        for key in ["atome_id", "project_id", "tx_id", "gesture_id"] { if let value = envelope[key] { event[key] = value } }
+        try execute(db, "SAVEPOINT ais_sync_envelope")
+        let applied: Bool
+        do {
+            applied = try applyRemoteSyncEvent(db, event: event, vault: vault, remote: principalId, local: local)
+        } catch {
+            // SQLite ended the run's transaction itself: nothing of the run remains to keep.
+            guard sqlite3_get_autocommit(db) == 0 else { throw error }
+            try execute(db, "ROLLBACK TO ais_sync_envelope")
+            try execute(db, "RELEASE ais_sync_envelope")
+            // The code of the failing statement: the connection's was reset by the rollbacks.
+            if let code = (error as? AiSError)?.sqliteCode, transientSQLiteCodes.contains(code) { throw error }
+            return try reject(error.localizedDescription)
+        }
+        try execute(db, "RELEASE ais_sync_envelope")
+        return applied ? .applied : .unchanged
+    }
+
+    // Runs inside the caller's savepoint. A duplicate already projected at this cursor is
+    // unchanged. Behind the cursor (a replay echoing this device's own commits back) it is
+    // projected again only to repair a legacy projection or where it changes the state.
     private static func applyRemoteSyncEvent(_ db: OpaquePointer?, event: [String: Any], vault: String, remote: String, local: String) throws -> Bool {
         let eventId = stringValue(event["id"]), streamId = stringValue(event["stream_id"])
         let sequence = intValue(event["sequence"], defaultValue: 0)
         let duplicate = !(try query(db, "SELECT id FROM events WHERE id = ? LIMIT 1", [.text(eventId)])).isEmpty
         let checkpoint = try query(db, "SELECT last_sequence, projection_version FROM remote_sync_stream_cursors WHERE principal_id = ? AND stream_id = ?", [.text(remote), .text(streamId)]).first
-        if duplicate && intValue(checkpoint?["projection_version"], defaultValue: 0) == 1
-            && intValue(checkpoint?["last_sequence"], defaultValue: 0) >= sequence {
+        let legacy = checkpoint.map { intValue($0["projection_version"], defaultValue: 1) == 0 } ?? false
+        if duplicate && !legacy && intValue(checkpoint?["last_sequence"], defaultValue: 0) >= sequence {
             return false
         }
         let projected = try localSyncProjection(db, event: event, vault: vault, remote: remote, local: local)
-        if duplicate { try applyEventToStateCurrent(db, event: projected) }
-        else { try appendEvent(db, event: event, projectionEvent: projected) }
+        let changed = try !duplicate || legacy || changesProjection(db, projected)
+        let winners = duplicate ? try lostKeyWinners(db, event: event, vault: vault, remote: remote, local: local)
+            .filter { try changesProjection(db, $0) } : []
+        if !duplicate { try appendEvent(db, event: event, projectionEvent: projected) }
+        else if changed { try applyEventToStateCurrent(db, event: projected) }
+        for winner in winners { try applyEventToStateCurrent(db, event: winner) }
         try advanceRemoteSyncCursor(db, principalId: remote, streamId: streamId, sequence: sequence)
-        return true
+        return changed || !winners.isEmpty
+    }
+
+    // An own commit with an older clock than a winner already applied here overwrites it
+    // locally. The server rules that its echo lost those keys (offline LWW), and the echo's
+    // projection only leaves them out: the losing value stayed until another edit. For each
+    // lost key this commit still holds, the winner it was compared with, held in the log since
+    // it was applied before, is projected again for that key only, localized and at its own
+    // clock. A key written since by another event is left to that event.
+    private static func lostKeyWinners(_ db: OpaquePointer?, event: [String: Any], vault: String, remote: String, local: String) throws -> [[String: Any]] {
+        guard let decisions = event["lww_decisions"] as? [String: [String: Any]] else { return [] }
+        let own = localizedSyncEvent(event, vault: vault, remote: remote, local: local)
+        let target = stringValue(own["atome_id"]), clock = syncTimestamp(stringValue(own["ts"]))
+        let payload = own["payload"] as? [String: Any] ?? [:]
+        let props = payload["props"] as? [String: Any] ?? [:], deletes = payload["delete_keys"] as? [String] ?? []
+        func holds(_ key: String) throws -> Bool {
+            if key == "__lifecycle__" {
+                guard let atome = try query(db, "SELECT deleted_at FROM atomes WHERE atome_id = ?", [.text(target)]).first else { return false }
+                let deletedAt = normalizedOptionalString(atome["deleted_at"])
+                switch stringValue(own["kind"]) {
+                case "delete": return deletedAt.map { syncTimestamp($0) == clock } ?? false
+                case "restore": return deletedAt == nil
+                default: return false
+                }
+            }
+            let particle = try query(db, "SELECT particle_value, updated_at FROM particles WHERE atome_id = ? AND particle_key = ?", [.text(target), .text(key)]).first
+            if let value = props[key] {
+                guard let particle else { return false }
+                return try stringValue(particle["particle_value"]) == jsonString(value) && syncTimestamp(stringValue(particle["updated_at"])) == clock
+            }
+            guard deletes.contains(key), particle == nil else { return false }
+            let removed = try query(db, "SELECT MAX(changed_at) AS ts FROM particles_versions WHERE atome_id = ? AND particle_key = ? AND new_value = 'null'", [.text(target), .text(key)]).first
+            return syncTimestamp(stringValue(removed?["ts"])) == clock
+        }
+        var keysByWinner: [String: Set<String>] = [:]
+        for (key, decision) in decisions where decision["winner"] as? Bool == false {
+            guard let winner = normalizedOptionalString(decision["compared_event_id"]), try holds(key) else { continue }
+            keysByWinner[winner, default: []].insert(key)
+        }
+        return try keysByWinner.keys.sorted().compactMap { winnerId in
+            guard var held = try query(db, "SELECT id, ts, atome_id, project_id, kind, payload, actor, lww_decisions FROM events WHERE id = ?", [.text(winnerId)]).first else { return nil }
+            for column in ["payload", "actor", "lww_decisions"] { held[column] = parseJSONValue(stringValue(held[column])) }
+            let keys = keysByWinner[winnerId] ?? []
+            var winner = try localSyncProjection(db, event: held, vault: vault, remote: remote, local: local)
+            let projected = winner["payload"] as? [String: Any] ?? [:]
+            var restricted: [String: Any] = ["props": (projected["props"] as? [String: Any] ?? [:]).filter { keys.contains($0.key) },
+                                             "delete_keys": (projected["delete_keys"] as? [String] ?? []).filter(keys.contains)]
+            if let scope = projected["scope"] { restricted["scope"] = scope }
+            let lifecycle = keys.contains("__lifecycle__") && ["delete", "restore"].contains(stringValue(winner["kind"]))
+            if !lifecycle {
+                guard !(restricted["props"] as? [String: Any] ?? [:]).isEmpty || !(restricted["delete_keys"] as? [String] ?? []).isEmpty else { return nil }
+                winner["kind"] = "set"
+            }
+            winner["payload"] = restricted
+            return winner
+        }
+    }
+
+    // Whether projecting a held event again changes anything. Its LWW-filtered projection
+    // keeps only the keys this event still wins (server decisions, then local clocks); when
+    // the state holds all of them, with its owner and scope, rewriting state_current, atomes
+    // and particles changes nothing (1 404 of 1 524 envelopes of an iPad launch replay).
+    // It changes the state when an equal-clock event applied after it took a key it wins,
+    // or when it was never projected here. Same classifier as a local commit, plus the
+    // vault owner and global scope that only a delivery carries.
+    private static func changesProjection(_ db: OpaquePointer?, _ projected: [String: Any]) throws -> Bool {
+        guard try withoutUnchangedProperties(db, event: projected) == nil else { return true }
+        guard let stored = try query(db, """
+            SELECT a.owner_id AS atome_owner, s.owner_id AS state_owner, s.project_id
+            FROM atomes a JOIN state_current s ON s.atome_id = a.atome_id WHERE a.atome_id = ?
+            """, [.text(stringValue(projected["atome_id"]))]).first else { return true }
+        let owner = normalizedOptionalString(projected["owner_id"])
+        let global = normalizedOptionalString((projected["payload"] as? [String: Any])?["scope"]) == "global"
+        return normalizedOptionalString(stored["atome_owner"]) != owner || normalizedOptionalString(stored["state_owner"]) != owner
+            || (global && normalizedOptionalString(stored["project_id"]) != nil)
     }
 
     private static func advanceRemoteSyncCursor(_ db: OpaquePointer?, principalId: String, streamId: String, sequence: Int64) throws {
@@ -332,18 +291,29 @@ extension AiSRuntime {
         }
     }
 
-    private static func localSyncProjection(_ db: OpaquePointer?, event: [String: Any], vault: String, remote: String, local: String) throws -> [String: Any] {
+    // The event as this device holds it: the account's own vault is the local principal.
+    private static func localizedSyncEvent(_ event: [String: Any], vault: String, remote: String, local: String) -> [String: Any] {
         var result = event
         let owned = vault == remote
-        let atomeId = stringValue(event["atome_id"])
         result["owner_id"] = owned ? local : vault
-        if owned && atomeId == remote { result["atome_id"] = local }
+        if owned && stringValue(event["atome_id"]) == remote { result["atome_id"] = local }
         var payload = event["payload"] as? [String: Any] ?? [:]
         var props = payload["props"] as? [String: Any] ?? [:]
         if owned {
             for key in ["owner", "ownerId", "owner_id", "creator", "creatorId", "creator_id"] where stringValue(props[key]) == remote { props[key] = local }
             for key in ["parent_id", "parentId"] where stringValue(payload[key]) == remote { payload[key] = local }
         }
+        payload["props"] = props
+        // A precondition of the original commit, never projected.
+        payload.removeValue(forKey: "expected_versions")
+        result["payload"] = payload
+        return result
+    }
+
+    private static func localSyncProjection(_ db: OpaquePointer?, event: [String: Any], vault: String, remote: String, local: String) throws -> [String: Any] {
+        var result = localizedSyncEvent(event, vault: vault, remote: remote, local: local)
+        let atomeId = stringValue(event["atome_id"])
+        var payload = result["payload"] as? [String: Any] ?? [:]
         let decisions = event["lww_decisions"] as? [String: [String: Any]]
         let target = stringValue(result["atome_id"])
         let timestamps = try query(db, "SELECT particle_key, updated_at FROM particles WHERE atome_id = ?", [.text(target)])
@@ -358,8 +328,7 @@ extension AiSRuntime {
             if let decision = decisions?[key], decision["winner"] as? Bool != true { return false }
             return syncTimestamp(byKey[key] ?? "") <= incomingTime
         }
-        props = props.filter { accepts($0.key) }
-        payload["props"] = props
+        payload["props"] = (payload["props"] as? [String: Any] ?? [:]).filter { accepts($0.key) }
         payload["delete_keys"] = (payload["delete_keys"] as? [String] ?? []).filter(accepts)
         let kind = stringValue(event["kind"])
         if ["delete", "restore"].contains(kind) {

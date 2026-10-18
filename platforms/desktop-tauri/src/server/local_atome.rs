@@ -1984,7 +1984,9 @@ async fn handle_event_commit(
         if !decision.allowed {
             return Err(format!("{}:{}", decision.reason, decision.denied_keys.join(",")));
         }
-        history::capture_before(conn, &mut normalized)?;
+        if !history::capture_before(conn, &mut normalized)? {
+            return Ok(());
+        }
         let inserted = insert_event_record(conn, &normalized)?;
         if inserted {
             let _ = apply_event_to_state_current(conn, &normalized)?;
@@ -2062,7 +2064,9 @@ async fn handle_event_commit_batch(
             }
         }
         for evt in normalized_events.iter_mut() {
-            history::capture_before(conn, evt)?;
+            if !history::capture_before(conn, evt)? {
+                continue;
+            }
             let inserted = insert_event_record(conn, evt)?;
             if inserted {
                 let _ = apply_event_to_state_current(conn, evt)?;
@@ -3235,6 +3239,7 @@ mod property_commit_security_tests {
     fn state() -> LocalAtomeState {
         let db = Connection::open_in_memory().expect("memory db");
         db.execute_batch(ADOLE_SCHEMA_SQL).expect("schema");
+        super::super::local_atome_remote_projection::ensure_schema(&db).expect("remote projection schema");
         for (id, owner) in [("owner", "owner"), ("member", "member"), ("secure", "owner")] {
             db.execute(
                 "INSERT INTO atomes (atome_id, atome_type, owner_id, creator_id) VALUES (?1, 'shape', ?2, ?2)",

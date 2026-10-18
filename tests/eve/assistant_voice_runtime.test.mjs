@@ -11,7 +11,6 @@ import {
     applyHintedSpeechCorrections,
     collectSpeechHints,
     normalizeSpeechConfidence,
-    resolvePreferredSpeechVoice,
     selectBestSpeechCandidate
 } from '../../atome/src/squirrel/voice/service_speech.js';
 import { sanitizeVoiceDiagnostic, writeVoiceDiagnostic } from '../../atome/src/squirrel/voice/telemetry.js';
@@ -95,12 +94,22 @@ test('profile runtime bridge preserves a vault preparation failure', async () =>
     assert.equal(result.error, 'home_vault_setup_failed');
 });
 
-test('French speech never forces an incompatible system voice', () => {
-    const englishVoice = { name: 'Samantha', voiceURI: 'Samantha', lang: 'en-US', default: true, localService: true };
-    const frenchVoice = { name: 'Thomas', voiceURI: 'Thomas', lang: 'fr-FR', default: false, localService: true };
-
-    assert.equal(resolvePreferredSpeechVoice({ getVoices: () => [englishVoice] }, { lang: 'fr-FR' }), null);
-    assert.equal(resolvePreferredSpeechVoice({ getVoices: () => [englishVoice, frenchVoice] }, { lang: 'fr-FR' }), frenchVoice);
+test('every phrase speaks with the one official voice, never the system synthesis', async () => {
+    const { createVoiceService } = await import('../../atome/src/squirrel/voice/service.js');
+    const spoken = [], stopped = [];
+    const localTts = {
+        speak: async (sessionId, text) => { spoken.push({ sessionId, text }); return { session_id: sessionId, promise: new Promise(() => {}) }; },
+        stop: async (sessionId) => { stopped.push(sessionId); return { session_id: sessionId, stopped: true }; },
+        preload: async () => ({ ok: true }), subscribeFrames: () => () => {}
+    };
+    const system = { speak: () => { throw new Error('system synthesis used'); }, cancel() {}, getVoices: () => [] };
+    const voice = createVoiceService({ env: { speechSynthesis: system, SpeechSynthesisUtterance: class {} }, aiPlanner: false, localTts });
+    assert.equal(voice.providers.tts.selected, 'local_onnx');
+    const started = await voice.tts.speak('Votre code est 1 2 3', { lang: 'fr-FR', source: 'first_launch_pairing' });
+    assert.equal(spoken.length, 1);
+    assert.equal(voice.runtime.getSession(started.session_id).phase, 'speaking');
+    await voice.interrupt(started.session_id, { utterance: 'ça suffit' });
+    assert.deepEqual(stopped, [started.session_id], 'interrupting stops the official voice');
 });
 
 test('voice diagnostics preserve requests and redact every secret field', () => {

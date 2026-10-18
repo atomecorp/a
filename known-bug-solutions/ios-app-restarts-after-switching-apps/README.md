@@ -31,9 +31,11 @@ later. Reports: `xcrun devicectl device info files --device <UDID>
   expiration `interruptActiveWork` (`sqlite3_interrupt`) stops the statement,
   which releases its lock. Without background time left, work fails with
   `ais_background_time_exhausted`.
-- `application/AppBackgroundLifecycle.swift`: provides the assertion
-  (`beginBackgroundTask`) and disconnects `FastifySyncClient` when the app
-  enters the background; events stay in the durable outbox.
+- `application/AppBackgroundLifecycle.swift`: the app's single lifecycle owner.
+  It provides the assertion (`beginBackgroundTask`), disconnects
+  `FastifySyncClient` when the app enters the background (events stay in the
+  durable outbox) and, on every activation, reopens the local listener,
+  reconnects the sync and resumes communication.
 - Restoration (when iOS still terminates the app or its web content):
   `application/AppWorkspaceResume.swift` keeps the presented project in the
   scene's `@SceneStorage` (discarded when the user closes the app from the
@@ -51,6 +53,13 @@ later. Reports: `xcrun devicectl device info files --device <UDID>
 - A device used by someone during a probe closes and relaunches the app on its
   own: record the pid before and after each step.
 
+Validated 2026-10-17 on the iPhone 17 Pro (background cycles, kill and
+restore, WebContent death) and the iPad Pro M5 (same, plus the 120 s guard: a
+second death after an automatic reload leaves the failure surface).
+
+The other half of the kills was how busy the database stayed: see
+[ios-outbox-backlog-unchanged-import-origins](../ios-outbox-backlog-unchanged-import-origins/README.md).
+
 ## Regression check
 
 Probes in `temp/ios_multitask_2026-10-17/` (Web Inspector launch flag
@@ -58,4 +67,5 @@ Probes in `temp/ios_multitask_2026-10-17/` (Web Inspector launch flag
 `scenario_background.sh` (mark, Safari, wait, return: same marker, same
 project, no new `atome-*.ips`), `scenario_kill.sh` (SIGKILL while backgrounded:
 the relaunch reopens the project; on the Dashboard it stays there), `oom.js`
-(foreground WebContent death: same app pid, project reopened).
+(foreground WebContent death: same app pid, project reopened; on an iPad,
+typed arrays fail at once, use `oom_heap.js`).

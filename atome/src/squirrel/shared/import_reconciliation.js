@@ -29,6 +29,12 @@ export const stableImportValue = value => {
     return JSON.stringify(value);
 };
 export const sameImportValue = (left, right) => stableImportValue(left) === stableImportValue(right);
+// A `set` merges its props into the stored record: it changes something only when one
+// of its own keys differs. Reads add keys a write never carries (iOS projects `type`
+// into `properties`), so a whole-object comparison rewrote every unchanged import
+// origin at each pass: 277 000 empty events in three days on one iPhone.
+export const importPatchChanges = (stored, patch) =>
+    !stored || Object.keys(patch).some(key => !sameImportValue(stored[key], patch[key]));
 
 /** Three-way merge. Absent/unread fields never mean explicit deletion. */
 export function reconcileImport(current = {}, previous = {}, incoming = {}, oldConflicts = {}, groups = []) {

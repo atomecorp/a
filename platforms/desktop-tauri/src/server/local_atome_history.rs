@@ -16,7 +16,8 @@ pub(super) fn deleted_keys(event: &EventRecord) -> Vec<String> {
 }
 
 // Capture authoritative preimages inside the commit transaction, never from the client.
-pub(super) fn capture_before(db: &Connection, event: &mut EventRecord) -> Result<(), String> {
+// Returns false for a `set` of an existing atome that changes nothing: it is not an event.
+pub(super) fn capture_before(db: &Connection, event: &mut EventRecord) -> Result<bool, String> {
     let stored: Option<String> = db
         .query_row(
             "SELECT payload FROM events WHERE id = ?1",
@@ -27,10 +28,10 @@ pub(super) fn capture_before(db: &Connection, event: &mut EventRecord) -> Result
         .map_err(|e| e.to_string())?;
     if let Some(payload) = stored {
         event.payload = Some(serde_json::from_str(&payload).map_err(|e| e.to_string())?);
-        return Ok(());
+        return Ok(true);
     }
     let Some(atome_id) = event.atome_id.as_deref() else {
-        return Ok(());
+        return Ok(true);
     };
     if let Some(expected) = event.payload.as_ref().and_then(|p| p.get("expected_versions")).and_then(JsonValue::as_object) {
         for (key, version) in expected {
@@ -42,7 +43,7 @@ pub(super) fn capture_before(db: &Connection, event: &mut EventRecord) -> Result
         }
     }
     let Some(patch) = extract_event_patch(&event.kind, &event.payload, &event.ts) else {
-        return Ok(());
+        return Ok(true);
     };
     let raw: Option<String> = db
         .query_row(
@@ -53,33 +54,6 @@ pub(super) fn capture_before(db: &Connection, event: &mut EventRecord) -> Result
         .optional()
         .map_err(|e| e.to_string())?;
     let current = parse_json_map(raw.as_ref());
-    // Same rule as Fastify (`database/adole_event_mutation.js`): a property
-    // rewritten identically is not a change. Dropping it is neutral for replay,
-    // conflicts and projection, and keeps unchanged blobs out of history.
-    let unchanged: HashSet<String> = patch
-        .iter()
-        .filter(|(key, value)| {
-            !["parent_id", "parentId", "kind", "type", "atome_type"].contains(&key.as_str())
-                && current.get(key.as_str()) == Some(*value)
-        })
-        .map(|(key, _)| key.clone())
-        .collect();
-    let keys: HashSet<String> = patch
-        .keys()
-        .filter(|key| !unchanged.contains(*key))
-        .cloned()
-        .chain(deleted_keys(event))
-        .collect();
-    let mut before = JsonMap::new();
-    let mut missing = Vec::new();
-    for key in keys {
-        if let Some(value) = current.get(&key) {
-            before.insert(key, value.clone());
-        } else {
-            missing.push(key);
-        }
-    }
-    missing.sort();
     // Same contract as Fastify (`database/adole_event_mutation.js`): the identity
     // the atome had BEFORE this event, `null` when the event creates it. History
     // reads it to undo a creation as a deletion, never as « erase every key ».
@@ -91,6 +65,60 @@ pub(super) fn capture_before(db: &Connection, event: &mut EventRecord) -> Result
         )
         .optional()
         .map_err(|e| e.to_string())?;
+    // Same rule as Fastify: a property rewritten identically is not a change. Dropping
+    // it is neutral for replay, conflicts and projection, and keeps unchanged blobs out
+    // of history. Identity keys equal to the stored identity are no change either.
+    let unchanged: HashSet<String> = patch
+        .iter()
+        .filter(|(key, value)| match key.as_str() {
+            "type" | "atome_type" => identity
+                .as_ref()
+                .is_some_and(|(_, atome_type)| atome_type.is_some() && value.as_str() == atome_type.as_deref()),
+            "parent_id" | "parentId" => identity.as_ref().is_some_and(|(parent_id, _)| {
+                value.as_str() == parent_id.as_deref() || (value.is_null() && parent_id.is_none())
+            }),
+            "kind" => identity.is_some() && current.get("kind") == Some(*value),
+            _ => current.get(key.as_str()) == Some(*value),
+        })
+        .map(|(key, _)| key.clone())
+        .collect();
+    let keys: HashSet<String> = patch
+        .keys()
+        .filter(|key| !unchanged.contains(*key))
+        .cloned()
+        .chain(deleted_keys(event))
+        .collect();
+    // A `set` of an existing atome left with nothing to change would still be queued,
+    // delivered and replayed by every device of the account (thousands a day: whole
+    // records rewritten by registries and imports, profile saves at session renewals).
+    // The envelope may also move it: a parent or project it does not have yet is a change.
+    let envelope = event.payload.as_ref().and_then(JsonValue::as_object);
+    let expects_versions = envelope
+        .and_then(|p| p.get("expected_versions"))
+        .and_then(JsonValue::as_object)
+        .is_some_and(|versions| !versions.is_empty());
+    let moves = envelope.and_then(|p| p.get("parent_id")).is_some_and(|parent| {
+        identity.as_ref().map_or(true, |(stored, _)| parent.as_str() != stored.as_deref())
+    }) || event.project_id.as_deref().is_some_and(|project| {
+        let stored: Option<Option<String>> = db
+            .query_row("SELECT project_id FROM state_current WHERE atome_id = ?1", [atome_id], |r| r.get(0))
+            .optional()
+            .unwrap_or(None);
+        stored.flatten().as_deref() != Some(project)
+    });
+    if event.kind == "set" && identity.is_some() && keys.is_empty() && !expects_versions && !moves {
+        return Ok(false);
+    }
+    let mut before = JsonMap::new();
+    let mut missing = Vec::new();
+    for key in keys {
+        if let Some(value) = current.get(&key) {
+            before.insert(key, value.clone());
+        } else {
+            missing.push(key);
+        }
+    }
+    missing.sort();
     let mut payload = event
         .payload
         .take()
@@ -118,7 +146,7 @@ pub(super) fn capture_before(db: &Connection, event: &mut EventRecord) -> Result
         },
     );
     event.payload = Some(json!(payload));
-    Ok(())
+    Ok(true)
 }
 
 // Events of `tx_id` that CREATED their atome: `before_identity: null`, or — for

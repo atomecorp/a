@@ -191,7 +191,7 @@ extension AiSRuntime {
         let existing = try query(db, "SELECT id FROM events WHERE id = ? LIMIT 1", [.text(eventId)])
         if !existing.isEmpty { return }
         // Remote history must retain the server's exact intent; localization is projection-only.
-        let event = enqueueRemote ? try withoutUnchangedProperties(db, event: incoming) : incoming
+        guard let event = enqueueRemote ? try withoutUnchangedProperties(db, event: incoming) : incoming else { return }
         try execute(db, "SAVEPOINT ais_event")
         var committed = false
         defer {
@@ -250,20 +250,44 @@ extension AiSRuntime {
 
     // A property rewritten identically is not a change (Fastify `adole_event_mutation`):
     // a profile save used to re-emit its unchanged photo in every event. Dropping
-    // such keys is neutral for replay, conflicts and the projected state.
-    private static func withoutUnchangedProperties(_ db: OpaquePointer?, event: [String: Any]) throws -> [String: Any] {
+    // such keys is neutral for replay, conflicts and the projected state. Identity keys
+    // equal to the stored identity are no change either. A `set` of an existing Atome
+    // left with nothing to change returns nil: it is not an event, since it would be
+    // queued, delivered and replayed by every device of the account for nothing (whole
+    // records rewritten by imports and registries, profile saves at session renewals).
+    // A delivered echo of an event this device already holds is classified the same way.
+    static func withoutUnchangedProperties(_ db: OpaquePointer?, event: [String: Any]) throws -> [String: Any]? {
         guard stringValue(event["kind"]) == "set", let atomeId = normalizedOptionalString(event["atome_id"]),
               var payload = event["payload"] as? [String: Any],
               let patchKey = ["props", "properties", "patch", "delta"].first(where: { payload[$0] is [String: Any] }),
-              let patch = payload[patchKey] as? [String: Any] else { return event }
+              let patch = payload[patchKey] as? [String: Any],
+              let identity = try query(db, "SELECT atome_type, parent_id FROM atomes WHERE atome_id = ?", [.text(atomeId)]).first
+        else { return event }
         let stored = try query(db, "SELECT particle_key, particle_value FROM particles WHERE atome_id = ?", [.text(atomeId)])
         var storedByKey: [String: String] = [:]
         for row in stored {
             if let key = row["particle_key"] as? String, let value = row["particle_value"] as? String { storedByKey[key] = value }
         }
-        let kept = try patch.filter { key, value in
-            try eventMetaParticleKeys.contains(key) || storedByKey[key] != jsonString(value)
+        let projected = try query(db, "SELECT json_extract(properties, '$.kind') AS kind, project_id FROM state_current WHERE atome_id = ?",
+                                  [.text(atomeId)]).first
+        let projectedKind = projected?["kind"] as? String
+        func unchanged(_ key: String, _ value: Any) throws -> Bool {
+            switch key {
+            case "type", "atome_type": return normalizedOptionalString(value) == normalizedOptionalString(identity["atome_type"])
+            case "kind": return projectedKind != nil && normalizedOptionalString(value) == projectedKind
+            case "parent_id", "parentId": return normalizedOptionalString(value) == normalizedOptionalString(identity["parent_id"])
+            default: return try !eventMetaParticleKeys.contains(key) && storedByKey[key] == jsonString(value)
+            }
         }
+        let kept = try patch.filter { key, value in try !unchanged(key, value) }
+        let deletes = payload["delete_keys"] as? [Any] ?? []
+        let expected = payload["expected_versions"] as? [String: Any] ?? [:]
+        // The envelope may also move it: a parent or project it does not have yet is a change.
+        let parent = normalizedOptionalString(event["parent_id"] ?? event["parentId"] ?? payload["parent_id"] ?? payload["parentId"])
+        let project = normalizedOptionalString(event["project_id"] ?? event["projectId"])
+        let moves = (parent != nil && parent != normalizedOptionalString(identity["parent_id"]))
+            || (project != nil && project != normalizedOptionalString(projected?["project_id"]))
+        if kept.isEmpty && deletes.isEmpty && expected.isEmpty && !moves { return nil }
         if kept.count == patch.count { return event }
         payload[patchKey] = kept
         var reduced = event

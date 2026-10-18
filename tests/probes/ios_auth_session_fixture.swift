@@ -34,9 +34,10 @@ extension AiSRuntime {
   precondition(session["generation"] as? Int64 == 4 && saved["token"] == nil)
   do { _=try bindRemoteIdentity(remote,scope:"qa-scope",keyId:"qa-key",sessionId:"qa-server-session",sessionGeneration:3)
        preconditionFailure("older generation overwrote native authority") } catch {precondition(error.localizedDescription == "auth_session_stale")}
-  // Reopen the actual database after a WebView cache disappearance.
-  sqlite3_close(db); Self.db=nil
-  let reopened=try openDatabase()
+  // Read the actual database file through a fresh handle, as after a WebView cache disappearance.
+  var reopened:OpaquePointer?
+  precondition(sqlite3_open_v2(SandboxPathValidator.primaryRoot()!.appendingPathComponent("adole.db").path,&reopened,SQLITE_OPEN_READWRITE,nil) == SQLITE_OK)
+  defer { sqlite3_close(reopened) }
   let restored=try localAuthDescriptor(["grantId":grant],db:reopened)["localGrant"] as! [String:Any]
   precondition((restored["remoteSession"] as? [String:Any])?["userId"] as? String == "qa-remote-A")
   func locking(_ remoteOnly:Bool, invalid:Bool=false)throws {

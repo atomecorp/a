@@ -31,7 +31,7 @@ let result = FastifySyncClient.configureRemote(["remote_user_id":"remote", "remo
 precondition(result["success"] as? Bool == true)
 let received = LocalHTTPServer.shared.completed.wait(timeout: .now() + 18)
 precondition(received == .success, "a failed/incomplete delivery must retry until the correlated server receipt")
-let pendingAfterReceipt = try AiSRuntime.pendingRemoteSync(principalId:"remote", localPrincipalId:"local")
+let pendingAfterReceipt = try AiSRuntime.pendingRemoteSync(principalId:"remote", localPrincipalId:"local").rows
 precondition(pendingAfterReceipt.isEmpty,
     "only the complete receipt may retire the durable event")
 FastifySyncClient.shared.disconnect()

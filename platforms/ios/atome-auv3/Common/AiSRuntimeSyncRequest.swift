@@ -17,11 +17,15 @@ extension AiSRuntime {
             if action == "get-pending" {
                 do {
                     let db = try openDatabase()
+                    let principal = stringValue(claims["sub"])
+                    // The oldest undelivered rows only: the page polls this status, and the whole
+                    // outbox (314 000 rows) was serialized to it at every read.
                     let rows = try query(db, """
-                        SELECT q.queue_id, q.atome_id, q.operation, q.created_at FROM sync_queue q
-                        WHERE q.target_server = 'fastify' AND q.status != 'synced' AND json_extract(q.payload, '$.actor.id') = ? ORDER BY q.queue_id
-                        """, [.text(stringValue(claims["sub"]))])
-                    var result: [String: Any] = ["type":"sync-response", "requestId":requestId, "success":true, "changes":rows, "pending_delivery_count":rows.count]
+                        SELECT queue_id, atome_id, operation, created_at FROM sync_queue
+                        WHERE \(undeliveredOutboxScope) ORDER BY created_at, queue_id LIMIT 100
+                        """, [.text(principal)])
+                    let count = try undeliveredOutboxCount(db, localPrincipalId: principal)
+                    var result: [String: Any] = ["type":"sync-response", "requestId":requestId, "success":true, "changes":rows, "pending_delivery_count":count]
                     result["sync_status"] = syncProgress.read(localPrincipal: stringValue(claims["sub"]))
                     return result
                 } catch {

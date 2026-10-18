@@ -9,11 +9,13 @@ extension FastifySyncClient {
     func drainOutbox() {
         guard outboxTask == nil, !outboxUploading, let config = configuration, resolveConfiguration() == config else { return }
         outboxRetry?.cancel(); outboxRetry = nil
-        let rows: [[String: Any]]
+        let rows: [[String: Any]], classifying: Bool
         // After a refused batch, its rows go one by one so the refusal lands on its own event.
-        do { rows = try AiSRuntime.pendingRemoteSync(principalId: config.principalId, localPrincipalId: config.localPrincipalId, limit: outboxIsolation > 0 ? 1 : 50) }
+        do { (rows, classifying) = try AiSRuntime.pendingRemoteSync(principalId: config.principalId, localPrincipalId: config.localPrincipalId, limit: outboxIsolation > 0 ? 1 : 50) }
         catch { notifyLocal(["type":"sync:persistence-error", "error":error.localizedDescription]); return }
-        guard !rows.isEmpty else { return }
+        // Older rows are still being classified one chunk per read: the next chunk runs once
+        // the database queue has served the work waiting behind this one.
+        guard !rows.isEmpty else { if classifying { scheduleOutboxRetry(after: 0.2) }; return }
         var batch: [(row: [String: Any], event: [String: Any])] = []
         for row in rows {
             do { batch.append((row, try AiSRuntime.outboundSyncEvent(row, localPrincipalId: config.localPrincipalId, principalId: config.principalId))) }
@@ -112,7 +114,7 @@ extension FastifySyncClient {
         let rows = outboxRows
         cancelOutbox()
         if outboxIsolation > 0 { outboxIsolation -= 1 }
-        if let error, refused, rows.count > 1 {
+        if error != nil, refused, rows.count > 1 {
             // Not this batch's attempt: deliver its rows alone, now, to find the refused one.
             outboxIsolation = rows.count
             drainOutbox()

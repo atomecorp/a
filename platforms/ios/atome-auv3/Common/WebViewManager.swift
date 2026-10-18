@@ -93,8 +93,6 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     static var lastTestStateUpdate: CFTimeInterval = 0
     static let nonCriticalUpdateInterval: CFTimeInterval = 0.2 // ULTRA: 5 FPS for non-timecode updates (instead of 10)
 
-    var terminateRetryCount = 0
-
     static func setupWebView(for webView: WKWebView, audioController: AudioControllerProtocol? = nil) {
         if FeatureFlags.mainThreadPrecondition {
             dispatchPrecondition(condition: .onQueue(.main))

@@ -35,7 +35,7 @@ extension AiSRuntime {
                 let remote: [String:Any] = ["event_id":"personal-\(index)", "stream":"personal", "sequence":index + 1,
                     "timestamp":"2026-10-10T00:00:00Z", "atome_id":record.0, "vault_principal_id":"cloud", "kind":"set",
                     "patch":["scope":"global", "props":props]]
-                _ = try persistRemoteSyncEnvelope(remote, principalId:"cloud")
+                _ = try persistRemoteSyncEnvelopes([remote], principalId:"cloud")[0]
                 let target = record.0 == "cloud" ? "local" : record.0
                 let local = try normalizeEventInput(["id":"offline-\(index)", "atome_id":target, "type":record.1,
                     "ts":"2026-10-11T00:00:00Z", "kind":"set", "scope":"global", "props":["note":"Saved offline"]], defaultActorId:"local")
@@ -47,7 +47,7 @@ extension AiSRuntime {
             let envelope: [String:Any] = ["event_id":"event-\(sequence)", "stream":"stream", "sequence":sequence,
                 "timestamp":"2026-10-10T00:00:0\(sequence)Z", "atome_id":"project", "vault_principal_id":"cloud", "kind":"set",
                 "patch":["props":["type":"project", "name":"Version \(sequence)"]]]
-            check(try persistRemoteSyncEnvelope(envelope, principalId:"cloud"))
+            check(try persistRemoteSyncEnvelopes([envelope], principalId:"cloud")[0] == .applied)
         }
         if mode == "complete" { try completeRemoteReplay(principalId:"cloud", streamIds:["stream"], cursors:["stream":2]) }
         let checkpoint = try remoteSyncCursors(principalId:"cloud").first { $0.0 == "stream" }!.1
@@ -64,7 +64,7 @@ extension AiSRuntime {
         check((appointment["alarms"] as? [[String:Any]])?.count == 1)
         let contact = try getStateCurrent(db, atomeId:"contact")!["properties"] as! [String:Any]
         check((contact["phones"] as? [[String:Any]])?.first?["value"] as? String == "+33100000000")
-        let queued = try pendingRemoteSync(principalId:"cloud", localPrincipalId:"local")
+        let queued = try pendingRemoteSync(principalId:"cloud", localPrincipalId:"local").rows
         check(Set(queued.compactMap { $0["event_id"] as? String }) == Set((0..<4).map { "offline-\($0)" }))
         print("cursor=\(checkpoint) version=\(row["projection_version"]!) stored=\(row["last_sequence"]!)")
     }
