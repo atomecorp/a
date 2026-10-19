@@ -16,14 +16,17 @@
 // site is still refused by the browser before it is sent.
 //
 // It is scoped to the media routes the phone must reach over plain HTTP;
-// everything else keeps the restricted allowlist.
+// everything else keeps the restricted allowlist. `/api/media-token` belongs
+// here: it issues the `?media_token=` those routes read, and without it the
+// phone's preflight got a 404, so protected media never carried a token on iOS.
 
 const OPAQUE_NATIVE_ORIGIN_SCHEMES = new Set(['atome:', 'asset:', 'ipc:']);
 
 const NATIVE_HTTP_MEDIA_ROUTES = [
     /^\/api\/uploads(?:\/|$)/i,
     /^\/api\/recordings(?:\/|$)/i,
-    /^\/api\/extract-audio(?:\/|$)/i
+    /^\/api\/extract-audio(?:\/|$)/i,
+    /^\/api\/media-token$/i
 ];
 
 export const OPAQUE_NATIVE_CORS_HEADERS = [

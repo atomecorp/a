@@ -217,6 +217,7 @@
   "tests/eve/media_container_boxes.test.mjs",
   "tests/eve/media_local_availability_owner.test.mjs",
   "tests/eve/media_capability_inline_sources.test.mjs",
+  "tests/eve/natural_action_gesture_trace.test.mjs",
   "tests/eve/media_persistence_service.sanitization.test.mjs",
   "tests/eve/media_recording_atomic_commit_contract.test.mjs",
   "tests/eve/media_recording_format_validation.test.mjs",

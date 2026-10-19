@@ -567,7 +567,8 @@ async function startServer() {
       '/api/uploads',
       '/api/uploads/*',
       '/api/recordings/*',
-      '/api/extract-audio/*'
+      '/api/extract-audio/*',
+      '/api/media-token'
     ]) {
       server.options(preflightRoute, (request, reply) => reply.code(204).send());
     }
