@@ -77,7 +77,13 @@ export function createGpsNavigationEngine(route, { offRouteSamples = 3, replanCo
             } else { offCount = 0; progress = Math.max(progress, best.along); }
             const end = points[points.length - 1];
             arrivalCount = fix.accuracy <= 50 && gpsDistance(fix, end) <= Math.max(20, fix.accuracy) ? arrivalCount + 1 : 0;
-            if (arrivalCount >= 2) { arrived = true; progress = cumulative[cumulative.length - 1]; intents.push({ type: 'arrived' }); }
+            if (arrivalCount >= 2) {
+                arrived = true; progress = cumulative[cumulative.length - 1];
+                // The destination maneuver is announced before guidance ends.
+                const index = currentRoute.maneuvers.length - 1, last = currentRoute.maneuvers[index]?.instruction;
+                if (last && `${index}:${last}` !== lastAnnouncement) { lastAnnouncement = `${index}:${last}`; intents.push({ type: 'speak', text: last }); }
+                intents.push({ type: 'arrived' });
+            }
             const view = state();
             const announcement = `${view.maneuver_index}:${view.instruction}`;
             if (!offCount && !arrived && view.instruction && announcement !== lastAnnouncement) {

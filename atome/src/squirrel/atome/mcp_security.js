@@ -54,6 +54,8 @@ const DEFAULT_ACTOR_CAPABILITIES = Object.freeze([
     'apple_music.control',
     'apple_music.write',
     'music.read', 'music.control', 'music.write',
+    // Private itineraries and guidance on this device.
+    'gps.read', 'gps.control',
     'audit.read'
 ]);
 

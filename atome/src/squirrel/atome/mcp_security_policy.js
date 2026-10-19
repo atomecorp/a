@@ -4,6 +4,7 @@ import { YOUTUBE_COMMANDS } from '../youtube/contracts.js';
 import { APPLE_MUSIC_COMMANDS } from '../apple_music/contracts.js';
 import { MUSIC_COMMANDS } from '../music/contracts.js';
 import { SOCIAL_COMMANDS } from '../social/contracts.js';
+import { GPS_COMMANDS } from '../gps/contracts.js';
 import { cloneValue } from './mcp_core.js';
 import { listMcpPromptEntries, listMcpResourceEntries } from './mcp_resources.js';
 import { normalizeRuntimeToolIdentifier } from './mcp_runtime.js';
@@ -279,7 +280,7 @@ export function resolveAccessPolicy(method, params = {}) {
     }
     // Direct and runtime calls share the exact contract capability and external-write policy.
     const contractId = normalizedMethod === 'runtime.tools.call' ? normalizeRuntimeToolIdentifier(params) : normalizedMethod;
-    const contract = [...TV_COMMANDS, ...YOUTUBE_COMMANDS, ...SOCIAL_COMMANDS, ...APPLE_MUSIC_COMMANDS, ...MUSIC_COMMANDS].find(entry => entry.name === contractId);
+    const contract = [...TV_COMMANDS, ...YOUTUBE_COMMANDS, ...SOCIAL_COMMANDS, ...APPLE_MUSIC_COMMANDS, ...MUSIC_COMMANDS, ...GPS_COMMANDS].find(entry => entry.name === contractId);
     if (contract || normalizedMethod.startsWith('tv.')) {
         const confirm = SOCIAL_CONFIRMED.includes(contract?.name);
         return { ...defaultPolicy, scope: 'tool', subject: contractId, required_capabilities: [contract?.capability || 'tv.control'],

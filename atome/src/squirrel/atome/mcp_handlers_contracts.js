@@ -3,6 +3,7 @@ import { YOUTUBE_COMMANDS, validateYoutubeInput } from '../youtube/contracts.js'
 import { SOCIAL_COMMANDS, validateSocialInput } from '../social/contracts.js';
 import { APPLE_MUSIC_COMMANDS, validateAppleMusicInput } from '../apple_music/contracts.js';
 import { MUSIC_COMMANDS, validateMusicInput } from '../music/contracts.js';
+import { GPS_COMMANDS, validateGpsInput } from '../gps/contracts.js';
 import { ensureRuntimeToolApi } from './mcp_bridges.js';
 import { buildRuntimeInvocationPayload, projectRuntimeMcpResult } from './mcp_runtime.js';
 
@@ -30,3 +31,5 @@ export const createMcpAppleMusicHandlers = () => createContractHandlers({
     commands: APPLE_MUSIC_COMMANDS, validate: validateAppleMusicInput, layer: 'atome_mcp_apple_music', noClient: 'HOST_UNSUPPORTED' });
 export const createMcpMusicHandlers = () => createContractHandlers({
     commands: MUSIC_COMMANDS, validate: validateMusicInput, layer: 'atome_mcp_music', noClient: 'AUTH_REQUIRED' });
+export const createMcpGpsHandlers = () => createContractHandlers({
+    commands: GPS_COMMANDS, validate: validateGpsInput, layer: 'atome_mcp_gps', noClient: 'HOST_UNSUPPORTED' });

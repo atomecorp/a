@@ -46,7 +46,7 @@ async function readBounded(response, maxBytes) {
 export function createGpsProvider({ env = process.env, fetchResource = fetch, now = () => new Date().toISOString() } = {}) {
     const get = async (url, options = {}, maxBytes = 5000000, allowRouteError = false) => {
         const response = await fetchResource(url, { ...options, signal: AbortSignal.timeout(12000),
-            headers: { 'User-Agent': 'atome-gps/1.0', Accept: 'application/json', ...options.headers } });
+            headers: { 'User-Agent': 'atome-gps/1.0 (+https://atome.one)', Accept: 'application/json', ...options.headers } });
         if (!response.ok && !(allowRouteError && response.status === 400)) throw new Error(response.status === 429 ? 'RATE_LIMITED' : 'PROVIDER_UNAVAILABLE');
         return { bytes: await readBounded(response, maxBytes), response };
     };
