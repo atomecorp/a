@@ -165,21 +165,6 @@ export const registerContactsDefaultTools = ({ Agent, safeString, prepareContact
     });
 
     Agent.registerTool({
-        name: 'contacts.import_macos',
-        description: 'Import contacts from the local macOS Contacts snapshot into private canonical contacts.',
-        capabilities: ['contacts.write'],
-        risk_tier: 'LOW',
-        handler: async ({ params }) => {
-            const api = await requireContactsApi();
-            if (!api || typeof api.importMacosContacts !== 'function') {
-                throw new Error('Contacts import API is not available');
-            }
-            return api.importMacosContacts(params || {});
-        },
-        summary: () => 'Import Mac contacts'
-    });
-
-    Agent.registerTool({
         name: 'contacts.import_icloud',
         description: 'Import contacts from iCloud CardDAV into private canonical contacts.',
         capabilities: ['contacts.write'],

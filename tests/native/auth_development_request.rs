@@ -33,7 +33,7 @@ async fn development_transport_covers_payment_cancel_and_session_lifecycle() {
     let actions = [
         "phone-link-start",
         "phone-link-challenge",
-        "phone-link-simulate-payment",
+        "phone-link-payment",
         "phone-link-resend",
         "phone-link-consume",
         "phone-link-confirm",

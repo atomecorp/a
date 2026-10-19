@@ -97,7 +97,7 @@ const enterProvisionedWorkspace = async (page) => {
                     await new Promise((resolve) => setTimeout(resolve, 1500));
                 }
             }
-            const paid = result?.paymentRequired === true ? await window.AdoleAPI.auth.simulatePhonePayment('paypal') : null;
+            const paid = result?.paymentRequired === true ? await window.AdoleAPI.auth.payPhoneLogin({ method: 'paypal' }) : null;
             return { started: result, paid, session: Boolean(paid?.session) };
         });
         for (let attempt = 0; attempt < 60 && !started.session && !developmentLink; attempt += 1) await page.waitForTimeout(100);

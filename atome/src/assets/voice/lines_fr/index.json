@@ -9,11 +9,11 @@
   "source": "https://datashare.is.ed.ac.uk/handle/10283/2353"
  },
  "lines": {
-  "Bonjour, je ne suis pas encore tout à fait prête, je te préviens dès que je le suis.": {
-   "file": "c50c94f1726d905f.wav",
-   "samples": 96000,
-   "phonemes": "^bɔ̃ʒuʁ , ʒə nə sɥi pa ɑ̃koʁ tu a fɛ pʁɛt , ʒə tə pʁevjɛ̃ dɛ kə ʒə lə sɥi .$",
-   "sha256": "e31c77dc5a4496197bd820a75430f0fe7ce29aa595afff452d8f735ef19901a2"
+  "Bonjour, j’arrive !": {
+   "file": "e86cc50f91da2c5b.wav",
+   "samples": 36864,
+   "phonemes": "^bɔ̃ʒuʁ , ʒaʁiv !$",
+   "sha256": "5714e11c17003a4db78f10a5f7f34dc898b29e9c34aed192bcba9d6187aaab22"
   },
   "Ça y est, je t’écoute.": {
    "file": "2b27eecc19952275.wav",
@@ -27,6 +27,12 @@
    "phonemes": "^vwala , ʒə sɥi pʁɛt , ʒə tekut .$",
    "sha256": "52a1711d1d5c41c795d12076fe2c755476e51732cc05f437969768d4699944a9"
   },
+  "C’est bon, je suis prête !": {
+   "file": "495310a64fd85b18.wav",
+   "samples": 41728,
+   "phonemes": "^sɛ bɔ̃ , ʒə sɥi pʁɛt !$",
+   "sha256": "40591be1a4318156efc3be5082d7b9fce3ce8c70eec3b0dd2ffda830a4980e0b"
+  },
   "Je suis là, qu’est-ce que tu souhaites faire ?": {
    "file": "f4a7024d61443d6c.wav",
    "samples": 49920,
@@ -39,23 +45,11 @@
    "phonemes": "^mə vwala , ʒə tekut .$",
    "sha256": "68991e95797523ed87a2ee29cdd61b68756be6dcddd5f0fd467e0d87269a90de"
   },
-  "C’est bon, je suis prête !": {
-   "file": "495310a64fd85b18.wav",
-   "samples": 41728,
-   "phonemes": "^sɛ bɔ̃ , ʒə sɥi pʁɛt !$",
-   "sha256": "40591be1a4318156efc3be5082d7b9fce3ce8c70eec3b0dd2ffda830a4980e0b"
-  },
   "Je suis disponible, on peut commencer.": {
    "file": "b11eace3d7792b0b.wav",
    "samples": 54016,
    "phonemes": "^ʒə sɥi disponibl , ɔ̃ pø komɑ̃se .$",
    "sha256": "a7f4a1e6a5dbdd8d34fe466895463e3387cd404c635e27b265f05ea96f058268"
-  },
-  "Salut, à plus tard.": {
-   "file": "a4a6dcd4c6e463a1.wav",
-   "samples": 25856,
-   "phonemes": "^saly , a ply taʁ .$",
-   "sha256": "55832b1e196ba7c89eb59ec7f681e5c65e330dcfecd8b3e29fceaf42e4de9538"
   },
   "Le profil de cette discussion est incompatible avec le registre actuel.": {
    "file": "92306174d9374e2f.wav",

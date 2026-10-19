@@ -77,7 +77,7 @@ pub async fn auth_development_request(message: Value) -> Result<Value, String> {
         action,
         "phone-link-start"
             | "phone-link-challenge"
-            | "phone-link-simulate-payment"
+            | "phone-link-payment"
             | "phone-link-resend"
             | "phone-link-consume"
             | "phone-link-confirm"

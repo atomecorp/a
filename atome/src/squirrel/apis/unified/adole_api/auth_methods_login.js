@@ -6,6 +6,7 @@ import { TauriAdapter, FastifyAdapter } from '../adole.js';
 import { createAuthDeviceStore } from '../../../security/auth_device.js';
 import { readOptionalAuthCache } from '../../../security/auth_optional_cache.js';
 import { createPhoneLinkClient } from '../../../security/auth_phone_link_client.js';
+import { billingStorePurchase } from '../../../billing/store_purchase.js';
 import { normalizePhone, normalizeUser } from './auth_core.js';
 import { isTauriRuntime } from './runtime.js';
 import { setSessionState, getSessionState } from './session.js';
@@ -175,7 +176,7 @@ export function phoneLinkClient() {
             return env.__TAURI_INTERNALS__.invoke('auth_development_request', { message });
         }
         return FastifyAdapter.ws.send(message);
-    }, installSession: installRemote, connectionProof: !isTauriRuntime(), onPending: detail => globalThis.window?.dispatchEvent(
+    }, installSession: installRemote, storePurchase: billingStorePurchase(), connectionProof: !isTauriRuntime(), onPending: detail => globalThis.window?.dispatchEvent(
         new CustomEvent('squirrel:phone-login-pending', { detail })) });
     return client;
 }
@@ -428,7 +429,7 @@ export const loginMethods = {
     async resumePhoneLogin() { return phoneLinkClient().resume(); },
     async resendPhoneLogin() { return phoneLinkClient().resend(); },
     async getPendingPhoneLogin() { return phoneLinkClient().pendingAttempt(); },
-    async simulatePhonePayment(method) { return phoneLinkClient().simulatePayment(method); },
+    async payPhoneLogin(payment) { return phoneLinkClient().pay(payment); },
     async completePhoneLogin(link) { return phoneLinkClient().consumeLink(link); },
     async confirmPhoneLogin(code) { return phoneLinkClient().confirmLink(code); },
     async cancelPhoneLogin() { return phoneLinkClient().cancel(); },

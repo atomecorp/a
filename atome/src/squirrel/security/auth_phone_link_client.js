@@ -6,7 +6,7 @@ const DEAD_SESSION_ERRORS = new Set(['auth_session_stale', 'auth_session_reused'
 
 // Owns proof exchange and persistent, non-bearer descriptors. Application session
 // projection and native local authorization remain the auth facade's owners.
-export function createPhoneLinkClient({ devices, send, installSession, locks = globalThis.navigator?.locks,
+export function createPhoneLinkClient({ devices, send, installSession, storePurchase, locks = globalThis.navigator?.locks,
     now = Date.now, onPending = () => {}, connectionProof = false }) {
     let serial = Promise.resolve();
     let confirmation = null;
@@ -169,12 +169,14 @@ export function createPhoneLinkClient({ devices, send, installSession, locks = g
             return followDelivery(response, record);
         }),
         resume: () => exclusive(async () => resumeAttempt(await devices.read('attempt'))),
-        simulatePayment: method => exclusive(async () => {
+        // `payment`: `{ method }` (Web) or `{ store }` (the native app's store).
+        pay: payment => exclusive(async () => {
             const record = await devices.read('attempt');
             if (!record || record.expiresAt <= now()) throw new Error('auth_attempt_expired');
             const device = await devices.forPhone(record.phone);
-            const signed = await attemptProof(record, 'simulate-payment', device);
-            const response = await request('phone-link-simulate-payment', { attemptId: record.attemptId, method, ...signed });
+            const paid = await storePurchase.creationPayment(payment, device.keyId);
+            const signed = await attemptProof(record, 'payment', device);
+            const response = await request('phone-link-payment', { attemptId: record.attemptId, payment: paid, ...signed });
             return settleAttempt(response, record);
         }),
         pendingAttempt: async () => {

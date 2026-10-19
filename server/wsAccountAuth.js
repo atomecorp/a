@@ -1,4 +1,5 @@
 import { createAccountAuth } from './auth_accounts.js';
+import { BILLING_PUBLIC_ERRORS } from './billing/store_purchases.js';
 import { createApprovals } from './auth_approvals.js';
 import { createPairing } from './auth_pairing.js';
 import { createRecovery } from './auth_recovery.js';
@@ -22,9 +23,9 @@ export const ACCOUNT_PUBLIC_ERRORS = ['auth_device_class_required', 'auth_paymen
     'auth_user_verification_required', 'auth_webauthn_rejected', 'auth_webauthn_invalid', 'auth_webauthn_attestation_unsupported',
     'auth_webauthn_algorithm_unsupported', 'auth_webauthn_counter_regressed', 'auth_pairing_invalid', 'auth_pairing_locked',
     'auth_pair_unknown', 'auth_pair_not_approved', 'auth_recovery_unavailable', 'auth_recovery_not_ready', 'auth_handle_unavailable',
-    'auth_connection_proof_required'];
+    'auth_connection_proof_required', ...BILLING_PUBLIC_ERRORS];
 
-export function createWsAccountAuth({ service, database, jwtSecret, createAccount, findById, disconnectSession, now = Date.now }) {
+export function createWsAccountAuth({ service, database, jwtSecret, createAccount, findById, disconnectSession, billing, now = Date.now }) {
     const { proof, devices, handles, sessions } = service;
     const query = database.query, transaction = database.withTransaction;
     // Server-originated notices reach the live connections of the account;
@@ -43,7 +44,7 @@ export function createWsAccountAuth({ service, database, jwtSecret, createAccoun
         }
     };
     const approvals = createApprovals({ query, proof, webauthn: resolveWebAuthnConfig(), now });
-    const accounts = createAccountAuth({ query, transaction, proof, sessions, devices, handles, approvals, createAccount, notify, disconnectSession, now });
+    const accounts = createAccountAuth({ query, transaction, proof, sessions, devices, handles, approvals, createAccount, notify, disconnectSession, now, billing });
     const pairing = createPairing({ query, transaction, proof, sessions, devices, handles, approvals, accounts, findById, notify, disconnectSession, now });
     const recovery = createRecovery({ query, transaction, proof, sessions, devices, handles, approvals, accounts, findById, notify, disconnectSession, now });
     // The waiting device hears about its request on the socket it asked from.

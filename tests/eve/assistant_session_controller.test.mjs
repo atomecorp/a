@@ -13,14 +13,12 @@ const withMcpBridge = (api) => ({
 const translateVoiceKey = (key) => {
     if (key.endsWith('opening_greeting')) return voiceTexts.openingGreeting;
     if (key.endsWith('touch_response')) return voiceTexts.touchResponse;
-    if (key.endsWith('closing_greeting')) return voiceTexts.closingGreeting;
     return 'Assistant vocal eVe';
 };
 
 const voiceTexts = {
     openingGreeting: 'Salut, que veux-tu ?',
-    touchResponse: 'Oui, je suis toujours là. Comment puis-je t’aider ?',
-    closingGreeting: 'Salut, à plus tard.'
+    touchResponse: 'Oui, je suis toujours là. Comment puis-je t’aider ?'
 };
 
 const deferred = () => {
@@ -29,11 +27,11 @@ const deferred = () => {
     return { promise, resolve };
 };
 
-test('the shared BevyUI hold recognizer can reopen while the previous farewell finishes', async () => {
+// eVe leaves in silence (2026-10-18): a close speaks nothing, a hold reopens at once.
+test('the shared BevyUI hold recognizer reopens right after a silent close', async () => {
     let clock = 0;
     let frameCallback = null;
     let sessionSequence = 0;
-    const farewell = deferred();
     const spoken = [];
     const scheduled = [];
     const voiceApi = withMcpBridge({
@@ -43,7 +41,7 @@ test('the shared BevyUI hold recognizer can reopen while the previous farewell f
         subscribeTtsFrames: () => () => { },
         speak: async (text) => {
             spoken.push(text);
-            return { promise: text === voiceTexts.closingGreeting ? farewell.promise : Promise.resolve({}) };
+            return { promise: Promise.resolve({}) };
         },
         startListening: async () => ({ promise: new Promise(() => { }) }),
         executeUtterance: async () => ({ ok: true }),
@@ -109,13 +107,7 @@ test('the shared BevyUI hold recognizer can reopen while the previous farewell f
     assert.equal(runtime.getState().transition, 'appearing');
     await advance(420);
     assert.equal(runtime.getState().sessionId, 'hold-session-2');
-    assert.deepEqual(spoken, [
-        voiceTexts.openingGreeting,
-        voiceTexts.closingGreeting,
-        voiceTexts.openingGreeting
-    ]);
-    farewell.resolve({ ok: true });
-    await flush();
+    assert.deepEqual(spoken, [voiceTexts.openingGreeting, voiceTexts.openingGreeting]);
 });
 
 test('assistant public API preserves project interaction, trace command, render teardown and clean reopen', async () => {
@@ -237,7 +229,7 @@ test('closing during connection cancels startup and remains reopenable', async (
     assert.equal(inputMode, 'voice');
     assert.equal(conversation.saved, false);
     assert.deepEqual(closedState, {
-        active: false, connected: false,
+        active: false, acting: false, connected: false, surface: 'screen',
         navigationGeneration: 1,
         microphoneActive: false,
         error: '',
@@ -253,7 +245,7 @@ test('closing during connection cancels startup and remains reopenable', async (
     await Promise.resolve();
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(runtime.getState().active, true);
-    assert.deepEqual(spokenTexts, [voiceTexts.closingGreeting, voiceTexts.openingGreeting]);
+    assert.deepEqual(spokenTexts, [voiceTexts.openingGreeting]);
 });
 
 test('assistant releases visual interaction after animation without waiting for native voice cleanup', async () => {
@@ -409,79 +401,8 @@ test('assistant runtime survives ten complete voiced open and close cycles with 
         assert.equal(runtime.getState().phase, 'closed');
     }
     assert.equal(sessionSequence, 10);
-    assert.deepEqual(spokenTexts, Array.from({ length: 10 }, () => [
-        voiceTexts.openingGreeting,
-        voiceTexts.closingGreeting
-    ]).flat());
+    assert.deepEqual(spokenTexts, Array.from({ length: 10 }, () => voiceTexts.openingGreeting));
     assert.equal(clearCount, 10);
-});
-
-test('a native farewell failure cannot strand the assistant or block reopening', async () => {
-    let clock = 0;
-    let frameCallback = null;
-    let sessionSequence = 0;
-    let voiceUnsubscribeCount = 0;
-    const closeErrors = [];
-    const advance = async (milliseconds) => {
-        clock += milliseconds;
-        const callback = frameCallback;
-        frameCallback = null;
-        callback?.();
-        await Promise.resolve();
-        await Promise.resolve();
-        await Promise.resolve();
-        await new Promise((resolve) => setTimeout(resolve, 0));
-    };
-    const voiceApi = withMcpBridge({
-        ensureReady: async () => true,
-        createSession: async () => ({ session_id: `failure-session-${++sessionSequence}` }),
-        subscribe: () => () => { voiceUnsubscribeCount += 1; },
-        subscribeTtsFrames: () => () => { },
-        speak: async (text) => {
-            if (text === voiceTexts.closingGreeting) throw new Error('native_farewell_failed');
-            return { promise: Promise.resolve({}) };
-        },
-        startListening: async () => ({ promise: new Promise(() => { }) }),
-        executeUtterance: async () => ({ ok: true }),
-        cancelListening: async () => ({ ok: true }),
-        stopSpeaking: async () => ({ ok: true }),
-        interrupt: async () => ({ ok: true })
-    });
-    const runtime = createEveAssistantRuntime({
-        dockFactory: () => ({ open() {}, close() {}, blur() {}, refresh() {} }),
-        providerResolver: async () => ({ ok: true, providerId: 'local' }),
-        env: {
-            addEventListener: () => { },
-            __EVE_VOICE_DIAGNOSTICS__: true,
-            console: { info: (line) => {
-                if (line.includes('voice.session.close.error')) closeErrors.push(line);
-            } },
-            performance: { now: () => clock }
-        },
-        voiceApiResolver: () => voiceApi,
-        now: () => clock,
-        requestFrame: (callback) => { frameCallback = callback; return 1; },
-        cancelFrame: () => { },
-        renderScene: async () => ({ ok: true }),
-        clearScene: async () => ({ ok: true }),
-        commandBus: { append: () => { } },
-        translate: translateVoiceKey
-    });
-    await runtime.open();
-    await advance(420);
-    const closing = runtime.close({ source: 'test' });
-    await advance(320);
-    await closing;
-    assert.equal(runtime.getState().active, false);
-    assert.equal(runtime.getState().transition, 'hidden');
-    assert.equal(closeErrors.length, 1);
-    assert.match(closeErrors[0], /voice\.session\.close\.error/);
-    assert.match(closeErrors[0], /native_farewell_failed/);
-    assert.equal(voiceUnsubscribeCount, 1);
-    await runtime.open();
-    await advance(420);
-    assert.equal(runtime.getState().active, true);
-    assert.equal(runtime.getState().sessionId, 'failure-session-2');
 });
 
  test('provider resolution failure never starts the legacy voice controller', async () => {

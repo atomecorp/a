@@ -2,98 +2,57 @@
 //  PurchaseManager.swift
 //  atome
 //
-//  Higher-level StoreKit 2 manager: loads products, observes transactions, exposes entitlements.
+//  StoreKit 2 in-app purchase of the single atome offer. The entitlement belongs
+//  to the account, never to this device: the app only returns the signed
+//  transaction (JWS) to the page, and the server verifies it with Apple before
+//  anything is granted. Renewals and refunds reach the server through App Store
+//  Server Notifications v2.
 //
 import Foundation
 import StoreKit
 
-@available(iOS 15.0, *)
-@MainActor
-final class PurchaseManager: ObservableObject {
+final class PurchaseManager {
     static let shared = PurchaseManager()
-    private init() { Task { await configure() } }
+    private var updates: Task<Void, Never>?
+    private init() {}
 
-    @Published private(set) var products: [Product] = []
-    private let targetIds: Set<String> = ["midi_console_unlock"] // align with JS for now
-
-    // Public query
-    func isOwned(_ id: String) -> Bool { EntitlementStore.shared.isOwned(id) }
-
-    // Initial load + start transaction listener
-    private func configure() async {
-        await loadProducts()
-        await listenForTransactions()
-        await refreshEntitlementsFromCurrent()
-    }
-
-    private func loadProducts() async {
-        do { products = try await Product.products(for: Array(targetIds)) } catch { print("🛒 loadProducts error: \(error)") }
-    }
-
-    private func listenForTransactions() async {
-        Task { [weak self] in
+    // Transactions delivered outside a purchase call (renewals, Ask to Buy
+    // approvals) are finished here; the server learns them from Apple.
+    func start() {
+        guard updates == nil else { return }
+        updates = Task.detached {
             for await result in Transaction.updates {
-                guard let self else { continue }
-                await self.handle(transactionResult: result)
+                if case .verified(let transaction) = result { await transaction.finish() }
             }
         }
     }
 
-    private func handle(transactionResult: VerificationResult<Transaction>) async {
-        switch transactionResult {
-        case .verified(let tx):
-            if targetIds.contains(tx.productID) { EntitlementStore.shared.setOwned(true, productId: tx.productID) }
-            await tx.finish()
-            WebViewManager.sendBridgeJSON(["action":"purchaseResult","productId":tx.productID,"success":true])
-        case .unverified(let tx, _):
-            print("🛒 Unverified transaction: \(tx.productID)")
-        }
-    }
-
-    private func refreshEntitlementsFromCurrent() async {
-        var changed = false
-        for await result in Transaction.currentEntitlements {
-            if case .verified(let tx) = result, targetIds.contains(tx.productID) {
-                if EntitlementStore.shared.isOwned(tx.productID) == false { EntitlementStore.shared.setOwned(true, productId: tx.productID); changed = true }
+    // `billing_store_purchase`: buys `productId` bound to the account token of the
+    // device key that creates or owns the account.
+    func purchase(productId: String, accountToken: String, completion: @escaping ([String: Any]?, String?) -> Void) {
+        // An Audio Unit extension has no scene to present the store sheet.
+        guard !WebViewManager.runningInExtension else { completion(nil, "billing_store_unavailable"); return }
+        guard let token = UUID(uuidString: accountToken) else { completion(nil, "billing_account_token_invalid"); return }
+        Task { @MainActor in
+            do {
+                guard let product = try await Product.products(for: [productId]).first else {
+                    completion(nil, "billing_product_unknown"); return
+                }
+                switch try await product.purchase(options: [.appAccountToken(token)]) {
+                case .success(let verification):
+                    guard case .verified(let transaction) = verification else { completion(nil, "billing_proof_untrusted"); return }
+                    await transaction.finish()
+                    completion(["ok": true, "productId": productId, "jws": verification.jwsRepresentation], nil)
+                case .userCancelled:
+                    completion(nil, "billing_purchase_cancelled")
+                case .pending:
+                    completion(nil, "billing_purchase_pending")
+                @unknown default:
+                    completion(nil, "billing_store_failed")
+                }
+            } catch {
+                completion(nil, "billing_store_failed")
             }
         }
-    if changed { WebViewManager.sendBridgeJSON(["action":"restorePurchasesResult","products":Array(targetIds.filter{ EntitlementStore.shared.isOwned($0) })]) }
-    }
-
-    // Explicit purchase request
-    func purchase(id: String, requestId: Int) async {
-        do {
-            var candidate = products.first(where:{ $0.id == id })
-            if candidate == nil { // fetch fresh if not already loaded
-                let fetched = try await Product.products(for:[id])
-                candidate = fetched.first
-            }
-            guard let product = candidate else {
-                WebViewManager.sendBridgeJSON(["action":"purchaseResult","productId":id,"success":false,"requestId":requestId,"error":"not_found"]) ; return }
-            let result = try await product.purchase()
-            switch result {
-            case .success(let verification):
-                if case .verified(let tx) = verification {
-                    EntitlementStore.shared.setOwned(true, productId: id)
-                    await tx.finish()
-                    WebViewManager.sendBridgeJSON(["action":"purchaseResult","productId":id,"success":true,"requestId":requestId])
-                } else {
-                    WebViewManager.sendBridgeJSON(["action":"purchaseResult","productId":id,"success":false,"requestId":requestId,"error":"unverified"]) }
-            case .userCancelled:
-                WebViewManager.sendBridgeJSON(["action":"purchaseResult","productId":id,"success":false,"requestId":requestId,"error":"cancelled"])        
-            case .pending:
-                WebViewManager.sendBridgeJSON(["action":"purchaseResult","productId":id,"success":false,"requestId":requestId,"error":"pending"])        
-            @unknown default:
-                WebViewManager.sendBridgeJSON(["action":"purchaseResult","productId":id,"success":false,"requestId":requestId,"error":"unknown"])        
-            }
-        } catch {
-            WebViewManager.sendBridgeJSON(["action":"purchaseResult","productId":id,"success":false,"requestId":requestId,"error":"exception" ])
-        }
-    }
-
-    func restore(requestId: Int) async {
-        await refreshEntitlementsFromCurrent()
-        let owned = targetIds.filter{ EntitlementStore.shared.isOwned($0) }
-        WebViewManager.sendBridgeJSON(["action":"restorePurchasesResult","products":Array(owned),"requestId":requestId])
     }
 }

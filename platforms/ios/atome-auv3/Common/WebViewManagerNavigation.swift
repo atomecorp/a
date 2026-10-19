@@ -72,12 +72,8 @@ extension WebViewManager {
         let hasNotch = UIDevice.current.userInterfaceIdiom == .phone && topInset >= 44
         let notchJS = "window.__HAS_NOTCH__=\(hasNotch ? "true" : "false");(function(){try{if(window.__HAS_NOTCH__){document.documentElement.classList.add('has-notch');}else{document.documentElement.classList.remove('has-notch');} if(window.updateSafeAreaLayout){window.updateSafeAreaLayout();}}catch(e){}})();"
         webView.evaluateJavaScript(notchJS, completionHandler: nil)
-        // Auto-restore entitlements to sync JS UI after load (App only; AUv3 can't present auth UI)
-        if FeatureFlags.sendPurchaseRestoreOnDidFinish && !isExtension {
-            if #available(iOS 15.0, *) {
-                Task { await PurchaseManager.shared.restore(requestId: Int(Date().timeIntervalSince1970)) }
-            }
-        }
+        // The app (not the AUv3) finishes the store transactions StoreKit delivers.
+        if !isExtension { PurchaseManager.shared.start() }
     }
 
     // iOS reclaims the web content of a backgrounded app under memory pressure: a

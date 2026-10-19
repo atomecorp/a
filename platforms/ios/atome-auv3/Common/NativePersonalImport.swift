@@ -44,11 +44,17 @@ final class NativePersonalImport {
                 completion(result, nil)
             } catch { completion(nil, "personal_import_read_failed:\((error as NSError).code)") }
         } }
+        // A refusal the system will not ask about again: only this app's Settings page
+        // can grant it, which the `_settings` suffix tells the gesture that asked.
         if command == "macos_contacts_snapshot" {
+            let status = CNContactStore.authorizationStatus(for: .contacts)
+            if status == .denied || status == .restricted { completion(nil, "contacts_permission_denied_settings"); return }
             contacts.requestAccess(for: .contacts) { granted, _ in
                 guard granted else { completion(nil, "contacts_permission_denied"); return }; read()
             }
         } else {
+            let status = EKEventStore.authorizationStatus(for: .event)
+            if status == .denied || status == .restricted { completion(nil, "calendar_full_access_required_settings"); return }
             let permission: (Bool, Error?) -> Void = { granted, _ in
                 guard granted else { completion(nil, "calendar_full_access_required"); return }; read()
             }

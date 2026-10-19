@@ -186,13 +186,6 @@ export const createMcpCommunicationHandlers = () => ({
         const contactId = params?.contact_id || params?.contactId || params?.id;
         return contacts.deleteLocalContact(contactId, params || {});
     },
-    async 'contacts.import_macos'(params = {}) {
-        const contacts = ensureContactsApi();
-        if (typeof contacts.importMacosContacts !== 'function') {
-            throw new Error('Contacts import API is not available');
-        }
-        return contacts.importMacosContacts(params || {});
-    },
     async 'contacts.import_icloud'(params = {}) {
         const contacts = ensureContactsApi();
         if (typeof contacts.importIcloudContacts !== 'function') {

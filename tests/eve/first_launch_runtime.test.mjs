@@ -40,7 +40,7 @@ beforeEach(() => {
         getPendingPhoneLogin: vi.fn(async () => null), resendPhoneLogin: vi.fn(async () => ({ ok: true })),
         getPendingPairing: vi.fn(async () => null), getPendingRecovery: vi.fn(async () => null), listLocalAccounts: vi.fn(async () => []),
         hasKnownPassword: vi.fn(async () => true),
-        simulatePhonePayment: vi.fn(async () => ({ ok: true })), cancelPhoneLogin: vi.fn(async () => ({ ok: true })) } } };
+        payPhoneLogin: vi.fn(async () => ({ ok: true })), paymentStore: vi.fn(() => null), cancelPhoneLogin: vi.fn(async () => ({ ok: true })) } } };
     owners.gateway.mockReset().mockResolvedValue({ ok: true }); owners.create.mockReset().mockResolvedValue({ ok: true, project_id: 'sleep-project' });
     owners.media.mockReset().mockResolvedValue({ ok: false, cancelled: true });
     owners.readFile.mockReset().mockResolvedValue({ type: 'image/png' }); owners.readImage.mockReset().mockResolvedValue('data:image/png;base64,selected');
@@ -211,7 +211,7 @@ describe('first-launch canonical lifecycle', () => {
         expect(window.__eveProfilePreferences.visual.masteryLevel).toBe('beginner');
         expect(window.__eveProfilePreferences.custom).toBeUndefined();
         expect(f.loadProfile).not.toHaveBeenCalled(); expect(f.saves).toHaveLength(0);
-        expect(window.AdoleAPI.auth.simulatePhonePayment).not.toHaveBeenCalled();
+        expect(window.AdoleAPI.auth.payPhoneLogin).not.toHaveBeenCalled();
         expect(window.AdoleAPI.auth.resendPhoneLogin).not.toHaveBeenCalled();
         expect(f.createTemplate).not.toHaveBeenCalled(); expect(owners.create).not.toHaveBeenCalled();
         await f.flow.close();
@@ -322,14 +322,28 @@ describe('first-launch canonical lifecycle', () => {
         await f.flow.handle({ operation: 'choose_auth' }); expect(f.flow.state.stage).toBe('credentials');
         await f.flow.handle({ operation: 'authenticate' }); expect(f.flow.state.stage).toBe('billing');
         await f.flow.handle({ operation: 'method', value: 'paypal' });
-        await f.flow.handle({ operation: 'pay' }); expect(window.AdoleAPI.auth.simulatePhonePayment).toHaveBeenCalledWith('paypal');
+        await f.flow.handle({ operation: 'pay' }); expect(window.AdoleAPI.auth.payPhoneLogin).toHaveBeenCalledWith({ method: 'paypal' });
         expect(f.flow.state.stage).toBe('billing'); expect(f.saves).toHaveLength(0);
+    });
+    it('pays through the native store without Web methods and treats a closed sheet as no failure', async () => {
+        window.AdoleAPI.auth.paymentStore.mockReturnValue('apple');
+        const f = fixture(); await f.flow.open();
+        await f.flow.handle({ operation: 'phone' }); f.draft('phone', '+33612345678');
+        await f.flow.handle({ operation: 'choose_auth' }); await f.flow.handle({ operation: 'authenticate' });
+        expect(f.flow.state.stage).toBe('billing');
+        expect(f.presentation().records.map(record => record.id.replace('__first_launch_first_launch_billing_store_', '')))
+            .toEqual(['matrix', 'actions', 'title', 'price', 'countdown', 'pay', 'back', 'notice', 'logo']);
+        window.AdoleAPI.auth.payPhoneLogin.mockRejectedValueOnce(new Error('billing_purchase_cancelled'));
+        expect(await f.flow.handle({ operation: 'pay' })).toEqual({ ok: true, cancelled: true });
+        expect(f.flow.state.notice).toBe(''); expect(f.flow.state.stage).toBe('billing');
+        await f.flow.handle({ operation: 'pay' });
+        expect(window.AdoleAPI.auth.payPhoneLogin).toHaveBeenLastCalledWith({ store: 'apple' });
     });
     it('keeps Billing while payment settles and reports failures', async () => {
         const f = fixture(); await f.flow.open();
         await f.flow.handle({ operation: 'phone' }); f.draft('phone', '+33612345678');
         await f.flow.handle({ operation: 'choose_auth' }); await f.flow.handle({ operation: 'authenticate' }); let release;
-        window.AdoleAPI.auth.simulatePhonePayment.mockImplementationOnce(() => new Promise(done => { release = done; }));
+        window.AdoleAPI.auth.payPhoneLogin.mockImplementationOnce(() => new Promise(done => { release = done; }));
         const paying = f.flow.handle({ operation: 'pay' });
         await vi.waitFor(() => expect(release).toBeTypeOf('function'));
         expect(f.flow.state.stage).toBe('billing'); expect(f.saves).toHaveLength(0);
@@ -353,7 +367,7 @@ describe('first-launch canonical lifecycle', () => {
     it('keeps Back actionable while delivery is pending and ignores an obsolete payment failure', async () => {
         const f = fixture(); window.AdoleAPI.auth.getPendingPhoneLogin.mockResolvedValue({ phone: '+33612345678', paymentRequired: true });
         await f.flow.open(); let release;
-        window.AdoleAPI.auth.simulatePhonePayment.mockImplementationOnce(() => new Promise(done => { release = done; }));
+        window.AdoleAPI.auth.payPhoneLogin.mockImplementationOnce(() => new Promise(done => { release = done; }));
         const paying = f.flow.handle({ operation: 'pay' });
         await vi.waitFor(() => expect(release).toBeTypeOf('function'));
         expect(f.flow.state.busy).toBe(false);

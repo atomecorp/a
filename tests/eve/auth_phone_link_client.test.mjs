@@ -1,5 +1,6 @@
 import { describe, expect, it, test, vi } from 'vitest';
 import { createPhoneLinkClient } from '../../atome/src/squirrel/security/auth_phone_link_client.js';
+import { createStorePurchase } from '../../atome/src/squirrel/billing/store_purchase.js';
 import { messageHandlerMixin } from '../../atome/src/squirrel/apis/unified/adole_websocket_message.js';
 
 describe('phone-link client serialization', () => {
@@ -20,10 +21,11 @@ describe('phone-link client serialization', () => {
             actions.push(message.action);
             if (message.action === 'phone-link-start') return { ok: true, attemptId: 'attempt', expiresAt: initial + 300000, serverNow: clock, pairingCode: '12345678' };
             if (message.action === 'phone-link-challenge') return { ok: true, challenge: { purpose: message.purpose, reference: 'attempt', issuedAt: clock, nonce: 'server:nonce' } };
-            if (message.action === 'phone-link-simulate-payment') return { ok: true, token: 'access', user: { id: 'user', phone: '+33612345678' }, session: { keyId: device.keyId } };
+            if (message.action === 'phone-link-payment' && message.payment?.method === 'card') return { ok: true, token: 'access', user: { id: 'user', phone: '+33612345678' }, session: { keyId: device.keyId } };
             return { ok: true, pending: true, expiresAt: initial + 300000, serverNow: clock, pairingCode: '12345678', ...(verified ? { paymentRequired: true } : {}) };
         };
-        const make = () => createPhoneLinkClient({ devices, send, installSession: async () => {}, locks: null, now: () => clock });
+        const make = () => createPhoneLinkClient({ devices, send, installSession: async () => {}, locks: null, now: () => clock,
+            storePurchase: createStorePurchase({ host: null }) });
         await make().start('+33612345678');
         clock += 120000;
         const resumed = make();
@@ -33,7 +35,7 @@ describe('phone-link client serialization', () => {
         verified = true; await resumed.resume();
         expect(await make().pendingAttempt()).toMatchObject({ paymentRequired: true, expiresAt: initial + 300000 });
         expect(actions.filter(action => action === 'phone-link-start')).toHaveLength(1);
-        expect(await resumed.simulatePayment('card')).toMatchObject({ token: 'access' });
+        expect(await resumed.pay({ method: 'card' })).toMatchObject({ token: 'access' });
         expect(records.has('attempt')).toBe(false);
     });
     it('consumes a local development link through the normal signed proof flow', async () => {

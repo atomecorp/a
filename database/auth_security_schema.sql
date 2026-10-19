@@ -53,3 +53,30 @@ CREATE TABLE IF NOT EXISTS provider_shared_settings (
     name TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+-- Billing: store-verified purchases and an append-only credit ledger. Balances
+-- and entitlements are derived from these rows; nothing is rewritten in place
+-- except a purchase's revocation (refund, chargeback).
+CREATE TABLE IF NOT EXISTS billing_purchases (
+    purchase_ref TEXT PRIMARY KEY,
+    principal_id TEXT NOT NULL,
+    source TEXT NOT NULL CHECK(source IN ('simulated', 'apple', 'google', 'stripe')),
+    product_id TEXT NOT NULL,
+    original_ref TEXT NOT NULL,
+    period_start_ms INTEGER,
+    period_end_ms INTEGER,
+    revoked_ms INTEGER,
+    recorded_ms INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_billing_purchases_principal ON billing_purchases(principal_id, period_end_ms);
+CREATE INDEX IF NOT EXISTS idx_billing_purchases_original ON billing_purchases(original_ref);
+CREATE TABLE IF NOT EXISTS billing_credit_ledger (
+    entry_ref TEXT PRIMARY KEY,
+    principal_id TEXT NOT NULL,
+    bucket TEXT NOT NULL CHECK(bucket IN ('included', 'purchased')),
+    credits INTEGER NOT NULL,
+    period_ref TEXT,
+    reason TEXT NOT NULL,
+    recorded_ms INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_billing_credit_ledger_principal ON billing_credit_ledger(principal_id, bucket, period_ref);

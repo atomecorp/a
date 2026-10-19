@@ -111,7 +111,7 @@ describe('logout first-launch ownership', () => {
     it('routes Billing Pay and Back through the real declared tool gateway', async () => {
         const f = await setup(); transport.cleanup = null;
         f.api.auth.startPhoneLogin = vi.fn(async () => ({ ok: true, paymentRequired: true }));
-        f.api.auth.simulatePhonePayment = vi.fn(async () => ({ ok: true }));
+        f.api.auth.payPhoneLogin = vi.fn(async () => ({ ok: true })); f.api.auth.paymentStore = vi.fn(() => null);
         f.api.auth.cancelPhoneLogin = vi.fn(async () => ({ ok: true }));
         await f.home.openLoginSequenceAfterAuthCheck();
         expect(await transport.presentations.at(-1).activate({ operation: 'phone', value: '' })).toMatchObject({ ok: true });
@@ -123,7 +123,7 @@ describe('logout first-launch ownership', () => {
         expect(f.flow().state.stage).toBe('billing');
         expect(await transport.presentations.at(-1).activate({ operation: 'change_phone', value: '' })).toMatchObject({ ok: true });
         expect(f.flow().state.stage).toBe('phone');
-        expect(f.api.auth.simulatePhonePayment).toHaveBeenCalledWith('card'); expect(f.api.auth.cancelPhoneLogin).toHaveBeenCalledTimes(1);
+        expect(f.api.auth.payPhoneLogin).toHaveBeenCalledWith({ method: 'card' }); expect(f.api.auth.cancelPhoneLogin).toHaveBeenCalledTimes(1);
         await f.flow().close();
     });
     it('keeps the guest goal selector open across the real session and main-menu events', async () => {

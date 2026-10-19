@@ -9,8 +9,9 @@ import { openRecoveryRequest, RECOVERY_PHONE_DELAY_MS } from './auth_recovery.js
 // The injected persistence and account functions are the existing server owners.
 // SMS I/O is outside transactions; proofs and identity changes are atomic.
 export function createPhoneLinkAuth({ query, transaction, findByPhone, findById, createAccount,
-    sendLink, masterSecret, issueAccess, disconnectSession, deleteAccount, replacePhone, screenPassword, notify, now = Date.now, dailyLimit = 20 }) {
+    sendLink, masterSecret, issueAccess, disconnectSession, deleteAccount, replacePhone, screenPassword, notify, billing, now = Date.now, dailyLimit = 20 }) {
     if (typeof notify !== 'function') reject('auth_notify_required');
+    if (typeof billing?.prepareCreation !== 'function') reject('auth_billing_required');
     if (!Number.isSafeInteger(dailyLimit) || dailyLimit < 1) reject('auth_budget_invalid');
     const proof = createAuthProofSecurity({ query, transaction, masterSecret, now });
     const devices = createDeviceRegistry({ query, now });
@@ -85,20 +86,27 @@ export function createPhoneLinkAuth({ query, transaction, findByPhone, findById,
         const value = await attempt(id);
         return deliver(value, token);
     }
-    // A fictional receipt never grants a session: the SMS and device proofs remain mandatory.
-    async function simulatePayment(input) {
-        if (!['card', 'paypal', 'wero', 'apple_pay', 'google_pay', 'other'].includes(input.method)) reject('auth_payment_method_invalid');
-        return transaction(async () => {
+    // A receipt, simulated or verified by a store, never grants a session by
+    // itself: the SMS and device proofs remain mandatory. The store purchase is
+    // bound to this attempt's device key, which becomes the account's key.
+    async function pay(input) {
+        const pending = await attempt(input.attemptId);
+        const purchase = await billing.prepareCreation(input.payment, pending.key_id);
+        const result = await transaction(async () => {
             const value = await attempt(input.attemptId);
-            await proof.consumeProof(input, 'simulate-payment', input.attemptId, JSON.parse(value.public_key));
-            if (value.state !== 'verified_payment' || value.candidate_id) reject();
+            await proof.consumeProof(input, 'payment', input.attemptId, JSON.parse(value.public_key));
+            if (value.key_id !== pending.key_id || value.state !== 'verified_payment' || value.candidate_id) reject();
             if (await findByPhone(proof.openPhone(value.phone_sealed))) reject();
-            await proof.audit(`payment_simulated:${input.method}`, null, input.attemptId);
-            return { ...await finishAttempt(value, true), payment: { mode: 'simulated', amountCents: 1200, currency: 'EUR', period: 'month' } };
+            await proof.audit(`payment:${purchase.method}`, null, input.attemptId);
+            const finished = await finishAttempt(value, true);
+            const created = finished.newAccount && finished.user?.id;
+            return { ...finished, payment: created ? await purchase.record(finished.user.id) : null };
         });
+        if (result.payment) await purchase.settle();
+        return result;
     }
     async function getChallenge({ attemptId, keyId, purpose }, network) {
-        if (!['consume', 'resume', 'resend', 'cancel', 'simulate-payment'].includes(purpose)) reject('auth_request_invalid');
+        if (!['consume', 'resume', 'resend', 'cancel', 'payment'].includes(purpose)) reject('auth_request_invalid');
         return transaction(async () => {
             await proof.limit(`challenge:${proof.keyedIndex(String(network))}`, 60, 60000);
             const value = await attempt(attemptId, { forCancellation: purpose === 'cancel' });
@@ -224,5 +232,5 @@ export function createPhoneLinkAuth({ query, transaction, findByPhone, findById,
         if (keyId !== authorization.key_id) reject();
         return start({ ...input, phone: input.newPhone }, network, authorization);
     }
-    return { start, simulatePayment, resend, startPhoneChange, getChallenge, complete, confirm, cancel, sessions, passwords, proof, devices, handles };
+    return { start, pay, resend, startPhoneChange, getChallenge, complete, confirm, cancel, sessions, passwords, proof, devices, handles };
 }

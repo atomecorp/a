@@ -16,13 +16,11 @@ export class PlayError extends Error {
     }
 }
 
-/** Local release-service boundary, independent of FCM's project-bound OS wake-up transport. */
-export function createPlayClient({ packageName, account, request = fetch, now = Date.now,
-    sleep = ms => new Promise(resolve => setTimeout(resolve, ms)) }) {
-    if (!/^[a-zA-Z]\w*(?:\.[a-zA-Z]\w*)+$/.test(packageName) || packageName.endsWith('.debug')) throw new Error('Invalid Play release package');
-    const base = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${packageName}/edits`;
+// Service-account OAuth for the Android Publisher API, shared by the release
+// client below and the server's purchase verification (`server/billing/`).
+export function createPlayAuthorization({ account, request = fetch, now = Date.now }) {
     let access;
-    async function authorize() {
+    return async function authorize() {
         if (access?.expires > now() + 60000) return access.token;
         let assertion;
         try {
@@ -40,7 +38,15 @@ export function createPlayClient({ packageName, account, request = fetch, now = 
         if (typeof body.access_token !== 'string' || !Number.isFinite(body.expires_in) || body.expires_in <= 60) throw new PlayError('authorization response', response.status);
         access = { token: body.access_token, expires: now() + Math.min(body.expires_in, 3600) * 1000 };
         return access.token;
-    }
+    };
+}
+
+/** Local release-service boundary, independent of FCM's project-bound OS wake-up transport. */
+export function createPlayClient({ packageName, account, request = fetch, now = Date.now,
+    sleep = ms => new Promise(resolve => setTimeout(resolve, ms)) }) {
+    if (!/^[a-zA-Z]\w*(?:\.[a-zA-Z]\w*)+$/.test(packageName) || packageName.endsWith('.debug')) throw new Error('Invalid Play release package');
+    const base = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${packageName}/edits`;
+    const authorize = createPlayAuthorization({ account, request, now });
     async function send(method, url, { body, upload = false, operation } = {}) {
         const bearer = await authorize();
         for (let attempt = 0; attempt < 3; attempt++) {

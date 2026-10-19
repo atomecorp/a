@@ -1,0 +1,11 @@
+"$schema" = "schemas/schema.json"
+
+[[set]]
+identifier = "billing-store"
+description = "Allows the main webview to use the single gated in-app purchase command. The purchase grants nothing by itself: the server verifies it with the store."
+permissions = ["allow-billing-invoke"]
+
+[[permission]]
+identifier = "allow-billing-invoke"
+description = "Enables the billing_invoke command."
+commands.allow = ["billing_invoke"]

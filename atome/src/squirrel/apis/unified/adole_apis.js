@@ -75,7 +75,7 @@ const getAnonymousIdentity = () => {
 export const AdoleAPI = {
   auth: {
     startPhoneLogin: auth.startPhoneLogin,
-    simulatePhonePayment: auth.simulatePhonePayment,
+    payPhoneLogin: auth.payPhoneLogin,
     resumePhoneLogin: auth.resumePhoneLogin,
     resendPhoneLogin: auth.resendPhoneLogin,
     getPendingPhoneLogin: auth.getPendingPhoneLogin,

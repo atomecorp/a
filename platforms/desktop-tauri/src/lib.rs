@@ -9,6 +9,7 @@ mod native_clipboard;
 mod native_contacts;
 mod native_personal_import;
 mod native_file_export;
+mod native_billing;
 mod native_health;
 mod native_communication;
 mod native_midi;
@@ -201,6 +202,7 @@ pub fn run() {
         // Opens the official social login pages in the system browser.
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_health::init())
+        .plugin(tauri_plugin_billing::init())
         .plugin(tauri_plugin_mobile_host::init())
         .manage(std::sync::Mutex::new(native_health::state()))
         .manage(assistant_link::AssistantRequestInbox::default())
@@ -267,6 +269,7 @@ pub fn run() {
             native_clipboard::clipboard_has_text,
             native_file_export::export_file_save,
             native_health::health_invoke,
+            native_billing::billing_invoke,
             native_communication::notifications_invoke,
             taxonomy_editor::taxonomy_read,
             taxonomy_editor::taxonomy_save,

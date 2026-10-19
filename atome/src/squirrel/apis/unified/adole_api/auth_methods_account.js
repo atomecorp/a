@@ -4,6 +4,7 @@ import { FastifyAdapter } from '../adole.js';
 import { setConnectionProver } from '../adole_websocket.js';
 import { setSyncConnectionSigner } from '../sync_engine.js';
 import { createPairingClient } from '../../../security/auth_pairing_client.js';
+import { billingStorePurchase } from '../../../billing/store_purchase.js';
 import { createWebAuthnApprover } from '../../../security/auth_webauthn_client.js';
 import { authSigningMessage } from '../../../../shared/auth_link_contract.js';
 import { deviceStore, ensureRemoteSession, installRemote } from './auth_methods_login.js';
@@ -56,7 +57,7 @@ export function pairingClient() {
         // Native shells also use the remote token from Swift/Rust, which cannot prove a connection yet.
         connectionProof: !native,
         send: (message) => FastifyAdapter.ws.send(message), token: () => FastifyAdapter.getToken(), ensureSession: ensureRemoteSession,
-        installSession: installRemote });
+        installSession: installRemote, storePurchase: billingStorePurchase() });
     return client;
 }
 
@@ -81,6 +82,9 @@ const withDevice = (options = {}) => ({ ...describeThisDevice(), ...options });
 export const accountMethods = {
     approveKeyAvailable: () => pairingClient().approveAvailable(),
     createAccount: (options) => pairingClient().createAccount(withDevice(options)),
+    // `apple` / `google` on the native iOS / Android apps, whose payment is the
+    // store's in-app purchase; null where the Web payment applies.
+    paymentStore: () => billingStorePurchase().store(),
     startPairing: (options) => pairingClient().startPairing(withDevice(options)),
     getPendingPairing: () => pairingClient().pendingPairing(),
     getPairingStatus: () => pairingClient().pairingStatus(),

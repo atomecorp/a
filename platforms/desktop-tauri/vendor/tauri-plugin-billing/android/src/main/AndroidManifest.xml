@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Play Billing Library declares com.android.vending.BILLING itself. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" />

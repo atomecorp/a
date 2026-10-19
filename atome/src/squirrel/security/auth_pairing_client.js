@@ -6,7 +6,7 @@ import { generateRecoveryCode, readRecoveryCode, recoveryVerifierInput } from '.
 const hex = (bytes) => Array.from(new Uint8Array(bytes), (value) => value.toString(16).padStart(2, '0')).join('');
 
 export function createPairingClient({ devices, approver, send, token, ensureSession, installSession, connectionProof = false,
-    crypto = globalThis.crypto, now = Date.now }) {
+    storePurchase, crypto = globalThis.crypto, now = Date.now }) {
     async function request(action, fields = {}) {
         const result = await send({ type: 'auth', action, ...fields });
         if (!result?.ok && result?.offline === true) throw new Error('auth_server_unreachable');
@@ -61,15 +61,17 @@ export function createPairingClient({ devices, approver, send, token, ensureSess
     }
     return {
         approveAvailable: () => approver.available(),
-        async createAccount({ deviceClass, platform = 'web', label = '', paymentMethod = 'card' } = {}) {
+        async createAccount({ deviceClass, platform = 'web', label = '', payment = { method: 'card' } } = {}) {
             const scope = newScope();
             const device = await devices.forScope(scope);
+            // A store sheet may stay open for minutes: buy before the 60 s challenge.
+            const paid = await storePurchase.creationPayment(payment, device.keyId);
             const clientNonce = devices.randomHandle();
             const pre = await request('account-create-challenge', { sessionKey: device.publicKey, clientNonce });
             const signed = await device.sign(checkChallenge(pre.challenge, 'create-account', `create:${device.keyId}`));
             const approve = await registerApprove(pre.register, deviceClass, scope);
             const result = await request('account-create', { sessionKey: device.publicKey, clientNonce, ...signed, connectionProof,
-                approve: approve?.approve || null, deviceMeta: { platform, label }, deviceClass, payment: { method: paymentMethod } });
+                approve: approve?.approve || null, deviceMeta: { platform, label }, deviceClass, payment: paid });
             return accept(result, scope, approve?.record, deviceClass);
         },
         // New device: a request code and a match number to show and to speak.

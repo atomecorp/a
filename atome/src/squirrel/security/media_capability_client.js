@@ -100,8 +100,13 @@ export function adoptDelegatedMediaCapability(capability = null) {
     delegated = token ? { token, expiresAt: Number(capability.expiresAt) || 0 } : null;
 }
 
+// Awaits a pending or allowed issuance; a recent failure is not retried per call
+// (the same back-off as `getMediaTokenSync`), or every texture re-sent the request.
 export async function ensureMediaToken() {
-    return getMediaTokenSync() || refreshMediaToken().catch(() => '');
+    const token = getMediaTokenSync();
+    if (token) return token;
+    if (!inflight && Date.now() - lastFailureAt <= RETRY_DELAY_MS) return '';
+    return refreshMediaToken().catch(() => '');
 }
 
 if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {

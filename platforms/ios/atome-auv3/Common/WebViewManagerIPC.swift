@@ -67,6 +67,13 @@ extension WebViewManager {
             }
             return
         }
+        if command == "billing_store_purchase" {
+            PurchaseManager.shared.purchase(productId: payload["productId"] as? String ?? "",
+                                            accountToken: payload["accountToken"] as? String ?? "") { response, error in
+                sendNativeInvokeResponse(requestId: requestId, payload: response, error: error)
+            }
+            return
+        }
         if command == "auth_link_take" {
             sendNativeInvokeResponse(requestId: requestId, payload: AuthLinkInbox.take())
             return

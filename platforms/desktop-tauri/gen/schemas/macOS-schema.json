@@ -363,6 +363,12 @@
           "markdownDescription": "Allows the main webview to use the native Bevy renderer commands.\n#### This permission set includes:\n\n- `allow-bevy-native-start`\n- `allow-bevy-native-apply-ops`\n- `allow-bevy-native-resize`"
         },
         {
+          "description": "Allows the main webview to use the single gated in-app purchase command. The purchase grants nothing by itself: the server verifies it with the store.\n#### This permission set includes:\n\n- `allow-billing-invoke`",
+          "type": "string",
+          "const": "billing-store",
+          "markdownDescription": "Allows the main webview to use the single gated in-app purchase command. The purchase grants nothing by itself: the server verifies it with the store.\n#### This permission set includes:\n\n- `allow-billing-invoke`"
+        },
+        {
           "description": "Allows the main webview to read and write the host system clipboard.\n#### This permission set includes:\n\n- `allow-clipboard-write-text`\n- `allow-clipboard-read-text`\n- `allow-clipboard-has-text`\n- `allow-clipboard-read-items`",
           "type": "string",
           "const": "clipboard-bridge",
@@ -589,6 +595,12 @@
           "type": "string",
           "const": "allow-bevy-native-start",
           "markdownDescription": "Enables the bevy_native_start command."
+        },
+        {
+          "description": "Enables the billing_invoke command.",
+          "type": "string",
+          "const": "allow-billing-invoke",
+          "markdownDescription": "Enables the billing_invoke command."
         },
         {
           "description": "Enables the clipboard_has_text command.",

@@ -410,8 +410,7 @@ export function resolveAccessPolicy(method, params = {}) {
         };
     }
     if (
-        normalizedMethod === 'contacts.import_macos'
-        || normalizedMethod === 'contacts.import_icloud'
+        normalizedMethod === 'contacts.import_icloud'
         || normalizedMethod === 'contacts.create'
         || normalizedMethod === 'contacts.update'
         || normalizedMethod === 'contacts.delete'

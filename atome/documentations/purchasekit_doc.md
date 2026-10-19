@@ -1,67 +1,44 @@
-# PurchaseKit -- Documentation
+# Achats intégrés (App Store, Google Play)
 
-## 1. Configuration côté App Store Connect
+L'offre unique (12 € par mois, stockage + crédits IA, paliers et packs) est décrite dans
+`atome/src/shared/billing_contract.js`. Sur l'app iOS et l'app Android, le seul moyen de
+paiement est l'achat intégré du magasin. Le Web et les apps de bureau gardent le paiement
+Web (encore simulé). Le droit appartient au **compte**, jamais à l'appareil : le serveur
+vérifie chaque achat auprès du magasin avant d'accorder quoi que ce soit.
 
-1.  **Créer les produits**
-    -   Types : consommable, non-consommable, abonnement.
-    -   Créer des IDs stables (ex. `com.atome.lyrix.pro`).
-2.  **Configurer dans App Store Connect**
-    -   Menu *Fonctionnalités → Achats intégrés*.
-    -   Renseigner les noms, descriptions et prix.
+## 1. Chaîne
 
-## 2. Configuration côté Xcode
+1. `atome/src/squirrel/billing/store_purchase.js` choisit le magasin de l'hôte natif et
+   achète le palier de base avec le jeton de compte `billingAccountToken(keyId)` de la clé
+   d'appareil qui crée le compte.
+2. iOS : `platforms/ios/atome-auv3/Common/PurchaseManager.swift` (StoreKit 2, commande
+   `billing_store_purchase`, `appAccountToken`) renvoie la transaction signée (JWS).
+   Android : `platforms/desktop-tauri/src/native_billing.rs` (`billing_invoke`) →
+   `vendor/tauri-plugin-billing` (`BillingPlugin.kt`, `obfuscatedAccountId`) renvoie le
+   jeton d'achat.
+3. La preuve part avec `account-create` ou `phone-link-payment`, ou plus tard avec
+   `billing` › `apple.verify` / `google.verify`.
+4. `server/billing/store_purchases.js` la vérifie (`apple_store_verify.js`,
+   `google_play_verify.js`), la lie au compte, puis l'inscrit dans `billing_ledger.js`.
+   Google exige ensuite un accusé (abonnement) ou une consommation (pack).
+5. Renouvellements et remboursements : `POST /api/billing/apple/notifications`
+   (App Store Server Notifications v2) et `POST /api/billing/google/rtdn` (Pub/Sub).
 
-1.  **Activer la capacité In-App Purchase** dans *Signing &
-    Capabilities*.
-2.  **(Optionnel) App Group** pour AUv3 (ex. `group.com.atome.shared`).
-3.  **Créer un fichier .storekit** pour tester localement.
+## 2. App Store Connect
 
-## 3. Intégration du code
+- Groupe d'abonnements avec `one.atome.plan.standard.monthly`, `.plus.monthly`,
+  `.max.monthly` ; achat consommable `one.atome.credits.4000`.
+- URL des notifications v2 : `https://atome.one/api/billing/apple/notifications`.
+- Test local : un fichier `.storekit` dans le schéma Xcode. Le serveur de développement
+  accepte ces transactions (`environment: Xcode`) si `ATOME_STOREKIT_TEST_CERT` désigne le
+  certificat exporté par Xcode (Editor › Save Public Certificate). Jamais en production.
 
-Le code est structuré en deux fichiers principaux :
+## 3. Google Play Console
 
-### PurchaseKit/EntitlementStore.swift
-
-Gère la sauvegarde des achats en local (UserDefaults ou App Group).
-
-### PurchaseKit/PurchaseManager.swift
-
--   Chargement des produits.
--   Achats et restauration.
--   Gestion des transactions en arrière-plan.
-
-## 4. Exemple d'intégration SwiftUI
-
-``` swift
-struct ContentView: View {
-    private let ids: Set<String> = ["com.atome.lyrix.pro"]
-    var body: some View {
-        PaywallView(productIDs: ids)
-    }
-}
-```
-
-## 5. AUv3 -- Partage des droits
-
--   Utiliser le même App Group pour partager l'état des achats entre
-    l'app et l'extension AUv3.
-
-## 6. Pont WebView (optionnel)
-
--   Permet d'exposer les achats dans la WebView.
--   Utilise un handler JS → Swift pour les commandes et un callback
-    Swift → JS pour les réponses.
-
-## 7. Tests et soumission
-
--   Tester d'abord avec le fichier `.storekit`.
--   Ensuite tester avec un compte Sandbox.
--   Vérifier la restauration des achats.
--   Soumettre avec les produits bien configurés dans App Store Connect.
-
-## 8. Bonnes pratiques
-
--   Toujours vérifier les transactions (`VerificationResult`).
--   Isoler la logique d'achat dans PurchaseKit.
--   Ne jamais accorder d'accès sans transaction vérifiée.
-
+- Mêmes identifiants : un abonnement (avec une offre de base) par palier, un produit
+  unique par pack.
+- Notifications en temps réel : sujet Pub/Sub en push vers
+  `https://atome.one/api/billing/google/rtdn`.
+- Compte de service avec l'accès financier : `ATOME_PLAY_SERVICE_ACCOUNT_FILE`, ou
+  `serviceAccountFile` de `Private/android-play.json`. Sans lui, la vérification répond
+  `billing_store_unconfigured`.

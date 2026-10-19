@@ -135,7 +135,7 @@ describe('SMS security boundaries', () => {
         expect(f.db.prepare("SELECT count FROM auth_send_limits WHERE bucket=?").get(`pairing:${a.attemptId}`).count).toBe(5);
         const restarted = createPhoneLinkAuth({ query: async (mode, sql, args = []) => f.db.prepare(sql)[mode](...args),
             transaction: async work => { f.db.exec('BEGIN'); try { const result = await work(); f.db.exec('COMMIT'); return result; } catch (error) { f.db.exec('ROLLBACK'); throw error; } },
-            masterSecret: 'test-only-secret-material'.repeat(3), now: f.now, notify: async () => {} });
+            masterSecret: 'test-only-secret-material'.repeat(3), now: f.now, notify: async () => {}, billing: f.billing });
         await expect(restarted.confirm({ ...input, pairingCode: a.pairingCode })).rejects.toThrow('auth_pairing_locked');
         expect(f.db.prepare('SELECT count(*) AS n FROM auth_device_sessions').get().n).toBe(0);
         expect(await f.auth.complete({ ...await f.input(key, a.attemptId, 'resume') })).toMatchObject({ pending: true });
@@ -151,7 +151,7 @@ describe('SMS security boundaries', () => {
         await expect(f.auth.start({ phone: 'invalid' }, 'test')).rejects.toThrow();
         expect(f.db.prepare("SELECT count(*) AS n FROM auth_send_limits WHERE bucket='sms-daily'").get().n).toBe(0);
         const a = await f.start(key);
-        for (let i = 0; i < 3; i++) await expect(f.auth.simulatePayment({ ...await f.input(key, a.attemptId, 'simulate-payment'), method: 'card' })).rejects.toThrow();
+        for (let i = 0; i < 3; i++) await expect(f.auth.pay({ ...await f.input(key, a.attemptId, 'payment'), payment: { method: 'card' } })).rejects.toThrow();
         expect(f.messages).toHaveLength(1);
         expect(f.db.prepare("SELECT count FROM auth_send_limits WHERE bucket='sms-daily'").get().count).toBe(1);
         await f.start(f.device(), '+33612345679');

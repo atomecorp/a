@@ -59,11 +59,11 @@ export const createRealtimeSession = ({
     };
     const setInput = enabled => stream?.getAudioTracks().forEach(track => { track.enabled = enabled; });
     // eVe says she is ready in her own voice, played locally once the session can
-    // hear and answer: the microphone stays shut meanwhile, and whatever it took
-    // in is cleared, so the session never answers her own sentence.
+    // hear and answer. The microphone stays shut from its capture until then
+    // (`capture`): the media flows before the event channel opens, and a startup
+    // sentence heard in that gap was answered by the model over her ready sentence.
     const announceReadiness = async token => {
         if (!announceReady) return emit({ phase: listening ? 'listening' : 'idle', connected: true });
-        setInput(false);
         emit({ phase: 'speaking', connected: true });
         await announceReady();
         if (token !== generation || !listening) return;
@@ -165,6 +165,7 @@ export const createRealtimeSession = ({
         });
         if (token !== generation || !listening) { acquired.getTracks().forEach(track => track.stop()); return false; }
         stream = acquired;
+        if (announceReady) setInput(false);
         emit({});
         const sender = peer.getSenders().find(item => item.track?.kind === 'audio');
         if (sender) await sender.replaceTrack(stream.getAudioTracks()[0]);
@@ -270,8 +271,7 @@ export const createRealtimeSession = ({
             await fail(error); throw error;
         }
     };
-    // A hang-up releases the transport at once: the farewell is eVe's own voice,
-    // spoken by the assistant, not by the model.
+    // A hang-up releases the transport at once, in silence.
     return Object.freeze({
         open, close, pause,
         async configure(options = {}) {

@@ -1,6 +1,6 @@
 import { createTtsRuntime } from './tts_runtime.js';
 
-// Every sentence eVe speaks on her own — startup, ready, farewell, assistant and
+// Every sentence eVe speaks on her own — startup, ready, assistant and
 // voice-activation messages — is the Siwis voice, rendered ahead of time by
 // `scripts/generate_voice_lines.mjs`: the app never runs a second ONNX engine
 // next to the wake detector (out of memory on iPhone), and the voice is the same

@@ -7761,6 +7761,7 @@ dependencies = [
  "symphonia",
  "tauri",
  "tauri-build",
+ "tauri-plugin-billing",
  "tauri-plugin-clipboard-manager",
  "tauri-plugin-health",
  "tauri-plugin-mobile-host",
@@ -8340,6 +8341,15 @@ dependencies = [
  "serde_json",
  "tauri-utils",
  "walkdir",
+]
+
+[[package]]
+name = "tauri-plugin-billing"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "tauri",
+ "tauri-plugin",
 ]
 
 [[package]]

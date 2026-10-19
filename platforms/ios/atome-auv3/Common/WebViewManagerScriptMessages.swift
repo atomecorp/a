@@ -161,7 +161,7 @@ extension WebViewManager {
                         // Auth and health commands are honoured only from the bundled
                         // app page in the main frame: never from an iframe or another origin.
                         if command == "auth_device_key" || command == "auth_link_take" || command == "auth_local_request"
-                            || command.hasPrefix("health_") || command.hasPrefix("notifications_") || command == "apple_music_invoke"
+                            || command.hasPrefix("health_") || command.hasPrefix("notifications_") || command.hasPrefix("billing_") || command == "apple_music_invoke"
                             || ["macos_contacts_snapshot", "native_calendar_snapshot", "export_file_save", "export_file_share"].contains(command) {
                             let source = message.frameInfo.request.url
                             let bundledPage = source?.scheme == "atome" && source?.host == nil
@@ -389,20 +389,6 @@ extension WebViewManager {
                         let requestId = body["requestId"] as? Int ?? -1
                         let info = WebViewManager.storageModeInfo(requestId: requestId)
                         WebViewManager.sendBridgeJSON(info)
-                        return
-                    }
-                    if action == "purchaseProduct" || action == "restorePurchases" {
-                        let requestId = body["requestId"] as? Int ?? Int(Date().timeIntervalSince1970)
-                        if action == "purchaseProduct" {
-                            let productId = body["productId"] as? String ?? ""
-                            if #available(iOS 15.0, *) {
-                                Task { await PurchaseManager.shared.purchase(id: productId, requestId: requestId) }
-                            } else { LegacyPurchaseBridge.shared.purchase(productId: productId, requestId: requestId) }
-                        } else {
-                            if #available(iOS 15.0, *) {
-                                Task { await PurchaseManager.shared.restore(requestId: requestId) }
-                            } else { LegacyPurchaseBridge.shared.restore(requestId: requestId) }
-                        }
                         return
                     }
                     if action == "sendMidi" {

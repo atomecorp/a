@@ -119,7 +119,6 @@ export const createMcpPlatformHandlers = (getHandlers) => ({
                 'contacts.list',
                 'contacts.search',
                 'contacts.read',
-                'contacts.import_macos',
                 'contacts.import_icloud',
                 'contacts.push_icloud',
                 'contacts.create',

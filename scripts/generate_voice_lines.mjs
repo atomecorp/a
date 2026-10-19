@@ -1,5 +1,5 @@
-// Renders every sentence eVe speaks on her own (startup, ready, farewell,
-// assistant and voice-activation messages) with the shipped Siwis voice, so the
+// Renders every sentence eVe speaks on her own (startup, ready, assistant and
+// voice-activation messages) with the shipped Siwis voice, so the
 // app plays them without running a second ONNX engine next to the wake
 // detector. `--check` prints the phonemes only; review them after any text change.
 //
@@ -28,7 +28,6 @@ const spokenTexts = () => {
         eveT('eve.voice.assistant.startup_line'),
         ...eveTList('eve.voice.assistant.ready_lines.after_wait'),
         ...eveTList('eve.voice.assistant.ready_lines.direct'),
-        eveT('eve.voice.assistant.closing_greeting'),
         ...byPrefix('eve.voice.assistant.error.'),
         ...byPrefix('eve.voice.wake.error.'),
         enroll('intro', { takes }),

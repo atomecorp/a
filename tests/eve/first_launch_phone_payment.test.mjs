@@ -3,6 +3,8 @@ import Database from 'better-sqlite3';
 import crypto from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { createPhoneLinkAuth } from '../../server/auth_phone_link.js';
+import { createBillingLedger } from '../../server/billing/billing_ledger.js';
+import { createStorePurchases } from '../../server/billing/store_purchases.js';
 import { authSigningMessage, parseAuthLink } from '../../atome/src/shared/auth_link_contract.js';
 import { digest } from '../../server/auth_link_security.js';
 
@@ -11,13 +13,16 @@ afterEach(() => { databases.splice(0).forEach(db => db.close()); });
 const fixture = ({ existing = false, failSms = false } = {}) => {
     const db = new Database(':memory:'); databases.push(db);
     db.exec(readFileSync(new URL('../../database/schema.sql', import.meta.url), 'utf8'));
+    db.exec(readFileSync(new URL('../../database/auth_security_schema.sql', import.meta.url), 'utf8'));
     let clock = 1800000000000, links = [], created = 0;
     const accounts = new Map(existing ? [['+33612345678', { user_id: 'existing', phone: '+33612345678' }]] : []);
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
     const jwk0 = publicKey.export({ format: 'jwk' }), jwk = { kty: 'EC', crv: 'P-256', x: jwk0.x, y: jwk0.y };
     const keyId = digest(JSON.stringify(jwk));
-    const service = createPhoneLinkAuth({ query: async (mode, sql, args = []) => db.prepare(sql)[mode](...args),
-        transaction: async callback => { db.exec('BEGIN'); try { const result = await callback(); db.exec('COMMIT'); return result; } catch (error) { db.exec('ROLLBACK'); throw error; } },
+    const query = async (mode, sql, args = []) => db.prepare(sql)[mode](...args);
+    const transaction = async callback => { db.exec('BEGIN'); try { const result = await callback(); db.exec('COMMIT'); return result; } catch (error) { db.exec('ROLLBACK'); throw error; } };
+    const billing = createStorePurchases({ ledger: createBillingLedger({ query, transaction, now: () => clock }), query, apple: null, google: null });
+    const service = createPhoneLinkAuth({ query, transaction, billing,
         findByPhone: async phone => accounts.get(phone), findById: async id => [...accounts.values()].find(a => a.user_id === id),
         createAccount: async phone => { created++; const account = { user_id: 'new', phone, first_launch_version: 1 }; accounts.set(phone, account); return account; },
         sendLink: async (_phone, link) => { if (failSms) throw new Error('provider'); links.push(link); return { accepted: true }; },
@@ -41,7 +46,7 @@ describe('first-launch server payment and phone proof', () => {
     });
     it('requires SMS before payment and issues one session only after both proofs', async () => {
         const f = fixture(), a = await f.start();
-        const pay = async () => f.service.simulatePayment({ ...await f.proof(a.attemptId, 'simulate-payment'), method: 'card' });
+        const pay = async () => f.service.pay({ ...await f.proof(a.attemptId, 'payment'), payment: { method: 'card' } });
         await expect(pay()).rejects.toThrow();
         expect(await f.service.complete({ ...await f.proof(a.attemptId, 'resume'), action: 'resume' })).toMatchObject({ pending: true });
         const bad = await f.proof(a.attemptId, 'consume');
@@ -76,11 +81,11 @@ describe('first-launch server payment and phone proof', () => {
     it('rejects expired verified payments and legacy unpaid attempts', async () => {
         const f = fixture(), a = await f.start();
         await f.service.complete({ ...parseAuthLink(f.links[0]), ...await f.proof(a.attemptId, 'consume') });
-        const input = { ...await f.proof(a.attemptId, 'simulate-payment'), method: 'paypal' };
-        f.advance(300000); await expect(f.service.simulatePayment(input)).rejects.toThrow('auth_attempt_expired');
+        const input = { ...await f.proof(a.attemptId, 'payment'), payment: { method: 'paypal' } };
+        f.advance(300000); await expect(f.service.pay(input)).rejects.toThrow('auth_attempt_expired');
         const legacy = fixture(), b = await legacy.start();
         legacy.db.prepare("UPDATE auth_link_attempts SET state='awaiting_payment'").run();
-        await expect(legacy.service.simulatePayment({ ...await legacy.proof(b.attemptId, 'simulate-payment'), method: 'card' })).rejects.toThrow();
+        await expect(legacy.service.pay({ ...await legacy.proof(b.attemptId, 'payment'), payment: { method: 'card' } })).rejects.toThrow();
         expect(f.created()).toBe(0); expect(legacy.created()).toBe(0);
     });
     it('blocks uncertain delivery, charges once and permits signed cancellation', async () => {

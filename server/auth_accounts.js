@@ -1,7 +1,6 @@
 import { publicDeviceKey, reject, requireHandle } from './auth_link_security.js';
 import { normalizeDeviceMeta, resolveDeviceClass } from './auth_devices.js';
 
-const PAYMENT_METHODS = new Set(['card', 'paypal', 'wero', 'apple_pay', 'google_pay', 'other']);
 // Approve-class purposes and the subject each one is bound to.
 const APPROVE_SUBJECTS = {
     'pair-approve': (s) => `${s.pairId}:${s.requesterSessionKeyId}:${s.requesterApproveKeyId || '-'}:${s.choice}`,
@@ -21,7 +20,8 @@ const subjectOf = (purpose, subject = {}) => {
 // Accounts without phone, email or password: an opaque principal, a public
 // handle, and per-device keys. Approve-class operations of an existing account
 // are authorized here for every owner (pairing, recovery, devices).
-export function createAccountAuth({ query, transaction, proof, sessions, devices, handles, approvals, createAccount, notify, disconnectSession, now }) {
+export function createAccountAuth({ query, transaction, proof, sessions, devices, handles, approvals, createAccount, notify, disconnectSession, now, billing }) {
+    if (typeof billing?.prepareCreation !== 'function') throw new Error('auth_billing_required');
     async function createChallenge({ sessionKey, clientNonce }, network) {
         requireHandle(clientNonce);
         const { keyId } = publicDeviceKey(sessionKey);
@@ -36,7 +36,8 @@ export function createAccountAuth({ query, transaction, proof, sessions, devices
         const { keyId, jwk } = publicDeviceKey(input.sessionKey);
         const meta = normalizeDeviceMeta(input.deviceMeta);
         const deviceClass = resolveDeviceClass(meta.platform, input.deviceClass);
-        if (!PAYMENT_METHODS.has(input.payment?.method)) reject('auth_payment_method_invalid');
+        // Store verification is network I/O: it runs before the transaction.
+        const purchase = await billing.prepareCreation(input.payment, keyId);
         const created = await transaction(async () => {
             await proof.limit(`account-create:${proof.keyedIndex(String(network))}`, 5, 3600000);
             await proof.limit(`account-create-key:${keyId}`, 3, 3600000);
@@ -53,10 +54,11 @@ export function createAccountAuth({ query, transaction, proof, sessions, devices
                 deviceId, assurance: approve.assurance, deviceClass, ...meta, enrolledBy: 'creation',
                 credentialId: approve.credentialId, signCount: approve.signCount });
             await proof.audit('account_created', account.user_id, keyId);
-            await proof.audit(`payment_simulated:${input.payment.method}`, account.user_id, keyId);
-            return { ...await sessions.create(account, keyId), newAccount: true, canApprove: approve?.assurance === 'hardware_uv',
-                payment: { mode: 'simulated', amountCents: 1200, currency: 'EUR', period: 'month' } };
+            await proof.audit(`payment:${purchase.method}`, account.user_id, keyId);
+            const payment = await purchase.record(account.user_id);
+            return { ...await sessions.create(account, keyId), newAccount: true, canApprove: approve?.assurance === 'hardware_uv', payment };
         });
+        if (created.payment) await purchase.settle();
         return created;
     }
     // A device enrolled before approve keys existed (or whose approve key was

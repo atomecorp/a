@@ -13,7 +13,6 @@ import jwt from 'jsonwebtoken';
 import { execFile } from 'child_process';
 import pino from 'pino';
 import { coerceLogEnvelope, isValidLogEnvelope } from '../atome/src/shared/logging.js';
-import { handleWsAtomeOperation } from './wsAtomeOperations.js';
 import { createUserVaultRouter } from './userVaultRouter.js';
 import { applyOpaqueNativeOriginCors } from './cors_policies.js';
 import { createWsSyncRuntime } from './wsSyncRuntime.js';
@@ -78,14 +77,12 @@ import { normalizePhone } from './auth_crypto.js';
 import { ensureOpaquePrincipalIdentity } from './auth_identity.js';
 import { createWsPhoneLinkHandler } from './wsPhoneLinkAuth.js';
 import { assertDeviceSessionClaims, validateConnectionDeviceSession } from './auth_session_validation.js';
-import { handleWsExternalResourceOperation } from './wsExternalResourceOperations.js';
 import { issueMediaToken, readMediaTokenFromQuery, verifyMediaToken } from './media_capability.js';
 import { handleWsApiGuestAdoption } from './wsApiGuestAdoption.js';
-import { announceWsSurfaceDisconnect, handleWsSurfaceOperation } from './wsSurfaceOperations.js';
-import { handleTeleportSurfaceLoss, handleWsTeleportOperation } from './wsTeleportOperations.js';
+import { announceWsSurfaceDisconnect } from './wsSurfaceOperations.js';
+import { handleTeleportSurfaceLoss } from './wsTeleportOperations.js';
 import { handleRemoteControlSurfaceLoss, handleWsRemoteControlOperation } from './wsRemoteControlOperations.js';
-import { handleWsAiProviderOperation } from './wsAiProviderOperations.js';
-import { handleWsSurfaceGrantOperation } from './wsSurfaceGrantOperations.js';
+import { handleWsApiOperationFamilies } from './wsApiOperationChain.js';
 import { handleWsFileOperation } from './wsFileOperations.js';
 import { registerServerIdentityRoutes } from './auth_routes_server.js';
 import { initServerIdentity } from './serverIdentity.js';
@@ -100,6 +97,7 @@ import { handleShareMessage } from './sharing_message_api.js';
 import { buildUserExportZip, inspectUserExportZip, importUserExportZip } from './userExportImport.js';
 import { registerMailRoutes } from './mailRoutes.js';
 import { registerSocialRoutes } from './social/social_oauth.js';
+import { registerBillingRoutes } from './billing/billing_routes.js';
 import {
   registerFileUpload,
   resolveOwnerPrincipal,
@@ -1000,6 +998,7 @@ async function startServer() {
 
     registerMailRoutes(server);
     registerSocialRoutes(server, { projectRoot });
+    registerBillingRoutes(server);
 
     const visioService = createVisioService({
       databaseEnabled: DATABASE_ENABLED,
@@ -2181,38 +2180,9 @@ async function startServer() {
             return;
           }
 
-          const resourceResponse = await handleWsExternalResourceOperation(data, connection, request.ip);
-          if (resourceResponse) {
-            safeSend(resourceResponse);
-            return;
-          }
-
-          const aiProviderResponse = await handleWsAiProviderOperation(data, connection);
-          if (aiProviderResponse) {
-            safeSend(aiProviderResponse);
-            return;
-          }
-          const atomeOperationResponse = await handleWsAtomeOperation(data, connection);
-          if (atomeOperationResponse) {
-            safeSend(atomeOperationResponse);
-            return;
-          }
-
-          const surfaceOperationResponse = await handleWsSurfaceOperation(data, connection);
-          if (surfaceOperationResponse) {
-            safeSend(surfaceOperationResponse);
-            return;
-          }
-
-          const teleportOperationResponse = await handleWsTeleportOperation(data, connection);
-          if (teleportOperationResponse) {
-            safeSend(teleportOperationResponse);
-            return;
-          }
-
-          const surfaceGrantResponse = await handleWsSurfaceGrantOperation(data, connection);
-          if (surfaceGrantResponse) {
-            safeSend(surfaceGrantResponse);
+          const familyResponse = await handleWsApiOperationFamilies(data, connection, request.ip);
+          if (familyResponse) {
+            safeSend(familyResponse);
             return;
           }
 

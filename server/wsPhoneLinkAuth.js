@@ -11,8 +11,9 @@ import { AUTH_LINK_ORIGIN, AUTH_ACCESS_TTL_SECONDS } from '../atome/src/shared/a
 import { attachWsApiClientToUser, detachWsApiClient, wsApiConnections } from './wsApiState.js';
 import { createCommunicationPush } from './communication_push.js';
 import { ACCOUNT_ACTIONS, ACCOUNT_PUBLIC_ERRORS, createWsAccountAuth } from './wsAccountAuth.js';
+import { getStorePurchases } from './billing/ws_billing_operations.js';
 
-const ACTIONS = new Set(['phone-link-start', 'phone-link-simulate-payment', 'phone-link-resend', 'phone-change-start', 'phone-link-challenge', 'phone-link-consume',
+const ACTIONS = new Set(['phone-link-start', 'phone-link-payment', 'phone-link-resend', 'phone-change-start', 'phone-link-challenge', 'phone-link-consume',
     'phone-link-confirm', 'phone-link-resume', 'phone-link-cancel', 'session-challenge',
     'session-delete-account', 'session-renew', 'session-local-bind', 'session-logout', 'session-logout-all', 'session-revoke-device',
     'password-login-challenge', 'password-login', 'session-set-password']);
@@ -76,9 +77,10 @@ export function createWsPhoneLinkHandler({ projectRoot, jwtSecret, sendLink, dat
             { sub: principalId, userId: principalId, sid: sessionId, cnf: { kid: keyId, ...(pop ? { pop: true } : {}) }, auth_version: 1 },
             jwtSecret(), { algorithm: 'HS256', issuer: AUTH_LINK_ORIGIN, audience: 'atome-ws', expiresIn: AUTH_ACCESS_TTL_SECONDS }),
         disconnectSession,
-        notify
+        notify,
+        billing: getStorePurchases()
     });
-    accountAuth = createWsAccountAuth({ service, database, jwtSecret, disconnectSession,
+    accountAuth = createWsAccountAuth({ service, database, jwtSecret, disconnectSession, billing: getStorePurchases(),
         findById: (id) => findUserById(dataSource, id),
         // An account without phone, email or password: its first launch runs.
         createAccount: async () => {
@@ -131,7 +133,7 @@ export function createWsPhoneLinkHandler({ projectRoot, jwtSecret, sendLink, dat
                 case 'session-set-password': result = await service.passwords.set(message); break;
                 case 'phone-change-start': result = await service.startPhoneChange(message, network); break;
                 case 'phone-link-start': result = await service.start(message, network); break;
-                case 'phone-link-simulate-payment': result = await service.simulatePayment(message); break;
+                case 'phone-link-payment': result = await service.pay(message); break;
                 case 'phone-link-resend': result = await service.resend(message); break;
                 case 'phone-link-challenge': result = await service.getChallenge(message, network); break;
                 case 'phone-link-consume': result = await service.complete({ ...message, action: 'consume' }); break;

@@ -27,7 +27,6 @@ enum FeatureFlags {
     static let registerCustomScheme: Bool = true // keep true to not break loads
     static let startLocalHTTPServer: Bool = true
     static let enableJSBridge: Bool = true
-    static let sendPurchaseRestoreOnDidFinish: Bool = true
     static let loadInlineOnly: Bool = false
     static let verboseLyrixStorageLogs: Bool = false
 }

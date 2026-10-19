@@ -24,7 +24,6 @@ export const createVoiceAssistantSessionController = ({
     voiceApi,
     openingGreeting,
     touchResponse,
-    closingGreeting,
     locale = 'fr-FR',
     actorId = 'eve_voice_assistant',
     executionTransport = 'mcp',
@@ -41,7 +40,6 @@ export const createVoiceAssistantSessionController = ({
     });
     if (!String(openingGreeting || '').trim()) throw new Error('voice_assistant_opening_greeting_required');
     if (!String(touchResponse || '').trim()) throw new Error('voice_assistant_touch_response_required');
-    if (!String(closingGreeting || '').trim()) throw new Error('voice_assistant_closing_greeting_required');
     const listeners = new Set();
     const voiceConfig = resolveHomeVoiceConfig(env);
     let openPromise = null;
@@ -335,23 +333,15 @@ export const createVoiceAssistantSessionController = ({
         return cloneState(state);
     };
 
-    const close = async ({ reason = 'assistant_closed', speakFarewell = true } = {}) => {
-        if (!state.active && state.phase === 'closed' && (state.generation > 0 || !speakFarewell)) {
-            return cloneState(state);
-        }
+    // eVe leaves in silence: closing only stops what she hears and says.
+    const close = async ({ reason = 'assistant_closed' } = {}) => {
+        if (!state.active && state.phase === 'closed') return cloneState(state);
         if (state.closePromise) return state.closePromise;
         state.closePromise = (async () => {
-            const generation = ++state.generation;
-            state.active = true;
+            ++state.generation;
             try {
                 if (openPromise) await openPromise;
-                if (speakFarewell && !state.sessionId && !await createSession(generation)) {
-                    return cloneState(state);
-                }
                 await stopActiveChannels(reason);
-                if (speakFarewell && state.active && state.sessionId) {
-                    await speak(closingGreeting);
-                }
             } finally {
                 clearTranscriptTimers();
                 state.active = false;
@@ -407,8 +397,7 @@ export const bindVoiceAssistantSession = async ({
         })
         : createVoiceAssistantSessionController({ voiceApi,
             openingGreeting: translate('eve.voice.assistant.opening_greeting'),
-            touchResponse: translate('eve.voice.assistant.touch_response'),
-            closingGreeting: translate('eve.voice.assistant.closing_greeting'), locale: 'fr-FR'
+            touchResponse: translate('eve.voice.assistant.touch_response'), locale: 'fr-FR'
         });
     const unsubscribeSession = controller.subscribe(onSession);
     const frameSubscriptions = [];

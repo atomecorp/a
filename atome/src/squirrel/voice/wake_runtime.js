@@ -120,8 +120,9 @@ export const createWakeRuntime = ({ env = globalThis, backend = createWakeDetect
     env.addEventListener?.('pageshow', onPageShow);
     env.addEventListener?.('blur', onBlur);
     env.addEventListener?.('focus', onFocus);
+    // `squirrel:user-logged-in` also announces each renewal of the same account's
+    // session: only a sign-out or a switch (`squirrel:user-logged-out`) disarms.
     env.addEventListener?.('squirrel:user-logged-out', onLogout);
-    env.addEventListener?.('squirrel:user-logged-in', onLogout);
     env.addEventListener?.('eve:profile-preferences-updated', onProfile);
     const api = {
         getState: snapshot,
@@ -165,7 +166,6 @@ export const createWakeRuntime = ({ env = globalThis, backend = createWakeDetect
             env.removeEventListener?.('blur', onBlur);
             env.removeEventListener?.('focus', onFocus);
             env.removeEventListener?.('squirrel:user-logged-out', onLogout);
-            env.removeEventListener?.('squirrel:user-logged-in', onLogout);
             env.removeEventListener?.('eve:profile-preferences-updated', onProfile); listeners.clear();
         }
     };
