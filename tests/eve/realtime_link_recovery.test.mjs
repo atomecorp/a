@@ -6,15 +6,16 @@ test('Realtime retains the link failure when remote cleanup also fails', async (
     let control, stopped = 0, peerClosed = 0;
     const track = { kind: 'audio', readyState: 'live', enabled: true, stop() { stopped++; } };
     const session = createRealtimeSession({
-        env: { crypto,
+        env: { crypto, setTimeout, clearTimeout,
             addEventListener(type, listener) { if (type === 'squirrel:ai-realtime-event') control = listener; },
             removeEventListener() {},
             navigator: { mediaDevices: { getUserMedia: async () => ({ getTracks: () => [track], getAudioTracks: () => [track] }) } },
             RTCPeerConnection: class {
+                iceGatheringState = 'complete';
                 getSenders() { return []; } addTrack() {} close() { peerClosed++; }
                 createDataChannel() { return { close() {} }; }
                 async createOffer() { return { sdp: 'v=0' }; }
-                async setLocalDescription() {} async setRemoteDescription() {}
+                async setLocalDescription(description) { this.localDescription = description; } async setRemoteDescription() {}
             } },
         playback: { stopStream() {} },
         request: async (action, payload) => {

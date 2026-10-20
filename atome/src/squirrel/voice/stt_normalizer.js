@@ -212,21 +212,3 @@ export const normalizeSTTUtterance = (rawUtterance, { locale = 'fr-FR' } = {}) =
 
     return text;
 };
-
-/**
- * Returns a confidence score for how much the normalized text
- * matches known domain vocabulary.
- *
- * @param {string} normalizedText
- * @returns {number} Score between 0 and 1.
- */
-export const domainConfidence = (normalizedText) => {
-    if (!normalizedText) return 0;
-    const words = normalizedText.split(/\s+/);
-    if (!words.length) return 0;
-    let matches = 0;
-    for (const word of words) {
-        if (DOMAIN_KEYWORDS.includes(word)) matches++;
-    }
-    return matches / words.length;
-};

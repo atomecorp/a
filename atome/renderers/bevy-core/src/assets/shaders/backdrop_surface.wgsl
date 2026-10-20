@@ -7,6 +7,7 @@ struct BackdropSurfaceUniform {
     tint: vec4<f32>,
     blur: vec4<f32>,
     corner_cut: vec4<f32>,
+    border_edges: array<vec4<f32>, 4>,
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0) var<uniform> material: BackdropSurfaceUniform;
@@ -89,6 +90,18 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let glass = sample_aligned_mip(screen_uv, material.blur.z);
     // `blur.w` fades the tint towards the bottom edge: same hue, clearer glass.
     let tint_alpha = material.tint.a * (1.0 - clamp(material.blur.w, 0.0, 1.0) * mesh.uv.y);
-    let color = mix(glass, material.tint.rgb, tint_alpha);
+    var color = mix(glass, material.tint.rgb, tint_alpha);
+    // Surface-paint border over the glass (`corner_cut.y` = width), composed as
+    // the painted texture composes it: each pixel takes its nearest edge's colour.
+    let border_width = material.corner_cut.y;
+    if border_width > 0.0 {
+        let edges = vec4(point.y, size.x - point.x, size.y - point.y, point.x);
+        var nearest = 0;
+        for (var index = 1; index < 4; index++) {
+            if edges[index] < edges[nearest] { nearest = index; }
+        }
+        let border = material.border_edges[nearest];
+        color = mix(color, border.rgb, border.a * clamp(distance + border_width + 0.5, 0.0, 1.0));
+    }
     return vec4(color, alpha);
 }

@@ -3,6 +3,7 @@ import { prepareHostedMcp } from './providerHostedSession.js';
 import { validateParams } from '../atome/src/squirrel/ai/agent_gateway_normalize.js';
 import { OPENAI_SERVICE_TOOLS, OPENAI_MODEL_PROFILES } from '../atome/src/squirrel/ai/model_catalog_registry.js';
 import { controlProviderRealtime } from './providerRealtimeSession.js';
+import { synthesizeRealtimeSpeech } from './providerRealtimeSpeech.js';
 import { resolveWsApiPrincipal, isWsApiPrincipalProvisioned } from './wsApiIdentity.js';
 import { wsResponse } from './wsResponse.js';
 import { resolveProviderCredentialVault } from './providerCredentialVault.js';
@@ -14,7 +15,7 @@ import { getVideoAiService } from './ai_video/index.js';
 import { VIDEO_AI_ERRORS } from './ai_video/service.js';
 import { handleSocialAction } from './social/social_operations.js';
 import { readSocialConfig } from './social/social_sessions.js';
-import { handleMusicAction, musicReceiptApi } from './music/music_operations.js';
+import { handleMusicAction, musicReceiptApi, musicCredentialProvider } from './music/music_operations.js';
 
 const operations = new WeakMap();
 const SOCIAL_TIMEOUT_MS = Object.freeze({ models: 15000, 'music.await_connection': 11 * 60_000, 'social.connect.await': 11 * 60_000, 'social.publish': 20 * 60_000, 'social.status': 5 * 60_000 });
@@ -25,8 +26,6 @@ const ROUTES = Object.freeze({
     'image-generate': ['POST', '/images/generations'],
     'image-edit': ['POST', '/images/edits'],
     transcription: ['POST', '/audio/transcriptions'],
-    translation: ['POST', '/audio/translations'],
-    speech: ['POST', '/audio/speech'],
     ...Object.fromEntries(OPENAI_SERVICE_TOOLS.map(service => [service.action, [service.method, service.path]])),
     'files.create': ['POST', '/files'],
     'files.content': ['GET', '/files/:id/content'],
@@ -108,7 +107,7 @@ const buildRequestBody = (action, payload) => {
         delete body.conversation;
         delete body.previous_response_id;
     }
-    if (['image-edit', 'transcription', 'translation', 'files.create', 'uploads.part', 'skills.create', 'skills.versions.create'].includes(action)) {
+    if (['image-edit', 'transcription', 'files.create', 'uploads.part', 'skills.create', 'skills.versions.create'].includes(action)) {
         const form = new FormData();
         const files = Array.isArray(body.files) ? body.files : [];
         delete body.files;
@@ -130,7 +129,7 @@ export const handleWsAiProviderOperation = async (message, connection, {
     resolvePrincipal = resolveWsApiPrincipal,
     provisioned = isWsApiPrincipalProvisioned,
     resolveVault = resolveProviderCredentialVault,
-    fetchImpl = globalThis.fetch, realtime = controlProviderRealtime,
+    fetchImpl = globalThis.fetch, realtime = controlProviderRealtime, speech = synthesizeRealtimeSpeech,
     audio = getAudioAiService(),
     video = getVideoAiService(),
     sharedGrant = getProviderSharedGrant()
@@ -169,11 +168,15 @@ export const handleWsAiProviderOperation = async (message, connection, {
         const vault = await resolveVault(connection?._wsApiVaultRouter?.provider, principal);
         const credentialProvider = String(message.provider || message.payload?.provider || 'openai');
         const audioCredential = credentialProvider !== 'openai' && action.startsWith('credential.')
-            ? (audio.providerForCredential(credentialProvider) || video.providerForCredential(credentialProvider)) : null;
+            ? (audio.providerForCredential(credentialProvider) || video.providerForCredential(credentialProvider)
+                || musicCredentialProvider(credentialProvider)) : null;
         if (credentialProvider !== 'openai' && action.startsWith('credential.') && !audioCredential) throw new Error('provider_not_supported');
         if (audioCredential) {
             if (action === 'credential.status') return reply(true, { configured: Boolean(await vault.read(credentialProvider)) });
-            if (action === 'credential.remove') return reply(true, vault.remove(credentialProvider));
+            if (action === 'credential.remove') {
+                await audioCredential.removed?.({ vault, principal });
+                return reply(true, vault.remove(credentialProvider));
+            }
             if (action !== 'credential.store') throw new Error('provider_operation_not_allowed');
             const candidate = String(message.key || '').trim();
             if (!candidate || candidate.length > 1024 || /\s/.test(candidate)) throw new Error('provider_key_invalid');
@@ -241,6 +244,11 @@ export const handleWsAiProviderOperation = async (message, connection, {
         if (!key && action !== 'realtime-close') throw new Error('no_ai_key_configured');
         if (action.startsWith('realtime-')) return reply(true, { data: await realtime({ action,
             payload: message.payload || {}, connection, principal, key, signal: controller.signal, fetchImpl }) });
+        if (action === 'speech') {
+            const data = await speech({ payload: message.payload, key, signal: controller.signal });
+            if (resolvePrincipal(connection, message) !== principal) throw new Error('provider_principal_changed');
+            return reply(true, { data });
+        }
         const route = ROUTES[action];
         if (!route) throw new Error('provider_operation_not_allowed');
         controller.signal.throwIfAborted();
@@ -285,7 +293,7 @@ export const handleWsAiProviderOperation = async (message, connection, {
             await recordUsage(result);
             return reply(true, { data: result });
         }
-        if (['speech', 'files.content', 'skills.content', 'skills.versions.content', 'containers.files.content'].includes(action)) {
+        if (['files.content', 'skills.content', 'skills.versions.content', 'containers.files.content'].includes(action)) {
             const audio = Buffer.from(await readProviderBytes(upstream.body, { signal: controller.signal }));
             if (resolvePrincipal(connection, message) !== principal) throw new Error('provider_principal_changed');
             return reply(true, { data: { base64: audio.toString('base64'), mime: upstream.headers.get('content-type') } });

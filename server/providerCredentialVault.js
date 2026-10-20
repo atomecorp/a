@@ -4,7 +4,7 @@ import { randomBytes, createHash } from 'node:crypto';
 import { createEncryptedTokenVault } from '../atome/src/squirrel/security/token_vault.js';
 
 // Providers whose key lives only on the server (never readable by the browser).
-export const SERVER_VAULT_PROVIDERS = Object.freeze(['openai', 'musicgpt', 'runway']);
+export const SERVER_VAULT_PROVIDERS = Object.freeze(['openai', 'musicgpt', 'runway', 'spotify', 'deezer']);
 // Provider sessions (OAuth tokens + provider identity) of the principal.
 export const PROVIDER_VAULT_RECORDS = Object.freeze(['social.tiktok', 'social.instagram', 'social.facebook', 'music.spotify']);
 const assertProvider = (provider) => {

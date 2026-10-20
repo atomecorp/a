@@ -79,6 +79,16 @@ export function createImportLifecycle({ domain, run, restore, env = globalThis, 
                     recovering = false;
                 }
             }
+            // The first complete pass that succeeded (even with nothing to import) is
+            // the fact « imported on this device »: written once on the checkpoint,
+            // never inferred from a permission asked or a list left empty.
+            if (result?.ok === true && result.more !== true && currentGeneration === generation && !entry.controller.signal.aborted) {
+                const context = store.capture();
+                const rows = await store.list(IMPORT_SOURCE_TYPE, context);
+                const latest = importRecordProps(rows.find(row => importRecordId(row) === entry.checkpointId));
+                if (!latest.last_completed_at) await store.write(entry.checkpointId, IMPORT_SOURCE_TYPE, { ...latest, domain_type: domain,
+                    source_key: entry.sourceKey, source_id: id, device_id: entry.deviceId, last_completed_at: new Date().toISOString() }, context);
+            }
             return result;
         })().catch(async error => {
             const result = { ok: false, error: /^[a-z][a-z0-9_]{1,100}$/.test(error.message) ? error.message : 'import_read_failed' };
@@ -196,7 +206,15 @@ export function createImportLifecycle({ domain, run, restore, env = globalThis, 
     const onVisibility = () => { if (env.document?.visibilityState !== 'hidden') onResume(); };
     env.document?.addEventListener?.('visibilitychange', onVisibility);
     if (session()?.mode === 'authenticated') void resume();
-    return { activate, deactivate, cycle, resume, status: () => [...active].map(([source_id, entry]) => ({ source_id, running: !!entry.running })),
+    // The sources this device has imported completely at least once (the checkpoint's `last_completed_at`).
+    const completed = async () => {
+        if (session()?.mode !== 'authenticated') return [];
+        const context = store.capture(), currentDevice = await ensureDevice();
+        const rows = await store.list(IMPORT_SOURCE_TYPE, context);
+        return rows.map(importRecordProps).filter(props => props.domain_type === domain && props.device_id === currentDevice && props.last_completed_at)
+            .map(props => ({ source_id: props.source_id, completed_at: props.last_completed_at }));
+    };
+    return { activate, deactivate, cycle, resume, completed, status: () => [...active].map(([source_id, entry]) => ({ source_id, running: !!entry.running })),
         dispose() { disposed = true; stopRuntime(); bindings.forEach(([name, listener]) => env.removeEventListener?.(name, listener));
             env.document?.removeEventListener?.('visibilitychange', onVisibility); } };
 }

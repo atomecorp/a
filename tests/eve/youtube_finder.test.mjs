@@ -30,10 +30,10 @@ test('YouTube Finder searches only after explicit submission and keeps the targe
     assert.equal(runtime.readState().statusKind, 'empty');
 
     await runtime.applyToolContext({ query: 'one two', submitted: true });
-    assert.deepEqual(requests, [{ query: 'one two', pageToken: '' }]);
+    assert.deepEqual(requests, [{ provider: 'youtube', query: 'one two', pageToken: '' }]);
     assert.equal(runtime.readState().records[0].id, 'abcDEFghi12');
-    await runtime.handleEvent({ type: 'finder.youtube.more' });
-    assert.deepEqual(requests[1], { query: 'one two', pageToken: 'next' });
+    await runtime.handleEvent({ type: 'finder.video.more' });
+    assert.deepEqual(requests[1], { provider: 'youtube', query: 'one two', pageToken: 'next' });
 });
 
 test('YouTube Finder exposes the missing service key as a configuration error', async () => {
@@ -82,23 +82,24 @@ test('YouTube Finder shows the viewing history until a search is submitted and a
     await runtime.applyToolContext({ scope: 'youtube', query: '' });
     let snapshot = runtime.readState();
     assert.equal(snapshot.statusKind, null);
-    assert.equal(snapshot.youtubeHistory, true);
+    assert.equal(snapshot.videoHistory, true);
     assert.deepEqual(snapshot.records.map((record) => record.id), ['histVIDEO01']);
 
     await runtime.applyToolContext({ query: 'music', submitted: true });
     snapshot = runtime.readState();
-    assert.equal(snapshot.youtubeHistory, false);
+    assert.equal(snapshot.videoHistory, false);
     assert.deepEqual(snapshot.records.map((record) => record.id), ['abcDEFghi12']);
 
     await runtime.applyToolContext({ query: '' });
     snapshot = runtime.readState();
-    assert.equal(snapshot.youtubeHistory, true);
+    assert.equal(snapshot.videoHistory, true);
     assert.deepEqual(snapshot.records.map((record) => record.id), ['histVIDEO01']);
 });
 
 test('YouTube history keeps the last twenty distinct videos, newest first, and publishes them at once', async () => {
-    const { normalizeYoutubeHistory, readYoutubeHistory, recordYoutubeHistory, YOUTUBE_HISTORY_LIMIT } =
-        await import('../../eVe/intuition/tools/youtube_history_preference.js');
+    const { onlineVideoLists, ONLINE_VIDEO_HISTORY_LIMIT: YOUTUBE_HISTORY_LIMIT } =
+        await import('../../eVe/intuition/tools/online_video_lists_preference.js');
+    const { normalizeHistory: normalizeYoutubeHistory, readHistory: readYoutubeHistory, recordHistory: recordYoutubeHistory } = onlineVideoLists('youtube');
     const id = (n) => `video${String(n).padStart(6, '0')}`;
     const many = Array.from({ length: 30 }, (_, n) => ({ videoId: id(n), title: `T${n}` }));
     const normalized = normalizeYoutubeHistory([...many, { videoId: id(0) }, { videoId: 'bad id' }]);

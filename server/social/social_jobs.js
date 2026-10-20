@@ -83,7 +83,6 @@ export function createSocialJobStore(root) {
 }
 
 const runKey = (principal, jobId, destination) => `${principal}\u0000${jobId}\u0000${destination}`;
-export const isDeliveryRunning = (principal, jobId, destination) => running.has(runKey(principal, jobId, destination));
 
 // Resolves once the aborted run has recorded its final state.
 export async function cancelDeliveryRun(principal, jobId, destination) {

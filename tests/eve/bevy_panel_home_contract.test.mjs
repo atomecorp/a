@@ -37,10 +37,11 @@ const baseState = (overrides = {}) => ({
         'settings.privacy': true,
         'passkeys.passwords': true,
         'passkeys.keys': true,
-        'preferences.mail': true,
         'preferences.visual': true,
         'preferences.language': true,
-        'preferences.server': true
+        'preferences.communication': true,
+        'communication.mail': true,
+        'account.server': true
     },
     selectOpen: '',
     securityMode: '',
@@ -132,10 +133,11 @@ test('Home is the card of the current user with a collapsed Settings accordion b
         'home_profile_experiences_accordion',
         'home_passwords_accordion',
         'home_ai_keys_accordion',
-        'home_preferences_mail_accordion',
         'home_preferences_visual_accordion',
         'home_preferences_language_accordion',
-        'home_preferences_server_accordion',
+        'home_preferences_communication_accordion',
+        'home_communication_mail_accordion',
+        'home_account_server_accordion',
         'home_level_global',
         'home_sharing_name',
         'home_privacy_target_phone'
@@ -185,8 +187,9 @@ test('only the handedness, the accordion side and the expertise levels remain vi
     }), { handedness: 'left', accordionDirection: 'down', masteryLevel: 'beginner', activityLevels: {}, mysticAutoSize: true, dashboardStyle: 'auto' },
     'retired settings are dropped on the next save');
     assert.equal(normalizeVisualPreferences({ accordionDirection: 'up' }).accordionDirection, 'up');
-    assert.equal(normalizeVisualPreferences({ dashboardStyle: 'mystic' }).dashboardStyle, 'mystic');
-    assert.equal(normalizeVisualPreferences({ dashboardStyle: 'unknown' }).dashboardStyle, 'auto');
+    assert.equal(normalizeVisualPreferences({ dashboardStyle: 'eve' }).dashboardStyle, 'eve');
+    assert.equal(normalizeVisualPreferences({ dashboardStyle: 'mystic' }).dashboardStyle, 'eve_basic');
+    assert.equal(normalizeVisualPreferences({ dashboardStyle: 'unknown' }).dashboardStyle, 'eve_basic');
 });
 
 test('the shared card defaults to the name, the first name, the nickname and the photo', () => {
@@ -559,7 +562,7 @@ test('a Home section request lands the card there before the profile answer', ()
 test('the shared colour control persists the new-project default and retains beginner preferences', async () => {
     const state = baseState({ expanded: 'settings', profile: normalizeHomeProfile({ name: 'Ada', preferences: {
         visual: { masteryLevel: 'beginner', newProjectBackgroundColor: '#272727' },
-        workspace: { startup_view: 'dashboard', home_template_project_id: 'home' },
+        workspace: { startup_view: 'dashboard', home_eve_project_id: 'home' },
         background: { backgroundSource: 'image', backgroundImageUrl: '/wallpaper.png' }
     } }), subsections: { 'settings.preferences': true, 'preferences.visual': true, 'visual.project_background': true } });
     const saves = [];
@@ -577,7 +580,7 @@ test('the shared colour control persists the new-project default and retains beg
     swatch.on.activate(); await Promise.all(pending);
     assert.equal(saves.at(-1).preferences.visual.newProjectBackgroundColor, '#f44336');
     assert.equal(saves.at(-1).preferences.visual.masteryLevel, 'beginner');
-    assert.equal(saves.at(-1).preferences.workspace.home_template_project_id, 'home');
+    assert.equal(saves.at(-1).preferences.workspace.home_eve_project_id, 'home');
     assert.equal(saves.at(-1).preferences.background.backgroundImageUrl, '/wallpaper.png');
     preferences.stopProjectBackground();
 });

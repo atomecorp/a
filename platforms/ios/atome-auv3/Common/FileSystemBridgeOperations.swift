@@ -333,13 +333,14 @@ extension FileSystemBridge {
         }
     }
 
-    // The Music library cannot be presented from an Audio Unit extension
-    // (no library entitlement in a host process): the source is left out there.
+    // The Music library and the camera cannot be presented from an Audio Unit
+    // extension (no library entitlement, no camera in a host process): those
+    // sources are left out there.
     private func availableImportSources(_ requested: [String]) -> [String] {
-        let known = ["files", "photos", "contacts", "music"]
+        let known = ["files", "photos", "camera", "contacts", "music"]
         return requested.filter { source in
             guard known.contains(source) else { return false }
-            return source != "music" || !ExternalDisplayGuards.isRunningInExtension
+            return (source != "music" && source != "camera") || !ExternalDisplayGuards.isRunningInExtension
         }
     }
 
@@ -386,6 +387,12 @@ extension FileSystemBridge {
                 selectionLimit: request.allowsMultiple ? 0 : 1,
                 from: controller
             ) { [weak self] success, results, error in
+                DispatchQueue.main.async {
+                    self?.sendLoadedFiles(success: success, results: results, error: error, webView: webView)
+                }
+            }
+        case "camera":
+            CameraImportPicker.takePhoto(from: controller) { [weak self] success, results, error in
                 DispatchQueue.main.async {
                     self?.sendLoadedFiles(success: success, results: results, error: error, webView: webView)
                 }

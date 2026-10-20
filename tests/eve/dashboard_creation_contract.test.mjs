@@ -3,6 +3,7 @@ import { createDashboardCreationRuntime } from '../../eVe/domains/dashboard/dash
 import { createDashboardCreationActions } from '../../eVe/domains/dashboard/dashboard_creation_actions.js';
 import { createDashboardActionRuntime } from '../../eVe/domains/dashboard/dashboard_actions.js';
 import { dashboardCreationStep, DASHBOARD_PROJECT_GOALS, DASHBOARD_OBJECTIVES, dashboardObjectiveFor } from '../../eVe/domains/dashboard/dashboard_creation_catalog.js';
+import { dashboardDefaultTarget } from '../../eVe/domains/dashboard/dashboard_progression_catalog.js';
 import * as mutation from '../../eVe/intuition/tools/core/tool_runtime_atome_mutation_shared.js';
 import { createDashboardBevyUiScrollRuntime } from '../../eVe/domains/dashboard/dashboard_bevy_ui_scroll_runtime.js';
 import { buildBootstrapDefsA } from '../../eVe/intuition/tools/core/tool_runtime_bootstrap_defs_a.js';
@@ -174,7 +175,9 @@ test.each(DASHBOARD_OBJECTIVES)('$objective_id creates one private, canonically 
     const result = await actions.createGuidedProject({ objective_id: objective.objective_id });
     const root = records.get(result.project.id);
     expect([...records.values()].filter(record => record.type === 'project')).toHaveLength(1);
-    expect(root.properties.project_intent).toEqual({ family: 'health', goal: objective.goal, objective_id: objective.objective_id });
+    // Every health objective starts with its measurable target (dashboard_progression_catalog.js).
+    expect(root.properties.project_intent).toEqual({ family: 'health', goal: objective.goal, objective_id: objective.objective_id,
+        target: dashboardDefaultTarget(objective.goal) });
     const replayed = normalizeCanonicalAtome({ id: root.id, type: 'project', properties: {
         project_intent: JSON.parse(JSON.stringify(root.properties.project_intent)) } }).atome;
     expect(replayed.properties.project_intent).toEqual(root.properties.project_intent);

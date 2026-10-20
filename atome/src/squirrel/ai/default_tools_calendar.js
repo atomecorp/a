@@ -1,223 +1,19 @@
-import { PERSONAL_IMPORT_TOOLS, personalImportToolResult } from '#shared/personal_import_tools.js';
+import { PERSONAL_IMPORT_TOOLS, personalImportInputSchema, personalImportToolResult } from '#shared/personal_import_tools.js';
+import { CALENDAR_AGENDA_TOOLS } from '#shared/calendar_tool_contract.js';
 export const registerCalendarDefaultTools = ({ Agent, safeString, requireCalendarServiceApi, invokeRuntimeDefaultTool }) => {
     for (const tool of PERSONAL_IMPORT_TOOLS.filter(tool => tool.name.startsWith('calendar.'))) Agent.registerTool({
         name: tool.name, description: tool.description, capabilities: [tool.write ? 'calendar.write' : 'calendar.read'],
-        risk_tier: tool.write ? 'MEDIUM' : 'LOW', parameters: { type: 'object', properties: tool.properties, required: tool.param ? [tool.param] : [] },
+        risk_tier: tool.write ? 'MEDIUM' : 'LOW', parameters: personalImportInputSchema(tool),
         handler: async ({ params = {} }) => { const api = await requireCalendarServiceApi(); return personalImportToolResult(tool,
             await (tool.param ? api[tool.method](params[tool.param], params) : api[tool.method](params))); }
     });
-    for (const [name, description, required, properties] of [
-        ['time.read', 'Read current time, epoch milliseconds and local timezone.', [], {}],
-        ['alarm.set', 'Set an agenda alarm at an ISO date with timezone or after delay_ms. Optional command runs a Runtime V2 tool through MCP at that time; sensitive actions still need approval. Runs only while the application is alive. eventId/alarmId replace an existing alarm.', [], {
-            at: { type: 'string' }, delay_ms: { type: 'number', minimum: 1 }, title: { type: 'string' }, message: { type: 'string' },
-            eventId: { type: 'string' }, alarmId: { type: 'string' }, projectId: { type: 'string' }, calendarId: { type: 'string' },
-            command: { type: 'object', description: 'Specify tool_id for Runtime V2, or tool_name for an AI/MCP registered tool; input contains its arguments.', properties: { tool_id: { type: 'string' }, tool_name: { type: 'string' }, action: { type: 'string' }, input: { type: 'object' } } }
-        }],
-        ['alarm.read', 'Read agenda alarms and remaining milliseconds (countdown).', [], { eventId: { type: 'string' }, projectId: { type: 'string' } }],
-        ['alarm.cancel', 'Cancel one alarm, or all alarms of an event when alarmId is omitted, preserving the agenda event.', ['eventId'], { eventId: { type: 'string' }, alarmId: { type: 'string' } }]
-    ]) Agent.registerTool({ name: 'calendar.' + name, description,
-        capabilities: [name.endsWith('read') ? 'calendar.read' : 'calendar.write'], risk_tier: name.endsWith('read') ? 'LOW' : 'MEDIUM',
-        parameters: { type: 'object', required, properties },
-        handler: ({ params, context }) => invokeRuntimeDefaultTool({ tool_id: 'calendar.' + name, source_tool: 'calendar.' + name, params: params || {}, context })
-    });
-    Agent.registerTool({
-        name: 'calendar.list_events',
-        description: 'List calendar events.',
-        capabilities: ['calendar.read'],
-        risk_tier: 'LOW',
-        parameters: {
-            properties: {
-                projectId: { type: 'string' }
-            }
-        },
-        handler: async ({ params, context }) => {
-            const payload = params?.projectId ? { projectId: String(params.projectId) } : {};
-            return invokeRuntimeDefaultTool({
-                tool_id: 'calendar.list_events',
-                source_tool: 'calendar.list_events',
-                params: payload,
-                context
-            });
-        },
-        summary: () => 'List calendar events'
-    });
-
-    Agent.registerTool({
-        name: 'calendar.get_event',
-        description: 'Get a calendar event by id.',
-        capabilities: ['calendar.read'],
-        risk_tier: 'LOW',
-        parameters: {
-            required: ['eventId'],
-            properties: {
-                eventId: { type: 'string' }
-            }
-        },
-        handler: async ({ params, context }) => {
-            const eventId = safeString(params?.eventId);
-            if (!eventId) throw new Error('Missing eventId');
-            return invokeRuntimeDefaultTool({
-                tool_id: 'calendar.get_event',
-                source_tool: 'calendar.get_event',
-                params: { eventId },
-                context
-            });
-        },
-        summary: (params) => `Get calendar event ${params?.eventId || ''}`
-    });
-
-    Agent.registerTool({
-        name: 'calendar.create_event',
-        description: 'Create a calendar event.',
-        capabilities: ['calendar.write'],
-        risk_tier: 'MEDIUM',
-        parameters: {
-            properties: {
-                event: { type: 'object' },
-                projectId: { type: 'string' }
-            }
-        },
-        handler: async ({ params, context }) => {
-            const payload = params?.event && typeof params.event === 'object'
-                ? { ...params.event }
-                : { ...(params || {}) };
-            if (params?.projectId) payload.projectId = String(params.projectId);
-            delete payload.event;
-            return invokeRuntimeDefaultTool({
-                tool_id: 'calendar.create_event',
-                source_tool: 'calendar.create_event',
-                params: payload,
-                context
-            });
-        },
-        summary: () => 'Create calendar event'
-    });
-
-    Agent.registerTool({
-        name: 'calendar.update_event',
-        description: 'Update a calendar event.',
-        capabilities: ['calendar.write'],
-        risk_tier: 'MEDIUM',
-        parameters: {
-            required: ['eventId'],
-            properties: {
-                eventId: { type: 'string' },
-                changes: { type: 'object' }
-            }
-        },
-        handler: async ({ params, context }) => {
-            const eventId = safeString(params?.eventId);
-            if (!eventId) throw new Error('Missing eventId');
-            const changes = params?.changes && typeof params.changes === 'object'
-                ? params.changes
-                : {};
-            return invokeRuntimeDefaultTool({
-                tool_id: 'calendar.update_event',
-                source_tool: 'calendar.update_event',
-                params: { eventId, ...changes },
-                context
-            });
-        },
-        summary: (params) => `Update calendar event ${params?.eventId || ''}`
-    });
-
-    Agent.registerTool({
-        name: 'calendar.delete_event',
-        description: 'Delete a calendar event.',
-        capabilities: ['calendar.write'],
-        risk_tier: 'MEDIUM',
-        parameters: {
-            required: ['eventId'],
-            properties: {
-                eventId: { type: 'string' }
-            }
-        },
-        handler: async ({ params, context }) => {
-            const eventId = safeString(params?.eventId);
-            if (!eventId) throw new Error('Missing eventId');
-            return invokeRuntimeDefaultTool({
-                tool_id: 'calendar.delete_event',
-                source_tool: 'calendar.delete_event',
-                params: { eventId },
-                context
-            });
-        },
-        summary: (params) => `Delete calendar event ${params?.eventId || ''}`
-    });
-
-    Agent.registerTool({
-        name: 'calendar.ensure_calendar',
-        description: 'Ensure a calendar exists (creates default if missing).',
-        capabilities: ['calendar.write'],
-        risk_tier: 'LOW',
-        parameters: {
-            properties: {
-                calendarId: { type: 'string' }
-            }
-        },
-        handler: async ({ params, context }) => {
-            const calendarId = safeString(params?.calendarId) || undefined;
-            return invokeRuntimeDefaultTool({
-                tool_id: 'calendar.ensure_calendar',
-                source_tool: 'calendar.ensure_calendar',
-                params: calendarId ? { calendarId } : {},
-                context
-            });
-        },
-        summary: () => 'Ensure calendar exists'
-    });
-
-    Agent.registerTool({
-        name: 'calendar.share',
-        description: 'Share a calendar with another user.',
-        capabilities: ['calendar.write', 'share.write'],
-        risk_tier: 'HIGH',
-        parameters: {
-            required: ['phone'],
-            properties: {
-                phone: { type: 'string' },
-                calendarId: { type: 'string' },
-                permissions: { type: 'object' },
-                shareType: { type: 'string' }
-            }
-        },
-        handler: async ({ params, context }) => {
-            const phone = safeString(params?.phone);
-            if (!phone) throw new Error('Missing phone');
-            const options = {
-                calendarId: params?.calendarId ? String(params.calendarId) : undefined,
-                phone,
-                permissions: params?.permissions,
-                shareType: params?.shareType
-            };
-            return invokeRuntimeDefaultTool({
-                tool_id: 'calendar.share', source_tool: 'calendar.share', params: options, context
-            });
-        },
-        summary: () => 'Share calendar'
-    });
-
-    Agent.registerTool({
-        name: 'calendar.export_webcal',
-        description: 'Export calendar events as an ICS feed and optional webcal URL.',
-        capabilities: ['calendar.read'],
-        risk_tier: 'LOW',
-        parameters: {
-            properties: {
-                calendarId: { type: 'string' },
-                baseUrl: { type: 'string' }
-            }
-        },
-        handler: async ({ params, context }) => {
-            return invokeRuntimeDefaultTool({
-                tool_id: 'calendar.export_webcal', source_tool: 'calendar.export_webcal', context,
-                params: {
-                calendarId: params?.calendarId ? String(params.calendarId) : undefined,
-                baseUrl: params?.baseUrl ? String(params.baseUrl) : undefined
-                }
-            });
-        },
-        summary: () => 'Export calendar webcal'
+    // Agenda tools: the runtime tool owns the behaviour, the shared contract its input.
+    for (const tool of CALENDAR_AGENDA_TOOLS) Agent.registerTool({
+        name: tool.name, description: tool.description,
+        capabilities: tool.capabilities, risk_tier: tool.risk,
+        parameters: tool.input_schema,
+        handler: ({ params, context }) => invokeRuntimeDefaultTool({ tool_id: tool.name, source_tool: tool.name, params: params || {}, context }),
+        summary: () => tool.description
     });
 
     Agent.registerTool({
@@ -225,6 +21,7 @@ export const registerCalendarDefaultTools = ({ Agent, safeString, requireCalenda
         description: 'List unified calendar sources and their roles.',
         capabilities: ['calendar.read'],
         risk_tier: 'LOW',
+        parameters: { type: 'object', additionalProperties: false, properties: {} },
         handler: async () => {
             const api = await requireCalendarServiceApi();
             return api.sources();
@@ -238,6 +35,7 @@ export const registerCalendarDefaultTools = ({ Agent, safeString, requireCalenda
         capabilities: ['calendar.read'],
         risk_tier: 'LOW',
         parameters: {
+            type: 'object',
             required: ['query'],
             properties: {
                 query: { type: 'string' },
@@ -260,6 +58,7 @@ export const registerCalendarDefaultTools = ({ Agent, safeString, requireCalenda
         capabilities: ['calendar.read'],
         risk_tier: 'LOW',
         parameters: {
+            type: 'object',
             properties: {
                 source_id: { type: 'string' },
                 limit: { type: 'number' }
@@ -278,6 +77,7 @@ export const registerCalendarDefaultTools = ({ Agent, safeString, requireCalenda
         capabilities: ['calendar.read'],
         risk_tier: 'LOW',
         parameters: {
+            type: 'object',
             properties: {
                 source_id: { type: 'string' },
                 limit: { type: 'number' },
@@ -297,6 +97,7 @@ export const registerCalendarDefaultTools = ({ Agent, safeString, requireCalenda
         capabilities: ['calendar.write'],
         risk_tier: 'MEDIUM',
         parameters: {
+            type: 'object',
             properties: {
                 title: { type: 'string' },
                 start: { type: 'string' },
@@ -322,6 +123,7 @@ export const registerCalendarDefaultTools = ({ Agent, safeString, requireCalenda
         capabilities: ['calendar.write'],
         risk_tier: 'MEDIUM',
         parameters: {
+            type: 'object',
             required: ['event_id'],
             properties: {
                 event_id: { type: 'string' },
@@ -351,6 +153,7 @@ export const registerCalendarDefaultTools = ({ Agent, safeString, requireCalenda
         capabilities: ['calendar.write'],
         risk_tier: 'MEDIUM',
         parameters: {
+            type: 'object',
             required: ['event_id'],
             properties: {
                 event_id: { type: 'string' },

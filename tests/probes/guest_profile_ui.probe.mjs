@@ -40,10 +40,11 @@ try {
  // Photo fixture is prepared through the public profile owner. Removal below
  // is a real UI gesture; OS picker selection is recorded separately as unavailable.
  await page.evaluate(async photo=>{const {upsertUserProfile,loadUserProfile}=await import('/eVe/domains/user/profile_api.js');const current=await loadUserProfile();const saved=await upsertUserProfile({...current.profile,user_face:photo});if(!saved.ok)throw new Error(saved.error);},'data:image/png;base64,'+fs.readFileSync('temp/guest_profile/photo.png').toString('base64'));
- await waitFor(page,()=>{const visit=n=>n?.id==='home_profile_photo_remove'||(n?.children||[]).some(visit);return [...window.eveBevyUiRuntime.state.trees.values()].some(e=>visit(e.tree.root));},null,15000);
+ await waitFor(page,()=>{const visit=n=>n?.id==='home_profile_photo'||(n?.children||[]).some(visit);return [...window.eveBevyUiRuntime.state.trees.values()].some(e=>visit(e.tree.root));},null,15000);
  await page.screenshot({path:'temp/guest_profile/ui-photo.png'});
  await page.evaluate(async()=>{const {close_home_panel,open_home_panel}=await import('/eVe/intuition/tools/user.js');await close_home_panel();await open_home_panel({section:'identity'});});
- await clickCanvasTarget(page,await awaitBevyUiNodeTarget(page,{nodeId:'home_profile_photo_remove'}));
+ await clickCanvasTarget(page,await awaitBevyUiNodeTarget(page,{nodeId:'home_profile_photo'}));
+ await clickCanvasTarget(page,await awaitBevyUiNodeTarget(page,{nodeId:'home_profile_photo_sources_remove'}));
  await waitFor(page,async()=>{const {loadUserProfile}=await import('/eVe/domains/user/profile_api.js');return (await loadUserProfile()).profile?.user_face==='';},null,15000);
  console.log('photo_removed_after_reopen',true);
  await page.evaluate(async()=>{const {close_home_panel}=await import('/eVe/intuition/tools/user.js');await close_home_panel();const {openContactPanel}=await import('/eVe/intuition/tools/contact.js');await openContactPanel();});

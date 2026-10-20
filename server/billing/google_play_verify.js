@@ -4,7 +4,7 @@ import { findBillingProduct } from '../../atome/src/shared/billing_contract.js';
 import { createPlayAuthorization } from '../../scripts/android/play_api.mjs';
 import { readPlayConfiguration, readServiceAccount } from '../../scripts/android/play_configuration.mjs';
 
-export const GOOGLE_PACKAGE_NAME = 'com.squirrel.desktop';
+export const GOOGLE_PACKAGE_NAME = 'one.atome.app';
 const API = 'https://androidpublisher.googleapis.com/androidpublisher/v3/applications';
 // A cancelled subscription keeps its paid period; the others carry no entitlement.
 const ENTITLED_STATES = new Set(['SUBSCRIPTION_STATE_ACTIVE', 'SUBSCRIPTION_STATE_IN_GRACE_PERIOD', 'SUBSCRIPTION_STATE_CANCELED']);

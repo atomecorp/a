@@ -22,11 +22,9 @@ export const findBillingProduct = (productId) => BILLING_PLANS.find(item => item
 
 // Store-governed platforms: their apps may only sell through the platform's
 // in-app purchase system (App Store 3.1.1, Google Play payments policy).
-const STORE_BY_PLATFORM = Object.freeze({ ios: 'apple', ipados: 'apple', android: 'google' });
 export const BILLING_STORES = Object.freeze(['apple', 'google']);
 // Web and desktop payment choices; still simulated (no card is charged).
 export const BILLING_SIMULATED_METHODS = Object.freeze(['card', 'paypal', 'wero', 'apple_pay', 'google_pay', 'other']);
-export const billingStoreForPlatform = (platform) => STORE_BY_PLATFORM[platform] || null;
 
 // The store purchase is bound to the device key that creates (or owns) the
 // account: Apple `appAccountToken` and Google `obfuscatedAccountId` both carry

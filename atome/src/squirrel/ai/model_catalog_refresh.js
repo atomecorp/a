@@ -1,7 +1,6 @@
 import { getSessionState } from '../apis/unified/adole_api/session.js';
 import {
     buildModelCatalogCacheRecord,
-    getEmbeddedModelCatalogPayload,
     readModelCatalogCache,
     writeModelCatalogCache
 } from './model_catalog_cache.js';
@@ -300,5 +299,3 @@ export const bootstrapAiModelCatalogRefresh = ({
     };
     return env[BOOTSTRAP_KEY];
 };
-
-export const getEmbeddedAiModelCatalog = () => getEmbeddedModelCatalogPayload();

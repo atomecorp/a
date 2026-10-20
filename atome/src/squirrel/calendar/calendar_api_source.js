@@ -170,5 +170,3 @@ export const createCalendarApiSource = ({
         }
     };
 };
-
-export { normalizeCalendarEvent as normalizeCalendarApiEvent };

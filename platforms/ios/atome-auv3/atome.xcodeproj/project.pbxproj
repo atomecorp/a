@@ -9,8 +9,8 @@
 /* Begin PBXBuildFile section */
 		34960420281861B500E13C15 /* atomeAudioUnit.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 349603FF281861B500E13C15 /* atomeAudioUnit.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		7A1000030000000000000003 /* GuestAdoptionRuntimeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1000010000000000000001 /* GuestAdoptionRuntimeTests.swift */; };
-		7A1000120000000000000012 /* RemoteSyncQueueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1000110000000000000011 /* RemoteSyncQueueTests.swift */; };
 		7A1000050000000000000005 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7A1000040000000000000004 /* XCTest.framework */; };
+		7A1000120000000000000012 /* RemoteSyncQueueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1000110000000000000011 /* RemoteSyncQueueTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -53,9 +53,9 @@
 		6BB7DA3B2D63233600CD6691 /* LICENSE */ = {isa = PBXFileReference; lastKnownFileType = text; path = LICENSE; sourceTree = "<group>"; };
 		6BB7DA3C2D63233600CD6691 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		7A1000010000000000000001 /* GuestAdoptionRuntimeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuestAdoptionRuntimeTests.swift; sourceTree = "<group>"; };
-		7A1000110000000000000011 /* RemoteSyncQueueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteSyncQueueTests.swift; sourceTree = "<group>"; };
 		7A1000020000000000000002 /* atomeGuestAdoptionTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = atomeGuestAdoptionTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		7A1000040000000000000004 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
+		7A1000110000000000000011 /* RemoteSyncQueueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteSyncQueueTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */

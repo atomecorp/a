@@ -1,14 +1,19 @@
 import { PERSONAL_IMPORT_TOOLS } from '#shared/personal_import_tools.js';
 import { TV_COMMANDS } from '../tv/contracts.js';
 import { YOUTUBE_COMMANDS } from '../youtube/contracts.js';
+import { PEERTUBE_COMMANDS } from '../peertube/contracts.js';
 import { APPLE_MUSIC_COMMANDS } from '../apple_music/contracts.js';
 import { MUSIC_COMMANDS } from '../music/contracts.js';
 import { SOCIAL_COMMANDS } from '../social/contracts.js';
 import { GPS_COMMANDS } from '../gps/contracts.js';
+import { SHOPPING_COMMANDS } from '../shopping/contracts.js';
+import { FOOD_COMMANDS } from '../food/contracts.js';
+import { TRAINING_COMMANDS } from '../training/contracts.js';
+import { DASHBOARD_PROGRESSION_COMMANDS } from '../dashboard_progression/contracts.js';
 import { cloneValue } from './mcp_core.js';
 import { listMcpPromptEntries, listMcpResourceEntries } from './mcp_resources.js';
 import { normalizeRuntimeToolIdentifier } from './mcp_runtime.js';
-const SOCIAL_CONFIRMED = ['social.connect', 'social.publish', 'social.disconnect'];
+const CONFIRMED_COMMANDS = ['social.connect', 'social.publish', 'social.disconnect', 'shopping.clear_checked', 'training.schedule_week'];
 const MCP_RATE_LIMIT_RULES = Object.freeze([
     {
         id: 'mail.send',
@@ -125,8 +130,8 @@ export function listAclRules() {
             { subject: 'calendar.update', access: 'confirm', required_capabilities: ['calendar.write'] },
             { subject: 'calendar.delete', access: 'confirm', required_capabilities: ['calendar.write'] },
             { subject: 'calendar.share', access: 'confirm', required_capabilities: ['calendar.write', 'share.write'] },
-            ...[...TV_COMMANDS, ...YOUTUBE_COMMANDS, ...APPLE_MUSIC_COMMANDS, ...MUSIC_COMMANDS].map(command => ({ subject: command.name, required_capabilities: [command.capability], access: 'allow' })),
-            ...SOCIAL_COMMANDS.map(command => ({ subject: command.name, required_capabilities: [command.capability], access: SOCIAL_CONFIRMED.includes(command.name) ? 'confirm' : 'allow' })),
+            ...[...TV_COMMANDS, ...YOUTUBE_COMMANDS, ...PEERTUBE_COMMANDS, ...APPLE_MUSIC_COMMANDS, ...MUSIC_COMMANDS, ...DASHBOARD_PROGRESSION_COMMANDS].map(command => ({ subject: command.name, required_capabilities: [command.capability], access: 'allow' })),
+            ...[...SOCIAL_COMMANDS, ...SHOPPING_COMMANDS, ...FOOD_COMMANDS, ...TRAINING_COMMANDS].map(command => ({ subject: command.name, required_capabilities: [command.capability], access: CONFIRMED_COMMANDS.includes(command.name) ? 'confirm' : 'allow' })),
             {
                 subject: 'runtime.tools.call:ui.capture.*',
                 access: 'confirm',
@@ -280,9 +285,10 @@ export function resolveAccessPolicy(method, params = {}) {
     }
     // Direct and runtime calls share the exact contract capability and external-write policy.
     const contractId = normalizedMethod === 'runtime.tools.call' ? normalizeRuntimeToolIdentifier(params) : normalizedMethod;
-    const contract = [...TV_COMMANDS, ...YOUTUBE_COMMANDS, ...SOCIAL_COMMANDS, ...APPLE_MUSIC_COMMANDS, ...MUSIC_COMMANDS, ...GPS_COMMANDS].find(entry => entry.name === contractId);
+    const contract = [...TV_COMMANDS, ...YOUTUBE_COMMANDS, ...PEERTUBE_COMMANDS, ...SOCIAL_COMMANDS, ...APPLE_MUSIC_COMMANDS, ...MUSIC_COMMANDS, ...GPS_COMMANDS, ...SHOPPING_COMMANDS, ...FOOD_COMMANDS, ...TRAINING_COMMANDS,
+        ...DASHBOARD_PROGRESSION_COMMANDS].find(entry => entry.name === contractId);
     if (contract || normalizedMethod.startsWith('tv.')) {
-        const confirm = SOCIAL_CONFIRMED.includes(contract?.name);
+        const confirm = CONFIRMED_COMMANDS.includes(contract?.name);
         return { ...defaultPolicy, scope: 'tool', subject: contractId, required_capabilities: [contract?.capability || 'tv.control'],
             ...(confirm ? { access: 'confirm', confirmation_required: true, proposal_required: contract.name === 'social.publish', sensitive: true } : {}),
             ...(contract?.name.startsWith('social.') ? { idempotent: contract.name !== 'social.connect' } : {}),

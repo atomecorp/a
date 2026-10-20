@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { reject } from './auth_link_security.js';
+import { isE164Phone } from '../atome/src/shared/phone_number.js';
 
 // Public, non-secret routing names (`jean-4821`): a handle only says whose
 // devices receive an approval request; it never proves anything.
@@ -32,5 +33,12 @@ export function createHandles({ query, now }) {
         if (!HANDLE_PATTERN.test(value)) return null;
         return (await query('get', 'SELECT principal_id FROM auth_handles WHERE handle = ?', [value]))?.principal_id || null;
     }
-    return { of, assign, resolve };
+    // A verified, unrevoked phone number routes like a handle: it only names whose
+    // devices are asked, the approval on one of them stays the proof.
+    async function resolvePhone(phone) {
+        if (!isE164Phone(phone)) return null;
+        return (await query('get', `SELECT c.principal_id FROM principal_phone_credentials c JOIN atomes a ON a.atome_id = c.principal_id
+            WHERE c.normalized_phone = ? AND c.revoked_at IS NULL AND a.atome_type = 'user' AND a.deleted_at IS NULL`, [phone]))?.principal_id || null;
+    }
+    return { of, assign, resolve, resolvePhone };
 }

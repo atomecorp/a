@@ -28,7 +28,6 @@ Ce dossier cartographie le bloc atome-core pour faciliter le debug des mutations
 - server/atomeHistoryCommands.js
 - server/atomePropertySecurity.js
 - server/atomeRealtime.js
-- server/wsAtomeRealtimeOperation.js
 - server/wsAtomeDeleteOperation.js
 - server/wsSyncSecurity.js
 - server/wsAtomeOperations.js
@@ -48,8 +47,7 @@ Ce dossier cartographie le bloc atome-core pour faciliter le debug des mutations
 - `dispatchSelectionEvent` - eVe/intuition/runtime/selection.js:94
 - `createAtome` - database/adole.js:494
 - `commitAtomeEvent` - server/atomeRoutes.orm.js:362
-- `handleWsAtomeRealtimeOperation` - server/wsAtomeRealtimeOperation.js
-- `executeAtomeHistoryCommand` - server/atomeHistoryCommands.js
+- `handleWsAtomeRealtimeOperation` - `executeAtomeHistoryCommand` - server/atomeHistoryCommands.js
 - `handleWsAtomeDeleteOperation` - server/wsAtomeDeleteOperation.js
 
 ## Main risks found

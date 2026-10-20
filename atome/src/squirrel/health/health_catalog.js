@@ -233,17 +233,6 @@ export const HEALTH_MONITORS = freeze([
     })
 ]);
 
-// Documented exclusions: never requested, not even "for later".
-export const HEALTH_EXCLUDED = freeze([
-    freeze({ id: 'clinical_records', reason: 'fhir_clinical_out_of_scope' }),
-    freeze({ id: 'ecg', reason: 'electrocardiogram_out_of_scope' }),
-    freeze({ id: 'exercise_route', reason: 'location_route_out_of_scope' }),
-    freeze({ id: 'menstruation_and_sexual_activity', reason: 'reproductive_health_special_handling_not_implemented' }),
-    freeze({ id: 'nutrition_details', reason: 'nutrition_out_of_monitor_scope' }),
-    freeze({ id: 'speed_power_cadence_series', reason: 'workout_series_not_a_dashboard_monitor' }),
-    freeze({ id: 'android_mindfulness_session', reason: 'requires_connect_client_feature_not_in_retained_stable_sdk' })
-]);
-
 const byId = new Map(HEALTH_MONITORS.map((entry) => [entry.id, entry]));
 
 export const getHealthMonitor = (id) => byId.get(String(id || '')) || null;

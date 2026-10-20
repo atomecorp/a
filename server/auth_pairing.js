@@ -47,9 +47,11 @@ export function createPairing({ query, transaction, proof, sessions, devices, ha
             if (await devices.byId(keyId)) reject('auth_request_invalid');
             const approve = input.approve && deviceClass === 'personal'
                 ? await approvals.register(input.approve, 'approve-key-register', `pair:${keyId}`, keyId) : null;
-            // Uniform answer whether the handle exists or not; one pending request per handle.
-            const target = input.handle ? await handles.resolve(input.handle) : null;
+            // Uniform answer whether the handle or phone exists or not; one pending request per account.
+            if (input.handle && input.phone) reject('auth_request_invalid');
+            const target = input.handle ? await handles.resolve(input.handle) : input.phone ? await handles.resolvePhone(input.phone) : null;
             if (input.handle) await proof.limit(`pair-handle:${proof.keyedIndex(String(input.handle).toLowerCase())}`, 3, 600000);
+            if (input.phone) await proof.limit(`pair-phone:${proof.keyedIndex(String(input.phone))}`, 3, 600000);
             if (target) await query('run', `UPDATE auth_pair_requests SET state = 'cancelled'
                 WHERE target_principal = ? AND kind = 'enroll' AND state IN ('pending', 'approved')`, [target]);
             let code;

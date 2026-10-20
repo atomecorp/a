@@ -249,3 +249,36 @@ fn malformed_paint_is_rejected_before_spawning_and_signed_spread_survives_normal
             .unwrap();
     assert_eq!(shadow.normalized().unwrap().spread, -3.0);
 }
+
+// A glass shape is drawn by the backdrop material, not by a painted sprite: its
+// surface-paint border has to reach that material, or every border on glass (a
+// selected panel chip, the active Dashboard lane) silently disappears.
+#[test]
+fn glass_surfaces_draw_their_surface_paint_border_and_follow_its_patches() {
+    let mut node = shape("glass_chip");
+    node.backdrop = Some(AtomeBackdropStyle { blur_px: 16.0, tint: [0.0, 0.0, 0.1, 0.69], tint_fade: 0.0, corner_cut_px: 0.0 });
+    node.surface_paint = Some(SurfacePaint {
+        border: Some(SurfaceBorder { width: 1.0, color: [1.0; 4], colors: None }),
+        ..Default::default()
+    });
+    let scene = AtomeRenderScene { nodes: vec![node], effects: Vec::new(), selection_style: None };
+    let mut app = App::new();
+    app.add_plugins(AtomeBevyRendererPlugin::new(AtomeBevyRendererConfig::new(640.0, 480.0, scene)));
+    app.update();
+    let entity = app.world().resource::<AtomeEntityTable>().by_id["glass_chip"];
+    let read = |app: &App| {
+        let handle = app.world()
+            .get::<bevy::sprite_render::MeshMaterial2d<crate::backdrop_surface::BackdropSurfaceMaterial>>(entity)
+            .unwrap().0.clone();
+        let uniform = app.world().resource::<Assets<crate::backdrop_surface::BackdropSurfaceMaterial>>()
+            .get(&handle).unwrap().uniform;
+        (uniform.corner_cut.y, uniform.border_edges)
+    };
+    assert_eq!(read(&app), (1.0, [Vec4::ONE; 4]));
+    let edges = [[1.0, 0.0, 0.0, 1.0], [0.0, 1.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0], [1.0, 1.0, 0.0, 1.0]];
+    apply_style(app.world_mut(), serde_json::from_value(serde_json::json!({"id":"glass_chip",
+        "surface_paint":{"border":{"width":2,"color":[1,1,1,1],"colors":edges}}})).unwrap()).unwrap();
+    assert_eq!(read(&app), (2.0, edges.map(Vec4::from_array)));
+    apply_style(app.world_mut(), serde_json::from_value(serde_json::json!({"id":"glass_chip","surface_paint":null})).unwrap()).unwrap();
+    assert_eq!(read(&app), (0.0, [Vec4::ZERO; 4]));
+}

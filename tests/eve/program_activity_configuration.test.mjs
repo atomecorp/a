@@ -18,6 +18,7 @@ const fixture = () => {
     let actor = 'alice', sequence = 0;
     const records = new Map(), events = new Map(), writes = [], onCreated = vi.fn(), refresh = vi.fn();
     const runtime = createProjectProgramRuntime({ actor: () => actor, project: () => '', read: async id => records.get(id),
+        syncShopping: async () => ({ ok: true, changed: 0 }),
         list: async () => [...records.values()], commitActivity: async event => {
             expect(event.scope).toBe('global'); expect(event).not.toHaveProperty('project_id');
             if (events.has(event.id)) { assertIdempotentEventReplay(events.get(event.id), event); return { ok: true }; }

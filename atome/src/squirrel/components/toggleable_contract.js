@@ -1,10 +1,7 @@
-const TOGGLEABLE_KINDS = Object.freeze(new Set(['checkbox', 'switch']));
+// Required-text coercion is owned by the select contract.
+import { textValue } from './select_contract.js';
 
-const textValue = (value, code) => {
-    const normalized = String(value == null ? '' : value).trim();
-    if (!normalized) throw new Error(code);
-    return normalized;
-};
+const TOGGLEABLE_KINDS = Object.freeze(new Set(['checkbox', 'switch']));
 
 // A radio group carries the same option/value semantics as a Select, so groups
 // reuse `select_contract.js` instead of declaring a second option contract.

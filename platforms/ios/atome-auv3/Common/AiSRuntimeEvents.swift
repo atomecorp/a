@@ -144,7 +144,7 @@ extension AiSRuntime {
         return nil
     }
 
-    private static func extractEventPatch(kind: String, payload: Any?, ts: String) -> [String: Any]? {
+    static func extractEventPatch(kind: String, payload: Any?, ts: String) -> [String: Any]? {
         if kind == "delete" {
             return ["__deleted": true, "deleted_at": ts]
         }
@@ -190,8 +190,14 @@ extension AiSRuntime {
         let eventId = stringValue(incoming["id"])
         let existing = try query(db, "SELECT id FROM events WHERE id = ? LIMIT 1", [.text(eventId)])
         if !existing.isEmpty { return }
+        // A WebView commit belongs to its atome's containment, not to the project the client has open.
+        var local = incoming
+        if enqueueRemote {
+            if let project = try resolveEventProjectId(db, event: incoming) { local["project_id"] = project }
+            else { local.removeValue(forKey: "project_id") }
+        }
         // Remote history must retain the server's exact intent; localization is projection-only.
-        guard let event = enqueueRemote ? try withoutUnchangedProperties(db, event: incoming) : incoming else { return }
+        guard let event = enqueueRemote ? try withoutUnchangedProperties(db, event: local) : incoming else { return }
         try execute(db, "SAVEPOINT ais_event")
         var committed = false
         defer {

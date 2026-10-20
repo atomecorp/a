@@ -138,7 +138,8 @@ export const sessionAccountMethods = {
             // the native launch cover stayed over a completely loaded page.
             // Keep the guest workspace itself for a later retry, but settle the
             // auth contract as logged out so the login choices are presented.
-            clearSessionState();
+            // The stored guest session stays: the next launch retries it.
+            setSessionState({ mode: 'logged_out', user: null, backend: null }, { persist: false });
             return {
                 authenticated: false,
                 user: null,

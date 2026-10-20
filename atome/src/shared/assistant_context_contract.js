@@ -25,7 +25,7 @@ export const ASSISTANT_CONTEXT_COMMANDS = Object.freeze([
         description: 'List the latest debug reports filed by the assistant, newest first.' },
     { name: 'assistant.session.end', required: [], properties: {},
         description: 'End the assistant session and stop listening, as a hang-up. Call it when the user dismisses the assistant: '
-            + '"au revoir", "tu peux partir", "raccroche", "quitte", "arrête de m\'écouter", "c\'est tout, merci", "goodbye", '
+            + '"au revoir", "tu peux partir", "raccroche", "c\'est bon, tu peux raccrocher", "quitte", "arrête de m\'écouter", "c\'est tout, merci", "goodbye", '
             + '"hang up". Not on a mere mention or a question about these words. The assistant says goodbye itself; '
             + 'the wake phrase "Ève, écoute-moi" or the assistant button opens a new session.' },
     // The user's other devices (surface registry + remote command relay).

@@ -1,7 +1,5 @@
 const LOG_LEVELS = ['debug', 'info', 'warn', 'error'];
 
-export const LOG_SCHEMA_VERSION = 1;
-
 export function buildLogEnvelope({
   level = 'info',
   source = 'unknown',
@@ -62,9 +60,5 @@ export function coerceLogEnvelope(entry, defaults = {}) {
     message,
     data
   };
-}
-
-export function serializeLogEnvelope(entry) {
-  return JSON.stringify(entry);
 }
 

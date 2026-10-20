@@ -131,6 +131,8 @@ Modes:
   --aab                 Emit an Android App Bundle instead of an APK (Play Store).
   --play-internal       Android release generator (Google Play internal testing).
                         See ./scripts/Android_testflight_generator --help.
+  --firebase            Android release generator (Firebase App Distribution).
+                        See ./scripts/Android_testflight_generator --firebase --help.
 
 Options:
       --abi <abi>       aarch64 (default) | armv7 | i686 | x86_64 | all

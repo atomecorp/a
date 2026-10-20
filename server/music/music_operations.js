@@ -5,7 +5,19 @@ import { handleWsAtomeOperation } from '../wsAtomeOperations.js';
 import { readMusicConfig, spotifyConfigured, spotifySession, startSpotifyConnection, awaitSpotifyConnection,
     cancelSpotifyConnection, disconnectSpotify } from './spotify_session.js';
 import { readSpotify, controlSpotify, writeSpotify } from './spotify_operations.js';
-import { readDeezerCatalog } from './deezer_catalog.js';
+import { readDeezerCatalog, verifyDeezerProfile } from './deezer_catalog.js';
+
+// Keys of Passwords & keys: the Spotify application Client ID and the Deezer profile.
+const MUSIC_CREDENTIALS = Object.freeze({
+    spotify: { validateKey: async key => { if (!/^[0-9a-f]{32}$/i.test(key)) throw new Error('provider_key_invalid'); },
+        // A Spotify session belongs to the application that authorized it.
+        removed: ({ vault, principal }) => disconnectSpotify({ vault, principal, check() {} }) },
+    deezer: { validateKey: verifyDeezerProfile }
+});
+export const musicCredentialProvider = id => MUSIC_CREDENTIALS[id] || null;
+const notConfigured = (name, provider) => name === 'get_state'
+    ? { ok: true, provider, supported: true, configured: false, state: 'not_configured', capabilities: [] }
+    : { ok: false, error: 'NOT_CONFIGURED' };
 
 // The receipt uses the same authenticated canonical commit/read boundary as Atome tools.
 export function musicReceiptApi(connection, token, check, dispatch = handleWsAtomeOperation) {
@@ -60,10 +72,12 @@ async function durableWrite(ctx, action, input, record) {
 export async function handleMusicAction(action, input, options) {
     const name = action.replace(/^music\./, '');
     if (validateMusicInput(name, input)) return { ok: false, error: 'INVALID_ARGUMENT' };
-    const ctx = { config: readMusicConfig(), ...options, input };
+    const ctx = { ...options, input };
     ctx.check();
     try {
-        if (input.provider === 'deezer') return await readDeezerCatalog(name, input, ctx);
+        ctx.config ??= await readMusicConfig(ctx.vault);
+        ctx.check();
+        if (input.provider === 'deezer') return ctx.config.deezerProfile ? await readDeezerCatalog(name, input, ctx) : notConfigured(name, 'deezer');
         if (name === 'operation_status') {
             const store = createMusicOperationStore({ api: ctx.receiptApi, readActor: () => { ctx.check(); return ctx.principal; }, type: 'music_operation', idPrefix: operationPrefix(ctx) });
             const saved = await store.read(input.request_id);
@@ -71,7 +85,7 @@ export async function handleMusicAction(action, input, options) {
             return receipt(saved, input.request_id);
         }
         const configured = spotifyConfigured(ctx.config);
-        if (name === 'get_state' && !configured) return { ok: true, provider: 'spotify', supported: true, configured: false, state: 'not_configured', capabilities: [] };
+        if (name === 'get_state' && !configured) return notConfigured(name, 'spotify');
         if (name === 'connect') return { ok: true, ...startSpotifyConnection(ctx) };
         if (name === 'await_connection') { const result = await awaitSpotifyConnection(ctx); return result.ok ? result : { ok: false, error: musicError(result.error) }; }
         if (name === 'cancel_connection') return { ok: true, cancelled: cancelSpotifyConnection(ctx) };

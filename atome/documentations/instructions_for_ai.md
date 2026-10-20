@@ -7,6 +7,8 @@
 
 This guide is for AI code assistants (such as Copilot, ChatGPT, etc.) and developers using code generation tools. It provides best practices and explicit rules to ensure all generated code leverages the Squirrel.js API effectively, instead of defaulting to vanilla JavaScript or other frameworks.
 
+**Scope in eVe:** this DOM API serves the Squirrel shell and standalone Squirrel pages. eVe product UI (panels, menus, Flower, Dashboard) is BevyUI drawn on the shared project canvas (`eVe/intuition/runtime/bevy_panel/`); do not build new eVe UI with `Squirrel.$`. Browser dialogs (`alert()`, `confirm()`) are forbidden in product flows (module 02).
+
 ---
 
 ## General Principles
@@ -46,7 +48,8 @@ const slider = Squirrel.Slider({ parent: '#view', min: 0, max: 100, value: 50 })
 
 ```js
 // Good:
-Squirrel.$('button', { parent: '#view', text: 'Click', onClick: () => alert('Clicked!') });
+const level = Squirrel.Slider({ parent: '#view', min: 0, max: 100, value: 50 });
+Squirrel.$('button', { parent: '#view', text: 'Reset', onClick: () => level.setValue(0) });
 
 // Avoid:
 // element.addEventListener('click', ...);
@@ -106,8 +109,8 @@ runShellCommand('ls').then(result => console.log(result.stdout));
 ```js
 window.addEventListener('squirrel:ready', () => {
   Squirrel.$('h1', { parent: '#view', text: 'Welcome!' });
-  Squirrel.$('button', { parent: '#view', text: 'Say Hi', onClick: () => alert('Hi!') });
-  Squirrel.Slider({ parent: '#view', min: 0, max: 100, value: 42 });
+  const level = Squirrel.Slider({ parent: '#view', min: 0, max: 100, value: 42 });
+  Squirrel.$('button', { parent: '#view', text: 'Reset', onClick: () => level.setValue(0) });
 });
 ```
 

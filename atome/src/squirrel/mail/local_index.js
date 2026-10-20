@@ -1,41 +1,7 @@
 import { toText as normalizeText } from '../shared/scalars.js';
+import { decodeBytesToText, decodeBase64Bytes } from './mail_mime.js';
 const DEFAULT_MAILBOX = 'inbox';
 
-
-const decodeBytesToText = (bytes, charset = 'utf-8') => {
-    const normalizedCharset = String(charset || 'utf-8').trim().toLowerCase();
-    try {
-        if (typeof TextDecoder === 'function') {
-            const decoder = new TextDecoder(
-                normalizedCharset === 'utf8' ? 'utf-8' : normalizedCharset,
-                { fatal: false }
-            );
-            return decoder.decode(bytes);
-        }
-    } catch (_) {
-        // Fall through to Buffer decoding.
-    }
-    if (typeof Buffer !== 'undefined') {
-        if (normalizedCharset.includes('iso-8859-1') || normalizedCharset.includes('latin1')) {
-            return Buffer.from(bytes).toString('latin1');
-        }
-        return Buffer.from(bytes).toString('utf8');
-    }
-    return String.fromCharCode(...bytes);
-};
-
-const decodeBase64Bytes = (value) => {
-    const text = String(value || '').trim();
-    if (!text) return new Uint8Array();
-    if (typeof Buffer !== 'undefined') {
-        return Uint8Array.from(Buffer.from(text, 'base64'));
-    }
-    if (typeof atob === 'function') {
-        const binary = atob(text);
-        return Uint8Array.from(binary, (char) => char.charCodeAt(0));
-    }
-    return new Uint8Array();
-};
 
 const decodeQuotedPrintableBytes = (value) => {
     const text = String(value || '').replace(/_/g, ' ');

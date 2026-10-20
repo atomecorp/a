@@ -107,6 +107,12 @@ export const startBrowserRecognition = (context, sessionId, options = {}, {
 
         recognition.onerror = (event) => {
             if (state.settled) return;
+            // Silence heard, or the end of a cancelled listening, is not a failure:
+            // the session ends as it would have, empty or cancelled.
+            if (event?.error === 'no-speech' || state.cancelled) {
+                settleEnded();
+                return;
+            }
             state.settled = true;
             clearEndpointTimer();
             context.sttSessions.delete(sessionId);
@@ -117,7 +123,7 @@ export const startBrowserRecognition = (context, sessionId, options = {}, {
             deferred.reject(new Error(error));
         };
 
-        recognition.onend = () => {
+        function settleEnded() {
             if (state.settled) return;
             state.settled = true;
             clearEndpointTimer();
@@ -149,7 +155,8 @@ export const startBrowserRecognition = (context, sessionId, options = {}, {
                 session_id: sessionId,
                 ...result
             });
-        };
+        }
+        recognition.onend = settleEnded;
 
         context.sttSessions.set(sessionId, state);
         try {

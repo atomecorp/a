@@ -23,7 +23,8 @@ const COMMAND_REPLY_TIMEOUT_MS = 35000;
 // sandbox — those stay with the person holding this device.
 const REMOTE_ACTOR_CAPABILITIES = Object.freeze([
     'mcp.read', 'runtime.read', 'runtime.execute', 'timeline.read', 'timeline.write', 'conditions.read',
-    'ai.read', 'ai.execute', 'tv.read', 'tv.control', 'youtube.read', 'youtube.control'
+    'ai.read', 'ai.execute', 'tv.read', 'tv.control', 'youtube.read', 'youtube.control',
+    'peertube.read', 'peertube.control', 'progression.read'
 ]);
 const REMOTE_SANDBOX_PROFILE = 'remote_surface';
 

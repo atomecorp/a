@@ -51,9 +51,6 @@ export const cloneLenient = (value) => {
 /** Trimmed string. `null`/`undefined`/`false`/`0` all collapse to `''`. */
 export const toText = (value) => String(value || '').trim();
 
-/** Trimmed string preserving falsy-but-real values: `0` becomes `'0'`. */
-export const toTextStrict = (value) => String(value == null ? '' : value).trim();
-
 /** Search-normalised text: accents folded, lowercased, punctuation to spaces. */
 export const normalizeSearchText = (value) => String(value || '')
     .normalize('NFD')
@@ -81,6 +78,15 @@ export const toFiniteNumber = (value, fallback = null) => {
 
 /** Current instant as an ISO-8601 string. */
 export const nowIso = () => new Date().toISOString();
+
+// --- errors ------------------------------------------------------------------
+
+/** Human-readable message of a thrown value: strings pass through, empty values read `'Unknown error'`. */
+export const toErrorMessage = (error) => {
+    if (!error) return 'Unknown error';
+    if (typeof error === 'string') return error;
+    return error.message || String(error);
+};
 
 // --- environment -------------------------------------------------------------
 

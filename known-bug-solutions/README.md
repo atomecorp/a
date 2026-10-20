@@ -10,6 +10,7 @@ the established solution before attempting a new implementation.
 
 | Symptom | Folder |
 | --- | --- |
+| A media preview (Médiathèque Lecture, contact takes) shows Pause but is silent | [preview-playback-silent-null-duration](preview-playback-silent-null-duration/README.md) |
 | Tauri: project opening 10–25 s; return to the home stuck grey in `transition` | [home-return-stuck-in-transition](home-return-stuck-in-transition/README.md) |
 | Home/projects repeatedly reload after restart or suspension; interrupted iOS reconstruction restarts at zero | [durable-startup-sync](durable-startup-sync/README.md) |
 | Home opens another Dashboard than chosen; false « liaison avec le serveur a échoué »; lift on a channel does nothing; TV sound without picture | [home-wrong-dashboard-and-false-link-errors](home-wrong-dashboard-and-false-link-errors/README.md) |
@@ -84,6 +85,9 @@ the established solution before attempting a new implementation.
 | A recorded video stays black in a Bevy preview on Web; decoder `errorCode: 4`, the bare `/api/recordings/` URL answers 404 | [hidden-video-missing-media-token](hidden-video-missing-media-token/README.md) |
 | A Pencil double-tap on the project background toggles the selection/rail instead of arming Draw | [ipad-pencil-background-double-tap](ipad-pencil-background-double-tap/README.md) |
 | iOS reports hundreds of GB of disk writes, the first launch is slow, `adole.db` weighs GB or calendars vanish after a contacts import | [local-db-disk-writes-and-slow-listing](local-db-disk-writes-and-slow-listing/README.md) |
+| iOS: importing or downloading a background leaves the surface unchanged, no error (opaque `atome:` origin vs CORS) | [ios-opaque-origin-media-cors](ios-opaque-origin-media-cors/README.md) |
+| Project view: reorder detaches a Molecule member, Delete bypasses the Molecule, Create Text/Code/Return/long press misroute text editing | [project-view-molecule-text-regressions](project-view-molecule-text-regressions/README.md) |
+| Slow first canvas (purple wait), surface briefly drawn at 75 %, unstable motion while the UI prepares | [ui-preparation-motion](ui-preparation-motion/README.md) |
 
 ## Maintenance rules
 

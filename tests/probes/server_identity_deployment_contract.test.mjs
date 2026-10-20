@@ -1,7 +1,6 @@
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runInNewContext } from 'node:vm';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
     createServerIdentityKeyPair,
@@ -209,11 +208,8 @@ it('allows credential-free native identity verification without opening account 
     await app.register(cors, { origin: false, credentials: true });
     registerServerIdentityRoutes(app, {});
     // Execute the existing health registration, rather than recreating its CORS policy.
-    const source = readFileSync(new URL('../../server/server.js', import.meta.url), 'utf8');
-    const healthRegistration = source.slice(source.indexOf("server.get('/health'"), source.indexOf("server.post('/api/uploads'"));
-    runInNewContext(healthRegistration, {
-        server: app, SERVER_VERSION: 'test', EVE_VERSION: 'test', DATABASE_ENABLED: true, process
-    });
+    const { registerServerInfoRoutes } = await import('../../server/http_status_routes.js');
+    registerServerInfoRoutes(app, { SERVER_TYPE: 'Fastify', DATABASE_ENABLED: true });
     app.get('/private-probe', () => ({ ok: true }));
     try {
         for (const origin of ['null', 'atome://', 'http://127.0.0.1:49152']) {

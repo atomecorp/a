@@ -51,12 +51,14 @@ export function createRecovery({ query, transaction, proof, sessions, devices, h
     const open = (principalId, options) => openRecoveryRequest({ query, proof, now }, principalId, options);
     async function start(input, network) {
         const { keyId, jwk } = publicDeviceKey(input.sessionKey);
-        const handle = String(input.handle || '').trim().toLowerCase();
-        // Identical shape and work for an unknown handle and a wrong code.
+        if (input.handle && input.phone) reject('auth_request_invalid');
+        // The account is named by its handle or its verified phone number.
+        const address = input.phone ? `phone:${String(input.phone)}` : String(input.handle || '').trim().toLowerCase();
+        // Identical shape and work for an unknown handle or number and a wrong code.
         const outcome = await transaction(async () => {
             await proof.limit(`recovery-network:${proof.keyedIndex(String(network))}`, 20, 86400000);
-            await proof.limit(`recovery-handle:${proof.keyedIndex(handle)}`, 10, 86400000);
-            const principalId = await handles.resolve(handle);
+            await proof.limit(`recovery-handle:${proof.keyedIndex(address)}`, 10, 86400000);
+            const principalId = input.phone ? await handles.resolvePhone(input.phone) : await handles.resolve(address);
             const stored = principalId ? await query('get', 'SELECT verifier FROM auth_recovery_codes WHERE principal_id = ?', [principalId]) : null;
             const candidate = recoveryVerifier(principalId || randomHandle(), input.code);
             const valid = !!stored && crypto.timingSafeEqual(Buffer.from(stored.verifier, 'hex'), Buffer.from(candidate, 'hex'));

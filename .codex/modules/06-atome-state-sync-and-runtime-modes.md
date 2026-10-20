@@ -63,11 +63,11 @@ Synchronization must be robust, deterministic, lossless, and history-compatible.
 | --- | --- |
 | Web Browser | Fastify, WebGPU, Kira WASM, Symphonia WASM |
 | Tauri | Axum, WebGPU, native Kira and Symphonia. Axum is the sole backend/runtime entry point for implementation, tests, debugging, APIs, filesystem access, local services, and integration flows. All filesystem access passes through Axum. |
-| iOS | AIS server, native SQLite iOS, WebGPU, native Kira and Symphonia. Low latency, battery efficiency, offline-first operation, and mobile stability are mandatory. |
-| AUv3 | AIS server, native SQLite iOS, WebGPU, native Kira and Symphonia. No blocking, disk access, runtime allocation, or nondeterministic latency in the realtime audio thread. |
-| Pure OS FreeBSD | Native FreeBSD runtime, Fastify server, auto-launched WebView, native Kira and Symphonia; standalone creative-operating-system behavior. |
+| iOS | Local Swift server ("AIS server" in older docs): `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift` (HTTP + `/ws/api`, `/ws/sync`) with the `AiSRuntime*.swift` runtime over native SQLite (`AiSRuntimeDatabase.swift`), WebGPU, native Kira and Symphonia. Low latency, battery efficiency, offline-first operation, and mobile stability are mandatory. |
+| AUv3 | Same local Swift server and `AiSRuntime*.swift` SQLite runtime as iOS, WebGPU, native Kira and Symphonia. No blocking, disk access, runtime allocation, or nondeterministic latency in the realtime audio thread. |
+| Pure OS FreeBSD | Image builder only (`platforms/atomeOS/builder`): it produces a bootable FreeBSD image whose session script (`overlays/ui/start_atome.sh`) starts the Fastify server (`node server/server.js`, or `run.sh` when present) and a full-screen WebKit webview (`cog` under the `cage` kiosk). No FreeBSD-specific runtime or native Kira/Symphonia code exists; the target is standalone creative-operating-system behavior. |
 
-For Tauri, browser File APIs, direct WebView filesystem access, browser-side filesystem hacks, alternate server paths, ad-hoc test ports, temporary development bridges, and port `1430` are forbidden. A native bridge or file-picker UI must preserve Axum's filesystem authority.
+For Tauri, browser File APIs, direct WebView filesystem access, browser-side filesystem hacks, alternate server paths, ad-hoc test ports, temporary development bridges, and port `1430` are forbidden. Port `1430` survives only as a debug-build CORS origin in `platforms/desktop-tauri/src/server/mod.rs` (the Tauri dev shell window before it is redirected to Axum); it is not a runtime mode, and a window stuck on it is a known bug. A native bridge or file-picker UI must preserve Axum's filesystem authority.
 
 The main application remains JavaScript under the core and module 02. Existing native host/runtime stacks are platform boundaries, not permission to implement application business behavior in another language or duplicate it outside the canonical APIs. Validate every participating boundary for cross-runtime scenarios under module 03.
 

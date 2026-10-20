@@ -32,6 +32,10 @@ export const PERSONAL_IMPORT_TOOLS = [
     { name: 'calendar.import_status', method: 'importStatus', description: 'Read active calendar collectors.', properties: {} }
 ];
 
+/** The one input schema of a personal import tool, for its runtime and AtomeAI registrations. */
+export const personalImportInputSchema = tool => ({ type: 'object', additionalProperties: false, properties: tool.properties,
+    ...(tool.param ? { required: [tool.param] } : {}) });
+
 export function personalImportToolResult(tool, result) {
     if (!tool.write) return result;
     const output = {};

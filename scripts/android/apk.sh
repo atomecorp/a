@@ -52,7 +52,7 @@ done
 tauri_android_build() {
   local -a args=(android build --ci)
   if [[ -n "${ATOME_ANDROID_RELEASE_CONFIG:-}" ]]; then
-    [[ "$MODE" == "prod" && "$EMIT" == "aab" ]] || fail "A release plan requires --prod --aab"
+    [[ "$MODE" == "prod" ]] || fail "A release plan requires --prod"
     args+=(--config "$ATOME_ANDROID_RELEASE_CONFIG")
   fi
   if [[ "$MODE" == "test" ]]; then args+=(--debug); fi
@@ -123,6 +123,11 @@ main() {
   # The release orchestrator calls this same build owner once, without this flag.
   # exec replaces this process; there is no nested release loop or second builder.
   local argument
+  for argument in "$@"; do
+    if [[ "$argument" == "--firebase" ]]; then
+      exec node "$ANDROID_SCRIPT_DIR/firebase_distribution.mjs" "$@"
+    fi
+  done
   for argument in "$@"; do
     if [[ "$argument" == "--play-internal" ]]; then
       exec node "$ANDROID_SCRIPT_DIR/play_internal.mjs" "$@"

@@ -52,11 +52,10 @@ test('a lost transport reply retains the stable receipt ID and a changed user ca
 test('Spotify and Deezer readiness tiles use canonical commands and expose only available controls', async () => {
     const command = vi.fn(async (_, input) => ({ result: input.provider === 'spotify' ? { ok: true, supported: true, configured: false }
         : { ok: true, supported: true, configured: true, state: 'catalog_only' } }));
-    const spotify = await createMusicMysticItem({ provider: 'spotify', makeItem: input => input, command });
-    spotify.children = await spotify.loadChildren();
+    // Not entered in Passwords & keys: no tile at all.
+    expect(await createMusicMysticItem({ provider: 'spotify', makeItem: input => input, command })).toBeNull();
     const deezer = await createMusicMysticItem({ provider: 'deezer', makeItem: input => input, command });
     deezer.children = await deezer.loadChildren();
-    expect(spotify.key).toBe('fun_spotify'); expect(spotify.children[0]).toMatchObject({ disabled: true, label: 'Spotify developer access needs configuration' });
     expect(deezer.key).toBe('fun_deezer'); expect(deezer.children[0]).toMatchObject({ disabled: true, label: 'Public catalog. Private library and playback unavailable' });
     expect(command).toHaveBeenCalledWith('music.get_state', { provider: 'deezer' });
 });

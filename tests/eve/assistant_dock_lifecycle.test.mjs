@@ -95,6 +95,6 @@ test('Atom short press closes the active assistant or opens the workspace, with 
         assert.deepEqual(calls, [['close', { source: 'mystic_center_click' }]]);
     }
     const calls = [];
-    await activateAtomShortPress({ source: 'bevy_ui_main_menu_atome' }, { assistant: null, professional: false, openDashboard: payload => calls.push(payload) });
+    await activateAtomShortPress({ source: 'bevy_ui_main_menu_atome' }, { assistant: null, openDashboard: payload => calls.push(payload) });
     assert.deepEqual(calls, [{ source: 'bevy_ui_main_menu_atome' }]);
 });

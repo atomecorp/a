@@ -52,10 +52,6 @@ export const publishRecordingScopeFrame = (payload = {}, sessionId = '') => {
 
 export const rememberRecordingScopeFrame = publishRecordingScopeFrame;
 
-export const readLatestRecordingScopeFrame = (sessionId) => (
-    latestScopeBySessionId.get(String(sessionId || '').trim()) || null
-);
-
 export const readRecordingScopeDiagnostic = (sessionId) => (
     scopeDiagnosticBySessionId.get(String(sessionId || '').trim()) || null
 );

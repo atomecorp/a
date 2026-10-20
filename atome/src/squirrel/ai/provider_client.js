@@ -1,10 +1,10 @@
 import {
-    AI_MODEL_PROVIDER_LIST,
     AI_MODEL_PROVIDER_REGISTRY
 } from './model_catalog_registry.js';
 import { loadRuntimeUserProfile } from './profile_loader.js';
 import { createGlobalSecurityApi } from '../security/bootstrap.js';
 import { requestProviderService } from './provider_broker.js';
+import { readResponseText } from './openai_stream.js';
 import { getSessionState } from '../apis/unified/adole_api/session.js';
 import {
     DEFAULT_TIMEOUT_MS,
@@ -27,12 +27,6 @@ export const AI_PROVIDER_DEFINITIONS = Object.freeze(Object.fromEntries(
         models: Object.freeze([...entry.recommended_models, ...entry.fallback_models])
     })]))
 ));
-
-export const AI_PROVIDER_LIST = Object.freeze(AI_MODEL_PROVIDER_LIST.map((entry) => Object.freeze({
-    id: entry.id,
-    label: entry.label,
-    models: Object.freeze([...entry.models])
-})));
 
 const containsAny = (haystack = '', needles = []) => needles.some((needle) => haystack.includes(needle));
 const resolveSecurityApi = (env = globalThis) => {
@@ -366,9 +360,7 @@ export const requestProviderCompletion = async ({
                 store: false
             }, { signal: merged.signal });
             return {
-                text: (data.output || []).filter(item => item.type === 'message')
-                    .flatMap(item => item.content || []).filter(item => item.type === 'output_text')
-                    .map(item => item.text).join(''),
+                text: readResponseText(data),
                 usage: normalizeUsage(data.usage)
             };
         }

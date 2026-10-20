@@ -143,9 +143,4 @@ export const installSurfaceGrantLifecycle = () => {
     return true;
 };
 
-export const __resetSurfaceGrantManager = () => {
-    state.incoming.clear();
-    state.outgoing.clear();
-};
-
 installSurfaceGrantLifecycle();

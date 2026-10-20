@@ -2,6 +2,7 @@ import { createWakeDetectorBackend } from './wake_detector.js';
 import { runWakeEnrollment } from './wake_enrollment.js';
 
 import { normalizeAssistantPreferences } from './wake_preferences.js';
+import { getSessionState } from '../apis/unified/adole_api/session.js';
 export { normalizeAssistantPreferences } from './wake_preferences.js';
 
 // Owns the standby lifecycle. The enabled profile preference arms this device: listening
@@ -13,6 +14,11 @@ export const createWakeRuntime = ({ env = globalThis, backend = createWakeDetect
     let engine = null, pending = Promise.resolve(), generation = 0, disposed = false;
     let enabled = false, armed = false, assistant = null, unsubscribe = () => {};
     let captureRetry = null;
+    // eVe's assistant serves an account only (a guest has no exchange); a surface the phrase
+    // is routed to instead (the first launch's guide) serves whoever it guides.
+    let routed = false;
+    const served = () => routed || getSessionState().mode === 'authenticated';
+    let wasServed = served();
     const clearCaptureRetry = () => { if (captureRetry !== null) env.clearTimeout(captureRetry); captureRetry = null; };
     const retryCapture = () => {
         clearCaptureRetry();
@@ -36,7 +42,7 @@ export const createWakeRuntime = ({ env = globalThis, backend = createWakeDetect
     const snapshot = () => ({ ...state, enabled, armed });
     const emit = (phase, error = '') => { state.phase = phase; state.error = error; listeners.forEach(fn => fn(snapshot())); return snapshot(); };
     const foreground = () => env.document?.visibilityState !== 'hidden';
-    const desired = () => !disposed && armed && enabled && foreground() && !blockers.size;
+    const desired = () => !disposed && armed && enabled && foreground() && !blockers.size && served();
     const release = async () => { const current = engine; engine = null; await current?.close(); };
     const reportError = error => {
         generation++;
@@ -109,6 +115,7 @@ export const createWakeRuntime = ({ env = globalThis, backend = createWakeDetect
     };
     const onVisibility = () => { clearCaptureRetry(); if (blockers.has('external_capture')) retryCapture(); void reconcile(); };
     const onLogout = () => { enabled = false; void api.stop(); };
+    const onAuthChecked = () => { if (served() !== wasServed) { wasServed = served(); void reconcile(); } };
     const onProfile = event => { void api.setEnabled(normalizeAssistantPreferences(event.detail?.preferences?.assistant).voiceActivation); };
     // A page kept in the back/forward cache comes back armed.
     const onPageHide = () => { void api.suspend('page_hidden'); };
@@ -123,6 +130,7 @@ export const createWakeRuntime = ({ env = globalThis, backend = createWakeDetect
     // `squirrel:user-logged-in` also announces each renewal of the same account's
     // session: only a sign-out or a switch (`squirrel:user-logged-out`) disarms.
     env.addEventListener?.('squirrel:user-logged-out', onLogout);
+    env.addEventListener?.('squirrel:auth-checked', onAuthChecked);
     env.addEventListener?.('eve:profile-preferences-updated', onProfile);
     const api = {
         getState: snapshot,
@@ -147,8 +155,14 @@ export const createWakeRuntime = ({ env = globalThis, backend = createWakeDetect
             try { return await runWakeEnrollment({ backend, prompt, signal }); }
             finally { await api.resume('enrollment'); }
         },
+        // `null`: no assistant yet (a detection bootstraps eVe's); the first launch routes it to its guide.
         connectAssistant(value) {
-            unsubscribe(); assistant = value;
+            unsubscribe(); assistant = value || null;
+            const wasRouted = routed;
+            routed = !!assistant && assistant !== env.eveAssistantApi;
+            wasServed = served();
+            if (!assistant) { unsubscribe = () => {}; if (blockers.delete('assistant') || wasRouted) void reconcile(); return; }
+            if (wasRouted !== routed) void reconcile();
             unsubscribe = assistant.subscribe(current => {
                 const wasActive = blockers.has('assistant');
                 // An assistant that failed to start holds no microphone: standby listens again,
@@ -166,6 +180,7 @@ export const createWakeRuntime = ({ env = globalThis, backend = createWakeDetect
             env.removeEventListener?.('blur', onBlur);
             env.removeEventListener?.('focus', onFocus);
             env.removeEventListener?.('squirrel:user-logged-out', onLogout);
+            env.removeEventListener?.('squirrel:auth-checked', onAuthChecked);
             env.removeEventListener?.('eve:profile-preferences-updated', onProfile); listeners.clear();
         }
     };

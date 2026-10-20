@@ -38,5 +38,6 @@ const normalizeSelectPresentation = ({ options, value = null, disabled = false }
 };
 
 export {
+    textValue,
     normalizeSelectPresentation
 };

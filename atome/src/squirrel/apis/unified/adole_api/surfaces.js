@@ -180,12 +180,6 @@ export const retireSurface = async () => {
     return result;
 };
 
-// Test seam: lets a probe restart from a clean slate without touching storage.
-export const __resetSurfaceAnnounceState = () => {
-    state.announcedGeneration = -1;
-    state.announcing = null;
-};
-
 // ---------------------------------------------------------------------------
 // Lifecycle
 //

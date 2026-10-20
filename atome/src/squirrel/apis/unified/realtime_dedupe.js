@@ -255,13 +255,6 @@ export function isSelfPatch(atomeId, fingerprint) {
     return false;
 }
 
-export function isFromCurrentUser(authorId) {
-    if (!authorId) return false;
-    const currentUserId = getCurrentUserId();
-    if (!currentUserId) return false;
-    return String(authorId) === String(currentUserId);
-}
-
 const normalizeValue = (value) => {
     if (value == null) return null;
     if (typeof value === 'number') return Number.isFinite(value) ? value : null;

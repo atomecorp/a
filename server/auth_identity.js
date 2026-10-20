@@ -1,5 +1,6 @@
 import { withTransaction } from '../database/adole.js';
 import { normalizePhone, generateOpaquePrincipalId } from './auth_crypto.js';
+import { isE164Phone } from '../atome/src/shared/phone_number.js';
 
 const REQUIRED_IDENTITY_TABLES = [
     'principal_phone_credentials',
@@ -73,6 +74,8 @@ export async function readPrincipalPhone(dataSource, principalId) {
 export async function assignVerifiedPhone(dataSource, principalId, phone, options = {}) {
     const normalizedPhone = normalizePhone(phone);
     if (!principalId || !normalizedPhone) throw new Error('invalid_phone_credential');
+    // One number, one spelling: the unique index compares strings, so only E.164 is stored.
+    if (!isE164Phone(normalizedPhone)) throw new Error('auth_phone_e164_required');
     const now = options.now || nowIso();
     const existing = await one(dataSource, `SELECT principal_id FROM principal_phone_credentials
         WHERE normalized_phone = ? AND revoked_at IS NULL LIMIT 1`, [normalizedPhone]);

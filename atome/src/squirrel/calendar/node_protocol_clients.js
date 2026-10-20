@@ -1,31 +1,18 @@
 import { readDavInitial, readDavDelta } from '../shared/dav_collection_read.js';
 import { CALENDAR_V1_ARCHITECTURE_DECISION } from './connector_contract.js';
 import { toText as normalizeText } from '../shared/scalars.js';
+// DAV wire helpers shared with CardDAV (the owners dav_collection_read.js already uses).
+import {
+    buildBasicAuthHeader,
+    extractTagValue,
+    extractResponseBlocks,
+    extractHrefFromProperty,
+    shouldDiscoverAddressBookUrl as shouldDiscoverCollectionUrl
+} from '../contacts/carddav_protocol.js';
+import { xmlDecode, escapeXml, resolveUrl } from '../contacts/carddav_shared.js';
 import { parseCalendarData } from './icalendar.js';
 export { parseCalendarData } from './icalendar.js';
 
-
-const xmlDecode = (value) => String(value || '')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, '\'')
-    .replace(/&amp;/g, '&');
-
-const escapeXml = (value) => String(value || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-
-const buildBasicAuthHeader = ({ username, password } = {}) => {
-    const user = normalizeText(username);
-    const secret = normalizeText(password);
-    if (!user || !secret) return null;
-    const payload = Buffer.from(`${user}:${secret}`, 'utf8').toString('base64');
-    return `Basic ${payload}`;
-};
 
 const toDate = (value) => {
     if (!value) return null;
@@ -47,17 +34,6 @@ const toIcsFloating = (value) => {
         pad(date.getUTCMinutes()),
         pad(date.getUTCSeconds())
     ].join('') + 'Z';
-};
-
-const extractTagValue = (xml = '', tagName = '') => {
-    const matcher = new RegExp(`<(?:[A-Za-z0-9._-]+:)?${tagName}\\b[^>]*>([\\s\\S]*?)</(?:[A-Za-z0-9._-]+:)?${tagName}>`, 'i');
-    const match = String(xml || '').match(matcher);
-    return match ? match[1] : null;
-};
-
-const extractResponseBlocks = (xml = '') => {
-    const matcher = /<(?:[A-Za-z0-9._-]+:)?response\b[^>]*>[\s\S]*?<\/(?:[A-Za-z0-9._-]+:)?response>/gi;
-    return String(xml || '').match(matcher) || [];
 };
 
 const parseMultiStatus = (xml = '') => ({
@@ -157,31 +133,6 @@ const ensureFetch = (fetchImpl) => {
     if (typeof fetchImpl === 'function') return fetchImpl;
     if (typeof globalThis.fetch === 'function') return globalThis.fetch.bind(globalThis);
     throw new Error('caldav_fetch_unavailable');
-};
-
-const shouldDiscoverCollectionUrl = (value) => {
-    try {
-        const url = new URL(String(value || ''));
-        return !url.pathname || url.pathname === '/';
-    } catch (_error) {
-        return false;
-    }
-};
-
-const resolveUrl = (base, href) => {
-    const normalizedHref = normalizeText(href || '');
-    if (!normalizedHref) return normalizeText(base || '') || null;
-    try {
-        return new URL(normalizedHref, base).toString();
-    } catch (_error) {
-        return normalizedHref;
-    }
-};
-
-const extractHrefFromProperty = (xml = '', propertyTag = '') => {
-    const content = extractTagValue(xml, propertyTag);
-    if (!content) return null;
-    return normalizeText(xmlDecode(extractTagValue(content, 'href') || '')) || null;
 };
 
 const hasCalendarCollectionType = (xml = '') => {

@@ -12,6 +12,10 @@ export const openAiFailure = (body, defaultCode = 'provider_request_failed', htt
     error.provider_code = code || ''; error.http_status = httpStatus;
     return error;
 };
+
+// The text of a completed Responses result: its message items' output_text parts.
+export const readResponseText = response => (response?.output || []).filter(item => item.type === 'message')
+    .flatMap(item => item.content || []).filter(item => item.type === 'output_text').map(item => item.text).join('');
 export async function* readOpenAiEvents(body, { signal, maxEventBytes = 4_000_000 } = {}) {
     if (!body?.getReader) throw new Error('provider_stream_required');
     const reader = body.getReader();

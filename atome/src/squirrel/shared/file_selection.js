@@ -10,6 +10,21 @@ const isNativeImportBridgeAvailable = () => {
     return !!window.webkit?.messageHandlers?.fileSystem?.postMessage;
 };
 
+// The sources a caller may offer inline, on this host: the native app opens
+// its camera, camera roll and files directly; an Audio Unit has no camera; a
+// browser has its file window and, in a secure context, the camera.
+const availableMediaSources = ({ kinds = ['image'] } = {}) => {
+    const win = typeof window !== 'undefined' ? window : null;
+    const visual = (Array.isArray(kinds) ? kinds : [kinds]).some((kind) => kind === 'image' || kind === 'video');
+    if (!visual) return ['files'];
+    if (isNativeImportBridgeAvailable()) {
+        const extension = String(win.__HOST_ENV || '').trim().toLowerCase() === 'auv3';
+        return extension ? ['photos', 'files'] : ['camera', 'photos', 'files'];
+    }
+    const camera = win?.isSecureContext === true && typeof win.navigator?.mediaDevices?.getUserMedia === 'function';
+    return camera ? ['camera', 'files'] : ['files'];
+};
+
 const inferMimeTypeFromName = (name = '') => {
     const normalized = String(name || '').trim().toLowerCase();
     if (normalized.endsWith('.json')) return 'application/json';
@@ -104,14 +119,16 @@ const buildFileFromNativeEntry = (entry = {}, index = 0) => {
     return blob;
 };
 
-const requestImportFilesFromNativeBridge = async ({ accept = '', kinds = null, multiple = true } = {}) => {
+const requestImportFilesFromNativeBridge = async ({ accept = '', kinds = null, multiple = true, source = '' } = {}) => {
     if (typeof window === 'undefined') return { ok: false, error: 'no_window', files: [] };
     if (!isNativeImportBridgeAvailable()) return { ok: false, error: 'native_bridge_unavailable', files: [] };
     const importKinds = resolveImportKinds({ kinds, accept });
     // `sources` est la demande ; `fileTypes` reste la forme qu'un hôte plus
     // ancien sait lire (« * » = feuille Photos/Fichiers).
+    // A caller that names its source (the inline sources under a photo) opens
+    // it directly: one source, no intermediate sheet.
     const options = {
-        sources: resolveNativeImportSources(importKinds),
+        sources: source ? [source] : resolveNativeImportSources(importKinds),
         kinds: importKinds,
         labels: resolveNativeImportLabels()
     };
@@ -248,11 +265,13 @@ const requestImportFilesFromInput = async (hostEnv = '', { accept = '', multiple
 };
 
 // Shared system selection for the Media panel and explicit text-file intake.
-const requestProjectImportFiles = async ({ accept = '', kinds = null, multiple = true } = {}) => {
+// `source` (files, photos, camera) is honoured by the native host; a browser
+// has only its file window, which covers files and the camera roll.
+const requestProjectImportFiles = async ({ accept = '', kinds = null, multiple = true, source = '' } = {}) => {
     if (typeof window === 'undefined') return { ok: false, error: 'no_window', files: [] };
     const hostEnv = String(window.__HOST_ENV || '').trim().toLowerCase();
     if (isNativeImportBridgeAvailable()) {
-        const nativeSelection = await requestImportFilesFromNativeBridge({ accept, kinds, multiple });
+        const nativeSelection = await requestImportFilesFromNativeBridge({ accept, kinds, multiple, source });
         return nativeSelection?.ok === true && multiple !== true
             ? { ...nativeSelection, files: nativeSelection.files.slice(0, 1) } : nativeSelection;
     }
@@ -260,7 +279,7 @@ const requestProjectImportFiles = async ({ accept = '', kinds = null, multiple =
 };
 
 
-export { requestProjectImportFiles, inferMimeTypeFromName };
+export { availableMediaSources, isNativeImportBridgeAvailable, requestProjectImportFiles, inferMimeTypeFromName };
 
 /** Explicit text-file intake. Desktop file bytes belong exclusively to Axum. */
 export async function requestTextFile({ extension, maxBytes = 32 * 1024 * 1024 } = {}) {

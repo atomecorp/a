@@ -131,6 +131,16 @@ async function handleDirectory(message, connection, userId) {
     const service = connection?._wsApiDirectoryService;
     if (!service) return errorResponse('directory', message, 'directory_service_unavailable');
     const action = actionOf(message);
+    if (action === 'meet') {
+        const entries = await service.meet({ goal: message.goal, theme: message.theme, scope: message.scope, query: message.query,
+            limit: message.limit, requesterId: userId });
+        return response('directory', message, true, { entries });
+    }
+    if (action === 'meet_card') {
+        const card = await service.meetCard({ principalId: message.principalId, goal: message.goal, theme: message.theme, scope: message.scope,
+            requesterId: userId });
+        return card ? response('directory', message, true, { card }) : errorResponse('directory', message, 'meeting_card_unavailable');
+    }
     if (action !== 'list' && action !== 'search') {
         return errorResponse('directory', message, `Unknown directory action: ${action || 'missing'}`);
     }

@@ -1,11 +1,7 @@
 import { generateUUID } from '../adole.js';
 import { getSessionState, setCurrentProjectCache, getCurrentProjectCache, clearCurrentProjectCache, updateWindowProject } from './session.js';
 import { list_atomes, create_atome, delete_atome, get_atome } from './atomes.js';
-
-const with_callback = (result, callback) => {
-    if (typeof callback === 'function') callback(result);
-    return result;
-};
+import { with_callback, getCurrentUserId, isLoggedOut } from './activities_support.js';
 
 const dispatchProjectChanged = (detail = {}) => {
     if (typeof window === 'undefined') return;
@@ -18,13 +14,6 @@ const dispatchProjectAtomeEvent = (eventName, detail = {}) => {
     if (typeof window === 'undefined') return;
     window.dispatchEvent(new CustomEvent(eventName, { detail }));
 };
-
-const getCurrentUserId = () => {
-    const state = getSessionState();
-    return state?.user?.id || null;
-};
-
-const isLoggedOut = () => getSessionState().mode === 'logged_out';
 
 const normalizeProject = (record) => {
     if (!record || typeof record !== 'object') return null;

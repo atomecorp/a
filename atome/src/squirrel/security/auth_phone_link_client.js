@@ -88,6 +88,12 @@ export function createPhoneLinkClient({ devices, send, installSession, storePurc
         if (result.token) return accept(result, record.phone, record.attemptId);
         // A verified phone only opens a delayed recovery of its account (V1 §7.4):
         // this device completes it later with the same key.
+        // The SMS proved a number that another account holds: this account keeps its own.
+        if (result.phoneTaken) {
+            await devices.remove('attempt');
+            onPending({ phoneTaken: true });
+            return { ok: true, phoneTaken: true };
+        }
         if (result.recoveryPending) {
             const device = await devices.forPhone(record.phone);
             await devices.put('recovery-attempt', { scope: device.scope, recoveryId: result.recoveryId, notBefore: result.notBefore,
@@ -104,6 +110,17 @@ export function createPhoneLinkClient({ devices, send, installSession, storePurc
         await devices.put('attempt', next);
         if (next.paymentRequired && !record.paymentRequired) onPending({ paymentRequired: true });
         return { ...result, expiresAt: next.expiresAt };
+    }
+    // The server moves the generation forward on every renew. A renew that reached it
+    // but whose answer was lost (app killed or suspended, socket dropped) leaves this
+    // device one generation behind: `renewing` says such a renew was sent.
+    async function renewChallenge(record) {
+        const ask = generation => request('session-challenge', { sessionId: record.session.id, generation, purpose: 'renew' });
+        const { generation } = record.session;
+        try { return { generation, ...await ask(generation) }; } catch (error) {
+            if (error?.message !== 'auth_session_stale' || record.renewing !== generation) throw error;
+            return { generation: generation + 1, ...await ask(generation + 1) };
+        }
     }
     async function followDelivery(response, record) {
         if (response.developmentLink) {
@@ -219,12 +236,16 @@ export function createPhoneLinkClient({ devices, send, installSession, storePurc
             return result;
         }),
         renew: () => exclusive(async () => {
-            const record = await devices.read('session');
-            if (!record) throw new Error('auth_session_required');
+            const stored = await devices.read('session');
+            if (!stored) throw new Error('auth_session_required');
+            const { renewing: _sent, ...record } = stored;
             const device = await deviceOf(record);
-            const fields = { sessionId: record.session.id, generation: record.session.generation };
             try {
-                const { challenge } = await request('session-challenge', { ...fields, purpose: 'renew' });
+                const { generation, challenge } = await renewChallenge(stored);
+                const fields = { sessionId: record.session.id, generation };
+                // Durable before sending: a lost answer must not cost this device its session.
+                record.session = { ...record.session, generation };
+                await devices.put('session', { ...record, renewing: generation });
                 const signed = await sign(device, challenge, 'renew', `${fields.sessionId}:${fields.generation}`);
                 // A client that proves its key on every connection says so (`pop`): its tokens become bound to it.
                 const result = await request('session-renew', { ...fields, ...signed, ...(connectionProof ? { pop: true } : {}) });

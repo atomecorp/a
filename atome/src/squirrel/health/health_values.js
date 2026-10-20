@@ -7,13 +7,6 @@ const MINUTE = 60 * 1000;
 const SLEEP_SESSION_GAP_MS = 2 * 60 * MINUTE;
 const SLEEP_IN_PROGRESS_MS = 30 * MINUTE;
 
-// Reading states shown to the user. `no_data` (nothing readable in the range)
-// is never a refusal: HealthKit hides read denials behind empty results.
-export const HEALTH_READING_STATES = Object.freeze([
-    'loading', 'value', 'no_data', 'needs_link', 'needs_permission', 'denied',
-    'unavailable', 'temporarily_unavailable', 'unsupported', 'error'
-]);
-
 const NATIVE_STATUS_TO_STATE = Object.freeze({
     ok: 'value',
     no_data: 'no_data',
@@ -250,16 +243,6 @@ export function normalizeHealthResult(entry, raw, { fetchedAt, range = null, now
     default:
         return failure(entry, 'error', 'health_strategy_unknown', withCoverage);
     }
-}
-
-// Direct step counter (Android TYPE_STEP_COUNTER counts since reboot). The
-// session value is a delta from the first reading; a reboot (counter going
-// backwards) re-bases instead of producing a negative or a jump.
-export function advanceStepCounter(state, counter) {
-    if (!isFiniteNumber(counter) || counter < 0) return state || null;
-    if (!state || !isFiniteNumber(state.lastCounter)) return { lastCounter: counter, steps: 0 };
-    const delta = counter >= state.lastCounter ? counter - state.lastCounter : counter;
-    return { lastCounter: counter, steps: state.steps + delta };
 }
 
 const twoDigits = (value) => String(value).padStart(2, '0');

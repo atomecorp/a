@@ -48,9 +48,9 @@ test('UI actions and MCP tools converge on the same Molecule state and history s
         await api.applyGroupTimelineOperation({
             group_id: 'ui', operation: 'ui.timeline.clip.move', command
         });
-        await mcpTools.get('eve.timeline.clip.move').handler({
+        await mcpTools.get('eve.timeline.clip.move').handler({ params: {
             group_id: 'mcp', command
-        });
+        } });
 
         const batch = [
             {
@@ -65,9 +65,9 @@ test('UI actions and MCP tools converge on the same Molecule state and history s
         await api.applyGroupTimelineBatch({
             group_id: 'ui', operations: batch, label: 'parity'
         });
-        await mcpTools.get('eve.timeline.batch').handler({
+        await mcpTools.get('eve.timeline.batch').handler({ params: {
             group_id: 'mcp', operations: batch, label: 'parity'
-        });
+        } });
 
         const uiState = sessions.get('ui').getState();
         const mcpState = sessions.get('mcp').getState();
@@ -79,7 +79,7 @@ test('UI actions and MCP tools converge on the same Molecule state and history s
         assert.equal(sessions.get('mcp').getHistory().undo.length, 2);
 
         await api.undoGroupTimeline({ group_id: 'ui' });
-        await mcpTools.get('eve.timeline.history.undo').handler({ group_id: 'mcp' });
+        await mcpTools.get('eve.timeline.history.undo').handler({ params: { group_id: 'mcp' } });
         assert.equal(sessions.get('ui').getState().transport.playhead_seconds, 0);
         assert.equal(sessions.get('mcp').getState().transport.playhead_seconds, 0);
     } finally {

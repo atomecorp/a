@@ -1,6 +1,7 @@
 use midir::{Ignore, MidiInput, MidiInputConnection, MidiOutput, MidiOutputConnection};
 use once_cell::sync::OnceCell;
 use serde::Serialize;
+use std::collections::HashMap;
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter};
 
@@ -39,10 +40,11 @@ struct NativeMidiEvent {
     port_name: String,
 }
 
+// One open connection per output port: a take recorded from several devices,
+// or played on every output, fans out without reconnecting per message.
 struct NativeMidiState {
     input_connections: Vec<MidiInputConnection<()>>,
-    output_connection: Option<MidiOutputConnection>,
-    output_id: String,
+    output_connections: HashMap<String, MidiOutputConnection>,
     inputs: Vec<NativeMidiPort>,
     outputs: Vec<NativeMidiPort>,
 }
@@ -51,8 +53,7 @@ impl NativeMidiState {
     fn empty() -> Self {
         Self {
             input_connections: Vec::new(),
-            output_connection: None,
-            output_id: String::new(),
+            output_connections: HashMap::new(),
             inputs: Vec::new(),
             outputs: Vec::new(),
         }
@@ -139,8 +140,7 @@ pub fn start_native_midi(app: AppHandle) -> Result<NativeMidiStatus, String> {
         .lock()
         .map_err(|_| "native_midi_state_poisoned".to_string())?;
     locked.input_connections = connections;
-    locked.output_connection = None;
-    locked.output_id.clear();
+    locked.output_connections.clear();
     locked.inputs = inputs.clone();
     locked.outputs = outputs.clone();
     Ok(NativeMidiStatus {
@@ -172,7 +172,7 @@ pub fn send_native_midi(bytes: Vec<u8>, output_id: Option<String>) -> Result<Nat
     } else {
         return Err("native_midi_destination_missing".to_string());
     };
-    if locked.output_connection.is_none() || locked.output_id != resolved_id {
+    if !locked.output_connections.contains_key(&resolved_id) {
         let output = MidiOutput::new("Atome Desktop MIDI output")
             .map_err(|error| format!("native_midi_output_init_failed:{error}"))?;
         let port = output
@@ -181,12 +181,11 @@ pub fn send_native_midi(bytes: Vec<u8>, output_id: Option<String>) -> Result<Nat
         let connection = output
             .connect(&port, "Atome Desktop MIDI output connection")
             .map_err(|error| format!("native_midi_output_connect_failed:{error}"))?;
-        locked.output_connection = Some(connection);
-        locked.output_id = resolved_id.clone();
+        locked.output_connections.insert(resolved_id.clone(), connection);
     }
     locked
-        .output_connection
-        .as_mut()
+        .output_connections
+        .get_mut(&resolved_id)
         .ok_or_else(|| "native_midi_output_unavailable".to_string())?
         .send(&bytes)
         .map_err(|error| format!("native_midi_send_failed:{error}"))?;

@@ -1,7 +1,7 @@
 import { test, expect, vi } from 'vitest';
-import { dashboardAtomNeighbours, dashboardEveHomeCellVisible, dashboardHomeCell, dashboardMysticCellRef, DASHBOARD_HOME_VARIANTS } from '../../eVe/domains/dashboard/dashboard_mystic_grid.js';
+import { dashboardAtomNeighbours, dashboardEveHomeCellVisible, dashboardHomeCell, dashboardMysticCellRef, DASHBOARD_HOME_LAYOUT } from '../../eVe/domains/dashboard/dashboard_mystic_grid.js';
 import { FIRST_LAUNCH_TEMPLATES } from '../../eVe/domains/templates/first_launch_template_catalog.js';
-import { resolveHomeTemplateKey, takeDashboardEveEntry, rememberDashboardConnection, forgetDashboardEveEntry, rememberDashboardEveMode } from '../../eVe/domains/dashboard/dashboard_home_style.js';
+import { takeDashboardEveEntry, rememberDashboardConnection, forgetDashboardEveEntry, rememberDashboardEveMode } from '../../eVe/domains/dashboard/dashboard_home_style.js';
 import { eveAtomBreath } from '../../eVe/domains/dashboard/dashboard_eve_tokens.js';
 import { normalizeDashboardStyle } from '../../eVe/intuition/tools/user_visual_preferences_model.js';
 import { createMusicMysticItem } from '../../eVe/domains/music/music_mystic_items.js';
@@ -14,15 +14,23 @@ vi.mock('../../eVe/intuition/runtime/tool_gateway.js', () => ({ invokeToolGatewa
 vi.mock('../../eVe/domains/dashboard/dashboard_contact_items.js', async (importOriginal) => ({
     ...(await importOriginal()), waitForPublishedFavorites: async () => true }));
 
-test('eVe Basic composes the same home and hides every other tile without changing the legacy homes', () => {
+test('eVe Basic composes the same home and hides every other tile; retired styles read as eVe Basic', () => {
     expect(normalizeDashboardStyle('eve_basic')).toBe('eve_basic');
-    expect(resolveHomeTemplateKey({ style: 'eve_basic' })).toBe(resolveHomeTemplateKey({ style: 'eve' }));
-    expect(resolveHomeTemplateKey({ style: 'basic' })).toBe('dashboard_basic');
-    expect(resolveHomeTemplateKey({ style: 'pro' })).toBe('');
-    const refs = [...DASHBOARD_HOME_VARIANTS.dashboard_eve.tileRefs, 'atom', 'clock', 'weather', 'search'];
+    expect(normalizeDashboardStyle('eve')).toBe('eve');
+    for (const retired of ['basic', 'pro', 'mystic', 'auto']) expect(normalizeDashboardStyle(retired)).toBe('eve_basic');
+    const refs = [...DASHBOARD_HOME_LAYOUT.tileRefs, 'atom', 'clock', 'weather', 'search'];
     expect(refs.filter(ref => dashboardEveHomeCellVisible(ref, { mode: 'solo', basic: true }))).toEqual(['atom']);
     expect(refs.filter(ref => dashboardEveHomeCellVisible(ref, { basic: true })).sort()).toEqual(
-        ['objectives', 'contacts', 'next_event', 'monitor_0', 'atom', 'clock', 'weather', 'search'].sort());
+        ['objectives', 'contacts', 'next_event', 'atom', 'clock', 'weather', 'search'].sort());
+    // A cell earned with the user's objectives (dashboard_progression_catalog.js) shows on Basic.
+    expect(refs.filter(ref => dashboardEveHomeCellVisible(ref, { basic: true, visible: ['objectives', 'contacts', 'next_event', 'activity'] }))
+        .sort()).toEqual(['objectives', 'contacts', 'next_event', 'activity', 'atom', 'clock', 'weather', 'search'].sort());
+    // The monitors chosen show above the Atom, up to six; an earned cell keeps its own tile.
+    const shown = options => refs.filter(ref => dashboardEveHomeCellVisible(ref, { basic: true, ...options })
+        && !['objectives', 'contacts', 'next_event', 'atom', 'clock', 'weather', 'search'].includes(ref));
+    expect(shown({ monitors: 3 })).toEqual(['monitor_0', 'library', 'monitor_1']);
+    expect(shown({ monitors: 9 }).sort()).toEqual(['monitor_0', 'monitor_1', 'library', 'shop', 'create', 'gps'].sort());
+    expect(shown({ monitors: 3, visible: ['objectives', 'contacts', 'next_event', 'library'] }).sort()).toEqual(['monitor_0', 'monitor_1', 'library', 'shop'].sort());
 });
 
 test('eVe Pro reads like the decision grid and eVe Basic lays its four tiles as a cross around the Atom', () => {
@@ -69,7 +77,10 @@ test('the TV rubric lists only the favourites, with fresh streams, then the tile
     tv.byId.mockResolvedValue([{ id: 'BFMTV.fr', name: 'BFM TV', logo: 'fresh.png', streams: [{ url: 'https://live' }] }]);
     const stage = createDashboardMysticStage({ projectId: 'home', readStageRect: () => null, readLastProjectId: async () => '' });
     const items = await stage.funItems();
-    expect(items.map(item => item.key)).toEqual(expect.arrayContaining(['fun_tv', 'fun_youtube', 'fun_spotify', 'fun_deezer']));
+    expect(items.map(item => item.key)).toEqual(expect.arrayContaining(['fun_tv', 'fun_youtube']));
+    // Music services not entered in Passwords & keys have no tile.
+    expect(items.map(item => item.key)).not.toEqual(expect.arrayContaining(['fun_spotify']));
+    expect(items.map(item => item.key)).not.toEqual(expect.arrayContaining(['fun_deezer']));
     const rubric = items.find(item => item.key === 'fun_tv');
     expect(tv.byId).toHaveBeenCalledWith(['BFMTV.fr', 'gone.fr']);
     expect(rubric.children.map(item => item.key)).toEqual(['tv_BFMTV.fr', 'tv_gone.fr', 'add_tv_channel']);

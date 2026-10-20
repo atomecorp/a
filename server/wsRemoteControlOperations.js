@@ -377,12 +377,3 @@ export function handleRemoteControlSurfaceLoss({ userId, surfaceId } = {}) {
     }
     return ended;
 }
-
-// Test seams only.
-export function __remoteControlSessions() {
-    return [...sessions.values()].map(publicSession);
-}
-
-export function __clearRemoteControlSessions() {
-    sessions.clear();
-}

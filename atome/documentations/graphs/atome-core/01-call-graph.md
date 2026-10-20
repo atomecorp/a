@@ -19,16 +19,14 @@ flowchart TD
   DeleteHandler --> CommitEvent
   TimelineHistory["undoTransaction / redoTransaction"] --> HistoryCommand["history:undo / history:redo\natomeHistoryCommands.js"]
   HistoryCommand --> CommitEvent
-  Realtime["/ws/api atome:realtime\nserver.js"] --> RealtimeHandler["handleWsAtomeRealtimeOperation\nwsAtomeRealtimeOperation.js"]
-  RealtimeHandler --> PropertyWritePolicy["authorizeAtomeEventWrite\natomePropertySecurity.js"]
-  PropertyWritePolicy --> RecipientProjection["broadcastAtomeRealtimePatch\natomeRealtime.js"]
+  Realtime["/ws/api atome:realtime"] --> RealtimeRefusal["canonical_event_commit_required\nws_api_atome_request.js"]
   SyncPush["/ws/api sync:push"] --> CommitEvent
   StateRead["/ws/api state-current"] --> ReadProjection["current authorization\nwsAtomeOperations.js"]
   SyncLive["/ws/sync replay/live"] --> SyncProjection["UserVaultRouter property projection"]
-  ReadProjection --> PropertyWritePolicy
+  ReadProjection --> PropertyWritePolicy["authorizeAtomeEventWrite\natomePropertySecurity.js"]
   SyncProjection --> PropertyWritePolicy
   ConsumerReads["state list / conditions search / user export"] --> ReadProjection
-  LegacyList["retained atome:list"] --> RecipientProjection
+  LegacyList["retained atome:list"] --> RecipientProjection["listAtomeRealtimeRecipients\natomeRealtime.js"]
   TauriCommit["Tauri /ws/api events:commit"] --> NativeSecurity["local_atome_security.rs\nper-particle authorization"]
   NativeSecurity --> NativeAtomic["local_atome.rs\nevent + particles + versions + state + queue"]
   NativeAtomic --> NativeWorker["local_atome_sync_worker.rs\nper-principal credential"]

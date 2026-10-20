@@ -166,22 +166,3 @@ export async function filterWsSyncEventForPrincipal(payload, userId) {
 
     return null;
 }
-
-export function buildWsSyncWelcome(clientId, version = {}) {
-    return {
-        type: 'welcome',
-        clientId,
-        server: 'fastify',
-        version: version.version || null,
-        timestamp: new Date().toISOString(),
-        capabilities: ['events', 'atome-events', 'file-events', 'ping']
-    };
-}
-
-export async function handleWsSyncControlMessage(connection, message = {}) {
-    const userId = await validateWsSyncPrincipal(connection);
-    if (!userId) return { type: 'error', code: 'authentication_required' };
-    if (message.type === 'ping') return { type: 'pong' };
-    if (message.type === 'register') return { type: 'registered', principal_id: userId };
-    return { type: 'error', code: 'operation_not_allowed' };
-}

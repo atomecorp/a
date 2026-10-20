@@ -1,3 +1,4 @@
+import { AgentGateway as Agent } from './agent_gateway.js';
 import { OPENAI_SERVICE_TOOLS, OPENAI_MODEL_PROFILES } from './model_catalog_registry.js';
 import { requestProviderService } from './provider_broker.js';
 import { registerAdoleDefaultTools } from './default_tools_adole.js';
@@ -170,11 +171,9 @@ const invokeRuntimeDefaultTool = async ({
     });
 };
 
+// The gateway is imported, not read from globalThis: both modules load in the
+// same concurrent boot wave, and the global may not exist yet.
 const registerDefaultTools = () => {
-    if (typeof globalThis === 'undefined') return;
-    const Agent = globalThis.AtomeAI;
-    if (!Agent || typeof Agent.registerTool !== 'function') return;
-
     const getAdoleAPI = () => globalThis.AdoleAPI;
 
     registerAdoleDefaultTools({ Agent, requireGlobal, safeString, getAdoleAPI });

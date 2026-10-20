@@ -64,7 +64,7 @@ async function handleAnnounce(message, connection, userId) {
     // the time the surface has finished announcing itself.
     let restored = [];
     try {
-        const reconnected = await handleTeleportSurfaceReconnect({ userId, surfaceId });
+        const reconnected = await handleTeleportSurfaceReconnect({ userId, surfaceId, connection });
         restored = reconnected.restored || [];
     } catch (error) {
         console.warn('[ws/api] teleport reconnect failed', error?.message || error);

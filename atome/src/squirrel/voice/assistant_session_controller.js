@@ -392,7 +392,7 @@ export const bindVoiceAssistantSession = async ({
             history: () => conversation.contextTurns(),
             onTurn: turn => conversation.appendVoiceTurn(turn),
             createTools: options => conversation.createVoiceTools(options),
-            onUsage: (usage, model) => conversation.recordUsage(usage, model), locale, suspendWhenHidden: !keepWhenHidden,
+            onUsage: (usage, model, serviceTier) => conversation.recordUsage(usage, model, 'openai', serviceTier), locale, suspendWhenHidden: !keepWhenHidden,
             announceReady
         })
         : createVoiceAssistantSessionController({ voiceApi,

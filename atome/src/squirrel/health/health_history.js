@@ -66,11 +66,17 @@ export function normalizeHealthHistoryDay(entry, raw, range, fetchedAt, { partia
     return result;
 }
 
+// One day's value in the monitor's unit (asleep minutes for sleep), or null.
+export function healthHistoryDayValue(entry, day) {
+    if (day?.reading?.state !== 'value') return null;
+    const value = entry.strategy === 'last_sleep' ? (day.reading.value?.semantics === 'asleep' ? day.reading.value.minutes : null)
+        : entry.strategy === 'latest_pair' ? day.statistics?.mean : day.statistics?.mean ?? day.reading.value;
+    return finite(value) ? value : null;
+}
+
 export function healthHistoryAverage(entry, days) {
     const complete = days.filter(day => day.reading?.state === 'value' && !day.reading.coverage?.partial);
-    const valueOf = day => entry.strategy === 'last_sleep' ? (day.reading.value.semantics === 'asleep' ? day.reading.value.minutes : null)
-        : entry.strategy === 'latest_pair' ? day.statistics?.mean : day.statistics?.mean ?? day.reading.value;
-    const values = complete.map(valueOf).filter(finite);
+    const values = complete.map(day => healthHistoryDayValue(entry, day)).filter(finite);
     const result = stats(values);
     if (result && entry.strategy === 'latest_pair') result.diastolic = stats(complete.map(day => day.diastolicStatistics?.mean).filter(finite));
     return result;

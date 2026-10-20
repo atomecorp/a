@@ -13,15 +13,6 @@
 // Domain operations
 // ---------------------------------------------------------------------------
 
-export const SEMANTIC_DOMAINS = Object.freeze([
-    'mail',
-    'contacts',
-    'calendar',
-    'atome',
-    'conversation',
-    'unknown'
-]);
-
 export const MAIL_OPERATIONS = Object.freeze([
     'list',
     'read',
@@ -243,11 +234,6 @@ export const createContactsRequest = (raw = {}) => createStructuredRequest({
 export const createCalendarRequest = (raw = {}) => createStructuredRequest({
     ...raw,
     domain: 'calendar'
-});
-
-export const createAtomeRequest = (raw = {}) => createStructuredRequest({
-    ...raw,
-    domain: 'atome'
 });
 
 // ---------------------------------------------------------------------------

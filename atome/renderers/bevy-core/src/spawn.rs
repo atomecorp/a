@@ -404,6 +404,7 @@ pub fn spawn_node_with_texture_handle(
         other => return Err(format!("bevy_render_kind_unsupported:{other}")),
     };
     world.entity_mut(entity).insert(crate::surface_paint::AtomeSurfacePaint(node.surface_paint.clone()));
+    crate::backdrop_surface::sync_backdrop_surface_border(world, entity)?;
     world.entity_mut(entity).insert((
         AtomeVisualColor(visual_color),
         AtomeVisualOpacity(normalize_opacity(node.opacity)),

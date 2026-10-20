@@ -121,8 +121,6 @@ export const listControlSessions = () => ({
     controlledBy: [...state.controlledBy.values()]
 });
 
-export const isControlling = (sessionId) => state.controlling.has(String(sessionId || ''));
-
 export const installRemoteControlLifecycle = () => {
     if (typeof window === 'undefined' || state.lifecycleInstalled) return false;
     state.lifecycleInstalled = true;
@@ -155,17 +153,5 @@ export const installRemoteControlLifecycle = () => {
     dispatch('squirrel:remote-control-ready', { surfaceId: getLocalSurfaceId() });
     return true;
 };
-
-export const __resetRemoteControlManager = () => {
-    state.controlling.clear();
-    state.controlledBy.clear();
-    state.pending = { dx: 0, dy: 0, sessionId: '' };
-    if (state.flushTimer) {
-        clearTimeout(state.flushTimer);
-        state.flushTimer = null;
-    }
-};
-
-export const __flushRemoteControlPointer = flushPointer;
 
 installRemoteControlLifecycle();

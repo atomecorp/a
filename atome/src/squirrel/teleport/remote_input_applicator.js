@@ -48,11 +48,6 @@ export const setRemoteInputEnabled = (enabled) => {
     return state.enabled;
 };
 
-export const readRemoteCursor = (sessionId) => {
-    const cursor = state.cursors.get(String(sessionId || ''));
-    return cursor ? { ...cursor } : null;
-};
-
 const resolveTarget = (point) => {
     if (state.targetResolver) {
         try {
@@ -203,13 +198,6 @@ export const installRemoteInputApplicator = () => {
 
     window.addEventListener('squirrel:user-logged-out', () => { state.cursors.clear(); });
     return true;
-};
-
-export const __resetRemoteInputApplicator = () => {
-    state.cursors.clear();
-    state.enabled = true;
-    state.targetResolver = null;
-    state_keyboard.enabled = false;
 };
 
 installRemoteInputApplicator();

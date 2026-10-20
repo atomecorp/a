@@ -184,10 +184,6 @@ export const waitForAuthCheck = () => {
     });
 };
 
-export const markAuthUnchecked = () => {
-    authCheckComplete = false;
-};
-
 export const getGuestWorkspace = () => readJson(GUEST_KEY);
 
 export const setGuestWorkspace = (guest) => {

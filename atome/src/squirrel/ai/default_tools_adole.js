@@ -4,6 +4,7 @@ export const registerAdoleDefaultTools = ({ Agent, requireGlobal, safeString, ge
         description: 'Return current authenticated user info (tauri/fastify).',
         capabilities: ['auth.read'],
         risk_tier: 'LOW',
+        parameters: { type: 'object', additionalProperties: false, properties: {} },
         handler: async () => {
             const api = requireGlobal('AdoleAPI', getAdoleAPI());
             const fn = api?.auth?.current;

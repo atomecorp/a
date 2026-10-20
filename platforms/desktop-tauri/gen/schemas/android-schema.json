@@ -363,6 +363,12 @@
           "markdownDescription": "Allows the main webview to use the native Bevy renderer commands.\n#### This permission set includes:\n\n- `allow-bevy-native-start`\n- `allow-bevy-native-apply-ops`\n- `allow-bevy-native-resize`"
         },
         {
+          "description": "Allows the main webview to use the single gated in-app purchase command. The purchase grants nothing by itself: the server verifies it with the store.\n#### This permission set includes:\n\n- `allow-billing-invoke`",
+          "type": "string",
+          "const": "billing-store",
+          "markdownDescription": "Allows the main webview to use the single gated in-app purchase command. The purchase grants nothing by itself: the server verifies it with the store.\n#### This permission set includes:\n\n- `allow-billing-invoke`"
+        },
+        {
           "description": "Allows the main webview to read and write the host system clipboard.\n#### This permission set includes:\n\n- `allow-clipboard-write-text`\n- `allow-clipboard-read-text`\n- `allow-clipboard-has-text`\n- `allow-clipboard-read-items`",
           "type": "string",
           "const": "clipboard-bridge",
@@ -379,6 +385,12 @@
           "type": "string",
           "const": "health-bridge",
           "markdownDescription": "Allows the main webview to use the single gated health command. The command itself checks the per-page channel token, the verified account and the local association before any Health Connect read.\n#### This permission set includes:\n\n- `allow-health-invoke`"
+        },
+        {
+          "description": "Allows the main webview to read this Mac's own address book and agenda for the canonical import, and the installation identity that keeps its checkpoints across rebuilt apps. The system prompts for Contacts and Calendar access before any read.\n#### This permission set includes:\n\n- `allow-macos-contacts-snapshot`\n- `allow-native-calendar-snapshot`\n- `allow-native-import-device-id`",
+          "type": "string",
+          "const": "personal-import",
+          "markdownDescription": "Allows the main webview to read this Mac's own address book and agenda for the canonical import, and the installation identity that keeps its checkpoints across rebuilt apps. The system prompts for Contacts and Calendar access before any read.\n#### This permission set includes:\n\n- `allow-macos-contacts-snapshot`\n- `allow-native-calendar-snapshot`\n- `allow-native-import-device-id`"
         },
         {
           "description": "Lets the developer taxonomy editor read and save eVe/intuition/menu/context_menus.json (writes only in debug builds).\n#### This permission set includes:\n\n- `allow-taxonomy-read`\n- `allow-taxonomy-save`",
@@ -585,6 +597,12 @@
           "markdownDescription": "Enables the bevy_native_start command."
         },
         {
+          "description": "Enables the billing_invoke command.",
+          "type": "string",
+          "const": "allow-billing-invoke",
+          "markdownDescription": "Enables the billing_invoke command."
+        },
+        {
           "description": "Enables the clipboard_has_text command.",
           "type": "string",
           "const": "allow-clipboard-has-text",
@@ -619,6 +637,24 @@
           "type": "string",
           "const": "allow-health-invoke",
           "markdownDescription": "Enables the health_invoke command."
+        },
+        {
+          "description": "Enables the macos_contacts_snapshot command.",
+          "type": "string",
+          "const": "allow-macos-contacts-snapshot",
+          "markdownDescription": "Enables the macos_contacts_snapshot command."
+        },
+        {
+          "description": "Enables the native_calendar_snapshot command.",
+          "type": "string",
+          "const": "allow-native-calendar-snapshot",
+          "markdownDescription": "Enables the native_calendar_snapshot command."
+        },
+        {
+          "description": "Enables the native_import_device_id command.",
+          "type": "string",
+          "const": "allow-native-import-device-id",
+          "markdownDescription": "Enables the native_import_device_id command."
         },
         {
           "description": "Enables the taxonomy_read command.",

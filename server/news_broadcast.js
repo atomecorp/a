@@ -130,16 +130,21 @@ export function createNewsBroadcast({
         };
         const audience = message.audience && typeof message.audience === 'object' ? message.audience : 'all';
 
+        if (!existing) await registerTags(tags);
+        return distribute({ author, postId, projectId: text(props.news_source_project_id) || null, publication, tags, audience, media });
+    };
+
+    // A publication stored once, then delivered to its audience (blocks and tag whitelists respected).
+    const distribute = async ({ author, postId, projectId, publication, tags, audience, media }) => {
+        const props = publication.properties || {};
         await query('run',
             `INSERT INTO news_publications (news_id, author_id, project_id, title, summary, tags_json, audience_json, payload_json, media_json)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT(news_id) DO UPDATE SET title = excluded.title, summary = excluded.summary,
              tags_json = excluded.tags_json, audience_json = excluded.audience_json,
              payload_json = excluded.payload_json, media_json = excluded.media_json, updated_at = datetime('now')`,
-            [postId, author, text(props.news_source_project_id) || null, text(props.title), text(props.preview),
+            [postId, author, projectId, text(props.title), text(props.preview),
                 JSON.stringify(tags), JSON.stringify(audience), JSON.stringify(publication), JSON.stringify(media)]);
-        if (!existing) await registerTags(tags);
-
         const candidates = await resolveAudience(author, audience);
         const result = { ok: true, news_id: postId, tags, delivered: 0, filtered: 0, blocked: 0, failed: 0, recipients: [] };
         for (const userId of candidates) {
@@ -160,6 +165,38 @@ export function createNewsBroadcast({
             }
         }
         return result;
+    };
+
+    // A publication `userId` received: one of its audience, neither side blocking the other.
+    const received = async (userId, newsId) => {
+        const row = await query('get', 'SELECT * FROM news_publications WHERE news_id = ?', [text(newsId)]);
+        if (!row || text(row.author_id) === text(userId) || await relations.blockedEitherWay(row.author_id, userId)) return null;
+        const audience = parseJson(row.audience_json, 'all');
+        if (Array.isArray(audience?.group) ? !audience.group.map(text).includes(text(userId))
+            : !acceptsTags(await subscriptionOf(userId), parseJson(row.tags_json, []))) return null;
+        return row;
+    };
+    // Aimer: the author alone learns it (no public count). Unknown or not received: nothing, silently.
+    const like = async (userId, message = {}) => {
+        const row = await received(userId, message.newsId);
+        if (!row) return { ok: true, delivered: false };
+        const title = text(parseJson(row.payload_json, {})?.properties?.title || row.title);
+        await deliver(text(row.author_id), text(userId), { kind: 'news-like', id: `like_${row.news_id}_${text(userId)}`, subject: title || null, message: title });
+        return { ok: true, delivered: true };
+    };
+    // Reprendre: the publication again, to the reposter's audience, credited to its author;
+    // its media stay the author's and readable by that audience (`canReadNewsMedia`).
+    const repost = async (userId, message = {}) => {
+        const row = await received(userId, message.newsId);
+        if (!row) throw new Error('news_not_found');
+        const source = parseJson(row.payload_json, null);
+        if (!source?.properties) throw new Error('news_not_found');
+        const postId = `repost_${row.news_id}_${text(userId)}`;
+        const origin = source.properties.reposted_from || { news_id: row.news_id, author_id: text(row.author_id), author_name: text(source.properties.author_name) };
+        const publication = { ...source, id: postId, properties: { ...source.properties, news_id: postId, news_post_id: postId, news_source_project_id: '',
+            author_id: text(userId), author_name: (await findUserName(userId)) || '', reposted_from: origin } };
+        return distribute({ author: text(userId), postId, projectId: null, publication, tags: parseJson(row.tags_json, []), audience: 'all',
+            media: parseJson(row.media_json, []) });
     };
 
     const setSubscriptions = async (userId, tags) => {
@@ -188,10 +225,12 @@ export function createNewsBroadcast({
         const reader = text(userId);
         if (!reader || reader === 'anonymous') return false;
         // Seules les News du PROPRIETAIRE du fichier comptent.
+        // A repost lends its audience the media of the publication's author.
+        const ownerOf = (row) => text(parseJson(row.payload_json, {})?.properties?.reposted_from?.author_id) || text(row.author_id);
         const rows = (await query('all',
-            `SELECT author_id, audience_json, tags_json FROM news_publications WHERE media_json LIKE ?`,
+            `SELECT author_id, audience_json, tags_json, payload_json FROM news_publications WHERE media_json LIKE ?`,
             [`%${JSON.stringify(text(atomeId)).slice(1, -1)}%`]) || [])
-            .filter((row) => !text(authorId) || text(row.author_id) === text(authorId));
+            .filter((row) => !text(authorId) || ownerOf(row) === text(authorId));
         if (!rows.length) return false;
         const account = await query('get', `SELECT atome_id FROM atomes WHERE atome_id = ? AND atome_type = 'user' AND deleted_at IS NULL`, [reader]);
         if (!account) return false;
@@ -214,8 +253,10 @@ export function createNewsBroadcast({
         if (action === 'subscriptions-get') return { ok: true, tags: await subscriptionOf(userId) };
         if (action === 'subscriptions-set') return setSubscriptions(userId, message.tags);
         if (action === 'tags-search') return searchTags(message.query, message.limit);
+        if (action === 'like') return like(userId, message);
+        if (action === 'repost') return repost(userId, message);
         throw new Error(`news_action_unsupported:${action || 'missing'}`);
     };
 
-    return { publish, setSubscriptions, subscriptionOf, searchTags, canReadNewsMedia, handle };
+    return { publish, like, repost, setSubscriptions, subscriptionOf, searchTags, canReadNewsMedia, handle };
 }

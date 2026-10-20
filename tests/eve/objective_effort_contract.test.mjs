@@ -15,7 +15,7 @@ import { normalizeCanonicalAtome, sanitizeAtomeProperties } from '../../atome/sr
 
 const labels = Object.fromEntries(['minimum', 'gentle', 'regular', 'sustained', 'ambitious']
     .map((name, index) => [index + 1, 'eve.program.effort.' + name]));
-const control = { kind: 'slider', compact: true, value_key: 'accepted_engagement', label_key: 'eve.program.effort',
+const control = { kind: 'slider', compact: true, folded_value: true, value_key: 'accepted_engagement', label_key: 'eve.program.effort',
     icon: 'monitor', min: 1, max: 5, step: 1, value_label_keys: labels };
 const walk = node => [node, ...(node.children || []).flatMap(walk)];
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); setEveLocale('fr'); });
@@ -58,7 +58,7 @@ describe('accepted engagement uses the canonical Matrix value contract', () => {
         const original = structuredClone(f.records.get(f.projectId));
         const result = await ensureObjectiveEngagement(f.projectId);
         expect(result).toMatchObject({ ok: true, created: true }); expect(f.history).toHaveLength(1);
-        expect(f.history[0]).toHaveLength(8);
+        expect(f.history[0]).toHaveLength(9);
         for (const record of f.records.values()) if (record.id !== f.projectId) {
             expect(() => normalizeCanonicalAtome({ id: record.id, type: record.type, properties: record.properties })).not.toThrow();
         }
@@ -71,7 +71,7 @@ describe('accepted engagement uses the canonical Matrix value contract', () => {
         expect(cell.properties.template_value).toBe(5);
         expect(systemTemplateSpec('sleep').version).toBe(2);
         expect(systemTemplateSpec('music_title').version).toBe(2);
-        expect(objectiveEngagementAtoms()).toHaveLength(8);
+        expect(objectiveEngagementAtoms()).toHaveLength(9);
     });
     it('does not create an assembly when the project is locked or a canonical commit is refused', async () => {
         const f = canonicalFixture(); f.records.delete('effort'); f.records.delete('matrix');
@@ -163,7 +163,7 @@ describe('optional capacity and engagement preview', () => {
         expect((await ensureObjectiveEngagement(f.projectId)).ok).toBe(false); expect(f.history).toHaveLength(0);
         delete f.records.get('old_matrix').properties.locked;
         expect(await ensureObjectiveEngagement(f.projectId)).toMatchObject({ ok: true, atome_id: 'old_effort', created: true });
-        expect(f.history[0]).toHaveLength(7); expect(f.records.get('old_effort').properties.template_value).toBe(5);
+        expect(f.history[0]).toHaveLength(8); expect(f.records.get('old_effort').properties.template_value).toBe(5);
         expect(await ensureObjectiveEngagement(f.projectId)).toMatchObject({ ok: true, atome_id: 'old_effort', created: false });
         expect(f.history).toHaveLength(1);
         for (const atom of f.records.values()) if (atom.properties.template_control?.value_key !== 'accepted_engagement')

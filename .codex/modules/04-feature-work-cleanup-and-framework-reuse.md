@@ -68,7 +68,6 @@ Within authorization:
 - restore a single source of truth for touched responsibility, state, configuration, rendering, and business rules;
 - simplify redundant branches, conditions, aliases, conversions, indirection, feature flags, configuration, and unused imports, exports, dependencies, comments, or documentation claims;
 - remove obsolete, dead, redundant, duplicated, transitional, and experimental code when dependency checks prove removal safe;
-- verify whether legacy `MTrax` naming, identifiers, labels, comments, modules, or references for Molecule-owned behavior can migrate coherently, and rename or remove them when safe and verifiable;
 - release resources, subscriptions, timers, listeners, caches, workers, retained media, and GPU objects at their explicit owner and lifecycle boundary;
 - keep persistent regression tests under `tests/`, and remove product-injected tests, temporary debug code, probes, traces, and logs according to [module 03](03-debugging-testing-and-ui-validation.md).
 

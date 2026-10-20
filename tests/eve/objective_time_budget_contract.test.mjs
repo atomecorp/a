@@ -83,6 +83,26 @@ describe('one canonical Matrix time budget', () => {
         expect((await commitMatrixControlValue({ atome_id: 'budget', value: { ...value, minutes: 0 } })).ok).toBe(false);
         expect(record.properties.template_value).toEqual(value);
     });
+    it('keeps the money budget optional: a typed value or null, never anything else', async () => {
+        const projectId = 'money_project', matrixId = 'money_matrix';
+        const record = { id: 'money', project_id: projectId, parent_id: matrixId, properties: {
+            template_control: objectiveEngagementAtoms().find(atom => atom.ref === 'money_budget').props.template_control } };
+        const root = { id: matrixId, project_id: projectId, parent_id: projectId, properties: { module: 'matrix',
+            matrix_template: 'objective_engagement', matrix_grid: { rows: 1, columns: 3, gap: 8 } } };
+        const records = new Map([[projectId, { id: projectId, type: 'project', properties: {} }], [matrixId, root], ['money', record]]);
+        const commitBatch = vi.fn(async events => { for (const event of events) Object.assign(records.get(event.atome_id).properties, structuredClone(event.props)); return { ok: true }; });
+        vi.stubGlobal('window', { __eveWorkspaceMode: { mode: 'project', projectId }, Atome: { getStateCurrent: async id => records.get(id), commitBatch } });
+        expect(record.properties.template_control).toMatchObject({ kind: 'money_budget', optional: true, currency: 'EUR' });
+        const value = { amount: 50, currency: 'EUR', basis: 'month' };
+        expect((await commitMatrixControlValue({ atome_id: 'money', value })).ok).toBe(true);
+        expect(record.properties.template_value).toEqual(value);
+        for (const invalid of ['', 0, { ...value, amount: -1 }, { ...value, currency: 'eur' }, { ...value, basis: 'day' },
+            { ...value, note: 'x' }, { amount: 5, currency: 'EUR' }, { ...value, amount: Infinity }])
+            expect((await commitMatrixControlValue({ atome_id: 'money', value: invalid })).ok).toBe(false);
+        expect((await commitMatrixControlValue({ atome_id: 'money', value: null })).ok).toBe(true);
+        expect(record.properties.template_value).toBe(null);
+        expect(commitBatch).toHaveBeenCalledTimes(2);
+    });
     it.each(['fr', 'en'])('composes a native expandable square, day chips and original-preserving views (%s)', async locale => {
         setEveLocale(locale);
         const dom = new JSDOM('<canvas id="eve_surface_project"></canvas>', { pretendToBeVisual: true });

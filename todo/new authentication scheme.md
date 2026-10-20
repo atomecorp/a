@@ -88,7 +88,8 @@ Before editing, re-verify every row (module 07 §2) and record divergences.
   gives nothing.
 - `display_name`: optional, unchanged ownership (profile owner). Never a proof.
 - Phone: optional attribute of existing accounts. No longer an index required for
-  creation.
+  creation. A **verified, unrevoked** phone (E.164) may route a pairing request
+  like a handle (2026-10-20): it names whose devices are asked, never a proof.
 
 ### 4.2 Keys (per account × per device)
 
@@ -263,7 +264,7 @@ handle).
 
 | Action | Caller | Effect |
 | --- | --- | --- |
-| `pair-start { sessionKey, approveKey|registration, deviceMeta, deviceClass, handle? }` | new device | Creates request, returns `requestId`, `code` (6 digits, unique among pending), `matchNumber` (2 digits). If `handle` resolves, notifies that principal's **personal, non-probation** devices. Response identical whether or not the handle exists. One pending request per handle; limits per network, per key, per handle. |
+| `pair-start { sessionKey, approveKey|registration, deviceMeta, deviceClass, handle? | phone? }` | new device | Creates request, returns `requestId`, `code` (6 digits, unique among pending), `matchNumber` (2 digits). If `handle` or the verified E.164 `phone` resolves, notifies that principal's **personal, non-probation** devices. Response identical whether or not the handle/phone exists. Both at once → `auth_request_invalid`. One pending request per account; limits per network, per key, per handle, per phone (3 per 10 min). |
 | `pair-claim { code }` (authenticated session) | approver | Binds `target_principal` to the caller's principal **only if** still unbound; returns request metadata + 3 numbers (one is `matchNumber`). 5 failed codes per session per 10 min. |
 | `pair-view { requestId }` (authenticated) | approver from notification | Same metadata + numbers; only for the targeted principal. |
 | `pair-approve { requestId, choice }` | approver | Challenge `pair-approve`, reference `requestId:requesterSessionKeyId:requesterApproveKeyId:choice`, signed by the approver's **approve** key (`hardware_uv`, personal, not in probation). Wrong `choice` → `rejected`, audit, notify all devices. Otherwise `approved`, `approved_by` set, push `pair-ready` to the requester socket (reuse the `phone-link-ready` mechanism). |
@@ -439,6 +440,50 @@ Chrome DevTools Protocol virtual authenticator for WebAuthn.
 - Native Windows/Linux/FreeBSD clients and their key providers.
 
 ## 13. Execution log
+
+### 2026-10-20 — One verified phone per account; number change onto a taken number (Claude)
+
+Audit: the active unique index `idx_principal_phone_active_unique` compares
+strings, and `assignVerifiedPhone` accepted any `normalizePhone` spelling. The
+local dev vault held 4 active national spellings, one of them the same number as
+another account's E.164 credential (two accounts, one number). Fixes:
+`assignVerifiedPhone` (`server/auth_identity.js`) now throws
+`auth_phone_e164_required` for anything but E.164; the boot migration
+`revokeNonE164PhoneCredentials` (new `database/adole_principal_identity_schema.js`,
+moved out of `adole_schema_migrations.js`, now part of the DDL fingerprint in
+`adole_db_core.js`) retires active non-E.164 rows (`revoked_reason = 'not_e164'`,
+never rewritten: their region is unknown). Tauri/iOS copy the remote phone and
+carry the same unique index.
+Number change (`phone-change-start`) onto a number held by another account: the
+answer before the SMS is the same as for a free number; after the SMS proof the
+consume answers `{ ok, phoneTaken: true }`, nothing moves, audit
+`phone_change_taken`. Home › Security shows the notice and « Ouvrir ce compte »
+(the existing add-account path → Connect screen: trusted device by number, or
+« J'ai perdu tous mes appareils » with the recovery code). `recovery-start`
+accepts `phone` like `pair-start`.
+Probes: `temp/auth_v1/phone_uniqueness.probe.mjs` 17/17,
+`phone_taken_client.probe.mjs` 4/4, `pair_by_phone.probe.mjs` 15/15,
+`pair_address_client.probe.mjs` 5/5; `tests/server/auth_phone_link.test.mjs` +
+`auth_accounts_v1.test.mjs` 36/36. Not run: Home panel click-through (the Home
+modules do not import standalone in Node: TDZ in the media playback modules,
+untouched here); production vault not inspected.
+
+### 2026-10-20 — Pairing addressed by a verified phone number (Claude)
+
+User decision: a new device may route its pairing request by the account's
+verified phone number instead of the handle; an SMS code alone never opens a
+device (rule §9.1 unchanged). Server: `createHandles().resolvePhone` (E.164,
+`principal_phone_credentials` unrevoked, live user) in `server/auth_handles.js`;
+`pair-start` accepts `phone` with its own `pair-phone:` limit (3 per 10 min),
+uniform answer, notice without the number. Client: `startPairing({ phone })`;
+the reconnect field (`first_launch_auth_flow.js#pairAddress`) sends a handle when
+the value has letters, else the E.164 number (`auth_phone_e164_required`
+otherwise); label `eve.auth.handle` now names both. Probes:
+`temp/auth_v1/pair_by_phone.probe.mjs` 15/15 (isolated Fastify, real sockets,
+WebAuthn approval, unknown/revoked/national numbers, limits),
+`temp/auth_v1/pair_address_client.probe.mjs` 5/5 (real flow module).
+Not run: browser UI click-through. `pair-start` exists only on the Fastify
+server (no Axum/Swift implementation), so no other backend needed the change.
 
 Codex appends dated gate reports, progress, evidence and blockers here, newest first.
 

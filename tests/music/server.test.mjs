@@ -9,16 +9,18 @@ test('readiness is explicit without developer access and never requests OpenAI o
     const fetchImpl = vi.fn();
     expect(await call('get_state', {}, context({ config: {}, fetchImpl }))).toMatchObject({ ok: true, state: 'not_configured', capabilities: [] });
     expect(await call('connect', {}, context({ config: {}, fetchImpl }))).toEqual({ ok: false, error: 'NOT_CONFIGURED' });
+    expect(await handleMusicAction('music.get_state', { provider: 'deezer' }, context({ config: {}, fetchImpl }))).toMatchObject({ ok: true, configured: false, state: 'not_configured' });
+    expect(await handleMusicAction('music.search', { provider: 'deezer', query: 'Daft Punk' }, context({ config: {}, fetchImpl }))).toEqual({ ok: false, error: 'NOT_CONFIGURED' });
     expect(await handleMusicAction('music.get_state', { provider: 'deezer' }, context({ fetchImpl }))).toMatchObject({ supported: true, state: 'catalog_only', capabilities: ['get_state', 'search', 'open_item'] });
     expect(await handleMusicAction('music.play', { provider: 'deezer', id: '1', kind: 'song' }, context({ fetchImpl }))).toEqual({ ok: false, error: 'DEVELOPER_ACCESS_REQUIRED' });
     expect(fetchImpl).not.toHaveBeenCalled();
 });
 test('authenticated provider socket routes music without reading an AI key and rejects anonymous requests', async () => {
-    const vault = context().vault, read = vi.fn(), connection = { once() {} };
+    const vault = context().vault, read = vi.fn(async name => name === 'deezer' ? '5' : null), connection = { once() {} };
     const deps = { resolvePrincipal: () => 'alice', provisioned: async () => true, resolveVault: async () => ({ ...vault, read }) };
     const message = { type: 'ai-provider', requestId: 'music-readiness', action: 'music.get_state', payload: { input: { provider: 'deezer' } } };
     expect(await handleWsAiProviderOperation(message, connection, deps)).toMatchObject({ ok: true, data: { provider: 'deezer', state: 'catalog_only' } });
-    expect(read).not.toHaveBeenCalled();
+    expect(read.mock.calls.map(([name]) => name).sort()).toEqual(['deezer', 'spotify']);
     expect(await handleWsAiProviderOperation(message, connection, { ...deps, resolvePrincipal: () => null })).toMatchObject({ ok: false, error: 'not_authenticated' });
 });
 test('canonical receipt adapter uses authenticated event commit and current-state reads', async () => {

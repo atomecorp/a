@@ -18,10 +18,10 @@ Canonical Atome state
     -> type-specific adapter only where required
       -> GPU texture, buffer, render command, media frame, text texture, or waveform data
         -> shared WebGPU compositor
-          -> one visible canvas per active rendering zone
+          -> one visible project canvas
 ```
 
-The visible rendering budget is one project surface and one matrix surface while the matrix is visible, with optional compositor-owned offscreen targets. It permits at most one hidden text-service root and one active text editor unless repository evidence establishes a stricter canonical service. There must be zero visible DOM subtrees per Atome, zero visible canvases per Atome, zero private renderers per Atome, and zero private event systems per Atome on the main rendering path.
+The visible rendering budget is one project surface (`eve_surface_project`), with optional compositor-owned offscreen targets. The Matrix and every BevyUI panel draw on that same canvas; no separate matrix canvas is created (the `eve_surface_matrix` id declared in `eVe/domains/rendering/surface_runtime.js` has no caller). It permits at most one hidden text-service root and one active text editor unless repository evidence establishes a stricter canonical service. There must be zero visible DOM subtrees per Atome, zero visible canvases per Atome, zero private renderers per Atome, and zero private event systems per Atome on the main rendering path.
 
 | Visual concern | Required route |
 | --- | --- |
@@ -37,7 +37,7 @@ WebGPU is the unified visual layer for interactive scenes, matrix previews, time
 
 ### Bounded non-authoritative exceptions
 
-Visible DOM may contain application shell elements, approved canonical Squirrel/Atome controls, and the managed canvas for each active rendering zone. The following exceptions must be centralized, bounded, non-authoritative, and documented in the owning architecture map:
+Visible DOM may contain application shell elements, approved canonical Squirrel/Atome shell controls, and the managed project canvas. Product panels, menus, Flower and Dashboard are BevyUI records on that canvas, not DOM. The following exceptions must be centralized, bounded, non-authoritative, and documented in the owning architecture map:
 
 - product-neutral shell DOM and canonical Squirrel/Atome UI controls;
 - compositor-owned offscreen render targets;
@@ -45,137 +45,39 @@ Visible DOM may contain application shell elements, approved canonical Squirrel/
 - unavoidable hidden media-decode elements that are pooled, invisible, feed WebGPU, and never form a permanent DOM island per Atome;
 - explicitly documented legacy or migration projections, accessibility, editing, shell, measurement, system interaction, and canonical-control surfaces.
 
-An exception does not authorize DOM-owned state, per-Atome visible rendering on the main path, cloned previews, or a second visible backend. A new exception requires evidence, a stricter-alternative analysis, map documentation, tests, and the bounded authorization required by the project core before implementation. Existing DOM projection allowances below constrain approved exception surfaces; they do not authorize new per-Atome DOM rendering.
+An exception does not authorize DOM-owned state, per-Atome visible rendering on the main path, cloned previews, or a second visible backend. A new exception requires evidence, a stricter-alternative analysis, map documentation, tests, and the bounded authorization required by the project core before implementation. The residual DOM host limits below constrain an existing path; they do not authorize new per-Atome DOM rendering.
 
-## Final Atome DOM projection contract
+## Atome projection contract
 
+Project Atomes have no DOM host. `eVe/domains/rendering/project_scene_runtime.js` projects canonical state through `project_scene_bevy_projection_runtime.js` and `bevy_web_renderer_runtime.js` into the Bevy (Rust→WASM) renderer, which draws every project Atome, the Matrix and every BevyUI panel on the single project canvas `eve_surface_project`. Pointer input on that canvas is resolved by Bevy-side hit-testing (`eVe/domains/rendering/project_scene_hit_testing.js`, with canvas point conversion in `surface_hit_target_runtime.js`), never by a DOM target. Visual Atome styling belongs to the JavaScript-driven visual contract in `maps/DESIGN_MAP.md` and reaches pixels only through that route.
 
-This contract governs approved final Atome projection hosts and subtrees, including legacy or migration exception surfaces. The allowed carriers below do not authorize new visible DOM rendering per Atome on the main path.
+The DOM, canvas, WebGPU resources and Bevy entities are disposable projections of canonical Atome state. None of them may hold Atome authority, metadata, business state, replay, persistence or sync state, runtime ownership, action-routing decisions, mutation payloads or serialized Atome structures, and no behavior may be decided by reading them back.
 
-The DOM MUST be treated only as a disposable projection of canonical Atome state. The DOM is allowed to expose:
+### Residual DOM host path
 
-- one canonical host id using the format `eve-atome_<atome_id>`;
-- semantic CSS classes required for styling, hit testing, rendering selection, and view-only grouping;
-- inline style only for dynamic geometry required by the current rendering contract;
-- real visual children such as text nodes, SVG, canvas, image/video/audio rendering surfaces, handles, or view-only UI controls.
+`eVe/core/atome_dom_id.js` still provides the `eve-atome_<atome_id>` host id, the generic `eve-atome` class and a WeakMap of per-host runtime state. Only one path registers such hosts: `tool_genesis_render_state_runtime.js` → `createAtomeElement` in `eVe/intuition/runtime/tool_genesis_host_runtime.js`, used for Atomes whose parent is not a project scene. Selection, tool-runtime and Matrix modules still import its lookup helpers; for project Atomes those lookups find no host. Do not extend this path or create new per-Atome DOM hosts.
 
-The DOM MUST NEVER contain Atome authority, Atome metadata, business state, replay state, persistence state, sync state, runtime ownership, action routing decisions, mutation payloads, or serialized Atome structures.
+While this path exists, its hosts obey these limits:
 
-This prohibition applies to every DOM carrier. Runtime, business, persistence, replay, sync, ownership, renderer, media-kind, group, project, selection, drag, resize, event-binding, debug-routing, or system-layer facts MUST NOT be stored as:
+- the only identity carrier is the host id `eve-atome_<atome_id>`; the only classes are generic visual or UI-state classes (`eve-atome`, `is-selected`, `is-dragging`, `is-resizing`, `is-hidden`, `is-disabled`, `is-focused` and equivalent structural classes);
+- no `data-*` or custom attribute, disguised class (for example `eve-selected-true`, `eve-project-id-*`, `eve-system-layer-*`), DOM comment, secondary id, hidden text node or marker-only wrapper may carry Atome identity, type, project or group membership, selection, drag/resize, renderer readiness, media kind, system layer, event binding, persistence, replay, sync or debug state;
+- inline style is limited to dynamic geometry (`left`, `top`, `width`, `height`, dynamic `z-index`); decorative or stateful inline CSS is forbidden;
+- runtime facts live in the `atome_dom_id.js` WeakMap or the owning registry, never on the element.
 
-- `data-*` attributes;
-- custom attributes;
-- disguised CSS classes;
-- inline styles;
-- DOM comments;
-- secondary ids;
-- serialized payloads;
-- hidden text nodes;
-- element names, wrapper nodes, or marker nodes whose only purpose is to encode runtime state.
+### Role separation
 
-The following attributes MUST NOT be present on final Atome DOM hosts or inside final Atome DOM subtrees:
+- Atome registry: Atome identity, type/kind, particles, persistence-facing state and canonical mutation facts.
+- Runtime registry: ephemeral UI/runtime state such as selection, drag/resize sessions, media renderer readiness, group preview membership and non-persistent interaction state.
+- Domain registries: domain runtime facts such as media projection, Molecule timeline and transport state, audio/video rendering state and debug instrumentation.
+- Renderer (Bevy/WebGPU) and DOM: paintable structure, geometry projection, hit-test geometry, browser-native event targets and visual surfaces only.
+- Event layer: translates canvas or browser input into Atome intent by id through hit-testing, then delegates to registries and the canonical mutation API.
 
-- `data-atome-id`;
-- `data-atome-kind`;
-- `data-project-id`;
-- `data-atome-selected`;
-- `data-group-atome`;
-- `data-group-id`;
-- `data-group-type`;
-- `data-mtrax-import`;
-- `data-source-kind`;
-- `data-media-kind`;
-- `data-eve-media-renderer`;
-- `data-eve-system-layer`;
-- `data-atome-events-bound`;
-- `data-eve-drag-bound`;
-- `data-eve-resize-bound`;
-- `data-media-api-ready`;
-- `data-role`;
-- `data-renderer`;
-- `atome_id`;
-- any empty `class=""` attribute;
-- any custom attribute that carries Atome identity, type, state, ownership, registry membership, persistence, replay, sync, debug routing, media renderer state, selection state, drag state, resize state, group state, project state, event binding state, or mutation payloads;
-- any new `data-*` attribute that carries Atome identity, type, state, ownership, registry membership, persistence, replay, sync, debug routing, media renderer state, selection state, drag state, resize state, group state, project state, or event binding state.
+Code that writes Atome business facts into any projection carrier, or reads behavior decisions back from one, is architecturally invalid. An active migration does not authorize legacy behavioral fallback reads; the approved fallback exceptions are limited to localization in module 02.
 
-The following runtime class forms MUST NOT be present on final Atome DOM hosts or inside final Atome DOM subtrees:
+### Regression proof
 
-- `eve-system-layer-*`;
-- `eve-project-id-*`;
-- `eve-group-id-*`;
-- `eve-media-kind-*`;
-- `eve-renderer-*`;
-- `eve-source-kind-*`;
-- `eve-mtrax-import-*`, except the exact visual wrapper class `eve-mtrax-import-preview-media`;
-- `eve-atome-kind-*`;
-- `eve-binding-*`;
-- `eve-events-bound-*`;
-- `eve-drag-bound-*`;
-- `eve-resize-bound-*`;
-- `eve-api-ready-*`;
-- `eve-selected-true`;
-- `eve-selected-false`;
-- any new class that embeds an Atome id, project id, group id, system layer name, renderer name, media kind, source kind, boolean business state, persistence state, replay state, sync state, debug-routing fact, event-binding fact, or mutation payload.
-
-The following generic visual classes are allowed by default because they describe structure, visual category, or generic UI state rather than business/runtime identity:
-
-- `eve-atome`;
-- `eve-matrix-tile`;
-- `eve-media-atome`;
-- `eve-shape-atome`;
-- `eve-svg-atome`;
-- `eve-rounded-large`;
-- `eve-atome-shape-svg`;
-- `eve-atome-group-placeholder`;
-- `eve-mtrax-import-preview-media`;
-- `eve-media-canvas`;
-- `eve-media-audio-host`;
-- `is-selected`;
-- `is-dragging`;
-- `is-resizing`;
-- `is-hidden`;
-- `is-disabled`;
-- `is-focused`.
-
-Selection MUST be projected only through the generic `is-selected` class. Internal selected state belongs in the runtime registry. Classes such as `eve-selected-true` and `eve-selected-false`, inline `outline` state, and dataset-backed selected flags are forbidden.
-
-System layer data MUST be stored only in the runtime registry or an explicitly owned layer registry. It MUST NOT be projected into DOM classes such as `eve-system-layer-intuition_active_drag`, attributes such as `data-eve-system-layer`, or inline styles.
-
-Final Atome host inline styles are limited to dynamic geometry values that cannot yet be represented by the current renderer contract, such as `left`, `top`, `width`, `height`, and `z-index` when z-order is dynamic. Decorative or stateful inline CSS is forbidden on final Atome hosts and final media/SVG projection children, including:
-
-- `border: medium`;
-- `outline` and `outline-offset`;
-- `box-sizing`;
-- `border`;
-- `border-color`;
-- `border-radius`;
-- `background`;
-- `background-color`;
-- `box-shadow`;
-- `color`;
-- `overflow`;
-- `touch-action`;
-- `pointer-events`;
-- `display`;
-- `user-select`;
-- any inline style whose value represents selection, drag, resize, renderer readiness, media kind, project membership, group membership, source kind, system layer, event binding, persistence, replay, sync, or debug state.
-
-Decorative Atome styling MUST live in the approved JavaScript-driven visual contract documented in `maps/DESIGN_MAP.md`, not in final DOM inline style. Required dynamic visual values must be justified by renderer constraints and covered by regression tests.
-
-All Atome information that is required to decide behavior MUST be centralized outside the DOM in the canonical Atome registry, runtime state registry, or the explicitly owned domain registry for that concern. Event handlers MUST resolve the nearest Atome host from the DOM id, recover the canonical `atome_id`, and then consult the appropriate registry or correspondence table to decide the action. Double click, left click, drag, resize, selection, keyboard routing, flower menu routing, MTRAX opening, media transport, persistence, refresh, replay, and debug behavior MUST NOT branch on DOM `data-*` state.
-
-Mandatory role separation:
-
-- Atome registry: owns Atome identity, kind, particles, persistence-facing state, and canonical mutation facts.
-- Runtime registry: owns ephemeral UI/runtime state such as event binding flags, selected state, drag/resize session state, media renderer readiness, group preview membership, and non-persistent interaction state.
-- Domain registries: own domain-specific runtime facts such as media projection, MTRAX timeline state, transport state, audio/video rendering state, and debug instrumentation state.
-- DOM: owns only paintable structure, CSS classes, geometry projection, browser-native event targets, and visual rendering surfaces.
-- Event layer: translates browser events into Atome intent by id, then delegates to registries and canonical mutation APIs.
-
-Any code that writes Atome business facts into DOM attributes, CSS classes, inline styles, comments, secondary ids, hidden text nodes, or marker-only wrapper elements is architecturally invalid. Any code that reads Atome behavior decisions from DOM attributes, runtime-disguised classes, inline styles, comments, secondary ids, hidden text nodes, or marker-only wrapper elements is architecturally invalid. An active migration does not authorize legacy behavioral fallback reads; the approved fallback exceptions are limited to localization in module 02.
-
-Every Atome rendering change MUST include or preserve an automated regression check that renders real Atome DOM and fails when forbidden attributes, custom attributes, empty classes, runtime-disguised classes, `border: medium`, inline outline without `is-selected`, decorative inline styles, DOM comments, secondary ids, duplicated DOM authority, or DOM-owned Atome state reappear. The regression check MUST verify the real final DOM after creation, selection/deselection, drag, resize, refresh, reload, SVG rendering, media/canvas rendering, and event resolution through `closest('.eve-atome')` plus `fromDomId(host.id)` when those flows are in scope.
+Every Atome rendering or interaction change must include or preserve an automated check on the real route: Bevy hit-testing (`hitTestRuntimeAtClientPoint` / `collectRuntimeAtomsInClientRect` in `project_scene_hit_testing.js`) resolving the expected Atome id, plus pixel evidence from the real canvas, after creation, selection/deselection, drag, resize, refresh, reload and the media, SVG or text rendering in scope. Use the canonical UI procedure in [module 03](03-debugging-testing-and-ui-validation.md) and `atome/documentations/how_debug_UI.md`. A check that queries `closest('.eve-atome')` cannot prove project behavior, because project Atomes have no DOM host. When the residual DOM host path is touched, also verify that its hosts carry none of the forbidden attributes, classes or inline styles above.
 
 ## Validation ownership
 
-Use [module 03](03-debugging-testing-and-ui-validation.md) for execution and real-interaction evidence, and module 06 for canonical-state survival checks. Static code review alone cannot prove a visible rendering or interaction result. Preserve the rendering budgets, routes, exception bounds, and real-final-DOM regression contract above whenever the corresponding flow is touched.
+Use [module 03](03-debugging-testing-and-ui-validation.md) for execution and real-interaction evidence, and module 06 for canonical-state survival checks. Static code review alone cannot prove a visible rendering or interaction result. Preserve the rendering budgets, routes, exception bounds, and real-route regression contract above whenever the corresponding flow is touched.

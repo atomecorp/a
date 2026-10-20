@@ -1,7 +1,7 @@
 import { MAIL_V1_ARCHITECTURE_DECISION } from './connector_contract.js';
-import { toText as normalizeText } from '../shared/scalars.js';
-// Re-exported: the local duplicate now lives in the shared scalars module.
-export { normalizeText };
+import { toText as normalizeText, toFiniteNumber } from '../shared/scalars.js';
+// Re-exported: the local duplicates now live in the shared scalars module.
+export { normalizeText, toFiniteNumber };
 
 export const DEFAULT_REMOTE_MAILBOX = 'INBOX';
 export const DEFAULT_LOCAL_MAILBOX = 'inbox';
@@ -12,12 +12,6 @@ export const DEFAULT_LOCAL_TRASH_MAILBOX = 'trash';
 
 export const normalizeRemoteMailbox = (value) => normalizeText(value).toUpperCase() || DEFAULT_REMOTE_MAILBOX;
 export const normalizeLocalMailbox = (value) => normalizeText(value).toLowerCase() || DEFAULT_LOCAL_MAILBOX;
-
-export const toFiniteNumber = (value, fallback = null) => {
-    if (value === null || value === undefined || value === '') return fallback;
-    const number = Number(value);
-    return Number.isFinite(number) ? number : fallback;
-};
 
 const toTimestamp = (value, fallback = 0) => {
     const direct = toFiniteNumber(value, null);
@@ -159,7 +153,7 @@ export const normalizeReadPayload = (payload, {
     }))
 });
 
-const normalizeAuthConfig = (auth = {}) => {
+export const normalizeAuthConfig = (auth = {}) => {
     const username = normalizeText(auth.username || auth.user || auth.apple_id || auth.appleId || auth.email);
     const password = normalizeText(auth.password || auth.app_password || auth.appPassword);
     return {

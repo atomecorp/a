@@ -8,7 +8,6 @@ import {
     DEFAULT_REMOTE_ARCHIVE_MAILBOX,
     DEFAULT_REMOTE_MAILBOX,
     DEFAULT_REMOTE_TRASH_MAILBOX,
-    normalizeConnectorMessage,
     normalizeIcloudMailConnectorConfig,
     normalizeLocalMailbox,
     normalizeReadPayload,
@@ -347,5 +346,4 @@ export const createIcloudMailConnector = ({
     };
 };
 
-export { normalizeConnectorMessage as normalizeIcloudMailRecord };
 export { normalizeIcloudMailConnectorConfig };

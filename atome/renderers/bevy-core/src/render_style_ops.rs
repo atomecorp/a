@@ -1,7 +1,7 @@
 use crate::{
     backdrop_surface::{
-        patch_backdrop_surface, refresh_workspace_backdrop_enabled, sync_backdrop_surface_corner_radius,
-        sync_backdrop_surface_opacity,
+        patch_backdrop_surface, refresh_workspace_backdrop_enabled, sync_backdrop_surface_border,
+        sync_backdrop_surface_corner_radius, sync_backdrop_surface_opacity,
     },
     clip::apply_entity_clip,
     procedural_sdf::patch_procedural_sdf,
@@ -149,6 +149,7 @@ pub fn apply_style(world: &mut World, patch: AtomeStylePatch) -> Result<(), Stri
         world
             .entity_mut(entity)
             .insert(crate::surface_paint::AtomeSurfacePaint(paint));
+        sync_backdrop_surface_border(world, entity)?;
     }
     if let Some(color) = patch.color {
         if let Some(mut current) = world.get_mut::<AtomeVisualColor>(entity) {

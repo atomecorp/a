@@ -28,6 +28,7 @@ No toolchain is bootstrapped, key generated, or production track modified.
 Only Android's build code is incremented; atome/eVe product versions are read.
 Guide: ${GUIDE}
 Example configuration: scripts/android/play.config.example.json
+Without a Play account: --firebase (Firebase App Distribution), see --firebase --help.
 `;
 
 export function runAndroidOwner(root, args, environment = process.env) {

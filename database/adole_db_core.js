@@ -61,7 +61,8 @@ async function openDatabase(config) {
     const here = path.dirname(fileURLToPath(import.meta.url));
     const schema = fs.readFileSync(path.join(here, 'schema.sql'), 'utf8');
     const authSchema = fs.readFileSync(path.join(here, 'auth_security_schema.sql'), 'utf8');
-    const migrations = fs.readFileSync(path.join(here, 'adole_schema_migrations.js'), 'utf8');
+    const migrations = ['adole_schema_migrations.js', 'adole_principal_identity_schema.js']
+        .map((file) => fs.readFileSync(path.join(here, file), 'utf8')).join('\n');
     const expectedVersion = ddlFingerprint(schema, authSchema, migrations);
 
     const [{ user_version: currentVersion = 0 } = {}] = await query('all', 'PRAGMA user_version');
@@ -91,15 +92,8 @@ export async function query(method, sql, params = []) {
     return db[method](sql, params);
 }
 
-export function safeParseJson(value) {
-    if (!value) return null;
-    if (typeof value === 'object') return value;
-    try {
-        return JSON.parse(value);
-    } catch {
-        return null;
-    }
-}
+// Lenient JSON column read; the shared event contract owns the implementation.
+export { parseEventPayload as safeParseJson } from '../atome/src/shared/adole_event_contract.js';
 
 export function serializeJson(value) {
     if (value === null || value === undefined) return null;

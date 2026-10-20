@@ -2,19 +2,27 @@
 const measurement = { type: 'object', additionalProperties: false, required: ['value', 'unit'], properties: {
     value: { type: 'number', minimum: 0 }, unit: { type: 'string', minLength: 1, maxLength: 32 }
 } };
-export const PROGRAM_SESSION_ACTIONS = Object.freeze(['start', 'pause', 'resume', 'confirm', 'skip', 'correct', 'undo', 'finish', 'stop']);
+// `elapse` records that a step's own timer ended (never inferred at replay);
+// `measure` records a heart rate in bpm, typed or read from the health store.
+export const PROGRAM_SESSION_ACTIONS = Object.freeze(['start', 'pause', 'resume', 'confirm', 'elapse', 'measure', 'skip', 'correct', 'undo', 'finish', 'stop']);
+export const PROGRAM_SESSION_STEP_KINDS = Object.freeze(['work', 'rest']);
+export const PROGRAM_SESSION_TIMED_UNITS = Object.freeze(['s', 'min']);
+const measurements = { type: 'array', minItems: 1, maxItems: 4, items: measurement };
 export const PROGRAM_SESSION_SCHEMA = { type: 'object', additionalProperties: false,
     required: ['version', 'activity_id', 'steps'], properties: {
         version: { type: 'number', enum: [1] }, activity_id: { type: 'string', minLength: 1 }, activity_version: { type: 'number', minimum: 1 },
         steps: { type: 'array', minItems: 1, maxItems: 200, items: { type: 'object', additionalProperties: false,
             required: ['id', 'label'], properties: { id: { type: 'string', minLength: 1 },
-                label: { type: 'string', minLength: 1, maxLength: 400 }, planned: measurement } } }
+                label: { type: 'string', minLength: 1, maxLength: 400 }, planned: measurement,
+                kind: { type: 'string', enum: PROGRAM_SESSION_STEP_KINDS }, planned_measures: measurements,
+                zone: { type: 'number', minimum: 1, maximum: 5 } } } }
     } };
 export const PROGRAM_SESSION_TRANSITION_SCHEMA = { type: 'object', additionalProperties: false,
     required: ['session_id', 'revision', 'request_id', 'action', 'recorded_at'], properties: {
         session_id: { type: 'string', minLength: 1 }, revision: { type: 'number', minimum: 1 },
         request_id: { type: 'string', minLength: 1 }, action: { type: 'string', enum: PROGRAM_SESSION_ACTIONS },
-        recorded_at: { type: 'string', minLength: 1 }, step_id: { type: 'string' }, actual: measurement,
+        recorded_at: { type: 'string', minLength: 1 }, step_id: { type: 'string' }, actual: measurement, actual_measures: measurements,
+        source: { type: 'string', enum: ['manual', 'health'] },
         note: { type: 'string', maxLength: 4000 }, use_in_followup: { type: 'boolean' }
     } };
 export const PROGRAM_SESSION_OPERATIONS = Object.freeze(['session_read', 'session_prepare', 'session_transition']);

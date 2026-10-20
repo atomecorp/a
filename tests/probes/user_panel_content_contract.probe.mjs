@@ -24,7 +24,7 @@ assert.doesNotMatch(definitions, /eve_user_dialog/);
 ['preferences', 'level', 'passkeys', 'security', 'privacy']
     .forEach((section) => assert.match(settingsSource, new RegExp(`\\['${section}'`)));
 assert.match(viewSource, /id: `home_\$\{key\}_accordion`/);
-assert.match(viewSource, /id: 'home_session_exit'/);
+assert.doesNotMatch(viewSource, /home_session_exit/);
 assert.match(settingsSource, /id: 'home_credentials_add'/);
 assert.match(settingsSource, /id: 'home_passwords_accordion'/);
 assert.match(settingsSource, /id: 'home_ai_keys_accordion'/);

@@ -1,5 +1,3 @@
-import { getTauriInvoke } from './runtime_audio_backend.js';
-
 export const KIRA_AUDIO_COMMANDS = Object.freeze({
     PLAY_INSTANCE: 'audio_play_instance',
     STOP_INSTANCE: 'audio_stop_instance'
@@ -120,53 +118,4 @@ export const buildFacadeKiraAudioPayload = (command = '', input = {}) => {
         return { voice_id: payload.voiceId };
     }
     return input && typeof input === 'object' ? { ...input } : {};
-};
-
-export const resolveKiraFacadeMethod = (command = '') => {
-    const normalizedCommand = safeString(command);
-    if (normalizedCommand === KIRA_AUDIO_COMMANDS.PLAY_INSTANCE) return 'play_instance';
-    if (normalizedCommand === KIRA_AUDIO_COMMANDS.STOP_INSTANCE) return 'stop_instance';
-    return '';
-};
-
-export const invokeTauriKiraAudioCommand = async ({
-    command = '',
-    payload = {},
-    env = globalThis,
-    unavailableError = 'kira_tauri_audio_invoke_unavailable'
-} = {}) => {
-    const invoke = getTauriInvoke(env);
-    if (typeof invoke !== 'function') {
-        throw new Error(unavailableError);
-    }
-    return await invoke(safeString(command), buildTauriKiraAudioPayload(command, payload));
-};
-
-export const invokeKiraAudioCommand = async ({
-    bridge = null,
-    command = '',
-    payload = {},
-    env = globalThis,
-    facade = null,
-    unavailablePrefix = 'kira'
-} = {}) => {
-    const normalizedCommand = safeString(command);
-    const kiraBackend = safeString(bridge?.kira_backend).toLowerCase();
-    if (kiraBackend === 'tauri' || kiraBackend === 'native_invoke') {
-        return await invokeTauriKiraAudioCommand({
-            command: normalizedCommand,
-            payload,
-            env,
-            unavailableError: `${unavailablePrefix}_tauri_audio_invoke_unavailable`
-        });
-    }
-    if (kiraBackend === 'wasm') {
-        const squirrelAudio = facade || env?.Squirrel?.av?.audio || null;
-        const facadeMethod = resolveKiraFacadeMethod(normalizedCommand);
-        if (!facadeMethod || typeof squirrelAudio?.[facadeMethod] !== 'function') {
-            throw new Error(`${unavailablePrefix}_wasm_audio_method_unavailable:${normalizedCommand || 'unknown'}`);
-        }
-        return await squirrelAudio[facadeMethod](buildFacadeKiraAudioPayload(normalizedCommand, payload));
-    }
-    throw new Error(`${unavailablePrefix}_kira_backend_unavailable:${kiraBackend || 'unknown'}`);
 };

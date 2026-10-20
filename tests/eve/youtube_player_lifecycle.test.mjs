@@ -91,7 +91,7 @@ test('a chosen video plays in place over its Atome, through the host page, and f
     expect(posted.at(-1)).toMatchObject({ target: 'eve-youtube-player', command: 'play', origin: HOST });
     expect(history).toHaveLength(0);
     fromHost({ type: 'state', state: 1, time: 0.5 });
-    expect(runtime.playerState()).toBe(1); expect(history.map(entry => entry.videoId)).toEqual(['abcDEFghi12']);
+    expect(runtime.isPlayingOn('video')).toBe(true); expect(history.map(entry => entry.videoId)).toEqual(['abcDEFghi12']);
     // Moving the Atome moves the player; a panel is drawn OVER the cut-out, so the player stays shown.
     movePlacement({ left: 210, top: 120, width: 240, height: 135, rotation: 15 }); tick();
     expect([iframe().style.left, iframe().style.width, iframe().style.transform]).toEqual(['200px', '240px', 'rotate(15deg)']);
@@ -104,7 +104,7 @@ test('a chosen video plays in place over its Atome, through the host page, and f
     // A foreign message is ignored.
     win.dispatchEvent(new win.MessageEvent('message', { origin: 'https://evil.test', source: iframe().contentWindow,
         data: { source: 'eve-youtube-player', videoId: 'abcDEFghi12', type: 'state', state: 5 } }));
-    expect(runtime.playerState()).toBe(1);
+    expect((await runtime.execute('set_fullscreen', { enabled: false })).playback).toBe('playing');
     win.close();
 });
 

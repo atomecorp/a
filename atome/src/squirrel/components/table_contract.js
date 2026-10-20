@@ -1,8 +1,5 @@
-const textValue = (value, code) => {
-    const normalized = String(value == null ? '' : value).trim();
-    if (!normalized) throw new Error(code);
-    return normalized;
-};
+// Required-text coercion is owned by the select contract.
+import { textValue } from './select_contract.js';
 
 const positiveNumber = (value, code) => {
     const normalized = Number(value);

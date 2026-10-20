@@ -397,7 +397,7 @@ describe('first-launch canonical lifecycle', () => {
         const resumed = fixture(f.profile()); await resumed.flow.authenticated({ user });
         expect(resumed.flow.state.stage).toBe('program'); expect(resumed.flow.state.fields.hours).toBe(9); expect(resumed.flow.state.bricks).toEqual(['meditation', 'nutrition']);
         await resumed.flow.handle({ operation: 'finish' }); expect(resumed.createTemplate).toHaveBeenCalledTimes(1);
-        expect(resumed.profile().preferences.workspace).toMatchObject({ startup_view: 'dashboard', home_template_project_id: 'basic' });
+        expect(resumed.profile().preferences.workspace).toMatchObject({ startup_view: 'dashboard', home_eve_project_id: 'basic' });
         expect(resumed.profile().preferences.custom).toBe('preserved'); expect(resumed.profile().preferences.first_launch.step).toBe('complete');
         expect(await resumed.flow.authenticated({ user })).toBe(false); expect(resumed.createTemplate).toHaveBeenCalledTimes(1);
     });
@@ -479,8 +479,8 @@ it.each([true, false])('publishes the canonical home reference before its activa
     const f = fixture({ preferences: { visual: { masteryLevel: 'beginner' }, first_launch: { version: 1, step: 'program', program_id: 'sleep-project' } } });
     await f.flow.authenticated({ user });
     f.finish.mockImplementation(async ({ homeId }) => {
-        expect(window.__eveProfilePreferences.workspace.home_template_project_id).toBe(homeId);
-        expect(f.profile().preferences.workspace.home_template_project_id).toBe(homeId);
+        expect(window.__eveProfilePreferences.workspace.home_eve_project_id).toBe(homeId);
+        expect(f.profile().preferences.workspace.home_eve_project_id).toBe(homeId);
         expect(f.profile().preferences.first_launch.step).toBe('program');
         return succeeds ? { ok: true } : { ok: false, error: 'activation_failed' };
     });

@@ -2,16 +2,22 @@ import Foundation
 
 extension FastifySyncClient {
     // Public, unauthenticated /ws/api operations owned by Fastify (YouTube search,
-    // television catalogue, YouTube live resolution). The phone has no copy of
-    // them: the frame is forwarded, without any credential, to the configured
-    // Fastify server and its single reply is returned.
-    static let publicTypes: Set<String> = ["youtube-search", "tv-catalog", "tv-resolve", "gps-resource"]
+    // PeerTube search and stream resolution,
+    // television catalogue, YouTube live resolution, GPS resources, Open Food
+    // Facts, the free book catalogs, the Médiathèque's free media). The phone has no copy of them: the frame is forwarded, without
+    // any credential, to the configured Fastify server and its single reply is
+    // returned.
+    static let publicTypes: Set<String> = ["youtube-search", "peertube-search", "peertube-resolve", "tv-catalog",
+        "tv-resolve", "gps-resource", "food-facts",
+        "book-source", "book-fetch", "media-library-search", "media-library-fetch"]
 
     func relayPublic(_ payload: [String: Any], reply: @escaping ([String: Any]) -> Void) {
         let requestId = payload["requestId"] ?? NSNull()
         let requestType = payload["type"] as? String ?? ""
         let responseType = requestType + "-response"
-        let unavailable = requestType == "youtube-search" ? "youtube_search_unavailable" : "PROVIDER_UNAVAILABLE"
+        let unavailableByType = ["youtube-search": "youtube_search_unavailable",
+            "peertube-search": "peertube_search_unavailable", "peertube-resolve": "peertube_resolve_unavailable"]
+        let unavailable = unavailableByType[requestType] ?? "PROVIDER_UNAVAILABLE"
         let failure: (String) -> Void = { error in
             reply(["type":responseType, "requestId":requestId,
                 "ok":false, "success":false, "error":error])

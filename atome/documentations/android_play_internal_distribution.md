@@ -6,6 +6,8 @@ internal testing** (French Console: **Tests internes**). Authorized testers opt 
 with their Google account, install from the Play Store and receive subsequent
 updates there. This is separate from Firebase App Distribution and Internal App
 Sharing. The generator only publishes to the `internal` track.
+For a few testers without a Play developer account, the same generator has a
+`--firebase` lane: see [Firebase App Distribution](android_firebase_distribution.md).
 
 ## Commands
 
@@ -47,7 +49,11 @@ caches and repositories; no additional dependency is introduced by the generator
    Google's payment, identity and any organization/device verification in Google's
    secure UI. The generator cannot perform legal consent or identity verification.
 2. Select the existing app, or create the intended eVe app. The current release
-   package is `com.squirrel.desktop`; `.debug` is a separate local test app.
+   package is `one.atome.app` (the iOS app identifier), set by `identifier` in
+   `platforms/desktop-tauri/tauri.android.conf.json`, which Tauri merges over the
+   desktop `com.squirrel.desktop` (kept so desktop data paths do not move). The
+   Gradle `namespace`/`applicationId` and the `MainActivity` package match it.
+   `.debug` is a separate local test app.
    **Confirm this package before the first upload**: Google fixes it when the
    first artifact is uploaded. Do not substitute a different identifier to bypass
    a signing or account problem.
@@ -92,12 +98,12 @@ Copy the **nonsecret** example `scripts/android/play.config.example.json` to
 
 ```json
 {
-  "packageName": "com.squirrel.desktop",
+  "packageName": "one.atome.app",
   "track": "internal",
   "serviceAccountFile": "/absolute/private/path/google-play-service-account.json",
   "uploadCertificateSha256": "64_HEXADECIMAL_DIGITS_FROM_THE_UPLOAD_CERTIFICATE",
   "initialUploadComplete": true,
-  "testerOptInUrl": "https://play.google.com/apps/testing/com.squirrel.desktop",
+  "testerOptInUrl": "https://play.google.com/apps/testing/one.atome.app",
   "releaseNotes": [
     { "language": "fr-FR", "text": "Description of this test release." }
   ]

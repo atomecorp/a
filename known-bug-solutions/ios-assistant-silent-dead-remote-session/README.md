@@ -44,6 +44,24 @@ The bundle is esbuild-packaged: module paths cannot be `import()`ed; use the glo
 - `runtime.tools.call` `{ tool_id:'ui.home.panel', action:'pointer.click', input:{ requireAuthentication:true } }`
   must not answer `ignored`.
 
+## Root cause of the dead session (2026-10-20)
+
+- `server/auth_sessions.js#renew` moves `generation` forward on every renew. A renew that
+  reaches the server but whose answer never arrives (app killed or suspended by iOS,
+  socket dropped) left the client on N while the server holds N+1. The next
+  `session-challenge(N)` answered `auth_session_stale` and the client erased its own
+  session (above). Measured on the real `server.js` + real client, real Web app.
+- Fix in the owner `auth_phone_link_client.js#renew`: before `session-renew(G)` the
+  record durably carries `renewing: G`; a `stale` verdict for G with `renewing === G`
+  asks the challenge for G+1 (the server rotated) and renews from there. A stale copy
+  without its own in-flight renew is still refused. No server change, no deploy.
+- Sessions already erased stay dead: a new phone confirmation is still required once.
+
+Regression probes (isolated server): `temp/remote_session_loss_2026-10-20/renew_lost_response.probe.mjs`
+(13/13: phone and scoped records, one or two lost answers, request never sent, stale
+copy refused) and `renew_lost_response_real_app.probe.mjs` (Web app, `routeWebSocket`
+drops the launch renew answer, page reloaded: 5/5; `BASELINE=1` on HEAD: no session, no bearer).
+
 ## Open
 
 The message is still written in the input field only (user rule), which is 70 px wide

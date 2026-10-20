@@ -2,6 +2,12 @@ import crypto from 'node:crypto';
 import db from '../database/adole.js';
 import { normalizePhone } from './auth_crypto.js';
 import { normalizeSharedProfileFields } from '../atome/src/shared/profile_sharing.js';
+import { meetingDeclarations, meetingDeclared, meetingMatches, normalizeMeetingProfile } from '../atome/src/shared/meeting_contract.js';
+
+// A public card's Rencontre declarations are kept with it for matching only: never
+// published (`list`, `meet` return names and photos), and only when at least one
+// goal is declared (a card without any never appears in Rencontre).
+const MEETING_KEY = '_meeting';
 
 const parse = (value) => {
     if (value == null) return null;
@@ -100,7 +106,10 @@ const projectProfile = (row) => {
         principal_id: String(row.atome_id),
         display_name: isBootstrapPhoneIdentity(row, canonicalProfile) ? '' : displayName(row, canonicalProfile, shared),
         user_face: shared.has('user_face') ? rowValue(row, canonicalProfile, 'user_face') : '',
-        card: sharedCard(row, canonicalProfile, shared),
+        card: { ...sharedCard(row, canonicalProfile, shared),
+            ...(meetingDeclared(canonicalProfile.meeting) ? { [MEETING_KEY]: meetingDeclarations(canonicalProfile.meeting) } : {}) },
+        // The Rencontre photos live in their own property (`meeting_photos`), beside the profile's.
+        meeting: normalizeMeetingProfile({ ...canonicalProfile.meeting, photos: parse(row.meeting_photos) }),
         public: publicProfile(row, canonicalProfile)
     };
 };
@@ -266,21 +275,58 @@ export class DirectoryPublicService {
         const requesterId = text(options.requesterId || options.requester_id);
         return Promise.all((rows || []).filter((row) => (
             text(row.display_name) && (!requesterId || text(row.principal_id) !== requesterId)
-        )).map(async (row) => {
-            const readable = async (field) => !PRIVACY_KEY_BY_FIELD[field] || (!!requesterId
-                && await db.allowsPropertyRead(row.principal_id, PRIVACY_KEY_BY_FIELD[field], requesterId, 'directory'));
+        )).map(row => this.publish(row, requesterId)));
+    }
+
+    // One published entry: the shared fields the reader may read, never the Rencontre declarations.
+    async publish(row, requesterId = '') {
+        const readable = async (field) => !PRIVACY_KEY_BY_FIELD[field] || (!!requesterId
+            && await db.allowsPropertyRead(row.principal_id, PRIVACY_KEY_BY_FIELD[field], requesterId, 'directory'));
+        const card = parse(row.card_json);
+        const fields = card && typeof card === 'object' && !Array.isArray(card) ? Object.entries(card).filter(([field]) => field !== MEETING_KEY) : [];
+        const visible = await Promise.all(fields.map(async ([field, value]) => ((await readable(field)) ? [[field, value]] : [])));
+        return {
+            ...Object.fromEntries(visible.flat()),
+            principal_id: row.principal_id,
+            display_name: text(row.display_name),
+            user_face: row.user_face && await readable('user_face') ? text(row.user_face) : null,
+            revision: Number(row.revision || 0),
+            updated_at: row.updated_at
+        };
+    }
+
+    // Rencontre: the public cards that declared what the search asks (`goal`, `theme`,
+    // `scope`, `query`), matched against the searcher's own declarations
+    // (meeting_contract.js). Nobody is added to fill an empty answer.
+    async meet(options = {}) {
+        const requesterId = text(options.requesterId || options.requester_id);
+        if (!requesterId) return [];
+        const searcher = (await this.sourceProfile(requesterId))?.meeting || normalizeMeetingProfile({});
+        const search = { goal: text(options.goal), theme: text(options.theme), scope: text(options.scope), query: text(options.query) };
+        const limit = Math.max(1, Math.min(Number(options.limit) || 100, 500));
+        const rows = await db.query('all', `SELECT principal_id, display_name, user_face, card_json, revision, updated_at
+             FROM directory_public_profiles ORDER BY lower(display_name), principal_id LIMIT 5000`);
+        const matches = (rows || []).filter((row) => {
+            if (!text(row.display_name) || text(row.principal_id) === requesterId) return false;
             const card = parse(row.card_json);
-            const fields = card && typeof card === 'object' && !Array.isArray(card) ? Object.entries(card) : [];
-            const visible = await Promise.all(fields.map(async ([field, value]) => ((await readable(field)) ? [[field, value]] : [])));
-            return {
-                ...Object.fromEntries(visible.flat()),
-                principal_id: row.principal_id,
-                display_name: text(row.display_name),
-                user_face: row.user_face && await readable('user_face') ? text(row.user_face) : null,
-                revision: Number(row.revision || 0),
-                updated_at: row.updated_at
-            };
-        }));
+            return meetingMatches({ searcher, candidate: card?.[MEETING_KEY], search, name: row.display_name, candidateId: row.principal_id });
+        }).slice(0, limit);
+        return Promise.all(matches.map(row => this.publish(row, requesterId)));
+    }
+
+    // One person's Rencontre card (hook, presentation, photos), for a searcher their
+    // card answers under the same search: anyone else gets nothing.
+    async meetCard(options = {}) {
+        const requesterId = text(options.requesterId || options.requester_id), principalId = text(options.principalId);
+        if (!requesterId || !principalId || requesterId === principalId) return null;
+        const row = await db.query('get', `SELECT principal_id, display_name, user_face, card_json, revision, updated_at
+             FROM directory_public_profiles WHERE principal_id = ?`, [principalId]);
+        const searcher = (await this.sourceProfile(requesterId))?.meeting || normalizeMeetingProfile({});
+        const search = { goal: text(options.goal), theme: text(options.theme), scope: text(options.scope) };
+        if (!row || !meetingMatches({ searcher, candidate: parse(row.card_json)?.[MEETING_KEY], search, name: row.display_name, candidateId: principalId })) return null;
+        const meeting = (await this.sourceProfile(principalId))?.meeting || normalizeMeetingProfile({});
+        return { ...await this.publish(row, requesterId), area: meeting.area, country: meeting.country,
+            hook: meeting.hook, presentation: meeting.presentation, photos: meeting.photos };
     }
 
     async listEvents(cursor = 0, limit = 500) {

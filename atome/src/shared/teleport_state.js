@@ -29,15 +29,6 @@ export const TELEPORT_STATES = Object.freeze({
     ERROR: 'ERROR'
 });
 
-export const TELEPORT_PROPERTY_KEYS = Object.freeze([
-    'teleport_state',
-    'teleport_surface_id',
-    'teleport_origin_surface_id',
-    'teleport_controller_surface_id',
-    'teleport_session_id',
-    'teleport_persist'
-]);
-
 // Which transitions the manager may perform. Anything absent is refused rather
 // than silently coerced, so a lost ACK can never be mistaken for an arrival.
 const ALLOWED_TRANSITIONS = Object.freeze({
@@ -115,10 +106,6 @@ export function rendersOnSurface(properties, surfaceId) {
     const { surfaceId: activeSurfaceId } = readTeleportState(properties);
     if (!activeSurfaceId) return true;
     return activeSurfaceId === String(surfaceId || '').trim();
-}
-
-export function isTeleported(properties) {
-    return Boolean(readTeleportState(properties).surfaceId);
 }
 
 function patch(fields) {

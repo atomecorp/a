@@ -3,7 +3,7 @@ import { stat } from 'node:fs/promises';
 import jwt from 'jsonwebtoken';
 
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
-const SCOPE = 'https://www.googleapis.com/auth/androidpublisher';
+const PUBLISHER_SCOPE = 'https://www.googleapis.com/auth/androidpublisher';
 
 export class PlayError extends Error {
     constructor(operation, status, uncertain = false) {
@@ -16,15 +16,16 @@ export class PlayError extends Error {
     }
 }
 
-// Service-account OAuth for the Android Publisher API, shared by the release
-// client below and the server's purchase verification (`server/billing/`).
-export function createPlayAuthorization({ account, request = fetch, now = Date.now }) {
+// Service-account OAuth for Google APIs: the Android Publisher scope for the release
+// client below and the server's purchase verification (`server/billing/`), another
+// scope for Firebase App Distribution (`firebase_distribution.mjs`).
+export function createPlayAuthorization({ account, scope = PUBLISHER_SCOPE, request = fetch, now = Date.now }) {
     let access;
     return async function authorize() {
         if (access?.expires > now() + 60000) return access.token;
         let assertion;
         try {
-            assertion = jwt.sign({ iss: account.client_email, scope: SCOPE, aud: TOKEN_URL,
+            assertion = jwt.sign({ iss: account.client_email, scope, aud: TOKEN_URL,
                 iat: Math.floor(now() / 1000), exp: Math.floor(now() / 1000) + 3600 }, account.private_key, { algorithm: 'RS256' });
         } catch { throw new Error('Google service account signing key is invalid'); }
         let response;

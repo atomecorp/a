@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import db from '../database/adole.js';
 import { createUserVaultProvider } from './userVaultProvider.js';
+import { parseJson } from './syncShareHierarchy.js';
 import { normalizeRights } from '../atome/src/shared/share_rights.js';
 import {
     ACTIVE_LINKED_SHARE_SQL,
@@ -16,12 +17,6 @@ const vaultKey = (principalId) => crypto
     .createHash('sha256')
     .update(String(principalId))
     .digest('hex');
-
-const parseJson = (value, fallback = null) => {
-    if (value == null) return fallback;
-    if (typeof value === 'object') return value;
-    try { return JSON.parse(value); } catch (_) { return fallback; }
-};
 
 // Deux listes distinctes (D8) : ce que le destinataire VOIT et ce qu'il peut MODIFIER.
 // `allowed_properties_json` (historique) sert de repli aux deux.
@@ -191,6 +186,12 @@ export class UserVaultRouter {
         return results;
     }
 
+    // Objects of `ownerId`'s vault hosted by a teleport surface.
+    async teleportHostedAtomes(ownerId, surfaceId) {
+        await this.provision(ownerId);
+        return this.provider.request(ownerId, 'teleport:hosted', { surface_id: surfaceId });
+    }
+
     async getState(requestingPrincipalId, atomeId) {
         const ownerId = await this.vaultPrincipalForAtome(atomeId, requestingPrincipalId);
         await this.provision(ownerId);
@@ -321,21 +322,17 @@ export class UserVaultRouter {
         return heads;
     }
 
-    // Flux dans lequel vivent les evenements d'un objet du coffre de `ownerId`.
+    // Stream a share of an object of `ownerId`'s vault binds to: the project's stream for a
+    // project (its children live there), otherwise the stream holding the object's events.
     async streamForAtome(ownerId, atomeId) {
-        const events = await this.provider.request(ownerId, 'events:list', {
-            atome_id: atomeId,
-            limit: 1,
-            order: 'desc'
-        });
-        const streamId = String(events?.[0]?.stream_id || events?.[0]?.stream || '').trim();
-        if (!streamId) return null;
-        const stream = await db.query(
+        const stream = await this.provider.request(ownerId, 'stream:of-atome', { atome_id: atomeId });
+        if (!stream?.stream_id) return null;
+        await this.registerStream(stream, ownerId);
+        return db.query(
             'get',
             'SELECT * FROM vault_stream_registry WHERE stream_id = ? AND vault_principal_id = ?',
-            [streamId, ownerId]
+            [stream.stream_id, ownerId]
         );
-        return stream || null;
     }
 
     async listAuthorizedStreams(principalId) {

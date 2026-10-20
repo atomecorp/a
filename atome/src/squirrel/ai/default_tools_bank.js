@@ -4,6 +4,7 @@ export const registerBankDefaultTools = ({ Agent, safeString, requireBankApi }) 
         description: 'List normalized bank accounts.',
         capabilities: ['bank.read'],
         risk_tier: 'LOW',
+        parameters: { type: 'object', additionalProperties: false, properties: {} },
         handler: async () => {
             const api = await requireBankApi();
             return api.accounts();
@@ -149,6 +150,9 @@ export const registerBankDefaultTools = ({ Agent, safeString, requireBankApi }) 
         description: 'Detect recurring outgoing payments.',
         capabilities: ['bank.read'],
         risk_tier: 'LOW',
+        parameters: { type: 'object', additionalProperties: false, properties: {
+            account_id: { type: 'string' }, limit: { type: 'number', minimum: 1, description: 'Transactions scanned (default 2000).' }
+        } },
         handler: async ({ params }) => {
             const api = await requireBankApi();
             return api.recurringPayments(params || {});

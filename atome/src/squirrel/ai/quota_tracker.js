@@ -1,4 +1,4 @@
-import { OPENAI_TEXT_TOKEN_PRICING, OPENAI_REALTIME_TOKEN_PRICING, OPENAI_SERVICE_TOOLS, OPENAI_MODEL_PROFILES } from './model_catalog_registry.js';
+import { OPENAI_TEXT_TOKEN_PRICING, OPENAI_REALTIME_TOKEN_PRICING, OPENAI_LIVE_PRICING, OPENAI_SERVICE_TOOLS, OPENAI_MODEL_PROFILES } from './model_catalog_registry.js';
 import { getSessionState } from '../apis/unified/adole_api/session.js';
 import { cloneStructured as cloneValue, nowIso } from '../shared/scalars.js';
 const QUOTA_TRACKER_STORAGE_KEY = 'eve_ai_quota_tracker_v1';
@@ -54,6 +54,13 @@ export const estimateOpenAiRealtimeTokenCost = ({ model, usage, now = Date.now()
     }
     if (inputSum !== usage.input_tokens || outputSum !== usage.output_tokens || cachedSum !== input.cached_tokens) return null;
     return cost / 1000000;
+};
+
+// A GPT-Live voice session is billed by connected seconds, silence included.
+export const estimateOpenAiLiveCost = ({ model, seconds, now = Date.now() } = {}) => {
+    const rate = OPENAI_LIVE_PRICING[model];
+    if (!rate || !Number.isFinite(seconds) || seconds < 0 || now > Date.parse('2026-11-21T00:00:00Z')) return null;
+    return seconds * rate.perMinute / 60;
 };
 
 export const createAiQuotaTracker = ({
@@ -130,7 +137,7 @@ export const createAiQuotaTracker = ({
             provider = '',
             model = '',
             prompt_tokens = 0,
-            completion_tokens = 0, audio_input_tokens = 0, audio_output_tokens = 0, images = 0, tool_calls = 0, estimated_cost_usd = null, estimated_token_cost_usd = null, usage_known = true
+            completion_tokens = 0, audio_input_tokens = 0, audio_output_tokens = 0, voice_seconds = 0, images = 0, tool_calls = 0, estimated_cost_usd = null, estimated_token_cost_usd = null, usage_known = true
         } = {}) {
             return mutate((state) => ({
                 ...state,
@@ -145,6 +152,7 @@ export const createAiQuotaTracker = ({
                         total_tokens: Math.max(0, toFiniteNumber(prompt_tokens, 0)) + Math.max(0, toFiniteNumber(completion_tokens, 0)),
                         audio_input_tokens: Math.max(0, toFiniteNumber(audio_input_tokens)),
                         audio_output_tokens: Math.max(0, toFiniteNumber(audio_output_tokens)),
+                        voice_seconds: Math.max(0, toFiniteNumber(voice_seconds)),
                         images: Math.max(0, toFiniteNumber(images)), tool_calls: Math.max(0, toFiniteNumber(tool_calls)),
                         estimated_token_cost_usd: Number.isFinite(estimated_token_cost_usd) && estimated_token_cost_usd >= 0 ? estimated_token_cost_usd : null,
                         estimated_cost_usd: estimated_cost_usd == null ? null : Math.max(0, toFiniteNumber(estimated_cost_usd)),
@@ -156,8 +164,14 @@ export const createAiQuotaTracker = ({
 
         recordProviderUsage(result = {}, action = 'responses', payload = {}) {
             const hosted = OPENAI_SERVICE_TOOLS.find(item => item.action === action)?.hosted;
-            if (!hosted && !action.startsWith('remote_mcp.') && !['responses', 'image-generate', 'image-edit', 'speech', 'transcription', 'translation', 'embeddings', 'realtime'].includes(action)) return null;
+            if (!hosted && !action.startsWith('remote_mcp.') && !['responses', 'image-generate', 'image-edit', 'speech', 'transcription', 'embeddings', 'realtime'].includes(action)) return null;
             const usage = result.usage || {};
+            if (OPENAI_LIVE_PRICING[result.model]) {
+                const recorded = this.recordUsage({ provider: 'openai', model: result.model, usage_known: Number.isFinite(usage.seconds),
+                    voice_seconds: usage.seconds, estimated_token_cost_usd: estimateOpenAiLiveCost({ model: result.model, seconds: usage.seconds }) });
+                if (env.dispatchEvent && env.CustomEvent) env.dispatchEvent(new env.CustomEvent('squirrel:ai-budget-changed'));
+                return recorded;
+            }
             const input = usage.input_tokens ?? usage.prompt_tokens;
             const output = usage.output_tokens ?? usage.completion_tokens ?? (action === 'embeddings' ? 0 : undefined);
             const images = action.startsWith('image-') ? (result.data?.length || 1)
@@ -170,7 +184,7 @@ export const createAiQuotaTracker = ({
                 usage_known: Number.isInteger(input) && Number.isInteger(output),
                 audio_input_tokens: details.audio_tokens, audio_output_tokens: outputDetails.audio_tokens,
                 images, tool_calls: (result.output || []).filter(item => /_call$/.test(item.type)).length,
-                estimated_token_cost_usd: action === 'realtime' && result.service_tier === undefined
+                estimated_token_cost_usd: OPENAI_REALTIME_TOKEN_PRICING[model]
                     ? estimateOpenAiRealtimeTokenCost({ model, usage })
                     : images ? null : estimateOpenAiTokenCost({ model, usage, serviceTier: result.service_tier })
             });
@@ -227,6 +241,7 @@ export const createAiQuotaTracker = ({
                     : usageRatio >= 1 ? 'exhausted' : usageRatio >= 1 - state.critical_remaining_ratio ? 'critical' : usageRatio >= 1 - state.low_remaining_ratio ? 'low' : 'normal',
                 audio_input_tokens: usageEvents.reduce((sum, item) => sum + toFiniteNumber(item.audio_input_tokens), 0),
                 audio_output_tokens: usageEvents.reduce((sum, item) => sum + toFiniteNumber(item.audio_output_tokens), 0),
+                voice_seconds: usageEvents.reduce((sum, item) => sum + toFiniteNumber(item.voice_seconds), 0),
                 tool_calls: usageEvents.reduce((sum, item) => sum + toFiniteNumber(item.tool_calls), 0),
                 images: usageEvents.reduce((sum, item) => sum + toFiniteNumber(item.images), 0),
                 estimated_token_cost_usd: usageEvents.length && usageEvents.every(item => item.estimated_token_cost_usd != null)

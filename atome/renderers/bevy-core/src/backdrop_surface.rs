@@ -31,7 +31,11 @@ pub struct BackdropSurfaceUniform {
     /// w: tint fade (share of the tint alpha removed at the bottom edge).
     pub blur: Vec4,
     /// x: existing palette top-right cut, in logical pixels. Zero keeps ordinary glass.
+    /// y: border width in logical pixels, from the node's surface paint (zero: none).
     pub corner_cut: Vec4,
+    /// Border colour per edge, top, right, bottom, left: the surface-paint border
+    /// drawn over the glass, as the painted texture draws it over a flat shape.
+    pub border_edges: [Vec4; 4],
 }
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
@@ -96,6 +100,7 @@ fn material_from_contract(
                 style.tint_fade,
             ),
             corner_cut: Vec4::new(style.corner_cut_px, 0.0, 0.0, 0.0),
+            border_edges: [Vec4::ZERO; 4],
         },
         backdrop,
     }
@@ -193,6 +198,29 @@ fn write_backdrop_shape(world: &mut World, entity: Entity, logical_size: Option<
     if let Some(radius) = radius {
         material.uniform.size_radius.z = radius;
     }
+    Ok(())
+}
+
+/// Follows the node's surface paint: the glass is the fill, the paint's border is
+/// drawn over it. Without this the glass dropped every border (a selected panel
+/// chip, whose only selection cue is its border, looked idle).
+pub fn sync_backdrop_surface_border(world: &mut World, entity: Entity) -> Result<(), String> {
+    let Some(handle) = world.get::<MeshMaterial2d<BackdropSurfaceMaterial>>(entity).map(|material| material.0.clone())
+    else {
+        return Ok(());
+    };
+    let border = world
+        .get::<crate::surface_paint::AtomeSurfacePaint>(entity)
+        .and_then(|paint| paint.0.as_ref().and_then(|paint| paint.border.clone()));
+    let mut materials = world
+        .get_resource_mut::<Assets<BackdropSurfaceMaterial>>()
+        .ok_or_else(|| "bevy_backdrop_surface_assets_required".to_string())?;
+    let mut material =
+        materials.get_mut(&handle).ok_or_else(|| "bevy_backdrop_surface_material_missing".to_string())?;
+    material.uniform.corner_cut.y = border.as_ref().map_or(0.0, |border| border.width.max(0.0));
+    material.uniform.border_edges = border.map_or([Vec4::ZERO; 4], |border| {
+        border.colors.unwrap_or([border.color; 4]).map(Vec4::from_array)
+    });
     Ok(())
 }
 

@@ -162,9 +162,4 @@ export const installRemotePreviewLifecycle = () => {
     return true;
 };
 
-export const __resetRemotePreview = () => {
-    state.frames.clear();
-    state.captureSource = null;
-};
-
 installRemotePreviewLifecycle();

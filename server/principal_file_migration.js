@@ -81,7 +81,3 @@ export async function reconcilePrincipalFilePath({ projectRoot, meta, authentica
         throw error;
     }
 }
-
-export const __PRINCIPAL_FILE_MIGRATION_TEST_ONLY__ = {
-    readLegacyLocation
-};

@@ -2,24 +2,11 @@ import {
     CONTACTS_V1_ARCHITECTURE_DECISION,
     createContactsConnectorContract
 } from './connector_contract.js';
-import { toText as normalizeText } from '../shared/scalars.js';
+import { toText as normalizeText, toFiniteNumber } from '../shared/scalars.js';
+// iCloud Apple-ID auth normalization is shared with the mail connector.
+import { normalizeAuthConfig } from '../mail/icloud_connector_normalization.js';
 
 const isNodeRuntime = () => typeof process !== 'undefined' && !!process.versions?.node;
-
-const toFiniteNumber = (value, fallback = null) => {
-    if (value === null || value === undefined || value === '') return fallback;
-    const number = Number(value);
-    return Number.isFinite(number) ? number : fallback;
-};
-
-const normalizeAuthConfig = (auth = {}) => {
-    const username = normalizeText(auth.username || auth.user || auth.apple_id || auth.appleId || auth.email);
-    const password = normalizeText(auth.password || auth.app_password || auth.appPassword);
-    return {
-        username: username || null,
-        password: password || null
-    };
-};
 
 export const normalizeIcloudContactsConnectorConfig = ({
     provider = 'icloud_carddav',

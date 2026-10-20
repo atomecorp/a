@@ -26,9 +26,11 @@ export async function releaseInputs(root) {
     if (!/^\d+(?:\.\d+){1,2}$/.test(productVersion)) throw new Error('atome/version.txt must hold a numeric Android version name');
     // Tauri requires semantic versions; a two-component product version gains .0.
     const versionName = productVersion.split('.').length === 2 ? `${productVersion}.0` : productVersion;
-    if (!/^[a-zA-Z]\w*(?:\.[a-zA-Z]\w*)+$/.test(desktop.identifier) || desktop.identifier.endsWith('.debug')) throw new Error('Invalid canonical Android release identifier');
+    // Tauri merges tauri.android.conf.json over tauri.conf.json: the Android package is the merged identifier.
+    const packageName = config.identifier ?? desktop.identifier;
+    if (!/^[a-zA-Z]\w*(?:\.[a-zA-Z]\w*)+$/.test(packageName) || packageName.endsWith('.debug')) throw new Error('Invalid canonical Android release identifier');
     nextVersionCode(config.bundle?.android?.versionCode);
-    return { source, config, productVersion, versionName, packageName: desktop.identifier, versionCode: config.bundle.android.versionCode };
+    return { source, config, productVersion, versionName, packageName, versionCode: config.bundle.android.versionCode };
 }
 
 export async function createRelease(root, inputs, remoteCodes, requested) {

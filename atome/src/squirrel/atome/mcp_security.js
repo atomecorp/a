@@ -45,17 +45,25 @@ const DEFAULT_ACTOR_CAPABILITIES = Object.freeze([
     'voice.read',
     'ai.read',
     'ai.execute',
-    // Watching television or a YouTube video for the user (ephemeral, no data written).
+    // Watching television or an online video for the user (ephemeral, no data written).
     'tv.read',
     'tv.control',
     'youtube.read',
     'youtube.control',
+    'peertube.read',
+    'peertube.control',
     'apple_music.read',
     'apple_music.control',
     'apple_music.write',
     'music.read', 'music.control', 'music.write',
     // Private itineraries and guidance on this device.
     'gps.read', 'gps.control',
+    // Private shopping list of the account.
+    'shopping.read', 'shopping.write', 'food.read',
+    // The user's own Sport activities, sessions and training log.
+    'training.read', 'training.write',
+    // How far the user's home has grown with their health objectives (counts, never health values).
+    'progression.read', 'progression.write',
     'audit.read'
 ]);
 

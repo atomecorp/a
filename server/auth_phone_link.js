@@ -71,7 +71,9 @@ export function createPhoneLinkAuth({ query, transaction, findByPhone, findById,
             await proof.limit(`device:${keyId}`, 10, 3600000);
             await proof.limit(`network:${proof.keyedIndex(network)}`, 20, 3600000);
             const account = await findByPhone(phone);
-            if (phoneChange && (account || typeof replacePhone !== 'function')) reject();
+            // A number held by another account is only told after the SMS proves it:
+            // before that, the answer is the same whether the number is taken or not.
+            if (phoneChange && (account?.user_id === phoneChange.principal_id || typeof replacePhone !== 'function')) reject();
             const registered = await query('get', 'SELECT * FROM auth_device_keys WHERE key_id = ?', [keyId]);
             if (registered && (registered.revoked_ms !== null || registered.principal_id !== (phoneChange?.principal_id || account?.user_id))) reject();
             // Only a new attempt from the same device supersedes its predecessor.
@@ -160,7 +162,16 @@ export function createPhoneLinkAuth({ query, transaction, findByPhone, findById,
             const initiating = await sessions.read(changing.session_id);
             if (initiating.principal_id !== changing.principal_id || initiating.key_id !== value.key_id) reject();
             if (initiating.restricted_until_ms > now()) reject('auth_device_cooling_off');
-            if (existing || typeof replacePhone !== 'function') reject();
+            if (typeof replacePhone !== 'function') reject();
+            if (existing) {
+                // Proven owner of a number another account holds: nothing moves; that
+                // account opens through its trusted device or its recovery code.
+                const consumed = await query('run', `UPDATE auth_link_attempts SET state = 'consumed'
+                    WHERE attempt_id = ? AND state IN ('sent', 'approved', 'verified_payment')`, [value.attempt_id]);
+                if (Number(consumed.changes) !== 1) reject();
+                await proof.audit('phone_change_taken', changing.principal_id, value.attempt_id);
+                return { ok: true, phoneTaken: true };
+            }
             await replacePhone(changing.principal_id, phone);
             account = await findById(changing.principal_id);
             if (!account || account.phone !== phone) reject();

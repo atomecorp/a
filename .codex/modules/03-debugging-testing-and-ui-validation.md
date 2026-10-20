@@ -66,7 +66,6 @@ Do not run a milestone command absent from the current manifest or invent an equ
 - Include Molecule tests for Molecule changes; widen to `check:m1` when guardrails may be affected.
 - Include server verification when the modified server/API path reaches that surface.
 - Use real UI execution when interaction or rendering is involved; visual inspection alone is insufficient.
-- Inspect legacy `MTrax` references for Molecule-owned behavior and handle them under [module 04](04-feature-work-cleanup-and-framework-reuse.md).
 
 Run the direct reproduction and relevant surrounding checks before declaring success. Add or update the smallest meaningful persistent test under `tests/` when an affected runtime contract lacks required coverage. Do not invent tests that merely restate the implementation. For documentation-only edits, validate links, references, consistency, traceability, and diff scope; application runtime tests are required only when the task changes or makes a new verification claim about application behavior.
 

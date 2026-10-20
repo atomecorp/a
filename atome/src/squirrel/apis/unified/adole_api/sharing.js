@@ -1,13 +1,9 @@
 import { TauriAdapter, FastifyAdapter } from '../adole.js';
 import { isTauriRuntime } from './runtime.js';
 import { getSessionState } from './session.js';
+import { with_callback } from './activities_support.js';
 
 const adapters = { tauri: TauriAdapter, fastify: FastifyAdapter };
-
-const with_callback = (result, callback) => {
-    if (typeof callback === 'function') callback(result);
-    return result;
-};
 
 const requireAuthenticatedUser = () => {
     const state = getSessionState();

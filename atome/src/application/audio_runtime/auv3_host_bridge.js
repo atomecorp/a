@@ -59,8 +59,6 @@ const normalizeClock = (payload = {}) => ({
 
 let unsubscribeClockStream = null;
 
-export const readAuv3HostClock = () => state.lastClock;
-
 export const subscribeAuv3HostClock = (listener, env = globalThis) => {
     if (typeof listener !== 'function') return () => false;
     if (!isAuv3HostClockAvailable(env)) return () => false;

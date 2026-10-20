@@ -75,12 +75,13 @@ export function createPairingClient({ devices, approver, send, token, ensureSess
             return accept(result, scope, approve?.record, deviceClass);
         },
         // New device: a request code and a match number to show and to speak.
-        async startPairing({ handle = '', deviceClass, platform = 'web', label = '' } = {}) {
+        async startPairing({ handle = '', phone = '', deviceClass, platform = 'web', label = '' } = {}) {
             const scope = newScope();
             const device = await devices.forScope(scope);
             const pre = await request('pair-start-challenge', { sessionKey: device.publicKey });
             const approve = await registerApprove(pre.register, deviceClass, scope);
-            const result = await request('pair-start', { sessionKey: device.publicKey, handle: String(handle || '').trim() || undefined, connectionProof,
+            const result = await request('pair-start', { sessionKey: device.publicKey, handle: String(handle || '').trim() || undefined,
+                phone: String(phone || '').trim() || undefined, connectionProof,
                 approve: approve?.approve || null, deviceMeta: { platform, label }, deviceClass });
             const attempt = { scope, pairId: result.pairId, code: result.code, matchNumber: result.matchNumber,
                 expiresAt: result.expiresAt, approve: approve?.record || null, deviceClass };
@@ -223,13 +224,14 @@ export function createPairingClient({ devices, approver, send, token, ensureSess
             await request('recovery-code-set', { ...await approval('recovery-code-set', { subject: { verifier } }), verifier });
             return { ok: true, code };
         },
-        async startRecovery({ handle, code, platform = 'web', label = '' } = {}) {
+        async startRecovery({ handle = '', phone = '', code, platform = 'web', label = '' } = {}) {
             const core = readRecoveryCode(code);
             const scope = newScope();
             const device = await devices.forScope(scope);
             const pre = await request('recovery-start-challenge', { sessionKey: device.publicKey });
             const approve = await registerApprove(pre.register, 'personal', scope);
-            const result = await request('recovery-start', { handle: String(handle || '').trim(), code: core, sessionKey: device.publicKey, connectionProof,
+            const result = await request('recovery-start', { handle: String(handle || '').trim() || undefined,
+                phone: String(phone || '').trim() || undefined, code: core, sessionKey: device.publicKey, connectionProof,
                 approve: approve?.approve || null, deviceMeta: { platform, label } });
             const attempt = { scope, recoveryId: result.recoveryId, notBefore: result.notBefore, approve: approve?.record || null };
             await devices.put('recovery-attempt', attempt);

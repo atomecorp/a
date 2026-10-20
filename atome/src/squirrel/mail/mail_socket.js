@@ -1,4 +1,4 @@
-import { toText as normalizeText } from '../shared/scalars.js';
+import { toText as normalizeText, toFiniteNumber } from '../shared/scalars.js';
 const DEFAULT_TIMEOUT_MS = 15000;
 
 const isIpLikeHost = (value) => /^(\d{1,3}\.){3}\d{1,3}$/.test(String(value || '')) || String(value || '').includes(':');
@@ -7,12 +7,6 @@ const resolveServername = (transport = {}) => {
     if (explicit) return explicit;
     const host = normalizeText(transport.host || '');
     return host && !isIpLikeHost(host) ? host : undefined;
-};
-
-const toFiniteNumber = (value, fallback) => {
-    if (value === null || value === undefined || value === '') return fallback;
-    const number = Number(value);
-    return Number.isFinite(number) ? number : fallback;
 };
 
 const waitForEvent = (emitter, successEvent, errorEvent = 'error') => new Promise((resolve, reject) => {

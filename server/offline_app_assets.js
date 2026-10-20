@@ -11,7 +11,8 @@ export async function registerOfflineAppAssets(server, { staticRoot, eveStaticRo
             if (entry.name.startsWith('.') || /^(private|temp|tests|node_modules|documentations|database_storage|user_data)$/i.test(entry.name)) continue;
             const child = path.posix.join(relative, entry.name);
             if (entry.isDirectory()) { await walk(root, prefix, child); continue; }
-            if (!entry.isFile() || !/\.(js|mjs|json|html|css|svg|woff2?|ttf|otf|wasm|png|ico|jpe?g|webp|gif)$/i.test(entry.name)) continue;
+            // pfb / bcmap: the PDF engine's standard fonts and character maps (vendor/pdfjs), read offline too.
+            if (!entry.isFile() || !/\.(js|mjs|json|html|css|svg|woff2?|ttf|otf|wasm|png|ico|jpe?g|webp|gif|pfb|bcmap)$/i.test(entry.name)) continue;
             if (/^(auth-link\.(html|js)|sw\.js)$/.test(child)) continue;
             const bytes = await readFile(path.join(root, child));
             assets.push({ url: `${prefix}${child}`, digest: createHash('sha256').update(bytes).digest('hex') });

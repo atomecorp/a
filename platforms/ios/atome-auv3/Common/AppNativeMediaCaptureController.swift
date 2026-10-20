@@ -49,7 +49,7 @@ final class AppNativeMediaCaptureController: NSObject {
              "media_camera_preview_stop":
             return true
         default:
-            return false
+            return barcodeCommands.contains(command)
         }
     }
 
@@ -87,6 +87,8 @@ final class AppNativeMediaCaptureController: NSObject {
             readCameraPreviewFrame(completion: completion)
         case "media_camera_preview_stop":
             stopCameraPreview(completion: completion)
+        case _ where Self.barcodeCommands.contains(command):
+            handleBarcode(command: command, completion: completion)
         default:
             completion(["success": false], "Unsupported native media command: \(command)")
         }

@@ -89,3 +89,31 @@ est le seul module à connaître Basic Pitch et TensorFlow.js. `midi_writer.js`,
 sorties (une liste de notes). En changer — pour ONNX Runtime Web, déjà vendoré
 sous `atome/src/assets/vendor/onnxruntime-web/`, ou pour autre chose — se fait
 dans ce seul fichier.
+
+---
+
+## Dépendance embarquée à attribution — Lecteur de livres (PDF)
+
+| Composant | Licence | Rôle |
+|---|---|---|
+| [pdf.js](https://github.com/mozilla/pdf.js) (`pdfjs-dist` 6.4.299) | **Apache 2.0** | ouverture et rastérisation des pages PDF du lecteur « Livre » |
+| Polices standard de pdf.js (Foxit, Liberation) | BSD (Foxit), **SIL OFL 1.1** (Liberation) | polices des PDF qui n'embarquent pas les leurs |
+| Décodeurs d'images de pdf.js (OpenJPEG, JBIG2, QCMS) | BSD-2-Clause (OpenJPEG), Apache 2.0 (JBIG2 de pdf.js), MIT (QCMS) | images JPEG 2000 / JBIG2, profils ICC |
+
+Copiés sans modification par `scripts/bundle-pdfjs.js` sous `atome/src/assets/vendor/pdfjs/` (avec `LICENSE`, `standard_fonts/LICENSE_*`
+et `wasm/LICENSE_*`), servis sur les quatre cibles avec l'arbre `atome/`. Consommé par le seul `eVe/domains/books/pdf_document.js`.
+MuPDF n'est **pas** utilisé (AGPLv3, incompatible avec la licence MIT d'Atome sans licence commerciale). L'EPUB est lu par un moteur
+interne (`eVe/domains/books/epub_document.js`), sans dépendance.
+
+
+## Données embarquées à attribution — Catalogue d'aliments de la liste de courses
+
+| Données | Licence | Rôle |
+|---|---|---|
+| [Table de composition nutritionnelle des aliments Ciqual 2025](https://doi.org/10.57745/RDMHWY), ANSES, mise à jour du 19/11/2025 | **Licence Ouverte / Open Licence 2.0 (Etalab)** | aliments génériques par rayon, noms FR/EN, énergie (kcal/100 g) |
+
+Extrait par `scripts/generate_food_catalogue.mjs` (sélection des aliments qu'on achète, noms raccourcis, une entrée par nom et par rayon)
+dans `atome/src/assets/food/ciqual_2025.json`, servi sur les quatre cibles avec l'arbre `atome/`. Consommé par le seul
+`eVe/domains/shopping/food_catalogue.js`. La licence autorise la réutilisation et la redistribution, y compris commerciale, à
+condition de **mentionner la source et la date de sa dernière mise à jour** : « Anses. 2025. Table de composition nutritionnelle des
+aliments Ciqual » (bloc `source` de l'asset et cette page ; rien n'est affiché dans l'interface, conformément au contrat zen).

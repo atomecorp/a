@@ -55,6 +55,8 @@ Validation : tests persistants et compilations iOS simulateur arm64/app/AUv3 et 
   - **Limite résiduelle documentée** : une réponse native déjà en vol au moment précis du scellement transite encore par le résolveur global du pont (`__ATOME_NATIVE_INVOKE_RESOLVE` sur iOS).
 - **Projets.** Les cellules ne sont rendues que dans le Dashboard de l'utilisateur. L'instance embarquée (module Matrix dans un projet) n'a pas de moniteur santé. Une cellule santé n'est ni glissable dans un projet, ni renommable, ni copiable (Mystic bloqué).
 - **Stockage.** Les valeurs restent en mémoire, sans record, sans annuler/refaire, sans synchro, sans journal. Seuls les ids sélectionnés sont persistés, dans le profil privé.
+- **Accueil eVe Basic (20 oct. 2026).** Aucun moniteur n'est gagné par la progression et aucun n'est choisi à la place de l'utilisateur : Basic montre Contacts, Agenda et Objectifs tant que la sélection `health_monitors` est vide, puis les moniteurs choisis au-dessus de l'Atom, jusqu'à six (`dashboard_mystic_grid.js#dashboardBasicMonitorAt`).
+- **Progression du Dashboard (20 oct. 2026).** Les briques gagnées par un objectif de santé sont des faits `record.dashboard_unlock` privés (`eVe/domains/dashboard/dashboard_progression_runtime.js`). Ils ne portent qu'un décompte (`{ source, met, required, window_days }` : jours tenus ou séances), jamais une valeur, et le contrat refuse toute autre clé. L'historique n'est lu que pour l'utilisateur dans l'app (source `ui`, hors barrière santé) ; un appel IA, MCP ou distant ne compte que les séances déclarées.
 
 ## Rafraîchissement
 
@@ -172,3 +174,7 @@ Pour l'IMC, seul l'échantillon natif HealthKit est lu ; aucun IMC dérivé n'es
 4. Activer l'accès dans les réglages de Health Connect, puis revenir dans l'app : la reprise doit être automatique.
 
 Opérations externes non faites : déclaration Health Connect dans la Play Console, page de politique de confidentialité publique, revue App Store de l'usage HealthKit.
+
+## Sport sessions (2026-10-20)
+
+The Dashboard's Sport sessions (`eVe/domains/dashboard/dashboard_training_session.js`) subscribe to the `heart_rate` monitor of this owner while a session runs. The latest reading, when fresher than two minutes, is recorded into the user's own session journal as a `measure` transition with `source: 'health'` when a step ends; the recovery after a session comes from `readHistory('heart_rate', { detail: true })` and `cardiacRecovery`. Health values never leave that journal, and MCP or assistant callers get the log without heart rates (`training_runtime.js`, `healthAccessAllowedNow`). Not yet verified on a device.

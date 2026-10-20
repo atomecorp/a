@@ -118,17 +118,3 @@ export const persistRuntimeMailPreferences = (env = globalThis, prefs = {}, fall
     }
     return normalized;
 };
-
-export const clearPersistedRuntimeMailPreferences = (env = globalThis) => {
-    if (env && typeof env === 'object' && '__eveRuntimeMailPreferences' in env) {
-        delete env.__eveRuntimeMailPreferences;
-    }
-    const storage = readStorage(env);
-    if (storage && typeof storage.removeItem === 'function') {
-        try {
-            storage.removeItem(MAIL_RUNTIME_SETTINGS_KEY);
-        } catch (_) {
-            // Ignore storage cleanup failures.
-        }
-    }
-};

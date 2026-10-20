@@ -1,9 +1,11 @@
-// Renders every sentence eVe speaks on her own (startup, ready, assistant and
-// voice-activation messages) with the shipped Siwis voice, so the
+// Renders every sentence eVe speaks on her own (startup, ready, assistant,
+// voice-activation and first-launch guide messages) with the shipped Siwis voice, so the
 // app plays them without running a second ONNX engine next to the wake
 // detector. `--check` prints the phonemes only; review them after any text change.
+// `--missing` renders only the sentences the index lacks and keeps every other line
+// as it is (the voice is not deterministic: a full run rewrites them all).
 //
-//   node scripts/generate_voice_lines.mjs [--check]
+//   node scripts/generate_voice_lines.mjs [--check] [--missing]
 import { createHash } from 'node:crypto';
 import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -25,11 +27,12 @@ const spokenTexts = () => {
     const enroll = (step, detail = {}) => eveT('eve.voice.wake.enroll.' + step, '', detail);
     const takes = WAKE_ENROLLMENT_TAKES;
     return [...new Set([
-        eveT('eve.voice.assistant.startup_line'),
+        eveT('eve.voice.assistant.startup_line'), eveT('eve.voice.assistant.idle_hang_up'),
         ...eveTList('eve.voice.assistant.ready_lines.after_wait'),
         ...eveTList('eve.voice.assistant.ready_lines.direct'),
         ...byPrefix('eve.voice.assistant.error.'),
         ...byPrefix('eve.voice.wake.error.'),
+        ...byPrefix('eve.first_launch.voice.'),
         enroll('intro', { takes }),
         ...Array.from({ length: takes }, (_, take) => [enroll('say', { take: take + 1, takes }), enroll('repeat', { take: take + 1, takes })]).flat(),
         enroll('speak_freely', { seconds: FREE_SPEECH_MS / 1000 }), enroll('silence', { seconds: AMBIENT_MS / 1000 }),
@@ -49,9 +52,12 @@ const modelBytes = readFileSync(MODEL);
 const session = await ort.InferenceSession.create(modelBytes, { executionProviders: ['wasm'], graphOptimizationLevel: 'all' });
 const { noise_scale: noise, length_scale: length, noise_w: noiseW } = config.inference;
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
+const missing = process.argv.includes('--missing');
+const previous = missing ? JSON.parse(readFileSync(path.join(OUTPUT, 'index.json'), 'utf8')).lines : {};
 const lines = {};
 mkdirSync(OUTPUT, { recursive: true });
 for (const text of texts) {
+    if (previous[text]) { lines[text] = previous[text]; continue; }
     const { ids, phonemes } = encodeFrenchPhonemes(text, config.phoneme_id_map);
     const result = await session.run({
         input: new ort.Tensor('int64', BigInt64Array.from(ids, BigInt), [1, ids.length]),

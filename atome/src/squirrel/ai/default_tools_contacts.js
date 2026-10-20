@@ -1,8 +1,8 @@
-import { PERSONAL_IMPORT_TOOLS, personalImportToolResult } from '#shared/personal_import_tools.js';
+import { PERSONAL_IMPORT_TOOLS, personalImportInputSchema, personalImportToolResult } from '#shared/personal_import_tools.js';
 export const registerContactsDefaultTools = ({ Agent, safeString, prepareContactsApi, requireContactsApi }) => {
     for (const tool of PERSONAL_IMPORT_TOOLS.filter(tool => tool.name.startsWith('contacts.'))) Agent.registerTool({
         name: tool.name, description: tool.description, capabilities: [tool.write ? 'contacts.write' : 'contacts.read'],
-        risk_tier: tool.write ? 'MEDIUM' : 'LOW', parameters: { type: 'object', properties: tool.properties, required: tool.param ? [tool.param] : [] },
+        risk_tier: tool.write ? 'MEDIUM' : 'LOW', parameters: personalImportInputSchema(tool),
         handler: async ({ params = {} }) => { const api = await requireContactsApi(); return personalImportToolResult(tool,
             await (tool.param ? api[tool.method](params[tool.param], params) : api[tool.method](params))); }
     });
@@ -11,6 +11,7 @@ export const registerContactsDefaultTools = ({ Agent, safeString, prepareContact
         description: 'List contact sources currently bridged into eVe.',
         capabilities: ['contacts.read'],
         risk_tier: 'LOW',
+        parameters: { type: 'object', additionalProperties: false, properties: {} },
         handler: async () => {
             const api = await prepareContactsApi();
             return api.sources();
@@ -169,6 +170,10 @@ export const registerContactsDefaultTools = ({ Agent, safeString, prepareContact
         description: 'Import contacts from iCloud CardDAV into private canonical contacts.',
         capabilities: ['contacts.write'],
         risk_tier: 'LOW',
+        parameters: { type: 'object', properties: {
+            source_id: { type: 'string' }, source_key: { type: 'string' }, auth_ref: { type: 'string', description: 'Credential vault reference.' },
+            addressbook_url: { type: 'string' }
+        } },
         handler: async ({ params }) => {
             const api = await requireContactsApi();
             if (!api || typeof api.importIcloudContacts !== 'function') {
@@ -206,6 +211,7 @@ export const registerContactsDefaultTools = ({ Agent, safeString, prepareContact
         description: 'Open the existing eVe contact panel.',
         capabilities: ['contacts.read'],
         risk_tier: 'LOW',
+        parameters: { type: 'object', additionalProperties: false, properties: {} },
         handler: async () => {
             const api = await prepareContactsApi();
             return api.openPanel();

@@ -200,6 +200,7 @@ const RESPONSE_PAYLOADS = {
         recoveryId: message.recoveryId,
         notBefore: message.notBefore,
         recoveryPending: message.recoveryPending,
+        phoneTaken: message.phoneTaken,
         recoveryCodeRequired: message.recoveryCodeRequired,
         devices: message.devices,
         handle: message.handle,

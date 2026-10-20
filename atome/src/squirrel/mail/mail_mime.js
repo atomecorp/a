@@ -292,6 +292,8 @@ const dotStuffMessage = (message = '') => String(message || '')
 
 export {
     quoteImapString,
+    decodeBytesToText,
+    decodeBase64Bytes,
     parseRawEmail,
     buildDestinationMailboxCandidates,
     buildPlainTextMessage,

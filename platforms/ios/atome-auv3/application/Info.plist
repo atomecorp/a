@@ -106,6 +106,8 @@
 	<string>Atome utilise votre position à votre demande pour la météo et le guidage GPS, y compris pendant un trajet en arrière-plan.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Atome utilise le microphone pour enregistrer du son et l'audio des vidéos.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>eVe utilise la reconnaissance vocale pour comprendre ce que tu lui dis, et faire à ta place ce que tu lui demandes.</string>
 	<key>NSMotionUsageDescription</key>
 	<string>Atome compte les pas mesurés par cet iPhone pour le moniteur « Pas de cet iPhone » que vous avez choisi.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>

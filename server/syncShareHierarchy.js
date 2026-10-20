@@ -1,4 +1,5 @@
-const parseJson = (value, fallback = null) => {
+// Share rows store permissions and property lists as JSON text; one reader for every share module.
+export const parseJson = (value, fallback = null) => {
     if (value == null) return fallback;
     if (typeof value === 'object') return value;
     try { return JSON.parse(value); } catch (_) { return fallback; }

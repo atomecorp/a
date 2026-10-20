@@ -1,5 +1,5 @@
 {
-  "packageName": "com.squirrel.desktop",
+  "packageName": "one.atome.app",
   "track": "internal",
   "serviceAccountFile": "/absolute/path/outside/the/repository/google-play-service-account.json",
   "uploadCertificateSha256": "",

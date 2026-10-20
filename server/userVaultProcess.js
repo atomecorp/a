@@ -102,6 +102,7 @@ const handleOperation = async (operation, payload = {}) => {
             order: payload.order || 'asc'
         });
     }
+    if (operation === 'stream:of-atome') return db.streamOfAtome(payload.atome_id || payload.atomeId);
     if (operation === 'stream:events') {
         const streamId = String(payload.stream_id || payload.streamId || '');
         const cursor = Math.max(0, Number(payload.cursor) || 0);
@@ -156,6 +157,18 @@ const handleOperation = async (operation, payload = {}) => {
             streamIds
         );
         return Object.fromEntries((rows || []).map((row) => [row.stream_id, Number(row.sequence || 0)]));
+    }
+    // Objects this vault has placed on a teleport surface (surface loss / reconnect).
+    if (operation === 'teleport:hosted') {
+        const surfaceId = String(payload.surface_id || payload.surfaceId || '');
+        if (!surfaceId) throw new Error('vault_surface_required');
+        const rows = await db.default.query(
+            'all',
+            `SELECT DISTINCT atome_id FROM particles
+             WHERE particle_key = 'teleport_surface_id' AND particle_value IN (?, ?)`,
+            [surfaceId, JSON.stringify(surfaceId)]
+        );
+        return (rows || []).map((row) => row.atome_id);
     }
     throw new Error('vault_operation_not_allowed');
 };

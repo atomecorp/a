@@ -7,13 +7,12 @@
 //   accept  → REMOTE committed, `teleport_surface_id` finally moves
 //   decline / timeout / target vanished → rollback, nothing was ever removed
 //
-// State transitions live in `teleportState.js`; commits go through the ordinary
-// event pipeline (`commitAtomeEvent`) so authorization, history and realtime
-// broadcast stay owned by the modules that already own them.
+// State transitions live in `teleportState.js`. Every object lives in its owner's
+// vault: reads, commits (with their sharing authorization) and the realtime publish
+// go through the connection's vault router and sync runtime, the same owners as
+// `events/commit`. The shared database holds no user object.
 
-import db from '../database/adole.js';
 import crypto from 'crypto';
-import { commitAtomeEvent } from './atomeRoutes.orm.js';
 import { isWsApiPrincipalProvisioned, resolveWsApiPrincipal } from './wsApiIdentity.js';
 import {
     getWsApiSurface,
@@ -33,7 +32,7 @@ import {
     buildReturnTeleportPatch,
     readTeleportState
 } from '../atome/src/shared/teleport_state.js';
-import { SURFACE_CAPABILITIES, hasSurfaceCapability } from './surfaceGrants.js';
+import { SURFACE_CAPABILITIES, hasSurfaceCapability, listSurfaceGrants } from './surfaceGrants.js';
 import { wsResponse, wsErrorResponse } from './wsResponse.js';
 
 // Family-bound aliases over the shared envelope (server/wsResponse.js).
@@ -56,22 +55,32 @@ export const TELEPORT_OFFER_TIMEOUT_MS = (() => {
 // sessionId -> { atomeId, ownerId, targetUserId, targetSurfaceId, sourceSurfaceId, timer }
 const pendingOffers = new Map();
 
-async function readAtomeProperties(atomeId) {
-    const atome = await db.getAtome(atomeId);
-    if (!atome) return null;
-    return atome.properties || atome.data || {};
+// { router, sync } of a ws/api connection, kept with an offer for its timeout.
+function storeOf(connection) {
+    const router = connection?._wsApiVaultRouter;
+    if (!router) throw new Error('teleport_vault_unavailable');
+    return { router, sync: connection._wsApiSyncRuntime || null };
 }
 
-async function commitTeleportPatch(atomeId, patch, principalId) {
-    return commitAtomeEvent({
-        event: {
+// Null when the object is missing or not readable by `principalId`.
+async function readAtomeProperties(store, principalId, atomeId) {
+    const state = await store.router.getState(String(principalId), atomeId);
+    return state ? (state.properties || state.particles || {}) : null;
+}
+
+async function commitTeleportPatch(store, atomeId, patch, principalId) {
+    try {
+        const entry = await store.router.commit(String(principalId), {
             kind: 'set',
             atome_id: atomeId,
             payload: { props: patch },
             actor: { type: 'user', id: String(principalId) }
-        },
-        authenticatedUserId: String(principalId)
-    });
+        });
+        if (entry.inserted) await store.sync?.publish(entry.event);
+        return { ok: true, event: entry.event };
+    } catch (error) {
+        return { ok: false, error: String(error?.message || error) };
+    }
 }
 
 function forgetOffer(sessionId) {
@@ -87,13 +96,13 @@ async function rollbackOffer(sessionId, reason) {
     const pending = forgetOffer(sessionId);
     if (!pending) return { ok: false, error: 'teleport_session_unknown' };
 
-    const properties = await readAtomeProperties(pending.atomeId);
+    const properties = await readAtomeProperties(pending.store, pending.ownerId, pending.atomeId);
     if (!properties) return { ok: false, error: 'teleport_atome_missing' };
 
     const built = buildCancelTeleportPatch(properties, { sessionId, reason });
     if (!built.ok) return built;
 
-    const committed = await commitTeleportPatch(pending.atomeId, built.patch, pending.ownerId);
+    const committed = await commitTeleportPatch(pending.store, pending.atomeId, built.patch, pending.ownerId);
     if (!committed.ok) return { ok: false, error: committed.error };
 
     // Both ends must learn the object stayed put, including the source that is
@@ -150,9 +159,9 @@ async function handleOffer(message, connection, userId) {
     const target = getWsApiSurface(targetUserId, targetSurfaceId);
     if (!target) return errorResponse(message, 'teleport_target_offline');
 
-    const properties = await readAtomeProperties(atomeId);
+    const store = storeOf(connection);
+    const properties = await readAtomeProperties(store, userId, atomeId);
     if (!properties) return errorResponse(message, 'teleport_atome_missing');
-    if (!await db.canWrite(atomeId, userId)) return errorResponse(message, 'teleport_write_denied');
 
     // One offer in flight per atome: a second push while the first is unconfirmed
     // would leave two sessions racing to own the same object.
@@ -169,10 +178,12 @@ async function handleOffer(message, connection, userId) {
     });
     if (!built.ok) return errorResponse(message, built.error);
 
-    const committed = await commitTeleportPatch(atomeId, built.patch, userId);
+    // The vault commit refuses a principal that may not write the object.
+    const committed = await commitTeleportPatch(store, atomeId, built.patch, userId);
     if (!committed.ok) return errorResponse(message, committed.error);
 
     pendingOffers.set(sessionId, {
+        store,
         atomeId,
         ownerId: String(userId),
         targetUserId,
@@ -220,7 +231,7 @@ async function handleAccept(message, connection, userId) {
         return errorResponse(message, 'teleport_not_target_surface');
     }
 
-    const properties = await readAtomeProperties(pending.atomeId);
+    const properties = await readAtomeProperties(pending.store, pending.ownerId, pending.atomeId);
     if (!properties) {
         await rollbackOffer(sessionId, 'atome_missing');
         return errorResponse(message, 'teleport_atome_missing');
@@ -232,7 +243,7 @@ async function handleAccept(message, connection, userId) {
     });
     if (!built.ok) return errorResponse(message, built.error);
 
-    const committed = await commitTeleportPatch(pending.atomeId, built.patch, pending.ownerId);
+    const committed = await commitTeleportPatch(pending.store, pending.atomeId, built.patch, pending.ownerId);
     if (!committed.ok) return errorResponse(message, committed.error);
 
     forgetOffer(sessionId);
@@ -278,20 +289,20 @@ async function handleDeclineOrCancel(message, connection, userId, reason) {
     return response(message, true, { session_id: sessionId, reason });
 }
 
-async function handleReturn(message, userId) {
+async function handleReturn(message, connection, userId) {
     const atomeId = String(message?.atome_id || message?.atomeId || '').trim();
     if (!atomeId) return errorResponse(message, 'teleport_atome_required');
 
-    const properties = await readAtomeProperties(atomeId);
+    const store = storeOf(connection);
+    const properties = await readAtomeProperties(store, userId, atomeId);
     if (!properties) return errorResponse(message, 'teleport_atome_missing');
-    if (!await db.canWrite(atomeId, userId)) return errorResponse(message, 'teleport_write_denied');
 
     const built = buildReturnTeleportPatch(properties, {
         toSurfaceId: message?.to_surface_id ?? message?.toSurfaceId
     });
     if (!built.ok) return errorResponse(message, built.error);
 
-    const committed = await commitTeleportPatch(atomeId, built.patch, userId);
+    const committed = await commitTeleportPatch(store, atomeId, built.patch, userId);
     if (!committed.ok) return errorResponse(message, committed.error);
 
     return response(message, true, {
@@ -301,30 +312,30 @@ async function handleReturn(message, userId) {
     });
 }
 
-async function handlePersist(message, userId) {
+async function handlePersist(message, connection, userId) {
     const atomeId = String(message?.atome_id || message?.atomeId || '').trim();
     if (!atomeId) return errorResponse(message, 'teleport_atome_required');
 
-    const properties = await readAtomeProperties(atomeId);
+    const store = storeOf(connection);
+    const properties = await readAtomeProperties(store, userId, atomeId);
     if (!properties) return errorResponse(message, 'teleport_atome_missing');
-    if (!await db.canWrite(atomeId, userId)) return errorResponse(message, 'teleport_write_denied');
 
     const built = buildPersistTeleportPatch(properties);
     if (!built.ok) return errorResponse(message, built.error);
 
-    const committed = await commitTeleportPatch(atomeId, built.patch, userId);
+    const committed = await commitTeleportPatch(store, atomeId, built.patch, userId);
     if (!committed.ok) return errorResponse(message, committed.error);
 
     return response(message, true, { atome_id: atomeId, state: TELEPORT_STATES.PERSISTED_REMOTE });
 }
 
-async function handleStateRead(message, userId) {
+async function handleStateRead(message, connection, userId) {
     const atomeId = String(message?.atome_id || message?.atomeId || '').trim();
     if (!atomeId) return errorResponse(message, 'teleport_atome_required');
-    if (!await db.canRead(atomeId, userId)) return errorResponse(message, 'teleport_read_denied');
 
-    const properties = await readAtomeProperties(atomeId);
-    if (!properties) return errorResponse(message, 'teleport_atome_missing');
+    // Missing and unreadable answer alike: existence is not disclosed.
+    const properties = await readAtomeProperties(storeOf(connection), userId, atomeId);
+    if (!properties) return errorResponse(message, 'teleport_read_denied');
 
     return response(message, true, {
         atome_id: atomeId,
@@ -357,9 +368,9 @@ export async function handleWsTeleportOperation(message, connection) {
         if (action === 'accept') return await handleAccept(message, connection, userId);
         if (action === 'decline') return await handleDeclineOrCancel(message, connection, userId, 'declined');
         if (action === 'cancel') return await handleDeclineOrCancel(message, connection, userId, 'cancelled');
-        if (action === 'return') return await handleReturn(message, userId);
-        if (action === 'persist') return await handlePersist(message, userId);
-        return await handleStateRead(message, userId);
+        if (action === 'return') return await handleReturn(message, connection, userId);
+        if (action === 'persist') return await handlePersist(message, connection, userId);
+        return await handleStateRead(message, connection, userId);
     } catch (error) {
         return errorResponse(message, error);
     }
@@ -370,7 +381,7 @@ export async function handleWsTeleportOperation(message, connection) {
 //   - offers awaiting that surface roll back, because nothing ever arrived;
 //   - objects already living there become DISCONNECTED, not returned — the user
 //     decides whether to bring them home (§16).
-export async function handleTeleportSurfaceLoss({ userId, surfaceId } = {}) {
+export async function handleTeleportSurfaceLoss({ userId, surfaceId, connection } = {}) {
     const lostSurfaceId = normalizeSurfaceId(surfaceId);
     const principalId = String(userId || '');
     if (!lostSurfaceId || !principalId) return { rolledBack: [], disconnected: [] };
@@ -384,67 +395,41 @@ export async function handleTeleportSurfaceLoss({ userId, surfaceId } = {}) {
         rolledBack.push(sessionId);
     }
 
-    const disconnected = [];
-    for (const row of await atomesHostedBySurface(lostSurfaceId) || []) {
-        const atomeId = row?.atome_id;
-        if (!atomeId) continue;
-        const properties = await readAtomeProperties(atomeId);
-        if (!properties) continue;
-        const built = buildDisconnectTeleportPatch(properties, { surfaceId: lostSurfaceId });
-        if (!built.ok) continue;
-        const ownerRow = await db.query('get', 'SELECT owner_id FROM atomes WHERE atome_id = ?', [atomeId]);
-        const ownerId = ownerRow?.owner_id ? String(ownerRow.owner_id) : principalId;
-        const committed = await commitTeleportPatch(atomeId, built.patch, ownerId);
-        if (committed.ok) disconnected.push(atomeId);
-    }
-
+    const disconnected = await patchHostedAtomes(storeOf(connection), principalId, lostSurfaceId, buildDisconnectTeleportPatch);
     return { rolledBack, disconnected };
 }
 
-/** Objects hosted by a surface, whatever their teleport state. Matches both the raw
- *  and JSON-encoded particle forms, since particles store either depending on the
- *  writer. */
-async function atomesHostedBySurface(surfaceId) {
-    return await db.query(
-        'all',
-        `SELECT atome_id FROM particles
-         WHERE particle_key = 'teleport_surface_id' AND particle_value IN (?, ?)`,
-        [surfaceId, JSON.stringify(surfaceId)]
-    ).catch(() => []);
+// The vaults that can have objects on a user's surface: the user's own, and those of
+// the principals granted access to one of the user's surfaces (cross-account teleport).
+async function hostingOwners(principalId) {
+    const { incoming } = await listSurfaceGrants({ principalId, role: 'incoming' });
+    return new Set([principalId, ...incoming.filter((grant) => grant.status === 'granted').map((grant) => grant.grantee_id)]);
+}
+
+// Applies `buildPatch` to every object the surface hosts, committed by its owner. A
+// patch that does not apply (e.g. not disconnected on reconnect) commits nothing, so
+// a reconnection never adds a meaningless event to an object's history.
+async function patchHostedAtomes(store, principalId, surfaceId, buildPatch) {
+    const patched = [];
+    for (const ownerId of await hostingOwners(principalId)) {
+        for (const atomeId of await store.router.teleportHostedAtomes(ownerId, surfaceId)) {
+            const properties = await readAtomeProperties(store, ownerId, atomeId);
+            if (!properties) continue;
+            const built = buildPatch(properties, { surfaceId });
+            if (!built.ok) continue;
+            if ((await commitTeleportPatch(store, atomeId, built.patch, ownerId)).ok) patched.push(atomeId);
+        }
+    }
+    return patched;
 }
 
 /** A surface came back with the same persisted id. Objects that went DISCONNECTED when
  *  it vanished become reachable again — REMOTE, or PERSISTED_REMOTE when the user had
  *  chosen to leave them there. §13: identity must survive a reconnection, so nothing is
  *  recreated and nothing is repatriated behind the user's back. */
-export async function handleTeleportSurfaceReconnect({ userId, surfaceId } = {}) {
+export async function handleTeleportSurfaceReconnect({ userId, surfaceId, connection } = {}) {
     const backSurfaceId = normalizeSurfaceId(surfaceId);
     const principalId = String(userId || '');
     if (!backSurfaceId || !principalId) return { restored: [] };
-
-    const restored = [];
-    for (const row of await atomesHostedBySurface(backSurfaceId) || []) {
-        const atomeId = row?.atome_id;
-        if (!atomeId) continue;
-        const properties = await readAtomeProperties(atomeId);
-        if (!properties) continue;
-        const built = buildReconnectTeleportPatch(properties, { surfaceId: backSurfaceId });
-        // Not disconnected: nothing to restore, and re-committing would add a
-        // meaningless event to the object's history on every reconnection.
-        if (!built.ok) continue;
-        const ownerRow = await db.query('get', 'SELECT owner_id FROM atomes WHERE atome_id = ?', [atomeId]);
-        const ownerId = ownerRow?.owner_id ? String(ownerRow.owner_id) : principalId;
-        const committed = await commitTeleportPatch(atomeId, built.patch, ownerId);
-        if (committed.ok) restored.push(atomeId);
-    }
-    return { restored };
-}
-
-// Test seam only: the pending map is process-local and must not leak between probes.
-export function __pendingTeleportSessions() {
-    return [...pendingOffers.keys()];
-}
-
-export function __clearPendingTeleportSessions() {
-    for (const sessionId of [...pendingOffers.keys()]) forgetOffer(sessionId);
+    return { restored: await patchHostedAtomes(storeOf(connection), principalId, backSurfaceId, buildReconnectTeleportPatch) };
 }

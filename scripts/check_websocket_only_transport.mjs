@@ -55,9 +55,12 @@ for (const relativePath of compositionFiles) {
     }
 }
 
-const syncRoute = fs.readFileSync(path.join(ROOT, 'server/server.js'), 'utf8');
+// /ws/sync is mounted by server.js on the runtime that server_services.js builds.
+const syncRoute = ['server/server.js', 'server/server_services.js']
+    .map((relativePath) => fs.readFileSync(path.join(ROOT, relativePath), 'utf8'))
+    .join('\n');
 if (!syncRoute.includes('authenticateWsSyncRequest') || syncRoute.includes('"account-events"')) {
-    failures.push('server/server.js: ws/sync authentication or scope guard missing');
+    failures.push('server/server.js + server/server_services.js: ws/sync authentication or scope guard missing');
 }
 
 if (failures.length) {

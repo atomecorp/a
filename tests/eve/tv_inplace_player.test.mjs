@@ -107,7 +107,7 @@ test('YouTube and YouTube live streams play through the YouTube player on the sa
     const { player, youtubeCalls } = setup({ streams: [{ kind: 'youtube_live', url: 'https://www.youtube.com/c/franceinfo/live', secure: true }] });
     const result = await player.play('tv1');
     expect(result.ok).toBe(true);
-    expect(youtubeCalls[0]).toEqual({ atomeId: 'tv1', videoId: 'NG7ZX42nZKc', title: 'TF1' });
+    expect(youtubeCalls[0]).toEqual({ atomeId: 'tv1', projectId: 'project', ref: 'NG7ZX42nZKc', title: 'TF1', tapTogglesFullscreen: false });
     await player.transport('pause', 'tv1');
     expect(youtubeCalls.at(-1)).toEqual({ action: 'pause' });
 });

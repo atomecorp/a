@@ -1,6 +1,6 @@
 import { test, expect } from 'vitest';
 import { createFinderPanelSurface } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_finder_runtime.js';
-import { searchYoutube } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_finder_data.js';
+import { searchOnlineVideos } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_finder_data.js';
 import { FastifyAdapter } from '../../atome/src/squirrel/apis/unified/adole.js';
 import { buildSelectionKey } from '../../eVe/intuition/tools/finder_record_model.js';
 
@@ -41,10 +41,10 @@ test('YouTube submits only on Enter, preserves pagination and ignores responses 
     const { runtime, draw, type, submit } = setup({ searchVideos: request => { requests.push(request); return new Promise(resolve => { finish = resolve; }); } });
     await runtime.applyToolContext({ owner: 'youtube', scope: 'youtube', query: '', source: { load: async () => [] } });
     draw(); await runtime.handleEvent({ type: 'finder.query.field.focus', key: 'query' });
-    type('piano'); expect(requests).toHaveLength(0); submit(); expect(requests).toEqual([{ query: 'piano', pageToken: '' }]);
+    type('piano'); expect(requests).toHaveLength(0); submit(); expect(requests).toEqual([{ provider: 'youtube', query: 'piano', pageToken: '' }]);
     finish({ records: [{ id: 'abcDEFghi12', type: 'image', name: 'Piano' }], nextPageToken: 'page2' });
     await new Promise(resolve => setTimeout(resolve, 0)); expect(runtime.readState().query).toBe('piano');
-    const page = runtime.handleEvent({ type: 'finder.youtube.more' }); expect(requests[1].pageToken).toBe('page2');
+    const page = runtime.handleEvent({ type: 'finder.video.more' }); expect(requests[1].pageToken).toBe('page2');
     await runtime.handleEvent({ type: 'finder.query.field.focus', key: 'query' }); type('drums');
     finish({ records: [{ id: 'late', type: 'image', name: 'Late' }], nextPageToken: '' }); await page;
     // Editing keeps the shown results until Return; the late page of the old
@@ -58,10 +58,10 @@ test('YouTube reads canonical WebSocket envelope, pagination and precise service
     const send = FastifyAdapter.ws.send;
     try {
         FastifyAdapter.ws.send = async () => ({ ok: true, status: 'ok', data: { ok: true, results: [{ videoId: 'abcDEFghi12', title: 'Piano', channel: 'Artist', thumbnail: 'https://example.test/thumb' }], nextPageToken: 'next' } });
-        expect(await searchYoutube({ query: 'piano' })).toMatchObject({ records: [{ id: 'abcDEFghi12', name: 'Piano' }], nextPageToken: 'next' });
+        expect(await searchOnlineVideos({ provider: 'youtube', query: 'piano' })).toMatchObject({ records: [{ id: 'abcDEFghi12', name: 'Piano' }], nextPageToken: 'next' });
         FastifyAdapter.ws.send = async () => ({ ok: true, data: { ok: false, error: 'youtube_quota_exceeded' } });
-        await expect(searchYoutube({ query: 'piano' })).rejects.toThrow('youtube_quota_exceeded');
+        await expect(searchOnlineVideos({ provider: 'youtube', query: 'piano' })).rejects.toThrow('youtube_quota_exceeded');
         FastifyAdapter.ws.send = async () => ({ ok: true, data: {} });
-        await expect(searchYoutube({ query: 'piano' })).rejects.toThrow('youtube_search_invalid_response');
+        await expect(searchOnlineVideos({ provider: 'youtube', query: 'piano' })).rejects.toThrow('youtube_search_invalid_response');
     } finally { FastifyAdapter.ws.send = send; }
 });

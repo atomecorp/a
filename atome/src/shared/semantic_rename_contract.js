@@ -1,7 +1,6 @@
 import { AtomeContractError } from './atome_contract_errors.js';
 import { hasObjectShape, normalizeStringField } from './atome_universal_contract.js';
 
-export const SEMANTIC_RENAME_VERSION = 1;
 export const SEMANTIC_RENAME_CANONICAL_PROPERTY = 'label';
 export const SEMANTIC_RENAME_EVENT_KIND = 'set';
 

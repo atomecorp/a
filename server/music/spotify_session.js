@@ -4,8 +4,10 @@ import { SocialError } from '../social/social_http.js';
 import { spotifyApi, spotifyFetch } from './spotify_http.js';
 import { musicError, MusicFailure } from '../../atome/src/squirrel/music/contracts.js';
 
-export const readMusicConfig = (env = process.env) => ({ clientId: String(env.SPOTIFY_CLIENT_ID || '').trim(),
-    publicBase: String(env.MUSIC_PUBLIC_BASE_URL || '').replace(/\/+$/, '') });
+// The user enters the Spotify Client ID and the Deezer profile in Passwords & keys;
+// the public base is the operator's server origin.
+export const readMusicConfig = async (vault, env = process.env) => ({ clientId: await vault.read('spotify') || '',
+    deezerProfile: await vault.read('deezer') || '', publicBase: String(env.MUSIC_PUBLIC_BASE_URL || '').replace(/\/+$/, '') });
 export const spotifyConfigured = config => {
     try { const url = new URL(config.publicBase); return !!config.clientId && url.protocol === 'https:' && !url.username && !url.password && !url.search && !url.hash && url.pathname === '/'; }
     catch { return false; }

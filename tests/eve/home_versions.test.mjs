@@ -32,7 +32,7 @@ for (const locale of ['fr', 'en']) for (const width of [300, 452]) {
         setEveLocale(locale);
         const state = createHomePanelState();
         state.expanded = 'settings';
-        Object.assign(state.subsections, { 'settings.preferences': true, 'preferences.server': true });
+        Object.assign(state.subsections, { 'settings.security': true, 'account.server': true });
         state.server.versions = { atome: '1.19', eve: '1.20', server: '1.17' };
         const intents = [];
         const render = () => flatten(buildHomeContent(state, { emit: intent => intents.push(intent), bodyWidth: width, editing }));

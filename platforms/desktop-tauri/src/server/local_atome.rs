@@ -39,6 +39,8 @@ macro_rules! eprintln {
 
 #[path = "local_atome_history.rs"]
 mod history;
+#[path = "local_atome_containment.rs"]
+mod containment;
 pub use history::handle_history_command;
 #[cfg(test)]
 #[path = "../../../../tests/tauri/local_atome_history.rs"]
@@ -1984,6 +1986,7 @@ async fn handle_event_commit(
         if !decision.allowed {
             return Err(format!("{}:{}", decision.reason, decision.denied_keys.join(",")));
         }
+        normalized.project_id = containment::resolve_event_project_id(conn, &normalized)?;
         if !history::capture_before(conn, &mut normalized)? {
             return Ok(());
         }
@@ -2064,6 +2067,7 @@ async fn handle_event_commit_batch(
             }
         }
         for evt in normalized_events.iter_mut() {
+            evt.project_id = containment::resolve_event_project_id(conn, evt)?;
             if !history::capture_before(conn, evt)? {
                 continue;
             }

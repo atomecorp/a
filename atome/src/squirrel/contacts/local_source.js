@@ -99,6 +99,8 @@ const comparable = value => String(value || '').toLowerCase().replace(/[^0-9a-z@
 const contactSignature = props => JSON.stringify([comparable(props.name),
     (props.phones || []).map(entry => comparable(entry?.value).slice(-9)).sort(), (props.emails || []).map(entry => comparable(entry?.value)).sort()]);
 const IMPORT_RESERVED_ID = /^contact_[0-9a-f]{64}$/;
+// A card copied from a device's book (its id is the import's): its source owns its identity.
+export const isImportedContactId = id => IMPORT_RESERVED_ID.test(String(id || ''));
 
 /**
  * Copies left by the device-scoped native keys used before Oct. 2026 (a new

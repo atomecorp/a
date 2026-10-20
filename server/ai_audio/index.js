@@ -15,6 +15,3 @@ export const getAudioAiService = ({ env = process.env } = {}) => {
     if (env.ATOME_AI_AUDIO_MOCK === '1') service.register(createMockAudioProvider());
     return service;
 };
-
-/** Credential ids the server vault accepts, besides OpenAI. */
-export const AUDIO_AI_CREDENTIAL_IDS = Object.freeze(['musicgpt']);

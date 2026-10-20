@@ -4,8 +4,20 @@
 
 ## Lot 5 — intention au bord
 
-`eVe/intuition/runtime/eve_intuition/teleport_edge_intent_runtime.js` (nouveau), branché
-dans `atome_contextual_edit_runtime.js` (`begin` / `track` / `end` sur le drag existant).
+`eVe/intuition/runtime/eve_intuition/teleport_edge_intent_runtime.js` (nouveau).
+
+**Mise à jour 2026-10-20.** Le branchement décrit ci-dessous (clamp de
+`contextualGestureProps` dans l'éditeur contextuel) n'existait plus : le glisser d'objet
+passe par le canevas Bevy, qui ne clampe pas. Le détecteur est maintenant consommé par le
+**mode téléportation** `eVe/intuition/tools/teleport_mode.js` (outil `ui.teleport.mode`,
+case `teleport` du rail devenue un interrupteur allumé, Stop épinglé en bas du rail comme
+une vidéo) : seulement quand l'outil est allumé, un glisser devient une question — l'objet
+poussé au-delà du bord visible et maintenu part (`resolveEdgeIntent`), lâché ailleurs il
+revient à sa place ; Stop rapatrie ce que le mode a envoyé (sauf « laisser »). Le signal
+est le rectangle de l'objet (origine + delta) qui dépasse le canevas visible. Sonde :
+`temp/unreachable_caps/teleport_mode_real_app.probe.mjs` (Fastify isolé, deux onglets du
+même compte, vrais clics et glisser). Restent : mode liste, briques du Dashboard, outils.
+Le texte qui suit décrit la conception d'août 2026.
 
 ### Le signal était déjà là
 

@@ -51,6 +51,9 @@ import {
 } from './adole_api/surfaces.js';
 // Also installs the executor that answers commands from the account's other devices.
 import { listRemoteSurfaces, runRemoteCommand } from '../../teleport/remote_command.js';
+// Installs the teleport lifecycle: every authenticated surface answers the offers
+// addressed to it, not only one that already pressed a teleport tool.
+import '../../teleport/teleport_manager.js';
 import { getSessionState, waitForAuthCheck } from './adole_api/session.js';
 import { FastifyAdapter } from './adole.js';
 
@@ -187,6 +190,23 @@ export const AdoleAPI = {
       return FastifyAdapter.ws.send({
         type: 'directory', action: 'search', query, limit: options.limit, offset: options.offset
       });
+    },
+    // Rencontre: the public cards answering `{ goal, theme, scope, query }` (shared/meeting_contract.js).
+    meet: async (options = {}) => {
+      const prepared = await auth.ensureFastifyToken();
+      if (!prepared?.ok) throw new Error(prepared?.error || prepared?.reason || 'directory_auth_unavailable');
+      return FastifyAdapter.ws.send({
+        type: 'directory', action: 'meet', goal: options.goal, theme: options.theme, scope: options.scope,
+        query: options.query, limit: options.limit
+      });
+    },
+    // One person's Rencontre card (hook, presentation, photos), under the search that found them.
+    meetCard: async (options = {}) => {
+      const prepared = await auth.ensureFastifyToken();
+      if (!prepared?.ok) throw new Error(prepared?.error || prepared?.reason || 'directory_auth_unavailable');
+      return FastifyAdapter.ws.send({
+        type: 'directory', action: 'meet_card', principalId: options.principalId, goal: options.goal, theme: options.theme, scope: options.scope
+      });
     }
   },
   communication: {
@@ -262,7 +282,10 @@ export const AdoleAPI = {
     ),
     getSubscriptions: () => fastifyCall({ type: 'news', action: 'subscriptions-get' }, 'news_auth_unavailable'),
     setSubscriptions: (tags = []) => fastifyCall({ type: 'news', action: 'subscriptions-set', tags }, 'news_auth_unavailable'),
-    searchTags: (query = '', { limit = 20 } = {}) => fastifyCall({ type: 'news', action: 'tags-search', query, limit }, 'news_auth_unavailable')
+    searchTags: (query = '', { limit = 20 } = {}) => fastifyCall({ type: 'news', action: 'tags-search', query, limit }, 'news_auth_unavailable'),
+    // A received publication: liked (its author alone learns it), or reposted to the reader's audience.
+    like: (newsId) => fastifyCall({ type: 'news', action: 'like', newsId }, 'news_auth_unavailable'),
+    repost: (newsId) => fastifyCall({ type: 'news', action: 'repost', newsId }, 'news_auth_unavailable')
   },
   machine: {
     getCurrent: auth.getCurrentMachine,

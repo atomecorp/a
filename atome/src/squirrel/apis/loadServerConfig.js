@@ -24,6 +24,8 @@ import { buildFastifyWsUrl } from './loadServerConfigWs.js';
 // Both predicates now come from apis/serverUrls.js; the bodies were duplicated
 // verbatim in loader.js.
 import { isDesktopTauriRuntime, isEmbeddedIosRuntime } from './serverUrls.js';
+// Strict loopback test (no tauri.localhost, unlike serverUrls.isLoopbackHost).
+import { isLoopbackHostname as isLoopbackHost } from './unified/adole_backend.js';
 
 let _loadPromise = null;
 function shouldBlockFastifyPrimaryOnLocalAxumPage() {
@@ -109,11 +111,6 @@ function readLocalTauriHttpPort() {
         return isDesktopTauriRuntime() ? 3000 : null;
     }
     return value;
-}
-
-function isLoopbackHost(hostname) {
-    const host = String(hostname || '').trim().toLowerCase();
-    return host === '127.0.0.1' || host === 'localhost' || host === '0.0.0.0';
 }
 
 function readPortFromLocation(locationLike) {
@@ -502,11 +499,6 @@ export async function loadServerConfigOnce() {
     })();
 
     return _loadPromise;
-}
-
-export function getServerConfigSync() {
-    if (typeof window === 'undefined') return null;
-    return window.__SQUIRREL_SERVER_CONFIG__ || null;
 }
 
 export { applyFastifyGlobalsFromHttpBase, isInvalidFastifyLoopbackBase };

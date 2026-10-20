@@ -2,7 +2,7 @@ import { expect, vi } from 'vitest';
 import { validateParams, stableStringify } from '../../atome/src/squirrel/ai/agent_gateway_normalize.js';
 import { MUSIC_OPERATION_TYPE } from '../../atome/src/shared/music_operation_contract.js';
 
-export const config = { clientId: 'public-client', publicBase: 'https://atome.example' };
+export const config = { clientId: 'public-client', deezerProfile: '5', publicBase: 'https://atome.example' };
 export const session = overrides => ({ access_token: 'private-access', refresh_token: 'private-refresh', expires_at: Date.now() + 1e7,
     authorization_id: 'authorization-session-1',
     authorized_at: Date.now(), identity: { id: 'stable-account', name: 'Alice' }, spotify_user_id: 'alice-spotify', scopes: [], ...overrides });

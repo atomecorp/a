@@ -1,4 +1,5 @@
-/** Explicit food choices; quantities and nutritional advice are never inferred. */
+/** Explicit food choices; quantities and nutritional advice are never inferred. A planned meal's
+ *  declared components feed the shopping list as they are (eVe/domains/shopping/shopping_list_model.js). */
 export const NUTRITION_MEAL_TYPES = Object.freeze(['breakfast', 'lunch', 'dinner', 'snack', 'before_activity', 'after_activity', 'other']);
 export const NUTRITION_FOOD_GROUPS = Object.freeze(['starches', 'vegetables', 'fruit', 'legumes', 'protein', 'dairy_alternative', 'fat', 'drink']);
 export const NUTRITION_PORTION_UNITS = Object.freeze(['g', 'ml', 'portion', 'piece']);

@@ -131,9 +131,12 @@ export const listAiModelProviders = () => AI_MODEL_PROVIDER_LIST.map((entry) => 
 // `server_vault` keys are stored by the server and never read back by the UI.
 export const AI_SERVICE_KEY_PROVIDERS = freeze([
     freeze({ id: 'musicgpt', label: 'MusicGPT', kind: 'audio', after: 'openai', docs_url: 'https://docs.musicgpt.com' }),
-    freeze({ id: 'runway', label: 'Runway', kind: 'video', after: 'musicgpt', docs_url: 'https://docs.dev.runwayml.com' })
+    freeze({ id: 'runway', label: 'Runway', kind: 'video', after: 'musicgpt', docs_url: 'https://docs.dev.runwayml.com' }),
+    // Music services: the Spotify application Client ID and the Deezer profile ID.
+    freeze({ id: 'spotify', label: 'Spotify', kind: 'music', after: 'runway' }),
+    freeze({ id: 'deezer', label: 'Deezer', kind: 'music', after: 'spotify' })
 ]);
-export const SERVER_VAULT_AI_PROVIDERS = freeze(['openai', 'musicgpt', 'runway']);
+export const SERVER_VAULT_AI_PROVIDERS = freeze(['openai', 'musicgpt', 'runway', 'spotify', 'deezer']);
 export const isServerVaultAiProvider = (providerId) => SERVER_VAULT_AI_PROVIDERS.includes(String(providerId || '').trim().toLowerCase());
 
 /** Every provider the key panel lists, in display order (service providers right after their anchor). */
@@ -170,38 +173,27 @@ export const OPENAI_TEXT_TOKEN_PRICING = freeze({
     'gpt-6-astra': freeze({ input: 10, cached: 1, cacheWrite: 12.5, output: 50 })
 });
 
-// Standard Realtime token tariffs; input transcription is charged separately.
+// Standard Realtime token tariffs, verified 2026-10-20 (speech synthesis since
+// the `/audio/speech` models shut down on 2027-01-06).
 export const OPENAI_REALTIME_TOKEN_PRICING = freeze({
-    'gpt-realtime-2.1': freeze({
-        text: freeze({ input: 4, cached: 0.4, output: 24 }),
-        audio: freeze({ input: 32, cached: 0.4, output: 64 }),
-        image: freeze({ input: 5, cached: 0.5 })
+    'gpt-realtime-2.1-mini': freeze({
+        text: freeze({ input: 0.6, cached: 0.06, output: 2.4 }),
+        audio: freeze({ input: 10, cached: 0.3, output: 20 })
     })
 });
 
+// GPT-Live voice sessions: USD per minute billed per second, silence included,
+// verified 2026-10-20. The delegated backend is billed at its text tariff.
+export const OPENAI_LIVE_PRICING = freeze({ 'gpt-live-1': freeze({ perMinute: 0.05 }) });
+
+// Native GPT-Live voices by interface language (ISO-639-1); `default` elsewhere.
+export const OPENAI_LIVE_VOICES = freeze({ default: 'marin', fr: 'brise' });
+
 export const OPENAI_MODALITY_MODELS = freeze({
-    voice: 'gpt-realtime-2.1', image: 'gpt-image-2.5-sunburst',
-    image_fast: 'gpt-image-2.5-flare', transcription: 'gpt-4o-transcribe',
-    tts: 'gpt-4o-mini-tts', embedding: 'text-embedding-3-small', moderation: 'omni-moderation-latest'
+    voice: 'gpt-live-1', voice_backend: OPENAI_MODEL_PROFILES[0], image: 'gpt-image-2.5-sunburst',
+    image_fast: 'gpt-image-2.5-flare', transcription: 'gpt-transcribe',
+    tts: 'gpt-realtime-2.1-mini', embedding: 'text-embedding-3-small', moderation: 'omni-moderation-latest'
 });
-
-export const OPENAI_VAD_SCHEMA = freeze({ oneOf: [
-    { type: 'object', required: ['type'], additionalProperties: false, properties: {
-        type: { const: 'server_vad' }, threshold: { type: 'number', minimum: 0, maximum: 1 },
-        silence_duration_ms: { type: 'integer', minimum: 0, maximum: 5000 },
-        prefix_padding_ms: { type: 'integer', minimum: 0, maximum: 2000 }
-    } },
-    { type: 'object', required: ['type'], additionalProperties: false, properties: {
-        type: { const: 'semantic_vad' }, eagerness: { type: 'string', enum: ['low', 'medium', 'high', 'auto'] }
-    } }
-] });
-
-export const resolveOpenAiProfile = ({ level = 1, availableModels = [] } = {}) => {
-    const profile = OPENAI_MODEL_PROFILES.find(entry => entry.level === Number(level));
-    if (!profile) throw new Error('provider_level_invalid');
-    if (!availableModels.includes(profile.model)) return { ...profile, available: false };
-    return { ...profile, available: true };
-};
 
 const serviceTool = (action, description, method, path, properties = {}, required = [], risk = 'moderate', hosted = null) => freeze({
     action, description, method, path, risk, hosted,

@@ -22,6 +22,7 @@ const fixture = async ({ presentationFactory = createMatrixTemplateRuntime } = {
     vi.stubGlobal('window', dom.window); vi.stubGlobal('document', dom.window.document);
     const records = new Map(), events = new Map(); let actor = 'alice', sequence = 0;
     const runtime = createProjectProgramRuntime({ actor: () => actor, project: () => '', now: () => '2030-01-07T11:00:00Z', read: async id => structuredClone(records.get(id)),
+        syncShopping: async () => ({ ok: true, changed: 0 }),
         list: async () => [...records.values()], commitActivity: async event => {
             if (events.has(event.id)) { assertIdempotentEventReplay(events.get(event.id), event); return { ok: true }; }
             const previous = records.get(event.atome_id), type = event.type || previous?.type, properties = { ...previous?.properties, ...event.props };

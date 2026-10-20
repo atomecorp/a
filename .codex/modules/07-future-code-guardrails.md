@@ -52,7 +52,6 @@ Before editing, provide a short numbered plan and a gate report covering:
 - map impact and framework-state impact;
 - precise DOM, rendering, mutation, legacy and security risks, or justified non-applicability;
 - complexity delta, resource/dependency/code recovery, or a reason none is needed;
-- relevant legacy `MTrax` references and whether safe Molecule convergence is in scope;
 - decision: proceed within authorization, or blocked with the smallest compliant action.
 
 Missing indispensable internal bricks require an **evidence-based internal creation or extension**, covered by the root standing authorization for the requested task. Present an explicit **missing or unavailable internal components** list with one entry per brick, then proceed autonomously when the canonical integration path and required access are established:

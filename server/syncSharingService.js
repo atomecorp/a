@@ -1,4 +1,4 @@
-import { hasPrivateProgramAncestor } from './syncShareHierarchy.js';
+import { hasPrivateProgramAncestor, parseJson } from './syncShareHierarchy.js';
 import crypto from 'node:crypto';
 import db from '../database/adole.js';
 import { resolveTargetUserId } from './sharing.js';
@@ -6,12 +6,6 @@ import {
     OWNER_RIGHTS, attenuatePropertyList, attenuateRights, normalizePropertyList, normalizeRights,
     roleOfRights, toStoredPermissions
 } from '../atome/src/shared/share_rights.js';
-
-const parseJson = (value, fallback = null) => {
-    if (value == null) return fallback;
-    if (typeof value === 'object') return value;
-    try { return JSON.parse(value); } catch (_) { return fallback; }
-};
 
 const activeLinkedShareSql = `status IN ('active', 'accepted') AND share_type = 'linked'
     AND (expires_at IS NULL OR expires_at > datetime('now'))`;

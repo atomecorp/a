@@ -15,7 +15,7 @@ const EVENT_META_PROPERTY_KEYS = new Set([
 
 const EVENT_INTERNAL_PROPERTY_KEYS = new Set(['__deleted', 'deleted_at']);
 
-function parseEventPayload(value) {
+export function parseEventPayload(value) {
     if (!value) return null;
     if (typeof value === 'object') return value;
     try {

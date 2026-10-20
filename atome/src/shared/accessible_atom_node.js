@@ -47,18 +47,6 @@ export const ACCESSIBLE_ATOM_RELATIONS = Object.freeze([
     'previous'
 ]);
 
-export const ACCESSIBLE_ATOM_NODE_SCHEMA = Object.freeze({
-    id: 'string',
-    role: ACCESSIBLE_ATOM_ROLES,
-    label: 'string|null',
-    description: 'string|null',
-    alt_text: 'string|null',
-    focusable: 'boolean',
-    visible_to_accessibility: 'boolean',
-    actions: 'AccessibleAtomAction[]',
-    relations: 'AccessibleAtomRelation[]'
-});
-
 const ROLE_SET = new Set(ACCESSIBLE_ATOM_ROLES);
 const ACTION_SET = new Set(ACCESSIBLE_ATOM_ACTIONS);
 const RELATION_SET = new Set(ACCESSIBLE_ATOM_RELATIONS);

@@ -174,10 +174,6 @@ export const applyHintedSpeechCorrections = (value = '', hints = []) => {
     return text.replace(/\s+/g, ' ').trim();
 };
 
-export const scoreSpeechCandidate = (candidate = {}, hints = []) => {
-    return evaluateSpeechCandidate(candidate, hints).selection_score;
-};
-
 export const normalizeSpeechConfidence = (value) => {
     const numeric = Number(value);
     if (!Number.isFinite(numeric)) return 0;

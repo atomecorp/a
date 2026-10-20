@@ -52,14 +52,3 @@ export function classifyRecipients(records, options = {}) {
 
     return { accepted, rejectedPrivate };
 }
-
-export function summarizeRecipients(records) {
-    const list = Array.isArray(records) ? records : [];
-    return list.map((record) => ({
-        id: record?.id || record?.user_id || record?.userId || record?.atome_id || record?.atomeId || null,
-        name: record?.name || record?.username || null,
-        phone: record?.phone || record?.phone_number || record?.phoneNumber || record?.mobile || record?.msisdn || null,
-        access: record?.access || record?.visibility || null,
-        visibility: record?.visibility || record?.access || null
-    }));
-}

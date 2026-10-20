@@ -67,59 +67,6 @@ export const isTauriAudioRuntime = (env = globalThis) => {
     return !!tauriInvoke;
 };
 
-export const describeAudioRuntimeEnvironment = (env = globalThis) => {
-    const hostEnv = readHostEnv(env);
-    const hasTauriInternalsInvoke = (() => {
-        try { return typeof env?.__TAURI_INTERNALS__?.invoke === 'function'; }
-        catch (_) { return false; }
-    })();
-    const hasTauriInvoke = (() => {
-        try { return typeof env?.__TAURI__?.invoke === 'function'; }
-        catch (_) { return false; }
-    })();
-    const hasTauriCoreInvoke = (() => {
-        try { return typeof env?.__TAURI__?.core?.invoke === 'function'; }
-        catch (_) { return false; }
-    })();
-    const tauriInvokeAvailable = typeof getTauriInvoke(env) === 'function';
-    const nativeKiraRequired = isAuv3AudioRuntime(env)
-        || isIosHostAppRuntime(env)
-        || isTauriAudioRuntime(env);
-    const nativeKiraAvailable = isAuv3AudioRuntime(env)
-        || ((isTauriAudioRuntime(env) || isIosHostAppRuntime(env)) && tauriInvokeAvailable);
-    const nativeKiraMissingReason = (() => {
-        if (!nativeKiraRequired || nativeKiraAvailable) return null;
-        if (isIosHostAppRuntime(env) && !tauriInvokeAvailable) {
-            return hasSwiftBridge(env)
-                ? 'ios_app_missing_native_invoke_swiftbridge_only'
-                : 'ios_app_missing_native_invoke';
-        }
-        if (isAuv3AudioRuntime(env) && !hasSwiftBridge(env)) {
-            return 'auv3_missing_swift_bridge';
-        }
-        return 'native_kira_backend_unavailable';
-    })();
-    return {
-        host_env: hostEnv || null,
-        auv3_mode: env?.__AUV3_MODE__ === true,
-        force_fastify: env?.__SQUIRREL_FORCE_FASTIFY__ === true,
-        force_tauri: env?.__SQUIRREL_FORCE_TAURI_RUNTIME__ === true,
-        tauri_invoke_available: tauriInvokeAvailable,
-        has_tauri_internals_invoke: hasTauriInternalsInvoke,
-        has_tauri_invoke: hasTauriInvoke,
-        has_tauri_core_invoke: hasTauriCoreInvoke,
-        has_tauri_object: !!env?.__TAURI__,
-        has_tauri_internals_object: !!env?.__TAURI_INTERNALS__,
-        has_swift_bridge: hasSwiftBridge(env),
-        is_auv3_audio_runtime: isAuv3AudioRuntime(env),
-        is_ios_host_app_runtime: isIosHostAppRuntime(env),
-        is_tauri_audio_runtime: isTauriAudioRuntime(env),
-        native_kira_required: nativeKiraRequired,
-        native_kira_available: nativeKiraAvailable,
-        native_kira_missing_reason: nativeKiraMissingReason
-    };
-};
-
 export const resolveAudioRuntime = (env = globalThis) => {
     const tauriInvoke = getTauriInvoke(env);
     const wasmAvailable = typeof env?.WebAssembly !== 'undefined';

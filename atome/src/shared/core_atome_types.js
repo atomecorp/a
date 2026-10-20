@@ -1,12 +1,16 @@
 import { PERSONAL_IMPORT_TYPES, CALENDAR_IMPORT_FIELDS } from './personal_import_types.js';
 import { GPS_TRIP_TYPE } from './gps_trip_contract.js';
+import { SHOPPING_ITEM_TYPE } from './shopping_list_contract.js';
+import { LIBRARY_WORK_TYPE } from './library_work_contract.js';
 import { COMMUNICATION_MESSAGE_TYPE } from './communication_contract.js';
 import { APPLE_MUSIC_OPERATION_TYPE } from './apple_music_operation_contract.js';
 import { MUSIC_OPERATION_TYPE } from './music_operation_contract.js';
 import { registerAtomeType } from './atome_universal_contract.js';
 import { PROGRAM_PREFERENCE_SCHEMA, PROGRAM_DATA_PERMISSION_SCHEMA, PROGRAM_PREFERENCE_KEYS } from './program_collection_contract.js';
 import { PROGRAM_SESSION_SCHEMA, PROGRAM_SESSION_TRANSITION_SCHEMA } from './program_session_contract.js';
-import { PROGRAM_NUTRITION_SCHEMA, NUTRITION_CONSUMPTION_SCHEMA } from './program_nutrition_contract.js';
+import { NUTRITION_CONSUMPTION_SCHEMA } from './program_nutrition_contract.js';
+import { PROGRAM_ACTIVITY_RECORD_SCHEMAS } from './program_activity_contract.js';
+import { DASHBOARD_OBJECTIVE_TARGET_SCHEMA, DASHBOARD_UNLOCK_SCHEMA } from './dashboard_progression_contract.js';
 
 export const CORE_ATOME_TYPE_VERSION = 1;
 
@@ -35,13 +39,6 @@ const orderSchema = Object.freeze({
     accessibility: { type: 'object' }
 });
 
-const programExecutionSchema = {
-    active_minutes: { type: 'number', minimum: 0 },
-    start: { type: 'string' }, end: { type: 'string' }, provenance: { type: 'string' },
-    use_in_followup: { type: 'boolean' }, note: { type: 'string' }
-};
-const programExecutionRequired = ['start', 'end', 'provenance', 'use_in_followup'];
-
 export const ATOME_MIX_PROPERTY_SCHEMA = Object.freeze({
     mute: { type: 'boolean' },
     solo: { type: 'boolean' },
@@ -61,6 +58,8 @@ const mediaSchema = Object.freeze({
     media_url: { type: 'string' },
     youtube_video_id: { type: 'string' },
     youtube_title: { type: 'string' },
+    peertube_video_url: { type: 'string' },
+    peertube_title: { type: 'string' },
     transcript: { type: 'string' },
     duration: { type: 'number' },
     duration_sec: { type: 'number' },
@@ -110,7 +109,7 @@ const defineType = (definition) => Object.freeze({
 export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
     defineType(APPLE_MUSIC_OPERATION_TYPE),
     defineType(MUSIC_OPERATION_TYPE),
-    defineType(GPS_TRIP_TYPE),
+    defineType(GPS_TRIP_TYPE), defineType(SHOPPING_ITEM_TYPE), defineType(LIBRARY_WORK_TYPE),
     defineType(COMMUNICATION_MESSAGE_TYPE),
     ...PERSONAL_IMPORT_TYPES.map(defineType),
     defineType({
@@ -135,7 +134,7 @@ export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
                 goal: { type: 'string' },
                 objective_id: { type: 'string', enum: ATOME_OBJECTIVE_IDS },
                 status: { type: 'string', enum: ['draft'] },
-                audience: { type: 'string', enum: ['everyone', 'group'] }
+                audience: { type: 'string', enum: ['everyone', 'group'] }, target: DASHBOARD_OBJECTIVE_TARGET_SCHEMA
             }, required: ['family', 'goal'] },
             title: { type: 'string' },
             description: { type: 'string' }
@@ -264,7 +263,11 @@ export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
             mime_type: { type: 'string' },
             source_atome_id: { type: 'string' },
             note_count: { type: 'number' },
-            transcription_metadata: { type: 'object' }
+            transcription_metadata: { type: 'object' },
+            // Where it plays: an output port NAME ('' = back to the devices each
+            // track was recorded from) and a channel 1-16 (0 = as recorded).
+            midi_output: { type: 'string' },
+            midi_channel: { type: 'number' }
         }
     }),
     defineType({
@@ -350,35 +353,14 @@ export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
             source_domain: { type: 'string' },
             matrix_navigation: ATOME_MATRIX_NAVIGATION_SCHEMA,
             program_preference: PROGRAM_PREFERENCE_SCHEMA,
-            program_data_permission: PROGRAM_DATA_PERMISSION_SCHEMA,
+            program_data_permission: PROGRAM_DATA_PERMISSION_SCHEMA, dashboard_unlock: DASHBOARD_UNLOCK_SCHEMA,
             program_session: PROGRAM_SESSION_SCHEMA,
             program_session_transition: PROGRAM_SESSION_TRANSITION_SCHEMA,
             program_nutrition_consumption: NUTRITION_CONSUMPTION_SCHEMA,
-            program_activity: { type: 'object', required: ['version', 'brick_id', 'title', 'involvement'], properties: {
-                version: { type: 'number', minimum: 1 }, brick_id: { type: 'string' }, title: { type: 'string' }, nutrition: PROGRAM_NUTRITION_SCHEMA,
-                nutrition_declined: { type: 'boolean' },
-                involvement: { type: 'object', required: ['minutes', 'basis', 'days', 'rhythm'], properties: {
-                    minutes: { type: 'number' }, basis: { type: 'string', enum: ['day', 'week'] },
-                    days: { type: 'array' }, rhythm: { type: 'number' }
-                } }
-            } },
-            program_activity_link: { type: 'object', required: ['activity_id', 'objective_id'], properties: {
-                activity_id: { type: 'string' }, objective_id: { type: 'string' }
-            } },
-            program_occurrence: { type: 'object', required: ['activity_id', 'execution_id'], properties: {
-                activity_id: { type: 'string' }, calendar_event_id: { type: 'string' }, session_id: { type: 'string' }, execution_id: { type: 'string' }
-            } },
-            program_execution: { type: 'object', required: ['activity_id', 'occurrence_id', ...programExecutionRequired], properties: {
-                activity_id: { type: 'string' }, occurrence_id: { type: 'string' }, ...programExecutionSchema
-            } },
-            program_execution_correction: { type: 'object', required: ['execution_id', 'supersedes_ids', 'reason', 'execution'], properties: {
-                execution_id: { type: 'string' }, supersedes_ids: { type: 'array' }, reason: { type: 'string' },
-                execution: { type: 'object', required: programExecutionRequired, properties: programExecutionSchema }
-            } },
+            ...PROGRAM_ACTIVITY_RECORD_SCHEMAS,
             metadata: { type: 'object' },
             payload: { type: 'object' },
-            created_iso: { type: 'string' },
-            updated_iso: { type: 'string' },
+            created_iso: { type: 'string' }, updated_iso: { type: 'string' },
             span: { type: 'number' }
         }
     }),

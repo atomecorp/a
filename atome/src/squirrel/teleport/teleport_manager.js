@@ -151,42 +151,61 @@ const publishSurfaceContext = async () => {
     dispatch('squirrel:teleport-surface-context', detail);
 };
 
-/** Resolve what a push at the edge should do, and do it.
- *  One eligible surface teleports directly (§5.2), several ask contextually (§5.3),
- *  none gives discreet feedback and leaves the object alone (§20). */
-export const resolveEdgeIntent = async (atomeId, edge = '', projectId = '') => {
-    const id = String(atomeId || '').trim();
-    if (!id) return { ok: false, error: 'teleport_atome_required' };
+/** Resolve what a push at the edge should do with the pushed objects, and do it.
+ *  One eligible surface teleports them directly (§5.2), several ask once for all of
+ *  them (§5.3), none gives discreet feedback and leaves them alone (§20). */
+export const resolveEdgeIntent = async (atomeIds = [], edge = '', projectId = '') => {
+    const ids = [...new Set((Array.isArray(atomeIds) ? atomeIds : []).map((id) => String(id || '').trim()).filter(Boolean))];
+    if (ids.length === 0) return { ok: false, error: 'teleport_atome_required', results: [] };
 
-    const read = await readRemoteTeleportState(id);
-    if (!read.ok) return { ok: false, error: read.error || 'teleport_state_unavailable' };
+    const results = [];
+    const readable = [];
+    const occupied = new Set();
+    let reported = [];
+    for (const id of ids) {
+        const read = await readRemoteTeleportState(id);
+        if (!read.ok) {
+            results.push({ atome_id: id, ok: false, error: read.error || 'teleport_state_unavailable' });
+            continue;
+        }
+        readable.push(id);
+        if (reported.length === 0) reported = read.surfaces || [];
+        if (read.teleport?.surfaceId) occupied.add(String(read.teleport.surfaceId));
+    }
+    if (readable.length === 0) return { ok: false, error: results[0].error, results, destinations: [] };
 
     const local = getLocalSurfaceId();
-    const current = read.teleport?.surfaceId || '';
-    // Same candidate set as the toolbox: own seats plus authorized foreign surfaces.
+    // Same candidate set as the toolbox: own seats plus authorized foreign surfaces,
+    // minus wherever one of the pushed objects already is.
     const listed = await listSurfaces({ includeShared: true });
-    const candidates = listed.ok ? listed.surfaces : (read.surfaces || []);
+    const candidates = listed.ok ? listed.surfaces : reported;
     const destinations = candidates.filter((surface) => {
         const surfaceId = String(surface?.surface_id || '');
-        return surfaceId && surfaceId !== local && surfaceId !== current;
+        return surfaceId && surfaceId !== local && !occupied.has(surfaceId);
     });
 
     if (destinations.length === 0) {
-        // Do not lose the object and do not interrupt the drag: the object simply
-        // stays, and the surface says so quietly.
-        dispatch('squirrel:teleport-no-destination', { atomeId: id, edge, projectId });
-        return { ok: false, error: 'teleport_no_destination', destinations: [] };
+        // Do not lose the objects and do not interrupt the drag: they simply stay,
+        // and the surface says so quietly, once.
+        dispatch('squirrel:teleport-no-destination', { atomeIds: readable, edge, projectId });
+        readable.forEach((id) => results.push({ atome_id: id, ok: false, error: 'teleport_no_destination' }));
+        return { ok: false, error: 'teleport_no_destination', results, destinations: [] };
     }
     if (destinations.length === 1) {
-        const sent = await teleportObject(id, destinations[0].surface_id, destinations[0].user_id || '');
-        dispatch('squirrel:teleport-edge-resolved', {
-            atomeId: id, edge, target: destinations[0], ok: sent.ok, error: sent.error
-        });
-        return sent;
+        for (const id of readable) {
+            const sent = await teleportObject(id, destinations[0].surface_id, destinations[0].user_id || '');
+            dispatch('squirrel:teleport-edge-resolved', {
+                atomeId: id, edge, target: destinations[0], ok: sent.ok, error: sent.error
+            });
+            results.push({ atome_id: id, ok: sent.ok, error: sent.error });
+        }
+        return { ok: results.every((result) => result.ok), results, destinations };
     }
-    // Never pick arbitrarily: the toolbox shows the candidates and calls back.
-    dispatch('squirrel:teleport-destination-choice', { atomeId: id, edge, projectId, destinations });
-    return { ok: false, error: 'teleport_destination_required', destinations };
+    // Never pick arbitrarily: the toolbox shows the candidates once for every pushed
+    // object and calls back.
+    dispatch('squirrel:teleport-destination-choice', { atomeIds: readable, edge, projectId, destinations });
+    readable.forEach((id) => results.push({ atome_id: id, ok: false, error: 'teleport_destination_required' }));
+    return { ok: false, error: 'teleport_destination_required', results, destinations };
 };
 
 export const installTeleportLifecycle = () => {
@@ -195,9 +214,7 @@ export const installTeleportLifecycle = () => {
 
     window.addEventListener('squirrel:teleport-edge-intent', (event) => {
         const detail = event?.detail || {};
-        const atomeId = String(detail.atomeId || detail.atome_id || '').trim();
-        if (!atomeId) return;
-        void resolveEdgeIntent(atomeId, detail.edge || '', detail.projectId || '');
+        void resolveEdgeIntent(detail.atomeIds, detail.edge || '', detail.projectId || '');
     });
 
     // Destination labels change as devices come and go, and the residual proxy shows
@@ -232,12 +249,6 @@ export const installTeleportLifecycle = () => {
     dispatch('squirrel:teleport-ready', { surfaceId: getLocalSurfaceId() });
     if (isAuthenticated()) void publishSurfaceContext();
     return true;
-};
-
-// Test seam: probes drive the lifecycle explicitly instead of on import.
-export const __resetTeleportManager = () => {
-    state.incomingOffers.clear();
-    state.autoAccept = true;
 };
 
 installTeleportLifecycle();

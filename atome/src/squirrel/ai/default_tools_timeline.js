@@ -1,3 +1,5 @@
+import { TIMELINE_TOOL_SCHEMAS, TIMELINE_WRITE_VERBS, timelineWriteVerbSchema } from '#shared/timeline_tool_contract.js';
+
 const requireMoleculeTimelineApi = () => {
     const api = globalThis.eveMoleculeTimelineApi || globalThis.window?.eveMoleculeTimelineApi || null;
     if (!api) {
@@ -6,307 +8,67 @@ const requireMoleculeTimelineApi = () => {
     return api;
 };
 
-const TIMELINE_WRITE_VERBS = Object.freeze([
-    'clip.move',
-    'clip.trim',
-    'clip.crop',
-    'clip.loop',
-    'clip.fades',
-    'scene.add',
-    'scene.update',
-    'scene.remove',
-    'scene.move',
-    'cell.set',
-    'cell.clear',
-    'cell.place',
-    'clip.split',
-    'clip.join',
-    'clip.take',
-    'clip.cut',
-    'clip.copy',
-    'clip.paste',
-    'clip.erase',
-    'clip.duplicate',
-    'track.add',
-    'track.remove',
-    'track.update',
-    'track.reorder',
-    'track.loop',
-    'track.quantization',
-    'track.mute',
-    'track.solo',
-    'transport.seek',
-    'transport.scrub',
-    'transport.loop',
-    'transport.tempo',
-    'quantization.set',
-    'metronome.set',
-    'section.add',
-    'section.update',
-    'section.remove',
-    'record_region.add',
-    'record_region.update',
-    'record_region.remove',
-    'view.set',
-    'automation.lane.add',
-    'automation.lane.remove',
-    'automation.keyframe.add',
-    'automation.keyframe.move',
-    'automation.keyframe.edit',
-    'automation.keyframe.remove'
-]);
+// The gateway calls handler({ params, context }); every timeline tool forwards
+// its params to one Molecule timeline API method.
+const TIMELINE_TOOLS = [
+    ['read', 'readGroupTimeline', 'Read the active Molecule timeline snapshot.', 'timeline.read', 'LOW'],
+    ['operation', 'applyGroupTimelineOperation', 'Apply one Molecule timeline operation through the active session.', 'timeline.write', 'MODERATE'],
+    ['batch', 'applyGroupTimelineBatch', 'Apply an atomic Molecule timeline operation batch through the active session.', 'timeline.write', 'MODERATE'],
+    ['transfer', 'transferGroupTimelineEntity', 'Atomically transfer a Section or Track between two open Molecules.', 'timeline.write', 'MODERATE'],
+    ['transport.toggle', 'toggleGroupTimelineTransport', 'Toggle Molecule, Section, or Track playback on the canonical Kira transport.', 'timeline.write', 'LOW'],
+    ['transport.stop', 'stopGroupTimelineTransport', 'Stop the active Molecule transport.', 'timeline.write', 'LOW'],
+    ['cells.trigger', 'triggerGroupTimelineCells', 'Cells (non-linear transport): press or release cells [{scene_id, track_id}] ("scene" = the whole Scene); each follows its own quantization, play mode, passes and Follow Action.', 'timeline.write', 'LOW'],
+    ['cells.stop', 'stopGroupTimelineCells', 'Stop every playing cell of a Molecule.', 'timeline.write', 'LOW'],
+    ['transport.list.toggle', 'toggleGroupTimelineListTransport', 'Toggle sequential playback of the ordered open Molecules on the canonical Kira transport.', 'timeline.write', 'LOW'],
+    ['transport.list.stop', 'stopGroupTimelineListTransport', 'Stop sequential Molecule List playback.', 'timeline.write', 'LOW'],
+    ['record.prepare', 'prepareGroupTimelineRecording', 'Prepare the current project for microphone recording using the existing Record tool owner. Return group_id and track_id for record.start; creates a Molecule only when needed.', 'timeline.write', 'MODERATE'],
+    ['history.undo', 'undoGroupTimeline', 'Undo the last Molecule timeline edit on the active session.', 'timeline.write', 'MODERATE'],
+    ['history.redo', 'redoGroupTimeline', 'Redo the last undone Molecule timeline edit on the active session.', 'timeline.write', 'MODERATE']
+];
 
-// Mixer verbs carry a typed command contract (strip ids are `<track_id>:<lane>`).
-const destination = { type: ['object', 'null'], properties: { kind: { type: 'string', enum: ['main', 'bus', 'strip', 'device', 'screen', 'midi_port'] }, id: { type: 'string' }, channel: { type: 'integer' } } };
-const stripCommand = (properties, required = []) => ({
-    type: 'object', required: ['strip_id', ...required],
-    properties: { strip_id: { type: 'string' }, ...properties }
-});
-const MIX_WRITE_VERBS = Object.freeze({
-    'mix.module.add': stripCommand({
-        module_id: { type: 'string' },
-        type: { type: 'string', enum: ['volume', 'pan', 'mono', 'fx', 'send', 'opacity', 'video_fx'] },
-        effect: { type: 'string', enum: ['reverb', 'delay', 'compressor', 'eq', 'filter', 'distortion', 'color'] },
-        params: { type: 'object' }, destination, index: { type: 'integer' }
-    }, ['module_id', 'type']),
-    'mix.module.update': stripCommand({ module_id: { type: 'string' }, effect: { type: 'string' }, params: { type: 'object' }, destination }, ['module_id']),
-    'mix.module.move': stripCommand({ module_id: { type: 'string' }, index: { type: 'integer' } }, ['module_id', 'index']),
-    'mix.module.remove': stripCommand({ module_id: { type: 'string' } }, ['module_id']),
-    'mix.module.bypass': stripCommand({ module_id: { type: 'string' }, bypass: { type: 'boolean' } }, ['module_id', 'bypass']),
-    'mix.output.set': stripCommand({ destination, enabled: { type: 'boolean' } }),
-    'mix.input.set': stripCommand({ input: { type: 'object', properties: { kind: { type: 'string', enum: ['track', 'live_audio'] }, device_id: { type: 'string' } } } }, ['input']),
-    'mix.group.create': { type: 'object', required: ['group_id', 'master_strip_id', 'member_strip_ids'], properties: { group_id: { type: 'string' }, master_strip_id: { type: 'string' }, member_strip_ids: { type: 'array', items: { type: 'string' } } } },
-    'mix.group.join': stripCommand({ group_id: { type: 'string' } }, ['group_id']),
-    'mix.group.leave': stripCommand({}),
-    'mix.group.dissolve': { type: 'object', required: ['group_id'], properties: { group_id: { type: 'string' } } }
-});
-
-const registerTimelineWriteVerb = ({ Agent, verb, command = { type: 'object' } }) => {
-    Agent.registerTool({
-        name: `eve.timeline.${verb}`,
-        description: `Apply Molecule timeline ${verb}.`,
-        capabilities: ['timeline.write'],
-        risk_tier: 'MODERATE',
-        parameters: {
-            type: 'object',
-            properties: {
-                group_id: { type: 'string' },
-                command
-            }
-        },
-        handler: async (params = {}) => requireMoleculeTimelineApi().applyGroupTimelineOperation({
-            ...params,
-            operation: `eve.timeline.${verb}`,
-            command: params.command || params
-        })
-    });
-};
+const RECORD_TOOLS = [
+    ['start', 'startGroupTimelineGenericRecording', 'Start a generic Molecule capture on an armed region or Track. With duration_ms, stop automatically and return the actual imported recording after completion.'],
+    ['stop', 'stopGroupTimelineGenericRecording', 'Stop and commit a generic Molecule capture.'],
+    ['cancel', 'cancelGroupTimelineGenericRecording', 'Cancel and discard a generic Molecule capture.']
+];
 
 export const registerTimelineDefaultTools = ({ Agent }) => {
-    Agent.registerTool({
-        name: 'eve.timeline.read',
-        description: 'Read the active Molecule timeline snapshot.',
-        capabilities: ['timeline.read'],
-        risk_tier: 'LOW',
-        parameters: {
-            type: 'object',
-            properties: {
-                group_id: { type: 'string' }
-            }
-        },
-        handler: async (params = {}) => requireMoleculeTimelineApi().readGroupTimeline(params)
-    });
-
-    Agent.registerTool({
-        name: 'eve.timeline.operation',
-        description: 'Apply one Molecule timeline operation through the active session.',
-        capabilities: ['timeline.write'],
-        risk_tier: 'MODERATE',
-        parameters: {
-            type: 'object',
-            required: ['operation'],
-            properties: {
-                group_id: { type: 'string' },
-                operation: { type: 'string' },
-                command: { type: 'object' }
-            }
-        },
-        handler: async (params = {}) => requireMoleculeTimelineApi().applyGroupTimelineOperation(params)
-    });
-
-    Agent.registerTool({
-        name: 'eve.timeline.batch',
-        description: 'Apply an atomic Molecule timeline operation batch through the active session.',
-        capabilities: ['timeline.write'],
-        risk_tier: 'MODERATE',
-        parameters: {
-            type: 'object',
-            required: ['operations'],
-            properties: {
-                group_id: { type: 'string' },
-                operations: { type: 'array' },
-                label: { type: 'string' }
-            }
-        },
-        handler: async (params = {}) => requireMoleculeTimelineApi().applyGroupTimelineBatch(params)
-    });
-
-    Agent.registerTool({
-        name: 'eve.timeline.transfer',
-        description: 'Atomically transfer a Section or Track between two open Molecules.',
-        capabilities: ['timeline.write'],
-        risk_tier: 'MODERATE',
-        parameters: {
-            type: 'object',
-            required: ['source_group_id', 'target_group_id', 'entity_type'],
-            properties: {
-                source_group_id: { type: 'string' },
-                target_group_id: { type: 'string' },
-                entity_type: { type: 'string', enum: ['section', 'track'] },
-                section_id: { type: 'string' },
-                track_id: { type: 'string' },
-                track_ids: { type: 'array' },
-                target_section_id: { type: 'string' },
-                target_index: { type: 'integer' }
-            }
-        },
-        handler: async (params = {}) => requireMoleculeTimelineApi().transferGroupTimelineEntity(params)
-    });
-
-    Agent.registerTool({
-        name: 'eve.timeline.transport.toggle',
-        description: 'Toggle Molecule, Section, or Track playback on the canonical Kira transport.',
-        capabilities: ['timeline.write'],
-        risk_tier: 'LOW',
-        parameters: {
-            type: 'object',
-            required: ['group_id'],
-            properties: {
-                group_id: { type: 'string' },
-                section_id: { type: 'string' },
-                track_id: { type: 'string' }
-            }
-        },
-        handler: async (params = {}) => requireMoleculeTimelineApi().toggleGroupTimelineTransport(params)
-    });
-
-    Agent.registerTool({
-        name: 'eve.timeline.transport.stop',
-        description: 'Stop the active Molecule transport.',
-        capabilities: ['timeline.write'],
-        risk_tier: 'LOW',
-        parameters: { type: 'object', required: ['group_id'], properties: { group_id: { type: 'string' } } },
-        handler: async (params = {}) => requireMoleculeTimelineApi().stopGroupTimelineTransport(params)
-    });
-
-    Agent.registerTool({
-        name: 'eve.timeline.cells.trigger',
-        description: 'Cells (non-linear transport): press or release cells [{scene_id, track_id}] ("scene" = the whole Scene); each follows its own quantization, play mode, passes and Follow Action.',
-        capabilities: ['timeline.write'],
-        risk_tier: 'LOW',
-        parameters: {
-            type: 'object',
-            required: ['group_id', 'cells'],
-            properties: {
-                group_id: { type: 'string' },
-                cells: { type: 'array', items: { type: 'object', properties: { scene_id: { type: 'string' }, track_id: { type: 'string' } } } },
-                gesture: { type: 'string', enum: ['press', 'release'] }
-            }
-        },
-        handler: async (params = {}) => requireMoleculeTimelineApi().triggerGroupTimelineCells(params)
-    });
-
-    Agent.registerTool({
-        name: 'eve.timeline.cells.stop',
-        description: 'Stop every playing cell of a Molecule.',
-        capabilities: ['timeline.write'],
-        risk_tier: 'LOW',
-        parameters: { type: 'object', required: ['group_id'], properties: { group_id: { type: 'string' } } },
-        handler: async (params = {}) => requireMoleculeTimelineApi().stopGroupTimelineCells(params)
-    });
-
-    Agent.registerTool({
-        name: 'eve.timeline.transport.list.toggle',
-        description: 'Toggle sequential playback of the ordered open Molecules on the canonical Kira transport.',
-        capabilities: ['timeline.write'],
-        risk_tier: 'LOW',
-        parameters: {
-            type: 'object',
-            properties: { group_ids: { type: 'array', items: { type: 'string' } } }
-        },
-        handler: async (params = {}) => requireMoleculeTimelineApi().toggleGroupTimelineListTransport(params)
-    });
-
-    Agent.registerTool({
-        name: 'eve.timeline.transport.list.stop',
-        description: 'Stop sequential Molecule List playback.',
-        capabilities: ['timeline.write'],
-        risk_tier: 'LOW',
-        parameters: { type: 'object', properties: {} },
-        handler: async () => requireMoleculeTimelineApi().stopGroupTimelineListTransport()
-    });
+    TIMELINE_TOOLS.forEach(([verb, method, description, capability, risk]) => Agent.registerTool({
+        name: `eve.timeline.${verb}`, description, capabilities: [capability], risk_tier: risk,
+        parameters: TIMELINE_TOOL_SCHEMAS[verb],
+        handler: async ({ params = {} }) => requireMoleculeTimelineApi()[method](params)
+    }));
 
     ['list', 'mix', 'timeline'].forEach((activity) => Agent.registerTool({
         name: `eve.timeline.activity.${activity}`,
         description: `Open the Molecule ${activity} activity on the shared Bevy project surface.`,
         capabilities: ['timeline.read'],
         risk_tier: 'LOW',
-        parameters: { type: 'object', properties: { project_id: { type: 'string' } } },
-        handler: async (params = {}) => requireMoleculeTimelineApi().setGroupTimelineActivity({
-            ...params, activity
-        })
+        parameters: TIMELINE_TOOL_SCHEMAS.activity,
+        handler: async ({ params = {} }) => requireMoleculeTimelineApi().setGroupTimelineActivity({ ...params, activity })
     }));
 
-    Agent.registerTool({
-        name: 'eve.timeline.record.prepare',
-        description: 'Prepare the current project for microphone recording using the existing Record tool owner. Return group_id and track_id for record.start; creates a Molecule only when needed.',
-        capabilities: ['timeline.write'], risk_tier: 'MODERATE',
-        parameters: { type: 'object', properties: { project_id: { type: 'string' } } },
-        handler: async (params = {}) => requireMoleculeTimelineApi().prepareGroupTimelineRecording(params)
-    });
-
-    [
-        ['start', 'startGroupTimelineGenericRecording', 'Start a generic Molecule capture on an armed region or Track. With duration_ms, stop automatically and return the actual imported recording after completion.'],
-        ['stop', 'stopGroupTimelineGenericRecording', 'Stop and commit a generic Molecule capture.'],
-        ['cancel', 'cancelGroupTimelineGenericRecording', 'Cancel and discard a generic Molecule capture.']
-    ].forEach(([verb, method, description]) => Agent.registerTool({
+    RECORD_TOOLS.forEach(([verb, method, description]) => Agent.registerTool({
         name: `eve.timeline.record.${verb}`,
         description,
         capabilities: ['timeline.write', 'media.capture'],
         risk_tier: verb === 'start' ? 'HIGH' : 'MODERATE',
-        parameters: {
-            type: 'object', required: ['group_id'],
-            properties: {
-                group_id: { type: 'string' }, track_id: { type: 'string' }, capture_id: { type: 'string' },
-                duration_ms: { type: 'integer', minimum: 100, maximum: 600000 },
-                record_region_id: { type: 'string' }, source_kind: { type: 'string', enum: ['audio', 'video', 'screen', 'photo'] }
-            }
-        },
-        handler: async (params = {}) => {
+        parameters: TIMELINE_TOOL_SCHEMAS[`record.${verb}`],
+        handler: async ({ params = {} }) => {
             const result = await requireMoleculeTimelineApi()[method](params);
             const { state, ...receipt } = result;
             return receipt;
         }
     }));
 
-    Agent.registerTool({
-        name: 'eve.timeline.history.undo',
-        description: 'Undo the last Molecule timeline edit on the active session.',
+    TIMELINE_WRITE_VERBS.forEach((verb) => Agent.registerTool({
+        name: `eve.timeline.${verb}`,
+        description: `Apply Molecule timeline ${verb}.`,
         capabilities: ['timeline.write'],
         risk_tier: 'MODERATE',
-        parameters: { type: 'object', properties: { group_id: { type: 'string' } } },
-        handler: async (params = {}) => requireMoleculeTimelineApi().undoGroupTimeline(params)
-    });
-
-    Agent.registerTool({
-        name: 'eve.timeline.history.redo',
-        description: 'Redo the last undone Molecule timeline edit on the active session.',
-        capabilities: ['timeline.write'],
-        risk_tier: 'MODERATE',
-        parameters: { type: 'object', properties: { group_id: { type: 'string' } } },
-        handler: async (params = {}) => requireMoleculeTimelineApi().redoGroupTimeline(params)
-    });
-
-    TIMELINE_WRITE_VERBS.forEach((verb) => registerTimelineWriteVerb({ Agent, verb }));
-    Object.entries(MIX_WRITE_VERBS).forEach(([verb, command]) => registerTimelineWriteVerb({ Agent, verb, command }));
+        parameters: timelineWriteVerbSchema(verb),
+        handler: async ({ params = {} }) => requireMoleculeTimelineApi().applyGroupTimelineOperation({
+            group_id: params.group_id, operation: `eve.timeline.${verb}`, command: params.command
+        })
+    }));
 };
