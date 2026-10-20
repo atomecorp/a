@@ -80,19 +80,26 @@ describe('first launch canonical composition', () => {
         const next = planTemplateInstanceSync({ sourceProjectId: 'source', sourceStates: source, instanceStates: records, instanceRootId: 'instance', instanceProjectId: 'instance', createId: () => 'unexpected' });
         expect(next.events.find(e => e.atome_id === first.events[1].atome_id).props.template_value).toBeUndefined();
     });
-    it('configures transverse brick selection and declared preferences without touching the calendar', async () => {
-        let program = initialProgram('sleep'), calendarCalls = 0;
-        const runtime = createProjectProgramRuntime({ actor: () => 'user', project: () => 'project',
-            read: async () => ({ owner_id: 'user', properties: { project_program: program } }),
-            commit: async events => { program = events[0].props.project_program; return { ok: true }; }, calendar: { createEvent: () => { calendarCalls++; } } });
+    it('configures bricks and preferences and writes the daily protocol into the calendar', async () => {
+        let program = initialProgram('sleep'), serial = 0;
+        const events = new Map();
+        const calendar = { createEvent: async event => { const id = 'event_' + ++serial; events.set(id, { ...event, id }); return { ok: true, event: { id } }; },
+            updateEvent: async (id, changes) => { events.set(id, { ...events.get(id), ...changes }); return { ok: true, event: { id } }; },
+            deleteEvent: async id => { events.delete(id); return { ok: true }; } };
+        const runtime = createProjectProgramRuntime({ actor: () => 'user', project: () => 'project', calendar, translate: key => key,
+            read: async id => (id === 'project' ? { owner_id: 'user', properties: { project_program: program } } : events.get(id) || null),
+            commit: async list => { program = list[0].props.project_program; return { ok: true }; } });
         expect(validateProgramBricks(program, ['nap', 'nutrition'])).toEqual(['nap', 'nutrition']);
-        const result = await runtime.invoke({ project_id: 'project', operation: 'configure', bricks: ['nap'], sleep_preferences: { age: null, hours: 8, effort: 50, preparationMinutes: 10 } });
-        expect(result.ok).toBe(true); expect(program.bricks).toEqual(['nap']); expect(program.status).toBe('draft'); expect(calendarCalls).toBe(0);
-        for (const hours of [1, 11]) expect((await runtime.invoke({ project_id: 'project', operation: 'configure', bricks: ['nap'],
-            sleep_preferences: { age: null, hours, effort: 50, preparationMinutes: 10 } })).ok).toBe(true);
-        expect((await runtime.invoke({ project_id: 'project', operation: 'configure', bricks: ['nap'],
-            sleep_preferences: { age: null, hours: .5, effort: 50, preparationMinutes: 10 } })).ok).toBe(false);
-        expect((await runtime.invoke({ project_id: 'project', operation: 'configure', bricks: ['invented'], sleep_preferences: {} })).ok).toBe(false);
+        const prefs = { age: null, wakeMinutes: 420, hours: 8, effort: 50, preparationMinutes: 30 };
+        const result = await runtime.invoke({ project_id: 'project', operation: 'configure', bricks: ['nap'], calendar: true, sleep_preferences: prefs });
+        expect(result.ok).toBe(true); expect(program.bricks).toEqual(['nap']); expect(program.status).toBe('draft');
+        expect([...events.values()].map(event => event.recurrence.freq)).toEqual(Array(events.size).fill('daily'));
+        expect(result.routine.find(item => item.key === 'bedtime').time).toBe('23:00');
+        expect((await runtime.invoke({ project_id: 'project', operation: 'configure', bricks: [], calendar: false, sleep_preferences: prefs })).ok).toBe(true);
+        expect([...events.values()].every(event => event.suspended)).toBe(true); expect(events.has('event_1')).toBe(false);
+        expect((await runtime.invoke({ project_id: 'project', operation: 'configure', bricks: ['nap'], calendar: true,
+            sleep_preferences: { ...prefs, hours: .5 } })).ok).toBe(false);
+        expect((await runtime.invoke({ project_id: 'project', operation: 'configure', bricks: ['invented'], calendar: true, sleep_preferences: {} })).ok).toBe(false);
     });
     it('keeps a consented feeling distinct from missing sensor data and ignores unconsented observations', () => {
         const observation = (value, use) => ({ properties: { text: value, program_observation: { kind: 'declaration', date: '2030-01-01T00:00:00Z', provenance: 'user', useInFollowup: use } } });
@@ -153,7 +160,7 @@ it('projects persisted Axum identities through every authenticated first-launch 
     try {
         for (const stage of ['welcome', 'profile', 'goals', 'sleep', 'program']) {
             const key = `first_launch_${stage}`;
-            const records = FIRST_LAUNCH_TEMPLATES[key].atoms.map(atom => ({
+            const records = FIRST_LAUNCH_TEMPLATES[key].atoms.filter(atom => atom.props.template_control?.kind !== 'atom').map(atom => ({
                 atome_id: atom.ref, parent_id: atom.parent_ref || 'template-project', properties: { kind: atom.type, ...atom.props }
             }));
             const runtime = createMatrixTemplateRuntime({ treeId: key, records, uiRuntime,
@@ -164,12 +171,12 @@ it('projects persisted Axum identities through every authenticated first-launch 
                 await runtime.open();
                 const nodes = walk(trees.at(-1).root);
                 expect(nodes.some(node => node.id.includes('undefined'))).toBe(false);
-                expect(nodes.some(node => node.id === 'logo')).toBe(true);
+                expect(nodes.some(node => node.id === 'logo')).toBe(['welcome', 'profile'].includes(stage));
                 const button = nodes.find(node => node.on?.activate);
                 expect(button).toBeDefined(); await button.on.activate();
                 await Promise.resolve(); expect(actions.length).toBeGreaterThan(0);
                 await runtime.updateRecords(records.map(record => ({ ...record })));
-                expect(walk(trees.at(-1).root).some(node => node.id === 'logo')).toBe(true);
+                expect(walk(trees.at(-1).root).some(node => node.id === 'logo')).toBe(['welcome', 'profile'].includes(stage));
             } finally { await runtime.destroy(); }
         }
     } finally { globalThis.window = previousWindow; globalThis.document = previousDocument; dom.window.close(); }

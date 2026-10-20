@@ -26,7 +26,7 @@ import { ensureVideoPlaybackCache } from './server_media.js';
 import { sanitizeUploadId, coerceWsChunkSize, resolveUserId } from './server_utils.js';
 import { listUserDownloadsSnapshot, resolveDownloadTarget } from './server_uploads.js';
 import { handleWsApiAtomeRequest } from './ws_api_atome_request.js';
-import { handleWsNewsRequest, handleWsContactRequest, handleWsShareRequest, handleWsShellRequest } from './ws_api_message_handlers.js';
+import { handleWsNewsRequest, handleWsCommunityRequest, handleWsContactRequest, handleWsShareRequest, handleWsShellRequest } from './ws_api_message_handlers.js';
 
 export function registerWsApiRoute(server, {
   projectRoot,
@@ -41,7 +41,8 @@ export function registerWsApiRoute(server, {
   directMessageRateAllowed,
   syncSharingService,
   newsBroadcast,
-  newsPublishRateAllowed
+  newsPublishRateAllowed,
+  communities
 }) {
   // Route WebSocket pour API calls (replaces HTTP fetch)
   server.register(async function (fastify) {
@@ -181,6 +182,11 @@ export function registerWsApiRoute(server, {
 
         if (data.type === 'news') {
           await handleWsNewsRequest({ data, connection, safeSend, newsBroadcast, newsPublishRateAllowed });
+          return;
+        }
+
+        if (data.type === 'community') {
+          await handleWsCommunityRequest({ data, connection, safeSend, communities });
           return;
         }
 

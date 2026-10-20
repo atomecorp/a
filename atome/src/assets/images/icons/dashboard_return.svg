@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 24 24">
+  <!-- Back to the Dashboard: its grid of tiles, the Atom's pink in the centre cell (painted untinted). -->
+  <g fill="#ffffff">
+    <rect x="2.2" y="2.2" width="5.2" height="5.2" rx="1.1"/>
+    <rect x="9.4" y="2.2" width="5.2" height="5.2" rx="1.1"/>
+    <rect x="16.6" y="2.2" width="5.2" height="5.2" rx="1.1"/>
+    <rect x="2.2" y="9.4" width="5.2" height="5.2" rx="1.1"/>
+    <rect x="16.6" y="9.4" width="5.2" height="5.2" rx="1.1"/>
+    <rect x="2.2" y="16.6" width="5.2" height="5.2" rx="1.1"/>
+    <rect x="9.4" y="16.6" width="5.2" height="5.2" rx="1.1"/>
+    <rect x="16.6" y="16.6" width="5.2" height="5.2" rx="1.1"/>
+  </g>
+  <rect x="9.4" y="9.4" width="5.2" height="5.2" rx="1.1" fill="#c90c7d"/>
+</svg>

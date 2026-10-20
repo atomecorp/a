@@ -108,8 +108,10 @@ export const startBrowserRecognition = (context, sessionId, options = {}, {
         recognition.onerror = (event) => {
             if (state.settled) return;
             // Silence heard, or the end of a cancelled listening, is not a failure:
-            // the session ends as it would have, empty or cancelled.
-            if (event?.error === 'no-speech' || state.cancelled) {
+            // the session ends as it would have, empty or cancelled. WebKit (iOS)
+            // reports silence as `aborted` with the message « No speech detected ».
+            if (event?.error === 'no-speech' || state.cancelled
+                || (event?.error === 'aborted' && /no speech/i.test(String(event?.message || '')))) {
                 settleEnded();
                 return;
             }

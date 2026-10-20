@@ -13,7 +13,8 @@ import {
   issueWsSyncChallenge,
   validateWsSyncPrincipal
 } from './wsSyncSecurity.js';
-import { findUserById, findUserByPhone, listAllUsers } from './auth_users.js';
+import { createUserAtome, findUserById, findUserByPhone, listAllUsers } from './auth_users.js';
+import { generateOpaquePrincipalId } from './auth_crypto.js';
 import { isWsApiPrincipalProvisioned } from './wsApiIdentity.js';
 import { getFileMetadata, setFileReadResolver } from './userFiles.js';
 import { getLocalVersion } from './githubSync.js';
@@ -22,6 +23,7 @@ import { pushNotificationToUserStack } from './notificationStack.js';
 import { createCommunicationRelations } from './communication_relations.js';
 import { createNotificationDelivery, createRateLimiter } from './communication_delivery.js';
 import { createNewsBroadcast } from './news_broadcast.js';
+import { createCommunities } from './communities.js';
 import { logStructured } from './server_logger.js';
 
 export function createServerServices({ projectRoot_env }) {
@@ -63,13 +65,25 @@ export function createServerServices({ projectRoot_env }) {
     )
   });
   // News : diffusion serveur (tous les utilisateurs, y compris prives : D1), tags, abonnements.
+  // A community's posts are News with the community as audience.
+  let communities = null;
+  const findUserName = async (id) => (await findUserById(db.getDataSourceAdapter(), id).catch(() => null))?.username || null;
   const newsBroadcast = createNewsBroadcast({
     vaultProvider: userVaultRouter.provider,
     relations: communicationRelations,
     deliver: (targetId, senderId, notification) => deliverCommNotification(targetId, senderId, notification),
     listUserIds: async () => (await listAllUsers(db.getDataSourceAdapter(), true)).map((user) => user.user_id),
-    findUserName: async (id) => (await findUserById(db.getDataSourceAdapter(), id).catch(() => null))?.username || null,
-    getFileMetadata
+    findUserName,
+    getFileMetadata,
+    getCommunities: () => communities
+  });
+  communities = createCommunities({
+    relations: communicationRelations,
+    distribute: (publication) => newsBroadcast.distribute(publication),
+    findUserByPhone: (phone) => findUserByPhone(db.getDataSourceAdapter(), phone),
+    // A community's host is an ordinary private account, in the host's name.
+    createAccount: ({ name, phone }) => createUserAtome(db.getDataSourceAdapter(), generateOpaquePrincipalId(), name, phone, 'private'),
+    findUserName
   });
   const newsPublishRateAllowed = createRateLimiter({ max: 10, windowMs: 60_000 });
   setFileReadResolver('news', (userId, atomeId, ownerId) => newsBroadcast.canReadNewsMedia(userId, atomeId, { authorId: ownerId }));
@@ -94,6 +108,7 @@ export function createServerServices({ projectRoot_env }) {
     syncSharingService,
     newsBroadcast,
     newsPublishRateAllowed,
+    communities,
     directoryPublicService
   };
 }

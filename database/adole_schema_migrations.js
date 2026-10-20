@@ -333,6 +333,19 @@ async function ensureCommunicationTables(query) {
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`);
     await query('run', 'CREATE INDEX IF NOT EXISTS idx_news_publications_author ON news_publications(author_id)');
+    await query('run', `CREATE TABLE IF NOT EXISTS communities (
+        community_id TEXT PRIMARY KEY,
+        host_id TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+    await query('run', `CREATE TABLE IF NOT EXISTS community_members (
+        community_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY(community_id, user_id),
+        CHECK(status IN ('member', 'refused', 'banned'))
+    )`);
     // Visio planifiee (invitation au calendrier) : la salle survit au redemarrage du serveur.
     await query('run', `CREATE TABLE IF NOT EXISTS visio_rooms (
         room_id TEXT PRIMARY KEY,

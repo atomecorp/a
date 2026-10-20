@@ -101,7 +101,9 @@ export const sessionAccountMethods = {
         let localError;
         try { restored = await restoreLocalAuthorization(); }
         catch (error) {
-            clearSessionState();
+            // An account grant that cannot be restored says nothing about a guest
+            // workspace: the stored guest session stays and is started below.
+            if (stored?.mode !== 'anonymous') clearSessionState();
             localError = error?.message || 'local_authorization_unavailable';
         }
         // A missing or unusable old grant must not prevent a fresh SMS login.
@@ -121,7 +123,7 @@ export const sessionAccountMethods = {
             void ensureFastifyToken();
             return { authenticated: true, user: getSessionState().user };
         }
-        if (localError) {
+        if (localError && stored?.mode !== 'anonymous') {
             // Recovery can fail after a readable but revoked desktop session.
             // Publish the logged-out state so the auth gate can present login.
             clearSessionState();

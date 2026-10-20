@@ -561,6 +561,42 @@
    "phonemes": "^lə somɛj , la nytʁisjɔ̃ , buʒe ply , u tɔ̃ ʒuʁnal ɛ̃tim : diləmwa , u apɥi syʁ tɔ̃ ʃwa .$",
    "sha256": "70d068a027e7c0cbcd8e5e6497861bfc8e43223ee458743a86ee378af6174235"
   },
+  "Il y a quatre choix : meilleur sommeil, meilleure nutrition, bouger plus, et journal intime.": {
+   "file": "fb4a691a80f9f237.wav",
+   "samples": 116736,
+   "phonemes": "^il i a katʁ ʃwa : mɛjœʁ somɛj , mɛjœʁ nytʁisjɔ̃ , buʒe ply , e ʒuʁnal ɛ̃tim .$",
+   "sha256": "701af27a804bc5f5ff6b407bb8ed3869764e05e72330c34c1b3a3686ec7a8be7"
+  },
+  "Tu règles ton objectif sommeil : la durée de ta nuit, ton heure de lever, l’effort que tu veux faire, et ton temps de préparation avant de te coucher.": {
+   "file": "71ac5e036c09076a.wav",
+   "samples": 167168,
+   "phonemes": "^ty ʁɛɡl tɔ̃ obʒɛktif somɛj : la dyʁe də ta nɥi , tɔ̃ œʁ də ləve , lɛfoʁ kə ty vø fɛʁ , e tɔ̃ tɑ̃ də pʁepaʁasjɔ̃ avɑ̃ də tə kuʃe .$",
+   "sha256": "70102924e368739efc3194820c94b4e9193cef4b5420aeb9a6387f8c41e1ec9b"
+  },
+  "Tu peux aussi rejoindre le cercle, pour échanger avec des personnes qui ont le même objectif. Dis « valider » quand c’est prêt.": {
+   "file": "dc853b2f4b36d7d8.wav",
+   "samples": 130816,
+   "phonemes": "^ty pø osi ʁəʒwɛ̃dʁ lə sɛʁkl , puʁ eʃɑ̃ʒe avɛk de pɛʁson ki ɔ̃ lə mɛm obʒɛktif . di valide kɑ̃ sɛ pʁɛ .$",
+   "sha256": "9a40ed2fee02c106a2358c44bbf2e9afb7d3a6729d7bff7832b9d975b8ced612"
+  },
+  "Voici ton programme. J’ai ajouté des événements quotidiens à ton calendrier, tu pourras les désactiver.": {
+   "file": "73bbf1a7eccaea7e.wav",
+   "samples": 124416,
+   "phonemes": "^vwasi tɔ̃ pʁoɡʁam . ʒɛ aʒute de evenəmɑ̃ kotidjɛ̃ a tɔ̃ kalɑ̃dʁje , ty puʁa le dezaktive .$",
+   "sha256": "68f3c572294877f543fc7675e6c4cffbd342bcf002fd33e303efdc685bc7f71d"
+  },
+  "Tu peux garder ou décocher la sieste, la méditation et la nutrition.": {
+   "file": "582b5746045eb939.wav",
+   "samples": 100608,
+   "phonemes": "^ty pø ɡaʁde u dekoʃe la sjɛst , la meditasjɔ̃ e la nytʁisjɔ̃ .$",
+   "sha256": "192c3ba9643f36b41bceb05be9c36ecce7acce0e8fec6fb12124f511a21db342"
+  },
+  "Dis « c’est parti » quand tu veux.": {
+   "file": "c26b084ec2be468f.wav",
+   "samples": 30464,
+   "phonemes": "^di sɛ paʁti kɑ̃ ty vø .$",
+   "sha256": "6cb5d96b3d9b24162154d329517555f1e498625ca90668f6818119d27766fff2"
+  },
   "D’accord, je m’en occupe.": {
    "file": "a24203d4b01a3d9e.wav",
    "samples": 34304,

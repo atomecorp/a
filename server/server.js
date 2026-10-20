@@ -57,6 +57,7 @@ const {
   syncSharingService,
   newsBroadcast,
   newsPublishRateAllowed,
+  communities,
   directoryPublicService
 } = createServerServices({ projectRoot_env });
 
@@ -310,7 +311,8 @@ async function startServer() {
       directMessageRateAllowed,
       syncSharingService,
       newsBroadcast,
-      newsPublishRateAllowed
+      newsPublishRateAllowed,
+      communities
     });
 
     // Route WebSocket unifiée pour sync (inclut file events, atome events, version sync)

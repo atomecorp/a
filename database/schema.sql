@@ -323,6 +323,23 @@ CREATE TABLE IF NOT EXISTS news_tags (
 
 CREATE INDEX IF NOT EXISTS idx_news_publications_author ON news_publications(author_id);
 
+-- Communities (server/communities.js): a host account, then the members' opt-in. A
+-- community's posts are News publications whose audience is the community.
+CREATE TABLE IF NOT EXISTS communities (
+    community_id TEXT PRIMARY KEY,
+    host_id TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS community_members (
+    community_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY(community_id, user_id),
+    CHECK(status IN ('member', 'refused', 'banned'))
+);
+
 -- Visio planifiee (invitation au calendrier) : la salle survit au redemarrage du serveur.
 CREATE TABLE IF NOT EXISTS visio_rooms (
     room_id TEXT PRIMARY KEY,

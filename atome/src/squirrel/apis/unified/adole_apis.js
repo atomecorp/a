@@ -58,7 +58,10 @@ import { getSessionState, waitForAuthCheck } from './adole_api/session.js';
 import { FastifyAdapter } from './adole.js';
 
 // Kick off auth bootstrap immediately so UI waits on a single source of truth.
-void auth.tryAutoLogin().catch(error => {
+// Only the application's own document owns the session: a frame it embeds (the
+// project preview capture renderer) shares its storage, and its bootstrap, without
+// the native bridge, failed and erased the stored session (a guest lost on relaunch).
+if (globalThis.window?.top === globalThis.window) void auth.tryAutoLogin().catch(error => {
   globalThis.window?.dispatchEvent(new CustomEvent('squirrel:phone-login-error', { detail: { code: error.message || 'local_authorization_unavailable' } }));
 });
 
@@ -286,6 +289,18 @@ export const AdoleAPI = {
     // A received publication: liked (its author alone learns it), or reposted to the reader's audience.
     like: (newsId) => fastifyCall({ type: 'news', action: 'like', newsId }, 'news_auth_unavailable'),
     repost: (newsId) => fastifyCall({ type: 'news', action: 'repost', newsId }, 'news_auth_unavailable')
+  },
+  // Communities (atome/src/shared/community_contract.js): joining, the thread of its members,
+  // the host's moderation. A member posts through `news.publish` with `{ community }` as audience.
+  communities: {
+    join: (community) => fastifyCall({ type: 'community', action: 'join', community }, 'community_auth_unavailable'),
+    leave: (community) => fastifyCall({ type: 'community', action: 'leave', community }, 'community_auth_unavailable'),
+    feed: (community) => fastifyCall({ type: 'community', action: 'feed', community }, 'community_auth_unavailable'),
+    members: (community) => fastifyCall({ type: 'community', action: 'members', community }, 'community_auth_unavailable'),
+    refuse: (community, userId) => fastifyCall({ type: 'community', action: 'refuse', community, userId }, 'community_auth_unavailable'),
+    ban: (community, userId) => fastifyCall({ type: 'community', action: 'ban', community, userId }, 'community_auth_unavailable'),
+    unban: (community, userId) => fastifyCall({ type: 'community', action: 'unban', community, userId }, 'community_auth_unavailable'),
+    removePost: (community, newsId) => fastifyCall({ type: 'community', action: 'remove-post', community, newsId }, 'community_auth_unavailable')
   },
   machine: {
     getCurrent: auth.getCurrentMachine,

@@ -68,13 +68,16 @@ export function createCanonicalImport({ type, api = () => globalThis.window?.Ato
         : type === 'contact' ? [['phone', 'phones'], ['email', 'emails']] : [];
     const capture = () => {
         const state = session();
-        if (state?.mode !== 'authenticated' || !state.user?.id) throw new Error('import_authenticated_owner_required');
+        // The guest's own local workspace keeps its records too (no exchange: they stay
+        // on this device until an account adopts them).
+        const owned = mode => mode === 'authenticated' || mode === 'anonymous';
+        if (!owned(state?.mode) || !state.user?.id) throw new Error('import_authenticated_owner_required');
         // Identity, not freshness: iOS/Tauri renew the local token of the same
         // account every 14 min (new `updatedAt`), which aborted every long import.
         const owner = String(state.user.id);
         const check = () => {
             const active = session();
-            if (active?.mode !== 'authenticated' || String(active.user?.id) !== owner) throw new Error('import_session_changed');
+            if (!owned(active?.mode) || String(active.user?.id) !== owner) throw new Error('import_session_changed');
         };
         const store = api();
         if (!store?.commit || !store?.listStateCurrent) throw new Error('canonical_import_api_unavailable');

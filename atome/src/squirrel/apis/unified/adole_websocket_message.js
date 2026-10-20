@@ -135,6 +135,15 @@ const RESPONSE_PAYLOADS = {
         failed: message.failed,
         recipients: message.recipients
     }),
+    // Communities (server/communities.js): membership, the thread, the host's moderation.
+    'community-response': (message) => ({
+        joined: message.joined,
+        member: message.member,
+        host: message.host,
+        host_id: message.host_id,
+        publications: message.publications,
+        members: message.members
+    }),
     'surface-grant-response': (message) => ({
         grant: message.grant,
         grants: message.grants,

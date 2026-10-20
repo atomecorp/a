@@ -146,7 +146,8 @@ export function createLocalContactsSource({ source_id = 'eve_contacts_local', ro
     let cache = [], cacheOwner = null, persisted = false, stale = true;
     const clearOnSessionChange = () => {
         const state = (session || getSessionState)();
-        const owner = state?.mode === 'authenticated' ? state.user?.id : null;
+        // The guest's local book is its own, like an account's.
+        const owner = ['authenticated', 'anonymous'].includes(state?.mode) ? state.user?.id : null;
         if (owner !== cacheOwner) { cache = []; persisted = false; stale = true; cacheOwner = owner; }
         return owner;
     };

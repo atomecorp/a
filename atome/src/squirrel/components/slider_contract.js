@@ -29,6 +29,9 @@ export const formatSliderBound = (value, unit = '') => {
     const numeric = Number(Number(value).toFixed(6));
     return unit ? `${numeric} ${unit}` : String(numeric);
 };
+// An end of the rail reads its own words (`boundLabels`), else its value caption, else its number.
+export const sliderBoundCaption = (options, bound, end, unit = '') => options.boundLabels?.[end]
+    ?? (options.valueLabels && Object.hasOwn(options.valueLabels, valueKey(bound)) ? options.valueLabels[valueKey(bound)] : formatSliderBound(bound, unit));
 export const normalizeSliderOptions = (options = {}) => {
     if (!options || typeof options !== 'object' || Array.isArray(options)) throw new Error('slider_options_invalid');
     const length = options.lengthPx ?? null, inset = options.valueInsetPx ?? 0;
@@ -41,6 +44,12 @@ export const normalizeSliderOptions = (options = {}) => {
             || Object.entries(labels).some(([key, label]) => !Number.isFinite(Number(key)) || valueKey(key) !== key
                 || typeof label !== 'string' || !label.trim())) throw new Error('slider_value_labels_invalid');
         normalized.valueLabels = { ...labels };
+    }
+    if (options.boundLabels != null) {
+        const labels = options.boundLabels;
+        if (!labels || typeof labels !== 'object' || Array.isArray(labels) || Object.keys(labels).some(end => !['min', 'max'].includes(end))
+            || Object.values(labels).some(label => typeof label !== 'string' || !label.trim())) throw new Error('slider_bound_labels_invalid');
+        normalized.boundLabels = { ...labels };
     }
     return normalized;
 };

@@ -24,6 +24,21 @@ export async function handleWsNewsRequest({ data, connection, safeSend, newsBroa
   }
 }
 
+export async function handleWsCommunityRequest({ data, connection, safeSend, communities }) {
+  const requestId = data.requestId || data.request_id;
+  const userId = connection?._wsApiUserId ? String(connection._wsApiUserId) : null;
+  if (!userId || !await isWsApiPrincipalProvisioned(userId)) {
+    safeSend({ type: 'community-response', requestId, success: false, error: 'community_auth_required' });
+    return;
+  }
+  try {
+    const result = await communities.handle(data, userId);
+    safeSend({ type: 'community-response', requestId, success: result.ok !== false, ...result });
+  } catch (error) {
+    safeSend({ type: 'community-response', requestId, success: false, error: error.message });
+  }
+}
+
 export async function handleWsContactRequest({ data, connection, safeSend, communicationRelations }) {
   const requestId = data.requestId || data.request_id;
   const userId = connection?._wsApiUserId ? String(connection._wsApiUserId) : null;
