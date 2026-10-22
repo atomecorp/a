@@ -12,6 +12,7 @@
 
 import db from '../database/adole.js';
 import { MAX_CONTACT_BOOK_HASHES, contactBookHash, contactBookPhone } from '../atome/src/shared/contact_book_hash.js';
+import { CONTACT_REQUEST_LIMITS, createContactRequestGuard } from './communication_request_guard.js';
 
 const CONTACT_STATUSES = new Set(['pending', 'accepted', 'refused']);
 // Un refus n'est pas un blocage (decision du 20 oct. 2026, remplace celle du 14 oct.) : il
@@ -24,9 +25,14 @@ export function createCommunicationRelations({
     notify = async () => {},
     // Resolution par numero (L11) : `findUserByPhone(e164)` / `findUserById(id)` -> { user_id, phone } ou null.
     findUserByPhone = async () => null,
-    findUserById = async () => null
+    findUserById = async () => null,
+    // An accepted request's note becomes the conversation's first message: `({ ownerId, peerId, note, at })`.
+    onAccepted = async () => {},
+    now = () => Date.now(),
+    requestLimits = CONTACT_REQUEST_LIMITS
 } = {}) {
     const id = (value) => String(value || '').trim();
+    const guard = createContactRequestGuard({ query, findUserById, now, limits: requestLimits });
 
     // Preference « accepter les demandes de personnes absentes de mon carnet » (defaut : oui)
     // et carnet sous forme d'empreintes salees par le proprietaire (jamais de numero en clair).
@@ -88,50 +94,68 @@ export function createCommunicationRelations({
     };
 
     // Verdict unique pour toute communication pair-a-pair (message, partage, appel).
-    // `silent` : le destinataire a bloque l'emetteur ; l'emetteur ne doit pas le savoir.
+    // `silent` : un contact accepte qui a ensuite bloque l'emetteur ; l'emetteur ne doit pas le
+    // savoir. Pour qui n'a jamais ete accepte, un refus ou un blocage repond comme une demande
+    // en attente (`contact_required`) : sinon un message « parti » trahirait le refus.
     const canCommunicate = async (senderId, recipientId) => {
         const sender = id(senderId);
         const recipient = id(recipientId);
         if (!sender || !recipient) return { ok: false, error: 'contact_required' };
         if (sender === recipient) return { ok: true };
-        if (await hasBlocked(recipient, sender)) return { ok: false, silent: true, error: 'blocked' };
-        if (await hasBlocked(sender, recipient)) return { ok: false, error: 'contact_blocked_by_you' };
         const status = await contactStatus(recipient, sender);
+        if (await hasBlocked(recipient, sender)) {
+            return status === 'accepted' ? { ok: false, silent: true, error: 'blocked' } : { ok: false, error: 'contact_required' };
+        }
+        if (await hasBlocked(sender, recipient)) return { ok: false, error: 'contact_blocked_by_you' };
         if (status === 'accepted') return { ok: true };
-        // Un refus tait le message, sans le reveler a l'emetteur.
-        if (status === 'refused') return { ok: false, silent: true, error: 'blocked' };
         return { ok: false, error: 'contact_required' };
     };
 
     const blockedEitherWay = async (a, b) => (await hasBlocked(a, b)) || (await hasBlocked(b, a));
 
-    const request = async (senderId, targetId, { note = '', phone = '' } = {}) => {
+    // Une demande = un destinataire, admise par la garde anti-spam (communication_request_guard.js)
+    // sauf s'il a deja accepte l'emetteur. Tout ce qu'un inconnu peut atteindre repond `pending`
+    // apres le meme plancher de temps : numero sans compte, blocage, refus, carnet ferme.
+    const request = async (senderId, targetId, options = {}) => {
+        const started = now();
+        try { return await admitRequest(senderId, targetId, options); } finally { await guard.settle(started); }
+    };
+    const admitRequest = async (senderId, targetId, { note = '', phone = '' } = {}) => {
         const sender = id(senderId);
         let target = id(targetId);
         // Par numero : un id qui n'est pas un compte (celui d'une fiche du carnet de
-        // l'appareil) se resout par le numero joint. Un numero sans compte repond comme
-        // un succes — on ne revele jamais si un numero correspond a un compte.
+        // l'appareil) se resout par le numero joint. Un numero sans compte compte dans les
+        // limites comme un autre et repond comme un succes.
         if (phone && !(target && (await findUserById(target).catch(() => null))?.user_id)) {
             const e164 = contactBookPhone(phone);
-            const found = e164 ? await findUserByPhone(e164).catch(() => null) : null;
-            if (!found?.user_id) return { ok: true, status: 'pending' };
-            target = id(found.user_id);
+            if (!e164) throw new Error('contact_phone_invalid');
+            target = id((await findUserByPhone(e164))?.user_id);
+            if (!target) {
+                await guard.admit(sender);
+                await guard.record(sender, null, null);
+                return { ok: true, status: 'pending' };
+            }
         }
         if (!sender || !target || sender === target) throw new Error('contact_target_invalid');
         if (await hasBlocked(sender, target)) throw new Error('contact_blocked_by_you');
-        // L'emetteur consent a recevoir du destinataire : c'est lui qui demande.
-        await setContact(sender, target, 'accepted', sender);
-        // Bloque ou deja refuse : succes apparent, rien n'est livre (D4, anti-harcelement).
-        if (await hasBlocked(target, sender)) return { ok: true, status: 'pending' };
         const current = await contactStatus(target, sender);
-        if (current === 'accepted') return { ok: true, status: 'accepted' };
-        // Une seule demande a la fois : tant qu'elle attend, les suivantes ne sont pas notifiees.
-        if (current === 'pending') return { ok: true, status: 'pending' };
-        if (current === 'refused' && await refusalStands(target, sender)) return { ok: true, status: 'pending' };
-        // Hors du carnet d'une cible qui refuse les inconnus : ignore, sans le reveler.
-        if (!await acceptsRequestFrom(target, sender)) return { ok: true, status: 'pending' };
+        const blocked = await hasBlocked(target, sender);
+        // L'emetteur consent a recevoir du destinataire : c'est lui qui demande.
+        if (current === 'accepted' && !blocked) {
+            await setContact(sender, target, 'accepted', sender);
+            return { ok: true, status: 'accepted' };
+        }
+        await guard.admit(sender);
+        await setContact(sender, target, 'accepted', sender);
+        // Bloque, deja en attente (une seule demande a la fois), refus recent, ou hors du carnet
+        // d'une cible qui refuse les inconnus : rien n'est livre, sans le reveler (D4).
+        const reaches = !blocked && current !== 'pending' && !(current === 'refused' && await refusalStands(target, sender))
+            && await acceptsRequestFrom(target, sender);
+        const text = String(note || '').slice(0, 280);
+        await guard.record(sender, target, reaches ? text : null);
+        if (!reaches) return { ok: true, status: 'pending' };
         await setContact(target, sender, 'pending', sender);
-        await notify(target, sender, { kind: 'connection-request', message: String(note || '').slice(0, 280) });
+        await notify(target, sender, { kind: 'connection-request', message: text });
         return { ok: true, status: 'pending' };
     };
 
@@ -145,6 +169,9 @@ export function createCommunicationRelations({
         await setContact(owner, peer, value === 'accept' ? 'accepted' : 'refused');
         // Refuser : silencieux pour l'expediteur, sans blocage (REFUSAL_WAIT_DAYS).
         if (value === 'refuse') return { ok: true, status: 'refused' };
+        // Le mot lu dans la demande devient le premier message de la conversation.
+        const first = await guard.resolve(peer, owner);
+        if (first) await onAccepted({ ownerId: owner, peerId: peer, ...first });
         await notify(peer, owner, { kind: 'connection-accepted', message: '' });
         return { ok: true, status: 'accepted' };
     };

@@ -293,6 +293,18 @@ CREATE TABLE IF NOT EXISTS communication_contacts (
     CHECK(status IN ('pending', 'accepted', 'refused'))
 );
 
+-- Contact requests sent (server/communication_request_guard.js): the anti-spam limits count them.
+-- `target_id` is NULL for a number without account; never a phone number in clear.
+CREATE TABLE IF NOT EXISTS communication_contact_requests (
+    request_id TEXT PRIMARY KEY,
+    sender_id TEXT NOT NULL,
+    target_id TEXT,
+    note TEXT,
+    created_ms INTEGER NOT NULL,
+    resolved_ms INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_communication_contact_requests_sender ON communication_contact_requests(sender_id, created_ms);
+
 CREATE TABLE IF NOT EXISTS news_publications (
     news_id TEXT PRIMARY KEY,
     author_id TEXT NOT NULL,

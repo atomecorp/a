@@ -307,6 +307,15 @@ async function ensureCommunicationTables(query) {
         PRIMARY KEY(owner_id, peer_id),
         CHECK(status IN ('pending', 'accepted', 'refused'))
     )`);
+    await query('run', `CREATE TABLE IF NOT EXISTS communication_contact_requests (
+        request_id TEXT PRIMARY KEY,
+        sender_id TEXT NOT NULL,
+        target_id TEXT,
+        note TEXT,
+        created_ms INTEGER NOT NULL,
+        resolved_ms INTEGER
+    )`);
+    await query('run', 'CREATE INDEX IF NOT EXISTS idx_communication_contact_requests_sender ON communication_contact_requests(sender_id, created_ms)');
     await query('run', `CREATE TABLE IF NOT EXISTS news_publications (
         news_id TEXT PRIMARY KEY,
         author_id TEXT NOT NULL,

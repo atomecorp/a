@@ -285,6 +285,24 @@
    "phonemes": "^sə modɛl nɛ pa disponibl puʁ lə kɔ̃t kɔ̃fiɡyʁe .$",
    "sha256": "44e72ad180fc525bba45c67e5e5fdfe6c501d859f2be752b140b244fe08babf5"
   },
+  "OpenAI refuse le modèle vocal demandé. Si le serveur atome n’est pas à jour, mets-le à jour.": {
+   "file": "422b99dda1e66c31.wav",
+   "samples": 114944,
+   "phonemes": "^opɛnai ʁəfyz lə modɛl vokal dəmɑ̃de . si lə sɛʁvœʁ atom nɛ pa a ʒuʁ , mɛlə a ʒuʁ .$",
+   "sha256": "b7fd28b6e64f8e51ba8627b1b45c89c2d74acb8fbd71ab7641de81ec8e659e4b"
+  },
+  "Plafond de dépenses OpenAI atteint. Relève-le dans la facturation OpenAI.": {
+   "file": "3f18c049464a148d.wav",
+   "samples": 91392,
+   "phonemes": "^plafɔ̃ də depɑ̃s opɛnai atɛ̃ . ʁəlɛvlə dɑ̃ la faktyʁasjɔ̃ opɛnai .$",
+   "sha256": "3d86fec051b7fe0bc9febefedb945f687480910158843fbed4c14f371dfcbf70"
+  },
+  "La facturation du compte OpenAI n’est pas active. Ajoute une carte ou du crédit.": {
+   "file": "0daaefee0b481715.wav",
+   "samples": 97024,
+   "phonemes": "^la faktyʁasjɔ̃ dy kɔ̃t opɛnai nɛ pa aktiv . aʒut yn kaʁt u dy kʁedi .$",
+   "sha256": "9d6f1503a59314ad16741e6669bb3236d4c8c0fa6d3c0f5a82c707a400029996"
+  },
   "Voix déconnectée. Touche l’assistant pour reprendre.": {
    "file": "39112be7facd6988.wav",
    "samples": 65024,

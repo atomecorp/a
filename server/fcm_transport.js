@@ -29,7 +29,7 @@ export function createFcmTransport({ environment = process.env, request = fetch,
         })().finally(() => { authorizing = null; });
         return authorizing;
     }
-    async function send(installation, payload, { voip = false, control = false, expiresAt, collapseId } = {}) {
+    async function send(installation, payload, { voip = false, control = false, quiet = false, expiresAt, collapseId } = {}) {
         if (!configured()) return { ok: false, error: 'fcm_configuration_required' };
         if (!/^[a-z0-9-]{6,63}$/.test(environment.FCM_PROJECT_ID) || !/^[A-Za-z0-9_-]{22}$/.test(installation.token))
             return { ok: false, error: 'fcm_installation_invalid' };
@@ -40,7 +40,7 @@ export function createFcmTransport({ environment = process.env, request = fetch,
         if (ttl === 0) return { ok: false, error: 'push_call_expired' };
         const body = JSON.stringify({ message: { fid: installation.token,
             data: { atome: JSON.stringify(payload.atome), notification_kind: control ? 'call-state' : voip ? 'call' : 'alert' },
-            android: { priority: 'HIGH', ttl: `${ttl}s`, ...(voip ? { collapse_key: collapseId } : {}) } } });
+            android: { priority: quiet ? 'NORMAL' : 'HIGH', ttl: `${ttl}s`, ...(voip ? { collapse_key: collapseId } : {}) } } });
         if (Buffer.byteLength(body, 'utf8') > 4096) return { ok: false, error: 'fcm_payload_too_large' };
         let response;
         try { response = await request(`https://fcm.googleapis.com/v1/projects/${environment.FCM_PROJECT_ID}/messages:send`,

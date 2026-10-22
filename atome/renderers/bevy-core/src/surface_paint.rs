@@ -21,6 +21,9 @@ pub struct InsetShadow {
     pub blur: f32,
     pub spread: f32,
     pub offset: [f32; 2],
+    /// Optional colour along an axis, replacing `color` (a stroke that fades).
+    #[serde(default)]
+    pub gradient: Option<LinearGradient>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -30,6 +33,9 @@ pub struct SurfaceBorder {
     /// Optional CSS edge colours in top, right, bottom, left order.
     #[serde(default)]
     pub colors: Option<[[f32; 4]; 4]>,
+    /// Optional colour along an axis, replacing `color` and `colors`.
+    #[serde(default)]
+    pub gradient: Option<LinearGradient>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq)]
@@ -41,7 +47,14 @@ pub struct SurfacePaint {
     pub inset_shadows: Vec<InsetShadow>,
     #[serde(default)]
     pub border: Option<SurfaceBorder>,
+    /// Texels per logical pixel (the device pixel ratio for a hairline that must
+    /// stay one physical pixel wide); 1 when absent.
+    #[serde(default)]
+    pub texture_scale: Option<f32>,
 }
+
+/// The largest texture scale a paint may ask for (a 3x screen).
+const MAX_TEXTURE_SCALE: f32 = 3.0;
 
 #[derive(Clone, Debug, Default, Component)]
 pub struct AtomeSurfacePaint(pub Option<SurfacePaint>);
@@ -61,28 +74,76 @@ fn over(base: [f32; 4], source: [f32; 4], coverage: f32) -> [f32; 4] {
     result
 }
 
+fn valid_color(value: &[f32; 4]) -> bool {
+    value
+        .iter()
+        .all(|v| v.is_finite() && (0.0..=1.0).contains(v))
+}
+
+impl LinearGradient {
+    fn valid(&self) -> bool {
+        self.angle.is_finite()
+            && self.stops.len() >= 2
+            && self.stops.len() <= 16
+            && self.stops.windows(2).all(|s| s[0].offset <= s[1].offset)
+            && self
+                .stops
+                .iter()
+                .all(|s| (0.0..=1.0).contains(&s.offset) && valid_color(&s.color))
+    }
+
+    fn push_key(&self, result: &mut Vec<u32>) {
+        result.extend([self.angle.to_bits(), self.stops.len() as u32]);
+        for stop in &self.stops {
+            result.push(stop.offset.to_bits());
+            result.extend(stop.color.map(f32::to_bits));
+        }
+    }
+
+    /// The axis and its extent are constant over the texture: computed once, not per pixel.
+    fn axis(&self, width: f32, height: f32) -> ([f32; 2], f32) {
+        let angle = self.angle.to_radians();
+        let axis = [angle.sin(), -angle.cos()];
+        (axis, axis[0].abs() * width + axis[1].abs() * height)
+    }
+
+    /// The colour at a logical point of a `width` x `height` surface (CSS angles).
+    fn color_at(&self, x: f32, y: f32, width: f32, height: f32, (axis, extent): ([f32; 2], f32)) -> [f32; 4] {
+        let t = (((x - width / 2.0) * axis[0] + (y - height / 2.0) * axis[1]) / extent.max(1.0)
+            + 0.5)
+            .clamp(0.0, 1.0);
+        let first = &self.stops[0];
+        if t <= first.offset {
+            return first.color;
+        }
+        for pair in self.stops.windows(2) {
+            if t <= pair[1].offset {
+                let mix =
+                    (t - pair[0].offset) / (pair[1].offset - pair[0].offset).max(f32::EPSILON);
+                return std::array::from_fn(|i| {
+                    pair[0].color[i] + (pair[1].color[i] - pair[0].color[i]) * mix
+                });
+            }
+        }
+        self.stops.last().unwrap().color
+    }
+}
+
 impl SurfacePaint {
     pub fn valid(&self) -> bool {
-        let color = |value: &[f32; 4]| {
-            value
-                .iter()
-                .all(|v| v.is_finite() && (0.0..=1.0).contains(v))
-        };
-        self.gradient.as_ref().is_none_or(|g| {
-            g.angle.is_finite()
-                && g.stops.len() >= 2
-                && g.stops.len() <= 16
-                && g.stops.windows(2).all(|s| s[0].offset <= s[1].offset)
-                && g.stops
-                    .iter()
-                    .all(|s| (0.0..=1.0).contains(&s.offset) && color(&s.color))
-        }) && self.inset_shadows.len() <= 4
+        let color = valid_color;
+        self.gradient.as_ref().is_none_or(LinearGradient::valid)
+            && self
+                .texture_scale
+                .is_none_or(|s| s.is_finite() && (1.0..=MAX_TEXTURE_SCALE).contains(&s))
+            && self.inset_shadows.len() <= 4
             && self.inset_shadows.iter().all(|s| {
                 color(&s.color)
                     && s.blur.is_finite()
                     && s.blur >= 0.0
                     && s.spread.is_finite()
                     && s.offset.iter().all(|v| v.is_finite())
+                    && s.gradient.as_ref().is_none_or(LinearGradient::valid)
             })
             && self.border.as_ref().is_none_or(|b| {
                 color(&b.color)
@@ -91,20 +152,22 @@ impl SurfacePaint {
                         .is_none_or(|edges| edges.iter().all(color))
                     && b.width.is_finite()
                     && b.width >= 0.0
+                    && b.gradient.as_ref().is_none_or(LinearGradient::valid)
             })
+    }
+
+    fn scale(&self) -> f32 {
+        self.texture_scale.unwrap_or(1.0)
     }
 
     pub fn cache_key(&self, fill: [f32; 4]) -> Vec<u32> {
         let mut result: Vec<u32> = fill.iter().map(|v| v.to_bits()).collect();
         if let Some(g) = &self.gradient {
-            result.extend([g.angle.to_bits(), g.stops.len() as u32]);
-            for stop in &g.stops {
-                result.push(stop.offset.to_bits());
-                result.extend(stop.color.map(f32::to_bits));
-            }
+            g.push_key(&mut result);
         } else {
             result.extend([0, 0]);
         }
+        result.push(self.scale().to_bits());
         result.push(self.inset_shadows.len() as u32);
         for s in &self.inset_shadows {
             result.extend(s.color.map(f32::to_bits));
@@ -114,6 +177,10 @@ impl SurfacePaint {
                 s.offset[0].to_bits(),
                 s.offset[1].to_bits(),
             ]);
+            match &s.gradient {
+                Some(g) => g.push_key(&mut result),
+                None => result.push(0),
+            }
         }
         if let Some(b) = &self.border {
             result.push(b.width.to_bits());
@@ -124,94 +191,87 @@ impl SurfacePaint {
                     result.extend(edge.map(f32::to_bits));
                 }
             }
+            match &b.gradient {
+                Some(g) => g.push_key(&mut result),
+                None => result.push(0),
+            }
         }
         result
     }
 
-    /// The gradient axis and its extent are constant over the texture: computed
-    /// once, not per pixel.
-    fn gradient_axis(&self, width: f32, height: f32) -> ([f32; 2], f32) {
-        let angle = self.gradient.as_ref().map_or(0.0, |g| g.angle).to_radians();
-        let axis = [angle.sin(), -angle.cos()];
-        (axis, axis[0].abs() * width + axis[1].abs() * height)
-    }
-
-    fn fill_at(&self, x: f32, y: f32, width: f32, height: f32, (axis, extent): ([f32; 2], f32), fill: [f32; 4]) -> [f32; 4] {
-        let Some(g) = &self.gradient else {
-            return fill;
-        };
-        let t = (((x - width / 2.0) * axis[0] + (y - height / 2.0) * axis[1]) / extent.max(1.0)
-            + 0.5)
-            .clamp(0.0, 1.0);
-        let first = &g.stops[0];
-        if t <= first.offset {
-            return first.color;
-        }
-        for pair in g.stops.windows(2) {
-            if t <= pair[1].offset {
-                let mix =
-                    (t - pair[0].offset) / (pair[1].offset - pair[0].offset).max(f32::EPSILON);
-                return std::array::from_fn(|i| {
-                    pair[0].color[i] + (pair[1].color[i] - pair[0].color[i]) * mix
-                });
-            }
-        }
-        g.stops.last().unwrap().color
-    }
-
     pub fn texture(&self, silhouette: &AtomeShapeSilhouette, fill: [f32; 4]) -> AtomeTexture {
-        let width = silhouette.width.ceil().max(1.0) as u32;
-        let height = silhouette.height.ceil().max(1.0) as u32;
+        // Lengths stay logical; only the raster grows. Edges blend over one texel.
+        let scale = self.scale();
+        let (logical_width, logical_height) = (silhouette.width, silhouette.height);
+        let width = (logical_width * scale).ceil().max(1.0) as u32;
+        let height = (logical_height * scale).ceil().max(1.0) as u32;
         let mut rgba = vec![0; width as usize * height as usize * 4];
-        let gradient_axis = self.gradient_axis(silhouette.width, silhouette.height);
+        let axis_of = |g: &LinearGradient| g.axis(logical_width, logical_height);
+        let fill_axis = self.gradient.as_ref().map(axis_of);
+        let shadow_axes: Vec<_> = self
+            .inset_shadows
+            .iter()
+            .map(|s| s.gradient.as_ref().map(axis_of))
+            .collect();
+        let border_axis = self
+            .border
+            .as_ref()
+            .and_then(|b| b.gradient.as_ref().map(axis_of));
         for y in 0..height {
             for x in 0..width {
-                let point = [x as f32 + 0.5, y as f32 + 0.5];
-                let coverage = silhouette.coverage(point[0], point[1]);
+                let point = [(x as f32 + 0.5) / scale, (y as f32 + 0.5) / scale];
+                let coverage =
+                    (0.5 - silhouette.signed_distance(point[0], point[1]) * scale).clamp(0.0, 1.0);
                 if coverage <= 0.0 {
                     continue;
                 }
-                let mut pixel = self.fill_at(
-                    point[0],
-                    point[1],
-                    silhouette.width,
-                    silhouette.height,
-                    gradient_axis,
-                    fill,
-                );
+                let along = |g: &LinearGradient, axis| {
+                    g.color_at(point[0], point[1], logical_width, logical_height, axis)
+                };
+                let mut pixel = match (&self.gradient, fill_axis) {
+                    (Some(g), Some(axis)) => along(g, axis),
+                    _ => fill,
+                };
                 // CSS lists the topmost inset first. Reverse before alpha composition.
-                for shadow in self.inset_shadows.iter().rev() {
+                for (shadow, axis) in self.inset_shadows.iter().zip(&shadow_axes).rev() {
                     let distance = silhouette
                         .signed_distance(point[0] - shadow.offset[0], point[1] - shadow.offset[1])
                         + shadow.spread;
                     let alpha = if shadow.blur <= 0.0 {
-                        (distance + 0.5).clamp(0.0, 1.0)
+                        (distance * scale + 0.5).clamp(0.0, 1.0)
                     } else {
                         gaussian_cdf(distance / (shadow.blur * 0.5).max(0.001))
                     };
-                    pixel = over(pixel, shadow.color, alpha);
+                    let color = match (&shadow.gradient, axis) {
+                        (Some(g), Some(axis)) => along(g, *axis),
+                        _ => shadow.color,
+                    };
+                    pixel = over(pixel, color, alpha);
                 }
                 if let Some(border) = &self.border {
                     let distance = silhouette.signed_distance(point[0], point[1]);
-                    let edge_color = border
-                        .colors
-                        .map(|edges| {
-                            let distances = [
-                                point[1],
-                                silhouette.width - point[0],
-                                silhouette.height - point[1],
-                                point[0],
-                            ];
-                            let edge = (0..4)
-                                .min_by(|a, b| distances[*a].total_cmp(&distances[*b]))
-                                .unwrap();
-                            edges[edge]
-                        })
-                        .unwrap_or(border.color);
+                    let edge_color = match (&border.gradient, border_axis) {
+                        (Some(g), Some(axis)) => along(g, axis),
+                        _ => border
+                            .colors
+                            .map(|edges| {
+                                let distances = [
+                                    point[1],
+                                    logical_width - point[0],
+                                    logical_height - point[1],
+                                    point[0],
+                                ];
+                                let edge = (0..4)
+                                    .min_by(|a, b| distances[*a].total_cmp(&distances[*b]))
+                                    .unwrap();
+                                edges[edge]
+                            })
+                            .unwrap_or(border.color),
+                    };
                     pixel = over(
                         pixel,
                         edge_color,
-                        (distance + border.width + 0.5).clamp(0.0, 1.0),
+                        ((distance + border.width) * scale + 0.5).clamp(0.0, 1.0),
                     );
                 }
                 pixel[3] *= coverage;

@@ -65,13 +65,16 @@ export function createCommunicationPush({ query, transport = createApnsTransport
             if (!reserved.changes) reserved = await query('run', "UPDATE auth_push_deliveries SET state='sending' WHERE delivery_id=? AND state='retry'", [id]);
             if (!reserved.changes) return;
             // No message, phone, bearer, photo or caller name is exposed on the lock screen.
-            const payload = { aps: call ? {} : { alert: { title: 'Atome', 'loc-key': 'ATOME_NOTIFICATION' }, sound: 'default' },
+            // A contact request arrives quietly: no sound, nothing lit, among the notifications.
+            const quiet = item.kind === 'connection-request';
+            const payload = { aps: call ? {} : { alert: { title: 'Atome', 'loc-key': 'ATOME_NOTIFICATION' },
+                ...(quiet ? { 'interruption-level': 'passive' } : { sound: 'default' }) },
                 atome: { principal_id: principal, notification_id: item.id, peer_id: item.from_id,
                     ...(call || control ? { room_id: item.room_id, call_mode: item.call_mode, expires_at: expiresAt } : {}),
                     ...(control ? { status: item.status, accepted_principal_id: item.acceptedPrincipalId,
                         accepted_key_id: item.acceptedKeyId } : {}) } };
             let result;
-            try { result = await deliveryTransport.send(installation, payload, { voip: call, control, expiresAt, collapseId: id }); }
+            try { result = await deliveryTransport.send(installation, payload, { voip: call, control, quiet, expiresAt, collapseId: id }); }
             catch { result = { ok: false, error: 'push_transport_uncertain' }; }
             const state = result.ok ? 'accepted' : result.status === 429 || result.status >= 500 ? 'retry' : 'failed';
             await query('run', 'UPDATE auth_push_deliveries SET state=? WHERE delivery_id=?', [state, id]);

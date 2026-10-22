@@ -78,6 +78,7 @@ fn inset_blur_darkens_the_inside_edge_without_painting_outside() {
             blur: 8.0,
             spread: 0.0,
             offset: [0.0, 3.0],
+            gradient: None,
         }],
         ..Default::default()
     };
@@ -95,6 +96,7 @@ fn border_can_cover_a_transparent_fill_without_filling_the_middle() {
             width: 2.0,
             color: [1.0; 4],
             colors: Some([[1.0; 4], [1.0; 4], [1.0, 1.0, 1.0, 0.25], [1.0; 4]]),
+            gradient: None,
         }),
         ..Default::default()
     };
@@ -102,6 +104,61 @@ fn border_can_cover_a_transparent_fill_without_filling_the_middle() {
     assert_eq!(pixel(&texture, 50, 0)[3], 255);
     assert_eq!(pixel(&texture, 50, 20)[3], 0);
     assert_eq!(pixel(&texture, 50, 39)[3], 64);
+}
+
+fn fade(angle: f32, from: f32, to: f32) -> LinearGradient {
+    LinearGradient {
+        angle,
+        stops: vec![
+            GradientStop { offset: 0.0, color: [1.0, 1.0, 1.0, from] },
+            GradientStop { offset: 1.0, color: [1.0, 1.0, 1.0, to] },
+        ],
+    }
+}
+
+// The Dashboard tile's hairline: almost nothing on the left, present on the right.
+#[test]
+fn a_border_gradient_grades_the_outline_along_its_axis() {
+    let paint = SurfacePaint {
+        border: Some(SurfaceBorder { width: 1.0, color: [1.0; 4], colors: None, gradient: Some(fade(90.0, 0.0, 1.0)) }),
+        ..Default::default()
+    };
+    let texture = paint.texture(&silhouette(100.0, 40.0, 0.0), [0.0; 4]);
+    assert!(pixel(&texture, 0, 20)[3] < 10);
+    assert!(pixel(&texture, 99, 20)[3] > 245);
+    assert!(pixel(&texture, 25, 0)[3] < pixel(&texture, 75, 0)[3]);
+    assert_eq!(pixel(&texture, 50, 20)[3], 0);
+}
+
+// The tile's right stroke: an inset line that fades while going down.
+#[test]
+fn an_inset_shadow_gradient_fades_the_stroke_along_its_axis() {
+    let paint = SurfacePaint {
+        inset_shadows: vec![InsetShadow { color: [1.0; 4], blur: 0.0, spread: 0.0, offset: [-1.0, 0.0],
+            gradient: Some(fade(180.0, 1.0, 0.0)) }],
+        ..Default::default()
+    };
+    let texture = paint.texture(&silhouette(40.0, 100.0, 0.0), [0.0; 4]);
+    assert!(pixel(&texture, 39, 5)[3] > 230);
+    assert!(pixel(&texture, 39, 95)[3] < 25);
+    assert_eq!(pixel(&texture, 0, 5)[3], 0);
+}
+
+// A hairline asked at the device ratio covers one physical pixel, not one logical one.
+#[test]
+fn a_texture_scale_rasterizes_more_texels_for_the_same_logical_lengths() {
+    let paint = SurfacePaint {
+        border: Some(SurfaceBorder { width: 0.5, color: [1.0; 4], colors: None, gradient: None }),
+        texture_scale: Some(2.0),
+        ..Default::default()
+    };
+    let texture = paint.texture(&silhouette(100.0, 40.0, 0.0), [0.0; 4]);
+    assert_eq!((texture.width, texture.height), (200, 80));
+    assert_eq!(pixel(&texture, 100, 0)[3], 255);
+    assert_eq!(pixel(&texture, 100, 1)[3], 0);
+    assert_ne!(paint.cache_key([0.0; 4]), SurfacePaint { texture_scale: None, ..paint.clone() }.cache_key([0.0; 4]));
+    assert!(!SurfacePaint { texture_scale: Some(4.0), ..paint.clone() }.valid());
+    assert!(!SurfacePaint { texture_scale: Some(0.5), ..paint }.valid());
 }
 
 #[test]
@@ -258,7 +315,7 @@ fn glass_surfaces_draw_their_surface_paint_border_and_follow_its_patches() {
     let mut node = shape("glass_chip");
     node.backdrop = Some(AtomeBackdropStyle { blur_px: 16.0, tint: [0.0, 0.0, 0.1, 0.69], tint_fade: 0.0, corner_cut_px: 0.0 });
     node.surface_paint = Some(SurfacePaint {
-        border: Some(SurfaceBorder { width: 1.0, color: [1.0; 4], colors: None }),
+        border: Some(SurfaceBorder { width: 1.0, color: [1.0; 4], colors: None, gradient: None }),
         ..Default::default()
     });
     let scene = AtomeRenderScene { nodes: vec![node], effects: Vec::new(), selection_style: None };

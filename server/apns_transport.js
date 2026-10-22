@@ -5,7 +5,7 @@ import jwt from 'jsonwebtoken';
 /** APNs is an OS delivery transport, never an application command endpoint. */
 export function createApnsTransport({ environment = process.env, connect = http2.connect, readKey = readFile } = {}) {
     const configured = () => ['APNS_KEY_ID', 'APNS_TEAM_ID', 'APNS_KEY_PATH', 'APNS_TOPIC'].every(key => !!environment[key]);
-    async function send(installation, payload, { voip = false, expiresAt, collapseId } = {}) {
+    async function send(installation, payload, { voip = false, quiet = false, expiresAt, collapseId } = {}) {
         if (!configured()) return { ok: false, error: 'apns_configuration_required' };
         if (!/^[a-f0-9]{64,200}$/.test(installation.token) || !['sandbox', 'production'].includes(installation.environment)) {
             throw new Error('apns_installation_invalid');
@@ -26,7 +26,7 @@ export function createApnsTransport({ environment = process.env, connect = http2
             let request;
             try { request = session.request({ ':method': 'POST', ':path': `/3/device/${installation.token}`,
                 authorization: `bearer ${bearer}`, 'apns-topic': environment.APNS_TOPIC + (voip ? '.voip' : ''),
-                'apns-push-type': voip ? 'voip' : 'alert', 'apns-priority': '10',
+                'apns-push-type': voip ? 'voip' : 'alert', 'apns-priority': quiet ? '5' : '10',
                 'apns-expiration': String(Math.floor(expiresAt / 1000)), 'apns-collapse-id': collapseId }); }
             catch { finish({ ok: false, error: 'apns_transport_uncertain' }); return; }
             let status = 0, body = '';

@@ -17,8 +17,8 @@ const definitions = {
     alternatives: [{ barcode }, ['barcode'], 'Propose up to three healthier food products of the same category (verdict good, better Nutri-Score).', false],
     attach: [{ item_id: { type: 'string', minLength: 1, maxLength: 200 }, barcode, source }, ['item_id', 'barcode'],
         'Link a product to a shopping list item: the item keeps the product\'s scores and verdict.', true],
-    scan: [{ item_id: { type: 'string', minLength: 1, maxLength: 200 } }, [],
-        'Scan a barcode with this device camera and read the product; the matching unchecked shopping item is checked, else the product is returned to propose adding it.', true]
+    scan: [{ item_id: { type: 'string', minLength: 1, maxLength: 200 }, check: { type: 'boolean' } }, [],
+        'Scan a barcode with this device camera and read the product; the matching unchecked shopping item (item_id, else by barcode or name) is checked, else the product is returned to propose adding it. check false only links the product to that item, leaving it to buy.', true]
 };
 export const FOOD_COMMANDS = Object.freeze(Object.entries(definitions).map(([action, [properties, required, description, persistent]]) => Object.freeze({
     name: `food.${action}`, action, description, persistent, capability: persistent ? 'shopping.write' : 'food.read',

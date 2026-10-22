@@ -4,7 +4,10 @@
 // messages and arbitrary codes can contain credentials; only known codes travel.
 export const openAiFailure = (body, defaultCode = 'provider_request_failed', httpStatus = null) => {
     const failure = body?.response?.status_details?.error || body?.response?.error || body?.error || body;
-    const known = ['invalid_api_key', 'insufficient_quota', 'rate_limit_exceeded', 'model_not_found',
+    // Specific codes before the `invalid_request_error` type they arrive with: a
+    // refused model, a spending cap or an inactive billing is told as itself.
+    const known = ['invalid_api_key', 'insufficient_quota', 'rate_limit_exceeded', 'model_not_found', 'invalid_model',
+        'billing_hard_limit_reached', 'billing_not_active',
         'invalid_request_error', 'permission_denied', 'server_error', 'context_length_exceeded',
         'session_expired', 'provider_connection_closed'];
     const code = [failure?.code, failure?.type].find(value => known.includes(value));

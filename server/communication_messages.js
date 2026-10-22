@@ -18,6 +18,19 @@ export async function persistCommunicationMessage(vaultRouter, owner, properties
     return result;
 }
 
+// An accepted contact request: the note its recipient read becomes the first message of
+// their conversation, in both vaults, dated when it was sent (communication_relations.js).
+export async function persistAcceptedRequestNote(vaultRouter, { ownerId, peer, note, at }) {
+    if (!peer?.user_id) throw new Error('contact_request_sender_unknown');
+    const messageId = `contact_request_${identity(peer.user_id, `${ownerId}:${at}`)}`;
+    const properties = { message_id: messageId, from_id: peer.user_id, from_name: peer.username || '', from_phone: peer.phone || null,
+        to_user_id: ownerId, timestamp: new Date(at).toISOString(), subject: '', message: note, atome_ids: [], kind: 'message',
+        request_atome_id: null, request_id: null, mode: null, share_type: null, priority: 'normal',
+        action: { kind: 'conversation', contactId: peer.user_id, messageId } };
+    await persistCommunicationMessage(vaultRouter, ownerId, { ...properties, unread: false, box: 'inbox' });
+    await persistCommunicationMessage(vaultRouter, peer.user_id, { ...properties, unread: false, box: 'sent' });
+}
+
 export async function readPersistedCommunicationMessage(vaultRouter, owner, messageId) {
     const state = await vaultRouter.getState(owner, localId(owner, messageId));
     return state?.properties || null;

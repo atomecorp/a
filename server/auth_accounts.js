@@ -40,6 +40,8 @@ export function createAccountAuth({ query, transaction, proof, sessions, devices
         const purchase = await billing.prepareCreation(input.payment, keyId);
         const created = await transaction(async () => {
             await proof.limit(`account-create:${proof.keyedIndex(String(network))}`, 5, 3600000);
+            // A day's bound too: accounts created in series would each get their own contact-request quotas.
+            await proof.limit(`account-create-day:${proof.keyedIndex(String(network))}`, 10, 86400000);
             await proof.limit(`account-create-key:${keyId}`, 3, 3600000);
             if (await devices.byId(keyId)) reject('auth_request_invalid');
             await proof.consumeProof(input, 'create-account', `create:${keyId}`, jwk);

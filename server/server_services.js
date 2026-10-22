@@ -21,6 +21,7 @@ import { getLocalVersion } from './githubSync.js';
 import { enqueuePendingConsoleMessage, wsSendJsonToUser } from './wsApiState.js';
 import { pushNotificationToUserStack } from './notificationStack.js';
 import { createCommunicationRelations } from './communication_relations.js';
+import { persistAcceptedRequestNote } from './communication_messages.js';
 import { createNotificationDelivery, createRateLimiter } from './communication_delivery.js';
 import { createNewsBroadcast } from './news_broadcast.js';
 import { createCommunities } from './communities.js';
@@ -50,7 +51,9 @@ export function createServerServices({ projectRoot_env }) {
   const communicationRelations = createCommunicationRelations({
     notify: (targetId, senderId, notification) => deliverCommNotification(targetId, senderId, notification),
     findUserByPhone: (phone) => findUserByPhone(db.getDataSourceAdapter(), phone),
-    findUserById: (id) => findUserById(db.getDataSourceAdapter(), id)
+    findUserById: (id) => findUserById(db.getDataSourceAdapter(), id),
+    onAccepted: async ({ ownerId, peerId, note, at }) => persistAcceptedRequestNote(userVaultRouter,
+      { ownerId, peer: await findUserById(db.getDataSourceAdapter(), peerId), note, at })
   });
   const directMessageRateAllowed = createRateLimiter();
   const syncSharingService = createSyncSharingService({
