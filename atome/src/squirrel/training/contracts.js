@@ -1,5 +1,5 @@
 import { validateParams } from '../ai/agent_gateway_normalize.js';
-import { TRAINING_CUSTOM_LEVEL, TRAINING_EXERCISE_IDS, TRAINING_GOALS, TRAINING_KINDS, TRAINING_LEVELS, TRAINING_TARGETS } from '../../shared/training_catalog.js';
+import { TRAINING_CUSTOM_LEVEL, TRAINING_EXERCISE_IDS, TRAINING_GOALS, TRAINING_KINDS, TRAINING_LEVELS, TRAINING_TARGETS, TRAINING_TEMPO_LIMITS } from '../../shared/training_catalog.js';
 
 // One contract for runtime V2, AI discovery and direct MCP calls: every Sport
 // feature of the Dashboard runs through these commands, the interface included.
@@ -12,6 +12,9 @@ const level = { enum: [...TRAINING_LEVELS, TRAINING_CUSTOM_LEVEL] };
 // The user's own prescription, in the shape of one of the exercise's catalogue levels (training.get_exercise).
 const custom = { type: 'object', description: 'Same shape as a level of training.get_exercise for this exercise: strength {sets, reps:[low, high], rest_s}, core {rounds, holds:[[variant, seconds]], rest_s}, cardio {warmup_min, steady:[minutes, zone] or intervals:[count, [work_s, zone], [recovery_s, zone]], cooldown_min}.' };
 const kg = { type: 'number', minimum: 0, maximum: 500 };
+const phase = { type: 'integer', minimum: TRAINING_TEMPO_LIMITS[0], maximum: TRAINING_TEMPO_LIMITS[1] };
+const tempo = { type: 'object', additionalProperties: false, required: ['concentric_s', 'eccentric_s'], properties: { concentric_s: phase, eccentric_s: phase },
+    description: 'A strength repetition\'s seconds: lifting (concentric_s) then lowering (eccentric_s); the beeps follow it.' };
 const date = { type: 'string', format: 'date-time', maxLength: 40 };
 const days = { type: 'array', maxItems: 7, uniqueItems: true, items: { type: 'integer', minimum: 0, maximum: 6 } };
 const minutes_per_week = { type: 'number', minimum: 0, maximum: 10080 };
@@ -25,14 +28,14 @@ const definitions = {
     list_exercises: [{ kind: { type: 'string', enum: TRAINING_KINDS } }, [], 'List the Sport exercises (core, strength, cardio) with their three levels.', false],
     get_exercise: [{ exercise_id }, ['exercise_id'], 'Read one exercise: its three level prescriptions, the user\'s chosen level (1-3 or custom), own prescription, sound choice and load, recent results and the heart-rate zones from the user\'s age.', false],
     open_exercise: [{ exercise_id }, ['exercise_id'], 'Show an exercise\'s card on the Dashboard surface: its level, numbered sets or cardio steps, load and last sessions. Writes nothing.', false],
-    set_profile: [{ exercise_id, level, load_kg: kg, minutes_per_week, days, custom, sound: { type: 'boolean' } }, ['exercise_id', 'level'],
-        'Choose the user\'s level for an exercise: 1-3, or custom for their own prescription (custom, started from their current level when omitted); optionally its working load in kg, the weekly time given to it and whether the session beeps (sound).', true],
+    set_profile: [{ exercise_id, level, load_kg: kg, minutes_per_week, days, custom, sound: { type: 'boolean' }, tempo, auto: { type: 'boolean' } }, ['exercise_id', 'level'],
+        'Choose the user\'s level for an exercise: 1-3, or custom for their own prescription (custom, started from their current level when omitted); optionally its working load in kg, the weekly time given to it, whether the session beeps (sound), a strength repetition\'s tempo, and whether a rest, hold or cardio step at zero moves on by itself (auto, on by default) or waits for the user.', true],
     suggest_load: [{ exercise_id, level, body_weight_kg: kg }, ['exercise_id'],
         'Propose the next working load (double progression from the log, else a share of body weight for a first test set) or the next plank holds.', false],
     plan_week: [{ minutes_per_week, days, goal }, [],
         'Preview a week of sessions within the user\'s weekly time (WHO targets, strength twice a week, HIIT at most twice). Writes nothing.', false],
     schedule_week: [{ week_start: day, hour: { type: 'integer', minimum: 5, maximum: 22 }, minutes_per_week, days, goal }, ['week_start'],
-        'Put the planned week (training.plan_week) in the user\'s personal calendar, one event per session from week_start (a Monday) at hour (18 by default). Sessions already placed for that week are kept, never doubled.', true],
+        'Put the planned week (training.plan_week) in the user\'s personal calendar, one event per session from week_start (a Monday) at hour (18 by default). Sessions already placed for that week keep their time (never doubled), take the new plan\'s exercises, and the future ones the plan no longer has are removed.', true],
     open_journal: [{ exercise_id }, [], 'Show the training log card on the Dashboard surface (one exercise, or every one). Writes nothing.', false],
     open_week: [{}, [], 'Show the week card on the Dashboard surface: the planned sessions within the weekly time. Writes nothing.', false],
     prepare_session: [{ request_id: id, exercise_id, level, load_kg: kg }, ['request_id', 'exercise_id'],
@@ -51,7 +54,7 @@ const definitions = {
     set_program: [{ targets: { type: 'array', maxItems: 30, uniqueItems: true, items: target } }, ['targets'],
         'Replace the session programme by these ordered targets: reorder it, remove from it or empty it.', true],
     open_program: [{}, [], 'Show the session programme card on the Dashboard surface, where it is reordered and started. Writes nothing.', false],
-    read_log: [{ exercise_id, from: date, to: date }, [], 'Read the training log: finished sessions with active time, volume, sets and heart rate.', false]
+    read_log: [{ exercise_id, from: date, to: date }, [], 'Read the training log: finished sessions with active time (split into work_minutes, rest_minutes and paused_minutes), volume, sets, heart rate and estimated energy (energy: active_kcal and total_kcal from the 2024 Compendium METs and the body weight on the user\'s card, null without one), and each day\'s totals (days). The energy is an estimate, never the health store\'s measured value.', false]
 };
 export const TRAINING_COMMANDS = Object.freeze(Object.entries(definitions).map(([action, [properties, required, description, persistent]]) => Object.freeze({
     name: `training.${action}`, action, description, persistent, capability: persistent ? 'training.write' : 'training.read',
@@ -59,7 +62,7 @@ export const TRAINING_COMMANDS = Object.freeze(Object.entries(definitions).map((
     output_schema: { type: 'object', required: ['ok'], properties: { ok: { type: 'boolean' }, error: { type: 'string', enum: TRAINING_ERRORS },
         exercises: { type: 'array' }, exercise: { type: 'object' }, zones: { type: ['object', 'null'] }, events: { type: 'array' }, profile: { type: ['object', 'null'] }, suggestion: { type: 'object' },
         plan: { type: 'object' }, session_id: { type: 'string' }, state: { type: 'object' }, sessions: { type: 'array' }, favorites: { type: 'array' },
-        program: { type: 'array' } } }
+        program: { type: 'array' }, days: { type: 'array' }, energy: { type: ['object', 'null'] } } }
 })));
 export const validateTrainingInput = (action, input) => {
     const contract = TRAINING_COMMANDS.find(command => command.action === action);

@@ -2,7 +2,10 @@
  * (todo/Dashboard Sport.md; four levels until 2026-10-21, the fourth now reached through « Perso »).
  * Sources: WHO 2020 (150-300 min moderate or 75-150 vigorous a week, strength 2 days a week),
  * ACSM 2009 progression models (novice 8-12 RM, 1-2 min rest for hypertrophy), trainer consensus
- * for planks (+5 s a week, a new variant after 60 s) and treadmill HIIT (1:3 → 2:1 work-rest). */
+ * for planks (+5 s a week, a new variant after 60 s) and treadmill HIIT (1:3 → 2:1 work-rest).
+ * Audited on 2026-10-22 against the ACSM 2026 position stand (MSSE 58(4):851-872, doi 10.1249/MSS.0000000000003897:
+ * ≥2 sessions a week, strength ≥80% 1RM 2-3 sets, hypertrophy ≥10 sets a week, failure not needed, 2-3 reps in reserve)
+ * and Currier et al., BJSM 2023;57:1211 (every prescription beats none): todo/urgent_task_suivi_2026-10-22.md, S-01. */
 const deep = value => Object.freeze(Array.isArray(value) ? value.map(deep)
     : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, deep(item)])) : value);
 
@@ -104,6 +107,15 @@ export const trainingCustomLevel = (id, custom) => {
                 && Array.isArray(blocks[2]) && within(blocks[2][0], 'recovery_s') && zoneOk(blocks[2][1])))) invalid();
     }
     return deep(custom);
+};
+// A strength repetition's tempo: its lifting (concentric) and lowering (eccentric) seconds, coached by the
+// session's beeps. Without a chosen tempo a repetition takes the default, three seconds.
+export const TRAINING_TEMPO_DEFAULT = Object.freeze({ concentric_s: 1, eccentric_s: 2 });
+export const TRAINING_TEMPO_LIMITS = Object.freeze([1, 6]);
+export const trainingTempo = tempo => {
+    const within = value => Number.isInteger(value) && value >= TRAINING_TEMPO_LIMITS[0] && value <= TRAINING_TEMPO_LIMITS[1];
+    if (!sameKeys(tempo, ['concentric_s', 'eccentric_s']) || !within(tempo.concentric_s) || !within(tempo.eccentric_s)) invalid();
+    return { concentric_s: tempo.concentric_s, eccentric_s: tempo.eccentric_s };
 };
 // The prescription a session follows: a catalogue level, or the user's own.
 export const trainingPrescription = (id, level, custom = null) => (level === TRAINING_CUSTOM_LEVEL ? trainingCustomLevel(id, custom) : trainingLevel(id, level));
