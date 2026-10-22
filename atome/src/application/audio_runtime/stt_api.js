@@ -1,20 +1,22 @@
-// Tauri -> native STT bridge
-// Exposes window.__TAURI__.stt and window.__TAURI_INTERNALS__.stt when the STT plugin is available.
-// Desktop-only event bridge: relies on Tauri's global event API when present.
+// Native STT bridge (the STT plugin's contract: `plugin:stt|…` commands, `plugin:stt:*` events).
+// Tauri: exposes window.__TAURI__.stt and window.__TAURI_INTERNALS__.stt through Tauri's
+// invoke and event API. The iOS app answers the same commands through its native bridge
+// and delivers the same events as window events: exposes window.__ATOME_NATIVE_STT__.
 
 (function () {
     if (typeof window === 'undefined') return;
 
     const tauri = window.__TAURI__ || null;
     const internals = window.__TAURI_INTERNALS__ || null;
-    if (!tauri && !internals) return;
+    const nativeInvoke = typeof window.__ATOME_IOS_NATIVE_INVOKE === 'function' ? window.__ATOME_IOS_NATIVE_INVOKE.bind(window) : null;
+    if (!tauri && !internals && !nativeInvoke) return;
 
     const getInvoke = () => {
         try {
             if (tauri && typeof tauri.invoke === 'function') return tauri.invoke.bind(tauri);
             if (internals && typeof internals.invoke === 'function') return internals.invoke.bind(internals);
         } catch (_) { }
-        return null;
+        return nativeInvoke;
     };
 
     const getEventListen = () => {
@@ -29,7 +31,12 @@
                 }
             }
         } catch (_) { }
-        return null;
+        if (!nativeInvoke) return null;
+        return async (eventName, handler) => {
+            const listener = (event) => handler({ payload: event.detail });
+            window.addEventListener(eventName, listener);
+            return () => window.removeEventListener(eventName, listener);
+        };
     };
 
     const invoke = getInvoke();
@@ -95,5 +102,10 @@
     }
     if (internals && !internals.stt) {
         internals.stt = stt;
+    }
+    if (!tauri && !internals && !window.__ATOME_NATIVE_STT__) {
+        // The iOS app stops taking the microphone's sound on request, without closing it.
+        stt.setMuted = (muted) => invoke('plugin:stt|set_muted', { muted: muted === true });
+        window.__ATOME_NATIVE_STT__ = stt;
     }
 })();

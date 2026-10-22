@@ -280,6 +280,7 @@ fn a_node_reads_its_variant_and_its_defaults() {
             filters: None,
             transition: None,
             procedural: None,
+            progress_ring: None,
         }
     };
     let geometry = node.shape_geometry();

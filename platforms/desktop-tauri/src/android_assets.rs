@@ -116,18 +116,38 @@ mod extraction {
             .all(|component| matches!(component, Component::Normal(_)))
     }
 
-    /// Extracts every embedded asset into `app_data_dir/squirrel/project` and
-    /// returns `<project>/atome/src`.
-    pub fn materialize_project_root<R: tauri::Runtime>(
+    /// Returns `<project>/atome/src` under `app_data_dir/squirrel/project`,
+    /// created so it resolves to the same canonical path before and after the
+    /// extraction. It reads no asset: the main thread can call it at once.
+    pub fn project_static_dir<R: tauri::Runtime>(
         app: &tauri::AppHandle<R>,
     ) -> Result<PathBuf, String> {
-        let project_root = app
+        let static_dir = app
             .path()
             .app_data_dir()
             .map_err(|err| format!("android app_data_dir is unavailable: {err}"))?
             .join("squirrel")
-            .join("project");
-        let static_dir = project_root.join("atome").join("src");
+            .join("project")
+            .join("atome")
+            .join("src");
+        fs::create_dir_all(&static_dir)
+            .map_err(|err| format!("cannot create {static_dir:?}: {err}"))?;
+        Ok(static_dir)
+    }
+
+    /// Extracts every embedded asset into `app_data_dir/squirrel/project` and
+    /// returns `<project>/atome/src`. Hashing and extracting ~300 MB takes
+    /// seconds, so this must never run on the Android main thread: blocking it
+    /// for 5 s at launch is an "isn't responding" dialog.
+    pub fn materialize_project_root<R: tauri::Runtime>(
+        app: &tauri::AppHandle<R>,
+    ) -> Result<PathBuf, String> {
+        let static_dir = project_static_dir(app)?;
+        let project_root = static_dir
+            .parent()
+            .and_then(Path::parent)
+            .ok_or_else(|| format!("{static_dir:?} has no project root"))?
+            .to_path_buf();
         let manifest_path = project_root.join(MANIFEST_FILE);
 
         let resolver = app.asset_resolver();
@@ -160,8 +180,6 @@ mod extraction {
             entries.len(),
             project_root
         );
-        fs::create_dir_all(&static_dir)
-            .map_err(|err| format!("cannot create {static_dir:?}: {err}"))?;
 
         let mut written = 0usize;
         for key in &entries {
@@ -198,7 +216,7 @@ mod extraction {
 }
 
 #[cfg(target_os = "android")]
-pub use extraction::materialize_project_root;
+pub use extraction::{materialize_project_root, project_static_dir};
 
 #[cfg(test)]
 #[path = "../../../tests/android/assets_manifest_tests.rs"]

@@ -48,6 +48,7 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         filters: None,
         transition: None,
         procedural: None,
+        progress_ring: None,
     }
 }
 
@@ -73,6 +74,7 @@ fn style_patch(id: &str) -> AtomeStylePatch {
         filters: None,
         transition: None,
         procedural: None,
+        progress_ring: None,
         corner_radius: None,
         corner_radii: None,
         shape_variant: None,

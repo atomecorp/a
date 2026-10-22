@@ -4,6 +4,7 @@ use crate::{
     backdrop_blur::apply_scene_effects,
     backdrop_surface::BackdropSurfacePlugin,
     procedural_sdf::ProceduralSdfPlugin,
+    progress_ring::ProgressRingPlugin,
     render_math::atome_camera_projection,
     render_ops::apply_render_op,
     selection_overlay::rebuild_selection_overlay,
@@ -36,6 +37,7 @@ impl Plugin for AtomeBevyRendererPlugin {
             .add_plugins(AtomeVideoExternalTexturePlugin)
             .add_plugins(AtomeMediaWindowPlugin)
             .add_plugins(ProceduralSdfPlugin)
+            .add_plugins(ProgressRingPlugin)
             .add_plugins(BackdropSurfacePlugin)
             .add_plugins(WorkspaceBlurPlugin)
             .add_plugins(AtomeBevyUiPlugin)
@@ -47,7 +49,9 @@ impl Plugin for AtomeBevyRendererPlugin {
             .init_resource::<Assets<Mesh>>()
             .init_resource::<Time<Real>>()
             .init_non_send::<crate::animated_png::PngAnimations>()
-            .add_systems(Update, crate::animated_png::advance_animations)
+            .init_resource::<crate::frame_demand::AtomeFrameDemand>()
+            .add_systems(Update, crate::animated_png::advance_animations.before(crate::frame_demand::apply_frame_demand))
+            .add_systems(Update, crate::frame_demand::apply_frame_demand)
             .add_systems(PostUpdate, crate::mystic_capture::sync_menu_capture)
             .add_systems(PostUpdate, crate::clip_polygon::sync_clip_polygon_proxies)
             // The project view is a virtual parent: applied to the globals once

@@ -3,7 +3,8 @@ android_webroot_sources() {
   printf '%s\n' \
     "$PROJECT_ROOT/atome/src|." \
     "$PROJECT_ROOT/eVe|eVe" \
-    "$PROJECT_ROOT/node_modules/rubberband-wasm/dist|vendor-rubberband-wasm/dist"
+    "$PROJECT_ROOT/node_modules/rubberband-wasm/dist|vendor-rubberband-wasm/dist" \
+    "$PROJECT_ROOT/platforms/desktop-tauri/android-boot|android-boot"
 }
 
 ensure_android_webroot() {

@@ -25,6 +25,10 @@ export const getTauriSttBridge = (env) => {
     if (internals?.stt && typeof internals.stt.start === 'function') {
         return internals.stt;
     }
+    const native = readEnv(env, '__ATOME_NATIVE_STT__');
+    if (native && typeof native.start === 'function') {
+        return native;
+    }
     return null;
 };
 

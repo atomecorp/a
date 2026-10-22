@@ -49,6 +49,8 @@ export const startTauriRecognition = async (context, sessionId, options = {}, {
         }
 
         const deferred = createDeferred();
+        // A conversation (`onUtterance`) receives each sentence and keeps listening.
+        const onUtterance = typeof options.onUtterance === 'function' ? options.onUtterance : null;
         const speechHints = collectSpeechHints(context.env, context.sessionRuntime, sessionId, options);
         const resolvedLang = resolveSpeechLocale(options.lang || options.locale || DEFAULT_LANG);
         const maxAlternatives = Number.isFinite(Number(options.maxAlternatives))
@@ -129,7 +131,9 @@ export const startTauriRecognition = async (context, sessionId, options = {}, {
                     continuous: options.continuous !== false,
                     maxDuration: Number.isFinite(options.timeoutMs) ? options.timeoutMs : 0,
                     maxAlternatives,
-                    onDevice: options.onDevice === true
+                    onDevice: options.onDevice === true,
+                    // Phrases this listening expects: the recognizer favours them.
+                    contextualStrings: state.speechHints
                 });
             } catch (error) {
                 const message = String(error?.message || error || '');
@@ -154,7 +158,9 @@ export const startTauriRecognition = async (context, sessionId, options = {}, {
                     continuous: options.continuous !== false,
                     maxDuration: Number.isFinite(options.timeoutMs) ? options.timeoutMs : 0,
                     maxAlternatives,
-                    onDevice: options.onDevice === true
+                    onDevice: options.onDevice === true,
+                    // Phrases this listening expects: the recognizer favours them.
+                    contextualStrings: state.speechHints
                 });
                 state.recoveringStart = false;
             }
@@ -273,6 +279,7 @@ export const startTauriRecognition = async (context, sessionId, options = {}, {
         }));
 
         state.cleanup.push(await bridge.onResult((result = {}) => {
+            if (state.muted && typeof bridge.setMuted !== 'function') return;
             const rawCandidates = Array.isArray(result?.alternatives) && result.alternatives.length
                 ? result.alternatives
                 : [{ transcript: result?.transcript || '', confidence: result?.confidence }];
@@ -305,6 +312,11 @@ export const startTauriRecognition = async (context, sessionId, options = {}, {
                 isFinal: result?.isFinal === true,
                 confidence
             }, context.env);
+            if (onUtterance) {
+                context.sessionRuntime.pushPartial(sessionId, { text });
+                if (result?.isFinal) onUtterance({ text, confidence });
+                return;
+            }
             if (result?.isFinal) {
                 state.final_texts.push(text);
                 state.segments.push(createSegment(text, confidence));

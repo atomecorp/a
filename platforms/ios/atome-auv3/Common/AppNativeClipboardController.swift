@@ -8,6 +8,22 @@ import UniformTypeIdentifiers
 final class AppNativeClipboardController {
     static let shared = AppNativeClipboardController()
     private static let copyType = "one.atome.clipboard.copy-key"
+    /// The pasteboard revision our last write produced and its copy key, kept across
+    /// launches (the system revision survives them): while it is unchanged the content
+    /// is ours, answered without reading it. Reading it raises the iOS « Allow Paste »
+    /// prompt at every paste, and after a relaunch the read can be refused outright.
+    private static let ownWriteKey = "one.atome.clipboard.own-write"
+    private var ownWrite: (revision: Int, key: String)? {
+        get {
+            guard let stored = UserDefaults.standard.dictionary(forKey: Self.ownWriteKey),
+                  let revision = stored["revision"] as? Int, let key = stored["key"] as? String else { return nil }
+            return (revision, key)
+        }
+        set {
+            if let value = newValue { UserDefaults.standard.set(["revision": value.revision, "key": value.key], forKey: Self.ownWriteKey) }
+            else { UserDefaults.standard.removeObject(forKey: Self.ownWriteKey) }
+        }
+    }
     private init() {}
 
     static func canHandle(command: String) -> Bool {
@@ -24,6 +40,7 @@ final class AppNativeClipboardController {
                 var item: [String: Any] = [UTType.utf8PlainText.identifier: (payload["text"] as? String) ?? ""]
                 if let key = payload["copyKey"] as? String { item[Self.copyType] = key }
                 board.items = [item]
+                self.ownWrite = (payload["copyKey"] as? String).map { (board.changeCount, $0) }
                 completion(["success": true, "revision": board.changeCount], nil)
             case "clipboard_has_text":
                 completion(["success": true, "has_text": board.hasStrings], nil)
@@ -32,9 +49,10 @@ final class AppNativeClipboardController {
                 completion(["success": true, "text": text, "revision": board.changeCount], nil)
             case "clipboard_read_items":
                 let revision = board.changeCount
+                if let own = self.ownWrite, own.revision == revision {
+                    completion(["success": true, "revision": revision, "items": [], "copy_key": own.key], nil); return
+                }
                 let providers = board.itemProviders
-                let marker = board.value(forPasteboardType: Self.copyType)
-                let key = (marker as? String) ?? (marker as? Data).flatMap { String(data: $0, encoding: .utf8) }
                 // Deferred Photos/Files representations are acquired asynchronously, off the audio thread.
                 self.readProviders(providers, index: 0, items: []) { items, error in
                     self.runOnMain {
@@ -45,9 +63,7 @@ final class AppNativeClipboardController {
                         guard board.changeCount == revision else {
                             completion(["success": false, "error": "clipboard_changed"], nil); return
                         }
-                        var result: [String: Any] = ["success": true, "revision": revision, "items": items]
-                        if let key = key { result["copy_key"] = key }
-                        completion(result, nil)
+                        completion(["success": true, "revision": revision, "items": items], nil)
                     }
                 }
             default:

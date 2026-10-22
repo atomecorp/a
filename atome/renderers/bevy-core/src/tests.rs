@@ -43,6 +43,7 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         filters: None,
         transition: None,
         procedural: None,
+        progress_ring: None,
     }
 }
 
@@ -86,6 +87,7 @@ fn text_node_with_texture(id: &str) -> AtomeRenderNode {
         filters: None,
         transition: None,
         procedural: None,
+        progress_ring: None,
     }
 }
 
@@ -189,6 +191,7 @@ fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_pr
         filters: None,
         transition: None,
         procedural: None,
+        progress_ring: None,
     };
     let text = AtomeRenderNode {
         project_space: false,
@@ -331,6 +334,7 @@ fn backdrop_style_patch_updates_the_resident_material_without_reallocation() {
             filters: None,
             transition: None,
             procedural: None,
+            progress_ring: None,
         },
     )
     .unwrap();
@@ -410,6 +414,7 @@ fn backdrop_glass_follows_record_opacity_and_releases_the_capture_when_hidden() 
         filters: None,
         transition: None,
         procedural: None,
+        progress_ring: None,
     };
     apply_style(app.world_mut(), patch(0.0)).unwrap();
     assert_eq!(opacity_of(&app), 0.0);
@@ -615,6 +620,7 @@ fn style_opacity_patch_updates_shape_sprite_without_cumulative_alpha() {
                 filters: None,
                 transition: None,
                 procedural: None,
+                progress_ring: None,
             },
         )
         .unwrap();
@@ -657,6 +663,7 @@ fn text_texture_spawn_and_opacity_patch_update_sprite_alpha() {
             filters: None,
             transition: None,
             procedural: None,
+            progress_ring: None,
         },
     )
     .unwrap();
@@ -705,6 +712,7 @@ fn text_color_spawn_and_opacity_patch_update_text_alpha() {
             filters: None,
             transition: None,
             procedural: None,
+            progress_ring: None,
         },
     )
     .unwrap();
@@ -762,6 +770,7 @@ fn shape_shadow_overlay_follows_owner_opacity() {
             filters: None,
             transition: None,
             procedural: None,
+            progress_ring: None,
         },
     )
     .unwrap();
@@ -1063,6 +1072,7 @@ fn selected_nodes_create_overlay_from_configured_visual_style() {
             filters: None,
             transition: None,
             procedural: None,
+            progress_ring: None,
         },
     )
     .unwrap();
@@ -1192,6 +1202,7 @@ fn audio_waveform_progress_spawns_and_moves_bevy_playhead_overlay() {
             filters: None,
             transition: None,
             procedural: None,
+            progress_ring: None,
         },
     )
     .unwrap();
@@ -1226,6 +1237,7 @@ fn audio_waveform_progress_spawns_and_moves_bevy_playhead_overlay() {
             filters: None,
             transition: None,
             procedural: None,
+            progress_ring: None,
         },
     )
     .unwrap();
@@ -1258,6 +1270,7 @@ fn audio_waveform_progress_spawns_and_moves_bevy_playhead_overlay() {
             filters: None,
             transition: None,
             procedural: None,
+            progress_ring: None,
         },
     )
     .unwrap();

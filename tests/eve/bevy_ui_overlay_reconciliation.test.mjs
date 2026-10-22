@@ -254,7 +254,7 @@ test('Calendar deep scroll keeps late-hour grid records mounted through the real
         draft: {
             id: '', title: '', description: '', location: '',
             start: '2026-08-03T09:00', end: '2026-08-03T10:00', timezone: 'Europe/Paris',
-            kind: 'event', status: 'open', allDay: false, alarms: '[]', recurrence: 'null',
+            kind: 'event', status: 'open', allDay: false, alarms: [], recurrence: null,
             source_id: '', calendarId: 'default', shareTarget: ''
         }
     });

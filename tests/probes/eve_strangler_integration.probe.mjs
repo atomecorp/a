@@ -63,7 +63,6 @@ const run = async () => {
         flags: null,
         circle: null,
         matrix: null,
-        matrixClose: null,
         runtimeDisabled: null,
         continuous: null,
         routingLogHasPreviousSecondary: null,
@@ -104,13 +103,6 @@ const run = async () => {
         out.matrix = await gateway({
           tool_id: 'ui.matrix.view',
           action: 'open',
-          input: {},
-          source: { type: 'headless_integration', layer: 'strangler' },
-          presentation: 'ui'
-        });
-        out.matrixClose = await gateway({
-          tool_id: 'ui.matrix.view',
-          action: 'close',
           input: {},
           source: { type: 'headless_integration', layer: 'strangler' },
           presentation: 'ui'
@@ -222,12 +214,6 @@ const run = async () => {
       ok: resolveToolKey(integration?.matrix) === 'matrix_view'
         && integration?.matrix?.ok === true,
       details: integration?.matrix || null
-    });
-    report.checks.push({
-      name: 'ui_matrix_close_runtime_path',
-      ok: resolveToolKey(integration?.matrixClose) === 'matrix_view'
-        && integration?.matrixClose?.ok === true,
-      details: integration?.matrixClose || null
     });
     report.checks.push({
       name: 'runtime_disabled_explicit_error',

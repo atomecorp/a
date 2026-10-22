@@ -241,14 +241,20 @@ public class MIDIController: NSObject {
 
     /// Starts MIDI input (idempotent). `completion` receives the input list, or an
     /// error when CoreMIDI refused the client or the input port.
+    /// CoreMIDI client creation starts the MIDI server and takes hundreds of
+    /// milliseconds on first use: it runs on the MIDI queue, never on the caller's
+    /// (main) thread — on the iPad it froze the first project opening ~0.8 s.
     public func startMIDIMonitoring(completion: ((Result<[[String: String]], Error>) -> Void)? = nil) {
-        guard setupMIDI() else {
-            completion?(.failure(NSError(domain: "MIDIController", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "ios_midi_input_port_unavailable"
-            ])))
-            return
+        midiQueue.async { [weak self] in
+            guard let self else { return }
+            guard self.setupMIDI() else {
+                completion?(.failure(NSError(domain: "MIDIController", code: 1, userInfo: [
+                    NSLocalizedDescriptionKey: "ios_midi_input_port_unavailable"
+                ])))
+                return
+            }
+            self.refreshSources { inputs in completion?(.success(inputs)) }
         }
-        refreshSources { inputs in completion?(.success(inputs)) }
     }
 
     /// Stop MIDI monitoring

@@ -10,14 +10,16 @@ import { createHealthOwner } from './health_owner.js';
 
 const env = typeof window !== 'undefined' ? window : globalThis;
 
+// Health is associated with the local principal of this device: a signed-in
+// account or the local guest. Values never leave the device either way.
 const accountId = () => {
     const session = getSessionState();
-    return session?.mode === 'authenticated' ? (session.user?.id || null) : null;
+    return session?.mode === 'authenticated' || session?.mode === 'anonymous' ? (session.user?.id || null) : null;
 };
 
 // The local access token expires after 15 minutes: renew it through the same
 // owner as every other local API before handing it to the host, otherwise the
-// host answers `health_account_required` to a signed-in user. Imported lazily:
+// host answers `health_account_required` to a signed-in user or guest. Imported lazily:
 // this module is evaluated in the boot wave, before the auth owner.
 const freshLocalToken = async () => {
     try {

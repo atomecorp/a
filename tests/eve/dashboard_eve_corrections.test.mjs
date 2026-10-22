@@ -7,9 +7,9 @@ import { normalizeDashboardStyle } from '../../eVe/intuition/tools/user_visual_p
 import { createMusicMysticItem } from '../../eVe/domains/music/music_mystic_items.js';
 import { createDashboardMysticStage } from '../../eVe/domains/dashboard/dashboard_mystic_stage.js';
 
-const tv = vi.hoisted(() => ({ byId: vi.fn(), favorites: vi.fn(), gateway: vi.fn(async () => ({ ok: true })) }));
+const tv = vi.hoisted(() => ({ byId: vi.fn(), favorites: vi.fn(), stored: vi.fn(() => []), written: vi.fn(() => true), gateway: vi.fn(async () => ({ ok: true })) }));
 vi.mock('../../eVe/intuition/tools/tv_catalog_client.js', () => ({ readTvChannelsById: tv.byId }));
-vi.mock('../../eVe/intuition/tools/tv_favorites_preference.js', () => ({ loadTvFavorites: tv.favorites }));
+vi.mock('../../eVe/intuition/tools/tv_favorites_preference.js', () => ({ loadTvFavorites: tv.favorites, readTvFavorites: tv.stored, isTvFavoritesWritten: tv.written }));
 vi.mock('../../eVe/intuition/runtime/tool_gateway.js', () => ({ invokeToolGateway: tv.gateway }));
 vi.mock('../../eVe/domains/dashboard/dashboard_contact_items.js', async (importOriginal) => ({
     ...(await importOriginal()), waitForPublishedFavorites: async () => true }));
@@ -71,20 +71,24 @@ test('a slow provider cannot delay its root tile or other providers', async () =
     void root.loadChildren(); expect(command).toHaveBeenCalledWith('music.get_state', { provider: 'spotify' });
 });
 
-test('the TV rubric lists only the favourites, with fresh streams, then the tile that opens the TV selector', async () => {
-    tv.favorites.mockResolvedValue([{ id: 'BFMTV.fr', name: 'BFM TV', country: 'FR', logo: 'stored.png' },
-        { id: 'gone.fr', name: 'Gone', country: 'FR', logo: '' }]);
+test('the TV rubric lists only the favourites, at once as stored, then with fresh streams, then the tile that opens the TV selector', async () => {
+    const favorites = [{ id: 'BFMTV.fr', name: 'BFM TV', country: 'FR', logo: 'stored.png' }, { id: 'gone.fr', name: 'Gone', country: 'FR', logo: '' }];
+    tv.favorites.mockResolvedValue(favorites); tv.stored.mockReturnValue(favorites);
     tv.byId.mockResolvedValue([{ id: 'BFMTV.fr', name: 'BFM TV', logo: 'fresh.png', streams: [{ url: 'https://live' }] }]);
     const stage = createDashboardMysticStage({ projectId: 'home', readStageRect: () => null, readLastProjectId: async () => '' });
-    const items = await stage.funItems();
+    // This device answers first (no network read); the catalogue's streams refresh the level.
+    let refresh; const refreshed = new Promise(resolve => { refresh = resolve; });
+    const items = await stage.funItems({ update: refresh });
     expect(items.map(item => item.key)).toEqual(expect.arrayContaining(['fun_tv', 'fun_youtube']));
     // Music services not entered in Passwords & keys have no tile.
     expect(items.map(item => item.key)).not.toEqual(expect.arrayContaining(['fun_spotify']));
     expect(items.map(item => item.key)).not.toEqual(expect.arrayContaining(['fun_deezer']));
-    const rubric = items.find(item => item.key === 'fun_tv');
+    const keys = level => level.map(item => item.key);
+    expect(keys(items.find(item => item.key === 'fun_tv').children)).toEqual(['tv_BFMTV.fr', 'tv_gone.fr', 'add_tv_channel']);
+    const rubric = (await refreshed).find(item => item.key === 'fun_tv');
     expect(tv.byId).toHaveBeenCalledWith(['BFMTV.fr', 'gone.fr']);
-    expect(rubric.children.map(item => item.key)).toEqual(['tv_BFMTV.fr', 'tv_gone.fr', 'add_tv_channel']);
-    expect((await rubric.loadChildren()).map(item => item.key)).toEqual(['tv_BFMTV.fr', 'tv_gone.fr', 'add_tv_channel']);
+    expect(keys(rubric.children)).toEqual(['tv_BFMTV.fr', 'tv_gone.fr', 'add_tv_channel']);
+    expect(keys(await rubric.loadChildren({ update: () => {} }))).toEqual(['tv_BFMTV.fr', 'tv_gone.fr', 'add_tv_channel']);
     const add = rubric.children.at(-1);
     expect(add.closeOnSelect).not.toBe(false);
     await add.onSelect();
@@ -92,8 +96,8 @@ test('the TV rubric lists only the favourites, with fresh streams, then the tile
 });
 
 test('an emptied favourite list leaves only the add tile', async () => {
-    tv.favorites.mockResolvedValue([]); tv.byId.mockResolvedValue([]);
+    tv.favorites.mockResolvedValue([]); tv.stored.mockReturnValue([]); tv.byId.mockResolvedValue([]);
     const stage = createDashboardMysticStage({ projectId: 'home', readStageRect: () => null, readLastProjectId: async () => '' });
-    const rubric = (await stage.funItems()).find(item => item.key === 'fun_tv');
+    const rubric = (await stage.funItems({ update: () => {} })).find(item => item.key === 'fun_tv');
     expect(rubric.children.map(item => item.key)).toEqual(['add_tv_channel']);
 });

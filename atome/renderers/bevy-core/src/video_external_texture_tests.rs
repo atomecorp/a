@@ -54,6 +54,7 @@ pub(crate) fn video_node(id: &str) -> AtomeRenderNode {
         filters: None,
         transition: None,
         procedural: None,
+        progress_ring: None,
     }
 }
 
@@ -579,6 +580,7 @@ fn video_style_patch_updates_external_texture_opacity() {
             filters: None,
             transition: None,
             procedural: None,
+            progress_ring: None,
         },
     )
     .unwrap();
@@ -612,6 +614,7 @@ fn video_style_patch_updates_external_texture_opacity() {
             filters: None,
             transition: None,
             procedural: None,
+            progress_ring: None,
         },
     )
     .unwrap();
@@ -739,6 +742,7 @@ fn video_style_patch_updates_color_filters() {
             }),
             transition: None,
             procedural: None,
+            progress_ring: None,
         },
     )
     .unwrap();
@@ -825,6 +829,7 @@ fn video_node_and_style_carry_normalized_transition() {
                 softness: 0.0,
             }),
             procedural: None,
+            progress_ring: None,
         },
     )
     .unwrap();

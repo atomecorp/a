@@ -12,7 +12,8 @@ import HealthKit
 import CoreMotion
 #endif
 
-// The single HealthKit / CoreMotion owner of the iOS app, read-only.
+// The single HealthKit / CoreMotion owner of the iOS app. Monitors are
+// read-only; the only write is the training workout (AppNativeHealthWorkout.swift).
 //
 // Contract (mirrors atome/src/squirrel/health/health_channel.js):
 // - `health_channel_open` issues ONE channel token per page load; every other
@@ -52,6 +53,7 @@ final class AppNativeHealthController {
     #if canImport(HealthKit)
     let healthStore = HKHealthStore()
     private var observers: [String: HKObserverQuery] = [:]
+    private lazy var workout = HealthWorkoutRecorder(store: healthStore) { [weak self] ids in self?.stateQueue.async { self?.signal(ids) } }
     #endif
     #if canImport(CoreMotion)
     private let pedometer = CMPedometer()
@@ -70,7 +72,7 @@ final class AppNativeHealthController {
         #endif
     }
 
-    static func canHandle(command: String) -> Bool { commands.contains(command) }
+    static func canHandle(command: String) -> Bool { commands.contains(command) || HealthWorkoutRecorder.commands.contains(command) }
 
     func attach(webView: WKWebView, openSettings: (() -> Void)? = nil) {
         self.webView = webView
@@ -151,6 +153,10 @@ final class AppNativeHealthController {
             case "health_unobserve":
                 unobserve(ids: ids)
                 reply(["observing": Array(observedIds())])
+            #if canImport(HealthKit)
+            case _ where HealthWorkoutRecorder.commands.contains(command):
+                workout.handle(command, payload: payload) { result in self.stateQueue.async { self.current(generation) ? reply(result) : fail("health_context_changed") } }
+            #endif
             default:
                 fail("health_command_unknown")
             }
@@ -163,14 +169,15 @@ final class AppNativeHealthController {
     }
 
     // Verified on the canonical database queue, like every protected local API.
+    // The principal is a signed-in account or the active local guest (both
+    // checked by `verifyToken`): health values stay on this device.
     private static func verifiedAccount(_ auth: Any?) -> String? {
         guard let token = auth as? String, !token.isEmpty else { return nil }
         let verified: [String: Any]? = AiSRuntime.queue.sync {
             guard let result = try? AiSRuntime.verifyToken(token) else { return nil }
             return result
         }
-        guard let claims = verified, claims["grant"] is String,
-              let subject = claims["sub"] as? String, !subject.isEmpty else { return nil }
+        guard let claims = verified, let subject = claims["sub"] as? String, !subject.isEmpty else { return nil }
         return subject
     }
 
@@ -211,6 +218,7 @@ final class AppNativeHealthController {
         #if canImport(HealthKit)
         observers.values.forEach { healthStore.stop($0) }
         observers.removeAll()
+        workout.discard()
         #endif
         #if canImport(CoreMotion)
         if pedometerLive { pedometer.stopUpdates() }

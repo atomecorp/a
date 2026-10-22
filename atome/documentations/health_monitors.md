@@ -6,7 +6,7 @@ Status on 2026-10-03: existing iOS/Android read-only owners are preserved. iOS H
 
 Dashboard → rubrique **Moniteur** (clé `monitor`) → bande « Nouveau » de l'en-tête → panneau Bevy standard `dashboard_health_monitors` → liste standard (`hierarchicalSelectableListNode`) avec le rail de cases standard (`createListSelectionRuntime`) → cellules de la ligne Moniteur (et sa vue filtrée existante).
 
-- iOS header entry checks capabilities and account association, then requests the available HealthKit catalog only when the system reports a request is necessary. Since 2026-10-11 that same gesture associates a signed-in, not-yet-associated device first (`dashboard_health_modules.js::requestAccessFor`): previously it returned silently and no sheet ever appeared. A health tile opens the reusable detail panel and never requests HealthKit. Android panel entry still checks status without prompting.
+- Since 2026-10-21 access comes to the user, never through a separate "add" step: opening the selector, or a Dashboard monitor shown as `needs_link` / `needs_permission`, associates the device (`owner.link()`, even when no sheet is left to show) and asks the host (`dashboard_health_modules.js::afterSelectorOpened`, `askHostFor` — once per monitor per Dashboard opening, monitors shown together share one request). iOS asks the available HealthKit catalog on opening; Android and the direct Motion sensor ask their selected types still waiting for access. The host decides whether a sheet is needed; refused types go to Open settings, never a sheet loop. No phone sign-in is opened any more: without a local principal (`health_account_required`) the panel stays silent. The local guest is accepted as principal (see Sécurité). A health tile opens the reusable detail panel.
 - Checking preserves canonical selection, persistence rollback, subscriptions and cells. iOS HealthKit types never request from a checkbox; the direct Motion sensor and Android retain their selected-type requests. Association resumes the central HealthKit initialization.
 - Décocher : la cellule et l'abonnement sont retirés immédiatement. Aucune donnée n'est effacée dans Santé ou Health Connect, et la permission système n'est pas révoquée.
 - The fixed footer shows Associate (a retry after a failed automatic association) when the device/account link is missing, or when an iOS HealthKit request is still unanswered. Its action uses the existing link/request owner. Android retains Allow access; known denied/restricted access retains Open settings. No read refusal is inferred from empty HealthKit data.
@@ -42,9 +42,10 @@ Validation : tests persistants et compilations iOS simulateur arm64/app/AUv3 et 
 
 - **Canal scellé.** L'invoke natif est capturé au boot, avant tout code projet. L'hôte émet **un seul** jeton de canal par chargement de page : un second `health_channel_open` est refusé. Le jeton est remis à zéro à chaque navigation du cadre principal (iOS `didStartProvisionalNavigation`, Tauri `on_page_load`).
 - **Identité vérifiée côté natif**, jamais transmise par le JS.
-  - iOS : `AiSRuntime.verifyToken` avec la claim `grant` exigée, donc les invités sont refusés.
-  - Android : action `me` de l'auth Axum locale, avec un téléphone vérifié exigé.
-- **Liaison locale** appareil ↔ compte, jamais synchronisée.
+  - iOS : `AiSRuntime.verifyToken` (compte connecté avec `grant`, ou invité local actif du registre `guest_workspace_principals`).
+  - Android : action `me` de l'auth Axum locale (compte ou invité local actif).
+  - Depuis le 2026-10-21 l'invité local est accepté (décision de l'utilisateur) : les valeurs restent sur l'appareil, aucun téléphone n'est exigé. Côté JS, `health/index.js#accountId` retient les sessions `authenticated` et `anonymous`.
+- **Liaison locale** appareil ↔ compte ou invité, jamais synchronisée.
   - iOS : Keychain, `ThisDeviceOnly`, non synchronisable.
   - Android : `noBackupFilesDir`, exclu de l'Auto Backup.
 - **Changement de compte.** Génération incrémentée, valeurs purgées, réponses tardives rejetées (JS et natif), observateurs arrêtés. Le compte B ne lit rien tant qu'il n'a pas fait sa propre association.
@@ -178,3 +179,15 @@ Opérations externes non faites : déclaration Health Connect dans la Play Conso
 ## Sport sessions (2026-10-20)
 
 The Dashboard's Sport sessions (`eVe/domains/dashboard/dashboard_training_session.js`) subscribe to the `heart_rate` monitor of this owner while a session runs. The latest reading, when fresher than two minutes, is recorded into the user's own session journal as a `measure` transition with `source: 'health'` when a step ends; the recovery after a session comes from `readHistory('heart_rate', { detail: true })` and `cardiacRecovery`. Health values never leave that journal, and MCP or assistant callers get the log without heart rates (`training_runtime.js`, `healthAccessAllowedNow`). Not yet verified on a device.
+
+## Workout recording (2026-10-21)
+
+The only health write. An eVe training session is mirrored as a platform workout so that Apple Health / Health Connect count it as exercise. The eVe session stays the truth; the mirror follows it and its failure never undoes a recorded transition.
+
+- **Path.** `training_runtime.js` (`prepare_session`, `session_transition`) → `getHealthOwner().workout` (`atome/src/squirrel/health/health_workout.js`) → the same sealed channel and account + association checks → `health_workout_prepare | start | pause | resume | end`. Card, assistant and MCP sessions take this one path. Replies carry no health value (`health_workout: { ok, writable | started, live | recorded | saved, error }`).
+- **Permission.** `prepare_session` asks, once, for the write grant before the session starts. iOS shares `workoutType`, `heartRate`, `activeEnergyBurned` only (`HealthWorkoutRecorder.shareTypes`); Android declares `WRITE_EXERCISE` only. A refusal is reported as `health_workout_write_denied`.
+- **iOS** (`platforms/ios/atome-auv3/Common/AppNativeHealthWorkout.swift`). From iOS 26 a live `HKWorkoutSession` + `HKLiveWorkoutBuilder` (`live: true`): paired sensors measure at workout rate, collected samples are saved with the workout, and the page gets a value-less `heart_rate` / `active_energy` invalidation (5 s throttle) so the session card re-reads immediately. Before iOS 26 an `HKWorkoutBuilder` records the same workout (`live: false`). Pauses become workout events. The workout carries `HKMetadataKeySyncIdentifier` = eVe session id. A page load, channel close or context reset discards an open workout.
+- **Android** (`HealthPlugin.kt` `workout*`). One `ExerciseSessionRecord` inserted at the end from the session's own start/end, `clientRecordId` = eVe session id, exercise type from the training kind. A phone has no live exercise mode; heart rate keeps arriving through the watch's own records. Pauses are not written.
+- **End.** `finish` saves; `stop` saves only when a step was confirmed, otherwise the workout is discarded.
+- **Not covered.** No watchOS / Wear OS companion: the Apple Watch only measures at workout rate when a workout runs on the watch itself. No per-set segments, no energy estimate of our own.
+- **Validation.** `temp/health_workout_session.probe.mjs` (real runtime + owner + session replay, simulated host), `tests/probes/native_health_authorization_contract.test.mjs` (write scope). Device behaviour **To verify**.

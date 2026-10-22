@@ -3,6 +3,7 @@ import { bootstrapVoicePanel, shouldEnableVoicePanel } from './panel.js';
 import { writeVoiceDiagnostic } from './telemetry.js';
 import { loadModulesSequentially } from '../../utils/module_loader_runtime.js';
 import { readEnv } from '../shared/scalars.js';
+import { resolveAudioRuntime } from '../../application/audio_runtime/runtime_audio_backend.js';
 
 const READY_PROMISE_KEY = '__SQUIRREL_VOICE_READY_PROMISE__';
 const SERVICE_KEY = '__SQUIRREL_VOICE_SERVICE__';
@@ -77,7 +78,9 @@ export const ensureVoiceBridgeModules = async ({
 
     const tauriGlobal = readEnv(env, '__TAURI__');
     const tauriInternals = readEnv(env, '__TAURI_INTERNALS__');
-    if (tauri && !(tauriGlobal?.stt || tauriInternals?.stt)) {
+    // The iOS app answers the STT plugin's commands natively, as Tauri does.
+    const iosApp = resolveAudioRuntime(env).playback === 'ios_native_kira';
+    if ((tauri || iosApp) && !(tauriGlobal?.stt || tauriInternals?.stt || readEnv(env, '__ATOME_NATIVE_STT__'))) {
         await importModule(VOICE_BRIDGE_STT);
         loaded.push('stt_api');
     }
@@ -217,6 +220,10 @@ export const createGlobalVoiceApi = ({
         async cancelListening(sessionId) {
             const service = await ensureReady();
             return service.stt.cancel(sessionId);
+        },
+        async muteListening(sessionId, muted) {
+            const service = await ensureReady();
+            return service.stt.mute(sessionId, muted);
         },
         async speak(text, options = {}) {
             const service = await ensureReady();

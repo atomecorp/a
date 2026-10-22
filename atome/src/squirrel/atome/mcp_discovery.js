@@ -1,5 +1,5 @@
 import { cloneValue } from './mcp_core.js';
-import { ensureAIAgent, ensureRuntimeToolApi } from './mcp_bridges.js';
+import { ensureRuntimeToolApi, loadAIAgent } from './mcp_bridges.js';
 
 export async function listUnifiedMcpTools() {
     const tools = [];
@@ -24,7 +24,7 @@ export async function listUnifiedMcpTools() {
         // Ignore unavailable optional surfaces in discovery.
     }
     try {
-        const agent = ensureAIAgent();
+        const agent = await loadAIAgent();
         const aiTools = agent.listTools();
         (Array.isArray(aiTools) ? aiTools : []).forEach((entry) => {
             tools.push({

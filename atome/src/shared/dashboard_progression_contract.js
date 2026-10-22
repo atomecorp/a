@@ -23,6 +23,9 @@ export const DASHBOARD_UNLOCK_SCHEMA = Object.freeze({ type: 'object', additiona
         unlocked_at: { type: 'string' }, evidence: DASHBOARD_UNLOCK_EVIDENCE_SCHEMA
     } });
 export const dashboardUnlockId = (actor, brickId) => 'dashboard_unlock:' + encodeURIComponent(actor) + ':' + brickId;
+// A fact keeps its id when the account's principal changes (identity migration,
+// guest adoption): the owner tells whose it is, the id only which brick it records.
+export const isDashboardUnlockIdFor = (id, brickId) => /^dashboard_unlock:[^:]+:/.test(String(id)) && String(id).endsWith(':' + brickId);
 
 const instant = value => typeof value === 'string' && /(?:Z|[+-]\d\d:\d\d)$/.test(value) ? Date.parse(value) : NaN;
 const known = (value, schema) => Object.keys(value).every(key => Object.hasOwn(schema.properties, key));

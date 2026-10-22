@@ -27,7 +27,7 @@ const spokenTexts = () => {
     const enroll = (step, detail = {}) => eveT('eve.voice.wake.enroll.' + step, '', detail);
     const takes = WAKE_ENROLLMENT_TAKES;
     return [...new Set([
-        eveT('eve.voice.assistant.startup_line'), eveT('eve.voice.assistant.idle_hang_up'),
+        eveT('eve.voice.assistant.startup_line'), eveT('eve.voice.assistant.idle_hang_up'), eveT('eve.voice.assistant.touch_response'),
         ...eveTList('eve.voice.assistant.ready_lines.after_wait'),
         ...eveTList('eve.voice.assistant.ready_lines.direct'),
         ...byPrefix('eve.voice.assistant.error.'),

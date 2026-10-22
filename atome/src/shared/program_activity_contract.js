@@ -14,7 +14,8 @@ export const PROGRAM_ACTIVITY_RECORD_SCHEMAS = Object.freeze({
         nutrition_declined: { type: 'boolean' },
         // A Sport activity: one catalogue exercise (#shared/training_catalog.js) at the user's level.
         training: { type: 'object', required: ['exercise_id', 'level'], properties: {
-            exercise_id: { type: 'string' }, level: { type: 'number' }, load_kg: { type: 'number' }
+            exercise_id: { type: 'string' }, level: { type: 'number' }, load_kg: { type: 'number' },
+            custom: { type: 'object' }, use_custom: { type: 'boolean' }, sound: { type: 'boolean' }
         } },
         involvement: { type: 'object', required: ['minutes', 'basis', 'days', 'rhythm'], properties: {
             minutes: { type: 'number' }, basis: { type: 'string', enum: ['day', 'week'] },

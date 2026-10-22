@@ -192,8 +192,8 @@ export const createGlobalContactsApi = ({
         activateSource(sourceId, options = {}) { return imports().activate(sourceId, options); },
         stopSource(sourceId) { return imports().deactivate(sourceId); },
         importStatus() { return imports().status(); },
-        // Imported completely on this device at least once (import_lifecycle.js#completed).
-        importCompleted() { return imports().completed(); },
+        // Kept synchronized on this device (import_lifecycle.js#synchronized).
+        importSynchronized() { return imports().synchronized(); },
         dispose() { lifecycle?.dispose(); },
         async importVcf(content, options = {}) {
             const contacts = parseVcards(content);

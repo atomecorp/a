@@ -80,7 +80,7 @@ export function createCalendarImport({ env = globalThis, session, device } = {})
     return {
         register(id, pull) { if (typeof pull !== 'function') throw new Error('calendar_import_pull_required'); sources.set(id, pull); },
         activate(id, options = {}) { if (id === 'native_calendar') ensureNative(); return lifecycle.activate(id, options); },
-        stop: lifecycle.deactivate, status: lifecycle.status, completed: lifecycle.completed, dispose: lifecycle.dispose,
+        stop: lifecycle.deactivate, status: lifecycle.status, synchronized: lifecycle.synchronized, dispose: lifecycle.dispose,
         async importIcs(content, options = {}) {
             const checkSession = store.capture().check;
             const items = parseCalendarData(content);

@@ -22,7 +22,7 @@ const REFUSAL_WAIT_DAYS = 30;
 export function createCommunicationRelations({
     query = (...args) => db.query(...args),
     notify = async () => {},
-    // Resolution par numero (L11) : `findUserByPhone(e164)` / `findUserById(id)` -> { user_id, phone }.
+    // Resolution par numero (L11) : `findUserByPhone(e164)` / `findUserById(id)` -> { user_id, phone } ou null.
     findUserByPhone = async () => null,
     findUserById = async () => null
 } = {}) {
@@ -108,9 +108,10 @@ export function createCommunicationRelations({
     const request = async (senderId, targetId, { note = '', phone = '' } = {}) => {
         const sender = id(senderId);
         let target = id(targetId);
-        // Par numero : un numero sans compte repond comme un succes — on ne revele jamais
-        // si un numero correspond a un compte.
-        if (!target && phone) {
+        // Par numero : un id qui n'est pas un compte (celui d'une fiche du carnet de
+        // l'appareil) se resout par le numero joint. Un numero sans compte repond comme
+        // un succes — on ne revele jamais si un numero correspond a un compte.
+        if (phone && !(target && (await findUserById(target).catch(() => null))?.user_id)) {
             const e164 = contactBookPhone(phone);
             const found = e164 ? await findUserByPhone(e164).catch(() => null) : null;
             if (!found?.user_id) return { ok: true, status: 'pending' };

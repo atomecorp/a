@@ -14,9 +14,10 @@ const CLOSE_ERRORS = Object.freeze({ expired: 'session_expired', content: 'realt
 // the assistant owns focus and the conversation owns public transcript turns.
 export const createRealtimeSession = ({
     env = globalThis, request = requestProviderService,
-    playback = getAudioPlaybackAPI(env), onTurn = async () => {}, onTool = async () => {},
-    history = () => [], onUsage = () => {}, tools = [], createTools = null, voice = null, locale = '', announceReady = null, suspendWhenHidden = true, deviceId = '',
-    turnGapMs = 1200, idleTimeoutMs = 60000
+    playback = getAudioPlaybackAPI(env), onTurn = async () => {}, onHear = () => {}, onTool = async () => {},
+    history = () => [], onUsage = () => {}, tools = [], createTools = null, voice = null, locale = '', announceReady = null, announceTouch = null, suspendWhenHidden = true, deviceId = '',
+    // Only the person ends a conversation, or three minutes without a word.
+    turnGapMs = 1200, idleTimeoutMs = 180000
 } = {}) => {
     // Interface language (ISO-639-1): the reply language and eVe's native voice for it.
     const language = String(locale || '').toLowerCase().split(/[-_]/)[0].replace(/[^a-z]/g, '').slice(0, 3);
@@ -73,6 +74,7 @@ export const createRealtimeSession = ({
         speech ||= { role, id: env.crypto.randomUUID(), text: '', end: 0, timer: null };
         const turn = speech;
         turn.text += String(event.delta || ''); turn.end = event.end_ms;
+        onHear({ id: turn.id, role, text: turn.text });
         env.clearTimeout(turn.timer);
         turn.timer = env.setTimeout(() => {
             if (speech !== turn || token !== generation) return;
@@ -85,7 +87,7 @@ export const createRealtimeSession = ({
         if (!Number.isFinite(total) || total <= usageSeconds) return;
         onUsage({ seconds: total - usageSeconds }, OPENAI_MODALITY_MODELS.voice); usageSeconds = total;
     };
-    // An open session is billed even in silence: after a minute without a word
+    // An open session is billed even in silence: after three minutes without a word
     // (either side) the assistant hangs up; the wake word calls it back.
     const armIdle = token => {
         env.clearTimeout(idleTimer);
@@ -106,6 +108,17 @@ export const createRealtimeSession = ({
         if (token !== generation || !listening) return;
         setInput(true);
         emit({ phase: 'listening' });
+    };
+    // A touch on eVe: she answers in her own voice, the microphone shut while she
+    // says it (as when she says she is ready), then she listens on.
+    const respond = async () => {
+        if (!announceTouch) throw new Error('realtime_touch_announcer_required');
+        const token = generation;
+        if (!peer || !listening) return snapshot();
+        armIdle(token); setInput(false); emit({ phase: 'speaking' });
+        try { await announceTouch(); }
+        finally { if (token === generation && listening) { setInput(true); emit({ phase: 'listening' }); } }
+        return snapshot();
     };
     const stopCapture = () => {
         listening = false;
@@ -304,7 +317,7 @@ export const createRealtimeSession = ({
     };
     // A hang-up releases the transport at once, in silence.
     return Object.freeze({
-        open, close, pause,
+        open, close, pause, respond,
         async configure(options = {}) {
             const nextDevice = options.deviceId === undefined ? deviceId : String(options.deviceId);
             await pause(); deviceId = nextDevice;

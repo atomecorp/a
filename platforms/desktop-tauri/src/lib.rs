@@ -285,11 +285,12 @@ pub fn run() {
             // `resource_dir()` returns the URI "asset://localhost/" there. The staged
             // web root is therefore written to the application data directory before
             // the Axum server starts, and every consumer below works unchanged.
+            // Only its path is resolved here: the extraction runs on the server
+            // thread, because `setup` runs on the Android main thread.
             #[cfg(target_os = "android")]
-            let static_dir: PathBuf = match android_assets::materialize_project_root(app.handle())
-            {
+            let static_dir: PathBuf = match android_assets::project_static_dir(app.handle()) {
                 Ok(dir) => dir,
-                Err(err) => panic!("Android assets could not be materialized: {err}"),
+                Err(err) => panic!("Android assets directory is unavailable: {err}"),
             };
 
             #[cfg(not(target_os = "android"))]
@@ -326,6 +327,7 @@ pub fn run() {
                 }
             };
 
+            #[cfg(not(target_os = "android"))]
             if !static_dir.join("index.html").exists() {
                 eprintln!(
                     "⚠️  Static directory does not contain index.html: {:?}",
@@ -372,7 +374,16 @@ pub fn run() {
             let uploads_dir_for_server = uploads_dir.clone();
             let data_dir_for_server = data_dir.clone();
 
+            #[cfg(target_os = "android")]
+            let materialize_handle = app.handle().clone();
             std::thread::spawn(move || {
+                // No server without the web root: the navigation thread then
+                // reports the failure on screen instead of the app crashing.
+                #[cfg(target_os = "android")]
+                if let Err(err) = android_assets::materialize_project_root(&materialize_handle) {
+                    eprintln!("[tauri] Android assets could not be materialized: {err}");
+                    return;
+                }
                 let rt = tokio::runtime::Runtime::new().unwrap();
                 rt.block_on(async {
                     server::start_server(

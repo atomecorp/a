@@ -155,6 +155,7 @@ pub fn apply_transform(world: &mut World, patch: AtomeTransformPatch) -> Result<
             insert_video_quad_mesh(world, entity, [width, height], [0.0, 0.0, 1.0, 1.0])?;
         }
         resize_procedural_sdf(world, entity, [width, height])?;
+        crate::progress_ring::resize(world, entity, [width, height])?;
         resize_backdrop_surface(world, entity, [width, height])?;
         // A rounded shape is painted through a cut-out mask rasterised at its
         // size: stretching the sprite alone stretched its corners too (a ribbon

@@ -43,6 +43,18 @@ final class NativeCalendarAlarm {
     func handle(command: String,
                 payload: [String: Any],
                 completion: @escaping ([String: Any], String?) -> Void) {
+        // The bridge calls in on the main thread. AlarmKit cancel/schedule and the
+        // owned-id defaults run one alarm after another: on « C'est parti » (7
+        // daily alarms) they held the main thread ~0.7 s (iOS hang banner).
+        // `respond` already returns to the main thread.
+        DispatchQueue.global(qos: .userInitiated).async {
+            Self.route(command: command, payload: payload, completion: completion)
+        }
+    }
+
+    private static func route(command: String,
+                              payload: [String: Any],
+                              completion: @escaping ([String: Any], String?) -> Void) {
         switch command {
         case "calendar_alarm_platform":
             Self.respond(completion, Self.platformPayload(), nil)

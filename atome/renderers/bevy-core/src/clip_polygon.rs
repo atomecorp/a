@@ -394,7 +394,7 @@ mod clip_polygon_tests {
             presentation: false, menu_plane: 0, color: Some([0.1, 0.2, 0.3, 1.0]),
             text: None, source: None, texture_size: None, uv_rect: None, texture: None,
             peaks: None, playback_progress: None, selected: None, filters: None,
-            transition: None, procedural: None,
+            transition: None, procedural: None, progress_ring: None,
         }
     }
 

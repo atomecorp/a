@@ -1,4 +1,5 @@
-//! Health Connect bridge (Android only), read-only.
+//! Health Connect bridge (Android only). Monitors are read-only; the only
+//! write is the training workout (`workout*`).
 //!
 //! The plugin registers the Kotlin `HealthPlugin` and exposes ONE Rust entry,
 //! [`call`], used by the app's gated `health_invoke` command after it has
@@ -27,6 +28,10 @@ pub const METHODS: &[&str] = &[
     "isLinked",
     "link",
     "openSettings",
+    "workoutPrepare",
+    "workoutStart",
+    "workoutEvent",
+    "workoutEnd",
 ];
 
 pub fn init<R: Runtime>() -> TauriPlugin<R> {

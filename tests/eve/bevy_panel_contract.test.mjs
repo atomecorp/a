@@ -21,7 +21,6 @@ import {
 import { EVE_PANEL_CHROME_TOKENS } from '../../eVe/elements/design/panel_chrome_tokens.js';
 import { EVE_CONTROL_PRESETS } from '../../eVe/elements/look/preset_controls.js';
 import { EVE_PANEL_CHROME_PRESETS } from '../../eVe/elements/look/preset_chrome.js';
-import { MATRIX_VISUAL_THEME_TOKENS } from '../../eVe/intuition/matrix/visual/matrix_visual_tokens.js';
 import { RIBBON_TOKENS } from '../../eVe/intuition/ribbon/tokens.js';
 import { buildAtomeEditorStyle } from '../../eVe/intuition/tools/visual/tool_visual_tokens.js';
 import { buildBevyFooterCloseButtonNode } from '../../eVe/intuition/ribbon/bevy_ui_menu_surface.js';
@@ -133,10 +132,7 @@ test('factored legacy presets remain independently mutable', () => {
     assert.equal(EVE_PANEL_CHROME_PRESETS.header.css.textShadow, EVE_PANEL_CHROME_TOKENS.textShadow);
 });
 
-test('Matrix and generated editor CSS consume factored style owners', () => {
-    assert.equal(MATRIX_VISUAL_THEME_TOKENS.filledCellBackground, MATRIX_VISUAL_THEME_TOKENS.currentCellBackground);
-    assert.equal(MATRIX_VISUAL_THEME_TOKENS.filledCellShadow, MATRIX_VISUAL_THEME_TOKENS.currentCellShadow);
-
+test('Generated editor CSS consumes factored style owners', () => {
     const css = buildAtomeEditorStyle({ editorId: 'style_factorization_probe' });
     assert.equal((css.match(/scrollbar-width: none;/g) || []).length, 1);
     assert.equal((css.match(/#style_factorization_probe \[data-role="tools"\] \{/g) || []).length, 1);

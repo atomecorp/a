@@ -223,6 +223,7 @@ pub fn apply_style(world: &mut World, patch: AtomeStylePatch) -> Result<(), Stri
             video.opacity = normalized_opacity;
         }
         sync_shape_shadow_overlay_opacity(world, entity, normalized_opacity);
+        crate::progress_ring::set_opacity(world, entity, normalized_opacity)?;
         if sync_backdrop_surface_opacity(world, entity, normalized_opacity) {
             refresh_workspace_backdrop_enabled(world)?;
         }
@@ -243,6 +244,9 @@ pub fn apply_style(world: &mut World, patch: AtomeStylePatch) -> Result<(), Stri
     }
     if let Some(procedural) = patch.procedural {
         patch_procedural_sdf(world, entity, procedural)?;
+    }
+    if let Some(ring) = patch.progress_ring {
+        crate::progress_ring::patch(world, entity, ring)?;
     }
     // L'arrondi et la variante de forme sont des retouches NON destructives :
     // l'objet garde son entite, sa pose et son calque, et seul son STYLE

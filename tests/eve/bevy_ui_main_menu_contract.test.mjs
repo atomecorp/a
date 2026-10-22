@@ -64,12 +64,12 @@ test('the capture palette keeps only its capture sources and Actions while the r
     const inertDependencies = [
         'applyDeleteSelection', 'closeBackgroundPanel', 'closeCalendarPanel', 'closeCanonicalHomePanel',
         'closeCommunicatePanel', 'closeCouleurPanel', 'closeDeletePanel', 'closeFinderPanel',
-        'closeFontPanel', 'closeInfoPanel', 'closeLayerPanel', 'closeMatrixView', 'closePastePanel',
+        'closeFontPanel', 'closeInfoPanel', 'closeLayerPanel', 'closePastePanel',
         'closeTimelinePanel', 'closeUndoPanel', 'defaultOrientation', 'directionValueToLabel',
         'ensureActivitiesModule', 'ensureCopyModule', 'ensurePastePanelModule', 'handleAiTouch',
         'handleFinderTouch', 'invokeTool', 'openBackgroundPanel', 'openCalendarPanel',
         'openCanonicalHomePanel', 'openCommunicatePanel', 'openCouleurPanel', 'openDeletePanel',
-        'openFinderPanel', 'openFontPanel', 'openInfoPanel', 'openLayerPanel', 'openMatrixView',
+        'openFinderPanel', 'openFontPanel', 'openInfoPanel', 'openLayerPanel', 
         'openMediaPanel', 'closeMediaPanel',
         'openPastePanel', 'openTimelinePanel', 'openUndoPanel', 'orientationChanged'
     ];
@@ -102,12 +102,12 @@ test('the permanent bar is the five intents plus view/help/contact; mode and act
     const inertDependencies = [
         'applyDeleteSelection', 'closeBackgroundPanel', 'closeCalendarPanel', 'closeCanonicalHomePanel',
         'closeCommunicatePanel', 'closeCouleurPanel', 'closeDeletePanel', 'closeFinderPanel',
-        'closeFontPanel', 'closeInfoPanel', 'closeLayerPanel', 'closeMatrixView', 'closePastePanel',
+        'closeFontPanel', 'closeInfoPanel', 'closeLayerPanel', 'closePastePanel',
         'closeTimelinePanel', 'closeUndoPanel', 'defaultOrientation', 'directionValueToLabel',
         'ensureActivitiesModule', 'ensureCopyModule', 'ensurePastePanelModule', 'handleAiTouch',
         'handleFinderTouch', 'invokeTool', 'openBackgroundPanel', 'openCalendarPanel',
         'openCanonicalHomePanel', 'openCommunicatePanel', 'openCouleurPanel', 'openDeletePanel',
-        'openFinderPanel', 'openFontPanel', 'openInfoPanel', 'openLayerPanel', 'openMatrixView',
+        'openFinderPanel', 'openFontPanel', 'openInfoPanel', 'openLayerPanel', 
         'openMediaPanel', 'closeMediaPanel',
         'openPastePanel', 'openTimelinePanel', 'openUndoPanel', 'orientationChanged'
     ];
@@ -149,8 +149,10 @@ test('the permanent bar is the five intents plus view/help/contact; mode and act
     assert.deepEqual(content.mode.children, ['perform', 'mode_edit', 'mode_consume']);
     assert.equal(content.validation.tool_id, 'ui.capture.validation');
     assert.equal(content.matrix.tool_id, 'tool.main.matrix');
-    assert.equal(typeof content.matrix.active, 'function');
-    assert.equal(typeof content.matrix.inactive, 'function');
+    // `matrix` opens the eVe home through its canonical tool; no ribbon-local handler.
+    assert.equal(content.matrix.action, 'momentary');
+    assert.equal(content.matrix.active, undefined);
+    assert.equal(content.matrix.inactive, undefined);
     // `help` is the existing tool: same tool_id, same handler, no second one.
     assert.equal(content.help.tool_id, 'tool.main.help');
     assert.equal(typeof content.help.touch, 'function');

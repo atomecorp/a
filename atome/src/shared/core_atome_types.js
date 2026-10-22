@@ -1,5 +1,5 @@
 import { PERSONAL_IMPORT_TYPES, CALENDAR_IMPORT_FIELDS } from './personal_import_types.js';
-import { GPS_TRIP_TYPE } from './gps_trip_contract.js';
+import { GPS_TRIP_TYPE, LIVE_POSITION_TYPE } from './gps_trip_contract.js';
 import { SHOPPING_ITEM_TYPE } from './shopping_list_contract.js';
 import { LIBRARY_WORK_TYPE } from './library_work_contract.js';
 import { COMMUNICATION_MESSAGE_TYPE } from './communication_contract.js';
@@ -109,7 +109,7 @@ const defineType = (definition) => Object.freeze({
 export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
     defineType(APPLE_MUSIC_OPERATION_TYPE),
     defineType(MUSIC_OPERATION_TYPE),
-    defineType(GPS_TRIP_TYPE), defineType(SHOPPING_ITEM_TYPE), defineType(LIBRARY_WORK_TYPE),
+    defineType(GPS_TRIP_TYPE), defineType(LIVE_POSITION_TYPE), defineType(SHOPPING_ITEM_TYPE), defineType(LIBRARY_WORK_TYPE),
     defineType(COMMUNICATION_MESSAGE_TYPE),
     ...PERSONAL_IMPORT_TYPES.map(defineType),
     defineType({

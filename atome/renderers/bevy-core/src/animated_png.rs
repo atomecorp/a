@@ -1,16 +1,13 @@
 //! APNG decoding belongs to the shared image resource, never to a DOM player.
 use crate::{
     animated_png_pixels::frame_pixels,
+    frame_demand::AtomeFrameDemand,
     types::{AtomeRendererDiagnostics, AtomeTexture},
 };
-use bevy::{
-    image::Image,
-    prelude::*,
-    winit::{UpdateMode, WinitSettings},
-};
+use bevy::{image::Image, prelude::*};
 use image::{codecs::png::PngDecoder, metadata::LoopCount, AnimationDecoder, ImageDecoder, Limits};
 use serde::Deserialize;
-use std::{collections::HashMap, io::Cursor, time::Duration};
+use std::{collections::HashMap, io::Cursor};
 
 const MAX_BYTES: usize = 32 * 1024 * 1024;
 const MAX_DECODED_ANIMATION_BYTES: usize = 32 * 1024 * 1024;
@@ -187,7 +184,6 @@ impl PngPlayback {
 #[derive(Default)]
 pub struct PngAnimations {
     entries: HashMap<Entity, PngPlayback>,
-    saved_modes: Option<(UpdateMode, UpdateMode)>,
 }
 
 pub fn remove_animation(world: &mut World, entity: Entity) {
@@ -234,13 +230,6 @@ pub fn install_animation(
     Ok(())
 }
 
-fn with_frame_deadline(mut mode: UpdateMode, interval: Duration) -> UpdateMode {
-    if let UpdateMode::Reactive { ref mut wait, .. } = mode {
-        *wait = (*wait).min(interval);
-    }
-    mode
-}
-
 pub fn advance_animations(
     mut animations: NonSendMut<PngAnimations>,
     time: Res<Time<Real>>,
@@ -251,7 +240,7 @@ pub fn advance_animations(
     )>,
     mut images: ResMut<Assets<Image>>,
     mut diagnostics: ResMut<AtomeRendererDiagnostics>,
-    mut settings: Option<ResMut<WinitSettings>>,
+    mut demand: ResMut<AtomeFrameDemand>,
 ) {
     let now = time.elapsed_secs_f64();
     let mut next: Option<f64> = None;
@@ -295,20 +284,8 @@ pub fn advance_animations(
         !playback.finished
     });
     diagnostics.apng_active = active;
-    if let Some(settings) = settings.as_mut() {
-        if let Some(deadline) = next {
-            if animations.saved_modes.is_none() {
-                animations.saved_modes = Some((settings.focused_mode, settings.unfocused_mode));
-            }
-            let interval = Duration::from_secs_f64((deadline - now).clamp(0.001, 1.0));
-            let (focused, unfocused) = animations.saved_modes.unwrap();
-            settings.focused_mode = with_frame_deadline(focused, interval);
-            settings.unfocused_mode = with_frame_deadline(unfocused, interval);
-        } else if let Some((focused, unfocused)) = animations.saved_modes.take() {
-            settings.focused_mode = focused;
-            settings.unfocused_mode = unfocused;
-        }
-    }
+    // The next frame a playing APNG needs (#frame_demand.rs owns the loop's wait).
+    demand.request("apng", next);
 }
 
 #[cfg(test)]

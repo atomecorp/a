@@ -209,12 +209,12 @@ const modeContentDependencies = (translate) => {
     const inert = [
         'applyDeleteSelection', 'closeBackgroundPanel', 'closeCalendarPanel', 'closeCanonicalHomePanel',
         'closeCommunicatePanel', 'closeCouleurPanel', 'closeDeletePanel', 'closeFinderPanel',
-        'closeFontPanel', 'closeInfoPanel', 'closeLayerPanel', 'closeMatrixView', 'closePastePanel',
+        'closeFontPanel', 'closeInfoPanel', 'closeLayerPanel', 'closePastePanel',
         'closeTimelinePanel', 'closeUndoPanel', 'defaultOrientation', 'directionValueToLabel',
         'ensureActivitiesModule', 'ensureCopyModule', 'ensurePastePanelModule', 'handleAiTouch',
         'handleFinderTouch', 'invokeTool', 'openBackgroundPanel', 'openCalendarPanel',
         'openCanonicalHomePanel', 'openCommunicatePanel', 'openCouleurPanel', 'openDeletePanel',
-        'openFinderPanel', 'openFontPanel', 'openInfoPanel', 'openLayerPanel', 'openMatrixView',
+        'openFinderPanel', 'openFontPanel', 'openInfoPanel', 'openLayerPanel', 
         'openMediaPanel', 'closeMediaPanel',
         'openPastePanel', 'openTimelinePanel', 'openUndoPanel', 'orientationChanged'
     ];

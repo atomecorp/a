@@ -1,10 +1,10 @@
 import { ATOME_MCP_PROTOCOL } from './mcp_core.js';
-import { ensureAIAgent, ensureRuntimeCommandBus, ensureRuntimeToolApi } from './mcp_bridges.js';
+import { ensureRuntimeCommandBus, ensureRuntimeToolApi, loadAIAgent } from './mcp_bridges.js';
 import { buildRuntimeInvocationPayload, normalizeRuntimeToolEntry, projectRuntimeMcpResult } from './mcp_runtime.js';
 
 export const createMcpAiRuntimeHandlers = () => ({
-    'ai.tools.list'() {
-        const agent = ensureAIAgent();
+    async 'ai.tools.list'() {
+        const agent = await loadAIAgent();
         const tools = agent.listTools();
         return {
             protocol: ATOME_MCP_PROTOCOL,
@@ -12,7 +12,7 @@ export const createMcpAiRuntimeHandlers = () => ({
         };
     },
     async 'ai.tools.call'(params = {}) {
-        const agent = ensureAIAgent();
+        const agent = await loadAIAgent();
         if (typeof agent.callTool !== 'function') {
             throw new Error('AtomeAI.callTool is not available');
         }
@@ -33,8 +33,8 @@ export const createMcpAiRuntimeHandlers = () => ({
 
         return agent.callTool(request);
     },
-    'ai.audit.list'(params = {}) {
-        const agent = ensureAIAgent();
+    async 'ai.audit.list'(params = {}) {
+        const agent = await loadAIAgent();
         const limit = Number.isFinite(params?.limit) ? params.limit : 20;
         if (!agent.audit || typeof agent.audit.list !== 'function') {
             throw new Error('AtomeAI.audit.list is not available');

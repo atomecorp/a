@@ -5,7 +5,7 @@
 //! by requesting the window's next animation frame — input and decoder-paced
 //! video frames alike — so each frame costs exactly one render.
 
-use atome_bevy_renderer_core::AtomeRendererDiagnostics;
+use atome_bevy_renderer_core::frame_demand::AtomeFrameDemand;
 use bevy::platform::time::Instant;
 use bevy::{
     prelude::*,
@@ -72,17 +72,18 @@ fn note_web_activity() {
 
 /// Chooses the idle wait at the end of each tick: the failsafe heartbeat while
 /// work is recent, the settled heartbeat once the workspace has been quiet for
-/// `WEB_IDLE_SETTLE_MS`. A playing animated PNG shortens the wait itself
-/// (`animated_png::advance_animations`) and keeps that control until it ends.
+/// `WEB_IDLE_SETTLE_MS`. An animation the renderer draws itself (a playing
+/// animated PNG, a moving progress ring) shortens the wait through
+/// `frame_demand::apply_frame_demand` and keeps that control until it ends.
 pub(crate) fn adapt_web_idle_heartbeat(
     mut settings: ResMut<WinitSettings>,
-    diagnostics: Option<Res<AtomeRendererDiagnostics>>,
+    demand: Option<Res<AtomeFrameDemand>>,
     mut resized: MessageReader<WindowResized>,
 ) {
     if resized.read().count() > 0 {
         note_web_activity();
     }
-    if diagnostics.is_some_and(|diagnostics| diagnostics.apng_active > 0) {
+    if demand.is_some_and(|demand| demand.active()) {
         return;
     }
     let now = Instant::now();

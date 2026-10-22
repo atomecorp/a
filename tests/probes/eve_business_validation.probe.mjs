@@ -76,7 +76,6 @@ const run = async () => {
         circleInvoke: null,
         textInvoke: null,
         matrixInvoke: null,
-        matrixCloseInvoke: null,
         commandBusCircleAccepted: false,
         commandBusTextAccepted: false,
         commandBusMatrixAccepted: false,
@@ -225,13 +224,6 @@ const run = async () => {
           source: { type: 'business_validation', layer: 'headless' },
           presentation: 'ui'
         });
-        out.matrixCloseInvoke = await gateway({
-          tool_id: 'ui.matrix.view',
-          action: 'close',
-          input: {},
-          source: { type: 'business_validation', layer: 'headless' },
-          presentation: 'ui'
-        });
 
         await gateway({
           tool_id: 'ui.move',
@@ -355,12 +347,6 @@ const run = async () => {
       ok: integration?.matrixInvoke?.ok === true
         && resolveToolKey(integration?.matrixInvoke) === 'matrix_view',
       details: integration?.matrixInvoke || null
-    });
-    report.checks.push({
-      name: 'matrix_close_runtime_success',
-      ok: integration?.matrixCloseInvoke?.ok === true
-        && resolveToolKey(integration?.matrixCloseInvoke) === 'matrix_view',
-      details: integration?.matrixCloseInvoke || null
     });
     report.checks.push({
       name: 'command_bus_circle_accepted',

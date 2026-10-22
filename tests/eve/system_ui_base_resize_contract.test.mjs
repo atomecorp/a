@@ -30,7 +30,6 @@ import { RIBBON_TOKENS } from './eVe/intuition/ribbon/tokens.js';
 import { BEVY_PANEL_TOKENS } from './eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
 import { createDashboardLayout } from './eVe/domains/dashboard/dashboard_layout.js';
 import { DASHBOARD_VISUAL_TOKENS, resolveDashboardBlockUnitSize } from './eVe/domains/dashboard/dashboard_tokens.js';
-import { MATRIX_VISUAL_METRICS } from './eVe/intuition/matrix/visual/matrix_visual_tokens.js';
 import { projectViewRowGeometry } from './eVe/domains/rendering/project_view_surface_layout.js';
 import { EVE_COMMON_SKIN_TOKENS } from './eVe/elements/skin/tokens.js';
 import { buildMainMenuNotificationNodes } from './eVe/intuition/ribbon/bevy_ui_main_menu_notification.js';
@@ -84,13 +83,6 @@ console.log(JSON.stringify({
         dashboardUnitWidth: layout.unit_width,
         dashboardBlockUnit: resolveDashboardBlockUnitSize(DASHBOARD_VISUAL_TOKENS),
         dashboardLabelText: DASHBOARD_VISUAL_TOKENS.labelText.font_size,
-        matrixCell: MATRIX_VISUAL_METRICS.cellSizePx,
-        matrixGap: MATRIX_VISUAL_METRICS.cellGapPx,
-        matrixContainerPadding: MATRIX_VISUAL_METRICS.containerPaddingPx,
-        matrixTileFont: MATRIX_VISUAL_METRICS.tileFontSizePx,
-        matrixTileLabel: MATRIX_VISUAL_METRICS.labelFontSizePx,
-        matrixAddIcon: MATRIX_VISUAL_METRICS.addIconSizePx,
-        matrixTileRadius: MATRIX_VISUAL_METRICS.tileRadiusPx,
         commonRadiusXs: EVE_COMMON_SKIN_TOKENS.radius.xs,
         commonRadiusSm: EVE_COMMON_SKIN_TOKENS.radius.sm,
         commonRadiusMd: EVE_COMMON_SKIN_TOKENS.radius.md,
@@ -157,14 +149,12 @@ describe('System UI base resize contract', () => {
         expect(alternate.lengths.panelAccordionHeader).toBe(alternate.lengths.toolSquare);
         expect(alternate.lengths.panelInput).toBe(alternate.lengths.toolSquare / 2);
         expect(alternate.lengths.dashboardCell).toBe(alternate.lengths.toolSquare * 2);
-        expect(alternate.lengths.matrixCell).toBe(alternate.lengths.toolSquare * 2);
     });
 
     it('resizes the labels and glyphs with their own surface', () => {
         expect(alternate.lengths.panelControlText).toBeGreaterThan(authoredLengths.panelControlText);
         expect(alternate.lengths.panelBodyText).toBeGreaterThan(authoredLengths.panelBodyText);
         expect(alternate.lengths.dashboardLabelText).toBeGreaterThan(authoredLengths.dashboardLabelText);
-        expect(alternate.lengths.matrixTileLabel).toBeGreaterThan(authoredLengths.matrixTileLabel);
         expect(alternate.lengths.buttonLabelText).toBeGreaterThan(authoredLengths.buttonLabelText);
     });
 

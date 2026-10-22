@@ -8,11 +8,13 @@
 // be stored, published or used to re-arm an observer.
 //
 // Values stay in memory only. Nothing here persists, syncs or logs a value.
+// The only write is the training workout (`workout`, #health_workout.js).
 
 import { getHealthMonitor, healthMonitorsForHost } from './health_catalog.js';
 import { normalizeHealthResult, requestRangeFor } from './health_values.js';
 import { buildLogEnvelope } from '../../shared/logging.js';
 import { createHealthHistoryReader } from './health_history_reader.js';
+import { createHealthWorkoutRecorder } from './health_workout.js';
 
 const DEFAULT_POLL_MS = 60000;
 const RETAINED_READING_FRESH_MS = 60000;
@@ -173,8 +175,9 @@ export function createHealthOwner({
         return status;
     };
 
-    // Explicit user gesture only: associates this device's health store with
-    // the signed-in account, on this device, without syncing the association.
+    // Associates this device's health store with the local principal (account
+    // or guest), on this device, without syncing the association. Called when health
+    // monitors are shown (selector opened, monitor displayed).
     const link = async () => {
         const ctx = context();
         const reply = await call('health_link', {}, ctx);
@@ -186,7 +189,8 @@ export function createHealthOwner({
     };
 
     // One native permission request in flight; ids requested meanwhile are
-    // merged into the next request. Only ever called from a user gesture.
+    // merged into the next request. Called when health monitors are shown
+    // (selector opened, monitor displayed without access) or by a gesture.
     // Monitors the system will no longer ask about are not requested again
     // (no silent sheet-less loop): they are answered as `settings`.
     const requestAccess = (monitorIds) => {
@@ -424,13 +428,13 @@ export function createHealthOwner({
     // Reponse d'authentification sans compte : l'absence de compte devient un etat.
     const onAuthChecked = (event) => {
         if (authResolved) return;
-        const next = event?.detail?.authenticated && !event?.detail?.anonymous ? (event.detail.userId || getAccountId() || null) : (getAccountId() || null);
+        const next = event?.detail?.authenticated ? (event.detail.userId || getAccountId() || null) : (getAccountId() || null);
         if (next) { resetContext(next); return; }
         authResolved = true;
         if (consumers.size) scheduleRead(Array.from(consumers.keys()));
     };
     const onLoggedIn = (event) => {
-        const next = event?.detail?.anonymous ? null : (event?.detail?.userId || getAccountId() || null);
+        const next = event?.detail?.userId || getAccountId() || null;
         if (next !== accountId) resetContext(next);
     };
 
@@ -456,6 +460,7 @@ export function createHealthOwner({
         },
         subscribe,
         readHistory,
+        workout: createHealthWorkoutRecorder({ call, context, loadLinkStatus, describe }),
         refresh: (ids) => scheduleRead(ids || Array.from(consumers.keys())),
         reading: (monitorId) => readings.get(monitorId) || null,
         resetContext,

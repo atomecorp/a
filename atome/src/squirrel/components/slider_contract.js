@@ -38,6 +38,11 @@ export const normalizeSliderOptions = (options = {}) => {
     if (length !== null && length !== 'fill' && (!Number.isFinite(length) || length <= 0)) throw new Error('slider_length_invalid');
     if (!Number.isFinite(inset) || inset < 0) throw new Error('slider_value_inset_invalid');
     const normalized = { showBounds: options.showBounds === true, lengthPx: length, valueInsetPx: inset };
+    // `valueFontSizePx`: the value read large above an expanded horizontal rail (an event's time).
+    if (options.valueFontSizePx != null) {
+        if (!Number.isFinite(options.valueFontSizePx) || options.valueFontSizePx <= 0) throw new Error('slider_value_font_size_invalid');
+        normalized.valueFontSizePx = options.valueFontSizePx;
+    }
     if (options.valueLabels != null) {
         const labels = options.valueLabels;
         if (!labels || typeof labels !== 'object' || Array.isArray(labels) || !Object.keys(labels).length

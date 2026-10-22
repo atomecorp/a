@@ -10,6 +10,8 @@ the established solution before attempting a new implementation.
 
 | Symptom | Folder |
 | --- | --- |
+| A panel or home level is empty / « Chargement… » offline or with a silent network; iOS first touch slow | [display-waits-for-network](display-waits-for-network/README.md) |
+| Android app (Firebase build) stays on a white screen after the splash; or a blank page where WebGPU has no adapter | [android-white-screen-at-launch](android-white-screen-at-launch/README.md) |
 | iOS guest back on the access screen after relaunch; « Mieux dormir » / « Dashboard eVe » duplicated at each « Commencer » | [guest-session-erased-by-preview-frame](guest-session-erased-by-preview-frame/README.md) |
 | A media preview (Médiathèque Lecture, contact takes) shows Pause but is silent | [preview-playback-silent-null-duration](preview-playback-silent-null-duration/README.md) |
 | Tauri: project opening 10–25 s; return to the home stuck grey in `transition` | [home-return-stuck-in-transition](home-return-stuck-in-transition/README.md) |

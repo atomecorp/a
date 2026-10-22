@@ -1,5 +1,8 @@
 use super::*;
+use crate::frame_demand::with_frame_deadline;
 use crate::texture::image_handle_from_texture;
+use bevy::winit::UpdateMode;
+use std::time::Duration;
 
 fn texture() -> AtomeTexture {
     AtomeTexture {
@@ -101,6 +104,7 @@ fn apng_updates_same_image_pauses_hidden_and_releases_on_replacement_or_despawn(
     app.init_resource::<Assets<Image>>()
         .init_resource::<Time<Real>>()
         .init_resource::<AtomeRendererDiagnostics>()
+        .init_resource::<AtomeFrameDemand>()
         .init_non_send::<PngAnimations>()
         .add_systems(Update, advance_animations);
     let handle = image_handle_from_texture(

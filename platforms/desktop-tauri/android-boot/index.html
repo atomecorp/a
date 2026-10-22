@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<!--
+  Android launch page (`tauri.android.conf.json` -> app.windows[0].url).
+  Android has no file system path for bundled resources, so the native setup
+  first materializes the web root, then starts the local Axum server and
+  navigates this window to it (`platforms/desktop-tauri/src/lib.rs`). Until
+  then the window used to load the whole application from tauri.localhost:
+  a blank page whose module boot competed with the extraction for the CPU.
+  This page only extends the system splash (same glyph, size and place:
+  the 108 dp adaptive foreground is drawn on a 288 dp canvas) and loads nothing else.
+-->
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <title>atome</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #fff; }
+    body { display: flex; align-items: center; justify-content: center; }
+    @media (prefers-color-scheme: dark) { html, body { background: #121212; } }
+  </style>
+</head>
+<body>
+  <svg width="131" height="114" viewBox="4.8 12.6 118 102.4" aria-hidden="true">
+    <image href="/assets/images/logos/atome.svg" width="128" height="128"/>
+  </svg>
+</body>
+</html>

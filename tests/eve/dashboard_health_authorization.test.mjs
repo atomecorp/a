@@ -43,10 +43,9 @@ function setup({ host = 'ios', linked = true, selected = [], failed = false } = 
     };
     let stored = selected;
     const persist = vi.fn(async ids => { stored = ids; return { ok: true }; });
-    const navigate = vi.fn(async () => ({ ok: true }));
-    const modules = createDashboardHealthModules({ owner, readSelection: () => stored, persistSelection: persist, navigate });
+    const modules = createDashboardHealthModules({ owner, readSelection: () => stored, persistSelection: persist });
     modules.start();
-    return { modules, owner, monitors, listeners, persist, navigate };
+    return { modules, owner, monitors, listeners, persist };
 }
 beforeEach(() => { panels.definition = null; });
 
@@ -98,14 +97,36 @@ test('a failed association is shown and never issues authorization', async () =>
     modules.stop();
 });
 
-test('without a signed-in account nothing is associated and sign-in is opened', async () => {
-    const { modules, owner, navigate } = setup({ linked: false });
+test('without a local principal nothing is associated and no phone sign-in is opened', async () => {
+    const { modules, owner } = setup({ linked: false });
     owner.linkStatus.mockResolvedValue({ linked: false, reason: 'health_account_required' });
     await modules.openSelector(); await settle();
     expect(owner.link).not.toHaveBeenCalled();
     expect(owner.requestAccess).not.toHaveBeenCalled();
-    expect(navigate).toHaveBeenCalled();
     modules.stop();
+});
+
+test('a monitor shown without association or access asks the host once, without the selector', async () => {
+    const { modules, owner, monitors, listeners } = setup({ linked: false, selected: ['steps', 'weight'] });
+    listeners.get('steps')({ state: 'needs_link' });
+    listeners.get('weight')({ state: 'needs_link' });
+    await settle();
+    expect(owner.link).toHaveBeenCalledTimes(1);
+    expect(owner.requestAccess).toHaveBeenCalledTimes(1);
+    expect(owner.requestAccess.mock.calls[0][0].slice().sort()).toEqual(['steps', 'weight']);
+    // Already answered (HealthKit hides read grants): shown again, asked no more.
+    listeners.get('steps')({ state: 'needs_permission' });
+    await settle();
+    expect(owner.requestAccess).toHaveBeenCalledTimes(1);
+    // Associated even when no sheet is left to show.
+    Object.values(monitors).forEach(entry => { entry.access = 'unknowable'; });
+    const other = setup({ linked: false, selected: ['steps'] });
+    Object.values(other.monitors).forEach(entry => { entry.access = 'unknowable'; });
+    other.listeners.get('steps')({ state: 'needs_link' });
+    await settle();
+    expect(other.owner.link).toHaveBeenCalledTimes(1);
+    expect(other.owner.requestAccess).not.toHaveBeenCalled();
+    modules.stop(); other.modules.stop();
 });
 
 test('an already answered catalog is read without another permission request', async () => {
@@ -244,15 +265,14 @@ test.each([{ selected: [] }, { selected: ['steps'] }])('a failed automatic assoc
     modules.stop();
 });
 
-test('linked iOS exposes Associate for an unanswered catalog even without checked measures', async () => {
+test('linked iOS asks the unanswered catalog on opening, leaving no Associate to press', async () => {
     const { modules, owner } = setup();
     await modules.activate(); await settle();
     const fixed = panels.definition.buildFixedContent(modules.readState(), { emit: intent => modules.handleEvent(intent), bodyWidth: 360 });
-    expect(fixed).toHaveLength(1);
-    expect(fixed[0].children[0].text).toMatch(/Associer|Associate/);
-    await fixed[0].on.activate();
+    expect(fixed).toEqual([]);
     expect(owner.link).not.toHaveBeenCalled();
-    expect(owner.requestAccess.mock.calls[0][0]).toHaveLength(32);
+    expect(owner.requestAccess).toHaveBeenCalledTimes(1);
+    expect(owner.requestAccess.mock.calls[0][0]).toHaveLength(healthMonitorsForHost('ios').filter(entry => entry.ios).length);
     modules.stop();
 });
 
@@ -264,12 +284,11 @@ test('first mounted panel already includes Associate when native status resolves
 });
 
 test('association stays behind authenticated-account and sealed-channel checks', async () => {
-    const { modules, owner, navigate } = setup({ linked: false });
+    const { modules, owner } = setup({ linked: false });
     owner.linkStatus.mockResolvedValue({ linked: false, reason: 'health_account_required' });
     await modules.activate();
     let fixed = panels.definition.buildFixedContent(modules.readState(), { emit: () => {}, bodyWidth: 360 });
     expect(fixed).toEqual([]);
-    expect(navigate).toHaveBeenCalledWith(expect.objectContaining({ toolId: 'ui.home.panel', input: { requireAuthentication: true } }));
     expect(owner.requestAccess).not.toHaveBeenCalled();
     owner.describe = () => ({ host: 'ios', supported: false, reason: 'health_access_sealed' });
     fixed = panels.definition.buildFixedContent(modules.readState(), { emit: () => {}, bodyWidth: 360 });
@@ -278,8 +297,10 @@ test('association stays behind authenticated-account and sealed-channel checks',
 });
 
 test('Android mixed request/settings actions remain fully inside the fixed footer', async () => {
-    const { modules, monitors } = setup({ host: 'android', selected: ['steps', 'weight'] });
+    const { modules, owner, monitors } = setup({ host: 'android', selected: ['steps', 'weight'] });
     monitors.weight.access = 'denied';
+    // The sheet shown on opening was dismissed: steps is still askable.
+    owner.requestAccess.mockImplementation(async () => ({ ok: true, completed: true }));
     await modules.activate();
     const fixedChildren = panels.definition.buildFixedContent(modules.readState(), { emit: () => {}, bodyWidth: 300 });
     const tree = buildBevyPanelTree({ id: 'android_fixture', geometry: { x: 0, y: 0, width: 320, height: 600 },

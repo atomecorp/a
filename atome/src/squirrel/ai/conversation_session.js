@@ -47,7 +47,7 @@ export const createConversationSession = ({
     let principal = null, compacted = null, providerIdentity = null;
     const listeners = new Set();
     const state = { id: uuid(), model, level: 1, effort: OPENAI_MODEL_PROFILES[0].effort,
-        turns: [], phase: 'idle', draft: '', error: '', usage: null, budget: quota.getSummary(), confirmation: null };
+        turns: [], phase: 'idle', draft: '', live: null, error: '', usage: null, budget: quota.getSummary(), confirmation: null };
     const emit = () => { const snapshot = api.snapshot(); listeners.forEach(fn => fn(snapshot)); };
     const checkPrincipal = () => {
         const current = actor();
@@ -268,10 +268,16 @@ export const createConversationSession = ({
             }
             return selected;
         },
+        // A voice turn still being said ({ id, role, text }): shown as it is heard, never stored;
+        // its finished turn (same id) replaces it.
+        hearVoice(turn) {
+            if (!['user', 'assistant'].includes(turn.role) || !String(turn.text || '').trim()) return;
+            state.live = { id: turn.id, role: turn.role, text: String(turn.text) }; emit();
+        },
         async appendVoiceTurn(turn) {
             checkPrincipal();
-            if (!['user', 'assistant'].includes(turn.role) || !turn.text) return;
-            if (state.turns.some(item => item.id === turn.id)) return;
+            if (state.live?.id === turn.id) state.live = null;
+            if (!['user', 'assistant'].includes(turn.role) || !turn.text || state.turns.some(item => item.id === turn.id)) return emit();
             state.turns.push({ id: turn.id || uuid(), role: turn.role, text: String(turn.text), modality: 'audio',
                 heard: turn.heard, interrupted: turn.interrupted });
             await store(); emit();
@@ -358,12 +364,12 @@ export const createConversationSession = ({
             compacted = null; state.id = snapshot.id; state.model = profile.model; state.effectiveModel = null;
             state.level = profile.level; state.effort = profile.effort;
             state.turns = copy(snapshot.turns || []); state.phase = 'idle';
-            state.draft = ''; state.error = ''; saved = true; emit();
+            state.draft = ''; state.live = null; state.error = ''; saved = true; emit();
         },
         reset() {
             api.cancel(); controller = null; principal = null; providerIdentity = null; saved = false;
             Object.assign(state, { id: uuid(), model, level: 1, effort: OPENAI_MODEL_PROFILES[0].effort,
-                turns: [], usage: null, error: '', budget: quota.getSummary() });
+                turns: [], live: null, usage: null, error: '', budget: quota.getSummary() });
             emit();
         },
         dispose() { api.cancel(); listeners.clear(); }

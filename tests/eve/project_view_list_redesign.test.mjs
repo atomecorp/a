@@ -99,10 +99,10 @@ test('first beginner List mount resolves and invokes native catalog capture tool
     const translate = (_key, fallback) => fallback;
     const callbackNames = `applyDeleteSelection closeBackgroundPanel closeCalendarPanel closeCanonicalHomePanel
         closeCommunicatePanel closeCouleurPanel closeDeletePanel closeFinderPanel closeFontPanel closeInfoPanel
-        closeLayerPanel closeMatrixView closeMediaPanel closePastePanel closeTimelinePanel closeUndoPanel
+        closeLayerPanel closeMediaPanel closePastePanel closeTimelinePanel closeUndoPanel
         ensureActivitiesModule ensureCopyModule ensurePastePanelModule handleAiTouch handleFinderTouch invokeTool
         openBackgroundPanel openCalendarPanel openCanonicalHomePanel openCommunicatePanel openCouleurPanel
-        openDeletePanel openFinderPanel openFontPanel openInfoPanel openLayerPanel openMatrixView openMediaPanel
+        openDeletePanel openFinderPanel openFontPanel openInfoPanel openLayerPanel openMediaPanel
         openPastePanel openTimelinePanel openUndoPanel orientationChanged`.split(/\s+/).filter(Boolean);
     const intuitionContent = createMainMenuContentRuntime({ ...Object.fromEntries(callbackNames.map(name => [name, vi.fn()])),
         mainToolIdByKey: { create: 'tool.main.create', draw: 'tool.main.draw', play: 'tool.main.play', delete: 'ui.delete.selection' },
@@ -243,10 +243,10 @@ test('first beginner List mount resolves and invokes native catalog capture tool
     const translate = (_key, fallback) => fallback;
     const callbackNames = `applyDeleteSelection closeBackgroundPanel closeCalendarPanel closeCanonicalHomePanel
         closeCommunicatePanel closeCouleurPanel closeDeletePanel closeFinderPanel closeFontPanel closeInfoPanel
-        closeLayerPanel closeMatrixView closeMediaPanel closePastePanel closeTimelinePanel closeUndoPanel
+        closeLayerPanel closeMediaPanel closePastePanel closeTimelinePanel closeUndoPanel
         ensureActivitiesModule ensureCopyModule ensurePastePanelModule handleAiTouch handleFinderTouch invokeTool
         openBackgroundPanel openCalendarPanel openCanonicalHomePanel openCommunicatePanel openCouleurPanel
-        openDeletePanel openFinderPanel openFontPanel openInfoPanel openLayerPanel openMatrixView openMediaPanel
+        openDeletePanel openFinderPanel openFontPanel openInfoPanel openLayerPanel openMediaPanel
         openPastePanel openTimelinePanel openUndoPanel orientationChanged`.split(/\s+/).filter(Boolean);
     const intuitionContent = createMainMenuContentRuntime({ ...Object.fromEntries(callbackNames.map(name => [name, vi.fn()])),
         mainToolIdByKey: { create: 'tool.main.create', draw: 'tool.main.draw', play: 'tool.main.play', delete: 'ui.delete.selection' },

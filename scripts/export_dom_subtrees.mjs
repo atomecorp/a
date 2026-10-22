@@ -7,17 +7,6 @@ const DEFAULT_OUTPUT_DIR = 'temp/dom_subtree_exports';
 
 const EXPORT_TARGETS = Object.freeze([
     Object.freeze({
-        name: 'matrix',
-        file: 'export_matrix_subtree.dom',
-        multiple: false,
-        selectors: Object.freeze([
-            '#eve_project_matrix',
-            '.eve-project-matrix',
-            '[data-role="eve-project-matrix"]',
-            '[data-view-id="matrix"]'
-        ])
-    }),
-    Object.freeze({
         name: 'project',
         file: 'export_project_subtree.dom',
         multiple: false,

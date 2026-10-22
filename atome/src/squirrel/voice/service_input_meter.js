@@ -1,4 +1,3 @@
-import { createVoiceInputMeter } from './voice_input_meter.js';
 import { getTauriSttBridge } from './service_support.js';
 import { writeVoiceDiagnostic } from './telemetry.js';
 
@@ -11,6 +10,8 @@ export const normalizeNativeInputRms = (rawRms, previous = 0) => {
     const factor = target > previous ? 0.72 : 0.14;
     return clamp(previous + (target - previous) * factor);
 };
+
+const HEARD_PEAK = 0.7, HEARD_DECAY_MS = 450;
 
 // Owns the ephemeral microphone-analysis lifecycle for voice sessions.
 export const createVoiceInputMeterRuntime = ({ env = globalThis, sessionRuntime, sttProvider = '' } = {}) => {
@@ -74,16 +75,40 @@ export const createVoiceInputMeterRuntime = ({ env = globalThis, sessionRuntime,
         };
     };
 
+    // Browser speech recognition owns the microphone: a second capture opened beside
+    // it (getUserMedia) receives silence on WebKit (iOS) and makes the system lower
+    // eVe's voice. The level then follows what the recognizer hears: each word it
+    // recognizes lifts it, and it falls back between words.
+    const startRecognitionMeter = (sessionId, purpose) => {
+        let level = 0, frame = 0, last = 0;
+        const tick = (now) => {
+            level = Math.max(0, level - ((now - last) / HEARD_DECAY_MS) * HEARD_PEAK);
+            last = now;
+            publish({ session_id: sessionId, rms: level, active: true, purpose });
+            frame = level > 0 ? env.requestAnimationFrame(tick) : 0;
+        };
+        const unsubscribe = sessionRuntime.subscribe((event) => {
+            if (event?.session_id !== sessionId || event.type !== 'voice.stt.partial') return;
+            level = HEARD_PEAK;
+            if (!frame) { last = env.performance.now(); frame = env.requestAnimationFrame(tick); }
+        });
+        return {
+            async start() { },
+            async stop() {
+                unsubscribe();
+                if (frame) env.cancelAnimationFrame(frame);
+                frame = 0;
+            }
+        };
+    };
+
     const start = async (sessionId, { purpose = 'user_turn' } = {}) => {
         if (meters.has(String(sessionId))) return;
         let meter;
         try {
             meter = sttProvider === 'tauri_plugin_stt'
                 ? await startNativeSttMeter(sessionId, purpose)
-                : createVoiceInputMeter({
-                    env,
-                    onFrame: ({ rms, active }) => publish({ session_id: sessionId, rms, active, purpose })
-                });
+                : startRecognitionMeter(sessionId, purpose);
             meters.set(String(sessionId), meter);
             await meter.start();
             sessionRuntime.publishEvent(sessionId, 'voice.input.state', {

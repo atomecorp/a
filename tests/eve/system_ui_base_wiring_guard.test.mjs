@@ -115,8 +115,7 @@ describe('System UI base wiring guard', () => {
             'elements/skin/button_skin.js',
             'elements/skin/tokens.js',
             'elements/system_ui_tokens.js',
-            'intuition/runtime/bevy_panel/bevy_panel_tokens.js',
-            'intuition/matrix/visual/matrix_visual_tokens.js'
+            'intuition/runtime/bevy_panel/bevy_panel_tokens.js'
         ];
         for (const owner of owners) {
             const text = readFileSync(join(LANE_ROOT, owner), 'utf8');

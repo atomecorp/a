@@ -118,6 +118,8 @@ pub struct AtomeStylePatch {
     pub transition: Option<AtomeTransition>,
     #[serde(default)]
     pub procedural: Option<AtomeProceduralSdf>,
+    #[serde(default)]
+    pub progress_ring: Option<crate::progress_ring::AtomeProgressRing>,
     // Les retouches NON destructives d'un objet deja pose : l'arrondi, la
     // variante de forme et le masque. Elles arrivent par le style parce que
     // l'objet garde son entite, sa pose et son calque ; sans ces champs le

@@ -8,6 +8,13 @@ export function ensureAIAgent() {
     return globalThis.AtomeAI;
 }
 
+// AtomeAI is installed by the optional integrations wave (spark.js), which nothing
+// loads at boot: an MCP caller loads it (memoized) before relying on the agent.
+export async function loadAIAgent() {
+    if (typeof globalThis.AtomeAI?.listTools !== 'function') await globalThis.__atomeLoadOptionalIntegrations?.();
+    return ensureAIAgent();
+}
+
 export function ensureRuntimeToolApi() {
     if (typeof globalThis === 'undefined') {
         throw new Error('Global context unavailable for MCP bridge');

@@ -13,7 +13,6 @@ import {
     DASHBOARD_VISUAL_TOKENS,
     resolveDashboardBlockUnitSize
 } from '../../eVe/domains/dashboard/dashboard_tokens.js';
-import { MATRIX_VISUAL_METRICS } from '../../eVe/intuition/matrix/visual/matrix_visual_tokens.js';
 import { projectViewRowGeometry } from '../../eVe/domains/rendering/project_view_surface_layout.js';
 
 const UNIT = SYSTEM_UI_METRICS.unitPx;
@@ -50,9 +49,6 @@ describe('System UI base unit contract', () => {
         expect(panelSkin).not.toMatch(/(?:inputHeightPx|rowHeightPx|headerHeightPx|controlHeightPx|optionHeightPx|agendaRowHeightPx|resultRowHeightPx|bodyHeightPx):\s*\d/);
         const bevyTokens = source('../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js');
         expect(bevyTokens).not.toMatch(/(?:size|height)\w*:\s*104\b/i);
-        const matrixTokens = source('../../eVe/intuition/matrix/visual/matrix_visual_tokens.js');
-        expect(matrixTokens).not.toMatch(/cellSizePx:\s*\d/);
-        expect(matrixTokens).toMatch(/cellSizePx:\s*TOOL_UI_METRICS\.doubleUnitPx/);
     });
 
     it('makes one square tool the base unit everywhere a tool is drawn', () => {
@@ -133,18 +129,5 @@ describe('System UI base unit contract', () => {
             tokens: DASHBOARD_VISUAL_TOKENS
         });
         expect(narrow.unit_width).toBe(DOUBLE);
-        expect(MATRIX_VISUAL_METRICS.cellSizePx).toBe(DOUBLE);
-        expect(MATRIX_VISUAL_METRICS.gridColumns * DOUBLE).toBeGreaterThan(0);
-    });
-
-    it('ties the Matrix tile labels to the base so they grow with the cell', () => {
-        expect(MATRIX_VISUAL_METRICS.tileFontSizePx).toBe(scalePx(11));
-        expect(MATRIX_VISUAL_METRICS.labelFontSizePx).toBe(scalePx(11));
-        expect(MATRIX_VISUAL_METRICS.addIconSizePx).toBe(scalePx(34));
-        expect(MATRIX_VISUAL_METRICS.tileRadiusPx).toBe(scalePx(6));
-        // The whole Matrix rhythm follows the base too, so a taller tool unit
-        // does not leave the tile text or the gaps behind.
-        expect(MATRIX_VISUAL_METRICS.cellGapPx).toBe(scalePx(10));
-        expect(MATRIX_VISUAL_METRICS.containerPaddingPx).toBe(scalePx(12));
     });
 });

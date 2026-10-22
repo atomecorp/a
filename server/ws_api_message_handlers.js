@@ -48,7 +48,10 @@ export async function handleWsContactRequest({ data, connection, safeSend, commu
   }
   try {
     const peerId = data.userId || data.toUserId || data.fromUserId || data.peerId;
-    if (peerId && data.action !== 'list' && !await isWsApiPrincipalProvisioned(String(peerId))) {
+    // A request with a number reaches the account of that number (communication_relations.js):
+    // its id may be the local one of the sender's book card.
+    const byPhone = data.action === 'request' && !!data.phone;
+    if (peerId && data.action !== 'list' && !byPhone && !await isWsApiPrincipalProvisioned(String(peerId))) {
       throw new Error('contact_target_invalid');
     }
     const result = await communicationRelations.handle(data, userId);

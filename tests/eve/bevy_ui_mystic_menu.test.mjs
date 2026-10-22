@@ -921,12 +921,12 @@ test('the Utilities palette gathers Mode, Validation, the projects Matrix and th
     const inertDependencies = [
         'applyDeleteSelection', 'closeBackgroundPanel', 'closeCalendarPanel', 'closeCanonicalHomePanel',
         'closeCommunicatePanel', 'closeCouleurPanel', 'closeDeletePanel', 'closeFinderPanel',
-        'closeFontPanel', 'closeInfoPanel', 'closeLayerPanel', 'closeMatrixView', 'closePastePanel',
+        'closeFontPanel', 'closeInfoPanel', 'closeLayerPanel', 'closePastePanel',
         'closeTimelinePanel', 'closeUndoPanel', 'defaultOrientation', 'directionValueToLabel',
         'ensureActivitiesModule', 'ensureCopyModule', 'ensurePastePanelModule', 'handleAiTouch',
         'handleFinderTouch', 'invokeTool', 'openBackgroundPanel', 'openCalendarPanel',
         'openCanonicalHomePanel', 'openCommunicatePanel', 'openCouleurPanel', 'openDeletePanel',
-        'openFinderPanel', 'openFontPanel', 'openInfoPanel', 'openLayerPanel', 'openMatrixView',
+        'openFinderPanel', 'openFontPanel', 'openInfoPanel', 'openLayerPanel', 
         'openMediaPanel', 'closeMediaPanel',
         'openPastePanel', 'openTimelinePanel', 'openUndoPanel', 'orientationChanged'
     ];
@@ -967,12 +967,12 @@ test('the in-force expertise level is the only choice that carries the check ico
     const inertDependencies = [
         'applyDeleteSelection', 'closeBackgroundPanel', 'closeCalendarPanel', 'closeCanonicalHomePanel',
         'closeCommunicatePanel', 'closeCouleurPanel', 'closeDeletePanel', 'closeFinderPanel',
-        'closeFontPanel', 'closeInfoPanel', 'closeLayerPanel', 'closeMatrixView', 'closePastePanel',
+        'closeFontPanel', 'closeInfoPanel', 'closeLayerPanel', 'closePastePanel',
         'closeTimelinePanel', 'closeUndoPanel', 'defaultOrientation', 'directionValueToLabel',
         'ensureActivitiesModule', 'ensureCopyModule', 'ensurePastePanelModule', 'handleAiTouch',
         'handleFinderTouch', 'invokeTool', 'openBackgroundPanel', 'openCalendarPanel',
         'openCanonicalHomePanel', 'openCommunicatePanel', 'openCouleurPanel', 'openDeletePanel',
-        'openFinderPanel', 'openFontPanel', 'openInfoPanel', 'openLayerPanel', 'openMatrixView',
+        'openFinderPanel', 'openFontPanel', 'openInfoPanel', 'openLayerPanel', 
         'openMediaPanel', 'closeMediaPanel',
         'openPastePanel', 'openTimelinePanel', 'openUndoPanel', 'orientationChanged'
     ];

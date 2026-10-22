@@ -174,20 +174,32 @@ emulator_install_webview_flags() {
   fi
   if [[ "$DO_DRY_RUN" -eq 1 ]]; then
     printf '[apk] dry-run> adb -s %s shell "cat > %s && chmod 644 %s" <<< %q\n' \
-      "$EMULATOR_SERIAL" "$EMULATOR_WEBVIEW_FLAGS_FILE" "$EMULATOR_WEBVIEW_FLAGS_FILE" "$flags"
+      "$EMULATOR_SERIAL" "$EMULATOR_WEBVIEW_FLAGS_FILE" "$EMULATOR_WEBVIEW_FLAGS_FILE" "_ $flags"
     return 0
   fi
-  printf '%s\n' "$flags" \
+  printf '_ %s\n' "$flags" \
     | adb -s "$EMULATOR_SERIAL" shell "cat > $EMULATOR_WEBVIEW_FLAGS_FILE && chmod 644 $EMULATOR_WEBVIEW_FLAGS_FILE" \
       >/dev/null 2>&1 || true
   # `pipefail` is active: a refused read-back must reach the warning below, never
   # end the lane on the way there.
   read_back="$(adb -s "$EMULATOR_SERIAL" shell cat "$EMULATOR_WEBVIEW_FLAGS_FILE" 2>/dev/null | tr -d '\r' | head -1 || true)"
-  if [[ "$read_back" == "$flags" ]]; then
+  if [[ "$read_back" == "_ $flags" ]]; then
     ok "WebView command line: $flags"
   else
     warn "the WebView command line could not be installed at $EMULATOR_WEBVIEW_FLAGS_FILE (read back: ${read_back:-empty}); the application will start without it"
   fi
+}
+
+# The emulator's own GLES stops at 3.0 on macOS hosts, and the WebView of the
+# API 37 image asks for an ES 3.1 context: eglCreateContext fails with
+# EGL_BAD_CONFIG and Chrome aborts the GPU thread ("Chrome runs only on top of
+# OpenGL ES … VERSION = "). ANGLE, shipped in the image, implements ES 3.1+ on
+# the guest Vulkan device; this per-application developer setting selects it.
+emulator_select_angle_gles() {
+  local app_id="$1"
+  adb -s "$EMULATOR_SERIAL" shell settings put global angle_gl_driver_selection_pkgs "$app_id" >/dev/null
+  adb -s "$EMULATOR_SERIAL" shell settings put global angle_gl_driver_selection_values angle >/dev/null
+  ok "GLES driver for $app_id: ANGLE"
 }
 
 # Single owner of the emulator command line, one argument per line. The line is

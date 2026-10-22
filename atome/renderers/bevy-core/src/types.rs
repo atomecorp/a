@@ -450,6 +450,8 @@ pub struct AtomeRenderNode {
     #[serde(default)]
     pub procedural: Option<AtomeProceduralSdf>,
     #[serde(default)]
+    pub progress_ring: Option<crate::progress_ring::AtomeProgressRing>,
+    #[serde(default)]
     pub project_space: bool,
 }
 

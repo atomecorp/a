@@ -28,8 +28,11 @@ readonly KEYSTORE_PROPERTIES="$KEYSTORE_DIR/keystore.properties"
 readonly EMULATOR_DEFAULT_SDK_ROOT="$TEMP_DIR/android-sdk"
 readonly EMULATOR_DEFAULT_STATE_DIR="$TEMP_DIR/android-avd"
 readonly EMULATOR_LOG_DIR="$TEMP_DIR/logcat"
-readonly EMULATOR_DEFAULT_AVD="atome-api36"
-readonly EMULATOR_DEFAULT_API="36"
+# Android 17 (API 37.0): the API 36 guest Vulkan driver crashes Chrome's GPU
+# thread as soon as WebGPU names an object (vulkan.ranchu.so
+# vk_common_SetDebugUtilsObjectNameEXT, measured 2026-10-21); 37.0 carries the fix.
+readonly EMULATOR_DEFAULT_AVD="atome-api37"
+readonly EMULATOR_DEFAULT_API="37.0"
 readonly EMULATOR_BOOT_TIMEOUT=420
 readonly EMULATOR_DEFAULT_LOGCAT_SECONDS=25
 # The capture follows the application instead of trusting one fixed slice: the
@@ -54,13 +57,15 @@ readonly EMULATOR_MEMORY_STEP=512
 readonly EMULATOR_GPU_MODES="auto host lavapipe swiftshader swangle"
 readonly EMULATOR_DEFAULT_GPU_MODE="host"
 readonly EMULATOR_HEADLESS_GPU_MODE="swiftshader"
-# Chromium reads its command line from this file when a WebView process starts,
-# and only for a debuggable application — which is what this lane installs. It
-# stays empty by default: the 20:07 run handed the WebView
-# `--enable-unsafe-webgpu` and the WebGPU adapter was still absent ("No available
-# adapters." 2 min 35 s after the launch, against 4 s in the run without it),
-# while the guest itself froze before the capture ended. A default must not cost
-# the measurement it is supposed to improve, so the attempt is now explicit.
+# Chromium reads its command line from this file when a WebView process starts
+# (any application on a google_apis image). Its first token is the program name
+# and is dropped, so the file is written as "_ <flags>": the September runs
+# wrote the flag first, which is why `--enable-unsafe-webgpu` "changed nothing".
+# With it (2026-10-21, API 37.0) the WebView gets the gfxstream adapter
+# (Apple M1) and Bevy creates its device, but presenting the canvas fails:
+# "Required texture memory size … is larger than the AHardwareBuffer allocation
+# size (0)" — the emulator's gralloc reports empty AHardwareBuffers. It stays
+# empty by default: without it the run shows the boot failure surface.
 readonly EMULATOR_WEBVIEW_FLAGS_FILE="/data/local/tmp/webview-command-line"
 readonly EMULATOR_DEFAULT_WEBVIEW_FLAGS=""
 # A guest that froze stops writing to logcat; anything it logged afterwards is
@@ -166,8 +171,8 @@ Options:
                                    "--enable-unsafe-webgpu --use-webgpu-adapter=swiftshader"
       --emulator-wipe   Recreate the AVD from scratch before booting it and stop
                         a running instance, so the recreated AVD is the one used
-      --emulator-avd <name>        AVD name (default: atome-api36)
-      --emulator-api <level>       Android API level (default: 36)
+      --emulator-avd <name>        AVD name (default: atome-api37)
+      --emulator-api <level>       Android API level (default: 37.0)
       --emulator-image <package>   System image package; defaults to
                                    system-images;android-<api>;google_apis;arm64-v8a
       --emulator-sdk-root <dir>    Where emulator packages are installed

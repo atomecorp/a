@@ -401,6 +401,17 @@ pub fn spawn_node_with_texture_handle(
             }
             entity
         }
+        // The Sport card's ring around its disc (progress_ring.rs).
+        "progress_ring" => {
+            let ring = node
+                .progress_ring
+                .ok_or_else(|| format!("bevy_progress_ring_contract_required:{}", node.id))?;
+            let entity = world
+                .spawn(node_base_components(&node, width, height, surface_width, surface_height))
+                .id();
+            crate::progress_ring::insert(world, entity, [width, height], ring, normalize_opacity(node.opacity))?;
+            entity
+        }
         other => return Err(format!("bevy_render_kind_unsupported:{other}")),
     };
     world.entity_mut(entity).insert(crate::surface_paint::AtomeSurfacePaint(node.surface_paint.clone()));

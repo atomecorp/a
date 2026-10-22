@@ -65,6 +65,8 @@ final class AppPageHost {
         WebViewManager.setNativeInvokeHandler { command, payload, completion in
             if AppNativeCommunication.canHandle(command) {
                 AppNativeCommunication.shared.handle(command, payload: payload, completion: completion)
+            } else if AppNativeSpeechRecognizer.canHandle(command) {
+                AppNativeSpeechRecognizer.shared.handle(command, payload: payload, completion: completion)
             } else if AppNativeMediaCaptureController.canHandle(command: command) {
                 AppNativeMediaCaptureController.shared.handle(command: command, payload: payload, completion: completion)
             } else if AppNativeHealthController.canHandle(command: command) {

@@ -65,7 +65,7 @@ export const createGlobalCalendarApi = ({
         activateSource: imports.activate,
         stopSource: imports.stop,
         importStatus: imports.status,
-        importCompleted: imports.completed,
+        importSynchronized: imports.synchronized,
         importIcs: imports.importIcs,
         exportIcs: imports.exportIcs,
         importNative(options = {}) { return imports.activate('native_calendar', options); },

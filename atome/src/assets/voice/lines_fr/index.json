@@ -21,6 +21,12 @@
    "phonemes": "^ʒə tə lɛs . di : ɛv , ekutmwa , puʁ mə ʁapəle .$",
    "sha256": "90af87eca3215fa2d23e993b91e56d9db3a612d97d04c1f5eff3d313da0bac13"
   },
+  "Oui, que veux-tu ?": {
+   "file": "3c7ca97a41de774d.wav",
+   "samples": 28928,
+   "phonemes": "^wi , kə vøty ?$",
+   "sha256": "b77365e90bc07af39607590b286832e95b3b9593626c7f2933eb61b67e5af46f"
+  },
   "Ça y est, je t’écoute.": {
    "file": "2b27eecc19952275.wav",
    "samples": 39680,

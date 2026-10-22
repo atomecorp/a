@@ -15,6 +15,8 @@ Tâche créée le 2026-10-20. Plan validé par l'utilisateur. Maquette v1 prése
 | L6 plan de la semaine | fait le 2026-10-20 — fiche Semaine + Agenda (`training.schedule_week`), aucun doublon |
 | L7 refonte fiches santé des projets | fait le 2026-10-20 (en-tête + onglets du design maître) — contenu à valider |
 | L8 i18n, maps, FRAMEWORK_STATE | fait le 2026-10-20 |
+| v2 (demande du 21 oct.) | fait le 2026-10-21 — 3 niveaux + Perso (champs à glisser), cloche, 3-2-1 bipé, bips de fin de minuteur, voix locale, répétitions coachées, disque orange « Série terminée » (séries restantes), « Terminé » ; Chaise au mur, Suspension, Presse, Extension, Flexion jambes. Sondes `v2_runtime` 8/8, `v2_session` 4/4, `v2_phone` 17/17 (captures `temp/training/v2_phone_shots/`). Reste : écoute sur iPhone, nouveaux exercices dans le plan de la semaine |
+| v3 (design validé panneau par panneau, 21 oct.) | fait le 2026-10-21 — 7 panneaux au disque orange, pictogrammes, zones, Mes favoris, Mon programme, validation vocale suivie par la fiche, appui long contextuel sur tout le Dashboard (jamais le Mystic complet). Sondes `v3_panels` 12/12, `v4_nav_lists` 17/17. Reste : second appareil appairé, écoute sur iPhone, outils d'appui long des médias/TV/GPS/réglages/capture/créer |
 
 
 ## Livré au lot L0 (2026-10-20)

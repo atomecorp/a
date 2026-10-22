@@ -11,10 +11,11 @@ const read = (path) => readFileSync(new URL(path, root), 'utf8');
 
 const swift = read('platforms/ios/atome-auv3/Common/NativeHealthTypes.swift');
 const controller = read('platforms/ios/atome-auv3/Common/AppNativeHealthController.swift');
+const workout = read('platforms/ios/atome-auv3/Common/AppNativeHealthWorkout.swift');
 const kotlin = read('platforms/desktop-tauri/vendor/tauri-plugin-health/android/src/main/java/HealthPlugin.kt');
 const manifest = read('platforms/desktop-tauri/vendor/tauri-plugin-health/android/src/main/AndroidManifest.xml');
 
-test('native health catalogs and read-only permissions match the canonical catalog', () => {
+test('native health catalogs and read permissions match the canonical catalog; the only write is the workout', () => {
 const swiftTable = swift.slice(swift.indexOf('static let specs'), swift.indexOf('static func spec('));
 const swiftIds = new Map([...swiftTable.matchAll(/"([a-z0-9_]+)": \.init\(kind: [^,]+, identifier: "([^"]+)", unitString: (?:"([^"]+)"|nil), fraction: (true|false)\)/g)]
     .map((m) => [m[1], { identifier: m[2], unit: m[3] || null, fraction: m[4] === 'true' }]));
@@ -39,9 +40,15 @@ androidCatalog.forEach((entry) => {
     assert.equal(spec.permission, entry.android.permission, `${entry.id} permission`);
 });
 assert.deepEqual(manifestPerms, androidReadPermissions(), 'manifest permissions ≠ catalog');
-assert.ok(!/WRITE_|READ_HEALTH_DATA_HISTORY|READ_HEALTH_DATA_IN_BACKGROUND/.test(manifest.replace(/<!--[\s\S]*?-->/g, '')), 'forbidden permission in manifest');
+const declared = manifest.replace(/<!--[\s\S]*?-->/g, '');
+assert.deepEqual([...declared.matchAll(/android\.permission\.health\.(WRITE_[A-Z0-9_]+)/g)].map((m) => m[1]), ['WRITE_EXERCISE'], 'the only write is the workout');
+assert.ok(!/READ_HEALTH_DATA_HISTORY|READ_HEALTH_DATA_IN_BACKGROUND/.test(declared), 'forbidden permission in manifest');
+assert.equal([...kotlin.matchAll(/insertRecords\(/g)].length, 1, 'one Health Connect write');
+assert.ok(/insertRecords\(listOf\(ExerciseSessionRecord\(/.test(kotlin) && !/deleteRecords|updateRecords/.test(kotlin));
 assert.ok(/STEP_SENSOR_ID = "device_steps_session"/.test(kotlin));
-assert.ok(!/toShare: \[[^\]]/.test(controller), 'HealthKit share set must stay empty');
+assert.ok(!/toShare: \[[^\]]/.test(controller), 'monitor authorization never requests a write');
+assert.match(workout, /static let shareTypes: Set<HKSampleType> = \[HKObjectType\.workoutType\(\), HKQuantityType\(\.heartRate\), HKQuantityType\(\.activeEnergyBurned\)\]/);
+assert.ok(!/toShare: \[/.test(workout) && /toShare: Self\.shareTypes/.test(workout), 'workout writes are limited to shareTypes');
 });
 
 test('capability discovery uses authorization quantity types and never requests access', () => {
@@ -65,13 +72,13 @@ test('the full iOS catalog survives native capability discovery and HealthKit re
         assert.match(read(`platforms/ios/atome-auv3/application/${file}`), /<key>com.apple.developer.healthkit<\/key>\s*<true\/>/);
     }
     const plist = read('platforms/ios/atome-auv3/application/Info.plist');
-    // The application carries the com.apple.developer.healthkit entitlement,
-    // which covers read AND write access, so App Store validation (altool
-    // 90683) requires both purpose strings even though the code only reads.
-    // Read-only behaviour is still enforced by rejecting save/delete below.
+    // Both purpose strings (App Store validation, altool 90683). The only
+    // write is the training workout, saved through its builder: no direct
+    // save or delete anywhere.
     assert.ok(plist.includes('NSHealthShareUsageDescription'));
     assert.ok(plist.includes('NSHealthUpdateUsageDescription'));
     assert.ok(!/healthStore\.(save|delete)\(/.test(controller + read('platforms/ios/atome-auv3/Common/AppNativeHealthQueries.swift')));
+    assert.ok(!/store\.(save|delete)|deleteObjects/.test(workout));
 });
 
 test('authorization checks necessity and rejects unknown status before presenting the system sheet', () => {

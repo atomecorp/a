@@ -124,6 +124,7 @@ pub fn apply_resource(world: &mut World, patch: AtomeResourcePatch) -> Result<()
             filters: current_filters,
             transition: current_transition,
             procedural: None,
+            progress_ring: None,
         };
         insert_video_external_texture_component_for_node(world, entity, &node);
         insert_video_quad_mesh(world, entity, size, uv_rect)?;

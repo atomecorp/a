@@ -8,6 +8,8 @@ pub mod clip_polygon;
 pub mod components;
 pub mod plugin;
 pub mod procedural_sdf;
+pub mod progress_ring;
+pub mod frame_demand;
 pub mod project_view;
 pub mod render_math;
 pub mod render_ops;
@@ -82,6 +84,10 @@ mod persistent_wallpaper_tests;
 #[cfg(test)]
 #[path = "../../../../tests/rendering/login_light.rs"]
 mod login_light_tests;
+
+#[cfg(test)]
+#[path = "../../../../tests/rendering/progress_ring.rs"]
+mod progress_ring_tests;
 
 #[cfg(test)]
 #[path = "../../../../tests/rendering/backdrop_composition.rs"]

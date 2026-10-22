@@ -11,6 +11,10 @@ export const startBrowserRecognition = (context, sessionId, options = {}, {
 
         const recognition = new RecognitionCtor();
         const deferred = createDeferred();
+        // A conversation (`onUtterance`) keeps one recognition open and receives each
+        // sentence as it ends: a recognition that stops and starts again hears nothing
+        // for a while on WebKit (iOS), so a conversation never cuts it between sentences.
+        const onUtterance = typeof options.onUtterance === 'function' ? options.onUtterance : null;
         const speechHints = collectSpeechHints(context.env, context.sessionRuntime, sessionId, options);
         const resolvedLang = resolveSpeechLocale(options.lang || options.locale || DEFAULT_LANG);
         const maxAlternatives = Number.isFinite(Number(options.maxAlternatives))
@@ -57,7 +61,7 @@ export const startBrowserRecognition = (context, sessionId, options = {}, {
 
         recognition.lang = resolvedLang;
         recognition.interimResults = options.partial !== false;
-        recognition.continuous = options.continuous === true;
+        recognition.continuous = options.continuous === true || !!onUtterance;
         recognition.maxAlternatives = maxAlternatives;
 
         recognition.onstart = () => {
@@ -69,8 +73,10 @@ export const startBrowserRecognition = (context, sessionId, options = {}, {
         };
 
         recognition.onresult = (event) => {
+            if (state.muted) return;
             let partialText = '';
             let receivedFinal = false;
+            let utterance = '';
             const results = Array.from(event?.results || []);
             const startIndex = Number.isFinite(event?.resultIndex) ? event.resultIndex : 0;
             for (let index = startIndex; index < results.length; index += 1) {
@@ -85,7 +91,9 @@ export const startBrowserRecognition = (context, sessionId, options = {}, {
                 const text = String(selected?.text || '').trim();
                 if (!text) continue;
                 const confidence = Number.isFinite(selected?.confidence) ? selected.confidence : null;
-                if (result?.isFinal) {
+                if (result?.isFinal && onUtterance) {
+                    utterance = utterance ? `${utterance} ${text}` : text;
+                } else if (result?.isFinal) {
                     receivedFinal = true;
                     state.final_texts.push(text);
                     state.segments.push(createSegment(text, confidence));
@@ -96,10 +104,14 @@ export const startBrowserRecognition = (context, sessionId, options = {}, {
                     partialText = partialText ? `${partialText} ${text}` : text;
                 }
             }
-            if (partialText) {
+            if (partialText || utterance) {
                 context.sessionRuntime.pushPartial(sessionId, {
-                    text: partialText
+                    text: partialText || utterance
                 });
+            }
+            if (onUtterance) {
+                if (utterance) onUtterance({ text: applyHintedSpeechCorrections(utterance, state.speechHints) });
+                return;
             }
             if (receivedFinal) scheduleEndpoint(finalSilenceMs);
             else if (partialText) scheduleEndpoint(silenceMs);

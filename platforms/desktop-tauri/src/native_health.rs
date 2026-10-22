@@ -51,12 +51,11 @@ async fn verified_account(auth: &Value) -> Result<String, &'static str> {
     )
     .await
     .map_err(|_| "health_account_unverifiable")?;
-    let user = &response["user"];
-    let id = user["id"].as_str().filter(|value| !value.is_empty());
-    let phone = user["phone"].as_str().filter(|value| !value.is_empty());
-    match (response["ok"].as_bool(), id, phone) {
-        // A verified phone = a real account; guests have none.
-        (Some(true), Some(id), Some(_)) => Ok(id.to_string()),
+    // A signed-in account or the active local guest (both verified by the local
+    // auth `me`): health values stay on this device.
+    let id = response["user"]["id"].as_str().filter(|value| !value.is_empty());
+    match (response["ok"].as_bool(), id) {
+        (Some(true), Some(id)) => Ok(id.to_string()),
         _ => Err("health_account_required"),
     }
 }
@@ -84,6 +83,14 @@ fn requests_payload(payload: &Value) -> Value {
         })
         .unwrap_or_default();
     json!({ "requests": requests })
+}
+
+// The training workout: the eVe session id, its kind, its title and its times only.
+fn workout_payload(payload: &Value) -> Value {
+    let text = |key: &str, max: usize| payload[key].as_str().map(|value| value.chars().take(max).collect::<String>()).unwrap_or_default();
+    json!({ "session": text("session", 300), "activity": text("activity", 20), "title": text("title", 200),
+        "start": payload["start"].as_f64().unwrap_or(0.0) as i64, "at": payload["at"].as_f64().unwrap_or(0.0) as i64,
+        "save": payload["save"].as_bool().unwrap_or(false) })
 }
 
 async fn plugin<R: Runtime>(app: &AppHandle<R>, method: &'static str, payload: Value) -> Result<Value, String> {
@@ -136,7 +143,8 @@ pub async fn health_invoke<R: Runtime>(
         // Opens Health Connect / the app settings; reads nothing.
         "health_open_settings" => plugin(&app, "openSettings", monitors_payload(&payload)).await,
         "health_link_status" | "health_link" | "health_request_access" | "health_read" | "health_observe"
-        | "health_unobserve" => {
+        | "health_unobserve" | "health_workout_prepare" | "health_workout_start" | "health_workout_pause"
+        | "health_workout_resume" | "health_workout_end" => {
             let account = match verified_account(&payload["auth"]).await {
                 Ok(account) => account,
                 Err(code) => return Ok(failure(code)),
@@ -149,6 +157,10 @@ pub async fn health_invoke<R: Runtime>(
                 "health_request_access" => plugin(&app, "requestAccess", monitors_payload(&payload)).await,
                 "health_read" => plugin(&app, "read", requests_payload(&payload)).await,
                 "health_observe" => plugin(&app, "observe", monitors_payload(&payload)).await,
+                "health_workout_prepare" => plugin(&app, "workoutPrepare", json!({})).await,
+                "health_workout_start" => plugin(&app, "workoutStart", workout_payload(&payload)).await,
+                "health_workout_pause" | "health_workout_resume" => plugin(&app, "workoutEvent", workout_payload(&payload)).await,
+                "health_workout_end" => plugin(&app, "workoutEnd", workout_payload(&payload)).await,
                 _ => plugin(&app, "unobserve", monitors_payload(&payload)).await,
             }
         }

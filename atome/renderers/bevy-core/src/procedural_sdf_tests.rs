@@ -102,6 +102,7 @@ fn procedural_sdf_spawns_and_patches_one_full_surface_material_quad() {
             filters: None,
             transition: None,
             procedural: Some(contract()),
+            progress_ring: None,
         },
     )
     .unwrap();
@@ -138,6 +139,7 @@ fn procedural_sdf_spawns_and_patches_one_full_surface_material_quad() {
             filters: None,
             transition: None,
             procedural: Some(patched),
+            progress_ring: None,
         },
     )
     .unwrap();

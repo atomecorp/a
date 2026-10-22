@@ -1,3 +1,10 @@
+2026-10-22 Matrix visual tokens (`intuition/matrix/visual/`), the DOM tile layout (`ui/matrix_layout.js`, `ui/matrix_virtual_slots.js`) and the generated `.eve-project-view` rule were deleted with the DOM Matrix runtime; they were injected only when that overlay opened. The projects route now lands on the eVe home and its existing tokens.
+2026-10-22 Sport cards and home title (user's requests of 2026-10-21): the home's title colour `dashboardSkin.titleText` moves from `#ff1494` to `#ec2ac2` (the logo fuchsia drawn towards blue; the assistant's captions share it). Sport cards (`dashboard_training_card_view.js`, `_journal`, `_week`, `_program`): no « Sport · <rubric> » line under the title any more (the Dashboard's title names it), the title is 24 px; a detail line stays only for what the moment says (cardio minutes, « En pause », the programme's step, the logged exercise, « Planifiée », the exercise count). The bell is a bare 26 px glyph (no icon-button surface or outline); `bell_off` cuts its strike out of the bell (SVG mask). Plan steps (sets, holds, cardio steps) are list rows of the framework's 1 unit (`resolveListRowTokens('tall').heightPx`, `TRAINING_CARD_METRICS.stepRow`), label/value lines stay ½ unit; the plan, the 3-2-1 plan and « Perso »'s fields scroll above the orange disc when taller than their room.
+2026-10-21 Plan contacts: `EVE_PANEL_SKIN_TOKENS.bevyPanel.map.personMarkerColor` (Communication family colour), `personLabelHeightPx` (16), `personLabelTextSizePx` (11): a contact sharing their position is a dot with their name in a pill under it; my own position keeps `markerColor`.
+2026-10-21 eVe home title colour and size: the title (eVe, the rubric, its level) wears the fuchsia of the Atom logo shown on the home, `#ff1494` (`tokens.titleText`, from `icons/atome_curve.svg`), at 80 % of its strip (was white, 60 %); `text_fit: 'shrink'` keeps a long word inside the strip.
+2026-10-21 Dashboard return arrow: the grid-anchored Mystic return (`bevy_ui_mystic_model.js#anchorNode`) shows the page turns' arrow `previous.svg` (mirror of `next.svg`) instead of the filled triangle `back_filled.svg`; its lit breath is two clear rotated capsules under the arrow's strokes (`backArrowHalo`, ids from `bevyMysticGlowNodeIds`). The previous-page turn (`mystic_grid_layout.js#pageTurn`) uses `previous.svg` too, so back, previous and next share one arrow.
+
+2026-10-21 Panel beside the rail: token `besideRailWidthPx` (`EVE_PANEL_SKIN_TOKENS.bevyPanel`, 4 units) — on a phone a panel opened with `context.besideRail` (the armed text tool's Colour / Font) is that column against the contextual rail, bottom-docked above the ribbon, never the full screen; its footer may carry the ✓ validation (`bevy_panel_confirm.js`, icon button `check.svg`, tone `success`).
 2026-10-20 Sleep onboarding (validated mockups temp/sleep_onboarding/mockups): no Atome logo under goals/sleep/program; the assistant Atom glides to the bottom-right corner (60 px cell, margin 16) and stays there, large ring = listening, small discreet ring = hung up; moon icon right in the « Objectif sommeil » band; effort slider ends read « Moins d’effort » / « Meilleur résultat »; Sommeil page = glass cards (summary, day rows icon/time/label/bell, dinner photo, tips, Cercle posts), its only tool (dashboard_return, untinted) left of the docked Atom; sleep illustrations are CC0 photos in atome/src/assets/images/sleep (SOURCES.md).
 
 2026-10-20 eVe home title: a strip 0.3 tile high under the band (time, weather), the text centred, white (`tokens.cardText`), weight 700, 60 % of the strip, Dashboard font; the tiles are fitted with it (`dashboardHomeShape({ titled })`). Beside a Dynamic Island the strip sits under the island's band, above the tiles.
@@ -707,7 +714,6 @@ Role:
   Native selection-only changes from the focused hidden textarea, including
   the iOS space-bar trackpad, update the same white one-pixel WebGPU caret
   without mutating the text.
-- `eVe/intuition/matrix/ui/view.js` may render bounded Matrix shell tiles, labels, and preview slots for layout. Tile interaction behavior belongs to `eVe/intuition/matrix/ui/matrix_interaction_runtime.js`, and preview imagery belongs to the unified Matrix preview renderer, not cloned project DOM.
 
 Design rule: final Atome DOM must not encode runtime facts as CSS classes or inline styles. System layer, renderer, media kind, group, binding, and selection truth belongs in the runtime registries, while CSS classes remain visual/category-only.
 
@@ -989,9 +995,6 @@ Primary sources:
 - `eVe/intuition/mystic/mystic_layout.js`
 - `eVe/intuition/mystic/mystic_menu_items.js`
 - `eVe/intuition/mystic/context_selection.js`
-- `eVe/intuition/matrix/visual/matrix_visual_tokens.js`
-- `eVe/intuition/matrix/ui/matrix_layout.js`
-- `eVe/intuition/matrix/ui/view.js`
 
 Role:
 
@@ -1010,10 +1013,6 @@ Role:
 - Toolbox styles inject runtime CSS variables and rules for menu V2.
 - Mystic uses `eVe/intuition/ribbon/bevy_ui_mystic_model.js`, standard tool metrics and `eVe/intuition/mystic/mystic_layout.js`. A distance-ordered wave turns frozen scene fronts into tool backs through one WebGPU projection; borders and per-glyph motion were removed. Interrupted closure starts from the visible frame. Submenus replace their parent and use the center for return. Preferences control duration, roundness, spacing and reduced motion. Root, submenu and pages share this implementation.
 - Lasso action menu visuals are owned by `eVe/shared/lasso_context_zone_runtime.js`: the selected lasso rectangle remains a passive overlay, the action menu opens from a long press inside the runtime selection bounds, and no separate bottom `+` trigger is rendered. `eVe/intuition/mystic/context_target.js` must block mystic long press by consulting that runtime lasso point blocker while the lasso context is active.
-- Matrix visual tokens define grid metrics, overlay styling, tile states, labels, and open animation.
-- Matrix layout runtime owns toolbar-aware viewport fitting, CSS grid variable updates, and scroll positioning; Matrix view runtime owns project and tile DOM composition.
-- Matrix visual grids use logical slot virtualization: empty background capacity is represented by grid sizing and slot math, while DOM nodes are reserved for project tiles and the first actionable empty creation tile.
-- Matrix project-view fixed geometry is owned by the generated `.eve-project-view` visual rule in `eVe/intuition/matrix/visual/matrix_visual_tokens.js`; `ensureProjectView()` may set only dynamic projection state and runtime interaction styles.
 
 Design rule: menu/ribbon/mystic/Matrix changes must preserve shared tool visual semantics, BevyUI-as-render-target ownership, and layer ordering.
 

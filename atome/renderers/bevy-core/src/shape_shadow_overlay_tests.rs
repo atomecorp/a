@@ -43,6 +43,7 @@ pub(crate) fn shape_node(id: &str) -> AtomeRenderNode {
         filters: None,
         transition: None,
         procedural: None,
+        progress_ring: None,
     }
 }
 
@@ -157,6 +158,7 @@ fn shape_shadow_uses_bevy_overlay_without_changing_logical_size() {
             filters: None,
             transition: None,
             procedural: None,
+            progress_ring: None,
         },
     )
     .unwrap();
@@ -221,6 +223,7 @@ fn repeated_shape_shadow_updates_replace_the_overlay_without_accumulating_entiti
                 filters: None,
                 transition: None,
                 procedural: None,
+                progress_ring: None,
             },
         )
         .unwrap();

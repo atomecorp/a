@@ -101,7 +101,7 @@
 	<key>NSHealthShareUsageDescription</key>
 	<string>Atome lit uniquement les données de santé que vous choisissez d'afficher dans vos moniteurs (rubrique Moniteur du Dashboard) et dans vos critères dynamiques. Ces données restent sur cet appareil.</string>
 	<key>NSHealthUpdateUsageDescription</key>
-	<string>Atome n'enregistre rien dans l'app Santé. Cette autorisation accompagne l'accès HealthKit, utilisé uniquement en lecture pour vos moniteurs et vos critères dynamiques, et est requise pour que l'app puisse demander l'autorisation Santé. Vos données restent sur cet appareil.</string>
+	<string>Atome enregistre dans l'app Santé uniquement vos séances de sport : l'entraînement, ainsi que le rythme cardiaque et l'énergie mesurés pendant la séance. Rien d'autre n'y est écrit, et rien n'y est supprimé.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Atome utilise votre position à votre demande pour la météo et le guidage GPS, y compris pendant un trajet en arrière-plan.</string>
 	<key>NSMicrophoneUsageDescription</key>

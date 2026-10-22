@@ -20,6 +20,8 @@ import androidx.health.connect.client.HealthConnectFeatures
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.aggregate.AggregateMetric
 import androidx.health.connect.client.records.*
+import androidx.health.connect.client.records.metadata.Device
+import androidx.health.connect.client.records.metadata.Metadata
 import androidx.health.connect.client.time.TimeRangeFilter
 import app.tauri.annotation.ActivityCallback
 import app.tauri.annotation.Command
@@ -38,9 +40,11 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.time.Instant
+import java.time.ZoneId
 import kotlin.reflect.KClass
 
-// Read-only Health Connect bridge. Called ONLY by the app's gated
+// Health Connect bridge: monitors are read-only; the only write is the
+// training workout (workout* below). Called ONLY by the app's gated
 // `health_invoke` (Rust) after channel + verified-account checks; no
 // JavaScript command reaches this class directly. Values are returned in the
 // invoke reply; the page is only told "invalidated" (no value) for the live
@@ -72,6 +76,13 @@ class HealthPlugin(private val activity: Activity) : Plugin(activity) {
     companion object {
         private const val HC = "android.permission.health."
         private const val STEP_SENSOR_ID = "device_steps_session"
+        private const val WRITE_EXERCISE = "${HC}WRITE_EXERCISE"
+        // eVe training kinds (atome/src/shared/training_catalog.js) -> Health Connect exercise types.
+        private val EXERCISE_TYPES = mapOf(
+            "strength" to ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING,
+            "core" to ExerciseSessionRecord.EXERCISE_TYPE_CALISTHENICS,
+            "cardio" to ExerciseSessionRecord.EXERCISE_TYPE_HIGH_INTENSITY_INTERVAL_TRAINING
+        )
         private val SPECS: Map<String, Spec> = mapOf(
             "steps" to Spec(StepsRecord::class, "${HC}READ_STEPS", "sum", StepsRecord.COUNT_TOTAL),
             "distance" to Spec(DistanceRecord::class, "${HC}READ_DISTANCE", "sum", DistanceRecord.DISTANCE_TOTAL),
@@ -359,6 +370,70 @@ class HealthPlugin(private val activity: Activity) : Plugin(activity) {
         val view = webView ?: return
         activity.runOnUiThread {
             view.evaluateJavascript("window.dispatchEvent(new CustomEvent('atome:native-health-invalidated',{detail:{monitors:['$id']}}));", null)
+        }
+    }
+
+    // ---- training workout: the only write ------------------------------------
+    // The eVe session stays the truth. Its ExerciseSessionRecord is written once,
+    // when it ends, identified by the session id (writing it again replaces it).
+    // A phone has no live exercise mode: heart rate keeps arriving through the
+    // watch's own Health Connect records.
+
+    @Command
+    fun workoutPrepare(invoke: Invoke) {
+        val hc = client() ?: return fail(invoke, "health_connect_unavailable")
+        scope.launch {
+            if (writeGranted(hc)) return@launch invoke.resolve(JSObject().put("writable", true))
+            activity.runOnUiThread {
+                val intent = PermissionController.createRequestPermissionResultContract().createIntent(activity, setOf(WRITE_EXERCISE))
+                startActivityForResult(invoke, intent, "onWorkoutPermission")
+            }
+        }
+    }
+
+    @ActivityCallback
+    fun onWorkoutPermission(invoke: Invoke, result: ActivityResult) {
+        scope.launch { invoke.resolve(JSObject().put("writable", client()?.let { writeGranted(it) } == true)) }
+    }
+
+    private suspend fun writeGranted(hc: HealthConnectClient): Boolean =
+        try { hc.permissionController.getGrantedPermissions().contains(WRITE_EXERCISE) } catch (_: Exception) { false }
+
+    @Command
+    fun workoutStart(invoke: Invoke) {
+        val hc = client() ?: return fail(invoke, "health_connect_unavailable")
+        if (!EXERCISE_TYPES.containsKey(invoke.getArgs().optString("activity"))) return fail(invoke, "health_workout_invalid")
+        scope.launch {
+            if (writeGranted(hc)) invoke.resolve(JSObject().put("started", true).put("live", false)) else fail(invoke, "health_workout_write_denied")
+        }
+    }
+
+    // Pauses stay in the eVe session: the record spans its start and end.
+    @Command
+    fun workoutEvent(invoke: Invoke) = invoke.resolve(JSObject().put("recorded", false))
+
+    @Command
+    fun workoutEnd(invoke: Invoke) {
+        val args = invoke.getArgs()
+        val session = args.optString("session")
+        val type = EXERCISE_TYPES[args.optString("activity")]
+        val start = Instant.ofEpochMilli(args.optLong("start"))
+        val end = minOf(Instant.ofEpochMilli(args.optLong("at")), Instant.now())
+        if (session.isEmpty() || session.length > 300 || type == null || !end.isAfter(start)) return fail(invoke, "health_workout_invalid")
+        if (!args.optBoolean("save")) return invoke.resolve(JSObject().put("saved", false))
+        val hc = client() ?: return fail(invoke, "health_connect_unavailable")
+        scope.launch {
+            try {
+                val zone = ZoneId.systemDefault().rules
+                val title = args.optString("title").take(200).ifEmpty { null }
+                hc.insertRecords(listOf(ExerciseSessionRecord(start, zone.getOffset(start), end, zone.getOffset(end),
+                    Metadata.activelyRecorded(Device(Device.TYPE_PHONE), session, 1L), type, title)))
+                invoke.resolve(JSObject().put("saved", true))
+            } catch (_: SecurityException) {
+                fail(invoke, "health_workout_write_denied")
+            } catch (_: Exception) {
+                fail(invoke, "health_workout_save_failed")
+            }
         }
     }
 

@@ -328,6 +328,7 @@ emulator_session() {
   [[ -n "$app_id" && -n "$activity" ]] \
     || fail "Could not read the package or the launcher activity from $(basename "$artifact")"
 
+  emulator_select_angle_gles "$app_id"
   step "Launching $app_id on $EMULATOR_SERIAL"
   emulator_capture_start
   adb -s "$EMULATOR_SERIAL" shell am start -W -n "$app_id/$activity" | sed 's/^/[apk] /'

@@ -18,18 +18,15 @@ import {
     readProposal
 } from './mcp_security.js';
 import { listAclRules, listRateLimitRules } from './mcp_security_policy.js';
-import { buildRuntimeInvocationPayload, ensureAtomeContext } from './mcp_runtime.js';
+import { buildRuntimeInvocationPayload } from './mcp_runtime.js';
 import { ensureRuntimeToolApi } from './mcp_bridges.js';
 
 export const createMcpPlatformHandlers = (getHandlers) => ({
     async 'atome.create'(params = {}) {
-        const { defaults } = ensureAtomeContext();
+        // The eVe creation funnel owns presets and placement: the legacy Squirrel
+        // DOM defaults (0,0 · 69 px · #272727) are never merged into a creation.
         const runtime = ensureRuntimeToolApi();
-        const invocation = resolveAtomeRuntimeInvocation({
-            operation: 'create',
-            params,
-            defaults
-        });
+        const invocation = resolveAtomeRuntimeInvocation({ operation: 'create', params });
         if (!invocation?.tool_id) {
             throw new Error('Atome create could not be resolved to a Runtime V2 tool');
         }
@@ -51,13 +48,10 @@ export const createMcpPlatformHandlers = (getHandlers) => ({
         }));
     },
     async 'atome.box'(params = {}) {
-        const { defaults } = ensureAtomeContext();
+        // The eVe creation funnel owns presets and placement: the legacy Squirrel
+        // DOM defaults (0,0 · 69 px · #272727) are never merged into a creation.
         const runtime = ensureRuntimeToolApi();
-        const invocation = resolveAtomeRuntimeInvocation({
-            operation: 'box',
-            params,
-            defaults
-        });
+        const invocation = resolveAtomeRuntimeInvocation({ operation: 'box', params });
         if (!invocation?.tool_id) {
             throw new Error('Atome box could not be resolved to a Runtime V2 tool');
         }
@@ -79,10 +73,8 @@ export const createMcpPlatformHandlers = (getHandlers) => ({
         }));
     },
     'atome.describe'() {
-        const { defaults } = ensureAtomeContext();
         return {
             protocol: ATOME_MCP_PROTOCOL,
-            defaults,
             methods: Object.keys(getHandlers()),
             async_methods: [
                 'ai.tools.call',

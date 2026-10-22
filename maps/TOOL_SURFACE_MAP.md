@@ -132,7 +132,7 @@ Hors `lasso`, les clés du tableau vivent dans `commands` ; les palettes `utilit
 | `mode_edit` | `ui.mode.edit` | édition (`edit`) |
 | `mode_consume` | `ui.mode.consume` | Consultation |
 | `validation` | `ui.capture.validation` | validation |
-| `matrix` | `tool.main.matrix` | projets en vignettes (même vue que le Dashboard) |
+| `matrix` | `tool.main.matrix` | ouvre l’accueil eVe (même porte que l’Atom et le retour de projet) |
 | `new_project` | `ui.new_project` | Nouveau projet |
 | `help` | `tool.main.help` | aide (outil existant) |
 | `contact` | `ui.contact.panel` | contact (commande à panneau, on/off) |

@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Read-only. These READ_* permissions MUST equal androidReadPermissions() of
-     atome/src/squirrel/health/health_catalog.js (temp/health_native_tables.probe.mjs).
-     No WRITE_*, no READ_HEALTH_DATA_HISTORY, no READ_HEALTH_DATA_IN_BACKGROUND. -->
+<!-- These READ_* permissions MUST equal androidReadPermissions() of
+     atome/src/squirrel/health/health_catalog.js (tests/probes/native_health_authorization_contract.test.mjs).
+     The only write is WRITE_EXERCISE (the training workout). No other WRITE_*,
+     no READ_HEALTH_DATA_HISTORY, no READ_HEALTH_DATA_IN_BACKGROUND. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED" />
     <uses-permission android:name="android.permission.health.READ_BASAL_BODY_TEMPERATURE" />
@@ -30,6 +31,7 @@
     <uses-permission android:name="android.permission.health.READ_VO2_MAX" />
     <uses-permission android:name="android.permission.health.READ_WEIGHT" />
     <uses-permission android:name="android.permission.health.READ_WHEELCHAIR_PUSHES" />
+    <uses-permission android:name="android.permission.health.WRITE_EXERCISE" />
     <!-- Direct step counter of this phone (separate monitor). -->
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
 

@@ -811,9 +811,19 @@ test('both recording types come from one state listing, published wave by wave',
         assert.equal(listings.length, 1, 'audio et video se lisent en un seul listage d etat');
         assert.deepEqual(result.files.map((file) => file.file_name).sort(),
             ['ecran.mp4', 'photo.png', 'prise.wav'], 'les deux sources sont bien fusionnees');
-        assert.equal(waves.length, 1, 'la vague des fichiers uploades part avant la lecture des prises');
-        assert.deepEqual(waves[0].files.map((file) => file.file_name), ['photo.png'],
-            'la premiere vague ne contient que ce qui est deja resolu');
+        // Chaque source publie sa vague des qu'elle est lue : les prises de l'appareil
+        // n'attendent jamais la liste du serveur.
+        assert.ok(waves.length >= 1 && waves.every((wave) => wave.partial === true), 'chaque vague est partielle');
+        assert.ok(waves.some((wave) => wave.files.map((file) => file.file_name).sort().join() === 'ecran.mp4,prise.wav'),
+            'la vague des prises ne contient que ce qui est deja resolu');
+
+        // Un serveur qui ne repond pas ne retient pas les prises.
+        waves.length = 0;
+        globalThis.fetch = () => new Promise(() => {});
+        void media.list_user_media_files({ onProgress: (wave) => waves.push(wave) });
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        assert.deepEqual(waves.map((wave) => wave.files.map((file) => file.file_name).sort()), [['ecran.mp4', 'prise.wav']],
+            'les prises sont publiees pendant que le serveur se tait');
     } finally {
         globalThis.window = previousWindow;
         globalThis.fetch = previousFetch;

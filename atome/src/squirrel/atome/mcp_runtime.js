@@ -1,13 +1,3 @@
-export function ensureAtomeContext() {
-    if (typeof globalThis === 'undefined') {
-        throw new Error('Global context unavailable for MCP bridge');
-    }
-    return {
-        defaults: globalThis.atomeDefaultsParams || {},
-        AtomeCtor: typeof globalThis.Atome === 'function' ? globalThis.Atome : null
-    };
-}
-
 export function normalizeRuntimeToolIdentifier(params = {}) {
     const candidates = [
         params.tool_id,

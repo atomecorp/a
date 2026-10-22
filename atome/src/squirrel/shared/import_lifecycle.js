@@ -1,4 +1,4 @@
-import { createCanonicalImport, createImportSnapshot, IMPORT_SOURCE_TYPE, importIdentity, importRecordId, importRecordProps } from './canonical_import.js';
+import { createCanonicalImport, createImportSnapshot, IMPORT_SOURCE_TYPE, importIdentity, importRecordId, importRecordProps, ownsImportedRecords } from './canonical_import.js';
 import { getLocalSurfaceId } from '../apis/unified/adole_api/surfaces.js';
 import { getSessionState } from '../apis/unified/adole_api/session.js';
 import { sameImportValue } from './import_reconciliation.js';
@@ -42,6 +42,14 @@ export function createImportLifecycle({ domain, run, restore, env = globalThis, 
             domain, source_id, ok: result?.ok === true, error: result?.ok === false ? result.error : null, changed
         } }));
     };
+    // A read permission refused or withdrawn ends the synchronization, whether the
+    // source reports it ({ ok: false }) or throws it: the source is turned off, so
+    // the home offers it again (synchronized()).
+    const endOnPermissionLoss = async (id, entry, result, currentGeneration) => {
+        if (currentGeneration !== generation || active.get(id) !== entry || !/permission_denied|full_access_required/.test(result.error)) return;
+        try { await deactivate(id); }
+        catch (stopError) { result.error = stopError.message === 'import_session_changed' ? stopError.message : 'import_stop_failed'; }
+    };
     const cycle = (id, options = {}) => {
         const entry = active.get(id);
         if (!entry || disposed) return Promise.resolve({ ok: false, error: 'import_source_inactive' });
@@ -69,6 +77,7 @@ export function createImportLifecycle({ domain, run, restore, env = globalThis, 
                     ...(recovering ? { restore_suppressed: true } : {}),
                     signal: entry.controller.signal, checkSession: context.check, snapshot });
                 context.check();
+                if (result?.ok === false) await endOnPermissionLoss(id, entry, result, currentGeneration);
                 if (currentGeneration === generation) notify(id, result, typeof result?.changed === 'number' ? result.changed : null);
                 if (result?.ok === true && result.more === true) entry.pending = true;
                 else if (result?.ok === true && recovering) {
@@ -92,10 +101,7 @@ export function createImportLifecycle({ domain, run, restore, env = globalThis, 
             return result;
         })().catch(async error => {
             const result = { ok: false, error: /^[a-z][a-z0-9_]{1,100}$/.test(error.message) ? error.message : 'import_read_failed' };
-            if (currentGeneration === generation && active.get(id) === entry && /permission_denied|full_access_required/.test(result.error)) {
-                try { await deactivate(id); }
-                catch (stopError) { result.error = stopError.message === 'import_session_changed' ? stopError.message : 'import_stop_failed'; }
-            }
+            await endOnPermissionLoss(id, entry, result, currentGeneration);
             if (currentGeneration === generation && !entry.controller.signal.aborted) notify(id, result);
             return result;
         }).finally(() => { entry.running = null; });
@@ -159,7 +165,7 @@ export function createImportLifecycle({ domain, run, restore, env = globalThis, 
         return { ok: true };
     };
     const resume = () => {
-        if (resuming || disposed || session()?.mode !== 'authenticated') return resuming || Promise.resolve();
+        if (resuming || disposed || !ownsImportedRecords(session())) return resuming || Promise.resolve();
         const resumeGeneration = generation;
         resuming = (async () => {
             const context = store.capture(), rows = await store.list(IMPORT_SOURCE_TYPE, context);
@@ -205,16 +211,18 @@ export function createImportLifecycle({ domain, run, restore, env = globalThis, 
     bindings.forEach(([name, listener]) => env.addEventListener?.(name, listener));
     const onVisibility = () => { if (env.document?.visibilityState !== 'hidden') onResume(); };
     env.document?.addEventListener?.('visibilitychange', onVisibility);
-    if (session()?.mode === 'authenticated') void resume();
-    // The sources this device has imported completely at least once (the checkpoint's `last_completed_at`).
-    const completed = async () => {
-        if (session()?.mode !== 'authenticated') return [];
+    if (ownsImportedRecords(session())) void resume();
+    // The sources this device keeps synchronized: imported completely at least once
+    // (the checkpoint's `last_completed_at`) and still on. A stop, or a permission
+    // withdrawn (cycle → deactivate), turns a source off: it is no longer synchronized.
+    const synchronized = async () => {
+        if (!ownsImportedRecords(session())) return [];
         const context = store.capture(), currentDevice = await ensureDevice();
         const rows = await store.list(IMPORT_SOURCE_TYPE, context);
-        return rows.map(importRecordProps).filter(props => props.domain_type === domain && props.device_id === currentDevice && props.last_completed_at)
+        return rows.map(importRecordProps).filter(props => props.domain_type === domain && props.device_id === currentDevice && props.enabled && props.last_completed_at)
             .map(props => ({ source_id: props.source_id, completed_at: props.last_completed_at }));
     };
-    return { activate, deactivate, cycle, resume, completed, status: () => [...active].map(([source_id, entry]) => ({ source_id, running: !!entry.running })),
+    return { activate, deactivate, cycle, resume, synchronized, status: () => [...active].map(([source_id, entry]) => ({ source_id, running: !!entry.running })),
         dispose() { disposed = true; stopRuntime(); bindings.forEach(([name, listener]) => env.removeEventListener?.(name, listener));
             env.document?.removeEventListener?.('visibilitychange', onVisibility); } };
 }

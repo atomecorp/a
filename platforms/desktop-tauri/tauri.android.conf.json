@@ -4,11 +4,23 @@
   "build": {
     "frontendDist": "./gen/android-webroot"
   },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "atome",
+        "url": "android-boot/index.html",
+        "width": 800,
+        "height": 600,
+        "dragDropEnabled": false
+      }
+    ]
+  },
   "bundle": {
     "resources": [],
     "android": {
       "minSdkVersion": 29,
-      "versionCode": 6,
+      "versionCode": 9,
       "debugApplicationIdSuffix": ".debug"
     }
   }

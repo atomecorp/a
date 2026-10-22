@@ -6,7 +6,7 @@ const query = { type: 'string', minLength: 1, maxLength: 200 };
 export const GPS_ERRORS = Object.freeze(['INVALID_ARGUMENT', 'AUTH_REQUIRED', 'TRIP_NOT_FOUND', 'NOT_CONFIGURED',
     'PROVIDER_UNAVAILABLE', 'NO_ROUTE', 'OUT_OF_COVERAGE', 'PERMISSION_DENIED', 'LOCATION_UNAVAILABLE',
     'HOST_UNSUPPORTED', 'NAVIGATION_ALREADY_ACTIVE', 'NO_ACTIVE_TRIP', 'VERSION_CONFLICT', 'CONTEXT_CHANGED',
-    'PRESENTATION_UNAVAILABLE', 'CANCELLED', 'RATE_LIMITED', 'INVALID_PROVIDER_RESPONSE', 'PLACE_NOT_FOUND']);
+    'PRESENTATION_UNAVAILABLE', 'CANCELLED', 'RATE_LIMITED', 'INVALID_PROVIDER_RESPONSE', 'PLACE_NOT_FOUND', 'CONTACT_REQUIRED']);
 const definitions = {
     list_trips: [{ offset: { type: 'integer', minimum: 0 }, limit: { type: 'integer', minimum: 1, maximum: 1000 } }, [], 'Read private GPS itineraries, active device trip first, then newest first.', false],
     get_trip: [{ trip_id: id }, ['trip_id'], 'Read an existing private GPS itinerary.', false],
@@ -21,6 +21,9 @@ const definitions = {
     start_navigation: [{ trip_id: id }, ['trip_id'], 'Start foreground/background guidance on this device, requesting location access. Refuses a second active trip.', true],
     stop_navigation: [{}, [], 'Stop guidance and release location and speech. Closing the preview does not stop guidance.', true],
     get_state: [{}, [], 'Read device guidance state without requesting location access.', false],
+    share_position: [{ user_id: id }, ['user_id'], 'Share this account live position, read-only and live, with one accepted contact (they accept it on their side). Updates while eVe runs on this device; stop_sharing_position or revoking the share ends it.', true],
+    stop_sharing_position: [{ user_id: id }, ['user_id'], 'Stop sharing this account live position with this contact.', true],
+    list_shared_positions: [{}, [], 'Read the recent live positions contacts share with this account.', false],
     navigate_to: [{ destination: query, origin: GPS_POINT_SCHEMA }, ['destination'], 'Take the user to an address or place said or typed in their words: search it, use this device position as origin unless given, create and calculate the private itinerary, show it, and start spoken guidance.', true]
 };
 export const GPS_COMMANDS = Object.freeze(Object.entries(definitions).map(([action, [properties, required, description, persistent]]) => Object.freeze({
@@ -28,7 +31,7 @@ export const GPS_COMMANDS = Object.freeze(Object.entries(definitions).map(([acti
     input_schema: { type: 'object', additionalProperties: false, properties, required },
     output_schema: { type: 'object', required: ['ok'], properties: { ok: { type: 'boolean' },
         error: { type: 'string', enum: GPS_ERRORS }, trip: { type: 'object' }, trips: { type: 'array' }, place: GPS_POINT_SCHEMA,
-        places: { type: 'array', items: GPS_POINT_SCHEMA }, position: { type: 'object' }, route: GPS_ROUTE_SCHEMA, state: { type: 'object' } } }
+        places: { type: 'array', items: GPS_POINT_SCHEMA }, position: { type: 'object' }, positions: { type: 'array' }, route: GPS_ROUTE_SCHEMA, state: { type: 'object' } } }
 })));
 export const validateGpsInput = (action, input) => {
     const contract = GPS_COMMANDS.find(command => command.action === action);

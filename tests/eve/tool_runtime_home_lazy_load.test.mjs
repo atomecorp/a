@@ -91,11 +91,11 @@ describe('User tool canonical command', () => {
     it('retains the complete Expert toolbar and the existing Beginner composition', async () => {
         const inert = [
             'applyDeleteSelection', 'closeBackgroundPanel', 'closeCalendarPanel', 'closeCanonicalHomePanel', 'closeCommunicatePanel',
-            'closeCouleurPanel', 'closeDeletePanel', 'closeFinderPanel', 'closeFontPanel', 'closeInfoPanel', 'closeLayerPanel', 'closeMatrixView',
+            'closeCouleurPanel', 'closeDeletePanel', 'closeFinderPanel', 'closeFontPanel', 'closeInfoPanel', 'closeLayerPanel', 
             'closeMediaPanel', 'closePastePanel', 'closeTimelinePanel', 'closeUndoPanel', 'ensureActivitiesModule', 'ensureCopyModule',
             'ensurePastePanelModule', 'handleAiTouch', 'handleFinderTouch', 'invokeTool', 'openBackgroundPanel', 'openCalendarPanel',
             'openCanonicalHomePanel', 'openCommunicatePanel', 'openCouleurPanel', 'openDeletePanel', 'openFinderPanel', 'openFontPanel',
-            'openInfoPanel', 'openLayerPanel', 'openMatrixView', 'openMediaPanel', 'openPastePanel', 'openTimelinePanel', 'openUndoPanel', 'orientationChanged'
+            'openInfoPanel', 'openLayerPanel', 'openMediaPanel', 'openPastePanel', 'openTimelinePanel', 'openUndoPanel', 'orientationChanged'
         ];
         const content = createMainMenuContentRuntime({ ...Object.fromEntries(inert.map(key => [key, () => null])),
             defaultOrientation: 'up', directionValueToLabel: {}, directionValues: [], translate: eveT,
