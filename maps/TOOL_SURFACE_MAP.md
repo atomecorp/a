@@ -76,7 +76,9 @@ Code : `eVe/intuition/tools/core/exposable_tools.js` ; branché dans `finder_dat
 Timeline, Cellules et Mixage ne sont plus dans « Vue » (16 oct. 2026) : ce sont les choix de l'outil
 de rail **Multipiste** (`container_multitrack`, `domains/rendering/project_view_multitrack_tool.js`),
 présent dans le rail de niveau des vues Liste, Matrice, Timeline et Mixage et dans le rail du fond de
-projet en Disposition : Timeline · Cellules › Pistes / Scènes / Côte à côte · Mixage.
+projet en Disposition : Timeline · Cellules · Scène · Mixage (23 oct. 2026 ; la vue Scène montre une Scène à la fois,
+ses quatre outils locaux Mixeur · Pistes · Follow Action · Timeline). Côte à côte est la case de rail `timeline_split`
+de la Timeline et des Cellules (bascule).
 Piste sélectionnée : la case de rail **Enregistrer** (`timeline_record`) contient Audio / Vidéo
 (`ui.capture.audio|video`) : un toucher prend à la tête de lecture sur cette piste, une source glissée hors
 du rail sur une piste y pose une région Record ; pendant la prise la case devient **Arrêter**

@@ -115,13 +115,12 @@ test('a view chosen before the Timeline opens is the one it opens on', async () 
     const api = fakeMoleculeApi();
     await withWindow(api, async () => {
         const content = createProjectViewTimelineContent({ requestRefresh: () => {} });
-        assert.deepEqual(content.chooseView({ layout: 'cells', projection: 'scenes' }), { ok: true, pending: true });
+        assert.deepEqual(content.chooseView({ layout: 'scene' }), { ok: true, pending: true });
         await content.load({ projectId: 'project_tl', readList: async () => ({ records: projectRecords, totalCount: 2 }) });
-        assert.deepEqual(content.viewChoice(), { layout: 'cells', projection: 'scenes' }, 'shown at once');
+        assert.deepEqual(content.viewChoice(), { layout: 'scene' }, 'shown at once');
         await new Promise((resolve) => setTimeout(resolve, 0));
         const view = api.readGroupTimeline({ group_id: 'project_tl' }).timeline.view;
-        assert.equal(view.layout, 'cells');
-        assert.equal(view.cells_projection, 'scenes');
+        assert.equal(view.layout, 'scene');
     });
 });
 
