@@ -135,6 +135,15 @@ const resolveMailSyncBase = (env) => {
     return resolveFastifyBase(env);
 };
 
+// The Fastify server answers mail calls for a verified device session only (server/mailRoutes.js): its token goes
+// with every call made to it. The local Tauri server, bound to this machine, needs none. Null: no session to send.
+const resolveMailSyncHeaders = async (env, baseUrl) => {
+    if (baseUrl !== resolveFastifyBase(env)) return {};
+    const { FastifyAdapter } = await import('../apis/unified/adole.js');
+    const token = FastifyAdapter?.getToken?.();
+    return token ? { authorization: `Bearer ${token}` } : null;
+};
+
 const resolveFetch = (env) => {
     const host = resolveTransportHost(env);
     if (typeof env?.fetch === 'function') return env.fetch.bind(env);
@@ -266,6 +275,7 @@ export {
     isNodeRuntime,
     resolveFetch,
     resolveMailSyncBase,
+    resolveMailSyncHeaders,
     resolveRuntimeMailCredentials,
     resolveSecureMailAuth,
     hasCompleteRuntimeMailCredentials

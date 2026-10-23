@@ -4,6 +4,7 @@ import {
     isNodeRuntime,
     resolveFetch,
     resolveMailSyncBase,
+    resolveMailSyncHeaders,
     resolveRuntimeMailCredentials,
     resolveSecureMailAuth,
     hasCompleteRuntimeMailCredentials
@@ -23,6 +24,8 @@ const callRemoteMailEndpoint = async (env, path, {
     if (!fetchImpl || !baseUrl) {
         return { ok: false, error: unavailableError };
     }
+    const auth = await resolveMailSyncHeaders(env, baseUrl);
+    if (!auth) return { ok: false, error: 'mail_auth_required' };
 
     const controller = typeof AbortController === 'function' ? new AbortController() : null;
     const timeoutId = controller
@@ -32,7 +35,8 @@ const callRemoteMailEndpoint = async (env, path, {
         const response = await fetchImpl(`${baseUrl}${path}`, {
             method: 'POST',
             headers: {
-                'content-type': 'application/json'
+                'content-type': 'application/json',
+                ...auth
             },
             body: JSON.stringify(body),
             ...(controller ? { signal: controller.signal } : {})

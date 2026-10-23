@@ -137,11 +137,14 @@ const toMessageList = (payload) => {
     return [];
 };
 
+// A refused read (the server's own `ok: false`: no session, unreachable mail server) stays a failure: it never
+// reads as a successful sync of an empty mailbox.
 export const normalizeReadPayload = (payload, {
     provider,
     mailbox,
     mode
-} = {}) => ({
+} = {}) => (payload?.ok === false ? { ok: false, provider, mailbox: normalizeLocalMailbox(mailbox), mode,
+    error: normalizeText(payload.error || '') || 'mail_read_failed', message: payload.message || null } : {
     ok: true,
     provider,
     mailbox: normalizeLocalMailbox(payload?.mailbox || mailbox),

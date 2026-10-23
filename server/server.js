@@ -274,7 +274,7 @@ async function startServer() {
 
     registerMediaTokenRoute(server, { validateToken });
 
-    registerMailRoutes(server);
+    registerMailRoutes(server, { identify: validateToken });
     registerSocialRoutes(server, { projectRoot });
     registerBillingRoutes(server);
 

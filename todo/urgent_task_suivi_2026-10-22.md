@@ -56,11 +56,7 @@ Pauses, Reprendre, Suivant : déjà présents dans le bandeau de séance (Pause/
    rendre transparentes la WebView principale, `html/body` et la vue racine pendant que la page est ouverte, et router les touchers de la
    découpe vers la page native. Par-dessus (recommandé) : vue native posée au-dessus, cadre = rectangle de la scène, bandeau et champ du
    bas restent atome ; plus simple et plus sûr pour les gestes, mais rien de Bevy ne peut se dessiner sur la page tant qu'elle est ouverte.
-5. **Sécurité, hors périmètre de la tâche : routes mail du serveur.** `server/mailRoutes.js:274-317` (`/api/eve/mail/sync|send|mark-read|archive|delete`)
-   n'exigent aucune identité ; l'hôte IMAP/SMTP vient du corps de la requête (le serveur se connecte où on lui dit) ; la clé du cache
-   de connexion omet le mot de passe (`mailRoutes.js:19-33`) : un second appelant avec la même adresse et n'importe quel mot de passe
-   réutiliserait la session ouverte. Constaté à la lecture, non exploité. Correctif proposé : identité exigée (`validateToken` déjà
-   disponible dans `server.js`), mot de passe (haché) dans la clé du cache, hôtes limités aux fournisseurs connus ou aux ports mail.
+5. **Sécurité : routes mail du serveur — CORRIGÉ le 2026-10-23 (demande de l'utilisateur).** Chaque `/api/eve/mail/*` exige une session d'appareil vérifiée (`validateToken`) ; la connexion ouverte n'est réutilisée que par la même personne avec les mêmes identifiants (mot de passe haché dans la clé) ; hôtes IMAP/SMTP : nom DNS, port mail standard (993/143, 465/587/25), adresses publiques seulement (`checkMailHosts`) ; le client envoie sa session (`resolveMailSyncHeaders`) ; une lecture refusée n'apparaît plus comme une boîte vide synchronisée (`normalizeReadPayload`). Preuves : Fastify réel isolé `temp/mail_fix/routes_real.probe.mjs` 6/6 ; `tests/server/mailRoutes.probe.mjs` étendue (cas de sécurité) ; sondes client mail vertes sauf deux échecs déjà présents sur HEAD (`bootstrap.connector`, cas « dom » de `bootstrap.tauri_sync_target`). Non traité : le serveur Axum local (lié à 127.0.0.1, un processus par appel) garde ses routes sans contrôle d'hôte.
 6. **Split View (SV-03)** : par où l'ouvrir (rail du bas, geste contextuel, autre) et comment choisir la seconde zone (choix manuel,
    proposition de l'IA). Options à comparer sur l'interface réelle avant toute maquette.
 7. **Beauté ou Apparence** : le nom du module (B-01).

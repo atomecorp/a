@@ -1,8 +1,29 @@
+import { createHash } from 'node:crypto';
+import { lookup } from 'node:dns/promises';
+import { isIP } from 'node:net';
 import { createIcloudMailConnector } from '../atome/src/squirrel/mail/icloud_connector.js';
 import { createMailService } from '../atome/src/squirrel/mail/service.js';
 import { resolveMailCredentials } from '../scripts/icloud_live_credentials.mjs';
+import { publicDavAddress as publicAddress } from './ws_personal_import.js';
+import { resolveUserId } from './server_utils.js';
 
 const DEFAULT_LIMIT = 20;
+// The standard mail ports: IMAP (TLS, STARTTLS) and SMTP (TLS, submission, relay).
+const MAIL_PORTS = Object.freeze({ imap: [993, 143], smtp: [465, 587, 25] });
+
+// The server only connects to a mail server named by a DNS name, on a mail port, whose every address is public:
+// the credentials come from the caller, so an IP literal, a private or loopback address, or another port would
+// let any caller make this server reach its own network (SSRF).
+export const checkMailHosts = async (credentials, { resolve = lookup } = {}) => {
+    for (const protocol of ['imap', 'smtp']) {
+        const host = String(credentials?.[protocol]?.host || '').trim().toLowerCase();
+        const port = Number(credentials?.[protocol]?.port);
+        if (!host || isIP(host) || !/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(host)) throw new Error(`mail_${protocol}_host_invalid`);
+        if (!MAIL_PORTS[protocol].includes(port)) throw new Error(`mail_${protocol}_port_not_allowed`);
+        const addresses = await resolve(host, { all: true });
+        if (!addresses.length || addresses.some(entry => !publicAddress(entry.address))) throw new Error(`mail_${protocol}_address_not_public`);
+    }
+};
 
 const toLimit = (value, secondary = DEFAULT_LIMIT) => {
     const number = Number(value);
@@ -13,14 +34,21 @@ export const createMailGateway = ({
     resolveCredentials = resolveMailCredentials,
     connectorFactory = createIcloudMailConnector,
     serviceFactory = createMailService,
-    resolveMailbox = (credentials = null) => credentials?.mailbox || 'INBOX'
+    resolveMailbox = (credentials = null) => credentials?.mailbox || 'INBOX',
+    checkHosts = checkMailHosts
 } = {}) => {
     let cachedRuntime = null;
 
-    const getRuntime = async (options = {}) => {
+    // `userId`: the verified caller. The open connection is reused only by the same person with the same
+    // credentials, the password included (hashed): never by another caller naming the same address.
+    const getRuntime = async (options = {}, userId) => {
+        if (!userId) throw new Error('mail_auth_required');
         const credentials = resolveCredentials(options?.credentials || null);
+        await checkHosts(credentials);
         const mailbox = String(options?.mailbox || resolveMailbox(credentials) || 'INBOX').trim() || 'INBOX';
         const cacheKey = JSON.stringify({
+            user: userId,
+            secret: createHash('sha256').update(String(credentials?.password || credentials?.appPassword || '')).digest('hex'),
             provider: credentials?.provider || '',
             email: credentials?.email || '',
             username: credentials?.username || '',
@@ -58,9 +86,9 @@ export const createMailGateway = ({
     };
 
     return {
-        async sync(options = {}) {
+        async sync(options = {}, userId = null) {
             try {
-                const { service, connector, credentials, mailbox } = await getRuntime(options);
+                const { service, connector, credentials, mailbox } = await getRuntime(options, userId);
                 const syncStatus = service.syncStatus?.().sync || null;
                 const shouldRunInitial = options?.initial === true || !String(syncStatus?.cursor || '').trim();
                 const syncResult = shouldRunInitial
@@ -102,9 +130,9 @@ export const createMailGateway = ({
                 };
             }
         },
-        async send(options = {}) {
+        async send(options = {}, userId = null) {
             try {
-                const { connector, credentials } = await getRuntime(options);
+                const { connector, credentials } = await getRuntime(options, userId);
                 const draft = options?.draft && typeof options.draft === 'object' ? options.draft : null;
                 if (!draft) {
                     return {
@@ -141,9 +169,9 @@ export const createMailGateway = ({
                 };
             }
         },
-        async markRead(options = {}) {
+        async markRead(options = {}, userId = null) {
             try {
-                const { connector, credentials } = await getRuntime(options);
+                const { connector, credentials } = await getRuntime(options, userId);
                 const message = options?.message && typeof options.message === 'object' ? options.message : null;
                 if (!message) {
                     return {
@@ -180,9 +208,9 @@ export const createMailGateway = ({
                 };
             }
         },
-        async archive(options = {}) {
+        async archive(options = {}, userId = null) {
             try {
-                const { connector, credentials } = await getRuntime(options);
+                const { connector, credentials } = await getRuntime(options, userId);
                 const message = options?.message && typeof options.message === 'object' ? options.message : null;
                 if (!message) {
                     return {
@@ -224,9 +252,9 @@ export const createMailGateway = ({
                 };
             }
         },
-        async delete(options = {}) {
+        async delete(options = {}, userId = null) {
             try {
-                const { connector, credentials } = await getRuntime(options);
+                const { connector, credentials } = await getRuntime(options, userId);
                 const message = options?.message && typeof options.message === 'object' ? options.message : null;
                 if (!message) {
                     return {
@@ -271,47 +299,29 @@ export const createMailGateway = ({
     };
 };
 
+// `identify(request)`: the verified device session of the caller (server.js `validateToken`), or null.
 export const registerMailRoutes = (server, {
-    gateway = createMailGateway()
+    gateway = createMailGateway(),
+    identify
 } = {}) => {
-    server.post('/api/eve/mail/sync', async (request, reply) => {
-        const result = await gateway.sync(request.body || {});
+    if (typeof identify !== 'function') throw new Error('mail_routes_identity_required');
+    const route = (path, action) => server.post(path, async (request, reply) => {
+        const user = await identify(request);
+        const userId = user ? resolveUserId(user) : null;
+        if (!userId) {
+            reply.code(401);
+            return { ok: false, error: 'mail_auth_required' };
+        }
+        const result = await gateway[action](request.body || {}, userId);
         if (result?.ok === true) {
             return result;
         }
         reply.code(503);
         return result;
     });
-    server.post('/api/eve/mail/send', async (request, reply) => {
-        const result = await gateway.send(request.body || {});
-        if (result?.ok === true) {
-            return result;
-        }
-        reply.code(503);
-        return result;
-    });
-    server.post('/api/eve/mail/mark-read', async (request, reply) => {
-        const result = await gateway.markRead(request.body || {});
-        if (result?.ok === true) {
-            return result;
-        }
-        reply.code(503);
-        return result;
-    });
-    server.post('/api/eve/mail/archive', async (request, reply) => {
-        const result = await gateway.archive(request.body || {});
-        if (result?.ok === true) {
-            return result;
-        }
-        reply.code(503);
-        return result;
-    });
-    server.post('/api/eve/mail/delete', async (request, reply) => {
-        const result = await gateway.delete(request.body || {});
-        if (result?.ok === true) {
-            return result;
-        }
-        reply.code(503);
-        return result;
-    });
+    route('/api/eve/mail/sync', 'sync');
+    route('/api/eve/mail/send', 'send');
+    route('/api/eve/mail/mark-read', 'markRead');
+    route('/api/eve/mail/archive', 'archive');
+    route('/api/eve/mail/delete', 'delete');
 };
