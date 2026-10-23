@@ -1,0 +1,9 @@
+{
+  "model": "vosk-model-small-fr-0.22",
+  "language": "fr-FR",
+  "use": "On-device recognition of the phrases of the current screen (grammar mode) by the native voice engine (atome/engines/audio-engine/src/voice). Every word of a French intent phrase must exist in its vocabulary (eVe/i18n/languages_first_launch_voice.js).",
+  "source": "https://alphacephei.com/vosk/models/vosk-model-small-fr-0.22.zip",
+  "zip_sha256": "cabf6180e177eb9b3a9a9d43a437bd5e549f3a7d09525e5d69a3fed787be12ad",
+  "license": "Apache-2.0 (as listed on https://alphacephei.com/vosk/models, checked 2026-10-23)",
+  "measured": "todo/refonte_assistant_vocal.md §10-11"
+}

@@ -1,0 +1,8 @@
+{
+  "package": "vosk-browser@0.0.8 (npm), dist/vosk.js",
+  "use": "Vosk compiled to WebAssembly (emscripten, worker inlined) for the browser path of the voice engine (atome/src/squirrel/voice/browser_voice_engine.js). Grammar recognizers supported; no SharedArrayBuffer needed.",
+  "source": "https://registry.npmjs.org/vosk-browser/-/vosk-browser-0.0.8.tgz",
+  "sha256": "29504515526e974f4cb053cf08811c4de5fb2a74007c0a5a957db50eaa8d5d0c",
+  "license": "Apache-2.0 (package.json \"license\")",
+  "measured": "todo/refonte_assistant_vocal.md §10.2 (same accuracy as the native engine in Chromium)"
+}

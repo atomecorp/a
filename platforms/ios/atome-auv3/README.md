@@ -14,6 +14,10 @@ clean build install
 
 ## TestFlight release
 
+The private registered-device OTA channel is documented in
+[iOS private OTA distribution](../../../atome/documentations/ios_ota_distribution.md).
+It shares this generator and version ledger; TestFlight remains the default.
+
 Run the repository release entry point from the repository root:
 
 ```bash

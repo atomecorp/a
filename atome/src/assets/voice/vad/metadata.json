@@ -1,0 +1,8 @@
+{
+  "model": "silero_vad.onnx (Silero VAD v5)",
+  "use": "Speech probability per 32 ms frame at 16 kHz in the native voice engine (atome/engines/audio-engine/src/voice/vad.rs), run by ONNX Runtime (ort).",
+  "source": "https://github.com/snakers4/silero-vad/blob/master/src/silero_vad/data/silero_vad.onnx",
+  "sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+  "license": "MIT (https://github.com/snakers4/silero-vad/blob/master/LICENSE)",
+  "measured": "todo/refonte_assistant_vocal.md §10.3"
+}

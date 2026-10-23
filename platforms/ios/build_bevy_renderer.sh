@@ -57,6 +57,20 @@ echo "[IOS_BEVY_BUILD] cargo=$CARGO_BIN"
 echo "[IOS_BEVY_BUILD] rustflags=$RUSTFLAGS"
 "$CARGO_BIN" --version
 
+# The native voice engine (Vosk + ONNX Runtime) belongs to the app on devices only: the AUv3 and
+# simulator builds answer its commands with audio_command_unknown.
+FEATURE_FLAGS=
+case "${SDK_NAME:-}" in
+  iphoneos*)
+    if [ "${PRODUCT_BUNDLE_IDENTIFIER:-}" = "one.atome.app" ]; then
+      VOSK_IOS_LIB_DIR="$(sh "$SRCROOT/../build_vosk_ios.sh")"
+      export VOSK_IOS_LIB_DIR
+      FEATURE_FLAGS="--features voice"
+      echo "[IOS_BEVY_BUILD] voice engine on, libvosk=$VOSK_IOS_LIB_DIR"
+    fi
+    ;;
+esac
+
 mkdir -p "$TARGET_TEMP_DIR"
 rm -f "$TARGET_TEMP_DIR/libatome_ios_bevy_renderer.a"
 
@@ -88,7 +102,7 @@ for ARCH in ${ARCHS:-arm64}; do
   esac
 
   echo "[IOS_BEVY_BUILD] cargo build target=$RUST_TARGET arch=$ARCH"
-  "$CARGO_BIN" build --manifest-path "$CRATE_MANIFEST" --target "$RUST_TARGET" $CARGO_PROFILE_FLAG
+  "$CARGO_BIN" build --manifest-path "$CRATE_MANIFEST" --target "$RUST_TARGET" $CARGO_PROFILE_FLAG $FEATURE_FLAGS
 
   BUILT_LIB="$CARGO_TARGET_DIR/$RUST_TARGET/$PROFILE_DIR/libatome_ios_bevy_renderer.a"
   if [ ! -f "$BUILT_LIB" ]; then

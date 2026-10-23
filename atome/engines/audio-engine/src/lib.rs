@@ -22,6 +22,9 @@ mod scheduled_backend;
 #[cfg(not(target_os = "ios"))]
 pub mod transcode;
 pub mod wake_capture;
+// Guided-conversation voice engine (Silero + Vosk); hosts enable it once they link libvosk.
+#[cfg(feature = "voice")]
+pub mod voice;
 
 #[cfg(test)]
 mod scheduled_backend_tests;

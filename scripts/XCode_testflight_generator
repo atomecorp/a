@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Build, archive, export, and upload the iOS application to App Store Connect.
+# Build, archive, and distribute iOS through TestFlight (default) or private OTA.
 # This script intentionally owns the release workflow only. auv3.sh remains the
 # local-device AUv3 development launcher and is not a TestFlight release path.
 
@@ -10,7 +10,11 @@ readonly SCRIPT_NAME="${0##*/}"
 readonly REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 readonly IOS_DIRECTORY="$REPO_ROOT/platforms/ios/atome-auv3"
 readonly CONFIGURATION="Release"
-readonly DISTRIBUTION_METHOD="app-store-connect"
+DISTRIBUTION_METHOD="app-store-connect"
+CHANNEL="testflight"
+PREPARE_ONLY=false
+PUBLISH_REPORT=""
+RELEASE_LOCK=""
 readonly APP_STORE_CONNECT_DIRECTORY="$HOME/.appstoreconnect"
 readonly APP_STORE_CONNECT_KEY_DIRECTORY="$APP_STORE_CONNECT_DIRECTORY/private_keys"
 readonly APP_STORE_CONNECT_ISSUER_ID_FILE="$APP_STORE_CONNECT_DIRECTORY/issuer-id"
@@ -48,9 +52,15 @@ EXTENSION_TARGETS=()
 
 usage() {
     cat <<USAGE
-Usage: ./scripts/$SCRIPT_NAME [--dry-run] [--export-compliance]
+Usage: ./scripts/$SCRIPT_NAME [--adhoc] [--dry-run | --prepare | --publish REPORT]
 
-Builds the distributable iOS app, then uploads its IPA to App Store Connect.
+Ad Hoc: --prepare validates a signed IPA without publishing; --publish REPORT
+revalidates and publishes it. --adhoc alone prepares and publishes.
+Configure OTA_SSH_HOST and OTA_ORIGIN, or ~/.config/atome/ios-ota.json.
+Remote Mac: node scripts/ios/remote.mjs --host SSH_ALIAS --repo ABSOLUTE_PATH --adhoc
+
+Builds signed iOS releases. The default channel uploads to App Store Connect;
+--adhoc publishes privately to the configured OTA server.
 
 Options:
   --dry-run  Inspect the Xcode project and print the planned release settings.
@@ -113,297 +123,9 @@ require_command() {
     command -v "$1" >/dev/null 2>&1 || fail "Required command is unavailable: $1"
 }
 
-xcodebuild_for_container() {
-    xcodebuild "$CONTAINER_FLAG" "$CONTAINER_PATH" "$@"
-}
+source "$REPO_ROOT/scripts/ios/discovery.sh"
 
-extract_setting() {
-    local settings="$1"
-    local key="$2"
-    printf '%s\n' "$settings" | sed -n "s/^[[:space:]]*${key} = //p" | tail -n 1
-}
-
-append_json_values() {
-    local json="$1"
-    local key="$2"
-
-    while IFS= read -r value; do
-        [ -n "$value" ] && printf '%s\n' "$value"
-    done < <(
-        printf '%s' "$json" | /usr/bin/ruby -rjson -e '
-            document = JSON.parse(STDIN.read)
-            root = document["workspace"] || document.fetch("project")
-            root.fetch(ARGV.fetch(0), []).each { |value| puts value }
-        ' "$key"
-    )
-}
-
-resolve_xcode_container() {
-    local workspaces=()
-    local projects=()
-
-    shopt -s nullglob
-    workspaces=("$IOS_DIRECTORY"/*.xcworkspace)
-    projects=("$IOS_DIRECTORY"/*.xcodeproj)
-    shopt -u nullglob
-
-    if [ "${#workspaces[@]}" -eq 1 ]; then
-        CONTAINER_FLAG="-workspace"
-        CONTAINER_PATH="${workspaces[0]}"
-        return
-    fi
-
-    if [ "${#workspaces[@]}" -gt 1 ]; then
-        fail "Multiple top-level workspaces were found; choose one before releasing."
-    fi
-
-    if [ "${#projects[@]}" -eq 1 ]; then
-        CONTAINER_FLAG="-project"
-        CONTAINER_PATH="${projects[0]}"
-        return
-    fi
-
-    fail "Expected exactly one top-level .xcworkspace or .xcodeproj in $IOS_DIRECTORY."
-}
-
-resolve_version_ledger() {
-    local project_path
-    local project_count=0
-
-    shopt -s nullglob
-    for project_path in "$IOS_DIRECTORY"/*.xcodeproj; do
-        VERSION_LEDGER_PROJECT_FILE="$project_path/project.pbxproj"
-        ((project_count += 1))
-    done
-    shopt -u nullglob
-
-    [ "$project_count" -eq 1 ] || fail "Expected exactly one top-level .xcodeproj to store release versions."
-
-    [ -f "$VERSION_LEDGER_PROJECT_FILE" ] || fail "Xcode version ledger is missing: $VERSION_LEDGER_PROJECT_FILE"
-}
-
-release_settings_for_target() {
-    xcodebuild_for_container -target "$1" -configuration "$CONFIGURATION" -showBuildSettings
-}
-
-release_settings_for_scheme() {
-    xcodebuild_for_container -scheme "$1" -configuration "$CONFIGURATION" -destination "generic/platform=iOS" -showBuildSettings
-}
-
-discover_application_scheme() {
-    local project_json
-    local scheme
-    local target
-    local settings
-    local product_type
-    local application_schemes=()
-    local application_targets=()
-    local matching_schemes=()
-    local matching_scheme_count=0
-
-    project_json="$(xcodebuild_for_container -list -json)"
-    printf '%s' "$project_json" | /usr/bin/ruby -rjson -e 'JSON.parse(STDIN.read)' 2>/dev/null \
-        || fail "xcodebuild -list -json did not return readable JSON."
-    while IFS= read -r scheme; do
-        settings="$(release_settings_for_scheme "$scheme")"
-        product_type="$(extract_setting "$settings" "PRODUCT_TYPE")"
-        if [ "$product_type" = "com.apple.product-type.application" ]; then
-            application_schemes+=("$scheme")
-        fi
-    done < <(append_json_values "$project_json" "schemes")
-
-    while IFS= read -r target; do
-        settings="$(release_settings_for_target "$target")"
-        product_type="$(extract_setting "$settings" "PRODUCT_TYPE")"
-        if [ "$product_type" = "com.apple.product-type.application" ]; then
-            application_targets+=("$target")
-        fi
-    done < <(append_json_values "$project_json" "targets")
-
-    # macOS ships bash 3.2, where an empty "${array[@]}" is an unbound
-    # variable under `set -u`; the guarded form reports the real error instead.
-    for scheme in ${application_schemes[@]+"${application_schemes[@]}"}; do
-        for target in ${application_targets[@]+"${application_targets[@]}"}; do
-            if [ "$scheme" = "$target" ]; then
-                matching_schemes+=("$scheme")
-                ((matching_scheme_count += 1))
-            fi
-        done
-    done
-
-    if [ "$matching_scheme_count" -ne 1 ]; then
-        fail "Expected one app scheme named after its application target, found $matching_scheme_count."
-    fi
-
-    APP_SCHEME="${matching_schemes[0]}"
-}
-
-discover_release_targets() {
-    local project_json
-    local target
-    local settings
-    local product_type
-    local target_bundle_identifier
-    local target_marketing_version
-    local target_build
-    local application_targets=()
-    local application_target_count=0
-    local app_settings
-
-    project_json="$(xcodebuild_for_container -list -json)"
-    while IFS= read -r target; do
-        settings="$(release_settings_for_target "$target")"
-        product_type="$(extract_setting "$settings" "PRODUCT_TYPE")"
-        target_bundle_identifier="$(extract_setting "$settings" "PRODUCT_BUNDLE_IDENTIFIER")"
-
-        if [ "$product_type" = "com.apple.product-type.application" ]; then
-            application_targets+=("$target")
-            ((application_target_count += 1))
-            if [ "$target_bundle_identifier" = "$APP_BUNDLE_IDENTIFIER" ]; then
-                APP_TARGET="$target"
-                app_settings="$settings"
-            fi
-        elif [ "$product_type" = "com.apple.product-type.app-extension" ]; then
-            EXTENSION_TARGETS+=("$target")
-            ((EXTENSION_TARGET_COUNT += 1))
-        fi
-    done < <(append_json_values "$project_json" "targets")
-
-    if [ "$application_target_count" -ne 1 ] || [ -z "$APP_TARGET" ]; then
-        fail "Expected exactly one application target matching scheme $APP_SCHEME."
-    fi
-
-    MARKETING_VERSION="$(extract_setting "$app_settings" "MARKETING_VERSION")"
-    CURRENT_BUILD="$(extract_setting "$app_settings" "CURRENT_PROJECT_VERSION")"
-    TEAM_ID="$(extract_setting "$app_settings" "DEVELOPMENT_TEAM")"
-    SIGNING_STYLE="$(extract_setting "$app_settings" "CODE_SIGN_STYLE")"
-    SIGNING_IDENTITY="$(extract_setting "$app_settings" "CODE_SIGN_IDENTITY")"
-
-    [ -n "$MARKETING_VERSION" ] || fail "MARKETING_VERSION is not configured for $APP_TARGET."
-    [[ "$CURRENT_BUILD" =~ ^[0-9]+$ ]] || fail "CURRENT_PROJECT_VERSION must be an integer, found: $CURRENT_BUILD"
-    [ -n "$TEAM_ID" ] || fail "DEVELOPMENT_TEAM is not configured for $APP_TARGET."
-    [ -n "$SIGNING_STYLE" ] || fail "CODE_SIGN_STYLE is not configured for $APP_TARGET."
-
-    for target in ${EXTENSION_TARGETS[@]+"${EXTENSION_TARGETS[@]}"}; do
-        settings="$(release_settings_for_target "$target")"
-        target_marketing_version="$(extract_setting "$settings" "MARKETING_VERSION")"
-        target_build="$(extract_setting "$settings" "CURRENT_PROJECT_VERSION")"
-        target_bundle_identifier="$(extract_setting "$settings" "PRODUCT_BUNDLE_IDENTIFIER")"
-
-        [ "$target_marketing_version" = "$MARKETING_VERSION" ] || fail "Extension $target ($target_bundle_identifier) has MARKETING_VERSION $target_marketing_version, expected $MARKETING_VERSION."
-        [ "$target_build" = "$CURRENT_BUILD" ] || fail "Extension $target ($target_bundle_identifier) has build $target_build, expected $CURRENT_BUILD."
-    done
-
-    NEXT_BUILD=$((10#$CURRENT_BUILD + 1))
-    increment_marketing_version
-    align_with_product_versions
-}
-
-increment_marketing_version() {
-    local version_prefix
-    local version_component
-    local component_width
-    local next_component
-
-    [[ "$MARKETING_VERSION" =~ ^[0-9]+(\.[0-9]+)+$ ]] || fail "MARKETING_VERSION must contain dot-separated numeric components, found: $MARKETING_VERSION"
-
-    version_prefix="${MARKETING_VERSION%.*}"
-    version_component="${MARKETING_VERSION##*.}"
-    component_width=${#version_component}
-    next_component=$((10#$version_component + 1))
-    printf -v next_component "%0${component_width}d" "$next_component"
-    NEXT_MARKETING_VERSION="$version_prefix.$next_component"
-}
-
-# Returns the version, or a non-zero status with a one-line diagnostic the
-# caller reports. This helper runs inside command substitutions where `fail`
-# would be swallowed by the surrounding command, so it never calls it.
-read_product_version() {
-    local file="$1"
-    local version
-
-    [ -s "$file" ] || {
-        printf '%s is missing or empty.\n' "$file" >&2
-        return 1
-    }
-
-    if [[ "$file" == *.json ]]; then
-        version="$(/usr/bin/ruby -rjson -e '
-            begin
-                document = JSON.parse(File.read(ARGV[0]))
-            rescue JSON::ParserError, SystemCallError => error
-                detail = error.message.gsub(/\s+/, " ").strip[0, 200]
-                warn "#{ARGV[0]} is not readable as JSON: #{detail}"
-                exit 1
-            end
-            print document.fetch("version", "")
-        ' "$file")" || return 1
-    else
-        version="$(tr -d '[:space:]' < "$file")" || return 1
-    fi
-
-    [[ "$version" =~ ^[0-9]+(\.[0-9]+)+$ ]] || {
-        printf '%s must hold dot-separated numeric components, found: %s\n' "$file" "$version" >&2
-        return 1
-    }
-
-    printf '%s' "$version"
-}
-
-highest_version() {
-    /usr/bin/ruby -e 'puts ARGV.max_by { |version| Gem::Version.new(version) }' "$@"
-}
-
-# The App Store version, atome and eVe move together. The next release is the
-# highest of the incremented Xcode ledger and both product version files, so a
-# product version bumped by hand is published as is instead of being overtaken.
-align_with_product_versions() {
-    local ledger_version="$NEXT_MARKETING_VERSION"
-    local json_version
-
-    ATOME_VERSION="$(read_product_version "$ATOME_VERSION_FILE")" \
-        || fail "The atome version file is unusable: $ATOME_VERSION_FILE"
-    EVE_VERSION="$(read_product_version "$EVE_VERSION_FILE")" \
-        || fail "The eVe version file is unusable: $EVE_VERSION_FILE"
-    # Read before calling highest_version: a failure inside an argument
-    # substitution is invisible to `set -e`, which is how an emptied
-    # version.json used to pass discovery and only break the version writers.
-    json_version="$(read_product_version "$ATOME_VERSION_JSON_FILE")" \
-        || fail "The version ledger is unusable: $ATOME_VERSION_JSON_FILE is empty or invalid JSON; restore it before releasing."
-
-    NEXT_MARKETING_VERSION="$(highest_version "$ledger_version" "$ATOME_VERSION" "$EVE_VERSION" "$json_version")"
-}
-
-# Written before the archive so the published bundle carries its own version;
-# restored if the release does not complete.
-write_product_version_files() {
-    local file
-    local content
-
-    for file in "$ATOME_VERSION_FILE" "$EVE_VERSION_FILE" "$ATOME_VERSION_JSON_FILE"; do
-        # The sentinel keeps a trailing newline that $(...) would strip.
-        content="$(cat "$file"; printf x)"
-        PRODUCT_VERSION_BACKUPS+=("$file" "${content%x}")
-        if [[ "$file" == *.json ]]; then
-            /usr/bin/ruby -rjson -e '
-                document = JSON.parse(File.read(ARGV[0]))
-                document["version"] = ARGV[1]
-                File.write(ARGV[0], JSON.pretty_generate(document) + "\n")
-            ' "$file" "$NEXT_MARKETING_VERSION"
-        else
-            printf '%s' "$NEXT_MARKETING_VERSION" > "$file"
-        fi
-    done
-}
-
-restore_product_version_files() {
-    local index
-
-    for ((index = 0; index < ${#PRODUCT_VERSION_BACKUPS[@]}; index += 2)); do
-        printf '%s' "${PRODUCT_VERSION_BACKUPS[index + 1]}" > "${PRODUCT_VERSION_BACKUPS[index]}"
-    done
-    PRODUCT_VERSION_BACKUPS=()
-}
+source "$REPO_ROOT/scripts/ios/versions.sh"
 
 validate_environment() {
     CURRENT_STEP="environment validation"
@@ -411,7 +133,8 @@ validate_environment() {
     require_command xcodebuild
     require_command xcrun
     require_command /usr/bin/ruby
-    xcrun --find altool >/dev/null
+    if [ "$CHANNEL" = testflight ]; then xcrun --find altool >/dev/null; fi
+    require_command node
     xcodebuild -version >/dev/null
 }
 
@@ -479,38 +202,6 @@ write_export_options() {
 PLIST
 }
 
-persist_version_ledger() {
-    local minimum_matching_settings=$((1 + EXTENSION_TARGET_COUNT))
-
-    /usr/bin/ruby -e '
-        project_file, current_marketing_version, next_marketing_version, current_build, next_build, minimum_count = ARGV
-        minimum_count = Integer(minimum_count)
-        source = File.binread(project_file)
-        updates = {
-            "MARKETING_VERSION" => [current_marketing_version, next_marketing_version],
-            "CURRENT_PROJECT_VERSION" => [current_build, next_build]
-        }
-
-        updated = source.dup
-        updates.each do |setting, values|
-            current_value, next_value = values
-            expression = /(?<=\b#{Regexp.escape(setting)} = )#{Regexp.escape(current_value)}(?=;)/
-            matches = updated.scan(expression).length
-            abort("Expected at least #{minimum_count} #{setting} settings with value #{current_value}, found #{matches}.") if matches < minimum_count
-            updated.gsub!(expression, next_value)
-        end
-
-        temporary_project_file = "#{project_file}.testflight-#{Process.pid}"
-        begin
-            File.binwrite(temporary_project_file, updated)
-            File.chmod(File.stat(project_file).mode, temporary_project_file)
-            File.rename(temporary_project_file, project_file)
-        ensure
-            File.delete(temporary_project_file) if File.exist?(temporary_project_file)
-        end
-    ' "$VERSION_LEDGER_PROJECT_FILE" "$MARKETING_VERSION" "$NEXT_MARKETING_VERSION" "$CURRENT_BUILD" "$NEXT_BUILD" "$minimum_matching_settings"
-}
-
 print_release_summary() {
     printf '%s\n' "Project: $CONTAINER_PATH"
     printf '%s\n' "Scheme: $APP_SCHEME"
@@ -520,7 +211,7 @@ print_release_summary() {
     printf '%s\n' "Current version: $MARKETING_VERSION"
     printf '%s\n' "atome version: $ATOME_VERSION ($ATOME_VERSION_FILE)"
     printf '%s\n' "eVe version: $EVE_VERSION ($EVE_VERSION_FILE)"
-    printf '%s\n' "New version (App Store, atome, eVe): $NEXT_MARKETING_VERSION"
+    printf '%s\n' "New version (iOS, atome, eVe): $NEXT_MARKETING_VERSION"
     printf '%s\n' "Current build: $CURRENT_BUILD"
     printf '%s\n' "New build: $NEXT_BUILD"
 }
@@ -528,6 +219,9 @@ print_release_summary() {
 parse_arguments() {
     while [ "$#" -gt 0 ]; do
         case "$1" in
+            --adhoc) CHANNEL="adhoc"; DISTRIBUTION_METHOD="release-testing" ;;
+            --prepare) PREPARE_ONLY=true ;;
+            --publish) shift; [ "$#" -gt 0 ] || fail "--publish requires a report"; PUBLISH_REPORT="$1" ;;
             --dry-run) DRY_RUN=true ;;
             --export-compliance) print_export_compliance_guidance; exit 0 ;;
             -h|--help) usage; exit 0 ;;
@@ -539,6 +233,15 @@ parse_arguments() {
 
 main() {
     parse_arguments "$@"
+    if [ "$DRY_RUN" = true ] && { [ "$PREPARE_ONLY" = true ] || [ -n "$PUBLISH_REPORT" ]; }; then
+        fail "--dry-run cannot be combined with --prepare or --publish"
+    fi
+    if [ "$PREPARE_ONLY" = true ] && [ -n "$PUBLISH_REPORT" ]; then fail "Choose --prepare or --publish"; fi
+    if [ "$CHANNEL" = testflight ] && { [ "$PREPARE_ONLY" = true ] || [ -n "$PUBLISH_REPORT" ]; }; then
+        fail "--prepare and --publish require --adhoc"
+    fi
+    if [ "$DRY_RUN" = false ]; then acquire_release_lock; fi
+    if [ -n "$PUBLISH_REPORT" ]; then publish_prepared_release "$PUBLISH_REPORT"; return; fi
     validate_environment
 
     CURRENT_STEP="Xcode project discovery"
@@ -559,13 +262,17 @@ main() {
         printf '%s\n' "Planned version files: atome/version.txt, eVe/version.txt, atome/src/version.json -> $NEXT_MARKETING_VERSION"
         printf '%s\n' "Planned archive: xcodebuild archive ... CURRENT_PROJECT_VERSION=$NEXT_BUILD"
         printf '%s\n' "Planned export method: $DISTRIBUTION_METHOD"
-        printf '%s\n' "Planned uploader: xcrun altool with App Store Connect API-key authentication"
-        printf '%s\n' "A live upload additionally requires one AuthKey_*.p8 private key and the Issuer ID documented by --help."
-        print_export_compliance_guidance
+        if [ "$CHANNEL" = testflight ]; then
+            printf '%s\n' "Planned uploader: xcrun altool with App Store Connect API-key authentication"
+            printf '%s\n' "A live upload additionally requires one AuthKey_*.p8 private key and the Issuer ID documented by --help."
+        else printf '%s\n' "Planned publication: verified SSH transfer and atomic OTA publication, no App Store Connect upload"; fi
+        if [ "$CHANNEL" = adhoc ]; then
+            node "$REPO_ROOT/scripts/ios/signing.mjs" inspect "$TEAM_ID"
+        else print_export_compliance_guidance; fi
         return
     fi
 
-    resolve_upload_credentials
+    if [ "$CHANNEL" = testflight ]; then resolve_upload_credentials; fi
 
     local run_directory
     local archive_path
@@ -573,7 +280,9 @@ main() {
     local export_options_path
     local ipa_path
 
-    run_directory="$(mktemp -d "$REPO_ROOT/temp/testflight.XXXXXX")"
+    if [ "$CHANNEL" = adhoc ]; then
+        run_directory="$(mktemp -d "$REPO_ROOT/temp/ios-adhoc.XXXXXX")"
+    else run_directory="$(mktemp -d "$REPO_ROOT/temp/testflight.XXXXXX")"; fi
     archive_path="$run_directory/Atome-$NEXT_MARKETING_VERSION-$NEXT_BUILD.xcarchive"
     export_path="$run_directory/export"
     export_options_path="$run_directory/ExportOptions.plist"
@@ -593,7 +302,7 @@ main() {
         "CURRENT_PROJECT_VERSION=$NEXT_BUILD" \
         archive
 
-    CURRENT_STEP="App Store Connect export"
+    CURRENT_STEP="iOS $CHANNEL export"
     xcodebuild -exportArchive \
         -allowProvisioningUpdates \
         -archivePath "$archive_path" \
@@ -602,6 +311,11 @@ main() {
 
     ipa_path="$(find "$export_path" -maxdepth 1 -type f -name '*.ipa' -print -quit)"
     [ -n "$ipa_path" ] || fail "The export completed without producing an IPA."
+
+    if [ "$CHANNEL" = adhoc ]; then
+        finish_adhoc_release "$run_directory" "$ipa_path"
+        return
+    fi
 
     CURRENT_STEP="App Store Connect upload"
     xcrun altool --upload-app \
@@ -624,5 +338,7 @@ main() {
     printf '\n%s\n' "Build $NEXT_BUILD was sent to App Store Connect. It should appear in TestFlight after Apple processing."
     print_export_compliance_guidance
 }
+
+source "$REPO_ROOT/scripts/ios/adhoc.sh"
 
 main "$@"

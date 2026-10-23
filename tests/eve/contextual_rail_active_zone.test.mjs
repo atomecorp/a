@@ -246,12 +246,11 @@ test('the lit-tool registry reads and stops each tool through its own owner', as
 });
 
 
-test('the rail pins what is lit in activation order, drops the level entry and pulses each case', async () => {
+test('the rail never moves a tool: Play holds the base, a lit tool stays in place and glows (2026-10-23)', async () => {
     const records = [{ id: 'shape', type: 'image', project_id: 'project',
         properties: { kind: 'image', left: 10, top: 10, width: 120, height: 80 } }];
     const scene = { project_id: 'project', records, scene: { byId: new Map() } };
     const rendered = [];
-    const motions = [];
     const invocations = [];
     const lit = { play: false, record: false, create: true };
     const runtime = createAtomeContextualEditRuntime({ readMenuAccess,
@@ -269,62 +268,55 @@ test('the rail pins what is lit in activation order, drops the level entry and p
             mountTree: async ({ tree }) => rendered.push(tree),
             updateTree: async ({ tree }) => rendered.push(tree),
             unmountTree: async () => null,
-            updateTreeMotion: ({ updates }) => { motions.push(updates.map((update) => update.nodeId)); }
+            updateTreeMotion: () => null
         }),
         findSceneByAtomeId: (id) => records.some((record) => record.id === id) ? scene : null,
         readMainMenuHeight: () => ITEM_SIZE
     });
     const flushPulse = () => new Promise((resolve) => setTimeout(resolve, 0));
+    const positions = (tree) => Object.fromEntries(['info', 'create', 'play', 'record_action'].map((key) => {
+        const id = `atome_contextual_tool_${key}`;
+        const node = findNode(tree.root, id);
+        const offset = levelIds(tree).has(id) ? railOf(tree).style.position[1] : 0;
+        return [key, node.style.position[1] + offset];
+    }));
     assert.equal(runtime.enter({ atomeId: 'shape', kind: 'image', contextLevel: 'edition', record: records[0] }).ok, true);
 
     await runtime.render();
-    assert.deepEqual(pinnedIds(rendered.at(-1)), [], 'nothing is lit yet');
-    assert.equal(levelIds(rendered.at(-1)).has('atome_contextual_tool_play'), true);
-    assert.equal(levelIds(rendered.at(-1)).has('atome_contextual_tool_create'), true);
+    let tree = rendered.at(-1);
+    const idle = positions(tree);
+    assert.deepEqual(pinnedIds(tree), ['atome_contextual_tool_play'], 'Play holds the base, idle');
+    assert.ok(Object.entries(idle).every(([key, y]) => key === 'play' || y < idle.play), 'Play is the case closest to Atome');
+    assert.deepEqual(glowingIds(tree), [], 'an idle base does not glow');
 
     lit.play = true;
     await runtime.render();
     await flushPulse();
-    let tree = rendered.at(-1);
-    assert.deepEqual(pinnedIds(tree), ['atome_contextual_tool_play']);
-    assert.equal(levelIds(tree).has('atome_contextual_tool_play'), false, 'the moved tool leaves the level');
+    tree = rendered.at(-1);
+    assert.deepEqual(positions(tree), idle, 'Play turning into Stop moves nothing');
     assert.equal(JSON.stringify(findNode(tree.root, 'atome_contextual_tool_play')).includes('Stop'), true);
     assert.deepEqual(glowingIds(tree), ['atome_contextual_tool_play'],
-        'the pinned case glows; the Create palette lit by its locked Text never does');
+        'the base glows; the Create palette lit by its locked Text never does');
     findNode(tree.root, 'atome_contextual_tool_play').on.activate();
     await flushPulse();
     assert.equal(invocations.at(-1).key, 'play');
-    assert.equal(invocations.at(-1).active, true, 'the pinned case hands the lit definition to the rail invocation path');
+    assert.equal(invocations.at(-1).active, true, 'the base hands the lit definition to the rail invocation path');
 
     lit.record = true;
     await runtime.render();
     await flushPulse();
     tree = rendered.at(-1);
-    assert.deepEqual(pinnedIds(tree), ['atome_contextual_tool_play', 'atome_contextual_tool_record_action']);
-    assert.ok(findNode(tree.root, 'atome_contextual_tool_play').style.position[1]
-        > findNode(tree.root, 'atome_contextual_tool_record_action').style.position[1],
-    'the first tool activated stays the closest to the Atome handle');
+    assert.deepEqual(positions(tree), idle, 'a record lit in the level stays in its place');
+    assert.equal(levelIds(tree).has('atome_contextual_tool_record_action'), true);
     assert.deepEqual(glowingIds(tree), ['atome_contextual_tool_play', 'atome_contextual_tool_record_action']);
-    assert.equal(levelIds(tree).has('atome_contextual_tool_create'), true, 'the palette keeps its own level place');
 
     lit.play = false;
-    await runtime.render();
-    await flushPulse();
-    tree = rendered.at(-1);
-    assert.deepEqual(pinnedIds(tree), ['atome_contextual_tool_record_action']);
-    assert.ok(glowingIds(tree).includes('atome_contextual_tool_record_action') && !glowingIds(tree).includes('atome_contextual_tool_create'),
-        'the remaining engaged tool keeps its halo; the palette still never glows');
-    assert.ok(glowingIds(tree).every((id) => id !== 'atome_contextual_tool_play'
-        || findNode(tree.root, `${id}_glow`).style.opacity < 1), 'the stopped case only fades out');
-
     lit.record = false;
     lit.create = false;
     await runtime.render();
     await flushPulse();
     tree = rendered.at(-1);
-    assert.deepEqual(pinnedIds(tree), [], 'the rail stack returns to its ordinary level');
-    assert.equal(levelIds(tree).has('atome_contextual_tool_play'), true);
-    assert.equal(levelIds(tree).has('atome_contextual_tool_record_action'), true);
+    assert.deepEqual(positions(tree), idle, 'stopping everything moves nothing either');
     assert.ok(glowingIds(tree).every((id) => findNode(tree.root, `${id}_glow`).style.opacity < 1),
         'what is still drawn only fades out');
     runtime.destroy?.();

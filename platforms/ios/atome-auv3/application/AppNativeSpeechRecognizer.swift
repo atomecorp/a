@@ -8,13 +8,10 @@ import Speech
 /// holds the microphone in voice-processing mode, which lowers every sound this app
 /// plays (eVe's voice) by about 12 dB, and stays deaf for a while after it restarts.
 ///
-/// One listening keeps the microphone open. A recognition request runs while eVe is
-/// silent: a sentence is the words heard since the previous one, ended by a second
-/// without a new word. When she speaks the request's audio is closed and it finishes
-/// with what it heard; the next one opens when she stops, once the previous has
-/// finished. (The on-device recognizer runs one request at a time: a request opened
-/// while another finishes hears nothing for about twenty seconds, and a request whose
-/// audio pauses for her sentences stops transcribing after the pause.)
+/// One listening keeps the microphone open: a sentence is the words heard since the
+/// previous one, ended by a second without a new word. A finished request is followed
+/// by the next once it has finished. (The on-device recognizer runs one request at a
+/// time: a request opened while another finishes hears nothing for about twenty seconds.)
 final class AppNativeSpeechRecognizer {
     static let shared = AppNativeSpeechRecognizer()
     static func canHandle(_ command: String) -> Bool { command.hasPrefix(prefix) }
@@ -32,11 +29,9 @@ final class AppNativeSpeechRecognizer {
 
     private let queue = DispatchQueue(label: "atome.app.speech")
     private let engine = AVAudioEngine()
-    /// The request the input tap feeds (none while eVe speaks) and whether she speaks
-    /// (muted); both read by the input thread.
+    /// The request the input tap feeds, read by the input thread.
     private let requestLock = NSLock()
     private var request: SFSpeechAudioBufferRecognitionRequest?
-    private var muted = false
     /// The running request's task, until it has finished (its audio may already be closed).
     private var task: SFSpeechRecognitionTask?
     private var recognizer: SFSpeechRecognizer?
@@ -50,8 +45,7 @@ final class AppNativeSpeechRecognizer {
     /// Phrases this listening expects (the commands it can act on): favoured by the recognizer.
     private var contextualStrings: [String] = []
     /// On-device when asked (no network; answers at once). Apple's server recognizer
-    /// hears some isolated words better, but holds its answers back for tens of
-    /// seconds in a conversation that pauses while eVe speaks.
+    /// hears some isolated words better, but can hold its answers back for tens of seconds.
     private var onDevice = false
     private var sentenceEnd: DispatchWorkItem?
     private var lastLevelAt: TimeInterval = 0
@@ -71,9 +65,6 @@ final class AppNativeSpeechRecognizer {
             requestPermissions { self.queue.async { self.start(config, completion) } }
         case "stop_listening":
             queue.async { self.stop(); completion(["stopped": true], nil) }
-        case "set_muted":
-            let muted = payload["muted"] as? Bool == true
-            queue.async { self.setMuted(muted); completion(["muted": muted], nil) }
         default:
             completion(["success": false], "unsupported_stt_command")
         }
@@ -135,7 +126,6 @@ final class AppNativeSpeechRecognizer {
             return
         }
         listening = true
-        requestLock.lock(); muted = false; requestLock.unlock()
         beginRecognition()
         emit("plugin:stt:stateChange", ["state": "listening"])
         completion(["started": true], nil)
@@ -186,30 +176,19 @@ final class AppNativeSpeechRecognizer {
         stop()
     }
 
-    /// While eVe speaks the microphone stays open but feeds no request: hers is closed,
-    /// and the next opens when she stops (or when the closed one has finished).
-    private func setMuted(_ next: Bool) {
-        guard listening else { return }
-        requestLock.lock(); let changed = muted != next; muted = next; requestLock.unlock()
-        AppNativeAudioDiagnostics.log("speech muted=\(next)")
-        guard changed else { return }
-        if next { closeRequest() } else if task == nil { beginRecognition() }
-    }
-
     /// Closes the running request's audio: it finishes with what it heard (`requestFinished`).
     private func closeRequest() {
         sentenceEnd?.cancel(); sentenceEnd = nil
         requestLock.lock(); request?.endAudio(); request = nil; requestLock.unlock()
     }
 
-    /// The request ended: its last words make a sentence, and the next request opens
-    /// now, or when eVe stops speaking.
+    /// The request ended: its last words make a sentence, and the next request opens.
     private func requestFinished() {
         endSentence()
         guard listening else { return }
         task = nil
         requestLock.lock(); request = nil; requestLock.unlock()
-        if !muted { beginRecognition() }
+        beginRecognition()
     }
 
     private func scheduleSentenceEnd() {
@@ -254,10 +233,9 @@ final class AppNativeSpeechRecognizer {
         audio.queue.async { audio.releaseAudioSessionConsumer(Self.consumerId) }
     }
 
-    /// Input thread: feeds the running request and measures the level (neither while muted).
+    /// Input thread: feeds the running request and measures the level.
     private func receive(_ buffer: AVAudioPCMBuffer) {
-        requestLock.lock(); let current = request, silent = muted; requestLock.unlock()
-        guard !silent else { return }
+        requestLock.lock(); let current = request; requestLock.unlock()
         current?.append(buffer)
         guard let samples = buffer.floatChannelData?[0], buffer.frameLength > 0 else { return }
         let count = Int(buffer.frameLength)

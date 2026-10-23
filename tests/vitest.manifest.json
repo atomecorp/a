@@ -393,6 +393,7 @@
   "tests/governance/map_paths_guard.test.mjs",
   "tests/governance/master_cleanup_governance.test.mjs",
   "tests/governance/vitest_manifest_guard.test.mjs",
+  "tests/ios/ota_distribution.test.mjs",
   "tests/music/authorization.test.mjs",
   "tests/music/contracts_ui.test.mjs",
   "tests/music/server.test.mjs",

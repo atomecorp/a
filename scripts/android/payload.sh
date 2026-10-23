@@ -32,11 +32,14 @@ ensure_android_webroot() {
     fi
   done < <(android_webroot_sources)
 
+  # The browser's archive of the Vosk model: the app reads the unpacked model (native voice engine).
+  local -a payload_excludes=(--exclude 'assets/voice/vosk/*.tar.gz')
+
   local source destination
   while IFS='|' read -r source destination; do
     [[ -d "$source" ]] || fail "Missing web root source directory: $source"
     run_cmd mkdir -p "$ANDROID_WEBROOT/$destination"
-    run_cmd rsync -a --delete --exclude '.DS_Store' "${sibling_excludes[@]}" \
+    run_cmd rsync -a --delete --exclude '.DS_Store' "${payload_excludes[@]}" "${sibling_excludes[@]}" \
       "$source/" "$ANDROID_WEBROOT/$destination/"
     ok "staged $source -> $(basename "$ANDROID_WEBROOT")/$destination"
   done < <(android_webroot_sources)

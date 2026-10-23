@@ -5,6 +5,7 @@
 
 mod mix;
 mod scheduled_backend;
+mod voice;
 
 use scheduled_backend::ScheduledContextBackend;
 use atome_mix_graph::voice::{ScheduledVoice, VoiceRequest, VoiceSound};

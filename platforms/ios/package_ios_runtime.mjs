@@ -48,6 +48,8 @@ const SKIP_RUNTIME_PATHS = new Set([
     'src/assets/videos/JeezsFire.mp4',
     'src/assets/videos/WhatsApp Video 2026-04-28 at 21.27.38.mp4',
     'src/assets/videos/video_1787217554069.mp4',
+    // The browser's copy of the Vosk model (vosk-browser loads archives); the app reads the unpacked one.
+    'src/assets/voice/vosk/vosk-model-small-fr-0.22.tar.gz',
     'src/wasm/squirrel_bevy_renderer_bg.wasm.br',
     'src/wasm/squirrel_bevy_renderer_bg.wasm.gz'
 ]);

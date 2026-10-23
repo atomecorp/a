@@ -1,0 +1,8 @@
+[package]
+name = "atome-voice-turns"
+version = "0.1.0"
+edition = "2021"
+description = "Who speaks to the device, and when a phrase starts and ends: the turn logic of the voice engine, shared by the native engine (atome-audio-engine `voice`) and the browser WASM (squirrel-audio-wasm)"
+
+[lib]
+path = "src/lib.rs"

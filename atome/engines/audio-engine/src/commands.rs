@@ -233,6 +233,12 @@ struct Args {
     input_device_name: Option<String>,
     end_frame: u64,
     release_frames: u64,
+    models_root: String,
+    own_capture: bool,
+    phrases: Vec<String>,
+    speaking: bool,
+    listening: String,
+    verifier: Option<String>,
 }
 
 // Every command by name, with the JSON arguments the JS side sends.
@@ -269,6 +275,20 @@ pub fn dispatch(name: &str, args: &Value, project_root: Option<&Path>) -> Result
         "wake_start" => wake_capture::start(parsed.sample_rate),
         "wake_stop" => wake_capture::stop(),
         "wake_read" => wake_capture::read(),
+        #[cfg(feature = "voice")]
+        "voice_start" => crate::voice::session::start(&resolve_path(project_root, &parsed.models_root)?, parsed.own_capture),
+        #[cfg(feature = "voice")]
+        "voice_stop" => crate::voice::session::stop(),
+        #[cfg(feature = "voice")]
+        "voice_set_phrases" => crate::voice::session::set_phrases(parsed.phrases),
+        #[cfg(feature = "voice")]
+        "voice_set_speaking" => crate::voice::session::set_speaking(parsed.speaking),
+        #[cfg(feature = "voice")]
+        "voice_set_listening" => crate::voice::session::set_listening(&parsed.listening),
+        #[cfg(feature = "voice")]
+        "voice_set_wake_verifier" => crate::voice::session::set_wake_verifier(parsed.verifier),
+        #[cfg(feature = "voice")]
+        "voice_read" => crate::voice::session::read(),
         other => Err(format!("audio_command_unknown:{other}")),
     }
 }

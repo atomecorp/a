@@ -19,7 +19,14 @@ export function resolveBillingStore(env = globalThis) {
 
 const failure = (code) => Object.assign(new Error(code), { code });
 
-export function createStorePurchase({ host = resolveBillingStore() } = {}) {
+// User decision 2026-10-23: the App Store and Play paid-apps agreements are not
+// active yet, so the store hosts keep their in-app screen but the creation
+// payment is simulated with the store's own wallet method (no store sheet).
+// Set to true once the store catalogues can sell.
+export const BILLING_STORE_PURCHASE_LIVE = false;
+const STORE_SIMULATED_METHOD = Object.freeze({ apple: 'apple_pay', google: 'google_pay' });
+
+export function createStorePurchase({ host = resolveBillingStore(), live = BILLING_STORE_PURCHASE_LIVE } = {}) {
     async function buy(productId, keyId) {
         if (!host) throw failure('billing_store_unavailable');
         let reply;
@@ -40,6 +47,7 @@ export function createStorePurchase({ host = resolveBillingStore() } = {}) {
         async creationPayment(payment, keyId) {
             if (!payment?.store) return { method: payment?.method };
             if (payment.store !== host?.store) throw failure('billing_store_unavailable');
+            if (!live) return { method: STORE_SIMULATED_METHOD[payment.store] };
             return { store: payment.store, proof: await buy(BILLING_PLANS[0].productId, keyId) };
         }
     };

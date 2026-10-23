@@ -97,16 +97,18 @@ pub fn stop() -> Result<Value, String> {
     Ok(json!({"active":false}))
 }
 
-pub fn read() -> Result<Value, String> {
+/// The PCM captured since the last call and whether it overran; None when no capture runs.
+pub(crate) fn take_samples() -> Result<Option<(Vec<i16>, bool)>, String> {
     let owner = CAPTURE.lock().map_err(|_| "wake_capture_failed")?;
-    match owner.as_ref() {
+    let Some(capture) = owner.as_ref() else { return Ok(None) };
+    let mut pcm = capture.pcm.lock().map_err(|_| "wake_capture_failed")?;
+    if pcm.failed { return Err("wake_capture_failed".into()); }
+    Ok(Some((std::mem::take(&mut pcm.samples), std::mem::take(&mut pcm.overrun))))
+}
+
+pub fn read() -> Result<Value, String> {
+    match take_samples()? {
         None => Ok(json!({"active":false,"samples":[],"busy":!FOREGROUND.load(Ordering::SeqCst) || super::recorder::has_active_sessions()})),
-        Some(capture) => {
-            let mut pcm = capture.pcm.lock().map_err(|_| "wake_capture_failed")?;
-            if pcm.failed { return Err("wake_capture_failed".into()); }
-            let samples = std::mem::take(&mut pcm.samples);
-            let overrun = std::mem::take(&mut pcm.overrun);
-            Ok(json!({"active":true,"samples":samples,"overrun":overrun}))
-        }
+        Some((samples, overrun)) => Ok(json!({"active":true,"samples":samples,"overrun":overrun})),
     }
 }

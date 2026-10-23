@@ -221,10 +221,6 @@ export const createGlobalVoiceApi = ({
             const service = await ensureReady();
             return service.stt.cancel(sessionId);
         },
-        async muteListening(sessionId, muted) {
-            const service = await ensureReady();
-            return service.stt.mute(sessionId, muted);
-        },
         async speak(text, options = {}) {
             const service = await ensureReady();
             return service.tts.speak(text, options);

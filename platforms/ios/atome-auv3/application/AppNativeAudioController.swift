@@ -23,6 +23,7 @@ final class AppNativeAudioController: NSObject, @unchecked Sendable {
     var wakeCaptureFailed = false
     var wakeCaptureInterrupted = false
     var wakeCaptureBackground = false
+    var voicePump: DispatchSourceTimer?
     var activeRecordingSessionId: String?
     var activeRecordingFileName: String?
     var activeRecordingPath: String?

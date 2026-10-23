@@ -6,7 +6,7 @@ import { SHOPPING_PRODUCT_SOURCES } from '../../shared/shopping_list_contract.js
 // The verdict is eVe's open assessment (food_health_assessment.js), never the Yuka score.
 export const FOOD_ERRORS = Object.freeze(['INVALID_ARGUMENT', 'NOT_CONFIGURED', 'RATE_LIMITED', 'PRODUCT_NOT_FOUND',
     'PROVIDER_UNAVAILABLE', 'ITEM_NOT_FOUND', 'AUTH_REQUIRED', 'VERSION_CONFLICT', 'CONTEXT_CHANGED', 'COMMIT_FAILED',
-    'HOST_UNSUPPORTED', 'PERMISSION_DENIED', 'CANCELLED']);
+    'HOST_UNSUPPORTED', 'PERMISSION_DENIED', 'CANCELLED', 'NO_BARCODE']);
 
 const barcode = { type: 'string', pattern: '^[0-9]{8,14}$' };
 const source = { type: 'string', enum: SHOPPING_PRODUCT_SOURCES };

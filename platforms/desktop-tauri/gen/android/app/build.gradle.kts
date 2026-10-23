@@ -71,6 +71,12 @@ android {
     kotlinOptions {
         jvmTarget = "1.8"
     }
+    // libvosk.so of the native voice engine (platforms/desktop-tauri/native/lib/android/<abi>).
+    sourceSets {
+        getByName("main") {
+            jniLibs.srcDir("../../../native/lib/android")
+        }
+    }
     buildFeatures {
         buildConfig = true
     }

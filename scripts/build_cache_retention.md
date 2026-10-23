@@ -35,6 +35,9 @@ Retention keeps:
   select its existing dev profile.
 - The latest complete TestFlight export, with its archive, symbols and IPA.
   The generator now uses normal Xcode DerivedData rather than a new cache per run.
+- Independently, the latest complete `ios-adhoc.*` export. A release awaiting
+  publication retains its `.retain` marker until publication and version
+  reconciliation finish; pending reports are not removed by convergence.
 
 Deletion is restricted to standalone `deps/*.rcgu.o`, old copied Rust targets
 in desktop staging, the obsolete desktop profile/bundle, Android compiler

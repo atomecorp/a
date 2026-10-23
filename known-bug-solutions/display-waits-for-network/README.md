@@ -36,6 +36,22 @@ first touch after launch took ~1 s before the grid moved.
 - Tool catalogue refresh: slices of 6, unchanged entries skipped (`TOOL_CANONICAL_PERSISTED`,
   `TOOL_CATALOG_RECORD_VERSIONS`).
 
+## Follow-up 2026-10-23: the network answer arrived but the Mystic level never showed it
+
+Symptom: a lazy Mystic level (« Mes vidéos », « Mes sons ») kept its first (local) answer forever,
+although `update(children)` was called with the server's list.
+
+Cause (`eVe/intuition/ribbon/bevy_ui_mystic_activation.js`): `refreshChildren` compared the surface
+epoch captured BEFORE the level opened; the level's own opening turn renders animated and bumps
+`state.surfaceEpoch`, so every later refresh was dropped. Second cause: the post-opening
+`stale.then(children => …)` delivered the first read's (older) answer after a network refresh had
+already landed, overwriting it.
+
+Fix: `refreshChildren(item, children, context)` checks the level on top, the context and the phase
+(a running turn is waited for), no epoch; after opening, the level shows `item.children` (the
+latest), never the first read's value. Probe `temp/media_library/library_fix.probe.mjs`
+(« Mes vidéos opens at once and lists the stored video »).
+
 ## Regression check
 
 - Mechanism: `node temp/offline_panels_2026-10-21/local_first.probe.mjs` (21 checks, real modules,

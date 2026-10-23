@@ -127,17 +127,21 @@ export function planBuildCleanup({ root = projectRoot,
         }
     }
 
-    const jobs = entries(temp).filter(entry => entry.isDirectory() && /^testflight\.[A-Za-z0-9]+$/.test(entry.name))
+    const jobs = entries(temp).filter(entry => entry.isDirectory() && /^(testflight|ios-adhoc)\.[A-Za-z0-9]+$/.test(entry.name))
         .map(entry => path.join(temp, entry.name));
+    const pendingJobs = jobs.filter(job => info(path.join(job, '.retain'))?.isFile());
+    kept.push(...pendingJobs);
     const completeJobs = jobs.map(job => {
         const archive = entries(job).find(entry => entry.isDirectory() && entry.name.endsWith('.xcarchive')
             && info(path.join(job, entry.name, 'Info.plist'))?.isFile());
         const ipa = entries(path.join(job, 'export')).find(entry => entry.isFile() && entry.name.endsWith('.ipa'));
         return archive && ipa ? { job, time: modified(path.join(job, 'export', ipa.name)) } : null;
     }).filter(Boolean).sort((a, b) => b.time - a.time || a.job.localeCompare(b.job));
-    if (completeJobs[0]) kept.push(completeJobs[0].job);
+    const latest = ['testflight.', 'ios-adhoc.'].map(prefix => completeJobs.find(item => path.basename(item.job).startsWith(prefix))?.job).filter(Boolean);
+    kept.push(...latest);
     for (const job of jobs) {
-        if (job !== completeJobs[0]?.job) add(job, 'obsolete-testflight-run');
+        if (pendingJobs.includes(job)) continue;
+        if (!latest.includes(job)) add(job, path.basename(job).startsWith('testflight.') ? 'obsolete-testflight-run' : 'obsolete-adhoc-run');
         else add(path.join(job, 'DerivedData'), 'per-run-xcode-cache');
     }
     const inspectTemporaryCache = (cache, depth) => {
@@ -147,7 +151,7 @@ export function planBuildCleanup({ root = projectRoot,
         }
         if (depth === 0) return;
         for (const entry of entries(cache)) {
-            if (!entry.isDirectory() || entry.name.startsWith('.') || entry.name.startsWith('testflight.')
+            if (!entry.isDirectory() || entry.name.startsWith('.') || entry.name.startsWith('testflight.') || entry.name.startsWith('ios-adhoc.')
                 || ['target', 'node_modules', 'android-sdk', 'android-avd', 'platforms', 'atome', 'eVe'].includes(entry.name)) continue;
             inspectTemporaryCache(path.join(cache, entry.name), depth - 1);
         }

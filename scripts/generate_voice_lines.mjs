@@ -1,5 +1,5 @@
 // Renders every sentence eVe speaks on her own (startup, ready, assistant,
-// voice-activation and first-launch guide messages) with the shipped Siwis voice, so the
+// voice-activation, first-launch guide and pairing request messages) with the shipped Siwis voice, so the
 // app plays them without running a second ONNX engine next to the wake
 // detector. `--check` prints the phonemes only; review them after any text change.
 // `--missing` renders only the sentences the index lacks and keeps every other line
@@ -32,7 +32,7 @@ const spokenTexts = () => {
         ...eveTList('eve.voice.assistant.ready_lines.direct'),
         ...byPrefix('eve.voice.assistant.error.'),
         ...byPrefix('eve.voice.wake.error.'),
-        ...byPrefix('eve.first_launch.voice.'),
+        ...byPrefix('eve.first_launch.voice.'), eveT('eve.auth.pair_request_said'),
         enroll('intro', { takes }),
         ...Array.from({ length: takes }, (_, take) => [enroll('say', { take: take + 1, takes }), enroll('repeat', { take: take + 1, takes })]).flat(),
         enroll('speak_freely', { seconds: FREE_SPEECH_MS / 1000 }), enroll('silence', { seconds: AMBIENT_MS / 1000 }),

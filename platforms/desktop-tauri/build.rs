@@ -68,6 +68,14 @@ fn main() {
         // SIGSEGV at `getauxval+28` from `init_have_lse_atomics`, before the
         // WebView is ever shown.
         println!("cargo:rustc-link-arg=-lc++_shared");
+
+        // The voice engine links libvosk.so: the official vosk-android 0.3.75 build (com.alphacephei,
+        // Maven Central), vendored per ABI; gen/android/app/build.gradle.kts packages the same directory.
+        let abi = match std::env::var("CARGO_CFG_TARGET_ARCH").as_deref() { Ok("aarch64") => "arm64-v8a", Ok("x86_64") => "x86_64", _ => "" };
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
+        let vosk_dir = std::path::Path::new(&manifest_dir).join("native").join("lib").join("android").join(abi);
+        println!("cargo:rerun-if-changed={}", vosk_dir.join("libvosk.so").display());
+        println!("cargo:rustc-link-search=native={}", vosk_dir.display());
     }
 
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {

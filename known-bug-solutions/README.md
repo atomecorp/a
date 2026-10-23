@@ -11,6 +11,8 @@ the established solution before attempting a new implementation.
 | Symptom | Folder |
 | --- | --- |
 | Visio: own tile (or a WebKit correspondent) upside down / sideways on iOS | [webkit-camera-rotation-ignored-by-webgpu](webkit-camera-rotation-ignored-by-webgpu/README.md) |
+| List in Simultaneous mode or Timeline: sound plays but the preview shows no video; no crossfade between videos; Timeline tracks stop after the first clip | [multitrack-preview-without-video](multitrack-preview-without-video/README.md) |
+| Monitor (capteurs) list: several sensors ticked by one touch, an unticked one comes back, rows blink | [monitor-list-ghost-selection-and-blink](monitor-list-ghost-selection-and-blink/README.md) |
 | A panel or home level is empty / « Chargement… » offline or with a silent network; iOS first touch slow | [display-waits-for-network](display-waits-for-network/README.md) |
 | Android app (Firebase build) stays on a white screen after the splash; or a blank page where WebGPU has no adapter | [android-white-screen-at-launch](android-white-screen-at-launch/README.md) |
 | iOS guest back on the access screen after relaunch; « Mieux dormir » / « Dashboard eVe » duplicated at each « Commencer » | [guest-session-erased-by-preview-frame](guest-session-erased-by-preview-frame/README.md) |

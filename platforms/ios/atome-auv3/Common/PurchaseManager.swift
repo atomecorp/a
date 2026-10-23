@@ -51,8 +51,19 @@ final class PurchaseManager {
                     completion(nil, "billing_store_failed")
                 }
             } catch {
-                completion(nil, "billing_store_failed")
+                completion(nil, PurchaseManager.failureCode(error))
             }
+        }
+    }
+
+    // The page names the store's own cause instead of a generic failure.
+    private static func failureCode(_ error: Error) -> String {
+        switch error {
+        case StoreKitError.userCancelled: return "billing_purchase_cancelled"
+        case StoreKitError.networkError: return "billing_store_unreachable"
+        case StoreKitError.notAvailableInStorefront, Product.PurchaseError.productUnavailable: return "billing_product_unknown"
+        case Product.PurchaseError.purchaseNotAllowed: return "billing_purchase_not_allowed"
+        default: return "billing_store_failed"
         }
     }
 }

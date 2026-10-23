@@ -99,6 +99,22 @@ test('shutdown preserves newest complete distribution and the one canonical Xcod
     expect(f.exists('temp/health-authorization/simulator')).toBe(false);
 });
 
+test('Ad Hoc retention preserves its newest export, pending reports and the TestFlight export', () => {
+    const f = fixture();
+    for (const name of ['testflight.latest', 'ios-adhoc.old', 'ios-adhoc.latest']) {
+        f.put(`temp/${name}/Atome.xcarchive/Info.plist`);
+        const ipa = f.put(`temp/${name}/export/atome.ipa`);
+        fs.utimesSync(ipa, 100, name.endsWith('old') ? 100 : 200);
+    }
+    f.put('temp/ios-adhoc.pending/.retain');
+    f.put('temp/ios-adhoc.pending/release.json');
+    cleanBuildCaches({ ...f.options, apply: true });
+    expect(f.exists('temp/testflight.latest/export/atome.ipa')).toBe(true);
+    expect(f.exists('temp/ios-adhoc.latest/export/atome.ipa')).toBe(true);
+    expect(f.exists('temp/ios-adhoc.pending/release.json')).toBe(true);
+    expect(f.exists('temp/ios-adhoc.old')).toBe(false);
+});
+
 test('obsolete Tauri profile is removed only after choosing the newest bundle', () => {
     const f = fixture();
     for (const name of ['debug', 'release']) {

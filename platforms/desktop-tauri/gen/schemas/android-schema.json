@@ -351,10 +351,10 @@
           "markdownDescription": "Lets the main webview take the assistant request opened by the atome://assistant link.\n#### This permission set includes:\n\n- `allow-assistant-request-take`"
         },
         {
-          "description": "Allows the main webview to use the native Kira audio engine commands.\n#### This permission set includes:\n\n- `allow-audio-init`\n- `allow-audio-load-clip`\n- `allow-audio-load-clip-from-bytes`\n- `allow-audio-has-clip`\n- `allow-audio-play`\n- `allow-audio-play-instance`\n- `allow-audio-schedule-instances`\n- `allow-audio-measure-input-latency`\n- `allow-audio-render-clock`\n- `allow-audio-mix-apply`\n- `allow-audio-mix-levels`\n- `allow-audio-mix-devices`\n- `allow-audio-mix-cut-tail`\n- `allow-audio-mix-module-state`\n- `allow-audio-stop`\n- `allow-audio-stop-instance`\n- `allow-audio-set-voice-end`\n- `allow-audio-destroy-clip`\n- `allow-audio-set-volume`\n- `allow-audio-set-pan`\n- `allow-audio-set-playback-rate`\n- `allow-audio-wake-start`\n- `allow-audio-wake-stop`\n- `allow-audio-wake-read`\n- `allow-audio-record-start`\n- `allow-audio-record-stop`\n- `allow-audio-get-levels`\n- `allow-audio-get-scope`\n- `allow-audio-shutdown`",
+          "description": "Allows the main webview to use the native Kira audio engine commands.\n#### This permission set includes:\n\n- `allow-audio-init`\n- `allow-audio-load-clip`\n- `allow-audio-load-clip-from-bytes`\n- `allow-audio-has-clip`\n- `allow-audio-play`\n- `allow-audio-play-instance`\n- `allow-audio-schedule-instances`\n- `allow-audio-measure-input-latency`\n- `allow-audio-render-clock`\n- `allow-audio-mix-apply`\n- `allow-audio-mix-levels`\n- `allow-audio-mix-devices`\n- `allow-audio-mix-cut-tail`\n- `allow-audio-mix-module-state`\n- `allow-audio-stop`\n- `allow-audio-stop-instance`\n- `allow-audio-set-voice-end`\n- `allow-audio-destroy-clip`\n- `allow-audio-set-volume`\n- `allow-audio-set-pan`\n- `allow-audio-set-playback-rate`\n- `allow-audio-wake-start`\n- `allow-audio-wake-stop`\n- `allow-audio-wake-read`\n- `allow-audio-voice-start`\n- `allow-audio-voice-stop`\n- `allow-audio-voice-set-phrases`\n- `allow-audio-voice-set-speaking`\n- `allow-audio-voice-set-listening`\n- `allow-audio-voice-set-wake-verifier`\n- `allow-audio-voice-read`\n- `allow-audio-record-start`\n- `allow-audio-record-stop`\n- `allow-audio-get-levels`\n- `allow-audio-get-scope`\n- `allow-audio-shutdown`",
           "type": "string",
           "const": "audio-engine",
-          "markdownDescription": "Allows the main webview to use the native Kira audio engine commands.\n#### This permission set includes:\n\n- `allow-audio-init`\n- `allow-audio-load-clip`\n- `allow-audio-load-clip-from-bytes`\n- `allow-audio-has-clip`\n- `allow-audio-play`\n- `allow-audio-play-instance`\n- `allow-audio-schedule-instances`\n- `allow-audio-measure-input-latency`\n- `allow-audio-render-clock`\n- `allow-audio-mix-apply`\n- `allow-audio-mix-levels`\n- `allow-audio-mix-devices`\n- `allow-audio-mix-cut-tail`\n- `allow-audio-mix-module-state`\n- `allow-audio-stop`\n- `allow-audio-stop-instance`\n- `allow-audio-set-voice-end`\n- `allow-audio-destroy-clip`\n- `allow-audio-set-volume`\n- `allow-audio-set-pan`\n- `allow-audio-set-playback-rate`\n- `allow-audio-wake-start`\n- `allow-audio-wake-stop`\n- `allow-audio-wake-read`\n- `allow-audio-record-start`\n- `allow-audio-record-stop`\n- `allow-audio-get-levels`\n- `allow-audio-get-scope`\n- `allow-audio-shutdown`"
+          "markdownDescription": "Allows the main webview to use the native Kira audio engine commands.\n#### This permission set includes:\n\n- `allow-audio-init`\n- `allow-audio-load-clip`\n- `allow-audio-load-clip-from-bytes`\n- `allow-audio-has-clip`\n- `allow-audio-play`\n- `allow-audio-play-instance`\n- `allow-audio-schedule-instances`\n- `allow-audio-measure-input-latency`\n- `allow-audio-render-clock`\n- `allow-audio-mix-apply`\n- `allow-audio-mix-levels`\n- `allow-audio-mix-devices`\n- `allow-audio-mix-cut-tail`\n- `allow-audio-mix-module-state`\n- `allow-audio-stop`\n- `allow-audio-stop-instance`\n- `allow-audio-set-voice-end`\n- `allow-audio-destroy-clip`\n- `allow-audio-set-volume`\n- `allow-audio-set-pan`\n- `allow-audio-set-playback-rate`\n- `allow-audio-wake-start`\n- `allow-audio-wake-stop`\n- `allow-audio-wake-read`\n- `allow-audio-voice-start`\n- `allow-audio-voice-stop`\n- `allow-audio-voice-set-phrases`\n- `allow-audio-voice-set-speaking`\n- `allow-audio-voice-set-listening`\n- `allow-audio-voice-set-wake-verifier`\n- `allow-audio-voice-read`\n- `allow-audio-record-start`\n- `allow-audio-record-stop`\n- `allow-audio-get-levels`\n- `allow-audio-get-scope`\n- `allow-audio-shutdown`"
         },
         {
           "description": "Allows the main webview to use the native Bevy renderer commands.\n#### This permission set includes:\n\n- `allow-bevy-native-start`\n- `allow-bevy-native-apply-ops`\n- `allow-bevy-native-resize`",
@@ -559,6 +559,48 @@
           "type": "string",
           "const": "allow-audio-stop-instance",
           "markdownDescription": "Enables the audio_stop_instance command."
+        },
+        {
+          "description": "Enables the audio_voice_read command.",
+          "type": "string",
+          "const": "allow-audio-voice-read",
+          "markdownDescription": "Enables the audio_voice_read command."
+        },
+        {
+          "description": "Enables the audio_voice_set_listening command.",
+          "type": "string",
+          "const": "allow-audio-voice-set-listening",
+          "markdownDescription": "Enables the audio_voice_set_listening command."
+        },
+        {
+          "description": "Enables the audio_voice_set_phrases command.",
+          "type": "string",
+          "const": "allow-audio-voice-set-phrases",
+          "markdownDescription": "Enables the audio_voice_set_phrases command."
+        },
+        {
+          "description": "Enables the audio_voice_set_speaking command.",
+          "type": "string",
+          "const": "allow-audio-voice-set-speaking",
+          "markdownDescription": "Enables the audio_voice_set_speaking command."
+        },
+        {
+          "description": "Enables the audio_voice_set_wake_verifier command.",
+          "type": "string",
+          "const": "allow-audio-voice-set-wake-verifier",
+          "markdownDescription": "Enables the audio_voice_set_wake_verifier command."
+        },
+        {
+          "description": "Enables the audio_voice_start command.",
+          "type": "string",
+          "const": "allow-audio-voice-start",
+          "markdownDescription": "Enables the audio_voice_start command."
+        },
+        {
+          "description": "Enables the audio_voice_stop command.",
+          "type": "string",
+          "const": "allow-audio-voice-stop",
+          "markdownDescription": "Enables the audio_voice_stop command."
         },
         {
           "description": "Enables the audio_wake_read command.",

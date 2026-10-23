@@ -10,7 +10,7 @@ import { OBJECTIVE_EFFORT_SCHEMA, OBJECTIVE_MONEY_BUDGET_SCHEMA, OBJECTIVE_TIME_
 // panels at any tier. Counts only, never a health value.
 const count = { type: 'number', minimum: 0 };
 export const DASHBOARD_PROGRESSION_ERRORS = Object.freeze(['progression_actor_required', 'progression_context_changed',
-    'progression_objective_required', 'progression_target_invalid', 'progression_monitor_unknown',
+    'progression_objective_required', 'progression_target_invalid', 'progression_monitor_unknown', 'progression_monitor_not_selected',
     'progression_commit_failed', 'progression_unlock_invalid', 'progression_read_incomplete', 'progression_unknown_command',
     'progression_invalid_argument', 'progression_settings_invalid', 'progression_settings_unavailable']);
 
@@ -58,7 +58,11 @@ const definitions = {
         { objective_id: { type: 'string' }, settings: settings(true) }],
     'monitors.select': [{ ids: { type: 'array', maxItems: 64, uniqueItems: true, items: { type: 'string', pattern: '^[a-z0-9_]{1,64}$' } } }, ['ids'], true,
         'Choose the health monitors the user\'s home shows, in order (ids from the health catalog). Replaces the selection.',
-        { ids: { type: 'array', items: { type: 'string' } } }]
+        { ids: { type: 'array', items: { type: 'string' } } }],
+    'monitors.place': [{ id: { type: 'string', pattern: '^[a-z0-9_]{1,64}$' }, position: { type: 'integer', enum: [0, 1, 2] } }, ['id', 'position'], true,
+        'Place one selected health monitor on the eVe Pro home: position 1 or 2 (its two monitor cells), 0 = not on the home '
+        + '(still selected). A taken position: the two swap when the monitor held the other one, else the former one leaves the home.',
+        { ids: { type: 'array', items: { type: 'string' } }, slots: { type: 'array', items: { type: 'string' } } }]
 };
 export const DASHBOARD_PROGRESSION_COMMANDS = Object.freeze(Object.entries(definitions)
     .map(([action, [properties, required, persistent, description, result]]) => Object.freeze({

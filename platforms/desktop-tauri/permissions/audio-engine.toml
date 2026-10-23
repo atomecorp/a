@@ -28,6 +28,13 @@ permissions = [
   "allow-audio-wake-start",
   "allow-audio-wake-stop",
   "allow-audio-wake-read",
+  "allow-audio-voice-start",
+  "allow-audio-voice-stop",
+  "allow-audio-voice-set-phrases",
+  "allow-audio-voice-set-speaking",
+  "allow-audio-voice-set-listening",
+  "allow-audio-voice-set-wake-verifier",
+  "allow-audio-voice-read",
   "allow-audio-record-start",
   "allow-audio-record-stop",
   "allow-audio-get-levels",
@@ -179,3 +186,38 @@ commands.allow = ["audio_wake_stop"]
 identifier = "allow-audio-wake-read"
 description = "Enables the audio_wake_read command."
 commands.allow = ["audio_wake_read"]
+
+[[permission]]
+identifier = "allow-audio-voice-start"
+description = "Enables the audio_voice_start command."
+commands.allow = ["audio_voice_start"]
+
+[[permission]]
+identifier = "allow-audio-voice-stop"
+description = "Enables the audio_voice_stop command."
+commands.allow = ["audio_voice_stop"]
+
+[[permission]]
+identifier = "allow-audio-voice-set-phrases"
+description = "Enables the audio_voice_set_phrases command."
+commands.allow = ["audio_voice_set_phrases"]
+
+[[permission]]
+identifier = "allow-audio-voice-set-speaking"
+description = "Enables the audio_voice_set_speaking command."
+commands.allow = ["audio_voice_set_speaking"]
+
+[[permission]]
+identifier = "allow-audio-voice-set-listening"
+description = "Enables the audio_voice_set_listening command."
+commands.allow = ["audio_voice_set_listening"]
+
+[[permission]]
+identifier = "allow-audio-voice-set-wake-verifier"
+description = "Enables the audio_voice_set_wake_verifier command."
+commands.allow = ["audio_voice_set_wake_verifier"]
+
+[[permission]]
+identifier = "allow-audio-voice-read"
+description = "Enables the audio_voice_read command."
+commands.allow = ["audio_voice_read"]

@@ -53,6 +53,9 @@ tests/*
 !tests/apple_music/
 !tests/apple_music/*.test.mjs
 !tests/apple_music/native_request.probe.swift
+!tests/ios/
+tests/ios/*
+!tests/ios/ota_distribution.test.mjs
 !tests/database/
 tests/database/*
 !tests/database/adole_event_replay_rebuild.test.mjs

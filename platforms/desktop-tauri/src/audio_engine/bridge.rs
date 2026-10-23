@@ -155,3 +155,24 @@ pub fn audio_wake_start(sample_rate: u32) -> Result<Value, String> { super::wake
 pub fn audio_wake_stop() -> Result<Value, String> { super::wake_capture::stop() }
 #[tauri::command]
 pub fn audio_wake_read() -> Result<Value, String> { super::wake_capture::read() }
+
+// The native voice engine, through the shared `dispatch` (the iOS app sends the same names).
+#[tauri::command]
+pub async fn audio_voice_start(paths: tauri::State<'_, crate::ProjectPaths>, models_root: String) -> Result<Value, String> {
+    let project_root = paths.project_root.clone();
+    tauri::async_runtime::spawn_blocking(move || commands::dispatch("voice_start", &serde_json::json!({ "modelsRoot": models_root, "ownCapture": true }), Some(&project_root)))
+        .await
+        .map_err(|error| format!("audio_voice_start_task_failed: {error}"))?
+}
+#[tauri::command]
+pub fn audio_voice_stop() -> Result<Value, String> { commands::dispatch("voice_stop", &serde_json::json!({}), None) }
+#[tauri::command]
+pub fn audio_voice_set_phrases(phrases: Vec<String>) -> Result<Value, String> { commands::dispatch("voice_set_phrases", &serde_json::json!({ "phrases": phrases }), None) }
+#[tauri::command]
+pub fn audio_voice_set_speaking(speaking: bool) -> Result<Value, String> { commands::dispatch("voice_set_speaking", &serde_json::json!({ "speaking": speaking }), None) }
+#[tauri::command]
+pub fn audio_voice_set_listening(listening: String) -> Result<Value, String> { commands::dispatch("voice_set_listening", &serde_json::json!({ "listening": listening }), None) }
+#[tauri::command]
+pub fn audio_voice_set_wake_verifier(verifier: Option<String>) -> Result<Value, String> { commands::dispatch("voice_set_wake_verifier", &serde_json::json!({ "verifier": verifier }), None) }
+#[tauri::command]
+pub fn audio_voice_read() -> Result<Value, String> { commands::dispatch("voice_read", &serde_json::json!({}), None) }

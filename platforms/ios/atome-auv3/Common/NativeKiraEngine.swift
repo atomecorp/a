@@ -11,7 +11,9 @@ enum NativeKiraEngine {
         "audio_load_clip", "audio_load_clip_from_bytes", "audio_has_clip", "audio_play", "audio_play_instance",
         "audio_schedule_instances", "audio_render_clock", "audio_measure_input_latency",
         "audio_mix_apply", "audio_mix_levels", "audio_mix_devices", "audio_mix_cut_tail", "audio_mix_module_state",
-        "audio_stop", "audio_stop_instance", "audio_set_voice_end", "audio_destroy_clip", "audio_set_volume", "audio_set_pan", "audio_set_playback_rate"
+        "audio_stop", "audio_stop_instance", "audio_set_voice_end", "audio_destroy_clip", "audio_set_volume", "audio_set_pan", "audio_set_playback_rate",
+        // The voice session (start and stop also own the microphone: AppNativeVoiceEngine.swift).
+        "audio_voice_set_phrases", "audio_voice_set_speaking", "audio_voice_set_listening", "audio_voice_set_wake_verifier", "audio_voice_read"
     ]
 
     /// Runs one engine command; `(result, nil)` or `(["success": false], error)`.

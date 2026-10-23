@@ -12,6 +12,11 @@ atome-bevy-renderer-core = { path = "../../../atome/renderers/bevy-core" }
 atome-audio-engine = { path = "../../../atome/engines/audio-engine" }
 serde_json = "1"
 
+[features]
+# The native voice engine; build_bevy_renderer.sh enables it for the app on devices and
+# provides libvosk_ios.a (build_vosk_ios.sh) through VOSK_IOS_LIB_DIR.
+voice = ["atome-audio-engine/voice"]
+
 [profile.dev]
 debug = 0
 panic = "abort"

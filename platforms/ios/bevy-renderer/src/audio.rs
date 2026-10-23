@@ -35,6 +35,20 @@ pub extern "C" fn atome_ios_audio_command(name: *const c_char, args_json: *const
     }
 }
 
+/// Microphone PCM for the voice session, 16 kHz mono in [-1, 1]: Swift owns the iOS audio
+/// session and capture, the engine only listens. False when no session runs, and always false
+/// in a build without the voice engine (AUv3, simulator), whose `audio_voice_start` already fails.
+#[no_mangle]
+pub extern "C" fn atome_ios_voice_push(samples: *const f32, count: usize) -> bool {
+    if samples.is_null() { return false; }
+    // SAFETY: Swift passes a buffer of `count` floats it owns for the call.
+    let _samples = unsafe { std::slice::from_raw_parts(samples, count) };
+    #[cfg(feature = "voice")]
+    return atome_audio_engine::voice::session::push(_samples).is_ok();
+    #[cfg(not(feature = "voice"))]
+    false
+}
+
 #[no_mangle]
 pub extern "C" fn atome_ios_audio_string_free(text: *mut c_char) {
     if !text.is_null() {

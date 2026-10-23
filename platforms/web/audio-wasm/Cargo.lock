@@ -17,6 +17,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "atome-voice-turns"
+version = "0.1.0"
+
+[[package]]
 name = "atomic-arena"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -220,6 +224,7 @@ name = "squirrel-audio-wasm"
 version = "0.1.0"
 dependencies = [
  "atome-mix-graph",
+ "atome-voice-turns",
  "hound",
  "js-sys",
  "kira",

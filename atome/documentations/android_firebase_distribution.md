@@ -67,7 +67,8 @@ device model, Android and WebView versions (user agent), screen, memory, the
 WebGPU adapter matrix (default, high-performance, low-power, `compatibility`
 feature level, with adapter info, features and key limits), the GPU named by
 WebGL (`WEBGL_debug_renderer_info`), the failure, the last Bevy WASM panic and the
-boot trace. Destination: Firestore `boot_reports` in project `atome-ccb07`
+boot trace; `appVersion` is `atome <v> eVe <v>`, the versions the kickstart read
+from `/api/server-info` (the Android web root serves no `version.txt`). Destination: Firestore `boot_reports` in project `atome-ccb07`
 (database `(default)`, location `eur3`). No account, name or content is sent.
 
 Security rules (published 2026-10-22): clients may only **create** a

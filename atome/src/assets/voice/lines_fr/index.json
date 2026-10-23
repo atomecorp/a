@@ -75,6 +75,12 @@
    "phonemes": "^lasistɑ̃ vokal ɛ ɛ̃disponibl .$",
    "sha256": "8a301a98880ebc125ada26934fbc056235d44653db4ff8dcbda7a5edb864393e"
   },
+  "Je ne suis pas disponible : nous sommes hors ligne.": {
+   "file": "53349cb9beaade2a.wav",
+   "samples": 62976,
+   "phonemes": "^ʒə nə sɥi pa disponibl : nu som oʁ liɲ .$",
+   "sha256": "4c11ad5e8979872c878eec421f0c5b8e5d901da8f2383c6c42bb90dd8ba795dd"
+  },
   "Erreur de l’assistant : la cause n’a pas été fournie par le service.": {
    "file": "c0abc11b2976a587.wav",
    "samples": 81920,
@@ -632,6 +638,12 @@
    "samples": 73472,
    "phonemes": "^ʒə nɛ pa bjɛ̃ kɔ̃pʁi . ʁədiləmwa , u apɥi syʁ œ̃ butɔ̃ .$",
    "sha256": "d5facfd6b1a82b4bb5e35d5b681b02f5ea9218cdfb5185fcdc0e9c2fdf8e02de"
+  },
+  "Un nouvel appareil demande à ouvrir ton espace. Si c’est le tien, tape en bas le nombre qu’il affiche.": {
+   "file": "295de311bea8e3ee.wav",
+   "samples": 120064,
+   "phonemes": "^œ̃ nuvɛl apaʁɛj dəmɑ̃d a uvʁiʁ tɔ̃ ɛspas . si sɛ lə tjɛ̃ , tap ɑ̃ ba lə nɔ̃bʁ kil afiʃ .$",
+   "sha256": "3af258f40db442eb10603445afbbfa5c54cdf5fa1ed9cb2bf75439a7db0965cd"
   },
   "Je vais apprendre ta voix. Je vais te demander de dire la phrase 4 fois.": {
    "file": "dd51313d3cd048b5.wav",

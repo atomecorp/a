@@ -81,16 +81,6 @@ export const createVoiceSttRuntime = ({
         }
         return state.deferred.promise.finally(() => inputMeter.stop(sessionId));
     },
-    // While eVe speaks, what the microphone hears is her: a muted listening stays open
-    // but transcribes nothing. A recognizer that can (`setMuted`) stops taking the
-    // microphone's sound, so no sentence mixes her voice with the person's; otherwise
-    // what it recognizes meanwhile is dropped.
-    async mute(sessionId, muted) {
-        const state = sttSessions.get(String(sessionId));
-        if (!state) return;
-        state.muted = muted === true;
-        if (typeof state.bridge?.setMuted === 'function') await state.bridge.setMuted(state.muted);
-    },
     async cancel(sessionId) {
         const state = sttSessions.get(String(sessionId));
         if (!state) {

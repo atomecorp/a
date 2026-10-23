@@ -146,7 +146,7 @@ export async function registerHttpServerHooks(server, { getServerFingerprint, SE
   });
 
   server.addHook('onResponse', async (request, reply) => {
-    if (request.url.startsWith('/auth/v/') || request.url.startsWith('/api/social/')) return;
+    if (request.url.startsWith('/auth/v/') || request.url.startsWith('/api/social/') || request.url.startsWith('/ios/')) return;
     if (MINIMAL_LOGS && reply.statusCode < 400) return;
     const durationMs = Date.now() - (request._requestStartMs || Date.now());
     logStructured('info', {
@@ -163,7 +163,7 @@ export async function registerHttpServerHooks(server, { getServerFingerprint, SE
   });
 
   server.addHook('onError', async (request, reply, error) => {
-    if (request.url.startsWith('/auth/v/') || request.url.startsWith('/api/social/')) return;
+    if (request.url.startsWith('/auth/v/') || request.url.startsWith('/api/social/') || request.url.startsWith('/ios/')) return;
     const lifecycle = classifyHttpLifecycleError({ error, request, reply });
     const details = {
       timestamp: new Date().toISOString(),

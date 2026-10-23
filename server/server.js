@@ -36,6 +36,7 @@ import { registerUploadRoutes } from './http_upload_routes.js';
 import { registerFileRoutes } from './http_file_routes.js';
 import { registerAdminUserRoutes } from './http_admin_user_routes.js';
 import { registerWsApiRoute } from './ws_api_connection.js';
+import { registerIosOtaRoutes } from './http_ios_ota_routes.js';
 
 // Database imports - Using SQLite/libSQL (ADOLE data layer)
 import db from '../database/adole.js';
@@ -275,6 +276,7 @@ async function startServer() {
     registerMediaTokenRoute(server, { validateToken });
 
     registerMailRoutes(server, { identify: validateToken });
+    registerIosOtaRoutes(server);
     registerSocialRoutes(server, { projectRoot });
     registerBillingRoutes(server);
 

@@ -332,7 +332,7 @@ describe('first-launch canonical lifecycle', () => {
         await f.flow.handle({ operation: 'choose_auth' }); await f.flow.handle({ operation: 'authenticate' });
         expect(f.flow.state.stage).toBe('billing');
         expect(f.presentation().records.map(record => record.id.replace('__first_launch_first_launch_billing_store_', '')))
-            .toEqual(['matrix', 'actions', 'title', 'price', 'countdown', 'pay', 'back', 'notice', 'logo']);
+            .toEqual(['matrix', 'actions', 'title', 'price', 'store', 'countdown', 'pay', 'back', 'notice', 'logo']);
         window.AdoleAPI.auth.payPhoneLogin.mockRejectedValueOnce(new Error('billing_purchase_cancelled'));
         expect(await f.flow.handle({ operation: 'pay' })).toEqual({ ok: true, cancelled: true });
         expect(f.flow.state.notice).toBe(''); expect(f.flow.state.stage).toBe('billing');

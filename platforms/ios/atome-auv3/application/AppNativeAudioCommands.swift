@@ -23,6 +23,11 @@ extension AppNativeAudioController {
                 case "audio_wake_start":
                     self.wakeCaptureFailed = false
                     self.startWakeCapture(payload: payload, completion: completion)
+                case "audio_voice_start":
+                    self.startVoiceEngine(completion: completion)
+                case "audio_voice_stop":
+                    let (result, error) = self.stopVoiceEngine()
+                    self.complete(completion, payload: result, error: error)
                 case "audio_wake_read":
                     self.complete(completion, payload: self.readWakeCapture())
                 case "audio_wake_stop":

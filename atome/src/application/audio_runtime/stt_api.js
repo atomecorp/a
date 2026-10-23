@@ -104,8 +104,6 @@
         internals.stt = stt;
     }
     if (!tauri && !internals && !window.__ATOME_NATIVE_STT__) {
-        // The iOS app stops taking the microphone's sound on request, without closing it.
-        stt.setMuted = (muted) => invoke('plugin:stt|set_muted', { muted: muted === true });
         window.__ATOME_NATIVE_STT__ = stt;
     }
 })();

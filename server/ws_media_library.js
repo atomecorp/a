@@ -1,12 +1,17 @@
 // The Médiathèque's online sources: free images, videos and sounds, public domain
 // or CC0 only (no attribution owed, so the results show alone). `media-library-search`
 // answers the results of every source of a kind at once (the sources are never named
-// to the user); `media-library-fetch` reads one byte range of a result's picture
-// (`thumb`) or of its file. The client names a result id, never a URL: each address
-// comes from the provider's own record and goes through the checked public source
-// access (public_source_fetch.js), so this is not an open proxy.
-//   - Openverse (WordPress): images and sounds, `license=cc0,pdm`, from the hosts below;
-//   - NASA Image and Video Library: images, videos and sounds (public domain media);
+// to the user); `discover: true` instead of a query draws a theme at random (what a
+// type shows before anything is searched). A source slower than SOURCE_BUDGET_MS is
+// left out of that answer: one provider never holds the others' results back.
+// `media-library-fetch` reads one byte range of a result's picture (`thumb`) or of its
+// file, or a sound's waveform (`waveform`: its peaks, `points`). The client names a
+// result id, never a URL: each address comes from the provider's own record and goes
+// through the checked public source access (public_source_fetch.js), so this is not
+// an open proxy.
+//   - Openverse (WordPress): images and sounds (with their waveform), `license=cc0,pdm`;
+//   - NASA Image and Video Library: images and videos (public domain media; its sounds
+//     are hour-long podcasts, without duration nor waveform: left out);
 //   - Internet Archive: videos marked public domain or CC0.
 import { lookup } from 'node:dns/promises';
 import { createAddressRateLimit, createPublicSourceAccess } from './public_source_fetch.js';
@@ -16,8 +21,17 @@ const CHUNK_BYTES = 512 * 1024;
 const MAX_FILE_BYTES = 256 * 1024 * 1024;
 const MAX_RECORD_BYTES = 4 * 1024 * 1024;
 const PER_SOURCE = 12;
+const SOURCE_BUDGET_MS = 8000;
+// The themes a type draws from before anything is searched (never shown: the query of a discovery).
+const THEMES = Object.freeze({
+    image: ['nature', 'ocean', 'mountain', 'flower', 'forest', 'city', 'animal', 'bird', 'sky', 'river', 'galaxy', 'winter'],
+    video: ['ocean', 'earth', 'launch', 'aurora', 'nature', 'city', 'storm', 'animals', 'space station', 'clouds', 'volcano', 'travel'],
+    audio: ['rain', 'birds', 'piano', 'wind', 'waves', 'forest', 'guitar', 'thunder', 'city', 'drum', 'river', 'bells']
+});
 const RESULT_TTL_MS = 60 * 60_000;
 const MAX_RESULTS_KEPT = 5000;
+const MAX_ANSWERS_KEPT = 500;
+const ARCHIVE_MAX_ITEM_BYTES = 80 * 1024 * 1024;
 const HOSTS = Object.freeze({
     openverse: { hosts: ['api.openverse.org', 'upload.wikimedia.org', 'cdn.freesound.org'], suffixes: ['.staticflickr.com'] },
     nasa: { hosts: ['images-api.nasa.gov', 'images-assets.nasa.gov'], suffixes: [] },
@@ -31,8 +45,10 @@ const access = createPublicSourceAccess({ allowedHost, sourceCode: 'media_librar
     chunkBytes: CHUNK_BYTES, maxFileBytes: MAX_FILE_BYTES });
 const { fail } = access;
 const limited = createAddressRateLimit({ windowMs: 60_000, max: 240 });
-// A result found is kept for a while: its picture and file are read without asking the provider again.
+// A result found is kept for a while: its picture, file and waveform are read without asking the provider
+// again; a search answered is kept as long (Openverse grants an address 200 anonymous requests a day).
 const results = new Map();
+const answered = new Map();
 const reply = (message, type, fields) => ({ type, requestId: message.requestId || message.request_id || null,
     request_id: message.requestId || message.request_id || null, success: fields.ok === true, ...fields });
 
@@ -60,11 +76,12 @@ const openverse = (kind) => async (query, context) => {
         .slice(0, PER_SOURCE).map(item => ({ id: `openverse_${kind}:${item.id}`, provider: 'openverse', kind, title: String(item.title || '').trim(),
             thumb: kind === 'image' ? item.thumbnail : '', file: item.url, license: item.license, author: String(item.creator || ''),
             source_url: String(item.foreign_landing_url || ''), width: item.width || null, height: item.height || null,
-            duration: item.duration ? item.duration / 1000 : null }));
+            duration: item.duration ? item.duration / 1000 : null,
+            waveform: kind === 'audio' && allowedHost('openverse', hostOf(item.waveform)) ? item.waveform : '' }));
 };
-// NASA lists an item's renditions in its collection: the first present of these, in order.
-const NASA_RENDITIONS = { image: [/~large\.jpg$/i, /~medium\.jpg$/i, /~orig\.(jpe?g|png)$/i], video: [/~medium\.mp4$/i, /~mobile\.mp4$/i, /~orig\.mp4$/i],
-    audio: [/~128k\.mp3$/i, /~orig\.(mp3|m4a|wav)$/i] };
+// NASA lists an item's renditions in its collection: the first present of these, in order (a video's
+// lightest first: a `medium` weighs up to 70 MB where its `mobile` weighs 10, and it is read whole).
+const NASA_RENDITIONS = { image: [/~large\.jpg$/i, /~medium\.jpg$/i, /~orig\.(jpe?g|png)$/i], video: [/~mobile\.mp4$/i, /~preview\.mp4$/i, /~small\.mp4$/i, /~medium\.mp4$/i, /~orig\.mp4$/i] };
 const nasaRendition = (kind, urls) => NASA_RENDITIONS[kind].map(pattern => urls.find(url => pattern.test(url))).find(Boolean) || '';
 const nasa = (kind) => async (query, context) => {
     const page = await readJson('nasa', `https://images-api.nasa.gov/search?q=${encodeURIComponent(query)}&media_type=${kind}&page_size=${PER_SOURCE}`, context);
@@ -76,9 +93,10 @@ const nasa = (kind) => async (query, context) => {
             resolve: async (ctx) => https(nasaRendition(kind, await readJson('nasa', https(item.href), ctx))) };
     }).filter(item => ID.test(item.id));
 };
-// The Internet Archive: its smallest MP4 rendition of the item.
+// The Internet Archive: its smallest MP4 rendition of an item light enough to be read whole quickly
+// (most weigh 100 to 250 MB; a result is read whole before it plays).
 const archiveVideos = async (query, context) => {
-    const search = `(${query}) AND mediatype:(movies) AND licenseurl:(*publicdomain* OR *zero*)`;
+    const search = `(${query}) AND mediatype:(movies) AND licenseurl:(*publicdomain* OR *zero*) AND item_size:[1 TO ${ARCHIVE_MAX_ITEM_BYTES}]`;
     const page = await readJson('archive', `https://archive.org/advancedsearch.php?q=${encodeURIComponent(search)}&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=licenseurl&rows=${PER_SOURCE}&output=json`, context);
     return (page?.response?.docs || []).map(doc => ({ id: `archive:${doc.identifier}`, provider: 'archive', kind: 'video', title: String(doc.title || '').trim(),
         thumb: `https://archive.org/services/img/${encodeURIComponent(doc.identifier)}`, license: /zero/.test(doc.licenseurl) ? 'cc0' : 'pdm',
@@ -89,12 +107,27 @@ const archiveVideos = async (query, context) => {
             return mp4 ? `https://archive.org/download/${encodeURIComponent(doc.identifier)}/${mp4.name.split('/').map(encodeURIComponent).join('/')}` : '';
         } })).filter(item => ID.test(item.id));
 };
-const SOURCES = Object.freeze({ image: [openverse('image'), nasa('image')], video: [nasa('video'), archiveVideos], audio: [openverse('audio'), nasa('audio')] });
+const SOURCES = Object.freeze({ image: [openverse('image'), nasa('image')], video: [nasa('video'), archiveVideos], audio: [openverse('audio')] });
 
-// The sources' answers interleaved (one of each in turn), what one source cannot give left out.
+// What the client receives of a result: never an address.
+const publicItem = ({ resolve: _resolve, file: _file, thumb, waveform, points: _points, ...item }) => ({ ...item, has_thumb: !!thumb, has_waveform: !!waveform });
+// Every source's answer, or once SOURCE_BUDGET_MS has passed, those already in (as soon as one is):
+// a slow provider never holds the others' results back, and a lone one is always awaited.
+const answersInBudget = (pending) => new Promise((resolve) => {
+    const lists = [];
+    let left = pending.length, late = false;
+    const settle = () => resolve(lists);
+    const budget = setTimeout(() => { late = true; if (lists.length) settle(); }, SOURCE_BUDGET_MS);
+    pending.forEach(promise => promise.then(list => lists.push(list), () => {}).finally(() => {
+        left -= 1;
+        if (!left || (late && lists.length)) { clearTimeout(budget); settle(); }
+    }));
+});
+// The sources' answers interleaved (one of each in turn), what one source cannot give in time left out.
 const search = async (kind, query, context) => {
-    const answers = await Promise.allSettled(SOURCES[kind].map(source => source(query, context)));
-    const lists = answers.filter(answer => answer.status === 'fulfilled').map(answer => answer.value);
+    const key = `${kind}:${query.toLowerCase()}`, known = answered.get(key);
+    if (known && context.now() - known.at < RESULT_TTL_MS && known.ids.every(id => results.has(id))) return known.ids.map(id => publicItem(results.get(id).item));
+    const lists = await answersInBudget(SOURCES[kind].map(source => source(query, context)));
     if (!lists.length) throw fail('media_library_source_unavailable');
     const found = [];
     for (let index = 0; lists.some(list => index < list.length); index += 1) for (const list of lists) if (list[index]) found.push(list[index]);
@@ -102,9 +135,23 @@ const search = async (kind, query, context) => {
     // Kept in arrival order: the oldest go first, until the rest is fresh and few enough.
     for (const [id, entry] of results) { if (now - entry.at < RESULT_TTL_MS && results.size <= MAX_RESULTS_KEPT) break; results.delete(id); }
     found.forEach(item => results.set(item.id, { at: now, item }));
-    return found.map(({ resolve: _resolve, file: _file, thumb, ...item }) => ({ ...item, has_thumb: !!thumb }));
+    for (const [entry, value] of answered) if (now - value.at >= RESULT_TTL_MS || answered.size > MAX_ANSWERS_KEPT) answered.delete(entry); else break;
+    if (lists.length === SOURCES[kind].length) answered.set(key, { at: now, ids: found.map(item => item.id) });
+    return found.map(publicItem);
 };
 
+// A theme drawn at random, its first page: the one a provider keeps ready (Openverse takes over
+// 20 s to answer a page it has not served lately).
+const discover = (kind, context) => search(kind, THEMES[kind][Math.floor(Math.random() * THEMES[kind].length)], context);
+// A sound's peaks, as its provider draws them (0…1).
+const waveformOf = async (item, context) => {
+    if (!item.waveform) throw fail('media_library_source_format_missing');
+    if (item.points) return item.points;
+    const points = (await readJson(item.provider, item.waveform, context))?.points;
+    if (!Array.isArray(points) || !points.length) throw fail('media_library_source_format_missing');
+    item.points = points.map(point => Math.max(0, Math.min(1, Number(point) || 0)));
+    return item.points;
+};
 const fileOf = async (item, variant, context) => {
     if (variant === 'thumb') {
         if (!item.thumb) throw fail('media_library_fetch_range_invalid');
@@ -123,13 +170,17 @@ export async function handleWsMediaLibrary(message, address, { fetchResource = f
     const context = { fetchResource, resolve, now };
     try {
         if (message.type === 'media-library-search') {
-            const kind = String(message.kind || ''), query = String(message.query || '').trim();
-            if (!KINDS.has(kind) || !query || query.length > 120) return reply(message, type, { ok: false, error: 'media_library_search_invalid' });
+            const kind = String(message.kind || '');
+            if (!KINDS.has(kind)) return reply(message, type, { ok: false, error: 'media_library_search_invalid' });
+            if (message.discover === true) return reply(message, type, { ok: true, kind, results: await discover(kind, context) });
+            const query = String(message.query || '').trim();
+            if (!query || query.length > 120) return reply(message, type, { ok: false, error: 'media_library_search_invalid' });
             return reply(message, type, { ok: true, kind, results: await search(kind, query, context) });
         }
-        const id = String(message.id || ''), variant = message.variant === 'thumb' ? 'thumb' : 'file';
+        const id = String(message.id || ''), variant = ['thumb', 'waveform'].includes(message.variant) ? message.variant : 'file';
         const kept = ID.test(id) ? results.get(id) : null;
         if (!kept) return reply(message, type, { ok: false, error: 'media_library_result_unknown' });
+        if (variant === 'waveform') return reply(message, type, { ok: true, points: await waveformOf(kept.item, context) });
         const file = await fileOf(kept.item, variant, context);
         return reply(message, type, { ok: true, name: file.name, ...(await access.readChunk(kept.item.provider, file, Number(message.offset), context)) });
     } catch (error) {
