@@ -63,7 +63,7 @@ test('remote terminal call state stops local capture and both canonical media tr
             : action === 'joinRoom' ? { rtpCapabilities: {}, participants: [], existingProducers: [] } : { transportOptions: {} }
     } };
     const call = createVisioCallRuntime({ win, getApi: () => api, loadClient: async () => ({ Device }),
-        getUserMedia: async () => ({ getTracks: () => [{ kind: 'audio', stop }] }) });
+        getUserMedia: async () => ({ getTracks: () => [{ kind: 'audio', stop }], getVideoTracks: () => [] }) });
     expect((await call.joinCall('room')).ok).toBe(true);
     const event = new Event('squirrel:visio-event');
     event.detail = { roomId: 'room', event: { type: 'callState', status: 'cancelled' } };
