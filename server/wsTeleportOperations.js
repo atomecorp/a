@@ -297,6 +297,8 @@ async function handleReturn(message, connection, userId) {
     const properties = await readAtomeProperties(store, userId, atomeId);
     if (!properties) return errorResponse(message, 'teleport_atome_missing');
 
+    // The surface the object leaves, read before the patch empties it.
+    const leftSurfaceId = readTeleportState(properties).surfaceId;
     const built = buildReturnTeleportPatch(properties, {
         toSurfaceId: message?.to_surface_id ?? message?.toSurfaceId
     });
@@ -304,6 +306,18 @@ async function handleReturn(message, connection, userId) {
 
     const committed = await commitTeleportPatch(store, atomeId, built.patch, userId);
     if (!committed.ok) return errorResponse(message, committed.error);
+
+    // Same arrival signal as an accepted offer: the surface it left hands over
+    // what it was doing with it (a playing media goes on where it lands).
+    wsSendJsonToUser(String(userId), {
+        type: 'teleport-arrived',
+        atome_id: atomeId,
+        session_id: null,
+        surface_id: built.destination,
+        origin_surface_id: leftSurfaceId,
+        returned: true,
+        timestamp: new Date().toISOString()
+    }, { scope: 'ws/api', op: 'teleport-arrived' });
 
     return response(message, true, {
         atome_id: atomeId,

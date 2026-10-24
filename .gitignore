@@ -477,6 +477,7 @@ tests/squirrel/*
 !tests/eve/assistant_surface_tools.test.mjs
 # Media handoff (what plays moves to another device and goes on there)
 !tests/eve/media_handoff.test.mjs
+!tests/server/teleport_return_arrival.test.mjs
 
 !tests/eve/program_session_contract.test.mjs
 !tests/eve/program_nutrition.test.mjs

@@ -443,6 +443,7 @@
   "tests/server/remote_command_relay.test.mjs",
   "tests/server/server_media_normalization.test.mjs",
   "tests/server/sync_architecture_contract.test.mjs",
+  "tests/server/teleport_return_arrival.test.mjs",
   "tests/server/visio_commands.test.mjs",
   "tests/server/ws_communication_corrections.test.mjs",
   "tests/server/ws_personal_import.test.mjs",
