@@ -20,7 +20,10 @@ const attempt = { type: 'string', pattern: '^[a-f0-9]{32}$' };
 const kind = { type: 'string', enum: ['song', 'playlist', 'artist'] };
 const page = { limit: { type: 'integer', minimum: 1, maximum: 10 }, offset: { type: 'integer', minimum: 0, maximum: 10000 } };
 export const MUSIC_ITEM_SCHEMA = Object.freeze({ type: 'object', additionalProperties: false, required: ['id', 'name', 'kind'],
-    properties: { id, name: { type: 'string' }, kind, artist: { type: 'string' } } });
+    properties: { id, name: { type: 'string' }, kind, artist: { type: 'string' }, artwork_url: { type: 'string', pattern: '^https://' },
+        duration: { type: 'number' } } });
+// A provider's cover: an https URL only (never a provider payload or another scheme).
+export const musicArtworkUrl = value => (typeof value === 'string' && /^https:\/\/[^\s]{1,2000}$/.test(value) ? value : null);
 const device = { type: 'object', properties: { id: { type: ['string', 'null'] }, name: { type: 'string' },
     active: { type: 'boolean' }, restricted: { type: 'boolean' } }, additionalProperties: false };
 const shapes = {
@@ -57,7 +60,8 @@ export const MUSIC_COMMANDS = Object.freeze(Object.entries(shapes).map(([action,
         current_song: { anyOf: [MUSIC_ITEM_SCHEMA, { type: 'null' }] }, device: { anyOf: [device, { type: 'null' }] },
         identity: { type: 'object', additionalProperties: false, properties: { id: { type: 'string' }, name: { type: 'string' } } },
         account: { type: 'object' }, cancelled: { type: 'boolean' }, provider_revoked: { type: 'boolean' },
-        playlist_id: id, song_id: id, favorited: { type: 'boolean' }, has_more: { type: 'boolean' }, expires_at: { type: 'number' }, url: { type: 'string' } } }
+        playlist_id: id, song_id: id, favorited: { type: 'boolean' }, has_more: { type: 'boolean' }, expires_at: { type: 'number' }, url: { type: 'string' },
+        position: { type: 'number' } } }
 })));
 export function validateMusicInput(action, input = {}) {
     const schema = MUSIC_COMMANDS.find(command => command.action === action)?.input_schema;

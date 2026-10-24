@@ -51,6 +51,7 @@ enum AppleMusicPlayback {
         case "resume": try await player.play()
         case "next": try await player.skipToNextEntry()
         case "previous": try await player.skipToPreviousEntry()
+        case "seek": player.playbackTime = request.seconds
         default: throw AppleMusicFailure(code: "INVALID_ARGUMENT")
         }
         try check(); return state()

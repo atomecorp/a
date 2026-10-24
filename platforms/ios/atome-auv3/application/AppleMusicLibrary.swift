@@ -1,10 +1,13 @@
 import Foundation
+import MediaPlayer
 import MusicKit
+import UIKit
 
 @MainActor
 enum AppleMusicLibrary {
     static func item(_ song: Song, scope: String) -> [String: Any] {
-        var value: [String: Any] = ["id": song.id.rawValue, "name": song.title, "artist": song.artistName, "kind": "song", "scope": scope]
+        var value: [String: Any] = ["id": song.id.rawValue, "name": song.title, "artist": song.artistName, "kind": "song", "scope": scope,
+            "duration": song.duration ?? 0]
         value["artwork_url"] = song.artwork?.url(width: 256, height: 256)?.absoluteString
         return value
     }
@@ -95,6 +98,55 @@ enum AppleMusicLibrary {
             try check(); batch = next
         }
         return ["ok": true, "items": songs.prefix(request.limit).map { item($0, scope: request.scope) }, "has_more": songs.count > request.limit]
+    }
+    // Covers as JPEG data URLs (the contacts' photos way): the WebView cannot load MusicKit's
+    // `musicKit://` library URLs. No `ids`: the cover of the song the device plays now.
+    static func artwork(_ request: AppleMusicRequest, check: () throws -> Void) async throws -> [String: Any] {
+        let side = request.size
+        if request.ids.isEmpty {
+            guard let entry = SystemMusicPlayer.shared.queue.currentEntry else { return ["ok": true, "items": []] }
+            var id = entry.id
+            if case let .song(song) = entry.item { id = song.id.rawValue }
+            var image = MPMusicPlayerController.systemMusicPlayer.nowPlayingItem?.artwork?.image(at: CGSize(width: side, height: side))
+            if image == nil, let url = entry.artwork?.url(width: side, height: side) { image = await download(url) }
+            try check()
+            guard let image, let data = dataURL(image, side: side) else { return ["ok": true, "items": []] }
+            return ["ok": true, "items": [["id": id, "artwork": data]]]
+        }
+        var items: [[String: Any]] = []
+        for id in request.ids {
+            guard let song = try? await song(id, scope: request.scope, check: check) else { continue }
+            var image = request.scope == "library" ? libraryImage(song, side: side) : nil
+            if image == nil, let url = song.artwork?.url(width: side, height: side) { image = await download(url) }
+            try check()
+            if let image, let data = dataURL(image, side: side) { items.append(["id": id, "artwork": data]) }
+        }
+        return ["ok": true, "items": items]
+    }
+    // A library song's own cover through the media library: by its persistent ID when MusicKit gives it, else by title and artist.
+    private static func libraryImage(_ song: Song, side: Int) -> UIImage? {
+        let query = MPMediaQuery.songs()
+        if let persistent = UInt64(song.id.rawValue) {
+            query.addFilterPredicate(MPMediaPropertyPredicate(value: NSNumber(value: persistent), forProperty: MPMediaItemPropertyPersistentID))
+        } else {
+            query.addFilterPredicate(MPMediaPropertyPredicate(value: song.title, forProperty: MPMediaItemPropertyTitle))
+            query.addFilterPredicate(MPMediaPropertyPredicate(value: song.artistName, forProperty: MPMediaItemPropertyArtist))
+        }
+        return query.items?.first?.artwork?.image(at: CGSize(width: side, height: side))
+    }
+    // A catalogue cover (an https URL); a `musicKit://` one is not downloadable.
+    private static func download(_ url: URL) async -> UIImage? {
+        guard url.scheme == "https", let (data, response) = try? await URLSession.shared.data(from: url),
+              (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+        return UIImage(data: data)
+    }
+    private static func dataURL(_ image: UIImage, side: Int) -> String? {
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        let size = CGSize(width: side, height: side)
+        let drawn = UIGraphicsImageRenderer(size: size, format: format).image { _ in image.draw(in: CGRect(origin: .zero, size: size)) }
+        guard let jpeg = drawn.jpegData(compressionQuality: 0.82) else { return nil }
+        return "data:image/jpeg;base64," + jpeg.base64EncodedString()
     }
     static func write(_ request: AppleMusicRequest, check: () throws -> Void, started: () -> Void) async throws -> [String: Any] {
         if request.operation == "create_playlist" {

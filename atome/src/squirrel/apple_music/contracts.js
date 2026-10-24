@@ -28,6 +28,9 @@ const definitions = {
     resume: [{}, [], 'control', 'Resume the current Apple Music queue.'],
     pause: [{}, [], 'control', 'Pause Apple Music without clearing its queue.'],
     stop: [{}, [], 'control', 'Stop Apple Music playback.'],
+    seek: [{ seconds: { type: 'number', minimum: 0, maximum: 86400 } }, ['seconds'], 'control', 'Move the current Apple Music song to a time, in seconds from its start.'],
+    artwork: [{ ids: { type: 'array', minItems: 1, maxItems: 25, items: id, uniqueItems: true }, scope, size: { type: 'integer', minimum: 32, maximum: 600 } }, [], 'read',
+        'Read song covers as image data: the given song IDs from their scope, or without ids the song playing now. Never changes playback.'],
     next: [{}, [], 'control', 'Skip to the next Apple Music track in the current queue.'],
     previous: [{}, [], 'control', 'Return to the previous Apple Music track in the current queue.'],
     create_playlist: [{ name: text, description: { type: 'string', maxLength: 1000 }, request_id: requestId }, ['name'], 'write',
@@ -39,7 +42,7 @@ const definitions = {
 };
 export const APPLE_MUSIC_ITEM_SCHEMA = Object.freeze({ type: 'object', additionalProperties: false,
     required: ['id', 'name', 'kind', 'scope'], properties: { id, name: { type: 'string' }, kind, scope,
-        artist: { type: 'string' }, artwork_url: { type: 'string' } } });
+        artist: { type: 'string' }, artwork_url: { type: 'string' }, duration: { type: 'number' } } });
 export const APPLE_MUSIC_COMMANDS = Object.freeze(Object.entries(definitions).map(([action, [properties, required, access, description]]) => Object.freeze({
     action, name: 'apple_music.' + action, access, description, capability: 'apple_music.' + access,
     // External playback/writes are never replayed as scene mutations. Write receipts use Atome.commit.
@@ -49,7 +52,8 @@ export const APPLE_MUSIC_COMMANDS = Object.freeze(Object.entries(definitions).ma
         current_song_id: id, current_entry_id: { type: 'string' }, song_id: id, favorited: { type: 'boolean' },
         supported: { type: 'boolean' }, items: { type: 'array', items: APPLE_MUSIC_ITEM_SCHEMA },
         candidates: { type: 'array', items: APPLE_MUSIC_ITEM_SCHEMA }, playlist_id: id, request_id: requestId,
-        status: { type: 'string' }, has_more: { type: 'boolean' }, title: { type: 'string' },
+        status: { type: 'string' }, has_more: { type: 'boolean' }, title: { type: 'string' }, artist: { type: 'string' },
+        duration: { type: 'number' }, position: { type: 'number' },
         subscription: { type: 'boolean' }, capabilities: { type: 'array', items: { type: 'string' } } } }
 })));
 export function validateAppleMusicInput(action, input = {}) {

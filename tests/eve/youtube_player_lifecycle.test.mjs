@@ -147,6 +147,20 @@ test('closing removes the player, its frame loop and its listener; a late commit
     win.close();
 });
 
+test('a cued start (handoff from another device) seeks once the player is ready, then plays', async () => {
+    const { win, runtime, watchCommands, posted, fromHost } = setup();
+    runtime.cue('video', 85);
+    await runtime.transport('play', 'video');
+    watchCommands(); fromHost({ type: 'ready', state: -1, time: 0 });
+    expect(posted.map(({ command, seconds }) => ({ command, seconds }))).toEqual([{ command: 'seek', seconds: 85 }, { command: 'play', seconds: undefined }]);
+    // The cue is spent: the next mount starts at the beginning.
+    await runtime.transport('stop', 'video'); posted.splice(0);
+    await runtime.transport('play', 'video');
+    watchCommands(); fromHost({ type: 'ready', state: -1, time: 0 });
+    expect(posted.map(({ command }) => command)).toEqual(['play']);
+    win.close();
+});
+
 test('a double tap on the playing Atome toggles fullscreen; the gesture layer goes with the player', async () => {
     const { runtime, tick } = setup();
     await runtime.transport('play', 'video'); tick();

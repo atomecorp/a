@@ -30,6 +30,7 @@ struct AppleMusicRequest {
     let input: [String: Any]
     static let fields: [String: Set<String>] = [
         "get_state": [], "authorize": [], "resume": [], "pause": [], "stop": [], "next": [], "previous": [],
+        "seek": ["seconds"], "artwork": ["ids", "scope", "size"],
         "search": ["query", "scope", "kind", "limit"], "list_playlists": ["limit", "offset"],
         "list_library": ["kind", "limit", "offset"],
         "favorite_current": ["song_id", "entry_id"],
@@ -40,11 +41,17 @@ struct AppleMusicRequest {
         guard let allowed = Self.fields[operation], Set(input.keys).isSubset(of: allowed) else { throw AppleMusicFailure(code: "INVALID_ARGUMENT") }
         self.operation = operation; self.input = input
         for (key, value) in input {
-            if ["limit", "offset"].contains(key) {
+            if key == "seconds" {
+                guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+                      number.doubleValue.isFinite, number.doubleValue >= 0, number.doubleValue <= 86400 else { throw AppleMusicFailure(code: "INVALID_ARGUMENT") }
+            } else if key == "size" {
+                guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+                      number.doubleValue == Double(number.intValue), number.intValue >= 32, number.intValue <= 600 else { throw AppleMusicFailure(code: "INVALID_ARGUMENT") }
+            } else if ["limit", "offset"].contains(key) {
                 guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
                       number.doubleValue == Double(number.intValue), number.intValue >= (key == "limit" ? 1 : 0),
                       number.intValue <= (key == "limit" ? 25 : 10000) else { throw AppleMusicFailure(code: "INVALID_ARGUMENT") }
-            } else if key == "track_ids" {
+            } else if key == "track_ids" || key == "ids" {
                 guard let ids = value as? [String], !ids.isEmpty, ids.count <= 25, Set(ids).count == ids.count,
                       ids.allSatisfy(Self.validID) else { throw AppleMusicFailure(code: "INVALID_ARGUMENT") }
             } else {
@@ -55,7 +62,7 @@ struct AppleMusicRequest {
                 if key == "kind" && !["song", "playlist", "artist"].contains(text) { throw AppleMusicFailure(code: "INVALID_ARGUMENT") }
             }
         }
-        let required = ["search": ["query"], "playlist_tracks": ["id"], "create_playlist": ["name"], "add_tracks": ["playlist_id", "track_ids"]]
+        let required = ["search": ["query"], "playlist_tracks": ["id"], "create_playlist": ["name"], "add_tracks": ["playlist_id", "track_ids"], "seek": ["seconds"]]
         guard (required[operation] ?? []).allSatisfy({ input[$0] != nil }) else { throw AppleMusicFailure(code: "INVALID_ARGUMENT") }
         if operation == "favorite_current" && (input["song_id"] == nil || input["entry_id"] == nil) {
             throw AppleMusicFailure(code: "INVALID_ARGUMENT")
@@ -74,5 +81,8 @@ struct AppleMusicRequest {
     var kind: String { input["kind"] as? String ?? "song" }
     var limit: Int { (input["limit"] as? NSNumber)?.intValue ?? 25 }
     var offset: Int { (input["offset"] as? NSNumber)?.intValue ?? 0 }
+    var seconds: Double { (input["seconds"] as? NSNumber)?.doubleValue ?? 0 }
+    var size: Int { (input["size"] as? NSNumber)?.intValue ?? 256 }
+    var ids: [String] { input["ids"] as? [String] ?? [] }
     func string(_ key: String) -> String { input[key] as? String ?? "" }
 }

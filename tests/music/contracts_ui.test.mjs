@@ -3,7 +3,7 @@ vi.mock('../../eVe/intuition/tools/core/tool_runtime.js', () => ({ toolRuntimeV2
 vi.mock('../../eVe/domains/dashboard/dashboard_mystic_sources.js', () => ({ dashboardMysticLabelItem: input => input, dashboardMysticTool: vi.fn() }));
 import { MUSIC_COMMANDS, MUSIC_ERRORS, validateMusicInput } from '../../atome/src/squirrel/music/contracts.js';
 import { createMusicRuntime } from '../../eVe/domains/music/music_runtime.js';
-import { createMusicMysticItem } from '../../eVe/domains/music/music_mystic_items.js';
+import { createMusicSource, resolveMusicProvider } from '../../eVe/domains/music/music_source.js';
 import { buildServiceCommandDefs, serviceCommandHandlers } from '../../eVe/intuition/tools/core/tool_runtime_service_commands.js';
 import { createMcpMusicHandlers } from '../../atome/src/squirrel/atome/mcp_handlers_contracts.js';
 import { resolveAccessPolicy } from '../../atome/src/squirrel/atome/mcp_security_policy.js';
@@ -49,27 +49,32 @@ test('a lost transport reply retains the stable receipt ID and a changed user ca
     const changed = createMusicRuntime({ readActor: () => owner, request: async () => { owner = 'bob'; return { ok: true, items: [{ name: 'private' }] }; } });
     expect(await changed.execute('list_library', { provider: 'spotify' })).toEqual({ ok: false, error: 'CONTEXT_CHANGED' });
 });
-test('Spotify and Deezer readiness tiles use canonical commands and expose only available controls', async () => {
-    const command = vi.fn(async (_, input) => ({ result: input.provider === 'spotify' ? { ok: true, supported: true, configured: false }
-        : { ok: true, supported: true, configured: true, state: 'catalog_only' } }));
-    // Not entered in Passwords & keys: no tile at all.
-    expect(await createMusicMysticItem({ provider: 'spotify', makeItem: input => input, command })).toBeNull();
-    const deezer = await createMusicMysticItem({ provider: 'deezer', makeItem: input => input, command });
-    deezer.children = await deezer.loadChildren();
-    expect(deezer.key).toBe('fun_deezer'); expect(deezer.children[0]).toMatchObject({ disabled: true, label: 'Public catalog. Private library and playback unavailable' });
-    expect(command).toHaveBeenCalledWith('music.get_state', { provider: 'deezer' });
+test('Musique takes the first service entered in Passwords & keys, and Deezer only opens pages', async () => {
+    const command = vi.fn(async (name, input) => ({ result: name === 'music.get_state'
+        ? (input.provider === 'spotify' ? { ok: true, supported: true, configured: false } : { ok: true, supported: true, configured: true, state: 'catalog_only' })
+        : name === 'music.open_item' ? { ok: true, url: 'https://www.deezer.com/track/1', playback: 'opened_unconfirmed' }
+            : { ok: true, items: [{ id: '1', name: 'Song', kind: 'song', artist: 'A', artwork_url: 'https://cdn.example/c.jpg', duration: 90 }] } }));
+    // Not entered in Passwords & keys: Spotify is skipped, Deezer is the one.
+    expect(await resolveMusicProvider({ command, apple: async () => false })).toBe('deezer');
+    const deezer = createMusicSource({ provider: 'deezer', command, notice: async () => {}, reserve: () => ({ close: vi.fn() }), open: async () => ({ ok: true }) });
+    expect(await deezer.state()).toEqual({ ok: true, need: '', catalogOnly: true, now: null });
+    expect(deezer.hasLibrary).toBe(false);
+    const found = await deezer.search('Song');
+    expect(command).toHaveBeenLastCalledWith('music.search', { provider: 'deezer', query: 'Song', kind: 'song', limit: 10 });
+    expect(found.songs[0]).toMatchObject({ id: '1', title: 'Song', artist: 'A', artwork: 'https://cdn.example/c.jpg', duration: 90 });
+    expect(await deezer.play(found.songs[0])).toMatchObject({ ok: true, playback: 'opened_unconfirmed' });
+    expect(command).toHaveBeenLastCalledWith('music.open_item', { provider: 'deezer', id: '1', kind: 'song' });
 });
 test('Spotify consent reserves its browser during the gesture and all account requests go through tools', async () => {
     const order = [], reserve = () => { order.push('reserve'); return { close: vi.fn() }; };
-    const command = vi.fn(async (name, input) => {
+    const command = vi.fn(async (name) => {
         order.push(name);
         return { result: name === 'music.get_state' ? { ok: true, supported: true, configured: true, state: 'disconnected' }
             : name === 'music.connect' ? { ok: true, authorization_url: 'https://accounts.spotify.com/authorize', attempt_id: 'a'.repeat(32) } : { ok: true } };
     });
-    const palette = await createMusicMysticItem({ provider: 'spotify', makeItem: input => input, command, reserve,
-        open: async () => { order.push('open'); return { ok: true }; }, notice: async () => {} });
-    palette.children = await palette.loadChildren();
-    order.length = 0; await palette.children[0].onSelect();
+    const spotify = createMusicSource({ provider: 'spotify', command, reserve, open: async () => { order.push('open'); return { ok: true }; }, notice: async () => {} });
+    expect((await spotify.state()).need).toBe('connect');
+    order.length = 0; await spotify.connect();
     expect(order).toEqual(['reserve', 'music.connect', 'open', 'music.await_connection']);
     expect(command).toHaveBeenLastCalledWith('music.await_connection', { provider: 'spotify', attempt_id: 'a'.repeat(32) });
 });

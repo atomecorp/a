@@ -15,6 +15,13 @@ vi.mock('../../atome/src/squirrel/teleport/remote_command.js', async (importOrig
         runRemoteCommand: async (request) => { runs.push(request); return answer; }
     };
 });
+let handoffMedia = null;
+let handoffOutcome = null;
+const handoffs = [];
+vi.mock('../../eVe/intuition/tools/media_handoff.js', () => ({
+    resolveHandoffMedia: async () => handoffMedia,
+    sendMediaToSurface: async (order) => { handoffs.push(order); return handoffOutcome; }
+}));
 vi.mock('../../atome/src/squirrel/apis/unified/adole_api/surfaces.js', () => ({
     setLocalSurfaceLabel: (label) => String(label).trim(),
     ensureSurfaceAnnounced: async () => ({ success: true })
@@ -64,4 +71,32 @@ test('an unknown device is never guessed: nothing is sent and the connected ones
     expect(outcome.message).toContain('Mac du bureau');
     expect(runs.length).toBe(before);
     expect(await run('surface.rename', { label: 'Télé du salon' })).toMatchObject({ ok: true, name: 'Télé du salon' });
+});
+
+test('send_media: the playing media goes to the named device, and every outcome has its own sentence', async () => {
+    handoffMedia = null;
+    const nothing = await run('surface.send_media', { surface: 'Mac du bureau' });
+    expect(nothing).toMatchObject({ ok: false, error: 'media_handoff_nothing' });
+    expect(handoffs).toHaveLength(0);
+
+    handoffMedia = { atomeId: 'tv-1', kind: 'tv', name: 'France 24', playing: true };
+    handoffOutcome = { ok: true, resumed: envelope({ ok: true, kind: 'tv', playback: 'playing', fullscreen: true }).result };
+    const sent = await run('surface.send_media', { surface: 'sur le Mac du bureau' });
+    expect(handoffs.at(-1)).toMatchObject({ media: { atomeId: 'tv-1' }, surface: { surface_id: 's-mac' }, fullscreen: true });
+    expect(sent).toMatchObject({ ok: true, device: { name: 'Mac du bureau' }, media: { name: 'France 24' }, result: { playback: 'playing' } });
+
+    handoffOutcome = { ok: false, error: 'teleport_declined' };
+    const declined = await run('surface.send_media', { surface: 'Mac du bureau', fullscreen: false });
+    expect(handoffs.at(-1).fullscreen).toBe(false);
+    handoffOutcome = { ok: true, resumed: envelope({ ok: false, error: 'MEDIA_NOT_HERE' }).result };
+    const silent = await run('surface.send_media', { surface: 'Mac du bureau' });
+    expect(silent).toMatchObject({ ok: false, error: 'MEDIA_NOT_HERE' });
+    handoffOutcome = { ok: false, error: 'teleport_target_offline' };
+    const offline = await run('surface.send_media', { surface: 'Mac du bureau' });
+    const messages = [nothing, sent, declined, silent, offline].map((outcome) => outcome.message);
+    messages.slice(1).forEach((message) => expect(message).toContain('Mac du bureau'));
+    expect(new Set(messages).size).toBe(messages.length);
+
+    const unknown = await run('surface.send_media', { surface: 'la télé de la cuisine' });
+    expect(unknown).toMatchObject({ ok: false, error: 'remote_command_surface_not_found' });
 });

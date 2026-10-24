@@ -1,11 +1,17 @@
 import { spotifyApi } from './spotify_http.js';
-import { MusicFailure } from '../../atome/src/squirrel/music/contracts.js';
+import { MusicFailure, musicArtworkUrl } from '../../atome/src/squirrel/music/contracts.js';
 
 const songUri = id => 'spotify:track:' + id;
 const page = input => new URLSearchParams({ limit: String(input.limit || 10), offset: String(input.offset || 0) });
-export const musicItem = value => value && ['track', 'artist', 'playlist'].includes(value.type) && /^[A-Za-z0-9]{1,100}$/.test(value.id || '') && typeof value.name === 'string'
-    ? { id: value.id, name: value.name, kind: value.type === 'track' ? 'song' : value.type,
-        ...(Array.isArray(value.artists) ? { artist: value.artists.map(artist => artist.name).join(', ') } : {}) } : null;
+// A track's cover is its album's; a playlist's or an artist's its own (Spotify lists the largest first).
+const coverOf = value => musicArtworkUrl((value.type === 'track' ? value.album?.images : value.images)?.[0]?.url);
+export const musicItem = value => {
+    if (!value || !['track', 'artist', 'playlist'].includes(value.type) || !/^[A-Za-z0-9]{1,100}$/.test(value.id || '') || typeof value.name !== 'string') return null;
+    const cover = coverOf(value), duration = Number(value.duration_ms) / 1000;
+    return { id: value.id, name: value.name, kind: value.type === 'track' ? 'song' : value.type,
+        ...(Array.isArray(value.artists) ? { artist: value.artists.map(artist => artist.name).join(', ') } : {}),
+        ...(cover ? { artwork_url: cover } : {}), ...(duration > 0 ? { duration } : {}) };
+};
 const itemsOf = values => (values || []).map(musicItem).filter(Boolean);
 
 export async function readSpotify(ctx, record, action, input) {
@@ -14,6 +20,7 @@ export async function readSpotify(ctx, record, action, input) {
         const state = await get('/me/player');
         return { playback: state?.is_playing === true ? 'playing' : state ? 'paused' : 'stopped',
             current_song: state?.item?.type === 'track' ? musicItem(state.item) : null,
+            ...(Number(state?.progress_ms) >= 0 && state?.item ? { position: Number(state.progress_ms) / 1000 } : {}),
             device: state?.device ? { id: state.device.id, name: state.device.name, restricted: state.device.is_restricted === true } : null };
     }
     if (action === 'devices') {

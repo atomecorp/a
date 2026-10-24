@@ -93,6 +93,17 @@ Les entrées reçues sont appliquées en **synthétisant des événements pointe
 (`remote_input_applicator.js`), jamais en attaquant le renderer : l'intercepteur de
 surface canonique reste l'unique propriétaire du pointeur.
 
+## Continuité de lecture des médias (24 oct. 2026)
+
+Un média qui joue (chaîne TV, vidéo YouTube/PeerTube, atome vidéo ou audio) continue
+sur la destination : `eVe/intuition/tools/media_handoff.js`. Pas de nouveau protocole :
+la téléportation déplace l'atome, puis la **source**, à `teleport-arrived`, lit la
+position dans son lecteur, l'arrête et envoie `media.resume` par le relais de commandes
+(`remote_command.js`). La destination ouvre le projet si besoin, cale la position et lit
+par `ui.play` depuis la source du média (§30 : jamais un flux de l'écran source). La
+position n'est jamais persistée. À la voix : `surface.send_media` (« envoie ça sur la
+télé du salon »).
+
 ## Ce qui n'existe pas
 
 `RemoteCommands` et `BuiltinHandlers` sont des **fantômes** : les fichiers n'existent

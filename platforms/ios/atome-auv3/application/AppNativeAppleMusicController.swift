@@ -18,8 +18,11 @@ final class AppNativeAppleMusicController {
                 let owner = try principal(token)
                 let request = try AppleMusicRequest(operation: payload["operation"] as? String ?? "",
                     input: payload["input"] as? [String: Any] ?? [:])
-                guard !controller.busy else { throw AppleMusicFailure(code: "BUSY") }
-                controller.busy = true; defer { controller.busy = false }
+                // A read (the player's state, covers, the library, a search) never waits for a command in
+                // flight: the Dashboard follows the song every second while a play may take longer.
+                let reading = ["get_state", "artwork", "search", "list_playlists", "list_library", "playlist_tracks"].contains(request.operation)
+                if !reading { guard !controller.busy else { throw AppleMusicFailure(code: "BUSY") }; controller.busy = true }
+                defer { if !reading { controller.busy = false } }
                 let valid = {
                     guard try principal(token) == owner else { throw AppleMusicFailure(code: "CONTEXT_CHANGED") }
                     if ["create_playlist", "add_tracks", "favorite_current"].contains(request.operation) {
@@ -77,8 +80,11 @@ final class AppNativeAppleMusicController {
         default: result["playback"] = "opened_unconfirmed"
         }
         result["title"] = player.queue.currentEntry?.title ?? ""
+        result["artist"] = player.queue.currentEntry?.subtitle ?? ""
+        result["position"] = player.playbackTime
         if let entry = player.queue.currentEntry, case let .song(song) = entry.item {
             result["current_entry_id"] = entry.id; result["current_song_id"] = song.id.rawValue
+            result["duration"] = song.duration ?? 0
         }
         return result
     }
@@ -94,6 +100,7 @@ final class AppNativeAppleMusicController {
         if request.operation == "favorite_current" {
             return try await AppleMusicFavorites.addCurrent(request, check: check, started: writeStarted)
         }
+        if request.operation == "artwork" { return try await AppleMusicLibrary.artwork(request, check: check) }
         if ["search", "list_playlists", "list_library", "playlist_tracks"].contains(request.operation) {
             return try await AppleMusicLibrary.read(request, check: check)
         }

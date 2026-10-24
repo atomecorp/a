@@ -1,4 +1,4 @@
-import { MusicFailure } from '../../atome/src/squirrel/music/contracts.js';
+import { MusicFailure, musicArtworkUrl } from '../../atome/src/squirrel/music/contracts.js';
 
 // The Deezer profile entered in Passwords & keys must exist in the public catalog.
 export async function verifyDeezerProfile(id, { fetchImpl, signal }) {
@@ -30,6 +30,10 @@ export async function readDeezerCatalog(action, input, ctx) {
     ctx.check();
     if (body?.error || !Array.isArray(body?.data)) throw new MusicFailure('PROVIDER_REJECTED');
     const items = body.data.filter(item => item?.type === 'track' && Number.isSafeInteger(item.id) && item.id > 0 && typeof item.title === 'string')
-        .map(item => ({ id: String(item.id), name: item.title, kind: 'song', artist: String(item.artist?.name || '') }));
+        .map((item) => {
+            const cover = musicArtworkUrl(item.album?.cover_medium), duration = Number(item.duration);
+            return { id: String(item.id), name: item.title, kind: 'song', artist: String(item.artist?.name || ''),
+                ...(cover ? { artwork_url: cover } : {}), ...(duration > 0 ? { duration } : {}) };
+        });
     return { ok: true, items, has_more: typeof body.next === 'string' && body.next.length > 0 };
 }

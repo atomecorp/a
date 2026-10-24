@@ -1,7 +1,8 @@
 // One contract for runtime V2, AI discovery and MCP: what the assistant needs to
 // read about the user's current context (selection, other devices), the debug
-// reports it files when a request cannot be done, and the orders it relays to the
-// user's other devices. Handlers live with the eVe assistant.
+// reports it files when a request cannot be done, the orders it relays to the
+// user's other devices and the media it hands over to them. Handlers live with
+// the eVe assistant.
 export const DEBUG_REPORT_SOURCE_DOMAIN = 'assistant_debug';
 export const DEBUG_REPORT_ORIGINS = Object.freeze(['user_requested', 'assistant_failure']);
 
@@ -48,6 +49,26 @@ export const ASSISTANT_CONTEXT_COMMANDS = Object.freeze([
         } },
     { name: 'surface.rename', required: ['label'], properties: { label: line(120) },
         description: 'Name THIS device so it can be addressed from the user\'s other devices: « appelle cet appareil la télé '
-            + 'du salon », « renomme ce Mac en Mac du bureau ».' }
+            + 'du salon », « renomme ce Mac en Mac du bureau ».' },
+    // Media handoff: the playing (or selected) media moves to another device and goes on there.
+    { name: 'surface.send_media', required: ['surface'],
+        description: 'Move what plays here (a TV channel, a YouTube or PeerTube video, a video or audio object), or else the '
+            + 'selected media, to ANOTHER device of the user, where it goes on playing at the same position, fullscreen: '
+            + '« envoie ça sur la télé du salon », « mets ça sur le Mac », « continue sur l\'iPad ». surface = the device name '
+            + 'exactly as the user said it; atome_id only when the user named another media object. It stops here once it '
+            + 'plays there. Always say the result message, including refusals, unknown and offline devices.',
+        properties: {
+            surface: line(120), atome_id: line(128),
+            fullscreen: { type: 'boolean', description: 'False only when the user asked for a small window.' }
+        } },
+    { name: 'media.resume', required: ['atome_id'],
+        description: 'Resume on THIS device a media object that was just teleported here from another device: opens its '
+            + 'project, plays it from position_seconds, fullscreen when asked. Sent by the device the media left; the '
+            + 'assistant uses surface.send_media instead.',
+        properties: {
+            atome_id: line(128), project_id: line(128),
+            position_seconds: { type: 'number', minimum: 0 },
+            fullscreen: { type: 'boolean' }
+        } }
 ]);
 export const ASSISTANT_CONTEXT_COMMAND_NAMES = Object.freeze(ASSISTANT_CONTEXT_COMMANDS.map(command => command.name));

@@ -4,7 +4,7 @@ import { FIRST_LAUNCH_TEMPLATES } from '../../eVe/domains/templates/first_launch
 import { takeDashboardEveEntry, rememberDashboardConnection, forgetDashboardEveEntry, rememberDashboardEveMode } from '../../eVe/domains/dashboard/dashboard_home_style.js';
 import { eveAtomBreath } from '../../eVe/domains/dashboard/dashboard_eve_tokens.js';
 import { normalizeDashboardStyle } from '../../eVe/intuition/tools/user_visual_preferences_model.js';
-import { createMusicMysticItem } from '../../eVe/domains/music/music_mystic_items.js';
+import { resolveMusicProvider } from '../../eVe/domains/music/music_source.js';
 import { createDashboardMysticStage } from '../../eVe/domains/dashboard/dashboard_mystic_stage.js';
 
 const tv = vi.hoisted(() => ({ byId: vi.fn(), favorites: vi.fn(), stored: vi.fn(() => []), written: vi.fn(() => true), gateway: vi.fn(async () => ({ ok: true })) }));
@@ -64,11 +64,10 @@ test('the breathing halo never extinguishes and keeps scale and deformation belo
     expect(eveAtomBreath(2000, true)).toEqual(eveAtomBreath(0, true));
 });
 
-test('a slow provider cannot delay its root tile or other providers', async () => {
+test('a slow provider cannot delay what this device shows at once', async () => {
     const command = vi.fn(() => new Promise(() => {}));
-    const root = await createMusicMysticItem({ provider: 'spotify', supported: () => true, makeItem: input => input, command });
-    expect(root.key).toBe('fun_spotify'); expect(command).not.toHaveBeenCalled();
-    void root.loadChildren(); expect(command).toHaveBeenCalledWith('music.get_state', { provider: 'spotify' });
+    expect(await resolveMusicProvider({ command, remote: false, apple: async () => false })).toBe('');
+    expect(command).not.toHaveBeenCalled();
 });
 
 test('the TV rubric lists only the favourites, at once as stored, then with fresh streams, then the tile that opens the TV selector', async () => {
