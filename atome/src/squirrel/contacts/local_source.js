@@ -3,7 +3,7 @@ import { createCanonicalImport, createImportSnapshot, importRecordId, importReco
 import { importData, sameImportValue } from '../shared/import_reconciliation.js';
 import { matchesQuery } from './service_contact_utils.js';
 import { getSessionState } from '../apis/unified/adole_api/session.js';
-import { persistContactPhoto, CONTACT_PHOTO_PERMANENT_ERRORS } from './photo_media.js';
+import { persistContactPhoto, CONTACT_PHOTO_PAYLOAD_INVALID } from './photo_media.js';
 import { contactBookPhone } from '../../shared/contact_book_hash.js';
 import { createPersonalContactImport } from './personal_profile.js';
 
@@ -188,17 +188,12 @@ export function createLocalContactsSource({ source_id = 'eve_contacts_local', ro
             const own = meta.personal_candidates ? await personal.collect(items, meta.personal_candidates, meta) : null;
             if (own?.external_id) items = items.filter(item => String(item.source_contact_id || item.id) !== own.external_id);
             const context = store.capture(), prepared = [];
-            let photoRetry = false;
             for (const item of items) {
-                // Une photo illisible ou un envoi refuse ne doit jamais annuler
-                // l'import du carnet entier : le contact entre sans photo.
-                try { prepared.push(await persistContactPhoto(item, context, meta.signal)); }
+                // Une photo illisible ne doit jamais annuler l'import du carnet
+                // entier : le contact entre sans photo.
+                try { prepared.push(await persistContactPhoto(item, context)); }
                 catch (error) {
-                    if (meta.signal?.aborted || /import_(cancelled|session_changed)/.test(error?.message || '')) throw error;
-                    // Un echec d'envoi est passager : le curseur n'avance pas, le
-                    // prochain cycle relit ces contacts. Une image invalide ne
-                    // le sera jamais davantage.
-                    photoRetry ||= !CONTACT_PHOTO_PERMANENT_ERRORS.has(error?.message);
+                    if (error?.message !== CONTACT_PHOTO_PAYLOAD_INVALID) throw error;
                     const { photo: _photo, user_face: _face, ...rest } = item;
                     const raw = item.raw ? { ...item.raw } : null;
                     if (raw) { delete raw.photo; delete raw.user_face; }
@@ -216,7 +211,7 @@ export function createLocalContactsSource({ source_id = 'eve_contacts_local', ro
             const result = await store.collect(items.map(item => {
                 const collections = item.collections || item.raw?.collections;
                 return collections ? { ...item, collections: collections.map(id => ids.get(id) || id) } : item;
-            }), photoRetry ? { ...meta, complete: false } : meta);
+            }), meta);
             const duplicatesRemoved = meta.legacy_source_prefix && meta.full_snapshot === true && meta.complete === true
                 ? await removeFormerImportCopies(store, items, result, meta.legacy_source_prefix, meta.snapshot || createImportSnapshot()) : 0;
             await reread(); return { ...result, personal_profile: own, duplicates_removed: duplicatesRemoved, items: cache };

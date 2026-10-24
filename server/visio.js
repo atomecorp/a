@@ -2,6 +2,7 @@ import mediasoup from 'mediasoup';
 import { v4 as uuidv4 } from 'uuid';
 import db from '../database/adole.js';
 import { findUserByPhone, findUserById } from './auth_users.js';
+import { contactBookPhone } from '../atome/src/shared/contact_book_hash.js';
 import { assertDeviceSessionClaims } from './auth_session_validation.js';
 import { AUTH_LINK_ORIGIN } from '../atome/src/shared/auth_link_contract.js';
 import { wsSendJson } from './wsSend.js';
@@ -207,7 +208,7 @@ export function createVisioService(options = {}) {
     }
 
     if (phone) {
-      const user = await findUserByPhone(dataSource, phone);
+      const user = await findUserByPhone(dataSource, contactBookPhone(phone));
       if (user) {
         return {
           id: user.user_id,

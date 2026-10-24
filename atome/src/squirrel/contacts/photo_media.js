@@ -1,13 +1,10 @@
 import { importIdentity } from '../shared/canonical_import.js';
 
 const CONTACT_PHOTO_ID_PREFIX = 'contact_photo_';
-/** Failures a later read of the same source photo cannot fix. */
-export const CONTACT_PHOTO_PERMANENT_ERRORS = new Set(['contact_photo_payload_invalid', 'contact_photo_owner_invalid']);
-// The media record can outlive its file (iOS keeps files on the local server
-// only; a reinstall empties it): such a photo is uploaded again.
-const MEDIA_FILE_MISSING = new Set(['media_export_read_failed', 'media_export_file_unavailable']);
+/** The one failure of an embedded photo: its contact is kept without it. */
+export const CONTACT_PHOTO_PAYLOAD_INVALID = 'contact_photo_payload_invalid';
 
-/** Contact photos are ordinary image media; listings show them apart from the user's own files. */
+/** Contact photos stored as media before 24 Oct 2026; listings show them apart from the user's own files. */
 export const isContactPhotoMedia = (file = {}) => [file.id, file.atome_id, file.file_name, file.name]
     .some(value => String(value || '').startsWith(CONTACT_PHOTO_ID_PREFIX));
 
@@ -15,48 +12,29 @@ export const isContactPhotoMedia = (file = {}) => [file.id, file.atome_id, file.
 const normalizeEmbeddedPhoto = (photo) => (typeof photo === 'string' && photo.startsWith('data:')
     ? photo.replace(/\s+/g, '').replace(/^data:image\/(?:image\/)?jpg;/i, 'data:image/jpeg;').replace(/^data:image\/image\//i, 'data:image/')
     : photo);
+const EMBEDDED_PHOTO = /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
 
-/** Embedded images use the existing file/media intake; arbitrary remote images are never fetched. */
-export async function persistContactPhoto(contact, context, signal) {
+/**
+ * An imported photo lives inline in its card, like every identity photo (the
+ * account's own photo, a photo picked for a contact): the card carries it to
+ * every device of the account and back after a restore. A stored file was
+ * bound to the importing device (an iOS local-server path) and was never seen
+ * again on another device or after a reinstall. `photo_asset_id` names the
+ * photo, so a repeated import recognizes the same one. Remote images are
+ * never fetched.
+ */
+export async function persistContactPhoto(contact, context) {
     const photo = normalizeEmbeddedPhoto(contact.photo ?? contact.raw?.photo);
     if (photo === '') return { ...contact, photo: '', user_face: '', photo_asset_id: '' };
     if (!photo || !photo.startsWith('data:')) return contact;
-    const match = photo.match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/);
-    if (!match || photo.length > 1024 * 1024) throw new Error('contact_photo_payload_invalid');
-    context.check(); signal?.throwIfAborted();
-    const id = `${CONTACT_PHOTO_ID_PREFIX}${await importIdentity([context.owner, photo])}`;
-    let existing;
-    try { existing = await context.store.getStateCurrent(id); }
-    catch (error) { if (!/atome_not_available_locally|not_found/i.test(error.message)) throw error; }
+    if (!EMBEDDED_PHOTO.test(photo) || photo.length > 1024 * 1024) throw new Error(CONTACT_PHOTO_PAYLOAD_INVALID);
     context.check();
-    if (existing?.owner_id && String(existing.owner_id) !== context.owner) throw new Error('contact_photo_owner_invalid');
-    let url = existing?.properties?.media_url;
-    if (existing?.deleted_at || existing?.deleted || existing?.properties?.__deleted) url = null;
-    const [{ createAssetFileUploader, readMediaAssetBytes }, { createUploadAtome }] = await Promise.all([
-        import('../../../../eVe/domains/media/asset_box_file_upload.js'),
-        import('../../../../eVe/domains/media/asset_box_atome_store.js')
-    ]);
-    if (url) {
-        try { await readMediaAssetBytes({ fileName: existing.properties.file_name, ownerId: context.owner }); }
-        catch (error) { if (!MEDIA_FILE_MISSING.has(error.message)) throw error; url = null; }
-        context.check();
-    }
-    if (!url) {
-        const upload = createAssetFileUploader({ setUploadsAuthMissing() {}, renderAuthMissingUploads() {}, createUploadAtomeForUpload: createUploadAtome });
-        const binary = atob(match[2]), bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
-        const extension = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[match[1]];
-        const file = new File([bytes], `${id}.${extension}`, { type: match[1] });
-        const result = await upload({ file, name: file.name, type: file.type }, { atomeId: id, scope: 'global',
-            checkSession: context.check, signal, typeOverride: 'image', extraParticles: { access: 'private', visibility: 'private' } });
-        context.check();
-        if (!result.ok || !result.mediaUrl) throw new Error('contact_photo_media_commit_failed');
-        url = result.mediaUrl;
-    }
-    return { ...contact, photo: url, photo_asset_id: id, user_face: url };
+    const id = `${CONTACT_PHOTO_ID_PREFIX}${await importIdentity([context.owner, photo])}`;
+    return { ...contact, photo, photo_asset_id: id, user_face: photo };
 }
 
 export async function exportContactPhoto(contact, context) {
-    if (!contact.photo_asset_id) return contact;
+    if (!contact.photo_asset_id || String(contact.photo || '').startsWith('data:')) return contact;
     const asset = await context.store.getStateCurrent(contact.photo_asset_id);
     context.check();
     const props = asset?.properties || {};

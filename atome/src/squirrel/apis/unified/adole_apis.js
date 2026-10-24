@@ -1,5 +1,6 @@
 import { getWorkspaceSyncStatus } from './adole_api/sync_status.js';
 import auth from './adole_api/auth.js';
+import { contactBookPhone } from '../../../shared/contact_book_hash.js';
 import { accountMethods } from './adole_api/auth_methods_account.js';
 import { flushBrowserWorkspace } from './adole_api/auth_methods_login.js';
 import {
@@ -71,6 +72,14 @@ const fastifyCall = async (message, errorCode) => {
   const prepared = await auth.ensureFastifyToken();
   if (!prepared?.ok) throw new Error(prepared?.error || prepared?.reason || errorCode);
   return FastifyAdapter.ws.send(message);
+};
+// A card number ("06 12 34 56 78" from a native book) is dialled from THIS device:
+// its country is known here, never on the server, so it leaves already in E.164.
+const dialledPhone = (phone) => {
+  if (!phone) return '';
+  const e164 = contactBookPhone(phone);
+  if (!e164) throw new Error('contact_phone_invalid');
+  return e164;
 };
 const getAnonymousIdentity = () => {
   const state = getSessionState();
@@ -214,7 +223,7 @@ export const AdoleAPI = {
   },
   communication: {
     readConversation: async ({ contactId, targetPhone = '', cursor = null, messageId = null, limit = 30 } = {}) => {
-      const result = await fastifyCall({ type: 'conversation', contactId, targetPhone, cursor, messageId, limit }, 'communication_auth_unavailable');
+      const result = await fastifyCall({ type: 'conversation', contactId, targetPhone: dialledPhone(targetPhone), cursor, messageId, limit }, 'communication_auth_unavailable');
       if (!result.ok) throw new Error(result.error || 'conversation_read_failed');
       return result;
     },
@@ -231,7 +240,7 @@ export const AdoleAPI = {
       return FastifyAdapter.ws.send({
         type: 'direct-message',
         toUserId: targetUserId || undefined,
-        toPhone: targetPhone || undefined,
+        toPhone: dialledPhone(targetPhone) || undefined,
         message: payload
       });
     },
@@ -263,7 +272,7 @@ export const AdoleAPI = {
       return fastifyCall({
         type: 'contact', action: 'request', note,
         userId: byObject ? target.userId || null : target,
-        phone: byObject ? target.phone || null : null
+        phone: byObject ? dialledPhone(target.phone) || null : null
       }, 'contacts_auth_unavailable');
     },
     // « Accepter les demandes de personnes absentes de mon carnet » (defaut : oui).

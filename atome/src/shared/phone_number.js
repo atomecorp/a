@@ -33,7 +33,10 @@ const COUNTRY_PHONE_METADATA = Object.freeze({
     US: { callingCode: '1', trunkPrefix: '' }
 });
 
-const cleanPhone = (value) => String(value ?? '').trim().replace(/[\s().\-/]/g, '');
+// Native address books wrap numbers in direction marks (Unicode Cf), and an
+// international number often keeps its national trunk as "(0)": +33 (0)6 → +336.
+const cleanPhone = (value) => String(value ?? '').replace(/\p{Cf}/gu, '').trim()
+    .replace(/^(\+|00)(\d+)\s*\(0\)/, '$1$2').replace(/[\s().\-/]/g, '');
 
 const TIME_ZONE_REGIONS = Object.freeze({
     'Europe/Paris': 'FR',

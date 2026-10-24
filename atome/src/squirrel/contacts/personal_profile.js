@@ -28,7 +28,7 @@ export function createPersonalContactImport({ api, session = getSessionState, pu
         const old = importRecordProps(original);
         const id = externalId(contact);
         if (!id) throw new Error('import_external_identity_required');
-        const prepared = await persistContactPhoto(contact, { ...context, check }, signal); check();
+        const prepared = await persistContactPhoto(contact, { ...context, check }); check();
         const incoming = profileInput(prepared);
         const row = await context.store.getStateCurrent(context.owner); check();
         if (!row) throw new Error('personal_profile_missing');

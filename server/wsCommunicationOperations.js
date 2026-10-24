@@ -42,13 +42,16 @@ export async function handleWsCommunication({ data, connection, safeSend, relati
         }
         const source = db.getDataSourceAdapter();
         const sender = await findUserById(source, userId);
-        const target = (data.toUserId || data.to_user_id ? await findUserById(source, String(data.toUserId || data.to_user_id)) : null)
-            || (data.toPhone ? await findUserByPhone(source, contactBookPhone(data.toPhone)) : null);
-        if (!sender || !target) throw new Error('contact_required');
-        const targetId = String(target.user_id);
+        if (!sender) throw new Error('contact_required');
+        // Rate and envelope are judged before the recipient is resolved: a number
+        // without an account answers exactly like an account not yet accepted.
         if (!rateAllowed(userId)) throw new Error('direct_message_rate_limited');
         const guarded = guardDirectMessage(data.message, { userId, username: sender.username, phone: sender.phone });
         if (!guarded.ok) throw new Error(guarded.error);
+        const target = (data.toUserId || data.to_user_id ? await findUserById(source, String(data.toUserId || data.to_user_id)) : null)
+            || (data.toPhone ? await findUserByPhone(source, contactBookPhone(data.toPhone)) : null);
+        if (!target) throw new Error('contact_required');
+        const targetId = String(target.user_id);
         const verdict = await relations.canCommunicate(userId, targetId);
         if (!verdict.ok && verdict.silent) { reply({ success: true, delivered: false, queued: true }); return; }
         if (!verdict.ok) throw new Error(verdict.error);

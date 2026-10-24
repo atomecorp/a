@@ -29,7 +29,10 @@ export function createVisioCommands({ ensureRoomMeta, resolveRoomMeta, resolveUs
     const invite = async (userId, meta, target, managed = false, vaultRouter = null, scheduled = false) => {
         const candidate = typeof target === 'object' ? target : { id: target };
         const user = await resolveUserInfo(candidate.id || candidate.userId || null, candidate.phone || null);
-        if (!user?.id || user.id === userId) throw new Error('visio_target_unavailable');
+        // A number without an account answers like an account not yet accepted:
+        // a call never reveals whether a number is registered (D4).
+        if (!user?.id) throw new Error('contact_required');
+        if (user.id === userId) throw new Error('visio_target_unavailable');
         const verdict = await relations.canCommunicate(userId, user.id);
         if (!verdict.ok && !verdict.silent) throw new Error(verdict.error || 'contact_required');
         if (meta.invites.size >= 5 && !meta.invites.has(user.id)) throw new Error('room_full');

@@ -111,14 +111,13 @@ test('MCP import methods require the same domain write capability as canonical m
             .toEqual(policy.required_capabilities);
     }
 });
-test('embedded photos reuse canonical media and remote photo references never trigger a fetch',async()=>{
-    const ids=[],context={owner:'owner',check(){},store:{async getStateCurrent(id){ids.push(id);return {owner_id:'owner',properties:{media_url:'/api/uploads/private-photo.jpg'}};}}};
+test('embedded photos live inline in the card and remote photo references never trigger a fetch',async()=>{
+    const context={owner:'owner',check(){}};
     const photo='data:image/jpeg;base64,/9j/';
     const first=await persistContactPhoto({photo},context);
     const second=await persistContactPhoto({photo},context);
-    expect(second.photo_asset_id).toBe(first.photo_asset_id);expect(first.photo).toBe('/api/uploads/private-photo.jpg');
+    expect(second.photo_asset_id).toBe(first.photo_asset_id);expect(first.photo).toBe(photo);expect(first.user_face).toBe(photo);
     expect(await persistContactPhoto({photo:'https://example.org/photo.jpg'},context)).toEqual({photo:'https://example.org/photo.jpg'});
-    expect(ids).toHaveLength(2);
     const vcf=buildWritableVcard({id:'photo',name:'Photo',photo},{version:'3.0'});
     expect(parseVcards(vcf)[0].photo).toBe(photo);
 });
