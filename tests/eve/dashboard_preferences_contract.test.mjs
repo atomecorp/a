@@ -5,8 +5,6 @@ import {
 } from '../../eVe/domains/dashboard/dashboard_preferences.js';
 import { createDashboardDataController } from '../../eVe/domains/dashboard/dashboard_data_controller.js';
 import { itemsForRender } from '../../eVe/domains/dashboard/dashboard_environment.js';
-import { createDashboardLayout } from '../../eVe/domains/dashboard/dashboard_layout.js';
-import { mergeDashboardTokens } from '../../eVe/domains/dashboard/dashboard_tokens.js';
 
 const allCategories = [
     ['calendar', 10], ['news', 20], ['contacts', 30], ['monitor', 40], ['projects', 50], ['store', 60]
@@ -68,17 +66,5 @@ describe('Dashboard preferences', () => {
         const restored = itemsForRender(categories, '', source);
         expect(restored.get('projects')).toEqual(source.get('projects'));
         expect(restored.get('calendar')).toEqual(source.get('calendar'));
-    });
-
-    it('keeps empty rows and integral scrolling on short mobile surfaces', () => {
-        const categories = allCategories.filter((category) => category.id !== 'store');
-        const tokens = mergeDashboardTokens({ metrics: { blockUnitSizePx: 120 } });
-        const layout = createDashboardLayout({
-            width: 320, height: 260, categories, itemsByCategory: new Map(), tokens
-        });
-        expect(layout.projection_lanes).toHaveLength(5);
-        expect(layout.projection_lanes.every((lane) => lane.visible_item_rects.length === 0)).toBe(true);
-        expect(layout.vertical_scroll_max).toBeGreaterThan(0);
-        expect(layout.vertical_scroll_step).toBe(layout.block_unit_size + tokens.metrics.laneGap);
     });
 });

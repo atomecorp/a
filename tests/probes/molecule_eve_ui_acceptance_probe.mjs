@@ -34,9 +34,6 @@ fs.mkdirSync(OUT_DIR, { recursive: true });
 const ensureProject = (page, projectName) => page.evaluate(async (name) => {
     const workspaceMode = await import('/eVe/domains/dashboard/dashboard_workspace_mode.js');
     workspaceMode.beginDashboardWorkspaceTransition?.('project');
-    if (window.eveDashboardBevyUiRuntime?.state?.active === true) {
-        await window.eveDashboardBevyUiRuntime.destroy();
-    }
     const created = await window.AdoleAPI.projects.create(name);
     const directId = created?.id || created?.project_id || created?.atome_id
         || created?.fastify?.project?.id || created?.tauri?.project?.id || '';
@@ -125,13 +122,13 @@ const enterProvisionedWorkspace = async (page) => {
     // The signed-in workspace opens on the Dashboard (or straight on a project).
     return waitFor(page, async () => {
         const current = await window.AdoleAPI?.auth?.current?.().catch(() => null);
-        const dashboard = window.eveDashboardBevyUiRuntime?.state || {};
+        const mode = window.__eveWorkspaceMode?.mode || null;
         return {
             ok: current?.logged === true
                 && window.AdoleAPI?.security?.isAnonymous?.() === false
-                && ((dashboard.active === true && dashboard.opening !== true) || window.__eveWorkspaceMode?.mode === 'project'),
+                && (mode === 'dashboard' || mode === 'project'),
             anonymous: window.AdoleAPI?.security?.isAnonymous?.() ?? null,
-            dashboard: dashboard.active === true, mode: window.__eveWorkspaceMode?.mode || null
+            mode
         };
     }, null, 180000);
 };
@@ -195,7 +192,6 @@ const installCanonicalFixture = (page, projectId) => page.evaluate(async ({ pid,
     ], { projectId: pid, tx_id: txId });
     if (!committed?.ok) throw new Error(`fixture_molecule_commit_failed:${JSON.stringify(committed)}`);
     await window.eveToolBase.loadProjectAtomes(pid, { staleFirst: false });
-    await window.eveDashboardBevyUiRuntime?.destroy?.();
     const workspaceMode = await import('/eVe/domains/dashboard/dashboard_workspace_mode.js');
     workspaceMode.markProjectWorkspaceMode?.(pid);
     return { ok: true, ownerId, timelineId: timeline.timeline_id, clipId: timeline.clips[0].clip_id };
@@ -382,19 +378,15 @@ const main = async () => {
 
         await wait(1200);
         await runSetupStep('workspace_projection', () => page.evaluate(async (pid) => {
-            await window.eveDashboardBevyUiRuntime?.destroy?.();
             const workspaceMode = await import('/eVe/domains/dashboard/dashboard_workspace_mode.js');
             workspaceMode.markProjectWorkspaceMode?.(pid);
         }, project.id));
         await runSetupStep('workspace_ready', () => waitFor(page, (pid) => {
-            const dashboard = window.eveDashboardBevyUiRuntime?.state || {};
             const trees = window.eveBevyUiRuntime?.readOverlayDiagnostics?.()?.trees || [];
             return {
-                ok: dashboard.active !== true
-                    && !trees.some((tree) => tree.id === 'dashboard_bevy_ui')
+                ok: !trees.some((tree) => tree.id === 'dashboard_bevy_ui')
                     && window.__eveWorkspaceMode?.mode === 'project'
                     && window.__eveWorkspaceMode?.projectId === pid,
-                active: dashboard.active === true,
                 treeIds: trees.map((tree) => tree.id),
                 workspaceMode: window.__eveWorkspaceMode || null
             };

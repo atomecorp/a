@@ -4,11 +4,9 @@ import { chromium } from 'playwright';
 import {
     APP_URL,
     OUT_DIR,
-    dashboardSnapshot,
     nowId,
     sceneSnapshot,
-    waitFor,
-    waitFrames
+    waitFor
 } from './dashboard_workspace_stress/support.mjs';
 import {
     assertProjectLoaded,
@@ -67,13 +65,6 @@ const loginOrCreateUser = async (page, prefix, index) => page.evaluate(async ({ 
     return { ok: loginOk, phone, username, created, logged };
 }, { key: prefix, order: index });
 
-const ensureDashboardClosed = async (page) => {
-    await page.evaluate(() => window.eveDashboardBevyUiRuntime?.close?.({ honorLabelEditorKeyboardGuard: false }));
-    const closed = await waitFor(page, () => ({ ok: window.eveDashboardBevyUiRuntime?.state?.active !== true }), 15000, 50);
-    if (!closed.ok) throw new Error(`dashboard_close_failed:${JSON.stringify(closed.last)}`);
-    await waitFrames(page, 6);
-};
-
 const cleanupProjects = async (page, projects) => page.evaluate(async (items) => {
     const deleted = [];
     for (const project of items || []) {
@@ -102,10 +93,9 @@ const exerciseUserWorkspace = async ({ browser, report, prefix, userIndex }) => 
         userReport.login = { phone: login.phone, username: login.username };
         await page.reload({ waitUntil: 'domcontentloaded', timeout: 45000 });
         const boot = await waitFor(page, () => ({
-            ok: !!window.AdoleAPI && window.__authCheckComplete === true && !!window.eveDashboardBevyUiRuntime
+            ok: !!window.AdoleAPI && window.__authCheckComplete === true
         }), 45000, 100);
         if (!boot.ok) throw new Error(`post_login_boot_failed:${JSON.stringify(boot.last)}`);
-        await ensureDashboardClosed(page);
         for (let projectIndex = 0; projectIndex < PROJECTS_PER_USER; projectIndex += 1) {
             const project = await ensureProject(page, `${prefix} ${userLabel} project ${projectIndex + 1}`);
             if (!project?.ok) throw new Error(`project_create_failed:${JSON.stringify(project)}`);
@@ -131,17 +121,6 @@ const exerciseUserWorkspace = async ({ browser, report, prefix, userIndex }) => 
             .map((project) => project.id)
             .filter((id) => !userReport.listedProjectIds.includes(id));
         if (missingOwnProjects.length) throw new Error(`own_projects_missing_from_list:${missingOwnProjects.join(',')}`);
-        await page.evaluate(() => window.eveDashboardBevyUiRuntime?.open?.({ sceneProjectId: '__eve_dashboard_workspace__', dataProjectId: '__eve_dashboard_workspace__' }));
-        const dashboardOpen = await waitFor(page, () => {
-            const state = window.eveDashboardBevyUiRuntime?.state || {};
-            return { ok: state.active === true && state.sceneProjectId === '__eve_dashboard_workspace__' };
-        }, 20000, 50);
-        if (!dashboardOpen.ok) throw new Error(`dashboard_neutral_open_failed:${JSON.stringify(dashboardOpen.last)}`);
-        const dashboard = await dashboardSnapshot(page);
-        if (!dashboard.active || dashboard.runtimeProjectId !== '__eve_dashboard_workspace__') {
-            throw new Error(`dashboard_not_neutral:${JSON.stringify(dashboard)}`);
-        }
-        await ensureDashboardClosed(page);
         userReport.cleanup = await cleanupProjects(page, userReport.projects);
         return userReport;
     } finally {

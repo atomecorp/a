@@ -7,13 +7,10 @@ import { resolveToolPresentation } from '../../eVe/intuition/shared/tool_present
 import { setPendingDropChoice, clearPendingDropChoice, dropChoiceRailDefinitions, invokeDropChoiceRail, readPendingDropChoice } from '../../eVe/domains/rendering/project_view_drop_choice_rail.js';
 import { getEveLocale, setEveLocale } from '../../eVe/i18n/i18n.js';
 import { combineCanonicalMolecule } from '../../eVe/intuition/tools/core/tool_runtime_molecule_combine.js';
-import { createDashboardLayout } from '../../eVe/domains/dashboard/dashboard_layout.js';
-import { buildDashboardBevyUiTree } from '../../eVe/domains/dashboard/dashboard_bevy_ui_tree.js';
 import { DASHBOARD_VISUAL_TOKENS as tokens } from '../../eVe/domains/dashboard/dashboard_tokens.js';
 import { normalizeAtomeRenderNode } from '../../eVe/domains/rendering/virtual_scene_contract.js';
 import { mapVirtualSceneNodeToBevyPayload } from '../../eVe/domains/rendering/bevy_projection_adapter.js';
 import { interactionSpecFrom } from '../../eVe/domains/templates/system_template_catalog.js';
-import { projectBevyUiTreeRecords } from '../../eVe/domains/rendering/bevy_ui_overlay_record_projection.js';
 
 const walk = node => [node, ...(node?.children || []).flatMap(walk)];
 test('Include is the sole composition choice and commits the existing front composition', async () => {
@@ -39,32 +36,6 @@ test('Include is the sole composition choice and commits the existing front comp
         expect(source.props.hierarchy_order).toBeGreaterThan(target.props.hierarchy_order);
         expect(readPendingDropChoice()).toBeNull();
     } finally { clearPendingDropChoice(); setEveLocale(previousLocale); }
-});
-test('embedded Dashboard preserves original glass materials and paint order through scene projection', () => {
-    const categories = [{ id: 'calendar', color: '#3399ff', icon_id: 'calendar', label_key: 'eve.dashboard.calendar' }];
-    const layout = createDashboardLayout({ width: 900, height: 720, categories, tokens });
-    const project = (embedded, zIndex = 0) => {
-        const tree = buildDashboardBevyUiTree({ layout, tokens, ...(embedded ? {
-            treeId: 'eve_matrix_test', rootRect: { x: 0, y: 0, width: 900, height: 720, zIndex },
-            recordFilter: record => !record.id.includes('surface_')
-        } : {}) });
-        return projectBevyUiTreeRecords({ tree, treeId: tree.id, workspaceLayer: embedded ? 'project' : 'dashboard' });
-    };
-    const originals = project(false).filter(record => !record.id.includes('surface_'));
-    for (const zIndex of [0, 120, 450]) {
-        const embedded = project(true, zIndex);
-        expect(embedded).toHaveLength(originals.length);
-        for (let index = 0; index < embedded.length; index++) {
-            const props = embedded[index].properties;
-            expect(props.zIndex).toBe(zIndex + 1 + originals[index].properties.zIndex - 780);
-            expect(props.renderLayer).toBe(props.zIndex);
-            expect(embedded[index].parent_id).toBe('__eve_workspace_layer_project');
-            expect(props.parent_id).toBe('__eve_workspace_layer_project');
-            expect(props.material).toEqual(originals[index].properties.material);
-            expect(props.presentation).toBe(originals[index].properties.presentation);
-        }
-        expect(new Set(embedded.map(record => record.properties.zIndex)).size).toBeGreaterThan(3);
-    }
 });
 test('all generated composition and page drop choices are classified without warnings', () => {
     const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -99,39 +70,36 @@ test('project background exposes Template first at every mastery level', () => {
         expect(shape.some(tool => tool.key === 'project_templates')).toBe(false);
     }
 });
-test('native Template panel lists the real Dashboard first and opens through its declared command', async () => {
+test('native Template panel lists the templates and opens through its declared command', async () => {
     const invoke = vi.fn(async () => ({ ok: true }));
     const surface = createProjectTemplatesSurface({
-        ensureDashboard: async () => ({ ok: true, project_id: 'dashboard_source' }),
         ensureOnboarding: async () => {},
-        listTemplates: async () => [{ id: 'personal_source', name: 'Personal' }, { id: 'dashboard_source', name: 'Dashboard Pro' }], invoke
+        listTemplates: async () => [{ id: 'personal_source', name: 'Personal' }, { id: 'garden_source', name: 'Garden' }], invoke
     });
     await surface.onOpen({ refresh: vi.fn() });
     const snapshot = surface.readState();
-    expect(snapshot.entries.map(entry => entry.label)).toEqual(['Dashboard Pro', 'Personal']);
+    expect(snapshot.entries.map(entry => entry.label)).toEqual(['Personal', 'Garden']);
     const events = [];
     const nodes = surface.buildContent(snapshot, { emit: event => events.push(event), bodyWidth: 420 });
-    const dashboardRow = walk(nodes[0]).find(node => node.kind === 'button' && node.on?.activate);
-    expect(dashboardRow).toBeTruthy();
-    dashboardRow.on.activate();
-    expect(events[0]).toMatchObject({ type: 'project_templates.open', value: 'dashboard_source' });
+    const firstRow = walk(nodes[0]).find(node => node.kind === 'button' && node.on?.activate);
+    expect(firstRow).toBeTruthy();
+    firstRow.on.activate();
+    expect(events[0]).toMatchObject({ type: 'project_templates.open', value: 'personal_source' });
     await surface.handleEvent(events[0], {});
-    expect(invoke).toHaveBeenCalledWith(expect.objectContaining({ tool_id: 'ui.project.templates.open', input: { template_project_id: 'dashboard_source' } }));
-    const fixed = surface.buildFixedContent(snapshot, { emit: event => events.push(event), bodyWidth: 420 });
-    fixed[0].on.activate();
+    expect(invoke).toHaveBeenCalledWith(expect.objectContaining({ tool_id: 'ui.project.templates.open', input: { template_project_id: 'personal_source' } }));
+    const [newTool] = surface.buildBandTools(snapshot, { emit: event => events.push(event) });
+    newTool.onSelect();
     await surface.handleEvent(events[1], {});
     expect(invoke).toHaveBeenLastCalledWith(expect.objectContaining({ tool_id: 'ui.project.templates.new' }));
 });
-test('Template panel refuses an absent Dashboard and stale choices without inventing entries', async () => {
+test('Template panel refuses stale choices without inventing entries', async () => {
     const invoke = vi.fn();
-    const surface = createProjectTemplatesSurface({ ensureDashboard: async () => ({ ok: true, project_id: 'missing' }),
-        ensureOnboarding: async () => {}, listTemplates: async () => [], invoke });
-    await expect(surface.onOpen({ refresh: vi.fn() })).rejects.toThrow('dashboard_template_catalog_missing');
+    const surface = createProjectTemplatesSurface({ ensureOnboarding: async () => {}, listTemplates: async () => [], invoke });
+    await surface.onOpen({ refresh: vi.fn() });
+    expect(surface.readState().entries).toEqual([]);
     expect(await surface.handleEvent({ type: 'project_templates.open', value: 'missing' }, {})).toMatchObject({ ok: false });
     expect(invoke).not.toHaveBeenCalled();
-    expect(SYSTEM_TEMPLATES.dashboard.name).toBe('Dashboard Pro');
-    expect(SYSTEM_TEMPLATES.dashboard.atoms[0].props.module).toBe('matrix');
-    expect(SYSTEM_TEMPLATES.dashboard.interactions.map(entry => entry.trigger.kind)).toContain('hold');
+    expect(SYSTEM_TEMPLATES.dashboard).toBeUndefined();
 });
 
 test('programme templates paint standard square glass cards and retain each canonical tab action', () => {

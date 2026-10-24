@@ -1,5 +1,5 @@
 // One base change must resize the whole framework UI: list rows, panel rows and
-// accordions, Dashboard cells, Matrix tiles, and the glyphs, labels and chrome
+// accordions, the Dashboard block unit, Matrix tiles, and the glyphs, labels and chrome
 // that sit on them. This contract measures the same owners twice, once at the
 // authored base unit and once at an alternate one, in an isolated copy of eVe so
 // the alternate base cannot leak into the running suite.
@@ -28,19 +28,11 @@ import { EVE_BUTTON_SKIN_TOKENS } from './eVe/elements/skin/button_skin.js';
 import { resolveBevyMainMenuItemSize } from './eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
 import { RIBBON_TOKENS } from './eVe/intuition/ribbon/tokens.js';
 import { BEVY_PANEL_TOKENS } from './eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
-import { createDashboardLayout } from './eVe/domains/dashboard/dashboard_layout.js';
 import { DASHBOARD_VISUAL_TOKENS, resolveDashboardBlockUnitSize } from './eVe/domains/dashboard/dashboard_tokens.js';
 import { projectViewRowGeometry } from './eVe/domains/rendering/project_view_surface_layout.js';
 import { EVE_COMMON_SKIN_TOKENS } from './eVe/elements/skin/tokens.js';
 import { buildMainMenuNotificationNodes } from './eVe/intuition/ribbon/bevy_ui_main_menu_notification.js';
 
-const layout = createDashboardLayout({
-    width: 1200,
-    height: 900,
-    categories: [{ id: 'news', color: '#9f2f2f', order: 0, icon_id: 'news', label_key: 'news' }],
-    itemsByCategory: new Map(),
-    tokens: DASHBOARD_VISUAL_TOKENS
-});
 const row = projectViewRowGeometry(760);
 // A notification badge is read off a ribbon item, so its fixture is expressed
 // in base units: the probe measures the framework, never its own constants.
@@ -79,8 +71,6 @@ console.log(JSON.stringify({
         buttonHeight: EVE_BUTTON_SKIN_TOKENS.bevyButton.sizePx,
         buttonRowHeight: EVE_BUTTON_SKIN_TOKENS.bevyButton.rowHeightPx,
         buttonLabelText: EVE_BUTTON_SKIN_TOKENS.bevyButton.labelFontSizePx,
-        dashboardCell: layout.block_unit_size,
-        dashboardUnitWidth: layout.unit_width,
         dashboardBlockUnit: resolveDashboardBlockUnitSize(DASHBOARD_VISUAL_TOKENS),
         dashboardLabelText: DASHBOARD_VISUAL_TOKENS.labelText.font_size,
         commonRadiusXs: EVE_COMMON_SKIN_TOKENS.radius.xs,
@@ -101,7 +91,6 @@ console.log(JSON.stringify({
         toolboxRowRadius: EVE_TOOL_SKIN_TOKENS.toolbox.rowRadiusPx,
         subtoolBorderRadius: EVE_TOOL_SKIN_TOKENS.metrics.subtoolBorderRadiusPx,
         dashboardContentRadius: DASHBOARD_VISUAL_TOKENS.metrics.contentRadius,
-        dashboardLabelShadowBlur: DASHBOARD_VISUAL_TOKENS.labelText.shadow_blur,
         notificationBadge: notification[2].style.size[0],
         notificationBadgeFont: notification[2].style.font_size,
         notificationRadius: notification[2].style.radius
@@ -148,7 +137,7 @@ describe('System UI base resize contract', () => {
         expect(alternate.lengths.listRow).toBe(alternate.lengths.toolSquare);
         expect(alternate.lengths.panelAccordionHeader).toBe(alternate.lengths.toolSquare);
         expect(alternate.lengths.panelInput).toBe(alternate.lengths.toolSquare / 2);
-        expect(alternate.lengths.dashboardCell).toBe(alternate.lengths.toolSquare * 2);
+        expect(alternate.lengths.dashboardBlockUnit).toBe(alternate.lengths.toolSquare * 2);
     });
 
     it('resizes the labels and glyphs with their own surface', () => {
@@ -165,7 +154,7 @@ describe('System UI base resize contract', () => {
             'panelActionShadowBlur', 'buttonFocusSpread', 'panelActionFocusSpread', 'panelInputFocusSpread',
             'panelSelectFocusSpread', 'commonRadiusXs', 'commonRadiusSm', 'commonRadiusMd', 'commonRadiusLg',
             'commonLabelShadowBlur', 'commonLabelShadowOffsetY', 'toolboxRowRadius', 'subtoolBorderRadius',
-            'dashboardContentRadius', 'dashboardLabelShadowBlur']) {
+            'dashboardContentRadius']) {
             expect(alternate.lengths[name], `${name} must follow the base`).toBeCloseTo(scale(authoredLengths[name]), 6);
         }
     });

@@ -20,29 +20,6 @@ window.eveBevyUiRuntime = {
     readOverlayDiagnostics: () => null
 };
 const calls = [];
-window.eveDashboardBevyUiRuntime = {
-    state: { active: false, suspended: false, sceneProjectId: '' },
-    readDiagnostics: () => ({ mounted_nodes: 1 }),
-    open: async (input) => {
-        calls.push({ name: 'dashboard', input });
-        window.eveDashboardBevyUiRuntime.state = {
-            active: true,
-            suspended: false,
-            sceneProjectId: input.sceneProjectId,
-            dataProjectId: input.dataProjectId
-        };
-        return { ok: true };
-    },
-    close: async () => {
-        calls.push({ name: 'dashboard_close' });
-        window.eveDashboardBevyUiRuntime.state = {
-            ...window.eveDashboardBevyUiRuntime.state,
-            active: false,
-            suspended: true
-        };
-        return { ok: true };
-    }
-};
 window.eveToolBase = {
     loadProjectAtomes: async (projectId, options) => {
         calls.push({ name: 'project_load', projectId, options });
@@ -52,8 +29,7 @@ window.eveToolBase = {
 
 const {
     openWorkspaceDashboardWithProjectBootstrap,
-    showPreparedProject,
-    toggleWorkspaceDashboardAndMainMenu
+    showPreparedProject
 } = await import('../../eVe/intuition/tools/user_workspace_surface_runtime.js');
 
 const opened = await openWorkspaceDashboardWithProjectBootstrap({
@@ -75,20 +51,8 @@ const opened = await openWorkspaceDashboardWithProjectBootstrap({
 assert.equal(opened.ok, true, JSON.stringify(opened));
 assert.equal(opened.projectId, 'project_ready');
 assert.equal(calls[0].name, 'project', 'canonical project readiness must resolve before choosing the first visible route');
-assert.equal(calls[1].name, 'dashboard', 'first use without a saved project must choose Dashboard');
-assert.equal(calls.length, 2, 'first-use Dashboard must mount once after project readiness');
-assert.equal(calls[1].input.sceneProjectId, 'project_ready', 'Dashboard must reuse the prepared project surface instead of creating a second scene');
-assert.equal(calls[1].input.dataProjectId, 'project_ready');
-assert.equal(window.eveDashboardBevyUiRuntime.state.active, true, 'Dashboard stays foregrounded after project preparation');
-assert.equal(window.eveDashboardBevyUiRuntime.state.suspended, false, 'Dashboard must not flicker or suspend during preparation');
 assert.equal(window.__eveWorkspaceMode.mode, 'dashboard');
 
-await toggleWorkspaceDashboardAndMainMenu({ source: 'contract_explicit_hide' });
-assert.equal(calls[2].name, 'dashboard_close', 'only the explicit Dashboard action may close it');
-assert.equal(window.__eveWorkspaceMode.mode, 'project');
-assert.equal(window.__eveWorkspaceMode.projectId, 'project_ready');
-
-const dashboardCallCountBeforeResume = calls.filter((entry) => entry.name === 'dashboard').length;
 const resumed = await openWorkspaceDashboardWithProjectBootstrap({
     source: 'contract_resume',
     ensureProjectReady: async () => {
@@ -99,11 +63,6 @@ const resumed = await openWorkspaceDashboardWithProjectBootstrap({
 });
 assert.equal(resumed.route, 'project', 'a valid saved project must be the first visible workspace route');
 assert.equal(resumed.resumed, true);
-assert.equal(
-    calls.filter((entry) => entry.name === 'dashboard').length,
-    dashboardCallCountBeforeResume,
-    'saved-project resume must not mount Dashboard'
-);
 
 const projectFailure = await openWorkspaceDashboardWithProjectBootstrap({
     source: 'contract_failure',

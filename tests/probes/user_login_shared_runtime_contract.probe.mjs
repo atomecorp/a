@@ -87,12 +87,6 @@ window.__eveWorkspaceMode = {
     transitioning: false,
     targetMode: ''
 };
-window.eveDashboardBevyUiRuntime = {
-    state: {
-        active: true,
-        projectId: '__eve_dashboard_workspace__'
-    }
-};
 runtime.syncMainMenuAuthContent({ force: true });
 assert.equal(
     document.getElementById('eve_login_sequence')?.style?.display,

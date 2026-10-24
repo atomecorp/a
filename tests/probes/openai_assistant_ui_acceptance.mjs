@@ -174,7 +174,7 @@ try {
     report.status = 'passed';
 } catch (error) {
     report.status = 'blocked'; report.error = String(error.message).slice(0, 500);
-    report.anchors = await page.evaluate(() => { const p = window.eveDashboardBevyUiRuntime?.state?.active ? window.eveDashboardBevyUiRuntime.state.projectId : window.__currentProject?.id;
+    report.anchors = await page.evaluate(() => { const p = window.__currentProject?.id;
         return (window.eveToolBase?.getProjectSceneState?.(p)?.records || []).filter(r => r.id.includes('main_menu_tool_atome')).map(r => ({ id: r.id, type: r.type })); });
     report.assistant = await page.evaluate(() => { const state = window.eveAssistantApi?.getState();
         return state ? { active: state.active, phase: state.phase, transition: state.transition, error: state.error, inputMode: state.inputMode, level: state.conversation?.level } : null; });

@@ -89,7 +89,7 @@ post-presentation concern.
   `workspace_dashboard_project_bootstrap_contract`,
   `project_bootstrap_offline_resume_contract`,
   `project_bootstrap_dashboard_ready_contract`,
-  `user_workspace_surface_runtime_contract`), plus
+  `user_workspace_surface_runtime_contract`), plus (This probe was removed on 2026-10-24 with the old built-in Dashboard engine; the record stays as history.)
   `tests/eve/project_boot_view_mode_presentation.test.mjs`,
   `tests/governance/vitest_manifest_guard.test.mjs`, `npm run check:syntax` and
   `npm run check:m0`.

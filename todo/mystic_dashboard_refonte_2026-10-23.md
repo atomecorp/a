@@ -18,6 +18,26 @@ Suivi des maquettes :
   `[‹] [champ] [›] [Atom]` (l'Atom ne bouge jamais). Choix par défaut acceptés : Atom à droite aussi pour un gaucher,
   Envoyer collé à droite du champ, › = page suivante (‹ reprend la page précédente puis remonte).
 
+- 24 oct. — **Navigation livrée (lots 2 + 3, cœur)** : pied `[‹][champ][›][Atom]` codé et vérifié dans l'app réelle
+  (19/19 portrait Pro, 6/6 Basic, 15/15 parcours appui long → carte → Retour). Propriétaire
+  `eVe/domains/dashboard/dashboard_footer_navigation.js`. Correctif moteur (halo des flèches tournées sous découpe).
+  Restes ouverts : paysage téléphone (ligne du bas serrée sous un panneau, Retour au milieu de la ligne) → lot 7 ;
+  bande propre de Musique (autre session, Retour à droite) et panneaux hors accueil (règle « Retour à droite » posée
+  le 24 oct. par une autre session) → arbitrage utilisateur ; immobilité 750 ms sur ‹ (doigt tenu) non reprise ;
+  `dashboard_mystic_runtime.js` 592 lignes → découpe (lot 0) dès que les sessions parallèles ont fini.
+- 24 oct. — **M6 lumière Launchpad** soumise : `temp/mystic_dashboard/mockups/M6_lumiere.png` (4 niveaux). En attente.
+
+- 24 oct. — Consigne utilisateur : **pas de couleur / lumière / style graphique pour l'instant** (Launchpad M6 mis de côté),
+  seulement le fonctionnel et la structure ; factoriser les styles ; label inerte au sommet (AGENTS.md règle 11) ; le
+  modèle de tuile validé = le second niveau (plaques des rubriques). Règles 12 (tailles fixes) et 13 (bas : Retour à
+  gauche, Atom à droite, Suivant à sa gauche) ajoutées par l'utilisateur le même jour.
+- 24 oct. — **Lot 4 livré** (outils de l'appui long : Retour/Suivant au pied, demi-tuiles 56 px sur les joints) et
+  **lot 0 en partie** (runtime 602 → 483 lignes en 3 modules ; typographie centralisée ; jetons morts retirés ;
+  une seule source de taille de tuile). Vérifié : sonde réelle 28/28, Basic 6/6, appui long 15/15, empreinte des cartes
+  identique. Restes lot 0 : couleurs de rubrique en double source et opacités 0,4/0,45 (= style, différé) ;
+  panneaux Sport/Rencontre/Actualités en `px()` (propriétaires actifs, différé) ; `text_fit: 'shrink'` de l'heure, de
+  la météo et du titre contraire à la règle 12 (à traiter avec la session qui applique la règle 12).
+
 Légende : **[C]** constat lu dans le code (fichier:ligne), **[H]** hypothèse, **[P]** proposition.
 
 ---

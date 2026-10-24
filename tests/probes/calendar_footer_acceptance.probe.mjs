@@ -46,7 +46,7 @@ try {
     await templateControl('goal', 'journal');
     await waitFor(page, async () => !(await import('/eVe/domains/user/first_launch_runtime.js')).getFirstLaunchRuntime()?.state.active, null, 45000);
     step('QA guest setup complete');
-    const initialState = await page.evaluate(async () => ({ workspace: window.__eveWorkspaceMode, dashboard: window.eveDashboardBevyUiRuntime?.state?.active, menu: (await import('/eVe/intuition/ribbon/bevy_ui_product_registry.js')).getMainMenuRuntime()?.measure(), trees:[...window.eveBevyUiRuntime.state.trees.keys()] }));
+    const initialState = await page.evaluate(async () => ({ workspace: window.__eveWorkspaceMode, menu: (await import('/eVe/intuition/ribbon/bevy_ui_product_registry.js')).getMainMenuRuntime()?.measure(), trees:[...window.eveBevyUiRuntime.state.trees.keys()] }));
     console.log(JSON.stringify(initialState));
     // QA setup uses the public panel API; every behavior under test uses real pointer actions.
     const opened = await page.evaluate(async () => (await import('/eVe/intuition/tools/calendar.js')).openCalendarPanel());

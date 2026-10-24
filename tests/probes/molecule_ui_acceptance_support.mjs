@@ -437,8 +437,7 @@ export const clickCanvasTarget = async (page, target, { double = false } = {}) =
                 rect: rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null,
                 display: style?.display || '', visibility: style?.visibility || '', opacity: style?.opacity || '',
                 workspaceMode: window.__eveWorkspaceMode || null,
-                currentProjectId: window.__currentProject?.id || '',
-                dashboardActive: window.eveDashboardBevyUiRuntime?.state?.active === true
+                currentProjectId: window.__currentProject?.id || ''
             };
         });
         throw new Error(`canvas_bounds_missing:${JSON.stringify({ target, evidence })}`);

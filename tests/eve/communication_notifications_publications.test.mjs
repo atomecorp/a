@@ -12,7 +12,6 @@ import { createCommCompose } from '../../eVe/intuition/tools/communication_compo
 import { resolveCommSendDraft } from '../../eVe/intuition/tools/communication_events.js';
 import { createCommunicationNewsPublication } from '../../eVe/intuition/tools/communication_news_publication.js';
 import { buildMainMenuNotificationNodes } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_notification.js';
-import { createDashboardProjectAttachmentDrag } from '../../eVe/domains/dashboard/dashboard_project_attachment_drag.js';
 import { dispatchAttachmentDrop } from '../../eVe/domains/rendering/surface_interaction_runtime.js';
 
 const findNode = (entry, id) => {
@@ -109,26 +108,6 @@ describe('Communication attachments', () => {
         expect(commRuntime.readState().compose.attachments).toEqual([
             { id: 'project_1', kind: 'project', label: 'Project One' }
         ]);
-    });
-
-    it('routes a real Dashboard Project drag through the shared BevyUI drop target', () => {
-        const dispatchDropPayload = vi.fn(() => true);
-        const drag = createDashboardProjectAttachmentDrag({
-            readHit: () => ({
-                category: { id: 'projects' },
-                item: { id: 'project_1', title: 'Project One' }
-            }),
-            surface: () => ({ id: 'surface' }),
-            uiRuntime: { dispatchDropPayload }
-        });
-        drag.press('project_card', { client_x: 10, client_y: 10 });
-        drag.drag('project_card', { client_x: 40, client_y: 40 });
-        expect(drag.release('project_card', { client_x: 80, client_y: 90 })).toMatchObject({ dropped: true });
-        expect(dispatchDropPayload).toHaveBeenCalledWith(expect.objectContaining({
-            clientX: 80,
-            clientY: 90,
-            payload: { id: 'project_1', type: 'project', kind: 'project', label: 'Project One' }
-        }));
     });
 
     it.each(['shape', 'molecule'])('routes a natural-canvas %s drag to the same drop target', (type) => {

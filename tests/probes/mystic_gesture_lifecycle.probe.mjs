@@ -50,28 +50,6 @@ const makeMysticPointerEvent = (type, properties = {}) => {
     }).forEach(([key, value]) => Object.defineProperty(event, key, { configurable: true, value }));
     return event;
 };
-window.eveDashboardBevyUiRuntime = {
-    readMysticTargetAtPoint: ({ clientX, clientY }) => (
-        clientX === 140 && clientY === 120 ? { kind: 'item', atomeId: 'dashboard_project_a' } : null
-    )
-};
-mysticInteraction.open = false;
-const dashboardRightClick = makeMysticPointerEvent('contextmenu', { button: 2, pointerType: 'mouse' });
-projectCanvas.dispatchEvent(dashboardRightClick);
-assert.equal(dashboardRightClick.defaultPrevented, true, 'Dashboard secondary click must still suppress the browser menu');
-await delay(1);
-assert.equal(mysticInteraction.open, true, 'Dashboard secondary click must open Mystic');
-assert.equal(mysticInteraction.openCount, 1, 'Dashboard secondary click must open Mystic exactly once');
-mysticInteraction.open = false;
-const dashboardLongPress = makeMysticPointerEvent('pointerdown', { pointerId: 72, pointerType: 'touch' });
-projectCanvas.addEventListener('pointerdown', (event) => event.preventDefault(), { once: true });
-projectCanvas.dispatchEvent(dashboardLongPress);
-assert.equal(dashboardLongPress.defaultPrevented, true, 'Dashboard BevyUI must be represented as the pointerdown owner');
-await delay(10);
-assert.equal(mysticInteraction.open, true, 'Dashboard card long press must open Mystic');
-assert.equal(mysticInteraction.openCount, 2, 'Dashboard card long press must open Mystic exactly once');
-projectCanvas.dispatchEvent(makeMysticPointerEvent('pointerup', { pointerId: 72, pointerType: 'touch' }));
-delete window.eveDashboardBevyUiRuntime;
 mysticInteraction.closeCount = 0;
 mysticInteraction.openCount = 0;
 mysticInteraction.open = true;

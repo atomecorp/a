@@ -1,17 +1,12 @@
 import { test, expect, vi, afterEach } from 'vitest';
-import { createDashboardCreationRuntime } from '../../eVe/domains/dashboard/dashboard_creation_runtime.js';
 import { createDashboardCreationActions } from '../../eVe/domains/dashboard/dashboard_creation_actions.js';
 import { createDashboardActionRuntime } from '../../eVe/domains/dashboard/dashboard_actions.js';
 import { dashboardCreationStep, DASHBOARD_PROJECT_GOALS, DASHBOARD_OBJECTIVES, dashboardObjectiveFor } from '../../eVe/domains/dashboard/dashboard_creation_catalog.js';
 import { dashboardDefaultTarget } from '../../eVe/domains/dashboard/dashboard_progression_catalog.js';
 import * as mutation from '../../eVe/intuition/tools/core/tool_runtime_atome_mutation_shared.js';
-import { createDashboardBevyUiScrollRuntime } from '../../eVe/domains/dashboard/dashboard_bevy_ui_scroll_runtime.js';
 import { buildBootstrapDefsA } from '../../eVe/intuition/tools/core/tool_runtime_bootstrap_defs_a.js';
 import { ATOME_OBJECTIVE_IDS, registerCoreAtomeTypes } from '../../atome/src/shared/core_atome_types.js';
 import { normalizeCanonicalAtome } from '../../atome/src/shared/atome_contract.js';
-import { createDashboardLayout } from '../../eVe/domains/dashboard/dashboard_layout.js';
-import { buildDashboardBevyUiTree } from '../../eVe/domains/dashboard/dashboard_bevy_ui_tree.js';
-import { mergeDashboardTokens } from '../../eVe/domains/dashboard/dashboard_tokens.js';
 import { systemTemplateSpec } from '../../eVe/domains/templates/system_template_catalog.js';
 import { createFromSystemTemplate } from '../../eVe/domains/templates/system_template_runtime.js';
 import { createProjectRecord } from '../../eVe/intuition/matrix/core/project_data.js';
@@ -21,9 +16,6 @@ import { createProjectViewListContent } from '../../eVe/domains/rendering/projec
 import { projectViewVisualPanel } from '../../eVe/domains/rendering/project_view_visual_panel.js';
 
 afterEach(() => { projectViewVisualPanel.reset(); projectViewVisualPanel.setEnabled(true); vi.unstubAllGlobals(); vi.restoreAllMocks(); setEveLocale('fr'); });
-
-const invokeCreation = actions => ({ input }) => input.family || input.objective_id
-    ? actions.createGuidedProject(input) : actions.createDefault('projects', input);
 
 vi.mock('../../eVe/domains/templates/system_template_runtime.js', () => ({ createFromSystemTemplate: vi.fn(),
     ensureObjectiveEngagement: vi.fn(async () => ({ ok: true })) }));
@@ -39,72 +31,26 @@ test.each([
         return { ok: opened.ok, project_id: 'programme-instance', template_project_id: 'library-template' };
     });
     const openProject = vi.fn(async () => ({ ok: true }));
-    const invalidateCategories = vi.fn(async () => {});
     const projectCreator = vi.fn();
     const committed = vi.spyOn(mutation, 'commitRuntimeSetBatch').mockResolvedValue({ ok: true });
-    const state = { active: true };
-    const actions = createDashboardCreationActions({ openProject, invalidateCategories, projectCreator });
-    const runtime = createDashboardCreationRuntime({ state, actions, invokeTool: invokeCreation(actions), render: async () => {} });
-
-    await runtime.toggleFromHeader('projects');
-    await runtime.choose(`family_${family}`);
-    const result = await runtime.choose(`goal_${family}_${goal}`);
+    const actions = createDashboardCreationActions({ openProject, projectCreator });
+    const result = await actions.createGuidedProject({ family, goal });
 
     expect(result).toMatchObject({ ok: true, project_id: 'programme-instance' });
     expect(createFromSystemTemplate).toHaveBeenLastCalledWith(key, { openProject: expect.any(Function), name: expect.any(String) });
     expect(committed.mock.calls[0][0][0]).toMatchObject({ atome_id: 'programme-instance', props: {
         project_intent: { family, goal, ...(family === 'health' ? { objective_id: 'OBJ-02' } : {}) } } });
     expect(openProject).toHaveBeenCalledExactlyOnceWith({ payload: { id: 'programme-instance', name: spec.name } });
-    expect(invalidateCategories).toHaveBeenCalledExactlyOnceWith(['projects', 'news']);
     expect(projectCreator).not.toHaveBeenCalled();
-    expect(state.creation).toBeNull();
-    expect(state.activeCategoryId).toBe('');
 });
 
-test('empty project reuses the creator without content or a template, preserving every existing choice', async () => {
+test('empty project reuses the creator without content or a template', async () => {
     const created=[],opened=[];
     const actions=createDashboardCreationActions({projectCreator:async()=>async input=>{created.push(input);return {ok:true,project:{id:'empty'}};},
-        invalidateCategories:async()=>{},openProject:async item=>{opened.push(item);return {ok:true};}});
-    const state={active:true};let resolveReady;
-    const ready=new Promise(resolve=>{resolveReady=resolve;});
-    const waitingActions={...actions,createDefault:async id=>{await ready;return actions.createDefault(id);}};
-    const runtime=createDashboardCreationRuntime({state,render:async()=>{},actions:waitingActions,invokeTool:invokeCreation(waitingActions)});
-    await runtime.toggleFromHeader('projects');
-    expect(runtime.readStep().cells.map(cell=>cell.id)).toEqual(['empty_project',...Object.keys(DASHBOARD_PROJECT_GOALS).map(id=>'family_'+id),'family_templates']);
-    const pending=runtime.choose('empty_project');
-    await Promise.resolve();
-    expect(state.creation.busy).toBe(true);
-    expect((await runtime.choose('empty_project')).ignored).toBe('dashboard_creation_busy');
-    resolveReady();await pending;
+        openProject:async item=>{opened.push(item);return {ok:true};}});
+    await actions.createDefault('projects');
     expect(created).toEqual([{name:'',empty:true,properties:{}}]);
-    expect(opened).toHaveLength(1);expect(state.creation).toBeNull();
-});
-
-test('project questions retain the wallpaper and use common glass cards, and loading retains only sidebar chrome', () => {
-    const tokens=mergeDashboardTokens();const step=dashboardCreationStep({categoryId:'projects'});
-    const layout=createDashboardLayout({width:1000,height:850,categories:[{id:'projects',label_key:'projects',color:'#357245'}],
-        itemsByCategory:new Map(),creationStep:step,activeCategoryId:'projects',tokens});
-    const tree=buildDashboardBevyUiTree({layout,tokens,creationState:{busy:false}});
-    const white=tree.root.children.find(node=>node.id.endsWith('creation_surface'));
-    expect(white).toBeUndefined();
-    const cards=tree.root.children.filter(node=>node.id.startsWith('__eve_dashboard_create_cell_'));
-    expect(cards).toHaveLength(6);
-    expect(cards.every(node=>node.style.opacity===1 && node.style.backdrop.blurPx===16)).toBe(true);
-    expect(cards.every(node=>node.overlayRecord.properties.color==='rgba(0,0,0,0)')).toBe(true);
-    expect(cards.every(node=>node.style.backdrop.tint[3]===.69)).toBe(true);
-    const loading=buildDashboardBevyUiTree({layout,tokens,creationState:{busy:true},sidebarOnly:true});
-    expect(loading.root.children.every(node=>node.id.includes('header'))).toBe(true);
-    expect(loading.root.children.some(node=>node.id.includes('create_cell'))).toBe(false);
-});
-
-test('cancel and creation failure return to an interactive question step', async () => {
-    const state={active:true};const actions={createGuidedProject:async()=>{throw Error('permission_denied');},createNews:async()=>{},openEditor:async()=>{}};
-    const runtime=createDashboardCreationRuntime({state,actions,invokeTool:invokeCreation(actions),render:async()=>{}});
-    await runtime.toggleFromHeader('projects');await runtime.choose('family_creation');
-    expect((await runtime.choose('goal_creation_video')).ok).toBe(false);
-    expect(state.creation.busy).toBe(false);expect(state.creation.error).toBe('permission_denied');
-    expect(runtime.readStep().cells.some(cell=>cell.id==='goal_creation_video')).toBe(true);
-    await runtime.toggleFromHeader('projects');expect(state.activeCategoryId).toBe('');expect(state.creation).toBeNull();
+    expect(opened).toHaveLength(1);
 });
 
 test('existing project removes its presentation before loading and restores it after a load failure', async () => {
@@ -120,7 +66,7 @@ test.each(Object.entries(DASHBOARD_PROJECT_GOALS).flatMap(([family, goals]) => g
     const newsCreator = vi.fn();
     const openProject = vi.fn(async () => ({ ok: true }));
     const actions = createDashboardCreationActions({ projectCreator: async () => create, newsCreator,
-        openProject, invalidateCategories: async () => {} });
+        openProject });
     const result = await actions.createGuidedProject({ family, goal });
     expect(result.ok).toBe(true);
     expect(create).toHaveBeenCalledExactlyOnceWith({ name: expect.any(String), empty: true,
@@ -171,7 +117,7 @@ test.each(['fr', 'en'])('official objectives remain distinct, localized and expl
 test.each(DASHBOARD_OBJECTIVES)('$objective_id creates one private, canonically typed intention without inventing a programme', async objective => {
     const { records } = projectStore('beginner'); registerCoreAtomeTypes();
     const actions = createDashboardCreationActions({ projectCreator: async () => createProjectRecord,
-        invalidateCategories: async () => {}, openProject: async () => ({ ok: true }) });
+        openProject: async () => ({ ok: true }) });
     const result = await actions.createGuidedProject({ objective_id: objective.objective_id });
     const root = records.get(result.project.id);
     expect([...records.values()].filter(record => record.type === 'project')).toHaveLength(1);
@@ -191,7 +137,7 @@ test('free expression uses the project name and legacy projects keep their origi
         properties: { project_intent: { family: 'health', goal: 'journal' } } });
     const before = structuredClone(records.get(original.createdId));
     const actions = createDashboardCreationActions({ projectCreator: async () => createProjectRecord,
-        invalidateCategories: async () => {}, openProject: async () => ({ ok: true }) });
+        openProject: async () => ({ ok: true }) });
     const result = await actions.createGuidedProject({ family: 'health', goal: 'free', name: 'Learn the cello' });
     expect(records.get(result.project.id).properties).toMatchObject({ name: 'Learn the cello', project_intent: { family: 'health', goal: 'free' } });
     expect(records.get(result.project.id).properties.project_program).toBeUndefined();
@@ -205,63 +151,23 @@ test('free expression uses the project name and legacy projects keep their origi
 test.each([{ objective_id: 'OBJ-99' }, { objective_id: 'OBJ-01', family: 'creation' },
     { objective_id: 'OBJ-01', goal: 'sleep' }])('rejects inconsistent objective identities before creating anything: %j', async input => {
     const projectCreator = vi.fn();
-    const actions = createDashboardCreationActions({ projectCreator, invalidateCategories: async () => {}, openProject: async () => ({ ok: true }) });
+    const actions = createDashboardCreationActions({ projectCreator, openProject: async () => ({ ok: true }) });
     await expect(actions.createGuidedProject(input)).rejects.toThrow('dashboard_objective_identity_invalid');
     expect(projectCreator).not.toHaveBeenCalled();
 });
 
-test('official choices invoke the existing typed command and keep backend refusals visible', async () => {
+test('the typed New Project command exposes every official objective', () => {
     const definition = buildBootstrapDefsA(value => value, value => value, 'calendar', 'registered').find(def => def.tool_id === 'ui.new_project');
     expect(definition.input_schema.properties.objective_id.enum).toEqual(ATOME_OBJECTIVE_IDS);
-    const invokeTool = vi.fn(async () => ({ ok: false, error: 'permission_denied' }));
-    const state = { active: true };
-    const actions = { createNews: async () => {}, openEditor: async () => {} };
-    const runtime = createDashboardCreationRuntime({ state, render: async () => {}, actions, invokeTool });
-    await runtime.toggleFromHeader('projects'); await runtime.choose('family_health');
-    expect((await runtime.choose('goal_health_aesthetic')).error).toBe('permission_denied');
-    expect(invokeTool).toHaveBeenCalledExactlyOnceWith({ tool_id: 'ui.new_project', action: 'pointer.click',
-        input: { family: 'health', goal: 'aesthetic', objective_id: 'OBJ-13' }, source: { type: 'ui', layer: 'dashboard_creation' } });
-    expect(state.creation.busy).toBe(false); expect(state.creation.error).toBe('permission_denied');
 });
 
 test('a refused stable identity write cannot open a pilot instance as if creation succeeded', async () => {
     vi.spyOn(mutation, 'commitRuntimeSetBatch').mockResolvedValue({ ok: false, error: 'permission_denied' });
     createFromSystemTemplate.mockImplementationOnce(async (key, { openProject }) => openProject({ id: 'refused-pilot' }));
     const openProject = vi.fn();
-    const actions = createDashboardCreationActions({ invalidateCategories: async () => {}, openProject });
+    const actions = createDashboardCreationActions({ openProject });
     await expect(actions.createGuidedProject({ objective_id: 'OBJ-02' })).rejects.toThrow('permission_denied');
     expect(openProject).not.toHaveBeenCalled();
-});
-
-test('choice transitions cancel native scroll work before resetting their position', async () => {
-    const state = { active: true, verticalScrollOffset: 123 }, resetScroll = vi.fn();
-    const actions = { createNews: async () => {}, openEditor: async () => {} };
-    const runtime = createDashboardCreationRuntime({ state, actions, resetScroll, render: async () => {} });
-    await runtime.toggleFromHeader('projects'); state.verticalScrollOffset = 200;
-    await runtime.choose('family_health'); expect(state.verticalScrollOffset).toBe(0);
-    state.verticalScrollOffset = 400; await runtime.choose('back'); expect(state.verticalScrollOffset).toBe(0);
-    await runtime.toggleFromHeader('projects'); expect(resetScroll).toHaveBeenCalledTimes(4);
-});
-
-test.each([{ width: 390, height: 844 }, { width: 844, height: 240 }])('native catalogue scrolling reaches the free choice without activating during a drag (%j)', size => {
-    const tokens = mergeDashboardTokens(), step = dashboardCreationStep({ categoryId: 'projects', path: ['health'] });
-    const state = { active: true, verticalScrollOffset: 0, scrollByLane: {}, scrollSnapTimers: new Map(), scrollAnimationFrames: new Map() };
-    const render = () => { state.layout = createDashboardLayout({ ...size, categories: [{ id: 'projects' }],
-        creationStep: step, verticalScrollOffset: state.verticalScrollOffset, tokens }); };
-    render(); expect(state.layout.vertical_scroll_max).toBeGreaterThan(0);
-    const scroll = createDashboardBevyUiScrollRuntime({ state, render, readItemsForRender: () => new Map() });
-    scroll.handleWheelNode('__eve_dashboard_create_cell_goal_health_weight', { deltaY: 10000 });
-    expect(state.verticalScrollOffset).toBe(state.layout.vertical_scroll_max);
-    const tree = buildDashboardBevyUiTree({ layout: state.layout, tokens, handlers: { activate: vi.fn(), wheel: vi.fn(), press: vi.fn(), drag: vi.fn(), release: vi.fn() } });
-    const free = tree.root.children.find(node => node.id === '__eve_dashboard_create_cell_goal_health_free');
-    expect(free).toBeDefined(); expect(free.accessibility.label).toBe(eveT('eve.dashboard.objective.free'));
-    expect(free.on.wheel).toBeTypeOf('function');
-    const label = tree.root.children.find(node => node.id === '__eve_dashboard_create_label_goal_health_aesthetic');
-    expect(label.text).toContain(eveT('eve.dashboard.objective.preview'));
-    expect(label.overlayRecord.properties.clip).toEqual(state.layout.creation.grid_rect);
-    scroll.pressNode(free.id, { x: 200, y: 200 }); scroll.dragNode(free.id, { x: 200, y: 400 });
-    expect(state.verticalScrollOffset).toBeLessThan(state.layout.vertical_scroll_max);
-    scroll.releaseNode(free.id); expect(scroll.consumeActivation(free.id)).toBe(true); scroll.cancel();
 });
 
 test.each(['fr', 'en'])('a beginner blank project persists exactly one white welcome row (%s)', async locale => {

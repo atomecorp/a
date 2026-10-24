@@ -12,7 +12,6 @@ vi.mock('../../eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js', () => ({
 }));
 vi.mock('../../atome/src/squirrel/health/index.js', () => ({ getHealthOwner: () => null }));
 const { createHealthDetailPanel } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_health_detail_runtime.js');
-const { createDashboardHitActivation } = await import('../../eVe/domains/dashboard/dashboard_bevy_ui_action_handlers.js');
 const now = new Date(2026, 9, 11, 12).getTime();
 const walk = node => [node, ...(node.children || []).flatMap(walk)];
 const text = nodes => nodes.flatMap(walk).filter(node => node.text).map(node => node.text).join('\n');
@@ -140,15 +139,4 @@ test('daily totals draw measured interval bars and recorded progression while mi
     const progression = graph.children.filter(node => node.id.includes('_1_point_'));
     expect(progression[1].style.position[1]).toBeLessThan(progression[0].style.position[1]);
     expect(text(nodes)).toContain('Cumul mesuré');
-});
-
-test('a lateral rubric closes the detail before selecting it; Nouveau retains its selector path', async () => {
-    const calls = [];
-    const state = { active: true, workspaceOpening: false, layout: {} };
-    const activate = createDashboardHitActivation({ state, isInteractivePresented: () => true,
-        healthModules: { isDetailOpen: () => true, closeDetail: async () => calls.push('close') },
-        headerZoneForHit: () => 'filter', clearCategoryFilter: () => calls.push('clear'),
-        toggleCategoryFilter: id => calls.push(id), activateCategory: id => calls.push('new_' + id) });
-    await activate({ kind: 'header', category: { id: 'monitor' } });
-    expect(calls).toEqual(['close', 'clear', 'monitor']);
 });

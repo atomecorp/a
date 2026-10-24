@@ -8,7 +8,6 @@ import { EVE_TOOL_SKIN_TOKENS } from '../../eVe/elements/skin/tool_skin.js';
 import { EVE_BUTTON_SKIN_TOKENS } from '../../eVe/elements/skin/button_skin.js';
 import { resolveBevyMainMenuItemSize } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
 import { BEVY_PANEL_TOKENS } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
-import { createDashboardLayout } from '../../eVe/domains/dashboard/dashboard_layout.js';
 import {
     DASHBOARD_VISUAL_TOKENS,
     resolveDashboardBlockUnitSize
@@ -21,10 +20,6 @@ const DOUBLE = SYSTEM_UI_METRICS.doubleUnitPx;
 const scalePx = SYSTEM_UI_METRICS.scalePx;
 
 const source = (relativePath) => readFileSync(new URL(relativePath, import.meta.url), 'utf8');
-
-const dashboardCategories = [
-    { id: 'news', color: '#9f2f2f', order: 0, icon_id: 'news', label_key: 'eve.dashboard.category.news' }
-];
 
 describe('System UI base unit contract', () => {
     it('publishes one base unit with its two declared ratios and one scaler', () => {
@@ -110,24 +105,7 @@ describe('System UI base unit contract', () => {
         expect(BEVY_PANEL_TOKENS.multilineEditor.heightPx).toBe(scalePx(80));
     });
 
-    it('makes a Dashboard cell and a Matrix tile two base units at any width', () => {
+    it('resolves the Dashboard block unit to two base units', () => {
         expect(resolveDashboardBlockUnitSize(DASHBOARD_VISUAL_TOKENS)).toBe(DOUBLE);
-        const layout = createDashboardLayout({
-            width: 760,
-            height: 700,
-            categories: dashboardCategories,
-            itemsByCategory: new Map(),
-            tokens: DASHBOARD_VISUAL_TOKENS
-        });
-        expect(layout.unit_width).toBe(DOUBLE);
-        expect(layout.block_unit_size).toBe(DOUBLE);
-        const narrow = createDashboardLayout({
-            width: 240,
-            height: 480,
-            categories: dashboardCategories,
-            itemsByCategory: new Map(),
-            tokens: DASHBOARD_VISUAL_TOKENS
-        });
-        expect(narrow.unit_width).toBe(DOUBLE);
     });
 });

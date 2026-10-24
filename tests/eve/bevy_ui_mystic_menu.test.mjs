@@ -998,105 +998,20 @@ test('the in-force expertise level is the only choice that carries the check ico
     }, { getDefaultContent: () => content });
 });
 
-test('the Dashboard claims its own glass for the Mystic table', async () => {
+test('a BevyUI node under the point blocks the Mystic gesture', async () => {
     await withMenuWindow(async () => {
-        const { createDashboardItemMysticMenu } = await import('../../eVe/domains/dashboard/dashboard_item_mystic_menu.js');
         const { isBlockedTarget } = await import('../../eVe/intuition/mystic/context_target.js');
-        const { MYSTIC_DASHBOARD_SURFACE_CONTEXT_TYPE } = await import('../../eVe/intuition/mystic/context_selection.js');
-        assert.equal(MYSTIC_DASHBOARD_SURFACE_CONTEXT_TYPE, 'dashboard_surface');
-        const menu = createDashboardItemMysticMenu({
-            state: {
-                active: true,
-                layout: {
-                    dashboard_rect: { x: 0, y: 0, width: 1280, height: 720 },
-                    // The toolbox keeps its sliver at the bottom of the surface: the
-                    // ONE place on the Dashboard the menu must never claim.
-                    toolbox_reserved_rect: { x: 0, y: 720, width: 1280, height: 0 },
-                    lanes: []
-                },
-                tokens: {}
-            },
-            layoutPointFromClient: ({ clientX, clientY }) => ({ x: clientX, y: clientY }),
-            label: { begin: () => {} },
-            invalidateCategories: async () => {}
-        });
-        const glass = { clientX: 640, clientY: 360 };
-        assert.deepEqual(menu.readTargetAtPoint(glass), { kind: 'surface' });
-        assert.equal(menu.isBlockedPoint(glass), false);
-        // The table opens ON the Dashboard, at the point the user pressed, and not
-        // only over one of its tiles.
-        assert.deepEqual(menu.readTargetAtPoint({ ...glass, eventType: 'contextmenu' }), { kind: 'surface' });
-        assert.equal(menu.isBlockedPoint(glass), false);
-        // Une TUILE du Dashboard, elle aussi, ouvre la table : elle repond
-        // `surface` des que Mystic est actif, et garde seulement son geste de
-        // renommage sous le doigt — la table canonique n'a pas d'entree `rename`.
-        // Sans ce verdict la tuile repondait `item`, le style mystique n'a pas
-        // d'entree pour ce contexte, et le menu ne s'ouvrait nulle part.
-        const tile = { x: 100, y: 100, width: 200, height: 200 };
-        const lane = {
-            category: { id: 'projects' },
-            header_visible_rect: { x: 0, y: 0, width: 0, height: 0 },
-            visible_item_rects: [{
-                item: { atome_id: 'p1', title: 'Projet 2', metadata: { project_preview_source: 'preview.png' } },
-                category: { id: 'projects' },
-                visible_rect: { ...tile },
-                card_rect: { ...tile }
-            }]
-        };
-        const tiled = createDashboardItemMysticMenu({
-            state: {
-                active: true,
-                layout: {
-                    dashboard_rect: { x: 0, y: 0, width: 1280, height: 720 },
-                    toolbox_reserved_rect: { x: 0, y: 720, width: 1280, height: 0 },
-                    lanes: [lane]
-                },
-                tokens: {}
-            },
-            layoutPointFromClient: ({ clientX, clientY }) => ({ x: clientX, y: clientY }),
-            label: { begin: () => {} },
-            invalidateCategories: async () => {}
-        });
-        // Le libelle tient le bas de la carte (`project_preview_source` present) ;
-        // le reste de la tuile appartient au menu.
-        const label = { clientX: 200, clientY: 285 };
-        const preview = { clientX: 200, clientY: 160 };
-        assert.equal(tiled.readTargetAtPoint({ ...preview, eventType: 'contextmenu' }).kind, 'item');
-        assert.equal(tiled.readTargetAtPoint({ ...preview, eventType: 'pointerdown' }).kind, 'item');
-        assert.deepEqual(tiled.readTargetAtPoint({ ...label, eventType: 'pointerdown' }), { kind: 'block' });
-        assert.equal(tiled.readTargetAtPoint({ ...label, eventType: 'contextmenu' }).kind, 'item');
-        const tileTarget = tiled.readTargetAtPoint({ ...preview, eventType: 'contextmenu' });
-        assert.equal(tileTarget.kind, 'item');
-        assert.equal(tileTarget.atomeId, 'p1');
-        // Outside its own rect the Dashboard abstains rather than blocking.
-        assert.equal(menu.readTargetAtPoint({ clientX: -10, clientY: 360 }), null);
-        // An inactive Dashboard owns nothing at all.
-        const idle = createDashboardItemMysticMenu({
-            state: { active: false, layout: null, tokens: {} },
-            layoutPointFromClient: ({ clientX, clientY }) => ({ x: clientX, clientY }),
-            label: { begin: () => {} },
-            invalidateCategories: async () => {}
-        });
-        assert.equal(idle.readTargetAtPoint(glass), null);
-
-        // ...and the shared Mystic gate reads that answer before anything else. A
-        // BevyUI node sits under the point — the Dashboard's own glass — and would
-        // block the menu on its own; the Dashboard's verdict is what settles it.
         // `context_target.js` tests its targets with the real DOM constructors.
         const previousElement = globalThis.Element;
         globalThis.Element = globalThis.window.Element;
-        const surface = globalThis.document.createElement('canvas');
-        const event = { clientX: 640, clientY: 360, type: 'pointerdown' };
-        globalThis.window.eveBevyUiRuntime = { hitTestAtClientPoint: () => ({ nodeId: 'dashboard_node_1' }) };
-        globalThis.window.eveDashboardBevyUiRuntime = { readMysticTargetAtPoint: () => ({ kind: 'block' }) };
-        assert.equal(isBlockedTarget(surface, event), true);
-        globalThis.window.eveDashboardBevyUiRuntime = { readMysticTargetAtPoint: () => menu.readTargetAtPoint(glass) };
-        assert.equal(isBlockedTarget(surface, event), false, 'the surface claims the gesture for the Mystic table');
-        globalThis.window.eveDashboardBevyUiRuntime = { readMysticTargetAtPoint: () => ({ kind: 'item', atomeId: 'a1' }) };
-        assert.equal(isBlockedTarget(surface, event), false, 'a tile keeps its own actions');
-        globalThis.window.eveDashboardBevyUiRuntime = undefined;
-        assert.equal(isBlockedTarget(surface, event), true, 'without the Dashboard the node blocks, as it always did');
-        globalThis.Element = previousElement;
+        try {
+            const surface = globalThis.document.createElement('canvas');
+            const event = { clientX: 640, clientY: 360, type: 'pointerdown' };
+            globalThis.window.eveBevyUiRuntime = { hitTestAtClientPoint: () => ({ nodeId: 'dashboard_node_1' }) };
+            assert.equal(isBlockedTarget(surface, event), true);
+        } finally {
+            globalThis.Element = previousElement;
+        }
     });
 });
 

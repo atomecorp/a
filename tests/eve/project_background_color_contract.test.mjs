@@ -143,7 +143,7 @@ test('full-surface Dashboard Matrix shares the current wallpaper across project 
         assert.equal(harness.latest().sourceUrl, '/wallpaper.mp4');
         assert.deepEqual(harness.latest().cover, RED_RGBA);
         const records = PROJECT_SCENES.get(PROJECT_ID).records;
-        records.set('matrix', {id: 'matrix', properties: {module: 'matrix', layout_fill: 'surface', matrix_background: false}});
+        records.set('matrix', {id: 'matrix', properties: {module: 'matrix', layout_fill: 'surface'}});
         const rendered = () => harness.windowRef.dispatchEvent(new harness.windowRef.CustomEvent('eve:project-render-done', {detail: {projectId: PROJECT_ID}}));
         rendered();
         assert.equal(harness.latest().sourceUrl, '/wallpaper.mp4');

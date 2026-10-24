@@ -255,12 +255,13 @@ it('projects native panel controls and Dashboard material without a private skin
                     for (const property of ['top', 'height', 'material', 'clip', 'corner_radius']) expect(band[property]).toEqual(standard[property]);
                     const icon = nodes.find(node => node.id === `__eve_dashboard_content_icon_${base}`).style;
                     expect(icon.position[0] + icon.size[0] / 2).toBe(card.style.size[0] / 2);
-                    // The shared label-band layout keeps its glyph in the
-                    // content area above the title, rather than under its band.
-                    expect(icon.position[1]).toBeGreaterThanOrEqual(0);
-                    expect(icon.position[1] + icon.size[1]).toBeLessThanOrEqual(band.top);
+                    // The shared label-band layout opens the card with its band:
+                    // the glyph sits in the content area under it.
+                    expect(icon.position[1]).toBeGreaterThanOrEqual(band.top + band.height);
+                    expect(icon.position[1] + icon.size[1]).toBeLessThanOrEqual(card.style.size[1]);
                     const title = nodes.find(node => node.id === `__eve_dashboard_content_title_${base}`).style;
-                    expect(title.position[1] + title.size[1]).toBe(card.style.size[1]);
+                    expect(title.position[1]).toBe(band.top);
+                    expect(title.size[1]).toBe(band.height);
                     expect(title.font_size).toBe(DASHBOARD_VISUAL_TOKENS.labelText.font_size);
                 }
                 const slots = ['sleep', 'nutrition', 'movement', 'journal'].map(id => nodes.find(node => node.id === id + '_slot').style);

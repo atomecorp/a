@@ -1,10 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { installMockBrowserEnv } from '../strangler_v2/_env.mjs';
-import {
-    DASHBOARD_WORKSPACE_HOST_ID,
-    DASHBOARD_WORKSPACE_PROJECT_ID
-} from '../../eVe/domains/dashboard/dashboard_workspace_mode.js';
+import { DASHBOARD_WORKSPACE_HOST_ID } from '../../eVe/domains/dashboard/dashboard_workspace_mode.js';
 
 const { window, document } = installMockBrowserEnv();
 globalThis.CustomEvent = window.CustomEvent;
@@ -23,13 +20,6 @@ view.appendChild(dashboardHost);
 const userProjectHost = document.createElement('div');
 userProjectHost.id = 'project_view_user_project';
 view.appendChild(userProjectHost);
-
-window.eveDashboardBevyUiRuntime = {
-    state: {
-        active: true,
-        projectId: DASHBOARD_WORKSPACE_PROJECT_ID
-    }
-};
 
 const { clearProjectView } = await import('../../eVe/intuition/tools/project_bootstrap_support.js');
 

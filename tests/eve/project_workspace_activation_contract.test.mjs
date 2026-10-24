@@ -150,8 +150,6 @@ test('Project workspace activation restores the project surface and main menu', 
 
     const calls = [];
     let menuActive = false;
-    let dashboardClosed = 0;
-    window.eveDashboardBevyUiRuntime = { state: { active: true, sceneProjectId: 'project_alpha' }, destroy: async () => { dashboardClosed += 1; } };
     window.__eveWorkspaceMode = { mode: 'transition', projectId: 'project_alpha', targetMode: 'project', transitioning: true };
     setMainMenuRuntime({
         showFully: async () => {
@@ -227,8 +225,6 @@ test('Project workspace activation restores the project surface and main menu', 
     assert.equal(canvas.style.visibility, '');
     assert.equal(canvas.style.pointerEvents, '');
     assert.equal(menuActive, true);
-    assert.equal(dashboardClosed, 1, 'even the current project must close its Dashboard');
-    delete window.eveDashboardBevyUiRuntime;
     assert.deepEqual(
         calls.find((entry) => entry.name === 'loadProjectAtomes')?.options,
         {
@@ -405,24 +401,6 @@ test('Project workspace activation from dashboard claims the project surface ins
         transitioning: false,
         targetMode: ''
     };
-    window.eveDashboardBevyUiRuntime = {
-        state: {
-            active: true,
-            suspended: false,
-            sceneProjectId: '__eve_dashboard_workspace__'
-        },
-        destroy: async () => {
-            calls.push({ name: 'destroyDashboard' });
-            window.eveDashboardBevyUiRuntime.state.active = false;
-            window.__eveWorkspaceMode = {
-                mode: 'dashboard',
-                projectId: '__eve_dashboard_workspace__',
-                transitioning: false,
-                targetMode: ''
-            };
-            return { ok: true };
-        }
-    };
     setMainMenuRuntime({
         showFully: async () => {
             menuActive = true;
@@ -490,8 +468,7 @@ test('Project workspace activation from dashboard claims the project surface ins
         'setCurrent',
         'commit',
         'loadProjectAtomes',
-        'showFully',
-        'destroyDashboard'
+        'showFully'
     ]);
 });
 

@@ -211,19 +211,9 @@ export const runMoleculeListAcceptance = async ({ page, project, fixture, report
             assert(name, `member_name_not_actionable:${memberEntryIndex}`);
             const nameHit = {
                 ...(await readBevyUiHit(page, name)),
-                ...(await page.evaluate(() => {
-                const dashboard = window.eveDashboardBevyUiRuntime?.state || {};
-                return {
-                    dashboard: {
-                        active: dashboard.active === true,
-                        suspended: dashboard.suspended === true,
-                        opening: dashboard.opening === true,
-                        closing: dashboard.closing === true,
-                        sceneProjectId: dashboard.sceneProjectId || null
-                    },
+                ...(await page.evaluate(() => ({
                     workspaceMode: window.__eveWorkspaceMode || null
-                };
-                }))
+                })))
             };
             assert(String(nameHit.nodeId || '').endsWith(`project_view_list_entry_${memberEntryIndex}_name`),
                 `member_name_hit_mismatch:${JSON.stringify({ name, nameHit })}`);

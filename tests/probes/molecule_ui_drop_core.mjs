@@ -59,7 +59,6 @@ export const createDropFixture = (page, projectId, tag, { stackedExit = false } 
         created.push(String(result.id || result.atome_id || spec.id));
     }
     await window.eveToolBase.loadProjectAtomes(pid, { staleFirst: false });
-    await window.eveDashboardBevyUiRuntime?.destroy?.();
     const workspace = await import('/eVe/domains/dashboard/dashboard_workspace_mode.js');
     workspace.markProjectWorkspaceMode?.(pid);
     const contentOffset = stackedExit ? 12 : 0;

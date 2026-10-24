@@ -27,15 +27,11 @@ try {
     });
     await page.reload({ waitUntil:'commit', timeout:45_000 });
     await page.waitForFunction(() => !!window.eveToolBase && !!document.getElementById('eve_surface_project'), null, { timeout:45_000 });
-    await page.waitForFunction(() => (
-        window.eveDashboardBevyUiRuntime?.state?.active === true
-        || window.__eveWorkspaceMode?.mode === 'dashboard'
-    ), null, { timeout:45_000 });
+    await page.waitForFunction(() => window.__eveWorkspaceMode?.mode === 'dashboard', null, { timeout:45_000 });
 
     const fixture = await page.evaluate(async () => {
         const workspace = await import('/eVe/domains/dashboard/dashboard_workspace_mode.js');
         workspace.beginDashboardWorkspaceTransition('project');
-        await window.eveDashboardBevyUiRuntime?.destroy?.();
         const name = `Z Mystic Mask ${Date.now()}`;
         const created = await window.AdoleAPI.projects.create(name);
         let projectId = String(created?.id || created?.project_id || created?.atome_id || created?.fastify?.project?.id || '');

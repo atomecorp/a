@@ -3,10 +3,6 @@ import path from 'node:path';
 
 import { assert, awaitBevyUiNodeTarget, clickCanvasTarget, visibleMenuTool, wait, waitFor, waitForStableScene } from "./molecule_ui_acceptance_support.mjs";
 
-
-import { clickCanvasRect } from "./dashboard_workspace_stress/support.mjs";
-
-
 export const FIXTURES = Object.freeze({
     video: path.resolve(process.env.MOLECULE_UI_VIDEO_FIXTURE || "tests/fixtures/media/Jeezs's fire.m4v"),
     audio: path.resolve('tests/fixtures/media/test.m4a'),
@@ -228,79 +224,20 @@ export const reloadBrowserProject = async (page, project) => {
         surface: !!document.getElementById('eve_surface_project'),
         intuition: !!document.getElementById('intuition')
     }), null, 45000);
-    const projectIsOpen = (projectId) => (
-        window.__currentProject?.id === projectId
-        && window.eveDashboardBevyUiRuntime?.state?.active !== true
-        && window.__eveWorkspaceMode?.mode === 'project'
-    );
-    const restoredRoute = await waitFor(page, (projectId) => {
-        const opened = window.__currentProject?.id === projectId
-            && window.eveDashboardBevyUiRuntime?.state?.active !== true
-            && window.__eveWorkspaceMode?.mode === 'project';
-        const dashboard = window.eveDashboardBevyUiRuntime?.state || {};
-        const tree = (window.eveBevyUiRuntime?.readOverlayDiagnostics?.()?.trees || [])
-            .find((entry) => entry.id === 'dashboard_bevy_ui');
-        const headerReady = (tree?.interactiveNodes || []).some((entry) => (
-            String(entry?.id || entry) === '__eve_dashboard_header_bg_projects'
-        ));
-        return {
-            ok: opened || (dashboard.active === true && tree?.suspended !== true && headerReady),
-            opened, dashboardActive: dashboard.active === true,
-            activeCategoryId: dashboard.activeCategoryId || '',
-            treeSuspended: tree?.suspended === true, headerReady,
-            currentProjectId: window.__currentProject?.id || '',
-            workspaceMode: window.__eveWorkspaceMode?.mode || ''
-        };
-    }, project.id, 60000);
-    let opened = restoredRoute.opened === true;
-    if (!opened) {
-        let projectsFocused = false;
-        for (let attempt = 0; attempt < 3 && !projectsFocused; attempt += 1) {
-            opened = await page.evaluate(projectIsOpen, project.id);
-            if (opened) break;
-            const projectsHeader = await awaitBevyUiNodeTarget(page, {
-                nodeId: '__eve_dashboard_header_bg_projects',
-                treeId: 'dashboard_bevy_ui', step: 2
-            }, { timeoutMs: 15000, intervalMs: 200 });
-            if (!projectsHeader) {
-                opened = await page.evaluate(projectIsOpen, project.id);
-                if (opened) break;
-                assert(projectsHeader, 'layered_reload_projects_header_not_actionable');
-            }
-            await clickCanvasTarget(page, projectsHeader);
-            projectsFocused = await waitFor(page, () => ({
-                ok: window.eveDashboardBevyUiRuntime?.state?.activeCategoryId === 'projects',
-                activeCategoryId: window.eveDashboardBevyUiRuntime?.state?.activeCategoryId || ''
-            }), null, 8000).then(() => true).catch(() => false);
-            if (!projectsFocused) await wait(300);
-        }
-        if (!opened) {
-            assert(projectsFocused, 'layered_reload_projects_focus_failed');
-            const card = await waitFor(page, (projectId) => {
-                const dashboard = window.eveDashboardBevyUiRuntime?.state || {};
-                const item = (dashboard.layout?.lanes || []).flatMap((lane) => lane.visible_item_rects || [])
-                    .find((entry) => String(entry?.item?.id || '') === String(projectId));
-                return {
-                    ok: dashboard.active === true && !!(item?.card_rect || item?.rect),
-                    active: dashboard.active === true,
-                    rect: item?.card_rect || item?.rect || null
-                };
-            }, project.id, 45000);
-            for (let attempt = 0; attempt < 3 && !opened; attempt += 1) {
-                await clickCanvasRect(page, card.rect);
-                opened = await waitFor(page, (projectId) => ({
-                    ok: window.__currentProject?.id === projectId
-                        && window.eveDashboardBevyUiRuntime?.state?.active !== true
-                        && window.__eveWorkspaceMode?.mode === 'project',
-                    current: window.__currentProject?.id || '',
-                    dashboard: window.eveDashboardBevyUiRuntime?.state?.active === true,
-                    workspaceMode: window.__eveWorkspaceMode?.mode || '',
-                    workspaceProjectId: window.__eveWorkspaceMode?.projectId || ''
-                }), project.id, 8000).then(() => true).catch(() => false);
-                if (!opened) await wait(300);
-            }
-        }
-    }
+    // A start presents the eVe home whatever the last surface (durable home startup, 2026-10-16):
+    // the project is reopened through the canonical `ui.project.open`, as workspace_scene_restoration.js does.
+    await waitFor(page, () => ({ ok: ['dashboard', 'project'].includes(window.__eveWorkspaceMode?.mode) }), null, 60000);
+    const reopen = await page.evaluate(async (projectId) => {
+        if (window.__eveWorkspaceMode?.mode === 'project' && window.__currentProject?.id === projectId) return { ok: true, already: true };
+        const { invokeToolGateway } = await import('/eVe/intuition/runtime/tool_gateway.js');
+        return invokeToolGateway({ tool_id: 'ui.project.open', action: 'pointer.click', input: { project_id: projectId }, source: { type: 'ui', layer: 'probe_reload' } });
+    }, project.id);
+    assert(reopen?.ok === true, `layered_reload_project_open_refused:${project.id}:${reopen?.error || ''}`);
+    const opened = await waitFor(page, (projectId) => ({
+        ok: window.__currentProject?.id === projectId && window.__eveWorkspaceMode?.mode === 'project',
+        currentProjectId: window.__currentProject?.id || '',
+        workspaceMode: window.__eveWorkspaceMode?.mode || ''
+    }), project.id, 60000).then(() => true).catch(() => false);
     assert(opened, `layered_reload_project_open_failed:${project.id}`);
     await waitForStableScene(page, project.id);
     await waitFor(page, async () => {
@@ -313,8 +250,7 @@ export const reloadBrowserProject = async (page, project) => {
         return {
             ok: menu.active === true && menu.treeMounted === true && contextual.suspended !== true,
             menu, contextual,
-            workspace: window.__eveWorkspaceMode || null,
-            dashboard: window.eveDashboardBevyUiRuntime?.state || null
+            workspace: window.__eveWorkspaceMode || null
         };
     }, null, 15000);
     await waitFor(page, async (projectId) => {

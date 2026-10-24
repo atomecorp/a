@@ -39,8 +39,11 @@ fn clip_shadow_overlay(
         return;
     };
     // Une decoupe tournee (page pivotee) n'est pas un rectangle ecran : l'ombre
-    // suit alors la pose de l'atome sans etre recadree.
-    if world.get::<crate::components::AtomeClipRotation>(owner).is_some_and(|value| value.0 != 0.0) {
+    // suit alors la pose de l'atome sans etre recadree. De meme pour une forme
+    // tournee dans une decoupe droite : la recadrer la reposerait a plat.
+    if world.get::<crate::components::AtomeClipRotation>(owner).is_some_and(|value| value.0 != 0.0)
+        || world.get::<crate::components::AtomeLocalTransform>(owner).is_some_and(|local| local.rotation != 0.0)
+    {
         return;
     }
     let left = shadow_rect[0].max(clip[0]);

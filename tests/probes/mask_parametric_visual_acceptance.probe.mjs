@@ -174,16 +174,12 @@ try {
     if (session?.ok !== true) throw new Error(`mask_visual_guest_failed:${JSON.stringify(session)}`);
     await page.reload({ waitUntil: 'commit', timeout: 45_000 });
     await page.waitForFunction(() => !!window.eveToolBase && !!document.getElementById('eve_surface_project'), null, { timeout: 45_000 });
-    await page.waitForFunction(() => (
-        window.eveDashboardBevyUiRuntime?.state?.active === true
-        || window.__eveWorkspaceMode?.mode === 'dashboard'
-    ), null, { timeout: 45_000 });
+    await page.waitForFunction(() => window.__eveWorkspaceMode?.mode === 'dashboard', null, { timeout: 45_000 });
 
     const project = await page.evaluate(async () => {
         const name = `Mask pixels ${Date.now()}`;
         const workspace = await import('/eVe/domains/dashboard/dashboard_workspace_mode.js');
         workspace.beginDashboardWorkspaceTransition('project');
-        await window.eveDashboardBevyUiRuntime?.destroy?.();
         const created = await window.AdoleAPI.projects.create(name);
         let id = String(created?.id || created?.project_id || created?.atome_id
             || created?.fastify?.project?.id || created?.tauri?.project?.id || '');

@@ -574,3 +574,33 @@ fn a_rotated_page_clips_its_rotated_member_on_the_rotated_edge() {
     assert!((transform.translation.truncate() - expected).length() < 0.05,
         "visible piece centre {:?} != {:?}", transform.translation, expected);
 }
+
+// Constat du 24 oct. 2026 (flèches du pied de l'accueil eVe) : une forme TOURNEE dans un
+// conteneur decoupe (decoupe droite) voyait son ombre reposee a plat par le recadrage.
+// Comme pour une decoupe tournee, son ombre suit alors sa pose sans etre recadree.
+#[test]
+fn a_rotated_shape_in_a_straight_clip_keeps_its_shadow_rotated() {
+    let mut world = test_world();
+    let shadow = AtomeShadowStyle { color: [0.3, 0.95, 0.95, 0.95], blur: 6.0, offset_x: 0.0, offset_y: 0.0, spread: 1.0,
+                     kind: crate::types::AtomeShadowKind::Drop,
+                     invert: false,
+                 };
+    let entity = apply_spawn(
+        &mut world,
+        AtomeRenderNode {
+            project_space: false,
+            rotation: 30.0,
+            shadow: Some(shadow),
+            clip_rect: Some([0.0, 0.0, 640.0, 480.0]),
+            ..shape_node("rotated_clipped_shape")
+        },
+    )
+    .unwrap();
+    let expected = Quat::from_rotation_z(-30.0_f32.to_radians());
+    let shape_shadow = world.get::<AtomeShapeShadowOverlay>(entity).unwrap().entities[0];
+    let transform = *world.get::<Transform>(shape_shadow).unwrap();
+    assert!(transform.rotation.angle_between(expected) < 1e-3, "clipped shadow lost its rotation: {:?}", transform.rotation);
+    let pose = *world.get::<Transform>(entity).unwrap();
+    assert!((transform.translation.truncate() - pose.translation.truncate()).length() < 0.01,
+        "clipped shadow centre {:?} != shape centre {:?}", transform.translation, pose.translation);
+}

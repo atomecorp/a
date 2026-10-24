@@ -4,7 +4,6 @@ import {
     subscribeCanonicalProjectChanges
 } from '../../eVe/domains/dashboard/dashboard_project_change_events.js';
 import { createDashboardCreationActions } from '../../eVe/domains/dashboard/dashboard_creation_actions.js';
-import { createDashboardCreationRuntime } from '../../eVe/domains/dashboard/dashboard_creation_runtime.js';
 
 afterEach(() => vi.useRealTimers());
 
@@ -50,43 +49,15 @@ describe('dashboard canonical project changes', () => {
     });
 });
 
-describe('dashboard creation mode', () => {
-    it('a short header press opens the grid, steps through a family, and any header closes it', async () => {
-        const state = { active: true, activeCategoryId: '', creation: null };
-        const created = [];
-        const runtime = createDashboardCreationRuntime({
-            state,
-            render: async () => null,
-            invokeTool: async ({ input }) => { created.push(input); return { ok: true }; },
-            actions: {
-                createGuidedProject: async (intent) => { created.push(intent); return { ok: true }; },
-                createNews: async () => ({ ok: true }),
-                openEditor: async () => ({ ok: true })
-            }
-        });
-        await runtime.toggleFromHeader('projects');
-        expect(runtime.readStep().cells.map((cell) => cell.id)).toEqual([
-            'empty_project', 'family_health', 'family_creation', 'family_recording', 'family_publication', 'family_templates'
-        ]);
-        await runtime.choose('family_health');
-        await runtime.choose('goal_health_weight');
-        expect(created).toEqual([{ family: 'health', goal: 'weight', objective_id: 'OBJ-01' }]);
-        expect(state.activeCategoryId).toBe('');
-        await runtime.toggleFromHeader('news');
-        await runtime.toggleFromHeader('calendar');
-        expect(state.creation).toBe(null);
-    });
-});
-
 it('guided creation carries the full intent into the canonical creator and opens its result', async () => {
     const calls = [];
-    const actions = createDashboardCreationActions({ invalidateCategories: async ids => calls.push(['invalidate', ids]),
+    const actions = createDashboardCreationActions({
         projectCreator: async () => async options => { calls.push(['create', options]); return { project: { id: 'guided' } }; },
         newsCreator: async () => async options => { calls.push(['news', options]); return { ok: true, project: { id: 'draft' } }; },
         openProject: async item => { calls.push(['open', item]); return { ok: true }; } });
     await actions.createGuidedProject({ family: 'health', goal: 'journal' });
     expect(calls[0][1].properties.project_intent).toEqual({ family: 'health', goal: 'journal', objective_id: 'OBJ-08' });
-    expect(calls[2]).toEqual(['open', { payload: { id: 'guided' } }]);
+    expect(calls[1]).toEqual(['open', { payload: { id: 'guided' } }]);
     calls.length = 0;
     await actions.createGuidedProject({ family: 'publication', goal: 'everyone' });
     expect(calls[0]).toEqual(['news', expect.objectContaining({ empty: true,
@@ -105,7 +76,6 @@ describe('dashboard weather data contract', () => {
     });
 });
 
-
 it('closing the shared place search aborts its request and rejects late results', async () => {
     const { createFinderPlaceRuntime } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_finder_place_runtime.js');
     let finish;
@@ -123,14 +93,12 @@ it('closing the shared place search aborts its request and rejects late results'
 
 it('opens calendar and contact drafts without creating records', async () => {
     const openPanel = vi.fn(async () => ({ ok: true }));
-    const invalidateCategories = vi.fn();
     const projectCreator = vi.fn();
-    const actions = createDashboardCreationActions({ openPanel, invalidateCategories, projectCreator,
+    const actions = createDashboardCreationActions({ openPanel, projectCreator,
         openProject: async () => ({ ok: true }) });
     await actions.openEditor('calendar', 'workspace');
     await actions.openEditor('contact');
     expect(openPanel.mock.calls.map(([key, context]) => [key, context.createNew, context.projectId]))
         .toEqual([['calendar', true, 'workspace'], ['contact', true, null]]);
     expect(projectCreator).not.toHaveBeenCalled();
-    expect(invalidateCategories).not.toHaveBeenCalled();
 });

@@ -57,7 +57,6 @@ export const runColdImageAudioAcceptance = async ({ page, report, ensureProject,
         const project = await ensureProject(coldPage, `Molecule Cold PNG Audio ${Date.now()}`);
         assert(project?.ok && project.id, `cold_project_create_failed:${JSON.stringify(project)}`);
         await coldPage.evaluate(async (projectId) => {
-            await window.eveDashboardBevyUiRuntime?.destroy?.();
             const workspace = await import('/eVe/domains/dashboard/dashboard_workspace_mode.js');
             workspace.markProjectWorkspaceMode?.(projectId);
         }, project.id);
@@ -68,11 +67,9 @@ export const runColdImageAudioAcceptance = async ({ page, report, ensureProject,
                 ok: window.__currentProject?.id === projectId
                     && window.__eveWorkspaceMode?.mode === 'project'
                     && window.__eveWorkspaceMode?.projectId === projectId
-                    && window.eveDashboardBevyUiRuntime?.state?.active !== true
                     && Number(rect?.width || 0) > 0 && Number(rect?.height || 0) > 0,
                 currentProjectId: window.__currentProject?.id || '',
                 workspaceMode: window.__eveWorkspaceMode || null,
-                dashboardActive: window.eveDashboardBevyUiRuntime?.state?.active === true,
                 rect: rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null
             };
         }, project.id, 45000);

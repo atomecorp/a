@@ -22,9 +22,6 @@ vi.mock('../../eVe/domains/dashboard/workspace_surface_preference.js', () => ({ 
     ensureHomeTemplateProject: async () => ({ ok: true, projectId: window.__eveProfilePreferences.workspace.home_eve_project_id }) }));
 vi.mock('../../eVe/domains/matrix/matrix_module_runtime.js', () => ({ openWorkspaceHomeProjection: owners.home, readMatrixInstance: () => null,
     closeWorkspaceHomeProjection: vi.fn(async () => {}) }));
-vi.mock('../../eVe/domains/dashboard/dashboard_bevy_ui_runtime.js', () => ({
-    getDashboardBevyUiRuntime: () => window.eveDashboardBevyUiRuntime
-}));
 
 let dom;
 beforeEach(() => {
@@ -44,7 +41,6 @@ it('keeps the wallpaper canvas visible throughout pending home restoration', asy
     const opacityChanges = [];
     const observer = new window.MutationObserver(() => opacityChanges.push(canvas.style.opacity));
     observer.observe(canvas, { attributes: true, attributeFilter: ['style'] });
-    window.eveDashboardBevyUiRuntime = { state: { active: false }, open: vi.fn(), close: vi.fn() };
     owners.home.mockImplementation(async input => {
         await new Promise(done => { release = done; arrived(); });
         return { ok: true, projectId: input.projectId, route: input.templateKey };
@@ -60,27 +56,18 @@ it('keeps the wallpaper canvas visible throughout pending home restoration', asy
 it.each(['beginner', 'intermediate', 'advanced'])('presents the eVe home without loading a work project (%s)', async level => {
     const canvas = ensureDashboardWorkspaceSurface();
     window.__eveProfilePreferences = { visual: { masteryLevel: level }, workspace: { startup_view: 'project', home_eve_project_id: 'home' } };
-    window.eveDashboardBevyUiRuntime = { state: { active: false }, open: vi.fn(), close: vi.fn() };
     const ensure = vi.fn(() => new Promise(() => {}));
     expect(await openWorkspaceDashboardWithProjectBootstrap({ ensureProjectReady: ensure })).toMatchObject({ ok: true, route: 'dashboard_eve', resumed: false });
     expect(owners.home).toHaveBeenCalledExactlyOnceWith({ templateKey: 'dashboard_eve', projectId: '__eve_dashboard_workspace__' });
     expect(ensure).not.toHaveBeenCalled(); expect(owners.activate).not.toHaveBeenCalled();
-    expect(window.eveDashboardBevyUiRuntime.open).not.toHaveBeenCalled();
     expect(canvas.isConnected).toBe(true); expect(canvas.style.opacity).not.toBe('0');
 });
 
-it('presents the standard creation surface over the eVe home', async () => {
+it('opens only the eVe home, without a work project', async () => {
     ensureDashboardWorkspaceSurface();
     window.__eveProfilePreferences = { visual: { masteryLevel: 'beginner' },
         workspace: { startup_view: 'dashboard', home_eve_project_id: 'home' } };
-    const runtime = window.eveDashboardBevyUiRuntime = {
-        state: { active: false }, close: vi.fn(), readDiagnostics: () => ({ mounted_nodes: 24 }),
-        activateCategory: vi.fn(async category => ({ ok: true, category_id: category })),
-        open: vi.fn(async input => { Object.assign(runtime.state, { active: true, sceneProjectId: input.sceneProjectId }); return { ok: true }; })
-    };
-    expect(await openWorkspaceDashboardAndMainMenu({ creationCategory: 'projects' })).toMatchObject({ ok: true, route: 'dashboard_creation' });
-    expect(runtime.activateCategory).toHaveBeenCalledExactlyOnceWith('projects');
+    expect(await openWorkspaceDashboardAndMainMenu()).toMatchObject({ ok: true, route: 'dashboard_eve' });
+    expect(owners.home).toHaveBeenCalledExactlyOnceWith({ templateKey: 'dashboard_eve', projectId: '__eve_dashboard_workspace__' });
     expect(owners.activate).not.toHaveBeenCalled();
-    expect(await openWorkspaceDashboardAndMainMenu()).toMatchObject({ route: 'dashboard_eve' });
-    expect(runtime.close).toHaveBeenCalledExactlyOnceWith({ honorLabelEditorKeyboardGuard: false });
 });

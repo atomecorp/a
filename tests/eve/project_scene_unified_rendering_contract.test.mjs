@@ -1,11 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
-import { createDashboardLayout } from '../../eVe/domains/dashboard/dashboard_layout.js';
-import { buildDashboardRecords } from '../../eVe/domains/dashboard/dashboard_records.js';
-import { DASHBOARD_VISUAL_TOKENS } from '../../eVe/domains/dashboard/dashboard_tokens.js';
-import { normalizeRenderAtoms } from '../../eVe/domains/rendering/render_atom.js';
-import { recordsForBevyProjection } from '../../eVe/domains/rendering/project_scene_record_projection.js';
 import {
     clearAllProjectSceneVisuals,
     clearAllProjectScenes,
@@ -19,9 +14,7 @@ import {
     updateProjectSceneRecords
 } from '../../eVe/domains/rendering/project_scene_runtime.js';
 import { sceneState } from '../../eVe/domains/rendering/project_scene_state.js';
-import { createRenderScene, hitTestRenderScene } from '../../eVe/domains/rendering/scene_graph.js';
 import { createSurfacePinchRuntime } from '../../eVe/domains/rendering/surface_pinch_runtime.js';
-import { createVirtualSceneTree } from '../../eVe/domains/rendering/virtual_scene_contract.js';
 import { getRenderSurfaceState } from '../../eVe/domains/rendering/surface_runtime.js';
 import { setAtomeContextualEditApi } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_registry.js';
 import { normalizeAtomeContextualKind } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_kind.js';
@@ -47,32 +40,6 @@ const bevyOpsFromCalls = (calls = []) => calls.flatMap((call) => (
         : [{ type: call.type, id: call.id, payload: call.payload }]
 ));
 const bevyOpId = (op = {}) => op.id || op.payload?.id || op.patch?.id || '';
-
-const dashboardCategories = Object.freeze([
-    { id: 'news', label_key: 'eve.dashboard.news', color: '#ff5252', icon_id: 'news' },
-    { id: 'calendar', label_key: 'eve.dashboard.calendar', color: '#ffa726', icon_id: 'calendar' }
-]);
-
-const buildDashboardHitScene = () => {
-    const layout = createDashboardLayout({
-        width: 1200,
-        height: 800,
-        toolboxHeight: 74,
-        categories: dashboardCategories,
-        itemsByCategory: new Map(),
-        tokens: DASHBOARD_VISUAL_TOKENS
-    });
-    const records = buildDashboardRecords({ layout, tokens: DASHBOARD_VISUAL_TOKENS });
-    const virtualScene = createVirtualSceneTree(recordsForBevyProjection(records), {
-        id: 'dashboard_selection_contract',
-        selectedIds: new Set()
-    });
-    const scene = createRenderScene(normalizeRenderAtoms(records), {
-        id: 'dashboard_selection_contract',
-        layerOrderById: new Map(virtualScene.nodes.map((node) => [String(node.id), node.renderLayer]))
-    });
-    return { layout, records, scene };
-};
 
 test('Foreground project render claims the canonical project layer when host is omitted', async () => {
     clearAllProjectScenes();
@@ -183,11 +150,10 @@ test('Project scene record updates preserve bounded DOM and avoid HTMLElement re
     assert.equal(getProjectSceneState('project_scene_b').scene.atoms.length, 2);
 });
 
-test('Late project renders preserve Molecule overlays and active same-project dashboard records only', async () => {
+test('Late project renders preserve Molecule overlays and never Dashboard records', async () => {
     clearAllProjectScenes();
     const dom = projectDom();
     const host = dom.window.document.getElementById('project');
-    const previousDashboardRuntime = dom.window.eveDashboardBevyUiRuntime;
     await renderProjectScene({
         projectId: 'project_ephemeral_overlay',
         records: [makeRecord('project_atom', 'shape', 1)],
@@ -220,25 +186,6 @@ test('Late project renders preserve Molecule overlays and active same-project da
     assert.equal(ids.has('project_atom'), true);
     assert.equal(ids.has('__eve_dashboard_background'), false);
     assert.equal(ids.has('mol:playhead'), true);
-    dom.window.eveDashboardBevyUiRuntime = { state: { active: true, sceneProjectId: 'project_ephemeral_overlay' } };
-    await updateProjectSceneRecords({
-        projectId: 'project_ephemeral_overlay',
-        records: [{
-            id: '__eve_dashboard_background',
-            type: 'shape',
-            properties: { left: 0, top: 0, width: 320, height: 180, color: '#111111' }
-        }]
-    });
-    await renderProjectScene({
-        projectId: 'project_ephemeral_overlay',
-        records: [makeRecord('project_atom', 'shape', 3)],
-        host,
-        preserveEphemeralRecords: true
-    });
-    const activeIds = new Set(getProjectSceneState('project_ephemeral_overlay').records.map((record) => record.id));
-    assert.equal(activeIds.has('__eve_dashboard_background'), true);
-    if (previousDashboardRuntime === undefined) delete dom.window.eveDashboardBevyUiRuntime;
-    else dom.window.eveDashboardBevyUiRuntime = previousDashboardRuntime;
 });
 
 test('Dashboard prefix reconciliation removes orphan records from runtime and Bevy projection', async () => {
@@ -402,20 +349,6 @@ test('Bulk visual cleanup preserves explicitly retained workspace scenes', async
 
     assert.equal(getProjectSceneState('__eve_dashboard_workspace__').record_count, 1);
     assert.equal(getProjectSceneState('previous_user_project').record_count, 0);
-});
-
-test('Dashboard overlay records stay non-selectable in the project hit-test scene', () => {
-    const { layout, records, scene } = buildDashboardHitScene();
-    assert.ok(records.length > 0);
-    assert.equal(records.every((record) => record.properties.selectable === false), true);
-
-    const reserved = layout.toolbox_reserved_rect;
-    const points = [
-        { x: reserved.x + reserved.width / 2, y: reserved.y + 8 },
-        { x: reserved.x + reserved.width / 2, y: reserved.y + reserved.height / 2 },
-        { x: layout.dashboard_rect.width / 2, y: layout.dashboard_rect.height / 2 }
-    ];
-    assert.deepEqual(points.map((point) => hitTestRenderScene(scene, point)?.id || null), [null, null, null]);
 });
 
 test('Project scene drag intent commits canonical geometry through commitBatch', async () => {

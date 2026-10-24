@@ -42,6 +42,7 @@ Every interface must always remain zen: calm, visually quiet, uncluttered, and l
 - Never add buttons or other controls beyond those needed for the requested interaction. Do not add convenience actions, informational badges, help sections, or debug indicators on your own initiative.
 - Compose the existing canonical controls and design tokens into the smallest coherent interface. Do not create a new control, local visual variant, or parallel implementation to achieve this restraint.
 - Preserve the existing accessibility contract, including necessary nonvisual accessible names. Accessibility metadata must not introduce unsolicited visible labels or text.
+- Lay every inert label (no action of its own) at the TOP of its object, never at the bottom: the finger comes from below (AGENTS.md rule 11). Reuse the canonical label band or menu tool content; never add a local variant.
 
 Before accepting a UI change, inspect every visible text item and control against the user's request and remove unsolicited copy, redundant labels, and superfluous controls introduced by the change. Localization of text does not authorize displaying it. Do not treat an empty area as a reason to fill it with information.
 
