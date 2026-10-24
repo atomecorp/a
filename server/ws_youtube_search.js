@@ -1,6 +1,11 @@
 import { logStructured } from './server_logger.js';
 
 const YOUTUBE_SEARCH_ENDPOINT = 'https://www.googleapis.com/youtube/v3/search';
+// `chart: 'popular'` (no query): the region's most popular videos, the list a
+// panel opens on before any search. It costs one quota unit (a search costs a
+// hundred), so it is not counted against the daily search guard.
+const YOUTUBE_VIDEOS_ENDPOINT = 'https://www.googleapis.com/youtube/v3/videos';
+const PAGE_SIZE = '25';
 const WINDOW_MS = 60_000;
 const MAX_REQUESTS_PER_WINDOW = 12;
 const MAX_DAILY_REQUESTS = 80;
@@ -37,7 +42,9 @@ export const handleWsYoutubeSearch = async (message, address, {
   const requestId = message.requestId || message.request_id || null;
   const query = String(message.query || '').trim();
   const pageToken = String(message.pageToken || '').trim();
-  if (!query || query.length > 120 || pageToken.length > 256) {
+  const popular = message.chart === 'popular';
+  const region = String(message.region || '').trim().toUpperCase();
+  if ((popular ? !/^[A-Z]{2}$/.test(region) : !query || query.length > 120) || pageToken.length > 256) {
     return reply(requestId, { ok: false, error: 'youtube_search_invalid_query' });
   }
   if (!apiKey) {
@@ -46,7 +53,7 @@ export const handleWsYoutubeSearch = async (message, address, {
   }
   const day = new Date(now).toISOString().slice(0, 10);
   if (dailyWindow !== day) { dailyWindow = day; dailyRequests = 0; }
-  if (dailyRequests >= MAX_DAILY_REQUESTS) {
+  if (!popular && dailyRequests >= MAX_DAILY_REQUESTS) {
     return reply(requestId, { ok: false, error: 'youtube_search_quota_guard' });
   }
   const key = String(address || 'unknown');
@@ -55,19 +62,19 @@ export const handleWsYoutubeSearch = async (message, address, {
     return reply(requestId, { ok: false, error: 'youtube_search_rate_limited' });
   }
   recent.push(now);
-  dailyRequests += 1;
+  if (!popular) dailyRequests += 1;
   requestsByAddress.set(key, recent);
   if (requestsByAddress.size > 10000) {
     for (const [entry, times] of requestsByAddress) {
       if (times.every((at) => now - at >= WINDOW_MS)) requestsByAddress.delete(entry);
     }
   }
-  const params = new URLSearchParams({
-    part: 'snippet', type: 'video', videoEmbeddable: 'true', videoSyndicated: 'true', q: query, maxResults: '10', key: apiKey
-  });
+  const params = new URLSearchParams(popular
+    ? { part: 'snippet,status', chart: 'mostPopular', regionCode: region, maxResults: PAGE_SIZE, key: apiKey }
+    : { part: 'snippet', type: 'video', videoEmbeddable: 'true', videoSyndicated: 'true', q: query, maxResults: PAGE_SIZE, key: apiKey });
   if (pageToken) params.set('pageToken', pageToken);
   try {
-    const response = await fetchResource(`${YOUTUBE_SEARCH_ENDPOINT}?${params}`, {
+    const response = await fetchResource(`${popular ? YOUTUBE_VIDEOS_ENDPOINT : YOUTUBE_SEARCH_ENDPOINT}?${params}`, {
       signal: AbortSignal.timeout(8000)
     });
     if (!response.ok) {
@@ -82,8 +89,10 @@ export const handleWsYoutubeSearch = async (message, address, {
     }
     const payload = await response.json();
     const results = (Array.isArray(payload.items) ? payload.items : []).flatMap((item) => {
-      const videoId = String(item?.id?.videoId || '');
-      if (!/^[A-Za-z0-9_-]{11}$/.test(videoId)) return [];
+      // A chart lists videos (`id` is the video's), a search lists results (`id.videoId`);
+      // a chart may hold videos that cannot be embedded.
+      const videoId = String(popular ? item?.id || '' : item?.id?.videoId || '');
+      if (!/^[A-Za-z0-9_-]{11}$/.test(videoId) || (popular && item?.status?.embeddable === false)) return [];
       return [{
         videoId,
         url: `https://www.youtube.com/watch?v=${videoId}`,

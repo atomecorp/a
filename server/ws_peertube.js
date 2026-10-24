@@ -4,7 +4,9 @@ import { peertubeVideoRef } from '../atome/src/shared/online_video_refs.js';
 // Public PeerTube operations of /ws/api (PeerTube tool, `online_video_providers.js`).
 //
 // - `peertube-search`: the federated index Sepia Search (Framasoft), public
-//   videos only, ten per page; `pageToken` is the next result offset.
+//   videos only, a page at a time; `pageToken` is the next result offset.
+//   `chart: 'popular'` (no query) lists the newest videos in `language`, the
+//   list a panel opens on before any search.
 // - `peertube-resolve`: the playable streams of one video, read from its own
 //   instance (HLS master playlist first, then the web video files). Only an
 //   instance of the public PeerTube directory is ever contacted, so a client
@@ -12,7 +14,7 @@ import { peertubeVideoRef } from '../atome/src/shared/online_video_refs.js';
 
 const SEARCH_ENDPOINT = 'https://sepiasearch.org/api/v1/search/videos';
 const DIRECTORY_ENDPOINT = 'https://instances.joinpeertube.org/api/v1/instances/hosts?count=5000&start=0';
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 25;
 const MAX_OFFSET = 9000;
 const DIRECTORY_REFRESH_MS = 12 * 60 * 60 * 1000;
 const WINDOW_MS = 60_000;
@@ -70,13 +72,15 @@ const searchResult = (video) => {
 const handleSearch = async (message, address, { fetchResource, now, log }) => {
     const requestId = message.requestId || message.request_id || null;
     const query = text(message.query);
+    const recent = message.chart === 'popular';
+    const language = text(message.language).toLowerCase();
     const start = message.pageToken ? Number(message.pageToken) : 0;
-    if (!query || query.length > 120 || !Number.isInteger(start) || start < 0 || start > MAX_OFFSET) {
+    if ((recent ? !/^[a-z]{2}$/.test(language) : !query || query.length > 120) || !Number.isInteger(start) || start < 0 || start > MAX_OFFSET) {
         return reply('peertube-search', requestId, { ok: false, error: 'peertube_search_invalid_query' });
     }
     if (rateLimited(address, now)) return reply('peertube-search', requestId, { ok: false, error: 'peertube_search_rate_limited' });
-    const params = new URLSearchParams({ search: query, start: String(start), count: String(PAGE_SIZE),
-        nsfw: 'false', isLive: 'false' });
+    const params = new URLSearchParams({ ...(recent ? { sort: '-publishedAt', languageOneOf: language } : { search: query }),
+        start: String(start), count: String(PAGE_SIZE), nsfw: 'false', isLive: 'false' });
     try {
         const payload = await readJson(fetchResource, `${SEARCH_ENDPOINT}?${params}`);
         const videos = Array.isArray(payload?.data) ? payload.data : [];

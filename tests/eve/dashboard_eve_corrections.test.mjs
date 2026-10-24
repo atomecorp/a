@@ -6,10 +6,12 @@ import { eveAtomBreath } from '../../eVe/domains/dashboard/dashboard_eve_tokens.
 import { normalizeDashboardStyle } from '../../eVe/intuition/tools/user_visual_preferences_model.js';
 import { resolveMusicProvider } from '../../eVe/domains/music/music_source.js';
 import { createDashboardMysticStage } from '../../eVe/domains/dashboard/dashboard_mystic_stage.js';
+import { tvSource } from '../../eVe/domains/dashboard/dashboard_video_sources.js';
 
-const tv = vi.hoisted(() => ({ byId: vi.fn(), favorites: vi.fn(), stored: vi.fn(() => []), written: vi.fn(() => true), gateway: vi.fn(async () => ({ ok: true })) }));
-vi.mock('../../eVe/intuition/tools/tv_catalog_client.js', () => ({ readTvChannelsById: tv.byId }));
-vi.mock('../../eVe/intuition/tools/tv_favorites_preference.js', () => ({ loadTvFavorites: tv.favorites, readTvFavorites: tv.stored, isTvFavoritesWritten: tv.written }));
+const tv = vi.hoisted(() => ({ country: vi.fn(async () => []), stored: vi.fn(() => []), written: vi.fn(() => true), gateway: vi.fn(async () => ({ ok: true })) }));
+vi.mock('../../eVe/intuition/tools/tv_catalog_client.js', () => ({ readTvChannels: tv.country }));
+vi.mock('../../eVe/intuition/tools/tv_favorites_preference.js', () => ({ readTvFavorites: tv.stored, isTvFavoritesWritten: tv.written,
+    isTvFavorite: id => tv.stored().some(entry => entry.id === id), toggleTvFavorite: vi.fn() }));
 vi.mock('../../eVe/intuition/runtime/tool_gateway.js', () => ({ invokeToolGateway: tv.gateway }));
 vi.mock('../../eVe/domains/dashboard/dashboard_contact_items.js', async (importOriginal) => ({
     ...(await importOriginal()), waitForPublishedFavorites: async () => true }));
@@ -70,33 +72,30 @@ test('a slow provider cannot delay what this device shows at once', async () => 
     expect(command).not.toHaveBeenCalled();
 });
 
-test('the TV rubric lists only the favourites, at once as stored, then with fresh streams, then the tile that opens the TV selector', async () => {
-    const favorites = [{ id: 'BFMTV.fr', name: 'BFM TV', country: 'FR', logo: 'stored.png' }, { id: 'gone.fr', name: 'Gone', country: 'FR', logo: '' }];
-    tv.favorites.mockResolvedValue(favorites); tv.stored.mockReturnValue(favorites);
-    tv.byId.mockResolvedValue([{ id: 'BFMTV.fr', name: 'BFM TV', logo: 'fresh.png', streams: [{ url: 'https://live' }] }]);
+test('the TV and every online video service open as lists out of their plate (dashboard_video.js)', async () => {
     const stage = createDashboardMysticStage({ projectId: 'home', readStageRect: () => null, readLastProjectId: async () => '' });
-    // This device answers first (no network read); the catalogue's streams refresh the level.
-    let refresh; const refreshed = new Promise(resolve => { refresh = resolve; });
-    const items = await stage.funItems({ update: refresh });
-    expect(items.map(item => item.key)).toEqual(expect.arrayContaining(['fun_tv', 'fun_youtube']));
+    const items = await stage.funItems({ update: () => {} });
+    expect(items.map(item => item.key)).toEqual(expect.arrayContaining(['fun_tv', 'fun_youtube', 'fun_peertube']));
     // Music services not entered in Passwords & keys have no tile.
     expect(items.map(item => item.key)).not.toEqual(expect.arrayContaining(['fun_spotify']));
     expect(items.map(item => item.key)).not.toEqual(expect.arrayContaining(['fun_deezer']));
-    const keys = level => level.map(item => item.key);
-    expect(keys(items.find(item => item.key === 'fun_tv').children)).toEqual(['tv_BFMTV.fr', 'tv_gone.fr', 'add_tv_channel']);
-    const rubric = (await refreshed).find(item => item.key === 'fun_tv');
-    expect(tv.byId).toHaveBeenCalledWith(['BFMTV.fr', 'gone.fr']);
-    expect(keys(rubric.children)).toEqual(['tv_BFMTV.fr', 'tv_gone.fr', 'add_tv_channel']);
-    expect(keys(await rubric.loadChildren({ update: () => {} }))).toEqual(['tv_BFMTV.fr', 'tv_gone.fr', 'add_tv_channel']);
-    const add = rubric.children.at(-1);
-    expect(add.closeOnSelect).not.toBe(false);
-    await add.onSelect();
-    expect(tv.gateway).toHaveBeenCalledWith(expect.objectContaining({ tool_id: 'ui.tv', action: 'pointer.click' }));
+    for (const key of ['fun_tv', 'fun_youtube', 'fun_peertube']) {
+        const plate = items.find(item => item.key === key);
+        expect(plate.type).not.toBe('palette');
+        expect(plate.closeOnSelect).toBe(false);
+        expect(typeof plate.onSelect).toBe('function');
+    }
 });
 
-test('an emptied favourite list leaves only the add tile', async () => {
-    tv.favorites.mockResolvedValue([]); tv.stored.mockReturnValue([]); tv.byId.mockResolvedValue([]);
-    const stage = createDashboardMysticStage({ projectId: 'home', readStageRect: () => null, readLastProjectId: async () => '' });
-    const rubric = (await stage.funItems({ update: () => {} })).find(item => item.key === 'fun_tv');
-    expect(rubric.children.map(item => item.key)).toEqual(['add_tv_channel']);
+test('the TV list opens on the favourites as stored, then the channels of the country', async () => {
+    tv.stored.mockReturnValue([{ id: 'BFMTV.fr', name: 'BFM TV', country: 'FR', logo: 'stored.png' }, { id: 'gone.fr', name: 'Gone', country: 'FR', logo: '' }]);
+    tv.country.mockResolvedValue([{ id: 'France24.fr', name: 'France 24', logo: 'f24.png', categories: ['news'] }]);
+    const source = tvSource();
+    expect((await source.local()).map(entry => entry.key)).toEqual(['tv_BFMTV.fr', 'tv_gone.fr']);
+    const { entries, next } = await source.discover();
+    expect(entries.map(entry => [entry.key, entry.kind, entry.image])).toEqual([['tv_France24.fr', 'tv', 'f24.png']]);
+    expect(next).toBe('');
+    expect(source.isFavorite({ ref: 'BFMTV.fr' })).toBe(true);
+    tv.written.mockReturnValueOnce(false);
+    expect(await source.local()).toEqual([]);
 });
