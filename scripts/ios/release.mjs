@@ -76,8 +76,15 @@ async function publish(file) {
     save(file, report);
     try {
         const response = await fetch(`${origin}/ios/status`, { signal: AbortSignal.timeout(20000) });
-        const publicStatus = await response.json();
-        if (!response.ok || publicStatus.id !== report.id) throw new Error('https_status_mismatch');
+        // Read the body as text first: a proxy error page (HTML) must surface its
+        // HTTP status instead of an opaque JSON syntax error.
+        const body = await response.text();
+        const excerpt = body.slice(0, 120).replace(/\s+/g, ' ').trim();
+        if (!response.ok) throw new Error(`https_status_http_${response.status}:${excerpt}`);
+        let publicStatus;
+        try { publicStatus = JSON.parse(body); }
+        catch { throw new Error(`https_status_not_json:http_${response.status}:${excerpt}`); }
+        if (publicStatus.id !== report.id) throw new Error('https_status_mismatch');
         const candidate = ssh(host, 'probe', {});
         if (candidate.id !== report.id) throw new Error('publication_changed_during_postcheck');
         const plistResponse = await fetch(candidate.manifestUrl, { signal: AbortSignal.timeout(20000) });
