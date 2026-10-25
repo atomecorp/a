@@ -34,6 +34,8 @@ export function issueCapability(secret, payload) {
     return `${body}.${createHmac('sha256', secret).update(body).digest('base64url')}`;
 }
 
+// A capability without `id` opens only the current-release manifest; the IPA
+// URL in that manifest carries a capability bound to the served release id.
 export function verifyCapability(secret, token, now = Date.now()) {
     if (typeof token !== 'string' || token.length > 2048) throw new Error('invalid_capability');
     const [body, mac, extra] = token.split('.');
@@ -42,7 +44,7 @@ export function verifyCapability(secret, token, now = Date.now()) {
     const actual = Buffer.from(mac, 'base64url');
     if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) throw new Error('invalid_capability');
     const payload = JSON.parse(Buffer.from(body, 'base64url').toString());
-    if (!validId(payload.id) || !/^[a-f0-9]{64}$/.test(payload.user) || !Number.isSafeInteger(payload.expires)
+    if ((payload.id !== undefined && !validId(payload.id)) || !/^[a-f0-9]{64}$/.test(payload.user) || !Number.isSafeInteger(payload.expires)
         || payload.expires <= now || payload.expires > now + DOWNLOAD_TTL_MS) throw new Error('expired_capability');
     return payload;
 }

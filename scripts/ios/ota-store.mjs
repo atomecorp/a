@@ -85,9 +85,10 @@ export async function publish(report, origin, root = OTA_ROOT) {
         if (fs.existsSync(target)) {
             if (readJson(path.join(target, 'release.json')).sha256 !== report.sha256) throw new Error('release_id_collision');
         } else fs.renameSync(source, target);
+        // previous.json keeps the replaced build only until finalize/rollback:
+        // the store holds one build, two while a publication is being verified.
         atomicJson(path.join(root, 'previous.json'), previous);
         atomicJson(path.join(root, 'current.json'), receipt);
-        if (previous) atomicJson(path.join(storePath(root, 'releases', previous.id), 'retired.json'), { at: Date.now() });
         return receipt;
     });
 }
@@ -96,30 +97,42 @@ export async function rollback(id, root = OTA_ROOT) {
     return withStoreLock(root, async () => {
         if (current(root)?.id !== id) throw new Error('rollback_current_changed');
         const previous = readJson(path.join(root, 'previous.json'));
-        if (!previous) {
-            atomicJson(path.join(root, 'current.json'), null);
-            atomicJson(path.join(storePath(root, 'releases', id), 'retired.json'), { at: Date.now() });
-            return { unpublished: true };
+        if (previous) {
+            const file = path.join(storePath(root, 'releases', previous.id), 'atome.ipa');
+            if (await hashFile(file) !== previous.sha256) throw new Error('previous_release_integrity_failed');
         }
-        const file = path.join(storePath(root, 'releases', previous.id), 'atome.ipa');
-        if (await hashFile(file) !== previous.sha256) throw new Error('previous_release_integrity_failed');
         atomicJson(path.join(root, 'current.json'), previous);
-        atomicJson(path.join(storePath(root, 'releases', id), 'retired.json'), { at: Date.now() });
-        const retired = path.join(storePath(root, 'releases', previous.id), 'retired.json');
-        if (fs.existsSync(retired)) fs.unlinkSync(retired);
-        return previous;
+        atomicJson(path.join(root, 'previous.json'), null);
+        fs.rmSync(storePath(root, 'releases', id), { recursive: true, force: true });
+        return previous || { unpublished: true };
+    });
+}
+
+// Confirms a verified publication: the replaced build and every stale upload go.
+export async function finalize(id, root = OTA_ROOT) {
+    return withStoreLock(root, async () => {
+        if (current(root)?.id !== id) throw new Error('finalize_current_changed');
+        atomicJson(path.join(root, 'previous.json'), null);
+        const removed = cleanup(root);
+        for (const staged of fs.readdirSync(path.join(root, '.incoming'))) {
+            if (!validId(staged)) continue;
+            fs.rmSync(storePath(root, '.incoming', staged), { recursive: true });
+            removed.push(staged);
+        }
+        return { current: id, removed };
     });
 }
 
 export function cleanup(root = OTA_ROOT, active = new Set(), now = Date.now()) {
-    const selected = current(root)?.id;
+    const previousFile = path.join(root, 'previous.json');
+    const previous = fs.existsSync(previousFile) ? readJson(previousFile) : null;
+    const keep = new Set([current(root)?.id, previous?.id, ...active]);
     const removed = [];
     for (const folder of ['releases', '.incoming']) for (const id of fs.readdirSync(path.join(root, folder))) {
-        if (!validId(id) || id === selected || active.has(id)) continue;
+        if (!validId(id) || keep.has(id)) continue;
         const directory = storePath(root, folder, id);
-        const retired = path.join(directory, 'retired.json');
-        const expired = folder === 'releases' ? fs.existsSync(retired) && readJson(retired).at + DOWNLOAD_TTL_MS < now
-            : fs.statSync(directory).mtimeMs + 24 * 60 * 60 * 1000 < now;
+        // An upload may still be in progress; a release outside `keep` is never served.
+        const expired = folder === 'releases' || fs.statSync(directory).mtimeMs + 24 * 60 * 60 * 1000 < now;
         if (expired) { fs.rmSync(directory, { recursive: true }); removed.push(id); }
     }
     return removed;
