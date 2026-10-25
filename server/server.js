@@ -95,6 +95,10 @@ const httpsOptions = resolveHttpsOptions(projectRoot);
 // Créer l'instance Fastify
 const server = fastify({
   https: httpsOptions,
+  // Behind nginx (atome.one) every request comes from 127.0.0.1: the client's own address is the
+  // X-Forwarded-For nginx sets (deploy/atome-one-sync/nginx-atome.one.conf), trusted from the local
+  // proxy only. Without it every user shared one per-address limit (media library, YouTube, books).
+  trustProxy: '127.0.0.1',
   bodyLimit: 1024 * 1024 * 1024, // 1 GiB
   loggerInstance: logger,
   disableRequestLogging: true,

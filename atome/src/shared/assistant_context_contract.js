@@ -1,9 +1,8 @@
 // One contract for runtime V2, AI discovery and MCP: what the assistant needs to
 // read about the user's current context (selection, other devices), the debug
-// reports it files when a request cannot be done, the orders it relays to the
-// user's other devices and the media it hands over to them. Handlers live with
-// the eVe assistant.
-export const DEBUG_REPORT_SOURCE_DOMAIN = 'assistant_debug';
+// reports it files (bug_report_contract.js: sent to the server, listed in Réglages >
+// Avancé), the orders it relays to the user's other devices and the media it hands
+// over to them. Handlers live with the eVe assistant.
 export const DEBUG_REPORT_ORIGINS = Object.freeze(['user_requested', 'assistant_failure']);
 
 const line = maxLength => ({ type: 'string', minLength: 1, maxLength });
@@ -13,17 +12,20 @@ export const ASSISTANT_CONTEXT_COMMANDS = Object.freeze([
             + '(type, name or text, position) of the selected objects first, then of the other objects. Call it before acting '
             + 'on "this", "it", "the selected object" or "the selection"; never claim nothing is selected without calling it.' },
     { name: 'debug.report', persistent: true, required: ['request', 'reason'],
-        description: 'File a debug report document when an explicit user request could not be done with the available tools, '
-            + 'or when the user asks to put something in the debug logs ("mets ça dans les logs de debug"). The conversation '
-            + 'excerpt, selection and platform are attached automatically.',
+        description: 'File a bug report when the user asks to report a bug or to put something in the debug logs ("envoie un '
+            + 'rapport de bug", "signale un bug", "mets ça dans les logs de debug"), or when an explicit user request could not '
+            + 'be done with the available tools. It is sent to the eVe team at once and listed in Réglages > Avancé. The '
+            + 'conversation excerpt, selection, platform and versions are attached automatically.',
         properties: {
             request: line(2000), reason: line(4000),
             attempted: { type: 'array', maxItems: 20, items: line(200) },
             origin: { type: 'string', enum: DEBUG_REPORT_ORIGINS },
+            share_contact: { type: 'boolean', description: 'True only after the user explicitly agreed to attach their phone '
+                + 'number, name and e-mail to the report.' },
             conversation: { type: 'object', description: 'Attached by the assistant session; never fill it.' }
         } },
     { name: 'debug.reports.list', required: [], properties: { limit: { type: 'number', minimum: 1, maximum: 50 } },
-        description: 'List the latest debug reports filed by the assistant, newest first.' },
+        description: 'List the latest bug reports (filed by the user or the assistant), newest first, and whether each was sent.' },
     { name: 'assistant.session.end', required: [], properties: {},
         description: 'End the assistant session and stop listening, as a hang-up. Call it when the user dismisses the assistant: '
             + '"au revoir", "tu peux partir", "raccroche", "c\'est bon, tu peux raccrocher", "quitte", "arrête de m\'écouter", "c\'est tout, merci", "goodbye", '

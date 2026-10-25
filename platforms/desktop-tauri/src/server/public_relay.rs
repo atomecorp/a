@@ -6,12 +6,13 @@ use tokio_tungstenite::{connect_async, tungstenite::Message};
 // Public, unauthenticated /ws/api operations owned by Fastify (YouTube search,
 // PeerTube search and stream resolution,
 // television catalogue, YouTube live resolution, GPS resources, Open Food
-// Facts, the free book catalogs and the Médiathèque's free media). The desktop runtime has no copy of them: it forwards the frame,
+// Facts, the free book catalogs, the Médiathèque's free media and the bug reports
+// kept on atome.one). The desktop runtime has no copy of them: it forwards the frame,
 // without any credential, to the configured Fastify server and returns its
 // single reply.
-pub(super) const PUBLIC_TYPES: [&str; 11] = ["youtube-search", "peertube-search", "peertube-resolve", "tv-catalog",
+pub(super) const PUBLIC_TYPES: [&str; 12] = ["youtube-search", "peertube-search", "peertube-resolve", "tv-catalog",
     "tv-resolve", "gps-resource", "food-facts",
-    "book-source", "book-fetch", "media-library-search", "media-library-fetch"];
+    "book-source", "book-fetch", "media-library-search", "media-library-fetch", "bug-report-submit"];
 
 fn failure_code(request_type: &str) -> &'static str {
     match request_type {

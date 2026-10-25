@@ -3,7 +3,8 @@
 // address comes from the provider's own record and is checked before it is
 // requested (https, an allowed host of that provider, a public address), every
 // redirect is followed by hand and checked the same way, and a file travels in
-// byte ranges over /ws/api: this is not an open proxy. `sourceCode` / `fetchCode`
+// byte ranges over /ws/api (or, for a page player streaming it, only its checked
+// address is answered, `readableAddress`): this is not an open proxy. `sourceCode` / `fetchCode`
 // prefix the error codes of the owner using it (`book_source`, `book_fetch`…).
 import { publicDavAddress } from './ws_personal_import.js';
 
@@ -19,16 +20,30 @@ export const createPublicSourceAccess = ({ allowedHost, sourceCode, fetchCode, c
         return url.href;
     };
     // Redirects are followed by hand: each target is checked before it is requested.
-    const request = async (provider, target, headers, { fetchResource, resolve }) => {
+    // `{ response, url }`: the answer and the checked address that gave it.
+    const follow = async (provider, target, headers, { fetchResource, resolve }) => {
         let url = target;
         for (let hop = 0; hop < 5; hop += 1) {
-            const response = await fetchResource(await checkedUrl(provider, url, resolve), { headers, redirect: 'manual', signal: AbortSignal.timeout(20000) });
-            if (response.status < 300 || response.status >= 400) return response;
+            const checked = await checkedUrl(provider, url, resolve);
+            const response = await fetchResource(checked, { headers, redirect: 'manual', signal: AbortSignal.timeout(20000) });
+            if (response.status < 300 || response.status >= 400) return { response, url: checked };
             const location = response.headers.get('location');
             if (!location) throw fail(`${sourceCode}_redirect_invalid`);
             url = new URL(location, url).href;
         }
         throw fail(`${sourceCode}_redirect_loop`);
+    };
+    const request = async (provider, target, headers, context) => (await follow(provider, target, headers, context)).response;
+    // Where a page player reads `file` ({ url, mime }) itself, in byte ranges: the checked address
+    // its redirects end at, once it answers a range (a file behind a login answers 401: unavailable).
+    const readableAddress = async (provider, file, context) => {
+        const { response, url } = await follow(provider, file.url, { Range: 'bytes=0-0' }, context);
+        await response.body?.cancel();
+        if (response.status !== 206 && response.status !== 200) throw fail(`${sourceCode}_unavailable`);
+        const range = /bytes \d+-\d+\/(\d+)/.exec(response.headers.get('content-range') || '');
+        const total = range ? Number(range[1]) : Number(response.headers.get('content-length'));
+        if (!Number.isSafeInteger(total) || total <= 0 || total > maxFileBytes) throw fail(`${sourceCode}_size_invalid`);
+        return { url, total, mime: file.mime };
     };
     const readBounded = async (response, maxBytes) => {
         const parts = [];
@@ -59,7 +74,7 @@ export const createPublicSourceAccess = ({ allowedHost, sourceCode, fetchCode, c
         // `base64`, never `data`: the WebSocket client takes a reply's `data` as its envelope.
         return { base64: bytes.toString('base64'), offset, length: bytes.length, total, mime: file.mime };
     };
-    return { fail, request, readBounded, readChunk };
+    return { fail, request, readBounded, readChunk, readableAddress };
 };
 
 // At most `max` requests per address within `windowMs`.

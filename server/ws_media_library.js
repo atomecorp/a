@@ -5,14 +5,17 @@
 // type shows before anything is searched). A source slower than SOURCE_BUDGET_MS is
 // left out of that answer: one provider never holds the others' results back.
 // `media-library-fetch` reads one byte range of a result's picture (`thumb`) or of its
-// file, or a sound's waveform (`waveform`: its peaks, `points`). The client names a
-// result id, never a URL: each address comes from the provider's own record and goes
-// through the checked public source access (public_source_fetch.js), so this is not
-// an open proxy.
+// file, or a sound's waveform (`waveform`: its peaks, `points`); `stream` answers the
+// checked address a page player streams the file from (`{ url, total, mime }`: a video
+// plays at once, never read whole first — the PeerTube streams' way, ws_peertube.js).
+// The client names a result id, never a URL: each address comes from the provider's own
+// record and goes through the checked public source access (public_source_fetch.js), so
+// this is not an open proxy.
 //   - Openverse (WordPress): images and sounds (with their waveform), `license=cc0,pdm`;
 //   - NASA Image and Video Library: images and videos (public domain media; its sounds
 //     are hour-long podcasts, without duration nor waveform: left out);
-//   - Internet Archive: videos marked public domain or CC0.
+//   - Internet Archive: videos marked public domain or CC0 with an MP4 file, never one behind
+//     a login (`access-restricted-item`: its file answers 401).
 import { lookup } from 'node:dns/promises';
 import { createAddressRateLimit, createPublicSourceAccess } from './public_source_fetch.js';
 
@@ -44,7 +47,11 @@ const allowedHost = (provider, host) => HOSTS[provider].hosts.includes(host) || 
 const access = createPublicSourceAccess({ allowedHost, sourceCode: 'media_library_source', fetchCode: 'media_library_fetch',
     chunkBytes: CHUNK_BYTES, maxFileBytes: MAX_FILE_BYTES });
 const { fail } = access;
+// Per client (its account, else its address): what reaches a provider anew (a search, a picture,
+// a waveform, a stream address, a file's first range), and the following ranges of the files it
+// reads (bandwidth only: 1200 ranges are 600 MB a minute).
 const limited = createAddressRateLimit({ windowMs: 60_000, max: 240 });
+const rangesLimited = createAddressRateLimit({ windowMs: 60_000, max: 1200 });
 // A result found is kept for a while: its picture, file and waveform are read without asking the provider
 // again; a search answered is kept as long (Openverse grants an address 200 anonymous requests a day).
 const results = new Map();
@@ -93,10 +100,10 @@ const nasa = (kind) => async (query, context) => {
             resolve: async (ctx) => https(nasaRendition(kind, await readJson('nasa', https(item.href), ctx))) };
     }).filter(item => ID.test(item.id));
 };
-// The Internet Archive: its smallest MP4 rendition of an item light enough to be read whole quickly
-// (most weigh 100 to 250 MB; a result is read whole before it plays).
+// The Internet Archive: its smallest MP4 rendition of an item light enough to be imported quickly
+// (most weigh 100 to 250 MB; a result streams when it plays, it is read whole only when kept).
 const archiveVideos = async (query, context) => {
-    const search = `(${query}) AND mediatype:(movies) AND licenseurl:(*publicdomain* OR *zero*) AND item_size:[1 TO ${ARCHIVE_MAX_ITEM_BYTES}]`;
+    const search = `(${query}) AND mediatype:(movies) AND licenseurl:(*publicdomain* OR *zero*) AND item_size:[1 TO ${ARCHIVE_MAX_ITEM_BYTES}] AND NOT access-restricted-item:true AND format:(MPEG4 OR "h.264" OR "h.264 IA")`;
     const page = await readJson('archive', `https://archive.org/advancedsearch.php?q=${encodeURIComponent(search)}&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=licenseurl&rows=${PER_SOURCE}&output=json`, context);
     return (page?.response?.docs || []).map(doc => ({ id: `archive:${doc.identifier}`, provider: 'archive', kind: 'video', title: String(doc.title || '').trim(),
         thumb: `https://archive.org/services/img/${encodeURIComponent(doc.identifier)}`, license: /zero/.test(doc.licenseurl) ? 'cc0' : 'pdm',
@@ -163,10 +170,12 @@ const fileOf = async (item, variant, context) => {
     return { url: item.file, mime: mimeOf(name), name };
 };
 
-export async function handleWsMediaLibrary(message, address, { fetchResource = fetch, resolve = lookup, now = Date.now } = {}) {
+// `client`: who asks (`user:<id>` for an account, else its address).
+export async function handleWsMediaLibrary(message, client, { fetchResource = fetch, resolve = lookup, now = Date.now } = {}) {
     if (message?.type !== 'media-library-search' && message?.type !== 'media-library-fetch') return null;
     const type = `${message.type}-response`;
-    if (limited(address, now())) return reply(message, type, { ok: false, error: 'media_library_rate_limited' });
+    const following = message.type === 'media-library-fetch' && !['thumb', 'waveform', 'stream'].includes(message.variant) && Number(message.offset) > 0;
+    if ((following ? rangesLimited : limited)(client, now())) return reply(message, type, { ok: false, error: 'media_library_rate_limited' });
     const context = { fetchResource, resolve, now };
     try {
         if (message.type === 'media-library-search') {
@@ -177,11 +186,12 @@ export async function handleWsMediaLibrary(message, address, { fetchResource = f
             if (!query || query.length > 120) return reply(message, type, { ok: false, error: 'media_library_search_invalid' });
             return reply(message, type, { ok: true, kind, results: await search(kind, query, context) });
         }
-        const id = String(message.id || ''), variant = ['thumb', 'waveform'].includes(message.variant) ? message.variant : 'file';
+        const id = String(message.id || ''), variant = ['thumb', 'waveform', 'stream'].includes(message.variant) ? message.variant : 'file';
         const kept = ID.test(id) ? results.get(id) : null;
         if (!kept) return reply(message, type, { ok: false, error: 'media_library_result_unknown' });
         if (variant === 'waveform') return reply(message, type, { ok: true, points: await waveformOf(kept.item, context) });
-        const file = await fileOf(kept.item, variant, context);
+        const file = await fileOf(kept.item, variant === 'stream' ? 'file' : variant, context);
+        if (variant === 'stream') return reply(message, type, { ok: true, name: file.name, ...(await access.readableAddress(kept.item.provider, file, context)) });
         return reply(message, type, { ok: true, name: file.name, ...(await access.readChunk(kept.item.provider, file, Number(message.offset), context)) });
     } catch (error) {
         const code = String(error?.code || '');
