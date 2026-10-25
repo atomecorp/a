@@ -169,6 +169,11 @@ pub fn apply_resource(world: &mut World, patch: AtomeResourcePatch) -> Result<()
         if let Some(texture) = &patch.texture {
             crate::animated_png::install_animation(world, entity, texture)?;
         }
+        // A shadow that follows the painted alpha is cut from the texture that
+        // just arrived (an icon starts on a transparent pending texture).
+        if world.get::<AtomeShapeShadow>(entity).and_then(|value| value.0).is_some_and(|shadow| shadow.follows_alpha) {
+            crate::shape_shadow_overlay::rebuild_shape_shadow_overlay(world, entity)?;
+        }
         apply_entity_clip(world, entity)?;
     }
     Ok(())

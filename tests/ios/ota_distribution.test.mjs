@@ -4,8 +4,8 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import Fastify from 'fastify';
-import { initialize, stage, publish, current, hashFile, cleanup, rollback, enroll, readJson, atomicJson, withStoreLock, probe } from '../../scripts/ios/ota-store.mjs';
-import { manifest, DOWNLOAD_TTL_MS, issueCapability, verifyCapability, tokenHash } from '../../scripts/ios/ota-contract.mjs';
+import { initialize, stage, publish, current, hashFile, cleanup, rollback, finalize, enroll, readJson, atomicJson, withStoreLock, probe } from '../../scripts/ios/ota-store.mjs';
+import { manifest, DOWNLOAD_TTL_MS, CURRENT_MANIFEST_PATH, issueCapability, verifyCapability, tokenHash } from '../../scripts/ios/ota-contract.mjs';
 import { validateProfile, readPlist } from '../../scripts/ios/signing.mjs';
 import { registerIosOtaRoutes } from '../../server/http_ios_ota_routes.js';
 import { productContents, ledgerContent, writeContents, PROJECT_FILE, PRODUCT_FILES } from '../../scripts/ios/version-ledger.mjs';
@@ -35,15 +35,25 @@ describe('OTA immutable publication lifecycle', () => {
         await expect(publish({ ...first, sha256: '0'.repeat(64) }, 'https://atome.one', root)).rejects.toThrow('collision');
         await expect(publish(await candidate(root), 'https://atome.one', root)).rejects.toThrow('not_increasing');
     });
-    it('keeps previous downloads, rolls back, then removes only retired inactive builds', async () => {
-        const root = fixture(); const first = await candidate(root); await publish(first, 'https://atome.one', root);
+    it('keeps one build: the replaced one only until the publication is verified or rolled back', async () => {
+        const root = fixture(); const releases = () => fs.readdirSync(path.join(root, 'releases'));
+        const first = await candidate(root); await publish(first, 'https://atome.one', root);
         const next = await candidate(root, '25'); await publish(next, 'https://atome.one', root);
         expect(cleanup(root)).toEqual([]);
-        const future = Date.now() + DOWNLOAD_TTL_MS + 1000;
-        expect(cleanup(root, new Set([first.id]), future)).toEqual([]);
         await rollback(next.id, root); expect(current(root).id).toBe(first.id);
-        expect(cleanup(root, new Set(), future)).toEqual([next.id]);
-        expect(fs.existsSync(path.join(root, 'releases', first.id, 'atome.ipa'))).toBe(true);
+        expect(releases()).toEqual([first.id]);
+        const third = await candidate(root, '26'); await publish(third, 'https://atome.one', root);
+        const stale = randomUUID(); fs.writeFileSync(stage(stale, root).ipa, 'abandoned');
+        await expect(finalize(first.id, root)).rejects.toThrow('finalize_current_changed');
+        expect((await finalize(third.id, root)).removed.sort()).toEqual([first.id, stale].sort());
+        expect(releases()).toEqual([third.id]);
+        expect(fs.readdirSync(path.join(root, '.incoming'))).toEqual([]);
+        expect(fs.existsSync(path.join(root, 'releases', third.id, 'atome.ipa'))).toBe(true);
+        const fourth = await candidate(root, '27'); await publish(fourth, 'https://atome.one', root);
+        await publish(await candidate(root, '28'), 'https://atome.one', root);
+        expect(cleanup(root, new Set([third.id]))).toEqual([]);
+        expect(cleanup(root)).toEqual([third.id]);
+        expect(releases().length).toBe(2);
     });
     it('rejects symlinks and invalid provisioning before publication', async () => {
         const root = fixture(); const next = await candidate(root); next.products[1].deviceCount = 0;
@@ -54,7 +64,7 @@ describe('OTA immutable publication lifecycle', () => {
     it('unpublishes a failed first release and scopes live probes to enrolled testers', async () => {
         const root = fixture(); const first = await candidate(root); await publish(first, 'https://atome.one', root);
         expect(() => probe(root)).toThrow('no_registered_testers');
-        enroll('owner', root); expect(probe(root).manifestUrl).toContain(`/ios/builds/${first.id}/manifest.plist?cap=`);
+        enroll('owner', root); expect(probe(root).manifestUrl).toContain(`https://atome.one${CURRENT_MANIFEST_PATH}?cap=`);
         expect(await rollback(first.id, root)).toEqual({ unpublished: true });
         expect(current(root)).toBeNull();
         expect(() => probe(root)).toThrow('no_published_release');
@@ -73,6 +83,9 @@ describe('OTA access and wire contracts', () => {
         expect(() => verifyCapability('wrong', cap, now)).toThrow();
         expect(() => verifyCapability('secret', cap, payload.expires)).toThrow();
         expect(() => verifyCapability('secret', cap, now - 1)).toThrow();
+        const stable = { user: '0'.repeat(64), expires: now + DOWNLOAD_TTL_MS };
+        expect(verifyCapability('secret', issueCapability('secret', stable), now)).toEqual(stable);
+        expect(() => verifyCapability('secret', issueCapability('secret', { ...stable, id: 'x' }), now)).toThrow();
     });
     it('authorizes a personal link, serves a cookie-free manifest/IPA range, and revokes both', async () => {
         const root = fixture(); const report = await candidate(root); await publish(report, 'https://atome.one', root);
@@ -85,8 +98,16 @@ describe('OTA access and wire contracts', () => {
             const session = await server.inject({ method: 'POST', url: '/ios/session', headers: { authorization: `Bearer ${token}` } });
             expect(session.statusCode).toBe(200);
             const install = new URL(session.json().install); const url = new URL(install.searchParams.get('url'));
+            expect(url.pathname).toBe(CURRENT_MANIFEST_PATH);
             const plist = await server.inject(url.pathname + url.search); expect(plist.statusCode).toBe(200);
             const ipa = new URL(readPlist(plist.body).items[0].assets[0].url);
+            expect(ipa.pathname).toBe(`/ios/builds/${report.id}/atome.ipa`);
+            expect((await server.inject(`${CURRENT_MANIFEST_PATH}${ipa.search}`)).statusCode).toBe(403);
+            expect((await server.inject(`/ios/builds/${report.id}/atome.ipa${url.search}`)).statusCode).toBe(403);
+            const newer = await candidate(root, '25', 'signed-newer'); await publish(newer, 'https://atome.one', root);
+            const same = readPlist((await server.inject(url.pathname + url.search)).body).items[0];
+            expect(same.metadata['bundle-version']).toBe('25');
+            expect(new URL(same.assets[0].url).pathname).toBe(`/ios/builds/${newer.id}/atome.ipa`);
             const ranged = await server.inject({ url: ipa.pathname + ipa.search, headers: { range: 'bytes=0-5' } });
             expect(ranged.statusCode).toBe(206); expect(ranged.body).toBe('signed');
             expect((await server.inject({ url: ipa.pathname + ipa.search, headers: { range: 'bytes=999-' } })).statusCode).toBe(416);

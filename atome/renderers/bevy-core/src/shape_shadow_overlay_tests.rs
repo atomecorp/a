@@ -110,6 +110,7 @@ fn shape_shadow_uses_bevy_overlay_without_changing_logical_size() {
                 spread: 2.0,
                 kind: crate::types::AtomeShadowKind::Drop,
                 invert: false,
+                follows_alpha: false,
             }),
             ..shape_node("shadowed_shape")
         },
@@ -185,6 +186,7 @@ fn repeated_shape_shadow_updates_replace_the_overlay_without_accumulating_entiti
         spread: 0.0,
         kind: crate::types::AtomeShadowKind::Drop,
         invert: false,
+        follows_alpha: false,
     };
     let entity = apply_spawn(
         &mut world,
@@ -264,6 +266,7 @@ fn shape_shadow_translation_reuses_existing_texture() {
                 spread: 2.0,
                 kind: crate::types::AtomeShadowKind::Drop,
                 invert: false,
+                follows_alpha: false,
             }),
             ..shape_node("translated_shadow")
         },
@@ -328,6 +331,7 @@ fn equivalent_shape_shadows_share_one_texture_asset() {
         spread: 0.0,
         kind: crate::types::AtomeShadowKind::Drop,
         invert: false,
+        follows_alpha: false,
     });
 
     let first = apply_spawn(
@@ -403,6 +407,7 @@ fn rounded_shape_shadow_overlay_uses_card_radius() {
                 spread: 0.0,
                 kind: crate::types::AtomeShadowKind::Drop,
                 invert: false,
+                follows_alpha: false,
             }),
             ..shape_node("rounded_shadowed_shape")
         },
@@ -443,6 +448,7 @@ fn initial_scene_rounded_shape_uses_mask_before_shadow_overlay() {
                 spread: 0.0,
                 kind: crate::types::AtomeShadowKind::Drop,
                 invert: false,
+                follows_alpha: false,
             }),
             ..shape_node("initial_rounded_shadowed_shape")
         }],
@@ -491,6 +497,7 @@ fn rotated_atom_overlays_follow_its_pose() {
     let shadow = AtomeShadowStyle { color: [0.0, 0.0, 0.0, 0.42], blur: 8.0, offset_x: 0.0, offset_y: 0.0, spread: 2.0,
                      kind: crate::types::AtomeShadowKind::Drop,
                      invert: false,
+                     follows_alpha: false,
                  };
     let entity = apply_spawn(
         &mut world,
@@ -584,6 +591,7 @@ fn a_rotated_shape_in_a_straight_clip_keeps_its_shadow_rotated() {
     let shadow = AtomeShadowStyle { color: [0.3, 0.95, 0.95, 0.95], blur: 6.0, offset_x: 0.0, offset_y: 0.0, spread: 1.0,
                      kind: crate::types::AtomeShadowKind::Drop,
                      invert: false,
+                     follows_alpha: false,
                  };
     let entity = apply_spawn(
         &mut world,

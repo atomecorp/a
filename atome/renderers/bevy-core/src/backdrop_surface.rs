@@ -36,6 +36,10 @@ pub struct BackdropSurfaceUniform {
     /// Border colour per edge, top, right, bottom, left: the surface-paint border
     /// drawn over the glass, as the painted texture draws it over a flat shape.
     pub border_edges: [Vec4; 4],
+    /// The surface paint's first inset shadow over the glass (a pressed, selected item):
+    /// its colour (alpha zero: none) and x/y offset, z blur, w spread, in logical pixels.
+    pub inset_color: Vec4,
+    pub inset_geometry: Vec4,
 }
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
@@ -101,6 +105,8 @@ fn material_from_contract(
             ),
             corner_cut: Vec4::new(style.corner_cut_px, 0.0, 0.0, 0.0),
             border_edges: [Vec4::ZERO; 4],
+            inset_color: Vec4::ZERO,
+            inset_geometry: Vec4::ZERO,
         },
         backdrop,
     }
@@ -201,17 +207,19 @@ fn write_backdrop_shape(world: &mut World, entity: Entity, logical_size: Option<
     Ok(())
 }
 
-/// Follows the node's surface paint: the glass is the fill, the paint's border is
-/// drawn over it. Without this the glass dropped every border (a selected panel
-/// chip, whose only selection cue is its border, looked idle).
+/// Follows the node's surface paint: the glass is the fill, the paint's border and
+/// its first inset shadow are drawn over it. Without this the glass dropped them (a
+/// selected item, pressed in by its inset shadow, looked idle).
 pub fn sync_backdrop_surface_border(world: &mut World, entity: Entity) -> Result<(), String> {
     let Some(handle) = world.get::<MeshMaterial2d<BackdropSurfaceMaterial>>(entity).map(|material| material.0.clone())
     else {
         return Ok(());
     };
-    let border = world
+    let paint = world
         .get::<crate::surface_paint::AtomeSurfacePaint>(entity)
-        .and_then(|paint| paint.0.as_ref().and_then(|paint| paint.border.clone()));
+        .and_then(|paint| paint.0.clone());
+    let border = paint.as_ref().and_then(|paint| paint.border.clone());
+    let inset = paint.as_ref().and_then(|paint| paint.inset_shadows.first().cloned());
     let mut materials = world
         .get_resource_mut::<Assets<BackdropSurfaceMaterial>>()
         .ok_or_else(|| "bevy_backdrop_surface_assets_required".to_string())?;
@@ -220,6 +228,10 @@ pub fn sync_backdrop_surface_border(world: &mut World, entity: Entity) -> Result
     material.uniform.corner_cut.y = border.as_ref().map_or(0.0, |border| border.width.max(0.0));
     material.uniform.border_edges = border.map_or([Vec4::ZERO; 4], |border| {
         border.colors.unwrap_or([border.color; 4]).map(Vec4::from_array)
+    });
+    material.uniform.inset_color = inset.as_ref().map_or(Vec4::ZERO, |shadow| Vec4::from_array(shadow.color));
+    material.uniform.inset_geometry = inset.map_or(Vec4::ZERO, |shadow| {
+        Vec4::new(shadow.offset[0], shadow.offset[1], shadow.blur.max(0.0), shadow.spread)
     });
     Ok(())
 }

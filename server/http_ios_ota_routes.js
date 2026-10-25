@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { OTA_ROOT, readJson, current, storePath, cleanup, withStoreLock } from '../scripts/ios/ota-store.mjs';
-import { DOWNLOAD_TTL_MS, tokenHash, manifest, issueCapability, verifyCapability } from '../scripts/ios/ota-contract.mjs';
+import { DOWNLOAD_TTL_MS, CURRENT_MANIFEST_PATH, tokenHash, manifest, issueCapability, verifyCapability } from '../scripts/ios/ota-contract.mjs';
 
 export function registerIosOtaRoutes(server, { root = OTA_ROOT, origin = 'https://atome.one' } = {}) {
     if (!fs.existsSync(path.join(root, 'settings.json'))) return;
@@ -34,8 +34,8 @@ export function registerIosOtaRoutes(server, { root = OTA_ROOT, origin = 'https:
         if (!readUser(user, config)) return reply.code(403).send({ error: 'ota_access_denied' });
         const report = current(root);
         if (!report) return reply.code(503).send({ error: 'ota_not_published' });
-        const cap = issueCapability(config.secret, { id: report.id, user, expires: Date.now() + DOWNLOAD_TTL_MS });
-        const url = `${origin}/ios/builds/${report.id}/manifest.plist?cap=${encodeURIComponent(cap)}`;
+        const cap = issueCapability(config.secret, { user, expires: Date.now() + DOWNLOAD_TTL_MS });
+        const url = `${origin}${CURRENT_MANIFEST_PATH}?cap=${encodeURIComponent(cap)}`;
         return { install: `itms-services://?action=download-manifest&url=${encodeURIComponent(url)}` };
         }).catch(error => {
             if (error.message === 'ota_publication_busy') return reply.code(503).send({ error: 'ota_publication_busy' });
@@ -43,22 +43,32 @@ export function registerIosOtaRoutes(server, { root = OTA_ROOT, origin = 'https:
         });
     });
 
-    server.get('/ios/builds/:id/:asset', { logLevel: 'silent' }, async (request, reply) => {
+    // Resolved when iOS fetches it, so one install link always yields the
+    // release that is current at that moment.
+    server.get(CURRENT_MANIFEST_PATH, { logLevel: 'silent' }, async (request, reply) => {
         privateHeaders(reply);
         const config = settings();
         let capability;
         try { capability = verifyCapability(config.secret, request.query.cap); }
         catch { return reply.code(403).send({ error: 'ota_capability_denied' }); }
-        const { id, asset } = request.params;
-        if (capability.id !== id || !readUser(capability.user, config) || !['manifest.plist', 'atome.ipa'].includes(asset))
-            return reply.code(403).send({ error: 'ota_access_denied' });
+        if (capability.id !== undefined || !readUser(capability.user, config)) return reply.code(403).send({ error: 'ota_access_denied' });
+        const report = current(root);
+        if (!report) return reply.code(503).send({ error: 'ota_not_published' });
+        const cap = issueCapability(config.secret, { id: report.id, user: capability.user, expires: Date.now() + DOWNLOAD_TTL_MS });
+        const ipa = `${origin}/ios/builds/${report.id}/atome.ipa?cap=${encodeURIComponent(cap)}`;
+        return reply.type('text/xml; charset=utf-8').send(manifest(report, ipa));
+    });
+
+    server.get('/ios/builds/:id/atome.ipa', { logLevel: 'silent' }, async (request, reply) => {
+        privateHeaders(reply);
+        const config = settings();
+        let capability;
+        try { capability = verifyCapability(config.secret, request.query.cap); }
+        catch { return reply.code(403).send({ error: 'ota_capability_denied' }); }
+        const { id } = request.params;
+        if (capability.id !== id || !readUser(capability.user, config)) return reply.code(403).send({ error: 'ota_access_denied' });
         const directory = storePath(root, 'releases', id);
         if (!fs.existsSync(directory)) return reply.code(410).send({ error: 'ota_release_retired' });
-        const report = readJson(path.join(directory, 'release.json'));
-        if (asset === 'manifest.plist') {
-            const ipa = `${origin}/ios/builds/${id}/atome.ipa?cap=${encodeURIComponent(request.query.cap)}`;
-            return reply.type('text/xml; charset=utf-8').send(manifest(report, ipa));
-        }
         // Open the immutable inode before yielding. Cleanup does not remove a
         // release while a stream is active, including ranged/resumed downloads.
         const file = path.join(directory, 'atome.ipa');

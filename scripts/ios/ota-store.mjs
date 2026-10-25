@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { validId, tokenHash, manifest, issueCapability, DOWNLOAD_TTL_MS } from './ota-contract.mjs';
+import { validId, tokenHash, manifest, issueCapability, DOWNLOAD_TTL_MS, CURRENT_MANIFEST_PATH } from './ota-contract.mjs';
 
 export const OTA_ROOT = process.env.ATOME_OTA_ROOT || '/var/lib/atome/ios-ota';
 export const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -154,8 +154,9 @@ export function probe(root = OTA_ROOT) {
     const settings = readJson(path.join(root, 'settings.json'));
     const user = Object.keys(settings.users).find(hash => settings.users[hash].enabled);
     if (!user) throw new Error('no_registered_testers');
-    const cap = issueCapability(settings.secret, { id: report.id, user, expires: Date.now() + DOWNLOAD_TTL_MS });
-    return { id: report.id, manifestUrl: `${report.origin}/ios/builds/${report.id}/manifest.plist?cap=${cap}` };
+    // Same stable route and capability shape as a tester's install link.
+    const cap = issueCapability(settings.secret, { user, expires: Date.now() + DOWNLOAD_TTL_MS });
+    return { id: report.id, manifestUrl: `${report.origin}${CURRENT_MANIFEST_PATH}?cap=${cap}` };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -169,6 +170,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
         else if (action === 'stage') result = stage(data.id);
         else if (action === 'publish') result = await publish(data.report, data.origin);
         else if (action === 'rollback') result = await rollback(data.id);
+        else if (action === 'finalize') result = await finalize(data.id);
         else if (action === 'status') result = { current: current(), enabledTesters: Object.values(readJson(path.join(OTA_ROOT, 'settings.json')).users).filter(user => user.enabled).length };
         else if (action === 'probe') result = probe();
         else if (action === 'enroll') result = await withStoreLock(OTA_ROOT, () => enroll(data.label));

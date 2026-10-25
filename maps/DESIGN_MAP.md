@@ -1,3 +1,7 @@
+2026-10-25 Lit glyph halo (user choice B, mockup `temp/lit_glyph_glow/mockups/glow.png`): a lit tool's icon no longer sits on a disc of light; its halo is the glyph itself — `buildLitGlyphGlowNode` (`bevy_ui_menu_surface.js`) lays the same picture, in the glyph's own tint, at the glyph's depth, its shadow `followsAlpha` (`litGlow.glyph`: `[0.3, 0.95, 0.95, 0.95]`, blur 0.22 × glyph, spread 0.05 × glyph), so the light hugs the strokes, dense at their edge and soft beyond. The same halo lines the navigation arrow (its two stroke capsules are gone) and the icon of a lit Mystic plate; ribbon, rail, tools bands and Molecule mix tiles get it through `buildBevyMenuToolNode`. The tile halo and edge are unchanged. Token `litGlow.icon` (disc) removed.
+
+2026-10-25 Design charter (validated by the user): one unit (the 60 px tool, half a tool the minimum, 3–6 tools the maximum), one radius (a quarter tool, 15 px, every radius token derives from `SYSTEM_UI_METRICS.radiusPx`), spacing a sixth / a twelfth of a tool (10 / 5 px), raised = drop shadow, selected = colour A pressed in (`selectedSurface`, inner shadow drawn by `backdrop_surface.wgsl`), active = the cyan breathing halo, panels' settings at the foot, the value alone (− value +). Full text: section « eVe design charter — absolute rules ».
+
 2026-10-25 Accordion rail removed (user request): no accordion of eVe draws the orange/blue hierarchy rail any more; the nesting reads through the disclosure symbols' depth colours alone (`panel_skin.js` `hierarchy.colors`, `bevy_panel_hierarchy.js`). The 2026-10-05 and 2026-10-08 rail entries below are superseded. Accordions open upward by default (the open item settles at the bottom); downward only through the visual preference.
 
 2026-10-25 Session disc power mark (mockups `temp/session_power/mockups/`, validated by the user): the home centre's session disc (Pro and Basic, first level) is an orange disc `#df7f35` with a cream power mark `#f9d8b7` (Dashboard icon `power`, drawn in the disc's 64 box, stroke 4.3, image tinted); size and place unchanged (0.72 of the cell). It replaces the white dot and the `orange.accent` fill of 24 Oct.
@@ -518,6 +522,46 @@ Mandatory Use:
 - Prefer existing tokens, presets, and visual factories over new inline style islands.
 - Do not add product design logic to Atome open modules unless it is product-neutral.
 - Do not treat generated or vendored CSS files as the source of truth for eVe product design.
+
+## eVe design charter — absolute rules (validated by the user, 2026-10-25)
+
+Every interface of atome/eVe obeys these rules, on every runtime. They are absolute (AGENTS.md rule 16): a new
+design starts from them; a mockup that breaks one is not shown; code that breaks one is a defect. Values come
+from the tokens named here, never written inline.
+
+1. **The unit is the tool** (`SYSTEM_UI_METRICS.unitPx` = 60 px). Every height and width of an element is a
+   whole multiple of a tool or of half a tool (`halfUnitPx` = 30 px). Half a tool is the smallest size
+   tolerated, in height (a thin row) as in width. The largest is 3, 4, 5 or 6 tools when the screen holds it.
+   A size never changes to make a layout fit (rule 12): what does not fit is dropped, cropped, or cut with « … ».
+2. **One radius**: a quarter of a tool (`SYSTEM_UI_METRICS.radiusPx` = 15 px) for every tool, tile, card,
+   panel, row, field and button; a half-tool row is therefore a pill. Every radius token derives from it
+   (`toolRadiusPx`, `compactToolRadiusPx`, `ribbonRadiusPx`, `mysticToolRadiusPx`, `panelRadiusPx`, the input
+   and chrome radii, `EVE_COMMON_SKIN_TOKENS.radius.*`). A band or a ground that follows an object takes the
+   object's own corners. Round discs (`radius.pill`) stay round.
+3. **Spacing**: inside a panel a sixth of a tool (padding 10 px), between elements a twelfth (gap 5 px)
+   (`PANEL_VISUAL_RATIOS.inset`/`gap`, workspace `paddingPx`/`gapPx`). Content never touches an edge: the
+   padding stays below the last row shown, even when the content scrolls.
+4. **Shadows**: a raised element (tool, card, row, button) carries its soft drop shadow (idle button
+   `0 3px 6px` black 0.32 plus `0 1px 2px` 0.25; cards `CARD_SHADOW`). A selected element is pressed in: no drop
+   shadow, an inner shadow instead (`selectedItem.inset`: `0 2px 6px` black 0.5), drawn by the glass shader.
+5. **One selected look, everywhere** (rule 15): `selectedSurface(style)` — colour A « bleu nuit éclairci »
+   (`EVE_COMMON_SKIN_TOKENS.selectedItem`: glass tint `[0.114, 0.199, 0.486, 0.8]`, veil over content 0.45, a
+   coloured block its own colour lightened) and pressed in. Never a frame, outline or ring: not for a
+   selection, a keyboard focus, a drop target nor an armed drag. Exceptions: a chosen colour swatch and a
+   checkbox carry the framework's ✓ (`checkMarkNode`).
+6. **One active look**: an active tool carries the cyan breathing halo (`bevyMenu.litGlow`, breath 3.2 s).
+   Active and selected never share a look.
+7. **Tools and labels**: a tool is exactly one tool (60 px); its label has at most 6 letters
+   (`labelMaxCharacters`) and never changes size. An inert label sits at the TOP of its object (rule 11).
+   Zen: no text, label, tooltip or button the user did not ask for.
+8. **Panels**: settings always at the panel's BOTTOM, within the finger's reach, never at its top; on a phone a
+   panel spans the width at the foot, as tall as its content (`bevy_panel_layout.js#phonePlacement`) — never an
+   empty screen with its content stuck at the top. The way out is ✕; ‹ only for a step back inside the same
+   panel (rule 13). A value is set by its value alone: − and + are tools at both ends, the value between them,
+   dragged to scrub or touched twice to be typed (`numericFieldNode` `presentation: 'tools'`); never a row of
+   presets. What is being changed stays in view: the panel takes the keyboard's room, the object stays above.
+9. **The bottom band never moves** (rule 13): Back leftmost, the assistant rightmost on its round support, Next
+   beside it; the whole band mirrored for a left hand; no tool ever takes another's place.
 
 ## Mandatory Pre-Implementation Gate
 
@@ -1546,7 +1590,7 @@ One design for Mystic, the main ribbon and the contextual rail.
 2026-10-08: The ribbon and contextual rail use the existing `toolGapPx` (currently 4 CSS px) for screen-edge clearance as well as tile seams. `bevy_ui_main_menu_viewport_fit.js` reserves that gap on both horizontal edges and below the ribbon; `atome_contextual_edit_model.js` aligns the rail with the Atome handle and leaves the same gap above it. The main-menu reserved height includes its bottom clearance. Tool size, Atome-center readers and rail projection remain separate from that reservation; no tool or project-object dimension changes.
 
 - **Tile**: `eVe/intuition/ribbon/bevy_ui_menu_surface.js` (`buildBevyMenuToolNode`, `resolveBevyMenuSurface`). Square, `toolGapPx` seam (`elements/skin/tool_skin.js`), one light `toolShadow` per tile.
-- **Engaged tool glow** (2026-10-09): `EVE_TOOL_SKIN_TOKENS.bevyMenu.litGlow` (reference design: cyan, tight, bright) — tile halo `[0.16, 0.86, 0.86, 0.95]`, blur 7, spread 1; icon halo `[0.3, 0.95, 0.95, 0.95]` on a disc of 0.7 × icon size, blur 0.3 × icon size; edge `[0.42, 0.95, 0.95, 0.95]` 1 px; filled-glyph halo `litGlow.glyph` (2026-10-20: the grid Mystic's return triangle on eVe Pro/Basic, always breathing; it follows the triangle's outline: a clear BevyUI panel with `shape_variant: 'polygon'`, `polygon_sides: 3`, rotation −90 under the glyph, whose native drop shadow follows the polygon silhouette; blur 0.3 × glyph, spread 0.05 × glyph; glyph box sized not scaled because a record's scale never reaches its children); breath floor 0 (fully out, then fully on), period 3200 ms, fade 600 ms, frame 40 ms. Painted by `buildBevyMenuToolNode({ lit, litOpacity })` as two transparent shapes with the native drop shadow (`<id>_glow`, `<id>_icon_glow`). Label, fill, geometry, folded corner and shadow unchanged. Mystic does not use it. Mystic paints the same family colour through its shader (`mystic_tile_colors`, sRGB → linear in `mystic_tokens.js`).
+- **Engaged tool glow** (2026-10-09): `EVE_TOOL_SKIN_TOKENS.bevyMenu.litGlow` (reference design: cyan, tight, bright) — tile halo `[0.16, 0.86, 0.86, 0.95]`, blur 7, spread 1; edge `[0.42, 0.95, 0.95, 0.95]` 1 px; glyph halo `litGlow.glyph` (2026-10-25, user choice B, replaces the icon disc and the arrow's stroke capsules): `[0.3, 0.95, 0.95, 0.95]`, blur 0.22 × glyph, spread 0.05 × glyph, painted by `buildLitGlyphGlowNode` — the glyph's own picture at its depth, in its tint, whose shadow `followsAlpha` (Rust: the shadow of an image built from its texture's alpha at the texture's density, `shadow_texture.rs#build_shadow_texture_rgba_for_alpha`), so the light hugs the strokes; glyph box sized not scaled because a record's scale never reaches its children; breath floor 0 (fully out, then fully on), period 3200 ms, fade 600 ms, frame 40 ms. Painted by `buildBevyMenuToolNode({ lit, litOpacity })`: `<id>_glow` (a transparent shape with the native drop shadow) and `<id>_icon_glow` (the glyph halo). Label, fill, geometry, folded corner and shadow unchanged. A lit Mystic plate wears the tile halo and the glyph halo (2026-10-25). Mystic paints the same family colour through its shader (`mystic_tile_colors`, sRGB → linear in `mystic_tokens.js`).
 - **Five families**: `eVe/intuition/shared/tool_family.js` (`TOOL_FAMILY_BY_KEY`, `classifyTool`), colours in `EVE_TOOL_FAMILY_COLORS` (`elements/skin/tokens.js`). Every menu reads it through `resolveToolPresentation` (`intuition/shared/tool_presentation.js`). Default is `system`, never a grey ground. `project_templates` and `panel_open` are explicitly `system`; all dynamically generated `drop_choice_*` tools inherit `modification` from the shared `drop_choice` key. The per-slot Mystic tint (`SLOT_FAMILIES`) and the per-palette accent bar (`familyByPaletteKey`, `buildBevyMenuPaletteAccent`) are removed.
 - **Palette marker**: a real folded corner, shown when `toolHasPaletteChildren(definition)` is true. That check covers declared children, hold options, and dynamic palettes that are still empty. A panel or a slider is not a palette.
   - The tile's top-right corner is cut along a diagonal, and the flap comes back on the tile with a gradient, a light fold edge and a soft shadow underneath (`buildBevyMenuPaletteCorner`, `bevy_ui_menu_surface.js`).

@@ -13,6 +13,8 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
  */
 
 export const DOWNLOAD_TTL_MS = 2 * 60 * 60 * 1000;
+// One install URL for every release: the manifest is resolved when iOS fetches it.
+export const CURRENT_MANIFEST_PATH = '/ios/current/manifest.plist';
 export const validId = id => typeof id === 'string' && /^[a-f0-9-]{36}$/.test(id);
 export const tokenHash = value => createHash('sha256').update(value).digest('hex');
 export const xml = value => String(value).replace(/[<>&"']/g, char => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' })[char]);

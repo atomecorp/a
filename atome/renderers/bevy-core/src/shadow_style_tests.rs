@@ -10,6 +10,7 @@ fn shadow(kind: AtomeShadowKind, blur: f32, spread: f32, invert: bool) -> AtomeS
         offset_y: 6.0,
         spread,
         invert,
+        follows_alpha: false,
     }
 }
 

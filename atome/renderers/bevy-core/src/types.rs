@@ -39,6 +39,10 @@ pub struct AtomeShadowStyle {
     pub spread: f32,
     #[serde(default)]
     pub invert: bool,
+    /// The shadow follows the alpha the node really paints (an icon's strokes),
+    /// not its box. Read on an image, whose texture carries that alpha.
+    #[serde(default)]
+    pub follows_alpha: bool,
 }
 
 fn default_mask_mode() -> String {
@@ -122,6 +126,7 @@ impl AtomeShadowStyle {
             offset_y: finite_or(self.offset_y, 0.0),
             spread: finite_or(self.spread, 0.0),
             invert: kind == AtomeShadowKind::Block && self.invert,
+            follows_alpha: self.follows_alpha,
         })
     }
 }

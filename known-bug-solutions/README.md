@@ -79,6 +79,7 @@ the established solution before attempting a new implementation.
 | Native contacts import stops after ~14 min or after a kill, then a reinstall duplicates the book | [contacts-import-interrupted-and-duplicated](contacts-import-interrupted-and-duplicated/README.md) |
 | iOS launch keeps "Le démarrage continue…" over a Dashboard entry or a late Main Toolbar mount | [ios-boot-presentation-contract](ios-boot-presentation-contract/README.md) |
 | A long press in a panel input box closes the field, the keyboard and the layout on finger lift | [ios-panel-input-fast-tap-blur](ios-panel-input-fast-tap-blur/README.md) |
+| iOS keyboard up: the band tools shrink and a tap on them does nothing | [ios-keyboard-band-shrinks-and-dies](ios-keyboard-band-shrinks-and-dies/README.md) |
 | iOS freezes after a rotation: the old frame is stretched, the bottom band stops answering and every tool raises the keyboard | [ios-rotation-freeze](ios-rotation-freeze/README.md) |
 | An AI-generated image or speech keeps displaying an older generation | [ai-generated-media-identity](ai-generated-media-identity/README.md) |
 | Production update stops on `@emnapi` and a later restart returns Nginx 502 | [production-update-dependency-gate](production-update-dependency-gate/README.md) |

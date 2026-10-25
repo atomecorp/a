@@ -105,7 +105,10 @@ async function publish(file) {
         }
         throw new Error(`publication_postcheck_failed:${error.message};state=${report.state}`);
     }
-    process.stdout.write(`Version: ${report.version}\nBuild: ${report.build}\nPublication: verified\nInstall page: ${origin}/ios/install (personal token required)\n`);
+    // Verified: the server keeps this build only.
+    report.finalized = ssh(host, 'finalize', { id: report.id });
+    save(file, report);
+    process.stdout.write(`Version: ${report.version}\nBuild: ${report.build}\nPublication: verified\nRemoved from server: ${report.finalized.removed.length}\nInstall page: ${origin}/ios/install (personal token required)\n`);
 }
 
 function reconcile(file) {

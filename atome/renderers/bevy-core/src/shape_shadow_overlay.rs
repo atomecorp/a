@@ -9,15 +9,11 @@ use bevy::{
 use crate::{
     components::{
         AtomeClipRect, AtomeCornerRadius, AtomeResolvedMask, AtomeShapeProfile, AtomeShapeShadow,
-        AtomeShapeShadowCacheKey, AtomeShapeShadowOverlay, AtomeShapeShadowTextureCache,
-        AtomeVisualOpacity,
+        AtomeRenderKind, AtomeShapeShadowOverlay, AtomeVisualOpacity,
     },
     render_math::{atome_rect_transform, depth_for_layer},
-    shadow_texture::{
-        build_block_shadow_texture_rgba_for_silhouette,
-        build_gaussian_shadow_texture_rgba_for_silhouette, build_shadow_texture_rgba_for_alpha,
-        channel_to_u8, shadow_padding,
-    },
+    shadow_texture::{alpha_shadow_margin, build_shadow_texture_rgba_for_alpha, shadow_padding},
+    shape_shadow_cache::cached_shape_shadow_handle,
     shape_sdf::AtomeShapeSilhouette,
     types::{
         normalize_opacity, AtomeBevyRendererConfig, AtomeLayer, AtomeLogicalPosition,
@@ -72,12 +68,18 @@ fn clip_shadow_overlay(
             (visible[0] + visible[2] - shadow_rect[0]) / shadow_rect[2],
             (visible[1] + visible[3] - shadow_rect[1]) / shadow_rect[3],
         );
+        // The source rect is in the texture's own pixels, which a shadow built
+        // from a high-density texture holds more of than its logical box.
+        let Some(texture_size) = world
+            .get::<Sprite>(overlay_entity)
+            .and_then(|sprite| world.get_resource::<Assets<Image>>()?.get(&sprite.image))
+            .map(|image| Vec2::new(image.texture_descriptor.size.width as f32, image.texture_descriptor.size.height as f32))
+        else {
+            continue;
+        };
         if let Some(mut sprite) = world.get_mut::<Sprite>(overlay_entity) {
             sprite.custom_size = Some(Vec2::new(visible[2], visible[3]));
-            sprite.rect = Some(Rect::from_corners(
-                Vec2::new(shadow_rect[2], shadow_rect[3]) * start,
-                Vec2::new(shadow_rect[2], shadow_rect[3]) * end,
-            ));
+            sprite.rect = Some(Rect::from_corners(texture_size * start, texture_size * end));
         }
         let transform = atome_rect_transform(
             visible[0],
@@ -92,147 +94,6 @@ fn clip_shadow_overlay(
             .entity_mut(overlay_entity)
             .insert((Visibility::Visible, transform, GlobalTransform::from(transform)));
     }
-}
-
-fn cache_dimension(value: f32) -> u32 {
-    value.max(1.0).round() as u32
-}
-
-fn cache_scalar(value: f32) -> u32 {
-    (value.max(0.0) * 100.0).round() as u32
-}
-
-fn cache_signed_scalar(value: f32) -> i32 {
-    (value * 100.0).round() as i32
-}
-
-fn shape_shadow_cache_key(
-    shadow: AtomeShadowStyle,
-    silhouette: &AtomeShapeSilhouette,
-) -> AtomeShapeShadowCacheKey {
-    AtomeShapeShadowCacheKey {
-        kind: u8::from(shadow.kind == crate::types::AtomeShadowKind::Block),
-        invert: shadow.invert,
-        width: cache_dimension(silhouette.width),
-        height: cache_dimension(silhouette.height),
-        corner_radii: silhouette.corner_radii.map(cache_scalar),
-        variant: silhouette.geometry.variant.cache_code(),
-        star_branches: silhouette.geometry.star_branches,
-        star_inner_radius: (silhouette.geometry.star_inner_radius * 100.0).round() as u32,
-        polygon_sides: silhouette.geometry.polygon_sides,
-        blur: cache_scalar(shadow.blur),
-        spread: cache_signed_scalar(shadow.spread),
-        offset_x: cache_signed_scalar(shadow.offset_x),
-        offset_y: cache_signed_scalar(shadow.offset_y),
-        color: [
-            channel_to_u8(shadow.color[0]),
-            channel_to_u8(shadow.color[1]),
-            channel_to_u8(shadow.color[2]),
-            channel_to_u8(shadow.color[3]),
-        ],
-    }
-}
-
-fn cached_shape_shadow_handle(
-    world: &mut World,
-    shadow: AtomeShadowStyle,
-    silhouette: &AtomeShapeSilhouette,
-) -> Result<Option<(Handle<Image>, u32, u32)>, String> {
-    let key = shape_shadow_cache_key(shadow, silhouette);
-    if let Some(handle) = world
-        .get_resource::<AtomeShapeShadowTextureCache>()
-        .and_then(|cache| cache.handles.get(&key))
-        .cloned()
-    {
-        if let Some(image) = world
-            .get_resource::<Assets<Image>>()
-            .and_then(|images| images.get(&handle))
-        {
-            return Ok(Some((
-                handle,
-                image.texture_descriptor.size.width,
-                image.texture_descriptor.size.height,
-            )));
-        }
-        let mut cache = world.resource_mut::<AtomeShapeShadowTextureCache>();
-        cache.handles.remove(&key);
-        cache.order.retain(|existing| existing != &key);
-        cache.total_bytes = cache
-            .total_bytes
-            .saturating_sub(cache.byte_sizes.remove(&key).unwrap_or(0));
-    }
-    let grown = AtomeShapeSilhouette {
-        width: (silhouette.width + shadow.spread * 2.0).max(1.0),
-        height: (silhouette.height + shadow.spread * 2.0).max(1.0),
-        corner_radii: silhouette.corner_radii.map(|radius|
-            if radius > 0.0 { (radius + shadow.spread).max(0.0) } else { 0.0 }),
-        geometry: silhouette.geometry,
-    };
-    // Block keeps its hard silhouette. Drop blurs then excludes the owner's
-    // interior, including when spread and offset move the shadow relative to it.
-    let texture = if shadow.kind == crate::types::AtomeShadowKind::Block {
-        build_block_shadow_texture_rgba_for_silhouette(
-            &grown,
-            shadow.color,
-            shadow.spread,
-            shadow.invert,
-        )
-    } else {
-        build_gaussian_shadow_texture_rgba_for_silhouette(
-            &grown,
-            shadow.color,
-            shadow.blur,
-            Some((silhouette, [shadow.offset_x - shadow.spread, shadow.offset_y - shadow.spread])),
-        )
-    };
-    let Some((image_width, image_height, rgba)) = texture else {
-        return Ok(None);
-    };
-    let image = Image::new(
-        Extent3d {
-            width: image_width,
-            height: image_height,
-            depth_or_array_layers: 1,
-        },
-        TextureDimension::D2,
-        rgba,
-        TextureFormat::Rgba8UnormSrgb,
-        RenderAssetUsages::default(),
-    );
-    let handle = {
-        let mut images = world
-            .get_resource_mut::<Assets<Image>>()
-            .ok_or_else(|| "bevy_shape_shadow_image_assets_required".to_string())?;
-        images.add(image)
-    };
-    if world
-        .get_resource::<AtomeShapeShadowTextureCache>()
-        .is_none()
-    {
-        world.insert_resource(AtomeShapeShadowTextureCache::default());
-    }
-    let mut cache = world.resource_mut::<AtomeShapeShadowTextureCache>();
-    let byte_size = image_width as usize * image_height as usize * 4;
-    if byte_size > cache.max_bytes {
-        return Ok(Some((handle, image_width, image_height)));
-    }
-    cache.order.retain(|existing| existing != &key);
-    if let Some(previous_size) = cache.byte_sizes.remove(&key) {
-        cache.total_bytes = cache.total_bytes.saturating_sub(previous_size);
-    }
-    cache.order.push_back(key.clone());
-    cache.handles.insert(key.clone(), handle.clone());
-    cache.byte_sizes.insert(key.clone(), byte_size);
-    cache.total_bytes += byte_size;
-    while cache.order.len() > cache.max_entries || cache.total_bytes > cache.max_bytes {
-        if let Some(oldest) = cache.order.pop_front() {
-            cache.handles.remove(&oldest);
-            cache.total_bytes = cache
-                .total_bytes
-                .saturating_sub(cache.byte_sizes.remove(&oldest).unwrap_or(0));
-        }
-    }
-    Ok(Some((handle, image_width, image_height)))
 }
 
 #[cfg(test)]
@@ -288,9 +149,6 @@ pub fn sync_shape_shadow_overlay_transform(
     let position = *world
         .get::<AtomeLogicalPosition>(entity)
         .ok_or_else(|| "bevy_shape_shadow_position_missing".to_string())?;
-    let size = *world
-        .get::<AtomeLogicalSize>(entity)
-        .ok_or_else(|| "bevy_shape_shadow_size_missing".to_string())?;
     let layer = world
         .get::<AtomeLayer>(entity)
         .map(|value| value.0)
@@ -299,13 +157,9 @@ pub fn sync_shape_shadow_overlay_transform(
         let config = world.resource::<AtomeBevyRendererConfig>();
         (config.width, config.height)
     };
-    let shadow_width = (size.width.max(1.0) + shadow.spread * 2.0).max(1.0);
-    let shadow_height = (size.height.max(1.0) + shadow.spread * 2.0).max(1.0);
-    let padding = shadow_padding(shadow.blur) as f32;
-    let image_width = (shadow_width + padding * 2.0).ceil();
-    let image_height = (shadow_height + padding * 2.0).ceil();
-    let shadow_x = position.x + shadow.offset_x - shadow.spread - padding;
-    let shadow_y = position.y + shadow.offset_y - shadow.spread - padding;
+    let [rect_x, rect_y, image_width, image_height] = overlay.logical_rect;
+    let shadow_x = position.x + shadow.offset_x + rect_x;
+    let shadow_y = position.y + shadow.offset_y + rect_y;
     for &overlay_entity in &overlay.entities {
         if world.get_entity(overlay_entity).is_ok() {
             let transform = atome_rect_transform(
@@ -343,6 +197,41 @@ pub fn sync_shape_shadow_overlay_opacity(world: &mut World, entity: Entity, opac
             sprite.color = Color::srgba(1.0, 1.0, 1.0, normalized_opacity);
         }
     }
+}
+
+/// The painted alpha a shadow follows, with its pixel size: the final mask of a
+/// masked atom, or, for a shadow that `follows_alpha`, the image's own texture
+/// (its sprite's source rect when it shows a crop). None: the shadow follows
+/// the shape's silhouette.
+fn painted_alpha_source(
+    world: &World,
+    entity: Entity,
+    size: [f32; 2],
+    shadow: AtomeShadowStyle,
+) -> Option<(Vec<u8>, u32, u32)> {
+    if let Some(mask) = world.get::<AtomeResolvedMask>(entity).and_then(|value| value.0.clone()) {
+        let texture = crate::shape_sdf::mask_texture_for_target(&mask, size);
+        return Some((texture.rgba, texture.width, texture.height));
+    }
+    if !shadow.follows_alpha || world.get::<AtomeRenderKind>(entity).is_none_or(|kind| kind.0 != "image") {
+        return None;
+    }
+    let sprite = world.get::<Sprite>(entity)?;
+    let image = world.get_resource::<Assets<Image>>()?.get(&sprite.image)?;
+    let data = image.data.as_ref()?;
+    let (texture_width, texture_height) = (image.texture_descriptor.size.width, image.texture_descriptor.size.height);
+    let rect = sprite.rect.unwrap_or(Rect::new(0.0, 0.0, texture_width as f32, texture_height as f32));
+    let (left, top) = (rect.min.x.max(0.0) as u32, rect.min.y.max(0.0) as u32);
+    let width = (rect.width().round() as u32).min(texture_width.saturating_sub(left));
+    let height = (rect.height().round() as u32).min(texture_height.saturating_sub(top));
+    if width == 0 || height == 0 || data.len() < (texture_width * texture_height * 4) as usize {
+        return None;
+    }
+    let row = texture_width as usize * 4;
+    let rgba = (top..top + height)
+        .flat_map(|y| data[y as usize * row + left as usize * 4..y as usize * row + (left + width) as usize * 4].iter().copied())
+        .collect();
+    Some((rgba, width, height))
 }
 
 pub fn rebuild_shape_shadow_overlay(world: &mut World, entity: Entity) -> Result<(), String> {
@@ -391,19 +280,18 @@ pub fn rebuild_shape_shadow_overlay(world: &mut World, entity: Entity) -> Result
         height: size.height.max(1.0),
         corner_radii,
     };
-    let resolved_mask = world
-        .get::<AtomeResolvedMask>(entity)
-        .and_then(|value| value.0.clone());
-    let masked_shadow = resolved_mask.and_then(|mask| {
-        let texture = crate::shape_sdf::mask_texture_for_target(&mask, [size.width, size.height]);
-        build_shadow_texture_rgba_for_alpha(
-            &texture.rgba,
-            texture.width,
-            texture.height,
+    let painted_shadow = painted_alpha_source(world, entity, [size.width, size.height], shadow)
+        .and_then(|(rgba, source_width, source_height)| build_shadow_texture_rgba_for_alpha(
+            &rgba,
+            source_width,
+            source_height,
+            [source_width as f32 / size.width.max(1.0), source_height as f32 / size.height.max(1.0)],
             shadow,
-        )
-    });
-    let shadow_asset = if let Some((image_width, image_height, rgba)) = masked_shadow {
+        ));
+    // A shadow built from painted alpha keeps its source's resolution: it is
+    // laid over the owner's box grown by its margin, whatever its pixel count.
+    let alpha_margin = alpha_shadow_margin(shadow);
+    let shadow_asset = if let Some((image_width, image_height, rgba)) = painted_shadow {
         let image = Image::new(
             Extent3d { width: image_width, height: image_height, depth_or_array_layers: 1 },
             TextureDimension::D2,
@@ -415,24 +303,27 @@ pub fn rebuild_shape_shadow_overlay(world: &mut World, entity: Entity) -> Result
             .get_resource_mut::<Assets<Image>>()
             .ok_or_else(|| "bevy_shape_shadow_image_assets_required".to_string())?
             .add(image);
-        Some((handle, image_width, image_height))
+        Some((handle, Vec2::new(size.width + alpha_margin * 2.0, size.height + alpha_margin * 2.0), alpha_margin))
     } else {
-        cached_shape_shadow_handle(world, shadow, &silhouette)?
+        cached_shape_shadow_handle(world, shadow, &silhouette)?.map(|(handle, image_width, image_height)| (
+            handle,
+            Vec2::new(image_width as f32, image_height as f32),
+            shadow.spread + shadow_padding(shadow.blur) as f32,
+        ))
     };
-    let Some((handle, image_width, image_height)) = shadow_asset
+    let Some((handle, shadow_size, margin)) = shadow_asset
     else {
         return Ok(());
     };
     let mut sprite = Sprite::from_image(handle.clone());
-    sprite.custom_size = Some(Vec2::new(image_width as f32, image_height as f32));
+    sprite.custom_size = Some(shadow_size);
     sprite.color = Color::srgba(1.0, 1.0, 1.0, opacity);
     let (surface_width, surface_height) = {
         let config = world.resource::<AtomeBevyRendererConfig>();
         (config.width, config.height)
     };
-    let padding = shadow_padding(shadow.blur) as f32;
-    let shadow_x = position.x + shadow.offset_x - shadow.spread - padding;
-    let shadow_y = position.y + shadow.offset_y - shadow.spread - padding;
+    let shadow_x = position.x + shadow.offset_x - margin;
+    let shadow_y = position.y + shadow.offset_y - margin;
     let shadow_entity = world
         .spawn((
             sprite,
@@ -440,8 +331,8 @@ pub fn rebuild_shape_shadow_overlay(world: &mut World, entity: Entity) -> Result
             atome_rect_transform(
                 shadow_x,
                 shadow_y,
-                image_width as f32,
-                image_height as f32,
+                shadow_size.x,
+                shadow_size.y,
                 surface_width,
                 surface_height,
                 shadow_depth_for_layer(layer),
@@ -459,12 +350,13 @@ pub fn rebuild_shape_shadow_overlay(world: &mut World, entity: Entity) -> Result
     world.entity_mut(entity).insert(AtomeShapeShadowOverlay {
         entities: vec![shadow_entity],
         image_handles: vec![handle],
+        logical_rect: [-margin, -margin, shadow_size.x, shadow_size.y],
     });
     crate::selection_overlay::follow_atom_pose(world, entity, &[shadow_entity]);
     clip_shadow_overlay(
         world,
         entity,
-        [shadow_x, shadow_y, image_width as f32, image_height as f32],
+        [shadow_x, shadow_y, shadow_size.x, shadow_size.y],
         layer,
     );
     Ok(())

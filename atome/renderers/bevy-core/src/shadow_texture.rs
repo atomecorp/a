@@ -143,78 +143,106 @@ fn convolve_columns(source: &[f32], result: &mut [f32], width: usize, height: us
     }
 }
 
-/// Builds a shadow from the alpha that is actually painted after masking.
-/// This is the path used by masked atoms: deriving it from the pre-mask
-/// rectangle would bring back a rectangular shadow around a star/circle mask.
+/// How far, in logical px, a shadow built from painted alpha reaches past its
+/// owner's box on each side: its spread, then its blur's gaussian tail.
+pub(crate) fn alpha_shadow_margin(shadow: AtomeShadowStyle) -> f32 {
+    let blur_padding = if shadow.kind == AtomeShadowKind::Drop { shadow_padding(shadow.blur) } else { 0 };
+    shadow.spread.max(0.0) + blur_padding as f32
+}
+
+/// `base` grown by `radius` px (a soft-edged disc), as CSS spreads a shadow.
+fn dilate_alpha(base: &[f32], width: usize, height: usize, radius: f32) -> Vec<f32> {
+    let reach = radius.ceil() as isize;
+    let taps: Vec<(isize, isize, f32)> = (-reach..=reach)
+        .flat_map(|dy| (-reach..=reach).map(move |dx| (dx, dy)))
+        .filter_map(|(dx, dy)| {
+            let weight = (radius + 0.5 - ((dx * dx + dy * dy) as f32).sqrt()).clamp(0.0, 1.0);
+            (weight > 0.0).then_some((dx, dy, weight))
+        })
+        .collect();
+    let mut grown = vec![0.0_f32; width * height];
+    for y in 0..height as isize {
+        for x in 0..width as isize {
+            let mut value = 0.0_f32;
+            for &(dx, dy, weight) in &taps {
+                let (sx, sy) = (x + dx, y + dy);
+                if sx >= 0 && sy >= 0 && sx < width as isize && sy < height as isize {
+                    value = value.max(base[sy as usize * width + sx as usize] * weight);
+                }
+            }
+            grown[y as usize * width + x as usize] = value;
+        }
+    }
+    grown
+}
+
+/// Builds a shadow from the alpha that is actually painted: after masking (a
+/// masked atom: deriving it from the pre-mask rectangle would bring back a
+/// rectangular shadow around a star/circle mask), or an image's own texture (an
+/// icon whose lit halo follows its strokes, never a disc).
+///
+/// `scale` is the source's pixels per logical px on each axis. Blur, spread and
+/// offset are logical; the result keeps the source's resolution, so a texture
+/// rasterised for a 3x screen keeps a crisp contact edge. It covers the owner's
+/// box grown by `alpha_shadow_margin` on each side: spread grows the painted
+/// shape, then the blur softens it, and a drop shadow leaves the owner's own
+/// painted pixels clear.
 pub(crate) fn build_shadow_texture_rgba_for_alpha(
     source_rgba: &[u8],
     source_width: u32,
     source_height: u32,
+    scale: [f32; 2],
     shadow: AtomeShadowStyle,
 ) -> Option<(u32, u32, Vec<u8>)> {
-    if source_width == 0 || source_height == 0 || shadow.color[3] <= 0.0 {
+    if source_width == 0 || source_height == 0 || shadow.color[3] <= 0.0
+        || !(scale[0] > 0.0 && scale[1] > 0.0) {
         return None;
     }
-    let blur_padding = if shadow.kind == AtomeShadowKind::Drop { shadow_padding(shadow.blur) } else { 0 };
-    let spread_padding = shadow.spread.max(0.0).ceil() as u32;
-    let padding = blur_padding.max(spread_padding) as usize;
-    let width = source_width as usize + padding * 2;
-    let height = source_height as usize + padding * 2;
+    let margin = alpha_shadow_margin(shadow);
+    let (margin_x, margin_y) = ((margin * scale[0]).round() as usize, (margin * scale[1]).round() as usize);
+    let (source_width, source_height) = (source_width as usize, source_height as usize);
+    let width = source_width + margin_x * 2;
+    let height = source_height + margin_y * 2;
+    let source_alpha = |x: usize, y: usize| source_rgba.get((y * source_width + x) * 4 + 3)
+        .map_or(0.0, |value| *value as f32 / 255.0);
     let mut base = vec![0.0; width * height];
-    for y in 0..source_height as usize {
-        for x in 0..source_width as usize {
-            let source_offset = (y * source_width as usize + x) * 4 + 3;
-            if source_offset < source_rgba.len() {
-                base[(y + padding) * width + x + padding] = source_rgba[source_offset] as f32 / 255.0;
-            }
+    for y in 0..source_height {
+        for x in 0..source_width {
+            base[(y + margin_y) * width + x + margin_x] = source_alpha(x, y);
         }
     }
-    let alpha = if shadow.kind == AtomeShadowKind::Drop && shadow.blur > 0.0 {
-        let kernel = gaussian_kernel(shadow.blur);
-        let horizontal = convolve_axis(&base, width, height, &kernel, true);
-        convolve_axis(&horizontal, width, height, &kernel, false)
-    } else if spread_padding > 0 {
-        let radius = spread_padding as isize;
-        let mut grown = vec![0.0_f32; width * height];
-        for y in 0..height {
-            for x in 0..width {
-                let mut value = 0.0_f32;
-                for dy in -radius..=radius {
-                    for dx in -radius..=radius {
-                        let sx = x as isize + dx;
-                        let sy = y as isize + dy;
-                        if sx >= 0 && sy >= 0 && sx < width as isize && sy < height as isize {
-                            value = value.max(base[sy as usize * width + sx as usize]);
-                        }
-                    }
-                }
-                grown[y * width + x] = if shadow.invert {
-                    value * (1.0 - base[y * width + x])
-                } else {
-                    value
-                };
-            }
+    let spread_px = shadow.spread.max(0.0) * (scale[0] + scale[1]) / 2.0;
+    let grown = if spread_px > 0.0 {
+        let grown = dilate_alpha(&base, width, height, spread_px);
+        if shadow.invert {
+            grown.iter().zip(&base).map(|(value, owner)| value * (1.0 - owner)).collect()
+        } else {
+            grown
         }
-        grown
     } else {
         base
     };
+    let alpha = if shadow.kind == AtomeShadowKind::Drop && shadow.blur > 0.0 {
+        let horizontal = convolve_axis(&grown, width, height, &gaussian_kernel(shadow.blur * scale[0]), true);
+        convolve_axis(&horizontal, width, height, &gaussian_kernel(shadow.blur * scale[1]), false)
+    } else {
+        grown
+    };
+    let rgb = [channel_to_u8(shadow.color[0]), channel_to_u8(shadow.color[1]), channel_to_u8(shadow.color[2])];
     let mut rgba = vec![0; width * height * 4];
     for (index, value) in alpha.into_iter().enumerate() {
         let offset = index * 4;
-        rgba[offset] = channel_to_u8(shadow.color[0]);
-        rgba[offset + 1] = channel_to_u8(shadow.color[1]);
-        rgba[offset + 2] = channel_to_u8(shadow.color[2]);
         let cutout = if shadow.kind == AtomeShadowKind::Drop {
-            let x = index % width;
-            let y = index / width;
-            let owner_x = x as f32 - padding as f32 + shadow.offset_x - shadow.spread;
-            let owner_y = y as f32 - padding as f32 + shadow.offset_y - shadow.spread;
+            // This pixel, in the owner's own pixels: the texture is laid at the
+            // owner's origin moved by the offset and back by the margin.
+            let owner_x = (index % width) as f32 - margin_x as f32 + shadow.offset_x * scale[0];
+            let owner_y = (index / width) as f32 - margin_y as f32 + shadow.offset_y * scale[1];
             if owner_x >= 0.0 && owner_y >= 0.0
                 && owner_x < source_width as f32 && owner_y < source_height as f32 {
-                source_rgba[(owner_y as usize * source_width as usize + owner_x as usize) * 4 + 3] as f32 / 255.0
+                source_alpha(owner_x as usize, owner_y as usize)
             } else { 0.0 }
         } else { 0.0 };
+        rgba[offset..offset + 3].copy_from_slice(&rgb);
         rgba[offset + 3] = channel_to_u8(shadow.color[3] * value * (1.0 - cutout));
     }
     Some((width as u32, height as u32, rgba))

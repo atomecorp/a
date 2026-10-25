@@ -98,6 +98,7 @@ fn drop_shadow() -> AtomeShadowStyle {
         offset_y: 6.0,
         spread: 0.0,
         invert: false,
+        follows_alpha: false,
     }
 }
 
@@ -391,6 +392,7 @@ fn a_masked_object_shadow_uses_the_final_mask_alpha() {
         offset_y: 4.0,
         spread: 0.0,
         invert: false,
+        follows_alpha: false,
     };
     let entity = apply_spawn(
         &mut world,

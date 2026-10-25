@@ -149,6 +149,10 @@ pub struct AtomeNodeBaseBundle {
 pub struct AtomeShapeShadowOverlay {
     pub entities: Vec<Entity>,
     pub image_handles: Vec<Handle<Image>>,
+    /// The logical box the shadow covers, from the owner's origin moved by the
+    /// shadow offset: `[x, y, width, height]`. Its texture may hold more pixels
+    /// (a shadow built from a texture rasterised for a 3x screen).
+    pub logical_rect: [f32; 4],
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]

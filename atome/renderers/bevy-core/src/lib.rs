@@ -20,6 +20,7 @@ pub mod shape_sdf;
 mod shape_texture;
 pub mod surface_paint;
 mod render_style_ops;
+mod shape_shadow_cache;
 pub mod shape_shadow_overlay;
 pub mod spawn;
 pub mod texture;
@@ -76,6 +77,10 @@ mod panel_surface_paint_tests;
 #[cfg(test)]
 #[path = "../../../../tests/rendering/shadow_outer_knockout.rs"]
 mod shadow_outer_knockout_tests;
+
+#[cfg(test)]
+#[path = "../../../../tests/rendering/image_alpha_shadow.rs"]
+mod image_alpha_shadow_tests;
 
 #[cfg(test)]
 #[path = "../../../../tests/rendering/persistent_wallpaper.rs"]

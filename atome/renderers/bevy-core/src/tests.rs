@@ -126,6 +126,7 @@ fn plugin_spawns_projected_nodes_and_camera() {
                 spread: 0.0,
                 kind: crate::types::AtomeShadowKind::Drop,
                 invert: false,
+                follows_alpha: false,
             }),
             ..shape_node("shape_1")
         }],
@@ -739,6 +740,7 @@ fn shape_shadow_overlay_follows_owner_opacity() {
                 spread: 0.0,
                 kind: crate::types::AtomeShadowKind::Drop,
                 invert: false,
+                follows_alpha: false,
             }),
             opacity: 0.25,
             ..shape_node("shadow_fade_shape")

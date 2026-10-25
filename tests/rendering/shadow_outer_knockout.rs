@@ -7,7 +7,7 @@ fn outer_shadow_leaves_transparent_owner_clear_for_shifted_and_spread_shapes() {
         let mut world = test_world();
         let shadow = AtomeShadowStyle {
             color: [0.0, 0.0, 0.0, 0.45], blur: 8.0, offset_x, offset_y, spread,
-            kind: AtomeShadowKind::Drop, invert: false,
+            kind: AtomeShadowKind::Drop, invert: false, follows_alpha: false,
         };
         let entity = apply_spawn(&mut world, AtomeRenderNode {
             color: Some([0.2, 0.4, 0.8, 0.2]), corner_radius: 10.0,
@@ -40,7 +40,7 @@ fn shifted_outer_shadow_keeps_contact_without_moving_the_owner_cutout() {
         corner_radius: 10.0,
         shadow: Some(AtomeShadowStyle {
             color: [0.0, 0.0, 0.0, 1.0], blur: 8.0, offset_x: 16.0, offset_y: 0.0,
-            spread: 0.0, kind: AtomeShadowKind::Drop, invert: false,
+            spread: 0.0, kind: AtomeShadowKind::Drop, invert: false, follows_alpha: false,
         }), ..shape_node("shifted_owner")
     }).unwrap();
     let overlay = world.get::<AtomeShapeShadowOverlay>(entity).unwrap();
@@ -58,9 +58,9 @@ fn masked_outer_shadow_removes_only_the_actual_owner_alpha() {
     for y in 8..32 { for x in 8..52 { source[(y * 60 + x) * 4 + 3] = 255; } }
     let style = AtomeShadowStyle {
         color: [0.0, 0.0, 0.0, 1.0], blur: 8.0, offset_x: 10.0, offset_y: 0.0,
-        spread: 0.0, kind: AtomeShadowKind::Drop, invert: false,
+        spread: 0.0, kind: AtomeShadowKind::Drop, invert: false, follows_alpha: false,
     };
-    let (width, _, rgba) = crate::shadow_texture::build_shadow_texture_rgba_for_alpha(&source, 60, 40, style).unwrap();
+    let (width, _, rgba) = crate::shadow_texture::build_shadow_texture_rgba_for_alpha(&source, 60, 40, [1.0, 1.0], style).unwrap();
     let at_owner = |x: usize| rgba[((20 + 12) * width as usize + x + 12 - 10) * 4 + 3];
     assert_eq!(at_owner(40), 0);
     assert!(at_owner(54) > 100);

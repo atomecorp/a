@@ -8,6 +8,8 @@ struct BackdropSurfaceUniform {
     blur: vec4<f32>,
     corner_cut: vec4<f32>,
     border_edges: array<vec4<f32>, 4>,
+    inset_color: vec4<f32>,
+    inset_geometry: vec4<f32>,
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0) var<uniform> material: BackdropSurfaceUniform;
@@ -102,6 +104,14 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         }
         let border = material.border_edges[nearest];
         color = mix(color, border.rgb, border.a * clamp(distance + border_width + 0.5, 0.0, 1.0));
+    }
+    // The paint's inset shadow (a pressed item): dark where the shape, moved by the
+    // offset and eroded by the spread, leaves the glass, softened over `blur`.
+    if material.inset_color.a > 0.0 {
+        let geometry = material.inset_geometry;
+        let inside = -(rounded_rect_distance(point - geometry.xy, size, material.size_radius.z) + geometry.w);
+        let shade = 1.0 - smoothstep(0.0, max(geometry.z, 0.5), inside);
+        color = mix(color, material.inset_color.rgb, material.inset_color.a * shade);
     }
     return vec4(color, alpha);
 }
