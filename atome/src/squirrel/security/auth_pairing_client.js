@@ -1,4 +1,4 @@
-import { generateRecoveryCode, readRecoveryCode, recoveryVerifierInput } from '../../shared/auth_recovery_code.js';
+import { generateRecoveryCode, readRecoveryCode, recoveryLookupInput, recoveryVerifierInput } from '../../shared/auth_recovery_code.js';
 
 // Authentication V1 client (§6.2 – §6.8): account creation without phone,
 // device pairing, approvals, devices, recovery and the connection proof. Keys
@@ -220,8 +220,11 @@ export function createPairingClient({ devices, approver, send, token, ensureSess
         async createRecoveryCode() {
             const record = await sessionRecord();
             const { code, core } = generateRecoveryCode(crypto);
-            const verifier = hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(recoveryVerifierInput(record.userId, core))));
-            await request('recovery-code-set', { ...await approval('recovery-code-set', { subject: { verifier } }), verifier });
+            const digest = async (text) => hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)));
+            const verifier = await digest(recoveryVerifierInput(record.userId, core));
+            // The lookup lets the code alone find its account when every device is lost.
+            const lookup = await digest(recoveryLookupInput(core));
+            await request('recovery-code-set', { ...await approval('recovery-code-set', { subject: { verifier, lookup } }), verifier, lookup });
             return { ok: true, code };
         },
         async startRecovery({ handle = '', phone = '', code, platform = 'web', label = '' } = {}) {

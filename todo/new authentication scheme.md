@@ -441,6 +441,26 @@ Chrome DevTools Protocol virtual authenticator for WebAuthn.
 
 ## 13. Execution log
 
+### 2026-10-26 — The recovery code alone names its account; refusals say their reason (Claude)
+
+User report: « J'ai perdu tous mes appareils », code pasted, identifier left empty, countdown 59:58, « Récupérer mon
+espace » → « Opération incomplète ». Causes: (1) the handle is shown nowhere in the app, and an empty identifier made
+`recovery-start` resolve no account — by design the answer (countdown included) is identical, so the request was a
+decoy that could never complete; (2) pressing « Récupérer » inside the 1 h delay is refused (`auth_recovery_not_ready`,
+or `auth_recovery_unavailable` for a decoy) but the first-launch runtime only looked up `eve.first_launch.error.*`.
+
+- `auth_recovery_codes.lookup` = SHA-256(`atome.recovery.lookup.v1\0` + code core), unique index, column added by
+  `prepareAdoleSchemaColumns` on existing bases (checked on a copy of the local base). The client sends it with the
+  verifier (`recovery-code-set` subject is now `verifier:lookup`; a client without lookup is refused). `recovery-start`
+  without handle or number finds the account by the lookup; the per-network limit (20/day) applies, the per-address
+  limit only when an address is given. Responses stay uniform. Codes created before have no lookup: create a new one.
+- The recovery screen's identifier field is optional (`eve.auth.handle`, `recovery_handle` key removed).
+- First launch shows `eve.auth.error.<code>` when no first-launch message exists (« Récupération pas encore disponible »).
+- Evidence: `tests/server/auth_accounts_v1.test.mjs` 17/17 (new: code alone, wrong code identical shape, no notice);
+  `temp/auth_v1/recovery_code_ui.probe.mjs` 19/19 (code pasted without identifier → request; too early → reason said;
+  delay shortened in the isolated base → « Ouvert sur l'espace de … » → same account, the other device revoked).
+- Needs a server deployment (schema + server) and an iOS build before it works on atome.one / the iPhone.
+
 ### 2026-10-25 — Recovery code « Option 1 »: shown once, touch to copy, paste anywhere (Claude)
 
 User decision (2026-10-25): Home › Security keeps one « Créer un code de récupération » tool; each new code

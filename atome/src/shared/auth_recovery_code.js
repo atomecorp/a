@@ -35,3 +35,5 @@ export function readRecoveryCode(value) {
 }
 
 export const recoveryVerifierInput = (principalId, core) => `atome.recovery.v1\0${principalId}${normalizeRecoveryCode(core)}`;
+// Finds the account from the code alone: 128 random bits, so the hash reveals nothing.
+export const recoveryLookupInput = (core) => `atome.recovery.lookup.v1\0${normalizeRecoveryCode(core)}`;

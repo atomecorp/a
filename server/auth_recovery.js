@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { publicDeviceKey, randomHandle, reject, requireHandle } from './auth_link_security.js';
 import { normalizeDeviceMeta, PROBATION_MS } from './auth_devices.js';
-import { recoveryVerifierInput } from '../atome/src/shared/auth_recovery_code.js';
+import { recoveryLookupInput, recoveryVerifierInput } from '../atome/src/shared/auth_recovery_code.js';
 
 export const RECOVERY_CODE_DELAY_MS = 60 * 60 * 1000;
 export const RECOVERY_PHONE_DELAY_MS = 72 * 60 * 60 * 1000;
@@ -10,6 +10,8 @@ const RECOVERY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 // Same domain-separated verifier on the client (creation) and the server (use).
 export const recoveryVerifier = (principalId, code) => crypto.createHash('sha256')
     .update(recoveryVerifierInput(principalId, code)).digest('hex');
+export const recoveryLookup = (code) => crypto.createHash('sha256').update(recoveryLookupInput(code)).digest('hex');
+const HEX_DIGEST = /^[a-f0-9]{64}$/;
 
 // Opens a delayed request; used by the recovery code and by the SMS link of a
 // phone account, which never enrolls a device directly any more.
@@ -30,12 +32,12 @@ export async function openRecoveryRequest({ query, proof, now }, principalId, { 
 // it enrolls this device alone and revokes every other key and session.
 export function createRecovery({ query, transaction, proof, sessions, devices, handles, approvals, accounts, findById, notify, disconnectSession, now }) {
     async function setCode(input) {
-        if (typeof input.verifier !== 'string' || !/^[a-f0-9]{64}$/.test(input.verifier)) reject('auth_request_invalid');
+        if (!HEX_DIGEST.test(String(input.verifier)) || !HEX_DIGEST.test(String(input.lookup))) reject('auth_request_invalid');
         const principalId = await transaction(async () => {
-            const { session } = await accounts.authorize(input, 'recovery-code-set', { verifier: input.verifier });
-            await query('run', `INSERT INTO auth_recovery_codes (principal_id, verifier, created_ms) VALUES (?, ?, ?)
-                ON CONFLICT(principal_id) DO UPDATE SET verifier = excluded.verifier, created_ms = excluded.created_ms`,
-            [session.principal_id, input.verifier, now()]);
+            const { session } = await accounts.authorize(input, 'recovery-code-set', { verifier: input.verifier, lookup: input.lookup });
+            await query('run', `INSERT INTO auth_recovery_codes (principal_id, verifier, lookup, created_ms) VALUES (?, ?, ?, ?)
+                ON CONFLICT(principal_id) DO UPDATE SET verifier = excluded.verifier, lookup = excluded.lookup, created_ms = excluded.created_ms`,
+            [session.principal_id, input.verifier, input.lookup, now()]);
             await proof.audit('recovery_code_set', session.principal_id, null);
             return session.principal_id;
         });
@@ -52,13 +54,15 @@ export function createRecovery({ query, transaction, proof, sessions, devices, h
     async function start(input, network) {
         const { keyId, jwk } = publicDeviceKey(input.sessionKey);
         if (input.handle && input.phone) reject('auth_request_invalid');
-        // The account is named by its handle or its verified phone number.
+        // The account is named by its handle, its verified phone number, or the code itself.
         const address = input.phone ? `phone:${String(input.phone)}` : String(input.handle || '').trim().toLowerCase();
         // Identical shape and work for an unknown handle or number and a wrong code.
         const outcome = await transaction(async () => {
             await proof.limit(`recovery-network:${proof.keyedIndex(String(network))}`, 20, 86400000);
-            await proof.limit(`recovery-handle:${proof.keyedIndex(address)}`, 10, 86400000);
-            const principalId = input.phone ? await handles.resolvePhone(input.phone) : await handles.resolve(address);
+            if (address) await proof.limit(`recovery-handle:${proof.keyedIndex(address)}`, 10, 86400000);
+            const principalId = address
+                ? (input.phone ? await handles.resolvePhone(input.phone) : await handles.resolve(address))
+                : (await query('get', 'SELECT principal_id FROM auth_recovery_codes WHERE lookup = ?', [recoveryLookup(String(input.code || ''))]))?.principal_id || null;
             const stored = principalId ? await query('get', 'SELECT verifier FROM auth_recovery_codes WHERE principal_id = ?', [principalId]) : null;
             const candidate = recoveryVerifier(principalId || randomHandle(), input.code);
             const valid = !!stored && crypto.timingSafeEqual(Buffer.from(stored.verifier, 'hex'), Buffer.from(candidate, 'hex'));

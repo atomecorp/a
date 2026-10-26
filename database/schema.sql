@@ -701,11 +701,14 @@ CREATE INDEX IF NOT EXISTS auth_pair_target ON auth_pair_requests(target_princip
 
 -- Only a verifier of the recovery code is kept: SHA-256 of a domain-separated
 -- principal + code. A new code replaces the previous one.
+-- `lookup` finds the account from the code alone (domain-separated hash of the code).
 CREATE TABLE IF NOT EXISTS auth_recovery_codes (
     principal_id TEXT PRIMARY KEY,
     verifier TEXT NOT NULL,
-    created_ms INTEGER NOT NULL
+    created_ms INTEGER NOT NULL,
+    lookup TEXT
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_auth_recovery_codes_lookup ON auth_recovery_codes(lookup);
 CREATE TABLE IF NOT EXISTS auth_recovery_requests (
     request_id TEXT PRIMARY KEY,
     principal_id TEXT NOT NULL,

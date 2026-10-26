@@ -285,6 +285,8 @@ async function ensureAuthDeviceKeyColumns(query) {
 
 async function prepareAdoleSchemaColumns(query) {
     await ensureAuthDeviceKeyColumns(query);
+    // A recovery code names its account by itself (codes created before keep their handle path).
+    await ensureColumn({ query, table: 'auth_recovery_codes', column: 'lookup', ddl: 'ALTER TABLE auth_recovery_codes ADD COLUMN lookup TEXT' });
     await ensurePermissionsColumns(query);
     await ensureSnapshotColumns(query);
     await ensureEventColumns(query);
