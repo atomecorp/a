@@ -11,6 +11,7 @@ import { GPS_ASSISTANT_INSTRUCTIONS } from '../gps/contracts.js';
 import { SHOPPING_ASSISTANT_INSTRUCTIONS } from '../shopping/contracts.js';
 import { SHOWS_ASSISTANT_INSTRUCTIONS } from '../shows/contracts.js';
 import { FILMS_ASSISTANT_INSTRUCTIONS } from '../films/contracts.js';
+import { CREATION_ASSISTANT_INSTRUCTIONS } from '../creation/contracts.js';
 import { FOOD_ASSISTANT_INSTRUCTIONS } from '../food/contracts.js';
 import { TRAINING_ASSISTANT_INSTRUCTIONS } from '../training/contracts.js';
 import { DASHBOARD_PROGRESSION_ASSISTANT_INSTRUCTIONS } from '../dashboard_progression/contracts.js';
@@ -97,12 +98,12 @@ export const createConversationSession = ({
         // commands of the tools open now; schemas and permissions still come from MCP.
         const context = await Promise.resolve(toolContext()).catch(() => null);
         signal.throwIfAborted();
-        const preload = new Set(['ui.draw.edit', 'ui.ai.image.generate', 'tv.open_channel', 'youtube.play', 'apple_music.play', 'apple_music.search', 'music.get_state', 'music.play', 'music.search', 'gps.navigate_to', 'gps.stop_navigation', 'shopping.add', 'shopping.check', 'shopping.list', 'shopping.open', 'shows.search', 'shows.open', 'shows.add_to_calendar', 'shows.navigate', 'shows.open_site', 'shows.open_tickets', 'films.search', 'films.play', 'films.open', 'films.control', 'films.set_service', 'food.search', 'food.alternatives', 'food.scan', 'training.prepare_session', 'training.session_transition', 'training.get_session', ...ASSISTANT_CONTEXT_COMMAND_NAMES,
+        const preload = new Set(['ui.draw.edit', 'ui.ai.image.generate', 'tv.open_channel', 'youtube.play', 'apple_music.play', 'apple_music.search', 'music.get_state', 'music.play', 'music.search', 'gps.navigate_to', 'gps.stop_navigation', 'shopping.add', 'shopping.check', 'shopping.list', 'shopping.open', 'shows.search', 'shows.open', 'shows.add_to_calendar', 'shows.navigate', 'shows.open_site', 'shows.open_tickets', 'films.search', 'films.play', 'films.open', 'films.control', 'films.set_service', 'creation.list', 'creation.read', 'creation.new_text', 'creation.open', 'food.search', 'food.alternatives', 'food.scan', 'training.prepare_session', 'training.session_transition', 'training.get_session', ...ASSISTANT_CONTEXT_COMMAND_NAMES,
             ...(Array.isArray(context?.preload) ? context.preload : [])]);
         const direct = tools.filter(tool => preload.has(toolMap.get(tool.name)?.name));
         const notes = (Array.isArray(context?.notes) ? context.notes : []).map(String).filter(Boolean);
         return { tools: [search, ...direct], catalog: tools, toolMap,
-            instructions: `${ATOME_ACTION_INSTRUCTIONS} ${APPLE_MUSIC_ASSISTANT_INSTRUCTIONS} ${MUSIC_ASSISTANT_INSTRUCTIONS} ${GPS_ASSISTANT_INSTRUCTIONS} ${SHOPPING_ASSISTANT_INSTRUCTIONS} ${SHOWS_ASSISTANT_INSTRUCTIONS} ${FILMS_ASSISTANT_INSTRUCTIONS} ${FOOD_ASSISTANT_INSTRUCTIONS} ${TRAINING_ASSISTANT_INSTRUCTIONS} ${DASHBOARD_PROGRESSION_ASSISTANT_INSTRUCTIONS}${notes.length ? ` Open tools: ${notes.join(' ')}` : ''}` };
+            instructions: `${ATOME_ACTION_INSTRUCTIONS} ${APPLE_MUSIC_ASSISTANT_INSTRUCTIONS} ${MUSIC_ASSISTANT_INSTRUCTIONS} ${GPS_ASSISTANT_INSTRUCTIONS} ${SHOPPING_ASSISTANT_INSTRUCTIONS} ${SHOWS_ASSISTANT_INSTRUCTIONS} ${FILMS_ASSISTANT_INSTRUCTIONS} ${CREATION_ASSISTANT_INSTRUCTIONS} ${FOOD_ASSISTANT_INSTRUCTIONS} ${TRAINING_ASSISTANT_INSTRUCTIONS} ${DASHBOARD_PROGRESSION_ASSISTANT_INSTRUCTIONS}${notes.length ? ` Open tools: ${notes.join(' ')}` : ''}` };
     };
     const debugExcerpt = () => ({ id: state.id, model: state.effectiveModel || state.model, level: state.level,
         turns: state.turns.slice(-20).map(turn => ({ role: turn.role, ...(turn.name ? { name: turn.name } : {}),

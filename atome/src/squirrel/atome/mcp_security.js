@@ -64,6 +64,8 @@ const DEFAULT_ACTOR_CAPABILITIES = Object.freeze([
     'shows.read', 'shows.write', 'shows.control',
     // Films and series (Divertissement › Vidéo): the catalogue, the services declared, the list on the Dashboard.
     'films.read', 'films.write', 'films.control',
+    // The user's own creations (Créer: texts, drawings, pictures): read, make and change, show on the Dashboard, send to people.
+    'creation.read', 'creation.write', 'creation.control', 'creation.send',
     // The user's own Sport activities, sessions and training log.
     'training.read', 'training.write',
     // How far the user's home has grown with their health objectives (counts, never health values).

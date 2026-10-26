@@ -9,6 +9,7 @@ import { TRAINING_COMMANDS, validateTrainingInput } from '../training/contracts.
 import { SHOPPING_COMMANDS, validateShoppingInput } from '../shopping/contracts.js';
 import { SHOWS_COMMANDS, validateShowsInput } from '../shows/contracts.js';
 import { FILMS_COMMANDS, validateFilmsInput } from '../films/contracts.js';
+import { CREATION_COMMANDS, validateCreationInput } from '../creation/contracts.js';
 import { FOOD_COMMANDS, validateFoodInput } from '../food/contracts.js';
 import { DASHBOARD_PROGRESSION_COMMANDS, validateDashboardProgressionInput } from '../dashboard_progression/contracts.js';
 import { ensureRuntimeToolApi } from './mcp_bridges.js';
@@ -50,6 +51,8 @@ export const createMcpShowsHandlers = () => createContractHandlers({
     commands: SHOWS_COMMANDS, validate: validateShowsInput, layer: 'atome_mcp_shows', noClient: 'PRESENTATION_UNAVAILABLE' });
 export const createMcpFilmsHandlers = () => createContractHandlers({
     commands: FILMS_COMMANDS, validate: validateFilmsInput, layer: 'atome_mcp_films', noClient: 'PRESENTATION_UNAVAILABLE' });
+export const createMcpCreationHandlers = () => createContractHandlers({
+    commands: CREATION_COMMANDS, validate: validateCreationInput, layer: 'atome_mcp_creation', noClient: 'PRESENTATION_UNAVAILABLE' });
 export const createMcpFoodHandlers = () => createContractHandlers({
     commands: FOOD_COMMANDS, validate: validateFoodInput, layer: 'atome_mcp_food', noClient: 'HOST_UNSUPPORTED' });
 export const createMcpDashboardProgressionHandlers = () => createContractHandlers({

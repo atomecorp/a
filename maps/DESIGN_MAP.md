@@ -1,3 +1,4 @@
+2026-10-26 Design charter made explicit (user): AGENTS.md rules 11–16 are now the charter's only text (this map, module 05, `.claude/rules` and memories point to it). Completed by the user: never a border, outline or ring in any state unless asked by name (exceptions `DESIGN_CHARTER_BORDERS`: calendar grid, Dashboard tile hairline edge, lasso; any other border is refused by the BevyUI and surface-paint normalizers); one look per state (rest, hover halfway to selected, press lighter than selected and pressed in, selected pressed in, active = halo on the glyph); the standard tile is two tools (120 px) and never shrinks; sizes are multiples of half a tool with no maximum; containers are responsive by restructuring and scrolling (scroll arrow on a hidden side); one panel slab; media are not panels. The former « 3–6 tools maximum » is withdrawn.
 2026-10-26 One tile label (user request): every tile's label at its top — Dashboard card (contact, project, agenda title and date), rubric / Mystic / Matrix `label_band` tile, default content tile, creation cell, weather place, panel media tile (`bevy_panel_media_card.js`) — is drawn in ONE style, `EVE_COMMON_SKIN_TOKENS.tileLabel` (`eVe/elements/skin/tokens.js`: 15 px, weight 400, `#efeaff`), read by `dashboardSkin.tileLabel` and `panelSkin.mediaCard.tile.labelTextSizePx/labelTextWeight`. No `text_fit: 'shrink'`, no size fitted to the tile or the band, no exception: a long label is cut with « … » at that size (`dashboardLabelBandText`, `{ size, weight }` defaulting to the tile label; `fitSingleLineText` in panels). `DASHBOARD_LABEL_MIN_FONT_PX` and the dead `labelMinTextSizePx` are removed.
 2026-10-25 Disc glyphs and pastel tiles (validated by the user): five pastels `#d29bff #ff9fd2 #a9b2ff #ffb592 #efa2f2` (`dashboardSkin.tileDisc`), one per home rubric as laid on the home grid; a tile or plate = the rubric's tinted glass + 1-physical-pixel edge of its colour at 0.28; label alone at the top (`#efeaff`); glyph = a disc of the colour at 0.68, the drawing cut out (the ground shows through), one tool wide; Capture keeps a red record dot in a hole of its own; radius unchanged (15 px). Session button: the orange power mark `#d68a44` alone, no disc.
 2026-10-25 Navigation arrow size (mockup `temp/navigation_arrow/mockups/arrow_sizes.png`, choice D, validated by the user on the real app): the navigation arrow (‹ back, › next) has ONE side on every surface, `SYSTEM_UI_METRICS.navigationArrowPx` = half a tool (30 px), read only by its owner `eVe/intuition/ribbon/bevy_ui_navigation_arrow.js`. A host (home footer, Mystic cell and page turn, Matrix return, tools band, contextual rail, prompter, panel previous/next) gives only the box taking the tap; no host sizes the glyph (the former `NAVIGATION_ARROW_BOX_RATIO` × box and the panels' 16 px icon size are gone). Its halo hugs the strokes (`follows_alpha`): a renderer WASM older than that Rust field draws it as a square.
@@ -528,43 +529,16 @@ Mandatory Use:
 
 ## eVe design charter — absolute rules (validated by the user, 2026-10-25)
 
-Every interface of atome/eVe obeys these rules, on every runtime. They are absolute (AGENTS.md rule 16): a new
-design starts from them; a mockup that breaks one is not shown; code that breaks one is a defect. Values come
-from the tokens named here, never written inline.
+The charter's only text is [AGENTS.md rules 11–16](../AGENTS.md#mandatory-core) (completed by the user on
+2026-10-26). This section does not restate it; it lists where each rule lives in code.
 
-1. **The unit is the tool** (`SYSTEM_UI_METRICS.unitPx` = 60 px). Every height and width of an element is a
-   whole multiple of a tool or of half a tool (`halfUnitPx` = 30 px). Half a tool is the smallest size
-   tolerated, in height (a thin row) as in width. The largest is 3, 4, 5 or 6 tools when the screen holds it.
-   A size never changes to make a layout fit (rule 12): what does not fit is dropped, cropped, or cut with « … ».
-2. **One radius**: a quarter of a tool (`SYSTEM_UI_METRICS.radiusPx` = 15 px) for every tool, tile, card,
-   panel, row, field and button; a half-tool row is therefore a pill. Every radius token derives from it
-   (`toolRadiusPx`, `compactToolRadiusPx`, `ribbonRadiusPx`, `mysticToolRadiusPx`, `panelRadiusPx`, the input
-   and chrome radii, `EVE_COMMON_SKIN_TOKENS.radius.*`). A band or a ground that follows an object takes the
-   object's own corners. Round discs (`radius.pill`) stay round.
-3. **Spacing**: inside a panel a sixth of a tool (padding 10 px), between elements a twelfth (gap 5 px)
-   (`PANEL_VISUAL_RATIOS.inset`/`gap`, workspace `paddingPx`/`gapPx`). Content never touches an edge: the
-   padding stays below the last row shown, even when the content scrolls.
-4. **Shadows**: a raised element (tool, card, row, button) carries its soft drop shadow (idle button
-   `0 3px 6px` black 0.32 plus `0 1px 2px` 0.25; cards `CARD_SHADOW`). A selected element is pressed in: no drop
-   shadow, an inner shadow instead (`selectedItem.inset`: `0 2px 6px` black 0.5), drawn by the glass shader.
-5. **One selected look, everywhere** (rule 15): `selectedSurface(style)` — colour A « bleu nuit éclairci »
-   (`EVE_COMMON_SKIN_TOKENS.selectedItem`: glass tint `[0.114, 0.199, 0.486, 0.8]`, veil over content 0.45, a
-   coloured block its own colour lightened) and pressed in. Never a frame, outline or ring: not for a
-   selection, a keyboard focus, a drop target nor an armed drag. Exceptions: a chosen colour swatch and a
-   checkbox carry the framework's ✓ (`checkMarkNode`).
-6. **One active look**: an active tool carries the cyan breathing halo (`bevyMenu.litGlow`, breath 3.2 s).
-   Active and selected never share a look.
-7. **Tools and labels**: a tool is exactly one tool (60 px); its label has at most 6 letters
-   (`labelMaxCharacters`) and never changes size. An inert label sits at the TOP of its object (rule 11).
-   Zen: no text, label, tooltip or button the user did not ask for.
-8. **Panels**: settings always at the panel's BOTTOM, within the finger's reach, never at its top; on a phone a
-   panel spans the width at the foot, as tall as its content (`bevy_panel_layout.js#phonePlacement`) — never an
-   empty screen with its content stuck at the top. The way out is ✕; ‹ only for a step back inside the same
-   panel (rule 13). A value is set by its value alone: − and + are tools at both ends, the value between them,
-   dragged to scrub or touched twice to be typed (`numericFieldNode` `presentation: 'tools'`); never a row of
-   presets. What is being changed stays in view: the panel takes the keyboard's room, the object stays above.
-9. **The bottom band never moves** (rule 13): Back leftmost, the assistant rightmost on its round support, Next
-   beside it; the whole band mirrored for a left hand; no tool ever takes another's place.
+| Rule | Tokens and owners |
+| --- | --- |
+| 11 Inert label on top | `dashboard_item_text_fields.js#dashboardCardLabelBackdropRect`, `bevy_ui_menu_surface.js#buildBevyMenuToolContent`, `labelMaxCharacters` |
+| 12 Tool grid, sizes never change | `SYSTEM_UI_METRICS.unitPx` / `halfUnitPx` (`eVe/elements/system_ui_tokens.js`), `dashboardSkin.metrics.blockUnitMultiplier`, `bevy_ui_tools_band.js#layoutToolsBand`, `dashboard_mystic_grid.js#dashboardHomeShape`, scroll arrows `bevy_ui_scroll_layout.js#scrollArrowNodes` (`bevy_ui_navigation_arrow.js` directions `up` / `down`, page turn in `bevy_ui_scroll_runtime.js`) |
+| 13 Bottom band | `bevy_ui_tools_band.js#orderToolsBand` / `layoutToolsBand` / `buildToolsBandToolNode`, `bevy_panel_band.js#withPanelBack`, `dashboard_footer_navigation.js#back` |
+| 14 Slab, radius, spacing, rows, panel foot | `EVE_PANEL_SKIN_TOKENS` (`panel_skin.js`), `SYSTEM_UI_METRICS.radiusPx`, `EVE_COMMON_SKIN_TOKENS.radius.*`, `PANEL_VISUAL_RATIOS.inset` / `gap`, `bevy_panel_layout.js#phonePlacement`, `numericFieldNode` (`presentation: 'tools'`) |
+| 15 States, no border | `bevy_panel_tokens.js#hoverSurface` / `pressedSurface` / `selectedSurface` / `sunkenSurface` (empty checkbox, radio, switch track), `EVE_COMMON_SKIN_TOKENS.hoverItem` / `pressedItem` / `selectedItem`, `bevyMenu.litGlow`, `checkMarkNode`; border exceptions `eVe/elements/design_charter.js#DESIGN_CHARTER_BORDERS`, refused elsewhere by `bevy_ui_tree_normalization.js#normalizeStyle` and `bevy_projection_style.js#normalizeBevySurfacePaint` |
 
 ## Mandatory Pre-Implementation Gate
 
