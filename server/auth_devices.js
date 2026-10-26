@@ -8,6 +8,8 @@ export const PROBATION_MS = 72 * 3600000;
 const ASSURANCES = new Set(['hardware_uv', 'hardware', 'software']);
 const PLATFORMS = new Set(['ios', 'ipados', 'android', 'macos', 'windows', 'linux', 'freebsd', 'chromeos', 'web']);
 const ALWAYS_PERSONAL = new Set(['ios', 'ipados', 'android']);
+// `enrolled_by` of a device opened by a recovery (code or SMS link).
+const RECOVERY_CHANNELS = new Set(['recovery_code', 'phone_recovery']);
 
 export function normalizeDeviceMeta(meta = {}) {
     const platform = PLATFORMS.has(meta?.platform) ? meta.platform : 'web';
@@ -41,12 +43,15 @@ export function createDeviceRegistry({ query, now }) {
         WHERE principal_id = ? AND device_id = ? AND key_role = 'approve' AND revoked_ms IS NULL
         ORDER BY enrolled_ms DESC LIMIT 1`, [sessionKey.principal_id, deviceOf(sessionKey)]);
     // A remote approval needs a user-verified key on a personal device out of probation.
-    async function requireApprover(sessionKey) {
+    // A device enrolled by a recovery is the account's only device: it may replace
+    // the consumed recovery code at once, so the account is never left without one.
+    async function requireApprover(sessionKey, purpose) {
         if (!sessionKey || sessionKey.revoked_ms !== null) reject('auth_session_invalid');
         const approve = await approveKeyOf(sessionKey);
         if (!approve || approve.assurance !== APPROVE_ASSURANCE || approve.device_class !== 'personal'
             || sessionKey.device_class !== 'personal') reject('auth_approve_key_required');
-        if (approve.restricted_until_ms > now() || sessionKey.restricted_until_ms > now()) reject('auth_device_cooling_off');
+        const recovered = purpose === 'recovery-code-set' && RECOVERY_CHANNELS.has(sessionKey.enrolled_by);
+        if (!recovered && (approve.restricted_until_ms > now() || sessionKey.restricted_until_ms > now())) reject('auth_device_cooling_off');
         return approve;
     }
     async function list(principalId) {

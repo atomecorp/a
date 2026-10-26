@@ -128,7 +128,12 @@ extension AiSRuntime {
             let oldBindingConflict = oldLocal == principal && oldRemote != nil && oldRemote != remoteId
             guard conflict.isEmpty && !oldBindingConflict else { throw AiSError("local_account_binding_conflict") }
             let grant = rowString(previous, "grant_id") ?? UUID().uuidString.lowercased()
-            let generation = previous == nil ? 0 : intValue(previous?["generation"], defaultValue: 0) + 1
+            // The renewal of the bound remote session keeps the local generation: raising it
+            // revoked every local token at each renewal (at launch, then every ~14 min), and the
+            // requests already sent with them were refused (`Access denied`). A new remote session
+            // or a locked grant still starts a new generation.
+            let renewal = intValue(previous?["locked"], defaultValue: 1) == 0 && rowString(previous, "remote_session_id") == sessionId
+            let generation = previous == nil ? 0 : intValue(previous?["generation"], defaultValue: 0) + (renewal ? 0 : 1)
             let now = isoNow()
             if try findUserRecordById(db, principal) == nil {
                 try execute(db, "INSERT INTO atomes(atome_id,atome_type,owner_id,creator_id,created_at,updated_at,created_source,sync_status) VALUES (?,'user',?,?,?,?,'ais','local')",

@@ -262,7 +262,7 @@ it('projects native panel controls and Dashboard material without a private skin
                     const title = nodes.find(node => node.id === `__eve_dashboard_content_title_${base}`).style;
                     expect(title.position[1]).toBe(band.top);
                     expect(title.size[1]).toBe(band.height);
-                    expect(title.font_size).toBe(DASHBOARD_VISUAL_TOKENS.labelText.font_size);
+                    expect(title.font_size).toBe(EVE_COMMON_SKIN_TOKENS.tileLabel.font_size);
                 }
                 const slots = ['sleep', 'nutrition', 'movement', 'journal'].map(id => nodes.find(node => node.id === id + '_slot').style);
                 expect(slots[1].position[0] - slots[0].position[0] - slots[0].size[0]).toBe(DASHBOARD_VISUAL_TOKENS.metrics.gap);

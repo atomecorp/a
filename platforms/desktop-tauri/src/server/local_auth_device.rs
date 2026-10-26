@@ -197,14 +197,18 @@ fn bind(
             rusqlite::params![remote_id,key_id], |row| Ok((row.get(0)?,row.get(1)?))).optional().map_err(|_| "local_database_unavailable")?;
         if previous_remote.as_ref().is_some_and(|(id, generation)| id.as_deref() == Some(remote_session_id)
             && generation.unwrap_or(-1) > remote_session_generation) { return Err("auth_session_stale".into()); }
-        let existing: Option<(String, String, i64)> = tx.query_row(
-            "SELECT grant_id, local_principal, generation FROM auth_local_grants WHERE remote_principal = ?1 AND key_id = ?2",
-            rusqlite::params![remote_id, key_id], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional().map_err(|_| "local_database_unavailable")?;
+        let existing: Option<(String, String, i64, i64)> = tx.query_row(
+            "SELECT grant_id, local_principal, generation, locked FROM auth_local_grants WHERE remote_principal = ?1 AND key_id = ?2",
+            rusqlite::params![remote_id, key_id], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))).optional().map_err(|_| "local_database_unavailable")?;
         let grant = existing
             .as_ref()
             .map(|v| v.0.clone())
             .unwrap_or_else(|| Uuid::new_v4().to_string());
-        let generation = existing.as_ref().map(|v| v.2 + 1).unwrap_or(0);
+        // The renewal of the bound remote session keeps the local generation: raising it
+        // revoked every local token at each renewal, and the requests already sent with
+        // them were refused. A new remote session or a locked grant starts a new generation.
+        let renewal = previous_remote.as_ref().is_some_and(|(id, _)| id.as_deref() == Some(remote_session_id));
+        let generation = existing.as_ref().map(|v| v.2 + i64::from(!(renewal && v.3 == 0))).unwrap_or(0);
         let principal = if let Some(value) = existing {
             value.1
         } else if let Some((id, _, deleted)) = if phone.is_empty() { None } else { accounts::find_user_record_by_phone(&tx, phone)? } {

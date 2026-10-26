@@ -100,7 +100,7 @@ export function createAccountAuth({ query, transaction, proof, sessions, devices
         return transaction(async () => {
             const row = await sessions.read(sessionId);
             if (row.generation !== generation) reject('auth_session_stale');
-            const approve = await devices.requireApprover(await devices.byId(row.key_id));
+            const approve = await devices.requireApprover(await devices.byId(row.key_id), purpose);
             return { ok: true, challenge: await approvals.challenge(approve, purpose, reference), credentialId: approve.credential_id || null };
         });
     }
@@ -109,7 +109,7 @@ export function createAccountAuth({ query, transaction, proof, sessions, devices
         const row = await sessions.read(sessionId);
         if (row.generation !== generation) reject('auth_session_stale');
         const sessionKey = await devices.byId(row.key_id);
-        const approve = await devices.requireApprover(sessionKey);
+        const approve = await devices.requireApprover(sessionKey, purpose);
         await approvals.consume(approval, purpose, `${sessionId}:${generation}:${subjectOf(purpose, subject)}`, approve);
         return { session: row, sessionKey, approve, deviceId: devices.deviceOf(sessionKey) };
     }

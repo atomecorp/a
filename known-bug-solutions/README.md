@@ -10,6 +10,7 @@ the established solution before attempting a new implementation.
 
 | Symptom | Folder |
 | --- | --- |
+| A list over the home: after touching a row, its picture shows but the rows stay in place over it and its tools band is missing until the finger moves again | [scroll-refresh-overtakes-tree-update](scroll-refresh-overtakes-tree-update/README.md) |
 | Visio: own tile (or a WebKit correspondent) upside down / sideways on iOS | [webkit-camera-rotation-ignored-by-webgpu](webkit-camera-rotation-ignored-by-webgpu/README.md) |
 | List in Simultaneous mode or Timeline: sound plays but the preview shows no video; no crossfade between videos; Timeline tracks stop after the first clip | [multitrack-preview-without-video](multitrack-preview-without-video/README.md) |
 | Monitor (capteurs) list: several sensors ticked by one touch, an unticked one comes back, rows blink | [monitor-list-ghost-selection-and-blink](monitor-list-ghost-selection-and-blink/README.md) |
@@ -76,6 +77,7 @@ the established solution before attempting a new implementation.
 | A new device or reinstalled browser restores nothing; re-imports duplicate contacts/appointments; old duplicate cards remain (merge on request) | [new-device-restores-nothing](new-device-restores-nothing/README.md) |
 | Contact favorites lost; Dashboard rows reload/flicker each visit; one heart shows a person several times | [home-panel-save-erases-favorites](home-panel-save-erases-favorites/README.md) |
 | Project → Dashboard pauses then snaps to the wallpaper | [dashboard-transition-jump](dashboard-transition-jump/README.md) |
+| eVe home: choosing in a rubric (a project…) shows the home before the destination; closing a panel (a recording's list, Créer › Texte, any level) lands on the home instead of the rubric | [rubric-choice-goes-back-home](rubric-choice-goes-back-home/README.md) |
 | Native contacts import stops after ~14 min or after a kill, then a reinstall duplicates the book | [contacts-import-interrupted-and-duplicated](contacts-import-interrupted-and-duplicated/README.md) |
 | iOS launch keeps "Le démarrage continue…" over a Dashboard entry or a late Main Toolbar mount | [ios-boot-presentation-contract](ios-boot-presentation-contract/README.md) |
 | A long press in a panel input box closes the field, the keyboard and the layout on finger lift | [ios-panel-input-fast-tap-blur](ios-panel-input-fast-tap-blur/README.md) |

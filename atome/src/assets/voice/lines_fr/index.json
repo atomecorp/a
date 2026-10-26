@@ -63,6 +63,24 @@
    "phonemes": "^ʒə sɥi disponibl , ɔ̃ pø komɑ̃se .$",
    "sha256": "68edb836229c46f6bb676181fd59146000a2b511efed1eebd164ceab5bd96cfa"
   },
+  "Attends, je prépare tes documents.": {
+   "file": "3b8466ee68da701f.wav",
+   "samples": 43264,
+   "phonemes": "^atɑ̃ , ʒə pʁepaʁ te dokymɑ̃ .$",
+   "sha256": "e42801b63253133747632b26680a40f999846f79c51c7b0ae7d483a63014b870"
+  },
+  "C’est bon, je suis prête. Je reste à l’écoute : pour m’arrêter, touche-moi. Pour travailler ou me demander quelque chose, parle-moi.": {
+   "file": "29f76a95a979a011.wav",
+   "samples": 180480,
+   "phonemes": "^sɛ bɔ̃ , ʒə sɥi pʁɛt . ʒə ʁɛst a lekut : puʁ maʁɛte , tuʃmwa . puʁ tʁavaje u mə dəmɑ̃de kɛlk ʃoz , paʁlmwa .$",
+   "sha256": "6e2f61330ecdb74308dbd2d6ec8fc3b669a2f7dc5e8fe87881b312987841cae5"
+  },
+  "C’est bon, je suis prête.": {
+   "file": "153e4767a6d13ec5.wav",
+   "samples": 39936,
+   "phonemes": "^sɛ bɔ̃ , ʒə sɥi pʁɛt .$",
+   "sha256": "6e1301381afd879292505ef14d0cf2adeb7bc49cf599d071f6432dae35616b66"
+  },
   "Le profil de cette discussion est incompatible avec le registre actuel.": {
    "file": "92306174d9374e2f.wav",
    "samples": 86784,

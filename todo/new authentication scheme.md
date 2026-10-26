@@ -441,6 +441,31 @@ Chrome DevTools Protocol virtual authenticator for WebAuthn.
 
 ## 13. Execution log
 
+### 2026-10-25 — Recovery code « Option 1 »: shown once, touch to copy, paste anywhere (Claude)
+
+User decision (2026-10-25): Home › Security keeps one « Créer un code de récupération » tool; each new code
+replaces the previous one (already so: `auth_recovery_codes` keyed by principal); the code is **never stored on
+the device** and never shown again — losing the note means creating a new code, not re-reading the old one.
+
+- Touching the shown code copies it through the shared clipboard facade (`writeSystemClipboardText`; native
+  bridge on Tauri/iOS, `navigator.clipboard` on the Web) and says « Code copié »; leaving the step (Back, panel
+  close) runs `clearSecrets`, so the code leaves memory and every tree. Owners: `bevy_panel_home_devices_view.js`,
+  `bevy_panel_home_security.js` (`home.security.recovery.copy`), i18n `eve.auth.recovery_code_*`.
+- The recovery code moved from the Dashboard's « Compte » brick to « Sécu. » (user: « dans réglage › sécurité »):
+  `buildRecoverySecurityNodes` (create, shown code, recovery alert, « Autoriser cet appareil à approuver ») renders in
+  the `security` part of `securityBody`; devices / open elsewhere / switch account stay in `account`.
+- Pasting into « J'ai perdu tous mes appareils » needed nothing new: every template field answers a long press with
+  the Mystic menu (Copier / Coller over the host clipboard, `bevy_panel_text_editing.js`).
+- §6.8 vs §4.4 divergence resolved: a device enrolled by a recovery (`enrolled_by` `recovery_code` or
+  `phone_recovery`, the account's only device since every other one was revoked) may run `recovery-code-set` during
+  its 72 h probation; every other approve purpose stays refused (`auth_devices.js#requireApprover(sessionKey, purpose)`).
+  A paired device in probation still cannot replace the code (it would void the owner's code).
+- Evidence: `tests/server/auth_accounts_v1.test.mjs` 16/16 (recovered device renews the code at once, `device-class`
+  still `auth_device_cooling_off`); `temp/auth_v1/recovery_code_ui.probe.mjs` 15/15 (real clicks, headed pixels:
+  create → copy → Back forgets → second browser long-press « Coller » → recovery request opened in the database).
+- Not done: a physical security key / passkey as an account-level recovery credential (§12, next lot); no
+  automatic prompt to create a new code right after a recovery.
+
 ### 2026-10-20 — One verified phone per account; number change onto a taken number (Claude)
 
 Audit: the active unique index `idx_principal_phone_active_unique` compares

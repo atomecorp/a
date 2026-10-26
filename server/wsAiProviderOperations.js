@@ -36,6 +36,7 @@ const ROUTES = Object.freeze({
     'skills.versions.content': ['GET', '/skills/:id/versions/:version/content']
 });
 
+const CATALOG_ACTIONS = new Set(['models', 'credential.status']);
 const activeFor = (connection) => {
     if (!operations.has(connection)) {
         const active = new Map();
@@ -154,8 +155,11 @@ export const handleWsAiProviderOperation = async (message, connection, {
             return reply(true, { cancelled: Boolean(pending?.principal === principal) });
         }
         if (action === 'realtime-connect' && [...active.values()].some(item => item.action === action)) throw new Error('provider_realtime_connect_pending');
-        const catalogs = [...active.values()].filter(item => item.action === 'models').length;
-        if (action === 'models' ? catalogs >= 8 : active.size - catalogs >= 4) throw new Error('provider_concurrency_limit');
+        // A model listing or a credential status is no provider work (a status reads our own
+        // vault): a launch asks one per provider at once, and with the assistant's own question
+        // they took the four places of the provider calls and the assistant was refused.
+        const catalogs = [...active.values()].filter(item => CATALOG_ACTIONS.has(item.action)).length;
+        if (CATALOG_ACTIONS.has(action) ? catalogs >= 8 : active.size - catalogs >= 4) throw new Error('provider_concurrency_limit');
         requestId = String(message.requestId || message.request_id || '');
         if (!requestId || active.has(requestId)) throw new Error('provider_request_id_invalid');
         const controller = new AbortController();

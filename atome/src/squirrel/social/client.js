@@ -1,5 +1,6 @@
 import { requestProviderService } from '../ai/provider_broker.js';
 import { saveExportFile } from '../shared/file_export.js';
+import { openExternalPage } from '../shared/external_page.js';
 
 // Client side of social sharing. Requests travel on the principal's
 // authenticated provider socket (web: Fastify; Tauri/iOS: relayed by the host);
@@ -17,38 +18,19 @@ const isOfficialUrl = (value) => {
 };
 
 const env = () => globalThis.window || null;
-const iosOpenUrl = () => env()?.webkit?.messageHandlers?.['squirrel.openURL'] || null;
 const tauriInvoke = () => {
     const win = env();
     return win?.__TAURI_INTERNALS__?.invoke?.bind(win.__TAURI_INTERNALS__) || win?.__TAURI__?.invoke?.bind(win.__TAURI__) || null;
 };
 
-// A web page must open its window during the user's gesture: `reserve()` is
-// called first (synchronously from the activation), the address is set once
-// the server has answered. Native hosts open the system browser instead.
-export function reserveExternalWindow() {
-    if (iosOpenUrl() || tauriInvoke() || typeof env()?.open !== 'function') return null;
-    const popup = env().open('about:blank', '_blank');
-    if (popup) popup.opener = null;
-    return popup || null;
-}
-
+// A provider's own page, opened by the shared owner (external_page.js) once its host is known official.
 export async function openOfficialPage(url, reserved = null) {
     if (!isOfficialUrl(url)) {
         reserved?.close?.();
         return { ok: false, error: 'social_request_invalid' };
     }
-    const ios = iosOpenUrl();
-    if (ios) { ios.postMessage({ url }); return { ok: true, via: 'ios' }; }
-    const invoke = tauriInvoke();
-    if (invoke) {
-        await invoke('plugin:opener|open_url', { url });
-        return { ok: true, via: 'tauri' };
-    }
-    const target = reserved && !reserved.closed ? reserved : env()?.open?.(url, '_blank', 'noopener');
-    if (!target) return { ok: false, error: 'social_handoff_unavailable', action_required: 'user_gesture_required' };
-    if (target === reserved) target.location.href = url;
-    return { ok: true, via: 'web' };
+    const opened = await openExternalPage(url, reserved);
+    return opened.ok ? opened : { ...opened, error: 'social_handoff_unavailable' };
 }
 
 // Connect = official login page + wait for the provider's redirect. The server

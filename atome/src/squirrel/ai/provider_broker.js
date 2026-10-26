@@ -105,7 +105,7 @@ export const requestProviderService = async (action, payload = {}, {
         const { FastifyAdapter, TauriAdapter } = await import('../apis/unified/adole.js');
         const { isTauriRuntime } = await import('../apis/unified/adole_api/runtime.js');
         const adapter = isTauriRuntime() ? TauriAdapter : FastifyAdapter;
-        const { configureTauriRemoteSync, ensureFastifyToken } = await import('../apis/unified/adole_api/auth_fastify_token.js');
+        const { ensureFastifyToken } = await import('../apis/unified/adole_api/auth_fastify_token.js');
         if (getSessionState()?.mode !== 'authenticated') throw new Error('not_authenticated');
         if (adapter === FastifyAdapter && !adapter.getToken()) {
             const auth = await ensureFastifyToken();
@@ -114,14 +114,13 @@ export const requestProviderService = async (action, payload = {}, {
         transport = adapter.ws;
         token = adapter.getToken();
         if (adapter === TauriAdapter && !token) throw new Error('not_authenticated');
+        // `ensureFastifyToken` returns the host relay configuration it performed (or
+        // shares the one in flight, or the one already done for these sessions):
+        // configuring it again doubled the work at every launch, behind the boot's
+        // writes, and the second configuration timed out.
         if (adapter === TauriAdapter) relinkNative = async () => {
             const auth = await ensureFastifyToken();
             if (!auth?.ok) return { reason: auth?.reason || 'provider_principal_unavailable' };
-            // `ensureFastifyToken` reports the sync result it already performed;
-            // the `unverified` path performs none, and that path is the common
-            // one when the socket was briefly unreachable.
-            const sync = auth.sync || await configureTauriRemoteSync();
-            if (sync?.ok !== true) return { reason: sync?.reason || 'sync_identity_configuration_failed' };
             return { token: adapter.getToken() };
         };
     }

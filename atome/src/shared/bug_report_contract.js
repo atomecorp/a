@@ -1,6 +1,6 @@
 // One contract for the bug reports, read by the eVe client that files them
 // (eVe/domains/diagnostics/bug_reports.js) and by the Fastify server that keeps
-// them (server/ws_bug_reports.js): the frame, the origins and the bounded shape
+// them (server/ws_bug_reports.js): the frames, the origins and the bounded shape
 // of a report. A report is filed by the user (the Avancé rubric of Réglages) or
 // by the assistant on the user's request or after a request it could not do.
 //
@@ -8,7 +8,10 @@
 // first filed under, so the reports filed before the Avancé rubric still list.
 export const BUG_REPORT_SOURCE_DOMAIN = 'assistant_debug';
 export const BUG_REPORT_SUBMIT = 'bug-report-submit';
+// Which of the device's sent reports the team marked fixed (scripts/bug_reports_admin.mjs).
+export const BUG_REPORT_STATUS = 'bug-report-status';
 export const BUG_REPORT_ORIGINS = Object.freeze(['user_requested', 'assistant_failure', 'manual']);
+export const BUG_REPORT_STATUS_MAX = 50;
 
 const ID = /^[A-Za-z0-9_-]{8,80}$/;
 const MAX_CONTEXT_BYTES = 32 * 1024;
@@ -51,4 +54,17 @@ export const normalizeBugReport = (input = {}) => {
         context, conversation: conversationOf(input.conversation),
         contact_consent: consent, contact: consent ? contactOf(input.contact) : null
     } };
+};
+
+// `refs` (`[{ id, created_iso }]`, the id and day that name a report's file) → `{ ok: true, refs }` or `{ ok: false, error }`.
+export const normalizeBugReportRefs = (refs) => {
+    if (!Array.isArray(refs) || !refs.length || refs.length > BUG_REPORT_STATUS_MAX) return fail('bug_report_refs_invalid');
+    const normalized = [];
+    for (const ref of refs) {
+        const id = String(ref?.id || '');
+        const created = new Date(String(ref?.created_iso || ''));
+        if (!ID.test(id) || Number.isNaN(created.getTime())) return fail('bug_report_refs_invalid');
+        normalized.push({ id, created_iso: created.toISOString() });
+    }
+    return { ok: true, refs: normalized };
 };

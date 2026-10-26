@@ -4,6 +4,7 @@ import { mapStateCurrentToAtome } from '../apis/unified/adole_api/atome_record_p
 import { create_atome, list_atomes, alter_atome, delete_atome } from '../apis/unified/adole_api/atomes.js';
 import { getSessionState } from '../apis/unified/adole_api/session.js';
 
+const ABSENT = new Set(['state not found', 'state_not_found', 'atome_not_available_locally']);
 // Conversations use the same authenticated event commit and state_current
 // projection as all other Atomes. No transcript database or local storage.
 export const createConversationStore = ({
@@ -12,6 +13,11 @@ export const createConversationStore = ({
     alter = alter_atome, remove = delete_atome, session = getSessionState, backend = () => isTauriRuntime() ? 'tauri' : 'fastify'
 } = {}) => {
     let pendingSave = Promise.resolve();
+    // A conversation not written yet: the server answers it, the local-first workspace throws it.
+    const read = async (id) => {
+        try { return await get(id); }
+        catch (error) { if (ABSENT.has(String(error?.message).toLowerCase())) return { ok: false, error: 'state_not_found' }; throw error; }
+    };
     const principal = () => {
         const current = session();
         if (current?.mode !== 'authenticated' || !current.user?.id) throw new Error('not_authenticated');
@@ -39,7 +45,7 @@ export const createConversationStore = ({
                         annotations: turn.annotations || [], modality: turn.modality, heard: turn.heard, interrupted: turn.interrupted, attachments: turn.attachments || [] };
                 });
                 const first = turns.find(turn => turn.role === 'user')?.text || '';
-                const existing = await get(snapshot.id);
+                const existing = await read(snapshot.id);
                 if (principal().user.id !== current.user.id) throw new Error('conversation_principal_changed');
                 if (existing?.ok === false && !['State not found', 'state_not_found'].includes(existing.error)) throw new Error(existing.error || 'conversation_storage_failed');
                 const record = mapStateCurrentToAtome(existing?.state);
@@ -57,7 +63,7 @@ export const createConversationStore = ({
                 if (retainAttachments && snapshot.turns?.some(turn => turn.attachments?.some(item => !item.asset_id))) {
                     const retained = await retainAttachments(snapshot);
                     if (principal().user.id !== current.user.id) throw new Error('conversation_principal_changed');
-                    const latest = await get(snapshot.id);
+                    const latest = await read(snapshot.id);
                     if (!latest?.state || latest.state.properties?.__deleted === true) throw new Error('conversation_deleted');
                     resultOf(await alter(snapshot.id, { turns: retained.turns }), current.backend);
                     return retained;
@@ -77,7 +83,7 @@ export const createConversationStore = ({
         },
         async load(id) {
             const current = principal();
-            const found = await get(id);
+            const found = await read(id);
             if (found?.ok === false) throw new Error(found.error || 'conversation_storage_failed');
             if (principal().user.id !== current.user.id) throw new Error('conversation_principal_changed');
             const record = mapStateCurrentToAtome(found.state);

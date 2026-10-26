@@ -30,6 +30,7 @@ const spokenTexts = () => {
         eveT('eve.voice.assistant.startup_line'), eveT('eve.voice.assistant.idle_hang_up'), eveT('eve.voice.assistant.touch_response'),
         ...eveTList('eve.voice.assistant.ready_lines.after_wait'),
         ...eveTList('eve.voice.assistant.ready_lines.direct'),
+        eveT('eve.voice.assistant.arrival.preparing'), ...eveTList('eve.voice.assistant.arrival.ready_first'), ...eveTList('eve.voice.assistant.arrival.ready'),
         ...byPrefix('eve.voice.assistant.error.'),
         ...byPrefix('eve.voice.wake.error.'),
         ...byPrefix('eve.first_launch.voice.'), eveT('eve.auth.pair_request_said'),

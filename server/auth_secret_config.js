@@ -40,3 +40,9 @@ export function loadLocalSocialConfig(projectRoot, env = process.env) {
     return loadLocalSecretFile({ env, keys: new Set(SOCIAL_CONFIG_KEYS), error: 'social_secret_file',
         file: env.ATOME_SOCIAL_ENV_FILE || path.join(projectRoot, 'Private', 'social.env') });
 }
+
+// The films of the Spectacles rubric (server/ws_shows.js): one TMDB key for every user, on the server only.
+export function loadLocalShowsConfig(projectRoot, env = process.env) {
+    return loadLocalSecretFile({ env, keys: new Set(['TMDB_API_KEY']), error: 'shows_secret_file',
+        file: env.ATOME_SHOWS_ENV_FILE || path.join(projectRoot, 'Private', 'tmdb.env') });
+}

@@ -3,7 +3,9 @@ import CryptoKit
 import UserNotifications
 #if canImport(AlarmKit)
 import AlarmKit
+import ActivityKit
 #endif
+import AppIntents
 import SwiftUI
 
 /// Native iOS alarms for the atome Calendar.
@@ -28,11 +30,18 @@ import SwiftUI
 ///   {"id":"alarm_…","title":"…","mode":"fixed","fireAt":"2026-10-03T06:30:00Z"}
 ///   {"id":"alarm_…","title":"…","mode":"relative","hour":7,"minute":30,
 ///    "weekdays":[2,3,4,5,6],"at":"2026-10-03T05:30:00Z"}
+///
+/// An alarm that launches something in atome (a project, a media, a tool) also
+/// carries `"sound":"alarm_gentle"` (its ringtone, bundled from AlarmSounds) and
+/// `"open":"Ouvrir"` (the label of its second button). iOS never lets an app open
+/// itself at a time: that button opens atome, which then runs the launch
+/// (`calendar_alarm_opened_take` hands the page the alarm that was opened).
 final class NativeCalendarAlarm {
     static let shared = NativeCalendarAlarm()
 
     private static let notificationPrefix = "atome_alarm_"
     private static let ownedIdsKey = "atome_native_alarm_ids"
+    private static let openedKey = "atome_native_alarm_opened"
 
     private init() {}
 
@@ -70,6 +79,8 @@ final class NativeCalendarAlarm {
             Self.cancel(ids: Self.ids(from: payload), completion: completion)
         case "calendar_alarm_list":
             Self.list(completion: completion)
+        case "calendar_alarm_opened_take":
+            Self.respond(completion, Self.takeOpened(), nil)
         case "calendar_alarm_sync":
             let descriptors = (payload["alarms"] as? [[String: Any]]) ?? []
             Self.schedule(descriptors: descriptors, cancelStaleAfter: true, completion: completion)
@@ -207,11 +218,15 @@ final class NativeCalendarAlarm {
         let uuid = nativeId(for: id)
         guard let schedule = alarmKitSchedule(from: descriptor) else { return .skipped }
         let title = (descriptor["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let eventId = descriptor["eventId"] as? String ?? ""
+        let openLabel = (descriptor["open"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let attributes = AlarmAttributes(
-            presentation: alarmPresentation(title: (title?.isEmpty == false) ? title! : "Atome"),
-            metadata: AtomeAlarmMetadata(eventId: descriptor["eventId"] as? String ?? "", alarmId: id),
+            presentation: alarmPresentation(title: (title?.isEmpty == false) ? title! : "Atome", openLabel: openLabel),
+            metadata: AtomeAlarmMetadata(eventId: eventId, alarmId: id),
             tintColor: .orange)
-        let configuration = AlarmManager.AlarmConfiguration<AtomeAlarmMetadata>.alarm(schedule: schedule, attributes: attributes)
+        let sound = (descriptor["sound"] as? String).map { AlertConfiguration.AlertSound.named("\($0).caf") } ?? .default
+        let configuration = AlarmManager.AlarmConfiguration<AtomeAlarmMetadata>.alarm(schedule: schedule, attributes: attributes,
+            secondaryIntent: openLabel.isEmpty ? nil : OpenAtomeAlarmIntent(eventId: eventId, alarmId: id), sound: sound)
         // Replace instead of stacking: the stable id makes the second schedule
         // the only one, but an explicit cancel also covers an entry whose
         // schedule changed shape (fixed → relative).
@@ -225,16 +240,41 @@ final class NativeCalendarAlarm {
     }
 
     @available(iOS 26.0, *)
-    private static func alarmPresentation(title: String) -> AlarmPresentation {
+    private static func alarmPresentation(title: String, openLabel: String) -> AlarmPresentation {
         let text = LocalizedStringResource("\(title)")
+        let open = openLabel.isEmpty ? nil : AlarmButton(text: LocalizedStringResource("\(openLabel)"),
+                                                          textColor: .white,
+                                                          systemImageName: "arrow.up.forward.app")
+        let behavior: AlarmPresentation.Alert.SecondaryButtonBehavior? = open == nil ? nil : .custom
         if #available(iOS 26.1, *) {
-            return AlarmPresentation(alert: AlarmPresentation.Alert(title: text))
+            return AlarmPresentation(alert: AlarmPresentation.Alert(title: text, secondaryButton: open, secondaryButtonBehavior: behavior))
         }
         return AlarmPresentation(alert: AlarmPresentation.Alert(
             title: text,
             stopButton: AlarmButton(text: LocalizedStringResource("Stop"),
                                     textColor: .white,
-                                    systemImageName: "stop.fill")))
+                                    systemImageName: "stop.fill"),
+            secondaryButton: open,
+            secondaryButtonBehavior: behavior))
+    }
+
+    // MARK: - Opened from the alarm
+
+    /// The « Ouvrir » button ran: keep which alarm it was until the page takes it (a
+    /// cold launch installs the page after the intent ran), then tell the page.
+    static func noteOpened(eventId: String, alarmId: String) {
+        UserDefaults.standard.set(["eventId": eventId, "alarmId": alarmId,
+                                   "openedAt": ISO8601DateFormatter().string(from: Date())], forKey: openedKey)
+        DispatchQueue.main.async {
+            WebViewManager.evaluateJS("window.dispatchEvent(new CustomEvent('eve:calendar-alarm-opened'));",
+                                      label: "calendar.alarm.opened", priority: .high)
+        }
+    }
+
+    private static func takeOpened() -> [String: Any] {
+        let opened = UserDefaults.standard.dictionary(forKey: openedKey)
+        UserDefaults.standard.removeObject(forKey: openedKey)
+        return ["ok": true, "opened": opened ?? NSNull()]
     }
 
     @available(iOS 26.0, *)
@@ -305,7 +345,7 @@ final class NativeCalendarAlarm {
         let content = UNMutableNotificationContent()
         let title = (descriptor["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         content.title = (title?.isEmpty == false) ? title! : "Atome"
-        content.sound = .default
+        content.sound = (descriptor["sound"] as? String).map { UNNotificationSound(named: UNNotificationSoundName("\($0).caf")) } ?? .default
         let trigger: UNNotificationTrigger?
         if mode == "relative", let hour = descriptor["hour"] as? Int, let minute = descriptor["minute"] as? Int {
             var components = DateComponents()
@@ -412,4 +452,27 @@ final class NativeCalendarAlarm {
 private struct AtomeAlarmMetadata: AlarmMetadata {
     var eventId: String
     var alarmId: String
+}
+
+/// The alarm's « Ouvrir » button: atome comes to the foreground and runs what the
+/// alarm launches (the page takes the opened alarm through `calendar_alarm_opened_take`).
+@available(iOS 26.0, *)
+struct OpenAtomeAlarmIntent: LiveActivityIntent {
+    static let title: LocalizedStringResource = "Open the alarm in atome"
+    static let openAppWhenRun = true
+
+    @Parameter(title: "Event") var eventId: String
+    @Parameter(title: "Alarm") var alarmId: String
+
+    init() {}
+
+    init(eventId: String, alarmId: String) {
+        self.eventId = eventId
+        self.alarmId = alarmId
+    }
+
+    func perform() async throws -> some IntentResult {
+        NativeCalendarAlarm.noteOpened(eventId: eventId, alarmId: alarmId)
+        return .result()
+    }
 }

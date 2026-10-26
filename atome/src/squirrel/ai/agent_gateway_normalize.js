@@ -11,13 +11,18 @@ const makeId = (prefix) => {
 };
 
 
+// JSON with sorted keys: two values equal once stored compare equal whatever the
+// key order a store returns them in (Swift's JSONSerialization does not keep it).
+// What JSON drops is dropped here too: an undefined or function member, and an
+// undefined or function array item reads null.
+const absentInJson = (value) => value === undefined || typeof value === 'function';
 const stableStringify = (value) => {
   if (value === null || value === undefined) return String(value);
   if (typeof value !== 'object') return JSON.stringify(value);
   if (Array.isArray(value)) {
-    return `[${value.map(stableStringify).join(',')}]`;
+    return `[${value.map(item => (absentInJson(item) ? 'null' : stableStringify(item))).join(',')}]`;
   }
-  const keys = Object.keys(value).sort();
+  const keys = Object.keys(value).filter(key => !absentInJson(value[key])).sort();
   return `{${keys.map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`;
 };
 

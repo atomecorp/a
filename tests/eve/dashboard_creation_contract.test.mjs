@@ -1,7 +1,7 @@
 import { test, expect, vi, afterEach } from 'vitest';
 import { createDashboardCreationActions } from '../../eVe/domains/dashboard/dashboard_creation_actions.js';
 import { createDashboardActionRuntime } from '../../eVe/domains/dashboard/dashboard_actions.js';
-import { dashboardCreationStep, DASHBOARD_PROJECT_GOALS, DASHBOARD_OBJECTIVES, dashboardObjectiveFor } from '../../eVe/domains/dashboard/dashboard_creation_catalog.js';
+import { DASHBOARD_PROJECT_GOALS, DASHBOARD_OBJECTIVES, dashboardObjectiveFor } from '../../eVe/domains/dashboard/dashboard_creation_catalog.js';
 import { dashboardDefaultTarget } from '../../eVe/domains/dashboard/dashboard_progression_catalog.js';
 import * as mutation from '../../eVe/intuition/tools/core/tool_runtime_atome_mutation_shared.js';
 import { buildBootstrapDefsA } from '../../eVe/intuition/tools/core/tool_runtime_bootstrap_defs_a.js';
@@ -101,13 +101,11 @@ const projectStore = (level, failure = null) => {
 
 test.each(['fr', 'en'])('official objectives remain distinct, localized and explicit about programme availability (%s)', locale => {
     setEveLocale(locale);
-    const cells = dashboardCreationStep({ categoryId: 'projects', path: ['health'] }).cells.slice(1);
-    expect(cells).toHaveLength(14);
-    expect(cells.slice(0, 13).map(cell => cell.action.payload.objective_id)).toEqual(ATOME_OBJECTIVE_IDS);
-    expect(cells.filter(cell => cell.availability === 'preview')).toHaveLength(12);
-    expect(cells.find(cell => cell.action.payload.objective_id === 'OBJ-02').availability).toBe('pilot');
-    expect(cells.at(-1).action.payload).toEqual({ kind: 'project', family: 'health', goal: 'free' });
-    expect(cells.every(cell => !eveT(cell.label_key).startsWith('eve.'))).toBe(true);
+    expect(DASHBOARD_OBJECTIVES.map(objective => objective.objective_id)).toEqual(ATOME_OBJECTIVE_IDS);
+    expect(DASHBOARD_OBJECTIVES.filter(objective => objective.availability === 'preview')).toHaveLength(12);
+    expect(dashboardObjectiveFor({ objective_id: 'OBJ-02' }).availability).toBe('pilot');
+    expect(DASHBOARD_PROJECT_GOALS.health).toContain('free');
+    expect(DASHBOARD_OBJECTIVES.every(objective => !eveT(objective.label_key).startsWith('eve.'))).toBe(true);
     expect(dashboardObjectiveFor({ goal: 'aging' }).objective_id).toBe('OBJ-10');
     expect(dashboardObjectiveFor({ goal: 'aesthetic' }).objective_id).toBe('OBJ-13');
     expect(DASHBOARD_PROJECT_GOALS.health).toContain('nutrition');

@@ -61,7 +61,8 @@ test('zoom and resize decode the same original, reuse matching rasters and relea
         expect(await resolver(photo)).toBe(large);
         const resized = await resolver({ ...photo, bounds: { ...photo.bounds, width: 200, height: 100 } });
         expect([resized.width, resized.height]).toEqual([1600, 800]);
-        expect(images.map(image => image.src)).toEqual(Array(3).fill(photo.content.source));
+        // Each decode reads the original once: the <img> decodes those bytes, never a second download.
+        expect(images.every(image => String(image.src).startsWith('blob:'))).toBe(true);
         expect(draws).toEqual(images);
         expect(images.every(image => image.released)).toBe(true);
         expect(canvases.every(canvas => canvas.width === 0 && canvas.height === 0)).toBe(true);

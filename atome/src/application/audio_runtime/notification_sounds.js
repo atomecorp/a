@@ -2,18 +2,31 @@ import { getAudioPlaybackAPI } from './audio_playback_api.js';
 
 // The sounds that announce what a person sends: a ding for a message, another
 // for an audio or video message, and one ring per call mode that repeats until
-// the call is answered, declined or missed. Files: atome/src/assets/audios/notifications
-// (CC0, see its README). They play on the canonical playback route, so Kira
-// renders them on Web, Tauri and iOS alike.
-const SOUND_ROOT = new URL('../../assets/audios/notifications/', import.meta.url);
-const SOUND_FILES = Object.freeze({
-    message: 'message.mp3',
-    media_message: 'media_message.mp3',
-    visio_call: 'visio_call_ring.mp3',
-    audio_call: 'audio_call_ring.mp3'
+// the call is answered, declined or missed; and the ringtones a calendar alarm
+// rings until it is stopped. Files: atome/src/assets/audios/notifications and
+// atome/src/assets/audios/alarms (CC0, see their READMEs). They play on the
+// canonical playback route, so Kira renders them on Web, Tauri and iOS alike.
+const SOUND_ROOT = new URL('../../assets/audios/', import.meta.url);
+// The alarm ringtones, gentlest first; `alarm_<id>` is also the name of the iOS copy AlarmKit plays.
+export const ALARM_RINGTONES = Object.freeze(['gentle', 'chime', 'birds', 'bells', 'gong', 'clock']);
+export const alarmRingtoneSound = (ringtone) => {
+    if (!ALARM_RINGTONES.includes(ringtone)) throw new Error(`alarm_ringtone_unknown:${ringtone}`);
+    return `alarm_${ringtone}`;
+};
+// Each sound and the period of its ring: one ring, then the silence before the next one
+// (a ringtone that already lasts its period loops without a gap).
+const SOUNDS = Object.freeze({
+    message: { file: 'notifications/message.mp3' },
+    media_message: { file: 'notifications/media_message.mp3' },
+    visio_call: { file: 'notifications/visio_call_ring.mp3', ringPeriodMs: 3000 },
+    audio_call: { file: 'notifications/audio_call_ring.mp3', ringPeriodMs: 3000 },
+    alarm_gentle: { file: 'alarms/alarm_gentle.mp3', ringPeriodMs: 3000 },
+    alarm_chime: { file: 'alarms/alarm_chime.mp3', ringPeriodMs: 6500 },
+    alarm_birds: { file: 'alarms/alarm_birds.mp3', ringPeriodMs: 10000 },
+    alarm_bells: { file: 'alarms/alarm_bells.mp3', ringPeriodMs: 10000 },
+    alarm_gong: { file: 'alarms/alarm_gong.mp3', ringPeriodMs: 8500 },
+    alarm_clock: { file: 'alarms/alarm_clock.mp3', ringPeriodMs: 6000 }
 });
-// One ring, then the silence before the next one.
-const RING_PERIOD_MS = 3000;
 const SOURCE_LAYER = 'notification_sound';
 
 export const createNotificationSoundPlayer = ({ env = globalThis, audio = getAudioPlaybackAPI(env), fetchImpl = (url) => env.fetch(url) } = {}) => {
@@ -21,7 +34,7 @@ export const createNotificationSoundPlayer = ({ env = globalThis, audio = getAud
     const loaded = new Map();
     let ring = null;
     const load = (name) => {
-        const file = SOUND_FILES[name];
+        const file = SOUNDS[name]?.file;
         if (!file) return Promise.reject(new Error(`notification_sound_unknown:${name}`));
         if (!loaded.has(name)) {
             const assetId = `__notification_sound_${name}`;
@@ -50,10 +63,12 @@ export const createNotificationSoundPlayer = ({ env = globalThis, audio = getAud
         // Rings until `stopRing()`; a new ring replaces the current one. The ring is
         // owned at once, so a stop that comes while its sound still loads is not missed.
         async ring(name) {
+            const period = SOUNDS[name]?.ringPeriodMs;
+            if (!period) throw new Error(`notification_sound_not_a_ring:${name}`);
             const previous = ring;
             const current = { name, started: false, timer: env.setInterval(() => {
                 if (ring === current) void start(name).catch((error) => console.error('[notification-sound] ring failed', error));
-            }, RING_PERIOD_MS) };
+            }, period) };
             ring = current;
             if (previous) {
                 env.clearInterval(previous.timer);

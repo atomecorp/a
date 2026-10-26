@@ -3,14 +3,14 @@ import Foundation
 extension FastifySyncClient {
     // Public, unauthenticated /ws/api operations owned by Fastify (YouTube search,
     // PeerTube search and stream resolution,
-    // television catalogue, YouTube live resolution, GPS resources, Open Food
+    // television catalogue, YouTube live resolution, the shows around a position, GPS resources, Open Food
     // Facts, the free book catalogs, the Médiathèque's free media, the bug reports kept on
     // atome.one). The phone has no copy of them: the frame is forwarded, without
     // any credential, to the configured Fastify server and its single reply is
     // returned.
     static let publicTypes: Set<String> = ["youtube-search", "peertube-search", "peertube-resolve", "tv-catalog",
-        "tv-resolve", "gps-resource", "food-facts",
-        "book-source", "book-fetch", "media-library-search", "media-library-fetch", "bug-report-submit"]
+        "tv-resolve", "shows-nearby", "gps-resource", "food-facts",
+        "book-source", "book-fetch", "media-library-search", "media-library-fetch", "bug-report-submit", "bug-report-status"]
 
     func relayPublic(_ payload: [String: Any], reply: @escaping ([String: Any]) -> Void) {
         let requestId = payload["requestId"] ?? NSNull()
