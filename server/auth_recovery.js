@@ -3,7 +3,6 @@ import { publicDeviceKey, randomHandle, reject, requireHandle } from './auth_lin
 import { normalizeDeviceMeta, PROBATION_MS } from './auth_devices.js';
 import { recoveryLookupInput, recoveryVerifierInput } from '../atome/src/shared/auth_recovery_code.js';
 
-export const RECOVERY_CODE_DELAY_MS = 60 * 60 * 1000;
 export const RECOVERY_PHONE_DELAY_MS = 72 * 60 * 60 * 1000;
 const RECOVERY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -27,10 +26,11 @@ export async function openRecoveryRequest({ query, proof, now }, principalId, { 
     return request;
 }
 
-// Losing every device: a recovery code (or, for phone accounts, the SMS link)
-// opens a delayed request that any still-enrolled device can cancel. Completing
-// it enrolls this device alone and revokes every other key and session.
-export function createRecovery({ query, transaction, proof, sessions, devices, handles, approvals, accounts, findById, notify, disconnectSession, now }) {
+// Opening the space without another device: the recovery code opens at once; the
+// SMS link of a phone account opens after its delay, cancellable by an enrolled
+// device. Completing adds this device to the account's others (user decision,
+// 2026-10-26: nothing is revoked) and tells them, as a pairing does.
+export function createRecovery({ query, transaction, proof, sessions, devices, handles, approvals, accounts, findById, notify, now }) {
     async function setCode(input) {
         if (!HEX_DIGEST.test(String(input.verifier)) || !HEX_DIGEST.test(String(input.lookup))) reject('auth_request_invalid');
         const principalId = await transaction(async () => {
@@ -68,15 +68,13 @@ export function createRecovery({ query, transaction, proof, sessions, devices, h
             const valid = !!stored && crypto.timingSafeEqual(Buffer.from(stored.verifier, 'hex'), Buffer.from(candidate, 'hex'));
             if (!valid) {
                 await proof.audit('recovery_code_failed', principalId, null);
-                return { request: { request_id: randomHandle(), not_before_ms: now() + RECOVERY_CODE_DELAY_MS } };
+                return { request: { request_id: randomHandle(), not_before_ms: now() } };
             }
             const approve = input.approve ? await approvals.register(input.approve, 'approve-key-register', `recovery:${keyId}`, keyId) : null;
             const request = await open(principalId, { channel: 'recovery_code', sessionKey: { keyId, jwk, connectionProof: input.connectionProof === true }, approve,
-                deviceMeta: input.deviceMeta, delay: RECOVERY_CODE_DELAY_MS });
+                deviceMeta: input.deviceMeta, delay: 0 });
             return { request, principalId };
         });
-        if (outcome.principalId) await notify(outcome.principalId, { kind: 'auth-recovery-started', recoveryId: outcome.request.request_id,
-            notBefore: outcome.request.not_before_ms });
         return { ok: true, recoveryId: outcome.request.request_id, notBefore: outcome.request.not_before_ms };
     }
     async function cancel(input) {
@@ -116,10 +114,6 @@ export function createRecovery({ query, transaction, proof, sessions, devices, h
             if (row.not_before_ms > now()) reject('auth_recovery_not_ready');
             const account = await findById(row.principal_id);
             if (!account) reject('auth_recovery_unavailable');
-            const revoked = [];
-            for (const key of await query('all', 'SELECT DISTINCT coalesce(device_id, key_id) AS device FROM auth_device_keys WHERE principal_id = ? AND revoked_ms IS NULL', [row.principal_id])) {
-                revoked.push(...await devices.revokeDevice(row.principal_id, key.device));
-            }
             const { keyId, jwk, connectionProof } = JSON.parse(row.requester_session_key);
             const meta = JSON.parse(row.device_meta);
             const restrictedUntil = now() + PROBATION_MS;
@@ -134,10 +128,11 @@ export function createRecovery({ query, transaction, proof, sessions, devices, h
             await query('run', "UPDATE auth_recovery_requests SET state = 'completed' WHERE request_id = ?", [row.request_id]);
             await query('run', `UPDATE auth_recovery_requests SET state = 'cancelled' WHERE principal_id = ? AND state = 'pending'`, [row.principal_id]);
             await proof.audit('recovery_completed', row.principal_id, row.request_id);
-            return { account, keyId, revoked, canApprove: approve?.assurance === 'hardware_uv' };
+            return { account, keyId, deviceId: row.requester_device_id, ...meta, canApprove: approve?.assurance === 'hardware_uv' };
         });
-        for (const id of outcome.revoked) await disconnectSession(id);
         const session = await sessions.create(outcome.account, outcome.keyId);
+        await notify(outcome.account.user_id, { kind: 'auth-device-added', deviceId: outcome.deviceId,
+            label: outcome.label, platform: outcome.platform }, { exceptDeviceId: outcome.deviceId });
         // The code is consumed: the user is asked to create a new one right away.
         return { ...session, canApprove: outcome.canApprove, recoveryCodeRequired: true, probationUntil: now() + PROBATION_MS };
     }

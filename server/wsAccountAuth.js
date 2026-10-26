@@ -46,7 +46,7 @@ export function createWsAccountAuth({ service, database, jwtSecret, createAccoun
     const approvals = createApprovals({ query, proof, webauthn: resolveWebAuthnConfig(), now });
     const accounts = createAccountAuth({ query, transaction, proof, sessions, devices, handles, approvals, createAccount, notify, disconnectSession, now, billing });
     const pairing = createPairing({ query, transaction, proof, sessions, devices, handles, approvals, accounts, findById, notify, disconnectSession, now });
-    const recovery = createRecovery({ query, transaction, proof, sessions, devices, handles, approvals, accounts, findById, notify, disconnectSession, now });
+    const recovery = createRecovery({ query, transaction, proof, sessions, devices, handles, approvals, accounts, findById, notify, now });
     // The waiting device hears about its request on the socket it asked from.
     const tellRequester = (pairId, state) => {
         for (const connection of wsApiConnections) {

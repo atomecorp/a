@@ -43,8 +43,8 @@ export function createDeviceRegistry({ query, now }) {
         WHERE principal_id = ? AND device_id = ? AND key_role = 'approve' AND revoked_ms IS NULL
         ORDER BY enrolled_ms DESC LIMIT 1`, [sessionKey.principal_id, deviceOf(sessionKey)]);
     // A remote approval needs a user-verified key on a personal device out of probation.
-    // A device enrolled by a recovery is the account's only device: it may replace
-    // the consumed recovery code at once, so the account is never left without one.
+    // A device enrolled by a recovery may replace the code it consumed at once, so the
+    // account is never left without one.
     async function requireApprover(sessionKey, purpose) {
         if (!sessionKey || sessionKey.revoked_ms !== null) reject('auth_session_invalid');
         const approve = await approveKeyOf(sessionKey);

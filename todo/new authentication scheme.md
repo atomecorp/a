@@ -441,6 +441,18 @@ Chrome DevTools Protocol virtual authenticator for WebAuthn.
 
 ## 13. Execution log
 
+### 2026-10-26 — Recovery code: immediate and additive (user decision) (Claude)
+
+User decision, overriding the « Assumed » values of §5 F6 / §6.8: the recovery code opens the space **at once**
+(no 1 h delay, no wait screen, no « Ouvert sur l'espace » confirmation) and **adds** this device to the account's
+others — nothing is revoked; revoking stays an explicit action from Home › Devices. A complete code (pasted or typed
+to its end, checked by its check group) or Enter starts the recovery by itself; the screen keeps the code field,
+« Par SMS (72 h) » and Back. A refused code says « Récupération impossible… », leaves no pending attempt and an empty
+field. Completion notifies the other devices `auth-device-added` (as a pairing does); the code is consumed and the
+recovered device may set a new one at once. The SMS channel keeps its 72 h delay (now also additive).
+Evidence: `tests/server/auth_accounts_v1.test.mjs` (auth suite green), `temp/auth_v1/recovery_code_ui.probe.mjs`
+18/18 three runs out of four (one earlier run 17/18, failing check not captured), Dashboard shown after recovery.
+
 ### 2026-10-26 — The recovery code alone names its account; refusals say their reason (Claude)
 
 User report: « J'ai perdu tous mes appareils », code pasted, identifier left empty, countdown 59:58, « Récupérer mon

@@ -25,13 +25,16 @@ export function generateRecoveryCode(crypto = globalThis.crypto) {
     return { code: [...groups, check(core)].join('-'), core };
 }
 
+// Whether a typed or pasted value is a whole code whose check group agrees.
+export function isCompleteRecoveryCode(value) {
+    const normalized = normalizeRecoveryCode(value);
+    return normalized.length === CORE_LENGTH + 2 && check(normalized.slice(0, CORE_LENGTH)) === normalized.slice(CORE_LENGTH);
+}
+
 // The core of a typed code, or an explicit error when its check group disagrees.
 export function readRecoveryCode(value) {
-    const normalized = normalizeRecoveryCode(value);
-    if (normalized.length !== CORE_LENGTH + 2) throw new Error('auth_recovery_code_invalid');
-    const core = normalized.slice(0, CORE_LENGTH);
-    if (check(core) !== normalized.slice(CORE_LENGTH)) throw new Error('auth_recovery_code_invalid');
-    return core;
+    if (!isCompleteRecoveryCode(value)) throw new Error('auth_recovery_code_invalid');
+    return normalizeRecoveryCode(value).slice(0, CORE_LENGTH);
 }
 
 export const recoveryVerifierInput = (principalId, core) => `atome.recovery.v1\0${principalId}${normalizeRecoveryCode(core)}`;
