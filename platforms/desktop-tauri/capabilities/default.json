@@ -25,6 +25,7 @@
     "billing-store",
     "assistant-link",
     "notifications",
+    "streaming-view",
     "personal-import"
   ]
 }

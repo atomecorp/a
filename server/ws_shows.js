@@ -1,22 +1,28 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { logStructured } from './server_logger.js';
-import { loadLocalShowsConfig } from './auth_secret_config.js';
+import { loadLocalShowsConfig, loadLocalTourismConfig } from './auth_secret_config.js';
+import { TOURISM_KINDS, readTourism } from './shows_tourism.js';
 
 // Public `shows-nearby` operation of /ws/api: what is on around a position, for the
 // Spectacles rubric of the Dashboard (eVe/domains/shows/shows_client.js). Every
 // answer is one list of `show` entries, a page at a time (`pageToken`):
 //
-// - OpenAgenda kinds (`concerts`, `stage`, `expos`, `festivals`, `family`, `free`,
+// - OpenAgenda kinds (`concerts`, `stage`, `expos`, `events`, `family`, `free`,
 //   `sport`): the public OpenAgenda events dataset (OpenDataSoft, no key), within
 //   `radiusKm` of `lat`/`lon`, soonest first.
-// - `cinemas`: the cinemas of France from OpenStreetMap (OpenDataSoft, no key),
-//   nearest first, with their own website (sessions are never invented here).
+// - Places (`cinemas`, `heritage`, `restaurants`, `bars`): the places of France from
+//   OpenStreetMap (OpenDataSoft, no key, ODbL), nearest first, with their own website
+//   (sessions are never invented here).
 // - `films`: the films showing in `region` (TMDB `now_playing`, `TMDB_API_KEY`: the
 //   server's environment, in development also `Private/tmdb.env`), read once for
 //   every user and kept FILM_TTL_MS (TMDB asks for few calls).
 // - `matches`: the next match of each French professional league (TheSportsDB free
 //   key), kept MATCH_TTL_MS (the free key allows 30 calls a minute).
+// - Tourism kinds (`museums`, `nature`, `hiking`, `experiences`, `wellbeing`): the
+//   DATAtourisme places around (server/shows_tourism.js, `DATATOURISME_API_KEY`).
+// - `sources`: which keyed sources this server holds (`{ tourism }`), so the rubric lays
+//   only the plates it can fill.
 
 const ODS = 'https://public.opendatasoft.com/api/explore/v2.1/catalog/datasets';
 const TMDB = 'https://api.themoviedb.org/3';
@@ -43,12 +49,22 @@ const AGENDA_WORDS = Object.freeze({
     concerts: ['concert', 'musique', 'jazz', 'rock', 'chanson', 'récital'],
     stage: ['théâtre', 'humour', 'cirque', 'opéra', 'danse', 'spectacle', 'marionnette', 'stand-up'],
     expos: ['exposition', 'expo', 'musée', 'vernissage'],
-    festivals: ['festival'],
+    events: ['festival', 'fête', 'carnaval', 'marché', 'brocante', 'vide-grenier', 'foire', 'salon', 'kermesse'],
     family: ['jeune public', 'enfant', 'famille', 'conte'],
     sport: ['sport', 'match', 'course', 'tournoi', 'marathon', 'football', 'rugby', 'basket', 'handball', 'vélo', 'randonnée'],
     free: []
 });
-const KINDS = new Set([...Object.keys(AGENDA_WORDS), 'cinemas', 'films', 'matches']);
+// What each place kind reads: its OpenStreetMap dataset, the `type` values it keeps (a heritage
+// place worth a visit, not a plaque, a tomb or a wayside cross) and the fields that dataset has.
+const PLACES = Object.freeze({
+    cinemas: { dataset: 'osm-france-cinema', types: [], fields: 'website,phone' },
+    heritage: { dataset: 'osm-france-historic', fields: 'website,wikipedia', types: ['castle', 'manor', 'fort', 'city_gate', 'citywalls', 'tower',
+        'ruins', 'archaeological_site', 'monument', 'church', 'chapel', 'monastery', 'place_of_worship'] },
+    restaurants: { dataset: 'osm-france-food-service', types: ['restaurant', 'cafe'], fields: 'website,phone' },
+    bars: { dataset: 'osm-france-food-service', types: ['bar', 'pub', 'biergarten'], fields: 'website,phone' }
+});
+const KINDS = new Set([...Object.keys(AGENDA_WORDS), ...Object.keys(PLACES), ...Object.keys(TOURISM_KINDS), 'films', 'matches', 'sources']);
+const UNPOSITIONED = new Set(['films', 'matches', 'sources']);
 
 const text = value => String(value == null ? '' : value).trim();
 // A word typed in the bottom field, safe inside an ODSQL string.
@@ -106,9 +122,16 @@ const agendaWhere = (kind, { lat, lon, radiusKm, query }) => {
         ...(query ? [`(title_fr like "${query}" or keywords_fr like "${query}" or location_name like "${query}" or location_city like "${query}")`] : [])
     ].join(' and ');
 };
+// The organiser's booking (OpenAgenda `registration`: links, e-mails, phones): its first https link,
+// the ticketing or booking page the « Billets » tool opens; none when the organiser gave none.
+const ticketUrl = (value) => {
+    let entries = value;
+    try { entries = typeof value === 'string' ? JSON.parse(value) : value; } catch { return ''; }
+    return (Array.isArray(entries) ? entries : []).filter(entry => entry?.type === 'link').map(entry => httpsUrl(entry.value)).find(Boolean) || '';
+};
 const readAgenda = async (kind, spec, { fetchResource, now }) => {
     const params = new URLSearchParams({ where: agendaWhere(kind, spec), order_by: 'firstdate_begin', limit: String(PAGE_SIZE), offset: String(spec.offset),
-        select: 'uid,title_fr,description_fr,daterange_fr,firstdate_begin,firstdate_end,timings,conditions_fr,thumbnail,image,canonicalurl,location_name,location_address,location_city,location_coordinates' });
+        select: 'uid,title_fr,description_fr,daterange_fr,firstdate_begin,firstdate_end,timings,conditions_fr,registration,thumbnail,image,canonicalurl,location_name,location_address,location_city,location_coordinates' });
     const payload = await readJson(fetchResource, `${ODS}/evenements-publics-openagenda/records?${params}`);
     const records = Array.isArray(payload?.results) ? payload.results : [];
     return { total: Number(payload?.total_count) || 0, entries: records.map((record) => {
@@ -116,21 +139,29 @@ const readAgenda = async (kind, spec, { fetchResource, now }) => {
         return { id: `agenda_${text(record.uid)}`, kind: 'event', title: text(record.title_fr), summary: text(record.description_fr), dateLabel: text(record.daterange_fr),
             start: when.start, end: when.end, place: text(record.location_name), address: text(record.location_address), city: text(record.location_city),
             lat: at.lat, lon: at.lon, distanceKm: distanceKm(spec, at.lat, at.lon), price: text(record.conditions_fr),
-            image: httpsUrl(record.thumbnail || record.image), url: httpsUrl(record.canonicalurl) };
+            image: httpsUrl(record.thumbnail || record.image), url: httpsUrl(record.canonicalurl), ticketUrl: ticketUrl(record.registration) };
     }) };
 };
 
-const readCinemas = async (spec, { fetchResource }) => {
-    const where = [`within_distance(meta_geo_point, ${point(spec)}, ${spec.radiusKm}km)`,
+// A Wikipedia reference of OpenStreetMap (`fr:Château de Versailles`) → its page.
+const wikipediaUrl = (value) => {
+    const [, language, title] = /^([a-z]{2,3}):(.+)$/.exec(text(value)) || [];
+    return language ? httpsUrl(`https://${language}.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, '_'))}`) : '';
+};
+const readPlaces = async (kind, spec, { fetchResource }) => {
+    const { dataset, types, fields } = PLACES[kind];
+    const where = [`within_distance(meta_geo_point, ${point(spec)}, ${spec.radiusKm}km)`, 'name is not null',
+        ...(types.length ? [`(${types.map(type => `type = "${type}"`).join(' or ')})`] : []),
         ...(spec.query ? [`(name like "${spec.query}" or meta_name_com like "${spec.query}")`] : [])].join(' and ');
     const params = new URLSearchParams({ where, order_by: `distance(meta_geo_point, ${point(spec)})`, limit: String(PAGE_SIZE), offset: String(spec.offset),
-        select: 'meta_osm_id,name,website,phone,meta_name_com,meta_geo_point' });
-    const payload = await readJson(fetchResource, `${ODS}/osm-france-cinema/records?${params}`);
+        select: `meta_osm_id,name,meta_name_com,meta_geo_point,${fields}` });
+    const payload = await readJson(fetchResource, `${ODS}/${dataset}/records?${params}`);
     const records = (Array.isArray(payload?.results) ? payload.results : []).filter(record => text(record.name));
     return { total: Number(payload?.total_count) || 0, entries: records.map((record) => {
         const at = geo(record.meta_geo_point);
-        return { id: `cinema_${text(record.meta_osm_id)}`, kind: 'cinema', title: text(record.name), place: text(record.name), city: text(record.meta_name_com),
-            lat: at.lat, lon: at.lon, distanceKm: distanceKm(spec, at.lat, at.lon), phone: text(record.phone), url: httpsUrl(record.website), image: '' };
+        return { id: `${kind}_${text(record.meta_osm_id)}`, kind: kind === 'cinemas' ? 'cinema' : 'place', title: text(record.name), place: text(record.name),
+            city: text(record.meta_name_com), lat: at.lat, lon: at.lon, distanceKm: distanceKm(spec, at.lat, at.lon), phone: text(record.phone),
+            url: httpsUrl(record.website) || wikipediaUrl(record.wikipedia), image: '' };
     }) };
 };
 
@@ -175,8 +206,7 @@ const readSpec = (message) => {
     const radiusKm = Math.round(Number(message.radiusKm)), offset = message.pageToken ? Number(message.pageToken) : 0;
     const region = text(message.region).toUpperCase(), language = text(message.language).toLowerCase();
     if (!KINDS.has(kind) || !Number.isInteger(offset) || offset < 0 || offset > MAX_OFFSET) return null;
-    const positioned = kind !== 'films' && kind !== 'matches';
-    if (positioned && (!(lat >= -90 && lat <= 90) || !(lon >= -180 && lon <= 180) || !(radiusKm >= 1 && radiusKm <= 100))) return null;
+    if (!UNPOSITIONED.has(kind) && (!(lat >= -90 && lat <= 90) || !(lon >= -180 && lon <= 180) || !(radiusKm >= 1 && radiusKm <= 100))) return null;
     if (kind === 'films' && (!/^[A-Z]{2}$/.test(region) || !/^[a-z]{2}$/.test(language))) return null;
     return { kind, lat, lon, radiusKm, offset, region, language, query: literal(message.query) };
 };
@@ -187,17 +217,22 @@ export const handleWsShows = async (message, address, { fetchResource = fetch, n
     const spec = readSpec(message);
     if (!spec) return reply(requestId, { ok: false, error: 'shows_request_invalid' });
     if (rateLimited(address, now)) return reply(requestId, { ok: false, error: 'shows_rate_limited' });
-    if (spec.kind === 'films' && !localConfigRead.has(env)) { loadLocalShowsConfig(PROJECT_ROOT, env); localConfigRead.add(env); }
-    const key = text(env.TMDB_API_KEY);
+    if (!localConfigRead.has(env)) { loadLocalShowsConfig(PROJECT_ROOT, env); loadLocalTourismConfig(PROJECT_ROOT, env); localConfigRead.add(env); }
+    const key = text(env.TMDB_API_KEY), tourismKey = text(env.DATATOURISME_API_KEY);
+    if (spec.kind === 'sources') return reply(requestId, { ok: true, entries: [], nextPageToken: '', sources: { tourism: !!tourismKey } });
     if (spec.kind === 'films' && !key) return reply(requestId, { ok: false, error: 'shows_films_not_configured' });
+    const tourism = Object.hasOwn(TOURISM_KINDS, spec.kind);
+    if (tourism && !tourismKey) return reply(requestId, { ok: false, error: 'shows_tourism_not_configured' });
     try {
-        const deps = { fetchResource, now, key };
-        const { total, entries } = spec.kind === 'cinemas' ? await readCinemas(spec, deps)
+        const deps = { fetchResource, now, key, distanceKm };
+        const { total, entries } = tourism ? await readTourism(spec.kind, spec, { ...deps, key: tourismKey })
+            : Object.hasOwn(PLACES, spec.kind) ? await readPlaces(spec.kind, spec, deps)
             : spec.kind === 'films' ? pageOf(await readFilms(spec, deps), spec)
                 : spec.kind === 'matches' ? pageOf(await readMatches(deps), spec) : await readAgenda(spec.kind, spec, deps);
         const next = spec.offset + PAGE_SIZE;
         return reply(requestId, { ok: true, entries, nextPageToken: next < Math.min(total, MAX_OFFSET) ? String(next) : '' });
     } catch (error) {
+        if (error?.message === 'shows_tourism_busy') return reply(requestId, { ok: false, error: 'shows_tourism_busy' });
         log('warn', { component: 'shows', request_id: requestId, message: 'shows_unavailable',
             data: { kind: spec.kind, status: error?.status || 0, cause: String(error?.message || error).slice(0, 300) } });
         return reply(requestId, { ok: false, error: 'shows_unavailable' });

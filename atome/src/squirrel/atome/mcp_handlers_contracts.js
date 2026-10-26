@@ -7,6 +7,8 @@ import { MUSIC_COMMANDS, validateMusicInput } from '../music/contracts.js';
 import { GPS_COMMANDS, validateGpsInput } from '../gps/contracts.js';
 import { TRAINING_COMMANDS, validateTrainingInput } from '../training/contracts.js';
 import { SHOPPING_COMMANDS, validateShoppingInput } from '../shopping/contracts.js';
+import { SHOWS_COMMANDS, validateShowsInput } from '../shows/contracts.js';
+import { FILMS_COMMANDS, validateFilmsInput } from '../films/contracts.js';
 import { FOOD_COMMANDS, validateFoodInput } from '../food/contracts.js';
 import { DASHBOARD_PROGRESSION_COMMANDS, validateDashboardProgressionInput } from '../dashboard_progression/contracts.js';
 import { ensureRuntimeToolApi } from './mcp_bridges.js';
@@ -44,6 +46,10 @@ export const createMcpTrainingHandlers = () => createContractHandlers({
     commands: TRAINING_COMMANDS, validate: validateTrainingInput, layer: 'atome_mcp_training', noClient: 'AUTH_REQUIRED' });
 export const createMcpShoppingHandlers = () => createContractHandlers({
     commands: SHOPPING_COMMANDS, validate: validateShoppingInput, layer: 'atome_mcp_shopping', noClient: 'AUTH_REQUIRED' });
+export const createMcpShowsHandlers = () => createContractHandlers({
+    commands: SHOWS_COMMANDS, validate: validateShowsInput, layer: 'atome_mcp_shows', noClient: 'PRESENTATION_UNAVAILABLE' });
+export const createMcpFilmsHandlers = () => createContractHandlers({
+    commands: FILMS_COMMANDS, validate: validateFilmsInput, layer: 'atome_mcp_films', noClient: 'PRESENTATION_UNAVAILABLE' });
 export const createMcpFoodHandlers = () => createContractHandlers({
     commands: FOOD_COMMANDS, validate: validateFoodInput, layer: 'atome_mcp_food', noClient: 'HOST_UNSUPPORTED' });
 export const createMcpDashboardProgressionHandlers = () => createContractHandlers({

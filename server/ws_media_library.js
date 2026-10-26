@@ -15,13 +15,16 @@
 //   - NASA Image and Video Library: images and videos (public domain media; its sounds
 //     are hour-long podcasts, without duration nor waveform: left out);
 //   - Internet Archive: videos marked public domain or CC0 with an MP4 file, never one behind
-//     a login (`access-restricted-item`: its file answers 401).
+//     a login (`access-restricted-item`: its file answers 401); its feature films (kind `film`,
+//     Divertissement › Vidéo › Films & séries) too, whole films only ever streamed, never imported.
 import { lookup } from 'node:dns/promises';
 import { createAddressRateLimit, createPublicSourceAccess } from './public_source_fetch.js';
 
 // Freesound's CDN serves about 75 KB/s: a range must arrive within the 20 s of one request.
 const CHUNK_BYTES = 512 * 1024;
 const MAX_FILE_BYTES = 256 * 1024 * 1024;
+// A whole film streams (its player reads ranges as it plays), it is never read whole here.
+const MAX_FILM_BYTES = 4 * 1024 * 1024 * 1024;
 const MAX_RECORD_BYTES = 4 * 1024 * 1024;
 const PER_SOURCE = 12;
 const SOURCE_BUDGET_MS = 8000;
@@ -29,7 +32,8 @@ const SOURCE_BUDGET_MS = 8000;
 const THEMES = Object.freeze({
     image: ['nature', 'ocean', 'mountain', 'flower', 'forest', 'city', 'animal', 'bird', 'sky', 'river', 'galaxy', 'winter'],
     video: ['ocean', 'earth', 'launch', 'aurora', 'nature', 'city', 'storm', 'animals', 'space station', 'clouds', 'volcano', 'travel'],
-    audio: ['rain', 'birds', 'piano', 'wind', 'waves', 'forest', 'guitar', 'thunder', 'city', 'drum', 'river', 'bells']
+    audio: ['rain', 'birds', 'piano', 'wind', 'waves', 'forest', 'guitar', 'thunder', 'city', 'drum', 'river', 'bells'],
+    film: ['comedy', 'western', 'noir', 'mystery', 'adventure', 'drama', 'romance', 'science fiction', 'horror', 'chaplin', 'hitchcock', 'musical']
 });
 const RESULT_TTL_MS = 60 * 60_000;
 const MAX_RESULTS_KEPT = 5000;
@@ -41,11 +45,13 @@ const HOSTS = Object.freeze({
     archive: { hosts: ['archive.org'], suffixes: ['.archive.org'] }
 });
 const ID = /^(openverse_image|openverse_audio|nasa|archive):[A-Za-z0-9 ._\-()',]{1,160}$/;
-const KINDS = new Set(['image', 'video', 'audio']);
+const KINDS = new Set(['image', 'video', 'audio', 'film']);
 
 const allowedHost = (provider, host) => HOSTS[provider].hosts.includes(host) || HOSTS[provider].suffixes.some(suffix => host.endsWith(suffix));
 const access = createPublicSourceAccess({ allowedHost, sourceCode: 'media_library_source', fetchCode: 'media_library_fetch',
     chunkBytes: CHUNK_BYTES, maxFileBytes: MAX_FILE_BYTES });
+const filmAccess = createPublicSourceAccess({ allowedHost, sourceCode: 'media_library_source', fetchCode: 'media_library_fetch',
+    chunkBytes: CHUNK_BYTES, maxFileBytes: MAX_FILM_BYTES });
 const { fail } = access;
 // Per client (its account, else its address): what reaches a provider anew (a search, a picture,
 // a waveform, a stream address, a file's first range), and the following ranges of the files it
@@ -105,16 +111,28 @@ const nasa = (kind) => async (query, context) => {
 const archiveVideos = async (query, context) => {
     const search = `(${query}) AND mediatype:(movies) AND licenseurl:(*publicdomain* OR *zero*) AND item_size:[1 TO ${ARCHIVE_MAX_ITEM_BYTES}] AND NOT access-restricted-item:true AND format:(MPEG4 OR "h.264" OR "h.264 IA")`;
     const page = await readJson('archive', `https://archive.org/advancedsearch.php?q=${encodeURIComponent(search)}&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=licenseurl&rows=${PER_SOURCE}&output=json`, context);
-    return (page?.response?.docs || []).map(doc => ({ id: `archive:${doc.identifier}`, provider: 'archive', kind: 'video', title: String(doc.title || '').trim(),
+    return archiveItems(page, 'video');
+};
+// The results of an Internet Archive search as `kind` items, each resolving to its smallest MP4.
+const archiveItems = (page, kind) => {
+    const docs = page?.response?.docs || [];
+    return docs.map(doc => ({ id: `archive:${doc.identifier}`, provider: 'archive', kind, title: String(doc.title || '').trim(),
         thumb: `https://archive.org/services/img/${encodeURIComponent(doc.identifier)}`, license: /zero/.test(doc.licenseurl) ? 'cc0' : 'pdm',
         author: [doc.creator].flat().filter(Boolean).join(', '), source_url: `https://archive.org/details/${encodeURIComponent(doc.identifier)}`,
+        year: String(doc.year || '').slice(0, 4),
         resolve: async (ctx) => {
             const meta = await readJson('archive', `https://archive.org/metadata/${encodeURIComponent(doc.identifier)}`, ctx);
             const mp4 = (meta?.files || []).filter(file => /\.mp4$/i.test(file.name) && Number(file.size) > 0).sort((a, b) => Number(a.size) - Number(b.size))[0];
             return mp4 ? `https://archive.org/download/${encodeURIComponent(doc.identifier)}/${mp4.name.split('/').map(encodeURIComponent).join('/')}` : '';
         } })).filter(item => ID.test(item.id));
 };
-const SOURCES = Object.freeze({ image: [openverse('image'), nasa('image')], video: [nasa('video'), archiveVideos], audio: [openverse('audio')] });
+// Its feature films marked public domain or CC0, the most watched first: the smallest MP4 of each streams.
+const archiveFilms = async (query, context) => {
+    const search = `(${query}) AND collection:(feature_films) AND licenseurl:(*publicdomain* OR *zero*) AND NOT access-restricted-item:true AND format:(MPEG4 OR "h.264" OR "h.264 IA")`;
+    const page = await readJson('archive', `https://archive.org/advancedsearch.php?q=${encodeURIComponent(search)}&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=licenseurl&fl[]=year&sort[]=downloads+desc&rows=${PER_SOURCE * 2}&output=json`, context);
+    return archiveItems(page, 'film');
+};
+const SOURCES = Object.freeze({ image: [openverse('image'), nasa('image')], video: [nasa('video'), archiveVideos], audio: [openverse('audio')], film: [archiveFilms] });
 
 // What the client receives of a result: never an address.
 const publicItem = ({ resolve: _resolve, file: _file, thumb, waveform, points: _points, ...item }) => ({ ...item, has_thumb: !!thumb, has_waveform: !!waveform });
@@ -166,7 +184,7 @@ const fileOf = async (item, variant, context) => {
     }
     item.file ||= item.resolve ? await item.resolve(context) : '';
     if (!item.file) throw fail('media_library_source_format_missing');
-    const name = nameOf(item.title, item.file, item.kind === 'image' ? 'jpg' : item.kind === 'video' ? 'mp4' : 'mp3');
+    const name = nameOf(item.title, item.file, item.kind === 'image' ? 'jpg' : ['video', 'film'].includes(item.kind) ? 'mp4' : 'mp3');
     return { url: item.file, mime: mimeOf(name), name };
 };
 
@@ -190,8 +208,11 @@ export async function handleWsMediaLibrary(message, client, { fetchResource = fe
         const kept = ID.test(id) ? results.get(id) : null;
         if (!kept) return reply(message, type, { ok: false, error: 'media_library_result_unknown' });
         if (variant === 'waveform') return reply(message, type, { ok: true, points: await waveformOf(kept.item, context) });
+        // A film only ever streams: its file is never read here, whole or in ranges.
+        if (kept.item.kind === 'film' && variant === 'file') return reply(message, type, { ok: false, error: 'media_library_fetch_range_invalid' });
         const file = await fileOf(kept.item, variant === 'stream' ? 'file' : variant, context);
-        if (variant === 'stream') return reply(message, type, { ok: true, name: file.name, ...(await access.readableAddress(kept.item.provider, file, context)) });
+        if (variant === 'stream') return reply(message, type, { ok: true, name: file.name,
+            ...(await (kept.item.kind === 'film' ? filmAccess : access).readableAddress(kept.item.provider, file, context)) });
         return reply(message, type, { ok: true, name: file.name, ...(await access.readChunk(kept.item.provider, file, Number(message.offset), context)) });
     } catch (error) {
         const code = String(error?.code || '');

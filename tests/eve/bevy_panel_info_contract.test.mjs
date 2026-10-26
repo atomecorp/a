@@ -778,7 +778,7 @@ test('Info project checkbox rail applies one continuous mode and cancel restores
     const parentCheckbox = find(nodes, 'info_project_hierarchy_entry_0_checkbox');
     assert.ok(parentCheckbox);
 
-    await runtime.surface.handleEvent({ type: 'info.selection.press', id: 'parent_a', event: { y: 2 } });
+    await runtime.surface.handleEvent({ type: 'info.selection.press', value: 'parent_a', event: { y: 2 } });
     await runtime.surface.handleEvent({ type: 'info.selection.drag', event: { y: 74 } });
     assert.deepEqual(selected, [], 'deselect mode applies to every crossed selected row');
     await runtime.surface.handleEvent({ type: 'info.selection.cancel' });
@@ -814,7 +814,7 @@ test('Info selection and drag refreshes preserve the manipulated project row as 
     });
     const refresh = (options) => { refreshOptions.push(options || null); };
     await runtime.surface.handleEvent({
-        type: 'info.selection.press', id: 'parent_a',
+        type: 'info.selection.press', value: 'parent_a',
         event: { node_id: 'info_project_hierarchy_entry_1_checkbox', y: 2 }
     }, { refresh });
     await Promise.resolve();

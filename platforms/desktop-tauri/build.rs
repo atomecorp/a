@@ -10,9 +10,10 @@ fn main() {
         cc::Build::new().file("native/personal_import.m")
             .file("../ios/atome-auv3/Common/AtomeContactHistory.m")
             .file("../ios/atome-auv3/Common/AtomeGPSHost.m")
+            .file("../ios/atome-auv3/Common/AtomeStreamingView.m")
             .file("native/clipboard.m").file("native/file_selection.m")
             .flag("-fobjc-arc").compile("atome_personal_import");
-        for framework in ["Foundation", "Contacts", "EventKit", "AppKit", "UniformTypeIdentifiers", "CoreLocation", "JavaScriptCore", "AVFoundation"] {
+        for framework in ["Foundation", "Contacts", "EventKit", "AppKit", "UniformTypeIdentifiers", "CoreLocation", "JavaScriptCore", "AVFoundation", "WebKit"] {
             println!("cargo:rustc-link-lib=framework={framework}");
         }
         println!("cargo:rerun-if-changed=native/personal_import.m");
@@ -20,6 +21,7 @@ fn main() {
         println!("cargo:rerun-if-changed=native/file_selection.m");
         println!("cargo:rerun-if-changed=../ios/atome-auv3/Common/AtomeContactHistory.m");
         println!("cargo:rerun-if-changed=../ios/atome-auv3/Common/AtomeGPSHost.m");
+        println!("cargo:rerun-if-changed=../ios/atome-auv3/Common/AtomeStreamingView.m");
     }
 
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("linux") {

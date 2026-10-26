@@ -31,6 +31,11 @@ const LIVE_PAGE_HEADERS = { 'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS 
 // Free-TV marks channels with circled letters (Ⓖ geo-blocked, Ⓨ YouTube…).
 const MARKERS = /[Ⓐ-ⓩ]/g;
 const FRANCE_TV_OWNER = /france t[ée]l[ée]visions?/i;
+// France Télévisions streams its channels only on its own site, behind its sign-in: each
+// channel's live page is played in the app's internal page of the service (the native
+// streaming view), never as a stream of the app's own.
+const FRANCE_TV_LIVE_PAGES = { 'France2.fr': 'france-2', 'France3.fr': 'france-3', 'France4.fr': 'france-4',
+  'France5.fr': 'france-5', 'Franceinfo.fr': 'franceinfo' };
 
 const reply = (requestId, fields) => ({
   type: 'tv-catalog-response', requestId, request_id: requestId,
@@ -122,6 +127,16 @@ export const buildTvCatalog = ({ channels = [], streams = [], blocklist = [], co
     const entry = entryFor(channel.id, { name: channel.name, country: channel.country,
       categories: channel.categories, logo: logoOf.get(channel.id) });
     addStream(entry, 'iptv-org', streamOf(stream.url, stream.quality));
+  }
+  // The service's own page leads: it is the channel's official source.
+  for (const [id, slug] of Object.entries(FRANCE_TV_LIVE_PAGES)) {
+    const channel = known.get(id);
+    if (!channel || !allowed(id)) continue;
+    const entry = entryFor(id, { name: channel.name, country: channel.country, categories: channel.categories, logo: logoOf.get(id) });
+    const url = `https://www.france.tv/${slug}/direct.html`;
+    entry.urls.add(url);
+    entry.providers.add('francetv');
+    entry.streams.unshift({ url, kind: 'service_page', service: 'francetv', quality: '', secure: true, provider: 'francetv' });
   }
   const byCountry = new Map();
   for (const entry of index.values()) {

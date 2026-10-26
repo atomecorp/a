@@ -24,7 +24,7 @@ const definitions = {
     share_position: [{ user_id: id }, ['user_id'], 'Share this account live position, read-only and live, with one accepted contact (they accept it on their side). Updates while eVe runs on this device; stop_sharing_position or revoking the share ends it.', true],
     stop_sharing_position: [{ user_id: id }, ['user_id'], 'Stop sharing this account live position with this contact.', true],
     list_shared_positions: [{}, [], 'Read the recent live positions contacts share with this account.', false],
-    navigate_to: [{ destination: query, origin: GPS_POINT_SCHEMA }, ['destination'], 'Take the user to an address or place said or typed in their words: search it, use this device position as origin unless given, create and calculate the private itinerary, show it, and start spoken guidance.', true]
+    navigate_to: [{ destination: query, place: GPS_POINT_SCHEMA, origin: GPS_POINT_SCHEMA }, ['destination'], 'Take the user to an address or place said or typed in their words: search it (or go straight to `place` when its position is already known), use this device position as origin unless given, create and calculate the private itinerary, show it, and start spoken guidance.', true]
 };
 export const GPS_COMMANDS = Object.freeze(Object.entries(definitions).map(([action, [properties, required, description, persistent]]) => Object.freeze({
     name: `gps.${action}`, action, description, persistent, capability: persistent ? 'gps.control' : 'gps.read',

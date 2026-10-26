@@ -15,7 +15,7 @@ const page = { cursor: { type: 'string', maxLength: 32 }, limit: { type: 'intege
 const shapes = {
     list_channels: [{ category: text, query: { type: 'string', maxLength: 200 }, ...page }, [], 'List television channels of the public catalogue (Free-TV, IPTV-org). With query: matching channels of every country, the user\'s country first; without: the country being browsed, favourites first. Does not start playback.'],
     find_channel: [{ query: text }, ['query'], 'Find television channels by name in every country (e.g. CNN, BBC News, Rai 1); returns candidates, does not start playback.'],
-    open_channel: [{ channel: text, fullscreen: { type: 'boolean' } }, ['channel'], 'Put on a television channel by its exact name (e.g. TF1, France 3, franceinfo, CNN, BBC News): it plays in place on a TV object of the current project. Without an exact name it returns CHANNEL_NOT_FOUND or AMBIGUOUS_CHANNEL with candidates to propose to the user; never open a candidate without confirmation. fullscreen enlarges playback to the whole project view.'],
+    open_channel: [{ channel: text, fullscreen: { type: 'boolean' } }, ['channel'], 'Put on a television channel by its exact name (e.g. TF1, France 3, franceinfo, CNN, BBC News): it plays in place on a TV object of the current project. France TV channels (France 2, France 3, France 4, France 5, franceinfo) play in the app\'s own France TV page ("sur France TV, ouvre France 2" -> channel France 2): the first time, the user signs in there. Without an exact name it returns CHANNEL_NOT_FOUND or AMBIGUOUS_CHANNEL with candidates to propose to the user; never open a candidate without confirmation. fullscreen enlarges playback to the whole project view.'],
     close: [{}, [], 'Stop and close television, releasing playback resources.'],
     set_fullscreen: [{ enabled: { type: 'boolean' } }, ['enabled'], 'Enlarge television playback to the whole project view (true) or return it to its TV object (false); playback continues.'],
     get_state: [{}, [], 'Read actual television playback and presentation, including required user actions.'],
@@ -72,7 +72,10 @@ export function tvPage(items, { cursor = '0', limit = 50 } = {}) {
     return { ok: true, items: items.slice(offset, offset + limit), cursor: offset + limit < items.length ? String(offset + limit) : null };
 }
 // What a page can actually play: an `atome:` (iOS) or https page refuses plain
-// http media, so a channel offered only over http is never listed or played there.
+// http media, so a channel offered only over http is never listed or played there;
+// a service's own page (`service_page`, France TV) needs the app's internal page of
+// that service, which only the native applications have (`acceptServicePage`).
 export const tvPageAcceptsHttp = (win = globalThis.window) => win?.location?.protocol === 'http:';
-export const playableTvStreams = (streams = [], { acceptHttp = false } = {}) => (Array.isArray(streams) ? streams : [])
-    .filter((stream) => ['hls', 'video', 'youtube', 'youtube_live'].includes(stream?.kind) && (acceptHttp || stream.secure === true));
+export const playableTvStreams = (streams = [], { acceptHttp = false, acceptServicePage = false } = {}) => (Array.isArray(streams) ? streams : [])
+    .filter((stream) => (['hls', 'video', 'youtube', 'youtube_live'].includes(stream?.kind) || (acceptServicePage && stream?.kind === 'service_page'))
+        && (acceptHttp || stream.secure === true));

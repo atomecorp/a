@@ -3,3 +3,4 @@
 #import "AtomeIosAudioEngineBridge.h"
 #import "AtomeContactHistory.h"
 #import "AtomeGPSHost.h"
+#import "AtomeStreamingView.h"

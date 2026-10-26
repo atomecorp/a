@@ -87,12 +87,15 @@ final class AppPageHost {
                 AppWorkspaceResume.shared.handle(command: command, payload: payload, completion: completion)
             } else if CarPlayAssistantLink.canHandle(command: command) {
                 CarPlayAssistantLink.shared.handle(command: command, payload: payload, completion: completion)
+            } else if AppNativeStreamingView.canHandle(command: command) {
+                AppNativeStreamingView.shared.handle(command: command, payload: payload, completion: completion)
             } else {
                 AppNativeAudioController.shared.handle(command: command, payload: payload, completion: completion)
             }
         }
         WebViewManager.midiController = midiController
         AppNativeMediaCaptureController.shared.attachPreviewHost(webView: webView)
+        AppNativeStreamingView.shared.attach(webView: webView)
         NativePersonalImport.shared.openSettings = AppPageHost.openSettings
         // This app's page in Settings: Motion & Fitness and Health access.
         AppNativeHealthController.shared.attach(webView: webView, openSettings: AppPageHost.openSettings)

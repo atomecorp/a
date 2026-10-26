@@ -1,0 +1,5 @@
+"$schema" = "schemas/schema.json"
+[[permission]]
+identifier = "streaming-view"
+description = "Allows the canonical main page to lay a service's internal page behind it."
+commands.allow = ["streaming_view_invoke"]

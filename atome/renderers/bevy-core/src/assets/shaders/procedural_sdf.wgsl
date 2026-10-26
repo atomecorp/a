@@ -730,7 +730,12 @@ fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32
         // THE HOLE. The cell's own footprint, laid flat under the turning plate:
         // the plate took its piece of the workspace with it, so what shows there
         // is the surface background itself — never the tile, never a flat colour.
-        let hole_distance = sd_mystic_tile(delta, half_side, clamp(tile.w, 0.0, half_side), fold);
+        // An empty grid cell is there to hide the tile under it: its edge band lies
+        // wholly OUTSIDE the footprint (in the seam, which shows that same
+        // background). Centred on the edge, it half covered the tile's lit rim, and
+        // every empty cell read as a faint outline.
+        let hole_edge = select(0.0, 2.0 * softness, ghost);
+        let hole_distance = sd_mystic_tile(delta, half_side, clamp(tile.w, 0.0, half_side), fold) - hole_edge;
         let hole_mask = (1.0 - smoothstep(-softness, softness, hole_distance)) * hole_dose;
         if hole_mask > 0.002 {
             let back_uv = clamp(vec2(pixel_position.x / surface.x, 1.0 - (pixel_position.y / surface.y)), vec2(0.0), vec2(1.0));

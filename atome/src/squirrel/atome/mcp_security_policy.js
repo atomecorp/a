@@ -7,6 +7,8 @@ import { MUSIC_COMMANDS } from '../music/contracts.js';
 import { SOCIAL_COMMANDS } from '../social/contracts.js';
 import { GPS_COMMANDS } from '../gps/contracts.js';
 import { SHOPPING_COMMANDS } from '../shopping/contracts.js';
+import { SHOWS_COMMANDS } from '../shows/contracts.js';
+import { FILMS_COMMANDS } from '../films/contracts.js';
 import { FOOD_COMMANDS } from '../food/contracts.js';
 import { TRAINING_COMMANDS } from '../training/contracts.js';
 import { DASHBOARD_PROGRESSION_COMMANDS } from '../dashboard_progression/contracts.js';
@@ -131,7 +133,7 @@ export function listAclRules() {
             { subject: 'calendar.delete', access: 'confirm', required_capabilities: ['calendar.write'] },
             { subject: 'calendar.share', access: 'confirm', required_capabilities: ['calendar.write', 'share.write'] },
             ...[...TV_COMMANDS, ...YOUTUBE_COMMANDS, ...PEERTUBE_COMMANDS, ...APPLE_MUSIC_COMMANDS, ...MUSIC_COMMANDS, ...DASHBOARD_PROGRESSION_COMMANDS].map(command => ({ subject: command.name, required_capabilities: [command.capability], access: 'allow' })),
-            ...[...SOCIAL_COMMANDS, ...SHOPPING_COMMANDS, ...FOOD_COMMANDS, ...TRAINING_COMMANDS].map(command => ({ subject: command.name, required_capabilities: [command.capability], access: CONFIRMED_COMMANDS.includes(command.name) ? 'confirm' : 'allow' })),
+            ...[...SOCIAL_COMMANDS, ...SHOPPING_COMMANDS, ...SHOWS_COMMANDS, ...FILMS_COMMANDS, ...FOOD_COMMANDS, ...TRAINING_COMMANDS].map(command => ({ subject: command.name, required_capabilities: [command.capability], access: CONFIRMED_COMMANDS.includes(command.name) ? 'confirm' : 'allow' })),
             {
                 subject: 'runtime.tools.call:ui.capture.*',
                 access: 'confirm',
@@ -285,7 +287,7 @@ export function resolveAccessPolicy(method, params = {}) {
     }
     // Direct and runtime calls share the exact contract capability and external-write policy.
     const contractId = normalizedMethod === 'runtime.tools.call' ? normalizeRuntimeToolIdentifier(params) : normalizedMethod;
-    const contract = [...TV_COMMANDS, ...YOUTUBE_COMMANDS, ...PEERTUBE_COMMANDS, ...SOCIAL_COMMANDS, ...APPLE_MUSIC_COMMANDS, ...MUSIC_COMMANDS, ...GPS_COMMANDS, ...SHOPPING_COMMANDS, ...FOOD_COMMANDS, ...TRAINING_COMMANDS,
+    const contract = [...TV_COMMANDS, ...YOUTUBE_COMMANDS, ...PEERTUBE_COMMANDS, ...SOCIAL_COMMANDS, ...APPLE_MUSIC_COMMANDS, ...MUSIC_COMMANDS, ...GPS_COMMANDS, ...SHOPPING_COMMANDS, ...SHOWS_COMMANDS, ...FILMS_COMMANDS, ...FOOD_COMMANDS, ...TRAINING_COMMANDS,
         ...DASHBOARD_PROGRESSION_COMMANDS].find(entry => entry.name === contractId);
     if (contract || normalizedMethod.startsWith('tv.')) {
         const confirm = CONFIRMED_COMMANDS.includes(contract?.name);

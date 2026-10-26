@@ -256,6 +256,9 @@ fn procedural_sdf_mystic_mode_is_one_isolated_turning_tile_branch() {
     assert!(shader.contains("let faceless = select(ghost, previous_ghost || previous_absent, cosine >= 0.0);"));
     assert!(shader.contains("if faceless { plate_mask = 0.0; }"));
     assert!(shader.contains("* lifted * select(1.0, 0.0, faceless)"));
+    // Its hole covers the tile under it edge included: the edge band lies outside
+    // the footprint, never half over the tile's lit rim (a faint outline).
+    assert!(shader.contains("let hole_edge = select(0.0, 2.0 * softness, ghost);"));
     assert!(!shader.contains("intuition_mystic_back_blur"));
     // Every mystic uniform is declared, and in the bind group order.
     let mut order = vec![shader.find("liquid_drop_count: vec4<f32>").expect("liquid drop count")];

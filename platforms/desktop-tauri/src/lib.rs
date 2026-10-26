@@ -15,6 +15,7 @@ mod native_communication;
 mod native_midi;
 mod runtime_logging;
 mod server;
+mod streaming_view;
 mod taxonomy_editor;
 mod viewport_runtime;
 
@@ -278,6 +279,7 @@ pub fn run() {
             native_health::health_invoke,
             native_billing::billing_invoke,
             native_communication::notifications_invoke,
+            streaming_view::streaming_view_invoke,
             taxonomy_editor::taxonomy_read,
             taxonomy_editor::taxonomy_save,
             assistant_link::assistant_request_take,

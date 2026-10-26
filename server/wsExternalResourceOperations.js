@@ -4,6 +4,7 @@ import { handleWsYoutubeSearch } from './ws_youtube_search.js';
 import { handleWsPeertube } from './ws_peertube.js';
 import { handleWsTvCatalog, handleWsTvResolve } from './ws_tv_catalog.js';
 import { handleWsShows } from './ws_shows.js';
+import { handleWsVideoCatalog } from './ws_video_catalog.js';
 import { handleWsGpsOperation } from './wsGpsOperations.js';
 import { handleWsOpenFoodFacts } from './ws_open_food_facts.js';
 import { handleWsBookSource } from './ws_book_sources.js';
@@ -17,6 +18,7 @@ export async function handleWsExternalResourceOperation(data, connection, addres
         || await handleWsTvCatalog(data)
         || await handleWsTvResolve(data)
         || await handleWsShows(data, address)
+        || await handleWsVideoCatalog(data, address)
         || await handleWsGpsOperation(data, address)
         || await handleWsOpenFoodFacts(data, address)
         || await handleWsBookSource(data, address)

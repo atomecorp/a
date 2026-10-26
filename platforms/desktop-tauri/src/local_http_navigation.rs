@@ -14,6 +14,8 @@ pub fn runtime_init_script() -> String {
     let remote = imposed.unwrap_or_else(|| "https://atome.one".to_string());
     script.push_str(&format!("window.__SQUIRREL_TAURI_FASTIFY_URL__={};", serde_json::to_string(&remote).expect("Fastify URL must serialize")));
     if cfg!(target_os = "android") { script.push_str("window.__ATOME_ANDROID_NATIVE__=true;"); }
+    // A service's internal page lies behind the app page (src/streaming_view.rs).
+    if cfg!(any(target_os = "macos", target_os = "android")) { script.push_str("window.__ATOME_STREAMING_VIEW_NATIVE__=true;"); }
     script
 }
 

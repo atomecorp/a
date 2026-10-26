@@ -14,7 +14,10 @@ import app.tauri.plugin.Plugin
 
 @TauriPlugin(permissions = [Permission(strings = [Manifest.permission.POST_NOTIFICATIONS], alias = "notifications")])
 class AtomeHostPlugin(private val activity: Activity) : Plugin(activity) {
-    override fun load(webView: WebView) { NativeCommunication.attach(activity, webView) }
+    override fun load(webView: WebView) {
+        NativeCommunication.attach(activity, webView)
+        StreamingView.attach(webView)
+    }
     override fun onResume() { NativeCommunication.signal() }
     override fun onNewIntent(intent: android.content.Intent) { NativeCommunication.handleIntent(activity, intent) }
 
@@ -37,6 +40,13 @@ class AtomeHostPlugin(private val activity: Activity) : Plugin(activity) {
         }
         execute(invoke)
     }
+    @Command fun streamingView(invoke: Invoke) {
+        val args = invoke.getArgs()
+        StreamingView.handle(activity, args.optString("command"), args.optJSONObject("payload") ?: org.json.JSONObject()) { result ->
+            invoke.resolve(JSObject(result.toString()))
+        }
+    }
+
     @PermissionCallback private fun notificationsPermission(invoke: Invoke) { execute(invoke) }
     private fun execute(invoke: Invoke) {
         try {

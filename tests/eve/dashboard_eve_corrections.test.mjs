@@ -72,15 +72,18 @@ test('a slow provider cannot delay what this device shows at once', async () => 
     expect(command).not.toHaveBeenCalled();
 });
 
-test('the TV and every online video service open as lists out of their plate (dashboard_video.js)', async () => {
+test('the TV, Films & séries and Vidéos open as lists out of their plate (dashboard_video.js)', async () => {
     const stage = createDashboardMysticStage({ projectId: 'home', readStageRect: () => null, readLastProjectId: async () => '' });
     const items = await stage.funItems({ update: () => {} });
-    expect(items.map(item => item.key)).toEqual(expect.arrayContaining(['fun_tv', 'fun_youtube', 'fun_peertube']));
+    expect(items.map(item => item.key)).toEqual(expect.arrayContaining(['fun_tv', 'fun_video']));
     // Music services not entered in Passwords & keys have no tile.
     expect(items.map(item => item.key)).not.toEqual(expect.arrayContaining(['fun_spotify']));
     expect(items.map(item => item.key)).not.toEqual(expect.arrayContaining(['fun_deezer']));
-    for (const key of ['fun_tv', 'fun_youtube', 'fun_peertube']) {
-        const plate = items.find(item => item.key === key);
+    // « Vidéo » is a level: its films and series, its online videos (user, 26 Oct. 2026).
+    const video = items.find(item => item.key === 'fun_video');
+    expect(video.type).toBe('palette');
+    expect(video.children.map(item => item.key)).toEqual(['fun_films', 'fun_videos']);
+    for (const plate of [items.find(item => item.key === 'fun_tv'), ...video.children]) {
         expect(plate.type).not.toBe('palette');
         expect(plate.closeOnSelect).toBe(false);
         expect(typeof plate.onSelect).toBe('function');

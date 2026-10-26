@@ -1,5 +1,5 @@
 import { createMcpSocialHandlers, createMcpTvHandlers, createMcpYoutubeHandlers, createMcpPeertubeHandlers, createMcpAppleMusicHandlers, createMcpMusicHandlers, createMcpGpsHandlers, createMcpTrainingHandlers,
-    createMcpShoppingHandlers, createMcpFoodHandlers, createMcpDashboardProgressionHandlers } from './mcp_handlers_contracts.js';
+    createMcpShoppingHandlers, createMcpShowsHandlers, createMcpFilmsHandlers, createMcpFoodHandlers, createMcpDashboardProgressionHandlers } from './mcp_handlers_contracts.js';
 import { createMcpAiRuntimeHandlers } from './mcp_handlers_ai_runtime.js';
 import { createMcpCommunicationHandlers } from './mcp_handlers_communication.js';
 import { createMcpPlatformHandlers } from './mcp_handlers_platform.js';
@@ -21,6 +21,8 @@ Object.assign(
     createMcpGpsHandlers(),
     createMcpTrainingHandlers(),
     createMcpShoppingHandlers(),
+    createMcpShowsHandlers(),
+    createMcpFilmsHandlers(),
     createMcpFoodHandlers(),
     createMcpDashboardProgressionHandlers(),
     createMcpSocialHandlers()

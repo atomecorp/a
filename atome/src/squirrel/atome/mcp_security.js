@@ -60,6 +60,10 @@ const DEFAULT_ACTOR_CAPABILITIES = Object.freeze([
     'gps.read', 'gps.control',
     // Private shopping list of the account.
     'shopping.read', 'shopping.write', 'food.read',
+    // What is on around the user (Spectacles): read, add to their calendar, guide them there, open a page.
+    'shows.read', 'shows.write', 'shows.control',
+    // Films and series (Divertissement › Vidéo): the catalogue, the services declared, the list on the Dashboard.
+    'films.read', 'films.write', 'films.control',
     // The user's own Sport activities, sessions and training log.
     'training.read', 'training.write',
     // How far the user's home has grown with their health objectives (counts, never health values).

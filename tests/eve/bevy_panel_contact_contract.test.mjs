@@ -216,7 +216,7 @@ test('Contact selection rail supports additive drag and cancellation', async () 
         const rowTop = (id) => visit(content, (node) => node.id === `contact_entry_${id}`).style.position[1];
         const first = { top: rowTop('local_a') };
         const third = { top: rowTop('local_c') };
-        await contactSurface.handleEvent({ type: 'contact.selection.press', id: 'local_a', event: { y: 8 } });
+        await contactSurface.handleEvent({ type: 'contact.selection.press', value: 'local_a', event: { y: 8 } });
         await contactSurface.handleEvent({
             type: 'contact.selection.drag',
             id: 'local_a',
@@ -225,11 +225,11 @@ test('Contact selection rail supports additive drag and cancellation', async () 
         await contactSurface.handleEvent({ type: 'contact.selection.release', id: 'local_a' });
         assert.deepEqual(contactSurface.readState().selectedIds, ['local_a', 'local_b', 'local_c']);
 
-        await contactSurface.handleEvent({ type: 'contact.selection.press', id: 'local_b', event: { y: 8 } });
+        await contactSurface.handleEvent({ type: 'contact.selection.press', value: 'local_b', event: { y: 8 } });
         await contactSurface.handleEvent({ type: 'contact.selection.cancel', id: 'local_b' });
         assert.deepEqual(contactSurface.readState().selectedIds, ['local_a', 'local_b', 'local_c']);
         assert.deepEqual(
-            await contactSurface.handleEvent({ type: 'contact.selection.press', id: 'current_user', event: { y: 8 } }),
+            await contactSurface.handleEvent({ type: 'contact.selection.press', value: 'current_user', event: { y: 8 } }),
             { ok: false, error: 'contact_not_selectable' }
         );
     } finally {
@@ -274,9 +274,9 @@ test('Contact compact footer preserves conditional multi-delete and partial-fail
         assert.equal(visit(footer, node => node.id === 'contact_select_all'), null);
 
         contactSurface.buildContent(snapshot, { emit: () => {}, bodyWidth: 388 });
-        await contactSurface.handleEvent({ type: 'contact.selection.press', id: 'local_a', event: { y: 8 } });
+        await contactSurface.handleEvent({ type: 'contact.selection.press', value: 'local_a', event: { y: 8 } });
         await contactSurface.handleEvent({ type: 'contact.selection.release', id: 'local_a' });
-        await contactSurface.handleEvent({ type: 'contact.selection.press', id: 'local_b', event: { y: 8 } });
+        await contactSurface.handleEvent({ type: 'contact.selection.press', value: 'local_b', event: { y: 8 } });
         await contactSurface.handleEvent({ type: 'contact.selection.release', id: 'local_b' });
         snapshot = contactSurface.readState();
         fixed = contactSurface.buildFixedContent(snapshot, { emit: () => {}, bodyWidth: 388 });

@@ -46,3 +46,9 @@ export function loadLocalShowsConfig(projectRoot, env = process.env) {
     return loadLocalSecretFile({ env, keys: new Set(['TMDB_API_KEY']), error: 'shows_secret_file',
         file: env.ATOME_SHOWS_ENV_FILE || path.join(projectRoot, 'Private', 'tmdb.env') });
 }
+
+// The tourism places of the Temps libre rubric (server/shows_tourism.js): one DATAtourisme key for every user, on the server only.
+export function loadLocalTourismConfig(projectRoot, env = process.env) {
+    return loadLocalSecretFile({ env, keys: new Set(['DATATOURISME_API_KEY']), error: 'tourism_secret_file',
+        file: env.ATOME_TOURISM_ENV_FILE || path.join(projectRoot, 'Private', 'datatourisme.env') });
+}
