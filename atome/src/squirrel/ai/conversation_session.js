@@ -5,13 +5,14 @@ import { requestProviderService } from './provider_broker.js';
 import { readResponseText } from './openai_stream.js';
 import { OPENAI_MODEL_PROFILES } from './model_catalog_registry.js';
 import { ASSISTANT_CONTEXT_COMMAND_NAMES } from '../../shared/assistant_context_contract.js';
-import { APPLE_MUSIC_ASSISTANT_INSTRUCTIONS } from '../apple_music/contracts.js';
 import { MUSIC_ASSISTANT_INSTRUCTIONS } from '../music/contracts.js';
 import { GPS_ASSISTANT_INSTRUCTIONS } from '../gps/contracts.js';
 import { SHOPPING_ASSISTANT_INSTRUCTIONS } from '../shopping/contracts.js';
 import { SHOWS_ASSISTANT_INSTRUCTIONS } from '../shows/contracts.js';
+import { EVENTS_ASSISTANT_INSTRUCTIONS } from '../public_events/contracts.js';
 import { FILMS_ASSISTANT_INSTRUCTIONS } from '../films/contracts.js';
 import { CREATION_ASSISTANT_INSTRUCTIONS } from '../creation/contracts.js';
+import { MEDIA_IMPORT_ASSISTANT_INSTRUCTIONS } from '../media_import/contracts.js';
 import { FOOD_ASSISTANT_INSTRUCTIONS } from '../food/contracts.js';
 import { TRAINING_ASSISTANT_INSTRUCTIONS } from '../training/contracts.js';
 import { DASHBOARD_PROGRESSION_ASSISTANT_INSTRUCTIONS } from '../dashboard_progression/contracts.js';
@@ -38,9 +39,10 @@ export const createConversationSession = ({
     model = OPENAI_MODEL_PROFILES[0].model,
     maxToolCalls = 16,
     // Context of the tools the user has open, read at every request:
-    // `{ preload: [tool names], notes: [one-line guidance] }`. Their commands
-    // become directly callable and the notes join the instructions; a closed
-    // tool simply stops contributing. Only trusted tool owners provide it.
+    // `{ preload: [tool names], instructions: [rules], notes: [one-line guidance] }`.
+    // Their commands become directly callable, their rules and notes join the
+    // instructions; a closed tool, or one this host does not have (Apple Music
+    // off iPhone and iPad), contributes nothing. Only trusted tool owners provide it.
     toolContext = async () => null
 } = {}) => {
     let controller = null, completion = Promise.resolve();
@@ -98,12 +100,13 @@ export const createConversationSession = ({
         // commands of the tools open now; schemas and permissions still come from MCP.
         const context = await Promise.resolve(toolContext()).catch(() => null);
         signal.throwIfAborted();
-        const preload = new Set(['ui.draw.edit', 'ui.ai.image.generate', 'tv.open_channel', 'youtube.play', 'apple_music.play', 'apple_music.search', 'music.get_state', 'music.play', 'music.search', 'gps.navigate_to', 'gps.stop_navigation', 'shopping.add', 'shopping.check', 'shopping.list', 'shopping.open', 'shows.search', 'shows.open', 'shows.add_to_calendar', 'shows.navigate', 'shows.open_site', 'shows.open_tickets', 'films.search', 'films.play', 'films.open', 'films.control', 'films.set_service', 'creation.list', 'creation.read', 'creation.new_text', 'creation.open', 'food.search', 'food.alternatives', 'food.scan', 'training.prepare_session', 'training.session_transition', 'training.get_session', ...ASSISTANT_CONTEXT_COMMAND_NAMES,
+        const preload = new Set(['ui.draw.edit', 'ui.ai.image.generate', 'tv.open_channel', 'youtube.play', 'music.get_state', 'music.play', 'music.search', 'gps.navigate_to', 'gps.stop_navigation', 'shopping.add', 'shopping.check', 'shopping.list', 'shopping.open', 'shows.search', 'shows.open', 'shows.set_place', 'shows.add_to_calendar', 'shows.navigate', 'shows.open_site', 'shows.open_tickets', 'events.declare', 'events.nearby', 'events.mine', 'events.open', 'events.panel', 'events.save', 'films.search', 'films.play', 'films.open', 'films.control', 'films.set_service', 'creation.list', 'creation.read', 'creation.new_text', 'creation.open', 'media_import.state', 'media_import.list', 'media_import.choose', 'food.search', 'food.alternatives', 'food.scan', 'training.prepare_session', 'training.session_transition', 'training.get_session', ...ASSISTANT_CONTEXT_COMMAND_NAMES,
             ...(Array.isArray(context?.preload) ? context.preload : [])]);
         const direct = tools.filter(tool => preload.has(toolMap.get(tool.name)?.name));
         const notes = (Array.isArray(context?.notes) ? context.notes : []).map(String).filter(Boolean);
+        const rules = (Array.isArray(context?.instructions) ? context.instructions : []).map(String).filter(Boolean);
         return { tools: [search, ...direct], catalog: tools, toolMap,
-            instructions: `${ATOME_ACTION_INSTRUCTIONS} ${APPLE_MUSIC_ASSISTANT_INSTRUCTIONS} ${MUSIC_ASSISTANT_INSTRUCTIONS} ${GPS_ASSISTANT_INSTRUCTIONS} ${SHOPPING_ASSISTANT_INSTRUCTIONS} ${SHOWS_ASSISTANT_INSTRUCTIONS} ${FILMS_ASSISTANT_INSTRUCTIONS} ${CREATION_ASSISTANT_INSTRUCTIONS} ${FOOD_ASSISTANT_INSTRUCTIONS} ${TRAINING_ASSISTANT_INSTRUCTIONS} ${DASHBOARD_PROGRESSION_ASSISTANT_INSTRUCTIONS}${notes.length ? ` Open tools: ${notes.join(' ')}` : ''}` };
+            instructions: `${[ATOME_ACTION_INSTRUCTIONS, ...rules].join(' ')} ${MUSIC_ASSISTANT_INSTRUCTIONS} ${GPS_ASSISTANT_INSTRUCTIONS} ${SHOPPING_ASSISTANT_INSTRUCTIONS} ${SHOWS_ASSISTANT_INSTRUCTIONS} ${EVENTS_ASSISTANT_INSTRUCTIONS} ${FILMS_ASSISTANT_INSTRUCTIONS} ${CREATION_ASSISTANT_INSTRUCTIONS} ${MEDIA_IMPORT_ASSISTANT_INSTRUCTIONS} ${FOOD_ASSISTANT_INSTRUCTIONS} ${TRAINING_ASSISTANT_INSTRUCTIONS} ${DASHBOARD_PROGRESSION_ASSISTANT_INSTRUCTIONS}${notes.length ? ` Open tools: ${notes.join(' ')}` : ''}` };
     };
     const debugExcerpt = () => ({ id: state.id, model: state.effectiveModel || state.model, level: state.level,
         turns: state.turns.slice(-20).map(turn => ({ role: turn.role, ...(turn.name ? { name: turn.name } : {}),
@@ -247,7 +250,6 @@ export const createConversationSession = ({
             state.budget = quota.getSummary(); emit();
         },
         refreshBudget() { state.budget = quota.getSummary(); emit(); },
-        setBudget(tokens) { quota.setBudgetTokensPerDay(tokens); state.budget = quota.getSummary(); emit(); },
         setLevel(level) {
             if (controller || pending) throw new Error('conversation_busy');
             const profile = OPENAI_MODEL_PROFILES.find(item => item.level === level);

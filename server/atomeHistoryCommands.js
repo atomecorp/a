@@ -6,6 +6,7 @@ import {
 } from '../atome/src/shared/adole_event_contract.js';
 import { classifyHistoryEvent, HISTORY_EVENT_CLASS } from '../database/adole_history_transactions.js';
 import { commitAtomeEvents } from './atomeRoutes.orm.js';
+import { afterCommitted } from './ws_api_commit_effects.js';
 import { wsResponse, wsErrorResponse, requestIdOf } from './wsResponse.js';
 
 export async function handleAtomeHistoryCommand(message, userId, connection) {
@@ -16,7 +17,7 @@ export async function handleAtomeHistoryCommand(message, userId, connection) {
     const result = router ? await router.applyHistory(userId, options)
         : await executeAtomeHistoryCommand({ ...options, authenticatedUserId: userId });
     if (!result.ok) return wsErrorResponse('history', message, result.error);
-    for (const event of result.inserted_events || result.events || []) await connection?._wsApiSyncRuntime?.publish(event);
+    await afterCommitted(connection, userId, result.inserted_events || result.events || []);
     return wsResponse('history', message, true, { events: result.events });
 }
 

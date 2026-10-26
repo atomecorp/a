@@ -5,6 +5,7 @@ import { handleWsTeleportOperation } from './wsTeleportOperations.js';
 import { handleWsAiProviderOperation } from './wsAiProviderOperations.js';
 import { handleWsSurfaceGrantOperation } from './wsSurfaceGrantOperations.js';
 import { handleWsBillingOperation } from './billing/ws_billing_operations.js';
+import { handleWsPublicEvents } from './ws_public_events.js';
 
 // Authenticated `/ws/api` families that answer with one reply envelope or null
 // when the frame is not theirs. Order is the dispatch order.
@@ -12,6 +13,7 @@ const FAMILIES = Object.freeze([
     (data, connection, ip) => handleWsExternalResourceOperation(data, connection, ip),
     (data, connection) => handleWsAiProviderOperation(data, connection),
     (data, connection) => handleWsBillingOperation(data, connection),
+    (data, connection) => handleWsPublicEvents(data, connection),
     (data, connection) => handleWsAtomeOperation(data, connection),
     (data, connection) => handleWsSurfaceOperation(data, connection),
     (data, connection) => handleWsTeleportOperation(data, connection),

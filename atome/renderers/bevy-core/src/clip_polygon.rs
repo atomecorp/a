@@ -189,8 +189,9 @@ pub(crate) fn write_polygon_into_entity_mesh(
     world
         .entity_mut(entity)
         .insert(AtomeClipPolygonMesh(key, id))
-        // Le garde de decoupe rectangle de la video ne decrit plus le maillage.
-        .remove::<crate::clip::AtomeVideoClipMesh>();
+        // Les gardes de decoupe rectangle (video, verre) ne decrivent plus le maillage.
+        .remove::<crate::clip::AtomeVideoClipMesh>()
+        .remove::<crate::backdrop_surface::AtomeBackdropCropMesh>();
     Ok(())
 }
 

@@ -62,10 +62,14 @@ const DEFAULT_ACTOR_CAPABILITIES = Object.freeze([
     'shopping.read', 'shopping.write', 'food.read',
     // What is on around the user (Spectacles): read, add to their calendar, guide them there, open a page.
     'shows.read', 'shows.write', 'shows.control',
+    // What users organise around (public events): declare theirs (confirmed), read, report, write to an organiser, show the panel.
+    'events.read', 'events.write', 'events.send', 'events.control',
     // Films and series (Divertissement › Vidéo): the catalogue, the services declared, the list on the Dashboard.
     'films.read', 'films.write', 'films.control',
     // The user's own creations (Créer: texts, drawings, pictures): read, make and change, show on the Dashboard, send to people.
     'creation.read', 'creation.write', 'creation.control', 'creation.send',
+    // The one import panel (AGENTS.md rule 18): the user's media read, the panel driven (its camera confirmed).
+    'media_import.read', 'media_import.control',
     // The user's own Sport activities, sessions and training log.
     'training.read', 'training.write',
     // How far the user's home has grown with their health objectives (counts, never health values).

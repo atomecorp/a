@@ -42,7 +42,8 @@ export function registerWsApiRoute(server, {
   syncSharingService,
   newsBroadcast,
   newsPublishRateAllowed,
-  communities
+  communities,
+  publicEvents
 }) {
   // Route WebSocket pour API calls (replaces HTTP fetch)
   server.register(async function (fastify) {
@@ -68,6 +69,7 @@ export function registerWsApiRoute(server, {
       connection._wsApiVaultRouter = userVaultRouter;
       connection._wsApiSyncRuntime = wsSyncRuntime;
       connection._wsApiDirectoryService = directoryPublicService;
+      connection._wsApiPublicEvents = publicEvents;
 
       try {
         const requestUser = await validateToken(request);

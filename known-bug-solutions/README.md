@@ -10,12 +10,16 @@ the established solution before attempting a new implementation.
 
 | Symptom | Folder |
 | --- | --- |
+| A BevyUI node partly outside its rounded parent: soft blurred end or dull colour, at random, not fixed by a repaint | [bevy-ui-rounded-clip-overhanging-child](bevy-ui-rounded-clip-overhanging-child/README.md) |
+| eVe home: the home's tiles flash behind a rubric when a plate opens on the stage (Créer › Texte); stretched (ovals), squashed or blank frames when the keyboard rises or falls | [home-tiles-flash-under-rubric](home-tiles-flash-under-rubric/README.md) |
 | A list over the home: after touching a row, its picture shows but the rows stay in place over it and its tools band is missing until the finger moves again | [scroll-refresh-overtakes-tree-update](scroll-refresh-overtakes-tree-update/README.md) |
 | Visio: own tile (or a WebKit correspondent) upside down / sideways on iOS | [webkit-camera-rotation-ignored-by-webgpu](webkit-camera-rotation-ignored-by-webgpu/README.md) |
 | List in Simultaneous mode or Timeline: sound plays but the preview shows no video; no crossfade between videos; Timeline tracks stop after the first clip | [multitrack-preview-without-video](multitrack-preview-without-video/README.md) |
 | Monitor (capteurs) list: several sensors ticked by one touch, an unticked one comes back, rows blink | [monitor-list-ghost-selection-and-blink](monitor-list-ghost-selection-and-blink/README.md) |
 | A panel or home level is empty / « Chargement… » offline or with a silent network; iOS first touch slow | [display-waits-for-network](display-waits-for-network/README.md) |
 | Android app (Firebase build) stays on a white screen after the splash; or a blank page where WebGPU has no adapter | [android-white-screen-at-launch](android-white-screen-at-launch/README.md) |
+| Android app closes by itself a minute after launch (killed by `lmkd`); GPU memory of the app above 1 GB | [web-gpu-memory-mesh-slab-churn](web-gpu-memory-mesh-slab-churn/README.md) |
+| Android: map tiles, TV, Médiathèque, Vidéo, bug reports answer `PROVIDER_UNAVAILABLE` at once (Rust HTTPS/WSS fails) | [android-rust-tls-no-root-certificates](android-rust-tls-no-root-certificates/README.md) |
 | iOS guest back on the access screen after relaunch; « Mieux dormir » / « Dashboard eVe » duplicated at each « Commencer » | [guest-session-erased-by-preview-frame](guest-session-erased-by-preview-frame/README.md) |
 | A media preview (Médiathèque Lecture, contact takes) shows Pause but is silent | [preview-playback-silent-null-duration](preview-playback-silent-null-duration/README.md) |
 | Tauri: project opening 10–25 s; return to the home stuck grey in `transition` | [home-return-stuck-in-transition](home-return-stuck-in-transition/README.md) |
@@ -74,7 +78,7 @@ the established solution before attempting a new implementation.
 | iPhone assistant answers nothing and shows nothing although the app looks signed in | [ios-assistant-silent-dead-remote-session](ios-assistant-silent-dead-remote-session/README.md) |
 | Dashboard rows (contacts, appointments, health) vanish and come back at boot | [dashboard-lane-flicker](dashboard-lane-flicker/README.md) |
 | Many contacts missing for good, photos missing, editing one contact deletes others | [contacts-lost-by-global-replace](contacts-lost-by-global-replace/README.md) |
-| A new device or reinstalled browser restores nothing; re-imports duplicate contacts/appointments; old duplicate cards remain (merge on request) | [new-device-restores-nothing](new-device-restores-nothing/README.md) |
+| A new device or reinstalled browser restores nothing; re-imports duplicate contacts/appointments; old duplicate cards remain (merge on request); a recovered device lacks passwords/keys/settings or shows the first launch again (Tauri/iOS) | [new-device-restores-nothing](new-device-restores-nothing/README.md) |
 | Contact favorites lost; Dashboard rows reload/flicker each visit; one heart shows a person several times | [home-panel-save-erases-favorites](home-panel-save-erases-favorites/README.md) |
 | Project → Dashboard pauses then snaps to the wallpaper | [dashboard-transition-jump](dashboard-transition-jump/README.md) |
 | eVe home: choosing in a rubric (a project…) shows the home before the destination; closing a panel (a recording's list, Créer › Texte, any level) lands on the home instead of the rubric | [rubric-choice-goes-back-home](rubric-choice-goes-back-home/README.md) |

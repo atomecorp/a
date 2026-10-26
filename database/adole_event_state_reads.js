@@ -148,6 +148,17 @@ export async function listStateCurrent(projectId, options = {}) {
     const limit = Number(options.limit) || 1000;
     const offset = Number(options.offset) || 0;
     const scope = stateCurrentListScope(projectId, options);
+    // `order: 'oldest'` walks the states oldest change first, from after the cursor
+    // `{ updated_at, atome_id }` of the last one received: a state changed during the
+    // walk moves to its end and is read again, where an offset over the newest first
+    // let it, and the one after a page, slip away (a restore missed them).
+    const oldest = options.order === 'oldest';
+    const after = oldest && options.after && typeof options.after === 'object' ? options.after : null;
+    const cursor = after
+        ? `${scope.where ? `${scope.where} AND` : 'WHERE'} (COALESCE(sc.updated_at, '') > ? OR (COALESCE(sc.updated_at, '') = ? AND sc.atome_id > ?))`
+        : scope.where;
+    const cursorParams = after ? [String(after.updated_at || ''), String(after.updated_at || ''), String(after.atome_id || '')] : [];
+    const order = oldest ? "COALESCE(sc.updated_at, '') ASC, sc.atome_id ASC" : 'sc.updated_at DESC, sc.atome_id';
 
     // The page is chosen on ids only: DISTINCT + ORDER BY over whole rows made
     // SQLite spill OFFSET + LIMIT `properties` blobs to a temporary file per page.
@@ -157,10 +168,10 @@ export async function listStateCurrent(projectId, options = {}) {
                 COALESCE(sc.owner_id, a.owner_id) AS owner_id
          FROM state_current sc LEFT JOIN atomes a ON a.atome_id = sc.atome_id
          WHERE sc.atome_id IN (
-             SELECT sc.atome_id FROM state_current sc ${scope.join} ${scope.where}
-             GROUP BY sc.atome_id ORDER BY sc.updated_at DESC, sc.atome_id LIMIT ? OFFSET ?)
-         ORDER BY sc.updated_at DESC, sc.atome_id`,
-        [...scope.params, limit, offset]
+             SELECT sc.atome_id FROM state_current sc ${scope.join} ${cursor}
+             GROUP BY sc.atome_id ORDER BY ${order} LIMIT ? OFFSET ?)
+         ORDER BY ${order}`,
+        [...scope.params, ...cursorParams, limit, oldest ? 0 : offset]
     );
 
     return (rows || []).map((row) => projectStoredStateCurrent(row)).filter(Boolean);

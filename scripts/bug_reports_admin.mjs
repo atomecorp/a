@@ -6,9 +6,9 @@
 //   list [--open|--resolved] [--since YYYY-MM-DD]   one line per report, oldest first
 //   show <id>                                       the whole report file
 //   resolve <id> [<id>…] --note "<cause → fix>" [--fixed-in <version>]
-//       writes the report's `resolution` into its file (the report's log); the devices that
-//       filed it remove it from their list the next time Réglages › Avancé opens
-//       (`bug-report-status`). `--fixed-in` defaults to the atome/eVe versions of this checkout.
+//       writes the report's `resolution` into its file (the report's log; `list --open` no
+//       longer shows it); the device that filed it shows it fixed the next time Réglages ›
+//       Avancé opens (`bug-report-status`), and its user deletes it from the list. `--fixed-in` defaults to the atome/eVe versions of this checkout.
 // `--root <dir>` reads another copy of the folder (a copy of the production logs).
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';

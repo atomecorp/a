@@ -5,8 +5,9 @@ import { createWakeCapture, wakeCaptureAvailable } from './wake_capture.js';
 const verifierEntry = userId => 'voice.wake.verifier.' + encodeURIComponent(userId);
 
 // Local openWakeWord detection of "Ève, écoute-moi": no account, key or network.
-// The optional personal verifier lives in this device's vault, scoped to the user,
-// and is never synchronized.
+// The optional personal verifier lives in the account vault, so the user's enrollment
+// follows them to a recovered or new device (the assistant it wakes needs the network
+// anyway).
 export const createWakeDetectorBackend = ({ env = globalThis,
     workerFactory = () => new env.Worker('/src/squirrel/voice/wake_detector_worker.js', { type: 'module' }),
     loadProfile = () => loadRuntimeUserProfile({ env }),
@@ -22,7 +23,7 @@ export const createWakeDetectorBackend = ({ env = globalThis,
         if (security.vaultStatus().configured !== true) throw new Error('wake_vault_locked');
         return userId;
     };
-    // No principal or a locked vault means no personal verifier, not a failure.
+    // No signed-in account means no personal verifier, not a failure.
     const readVerifier = async () => {
         const profile = await loadProfile();
         if (!profile?.ok || !profile.userId || security.vaultStatus().configured !== true) return null;

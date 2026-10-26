@@ -21,6 +21,13 @@ use crate::{
 
 const BACKDROP_SURFACE_SHADER_HANDLE: Handle<Shader> = uuid_handle!("c7a899e6-7d4b-4fd3-82cb-53c7e11f99bf");
 
+/// The crop last written into a glass surface's quad, and that quad. Every transform patch
+/// re-applies the clip: rewriting an unchanged quad made Bevy free and reallocate its vertex
+/// slab on each frame of an animation, and on the web (wgpu drops a buffer without destroying
+/// it) every slab held 1 MiB of GPU memory until garbage collection — 1 GB in 30 s on a phone.
+#[derive(Component, Clone, Copy, PartialEq, Debug)]
+pub struct AtomeBackdropCropMesh(pub [f32; 6], pub AssetId<Mesh>);
+
 #[derive(Clone, Copy, Debug, ShaderType)]
 pub struct BackdropSurfaceUniform {
     /// x/y: logical size, z: corner radius, w: the record opacity. The glass is
@@ -252,13 +259,23 @@ pub(crate) fn crop_backdrop_surface(
         .get::<Mesh2d>(entity)
         .map(|mesh| mesh.0.clone())
         .ok_or_else(|| "bevy_backdrop_surface_mesh_missing".to_string())?;
-    let mut meshes = world
-        .get_resource_mut::<Assets<Mesh>>()
-        .ok_or_else(|| "bevy_mesh_assets_required".to_string())?;
-    let mut mesh = meshes
-        .get_mut(&handle)
-        .ok_or_else(|| "bevy_backdrop_surface_mesh_asset_missing".to_string())?;
-    *mesh = video_quad_mesh_from_size(visible_size, uv_rect);
+    let crop = AtomeBackdropCropMesh(
+        [visible_size[0], visible_size[1], uv_rect[0], uv_rect[1], uv_rect[2], uv_rect[3]],
+        handle.id(),
+    );
+    if world.get::<AtomeBackdropCropMesh>(entity) == Some(&crop) {
+        return Ok(());
+    }
+    {
+        let mut meshes = world
+            .get_resource_mut::<Assets<Mesh>>()
+            .ok_or_else(|| "bevy_mesh_assets_required".to_string())?;
+        let mut mesh = meshes
+            .get_mut(&handle)
+            .ok_or_else(|| "bevy_backdrop_surface_mesh_asset_missing".to_string())?;
+        *mesh = video_quad_mesh_from_size(visible_size, uv_rect);
+    }
+    world.entity_mut(entity).insert(crop);
     Ok(())
 }
 

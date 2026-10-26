@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
+// The panels' runtime first, as the app loads it (tools/media.js): the ribbon's recording
+// runtime that the import panel's camera uses reaches the panels back through it.
+import '../../eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js';
 import { createMediaPanelSurface } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_media_runtime.js';
-import { BEVY_PANEL_TOKENS, resolveListRowTokens } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
 import {
     applyCreatorDropExternalMediaSizing,
     resolveCreatorMediaIntrinsicSize
@@ -19,8 +21,8 @@ const visit = (root, predicate) => {
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-// Trois medias importables (image, video, son) et un `other` qui n'a ni apercu
-// ni type canonique : la liste ne doit jamais le montrer.
+// Three importable media (picture, video, sound) and an `other` that has neither preview
+// nor canonical type: the panel never shows it.
 const FILES = [
     { id: 'vid_1', name: 'montage', file_name: 'montage.mp4', kind: 'video', mime_type: 'video/mp4', modified: '2026-09-28T10:00:00Z', owner_id: 'u1' },
     { id: 'aud_1', name: 'bande', file_name: 'bande.mp3', kind: 'audio', mime_type: 'audio/mpeg', modified: '2026-09-29T10:00:00Z', owner_id: 'u1' },
@@ -30,368 +32,227 @@ const FILES = [
 
 const MOUNT_CONTEXT = { projectId: 'p1', container_id: 'm1', container_entity: 'molecule' };
 
-const harness = ({
-    files = FILES, resolveDropPoint = () => null, importResult = null, systemResult = null
-} = {}) => {
+// The import panel (AGENTS.md rule 18), its writes and the host's sources stubbed.
+const harness = ({ files = FILES, resolveDropPoint = () => null, importResult = null, systemResult = null, picked = null,
+    sources = ['camera', 'files'] } = {}) => {
     const imported = [];
     const system = [];
+    const picks = [];
     const closes = [];
     const panel = createMediaPanelSurface({
         loadFiles: async () => ({ ok: true, files }),
-        // Le panneau n'envoie jamais une ligne seule : c'est toujours un lot,
-        // la ligne cliquée ou la série cochée déposée.
         importFiles: async (batch, placement, context) => {
             imported.push({ files: batch, placement, context });
             return importResult ? importResult() : { ok: true };
         },
-        importFromSystem: async (context) => {
-            system.push(context);
-            return systemResult ? systemResult() : { ok: true };
-        },
+        importFromSystem: async (context) => { system.push(context); return systemResult ? systemResult() : { ok: true }; },
+        pickFromSystem: async (options) => { picks.push(options); return picked ? picked() : { ok: false, error: 'cancelled' }; },
         closePanel: () => closes.push(true),
         resolveProjectId: () => 'p1',
-        resolveDropPoint
+        resolveDropPoint,
+        sources: () => sources,
+        createUrl: file => `blob:${file.name}`,
+        revokeUrl: () => {}
     });
     const surface = panel.surface;
     const draw = () => {
         const emitted = [];
         const snapshot = surface.readState();
-        const content = surface.buildContent(snapshot, { emit: (intent) => emitted.push(intent), bodyWidth: 388 });
-        const fixed = surface.buildFixedContent(surface.readState(), { emit: (intent) => emitted.push(intent), bodyWidth: 388 });
-        return { content, fixed, emitted, snapshot: surface.readState() };
+        const content = surface.buildContent(snapshot, { emit: (intent) => emitted.push(intent), bodyWidth: 400, bodyHeight: 600 });
+        const band = surface.buildBandTools(snapshot, { emit: (intent) => emitted.push(intent) });
+        return { content, band, emitted, snapshot };
     };
-    return { panel, surface, imported, system, closes, draw };
+    return { panel, surface, imported, system, picks, closes, draw };
 };
 
 const open = async (surface, context = MOUNT_CONTEXT) => {
     surface.onOpen({ context });
     await flush();
 };
+const bandKeys = band => band.map(item => item.key);
 
-test('a listed media is a standard tall row: name at the left, thumbnail at the trailing end', async () => {
-    const { panel, surface, draw } = harness();
-    await open(surface);
-    const { content, snapshot } = draw();
-
-    assert.deepEqual(snapshot.entries.map((entry) => entry.label), ['bande', 'montage', 'affiche'],
-        'the newest upload comes first by default');
-    assert.deepEqual(snapshot.entries.map((entry) => entry.meta.type), ['Son', 'Vidéo', 'Image']);
-    assert.equal(snapshot.entries.some((entry) => entry.label === 'archive'), false,
-        'a media the panel cannot preview nor type stays out of the list');
-
-    // Le gabarit des listes standard (Contact, Coller) : la hauteur et la
-    // vignette se lisent sur les jetons, jamais sur un nombre local.
-    const rowTokens = resolveListRowTokens('tall');
-    const row = visit(content, (node) => node.id === 'media_list_entry_0');
-    assert.equal(row.style.size[1], rowTokens.heightPx, 'the row keeps the standard tall list height');
-    assert.equal(row.style.size[0], 388);
-
-    const thumbnail = visit(content, (node) => node.id === 'media_list_entry_0_thumbnail');
-    assert.deepEqual(thumbnail.style.size, [rowTokens.thumbnailSizePx, rowTokens.thumbnailSizePx]);
-    const holder = visit(content, (node) => node.id === 'media_list_entry_0_preview');
-    assert.equal(holder.style.position[0], row.style.size[0] - rowTokens.thumbnailSizePx,
-        'the miniature closes the row');
-    assert.equal(visit(content, (node) => node.id === 'media_list_entry_0_label').text, 'bande',
-        'the name owns the left side of the row');
-
-    // La ligne ne porte aucun geste de glissement : la vignette est la poignée.
-    assert.equal(row.on?.press, undefined, 'la ligne ne s’arme pas au glissement');
-    assert.equal(row.on?.drag, undefined);
-    assert.equal(row.on?.release, undefined);
-    assert.deepEqual(Object.keys(holder.on).sort(), ['activate', 'cancel', 'drag', 'press', 'release'],
-        'la vignette porte le clic et les quatre gestes du glissement');
-
-    // La case de sélection appartient au rail standard partagé.
-    const checkbox = visit(content, (node) => node.id === 'media_list_entry_0_checkbox');
-    assert.equal(checkbox.kind, 'checkbox');
-    assert.equal(panel.state.railRanges.length, 3, 'chaque ligne offre sa plage de sélection');
-
-    assert.equal(snapshot.entries[0].visualRecord.type, 'audio');
-    assert.equal(snapshot.entries[0].visualRecord.properties.media_kind, 'sound',
-        'the engine vocabulary is normalised for the shared preview');
-    assert.equal(snapshot.entries[2].visualRecord.properties.media_kind, 'image');
-});
-
-test('the type chips and the sortable header drive the same list without a second model', async () => {
+test('opened, the panel shows its label and an empty preview; the sources are band tools, nothing chosen yet', async () => {
     const { surface, draw } = harness();
     await open(surface);
-    let { content, snapshot, emitted } = draw();
-
-    assert.equal(snapshot.sortKey, 'date');
-    assert.equal(snapshot.sortDirection, 'desc');
-    const header = visit(content, (node) => node.id === 'media_header');
-    assert.deepEqual(header.children.map((child) => child.id), [
-        'media_header_cell_name', 'media_header_cell_date', 'media_header_cell_type'
-    ]);
-    assert.equal(visit(content, (node) => node.id === 'media_header_cell_name_label').text, 'Nom');
-    assert.equal(visit(content, (node) => node.id === 'media_header_cell_date_label').text, 'Date');
-    assert.equal(visit(content, (node) => node.id === 'media_header_cell_type_label').text, 'Type');
-
-    // Une premiere presse sur Nom trie par nom ascendant ; la seconde inverse.
-    await surface.handleEvent({ type: 'media.header.sort', columnId: 'name' });
-    assert.deepEqual(surface.readState().entries.map((entry) => entry.label), ['affiche', 'bande', 'montage']);
-    await surface.handleEvent({ type: 'media.header.sort', columnId: 'name' });
-    assert.deepEqual(surface.readState().entries.map((entry) => entry.label), ['montage', 'bande', 'affiche']);
-
-    // Le tri par type n'est pas un tri de texte : image, video, son.
-    await surface.handleEvent({ type: 'media.header.sort', columnId: 'type' });
-    assert.deepEqual(surface.readState().entries.map((entry) => entry.label), ['affiche', 'montage', 'bande']);
-
-    const scopes = visit(content, (node) => node.id === 'media_scopes');
-    assert.deepEqual(scopes.children.map((child) => child.id), [
-        'media_scopes_chip_0', 'media_scopes_chip_1', 'media_scopes_chip_2', 'media_scopes_chip_3'
-    ]);
-    await surface.handleEvent({ type: 'media.scope.activate', value: 'images' });
-    ({ content, snapshot, emitted } = draw());
-    assert.equal(snapshot.scope, 'images');
-    assert.deepEqual(snapshot.entries.map((entry) => entry.label), ['affiche']);
-    await surface.handleEvent({ type: 'media.scope.activate', value: 'all' });
-    assert.equal(surface.readState().entries.length, 3);
+    const { content, band, snapshot } = draw();
+    assert.deepEqual(content.map(node => node.id), ['media_label', 'media_preview']);
+    assert.equal(visit(content, node => String(node.id).startsWith('media_item_')), null, 'the media never show at once');
+    assert.equal(snapshot.title, 'Importer');
+    assert.deepEqual(bandKeys(band), ['media_import_medias', 'media_import_system', 'media_import_photo', 'media_import_video']);
 });
 
-test('contact photos stay out of the base listing and open through the Contacts import source', async () => {
-    const contactPhoto = { id: 'contact_photo_ab12', name: 'contact_photo_ab12.jpg', file_name: 'contact_photo_ab12.jpg',
-        kind: 'image', mime_type: 'image/jpeg', modified: '2026-10-08T10:00:00Z', owner_id: 'u1' };
-    const { surface, closes, draw } = harness({ files: [...FILES, contactPhoto], systemResult: () => ({ ok: true, source: 'contacts' }) });
+test('Médias unfolds the person\'s media in a grid under the preview, `other` left out', async () => {
+    const { surface, draw } = harness();
     await open(surface);
-    assert.deepEqual(surface.readState().entries.map((entry) => entry.label), ['bande', 'montage', 'affiche']);
+    await surface.handleEvent({ type: 'media.source.library' });
+    const { content, band, snapshot } = draw();
+    assert.deepEqual(content.map(node => node.id), ['media_label', 'media_preview', 'media_scopes_row', 'media_grid']);
+    assert.equal(visit(content, node => node.id === 'media_grid').kind, 'scroll_area', 'the grid scrolls in its own area');
+    assert.deepEqual(snapshot.entries.map(entry => entry.key), ['aud_1', 'vid_1', 'img_1'], 'newest first, no `other`');
+    assert.equal(band.find(item => item.key === 'media_import_medias').lit, true);
     await surface.handleEvent({ type: 'media.scope.activate', value: 'images' });
-    assert.deepEqual(surface.readState().entries.map((entry) => entry.label), ['affiche']);
-
-    await surface.handleEvent({ type: 'media.import.system' });
-    assert.equal(closes.length, 0, 'choosing the Contacts source keeps the panel open on their photos');
-    assert.deepEqual(surface.readState().entries.map((entry) => entry.label), ['contact_photo_ab12.jpg']);
-    const scopes = visit(draw().content, (node) => node.id === 'media_scopes');
-    assert.equal(scopes.children.length, 5, 'the Contacts chip appears only to leave that list');
-
-    await surface.handleEvent({ type: 'media.scope.activate', value: 'all' });
-    assert.equal(surface.readState().entries.some((entry) => entry.label.startsWith('contact_photo_')), false);
-    assert.equal(visit(draw().content, (node) => node.id === 'media_scopes').children.length, 4);
+    assert.deepEqual(surface.readState().entries.map(entry => entry.key), ['img_1']);
 });
 
-test('a click imports the media at the current level, with no system window', async () => {
+test('a picture touched is chosen and shown; Import writes the chosen ones once, then the panel closes', async () => {
     const { surface, imported, closes, draw } = harness();
     await open(surface);
-    draw();
-
-    const result = await surface.handleEvent({ type: 'media.row.activate', value: 'img_1' });
-
-    assert.deepEqual(result, { ok: true });
+    await surface.handleEvent({ type: 'media.source.library' });
+    await surface.handleEvent({ type: 'media.item.activate', value: 'img_1' });
+    await surface.handleEvent({ type: 'media.item.activate', value: 'vid_1' });
+    const { band, snapshot } = draw();
+    assert.deepEqual(snapshot.chosen.map(item => item.key), ['img_1', 'vid_1'], 'a project takes several');
+    assert.equal(snapshot.shown.key, 'vid_1', 'the last one touched shows');
+    assert.ok(bandKeys(band).includes('media_import_selection'));
+    await surface.handleEvent({ type: 'media.item.activate', value: 'vid_1' });
+    assert.deepEqual(surface.readState().chosen.map(item => item.key), ['img_1'], 'touched again, taken back');
+    const result = await surface.handleEvent({ type: 'media.choose' });
+    assert.equal(result.ok, true);
     assert.equal(imported.length, 1);
-    assert.deepEqual(imported[0].files.map((file) => file.id), ['img_1']);
-    assert.deepEqual(imported[0].placement, { autoPlace: true });
-    assert.equal(imported[0].context.projectId, 'p1');
-    assert.equal(imported[0].context.container_id, 'm1', 'the mounting context reaches the import');
-    assert.equal(closes.length, 1, 'un import abouti referme le panneau');
-
-    await surface.handleEvent({ type: 'media.row.activate', value: 'missing' });
-    assert.equal(imported.length, 1, 'an unknown row imports nothing');
-    assert.equal(closes.length, 1, 'rien à importer, rien à fermer');
+    assert.deepEqual(imported[0].files.map(file => file.id), ['img_1']);
+    assert.equal(imported[0].placement.autoPlace, true);
+    assert.equal(imported[0].context.container_id, 'm1', 'the mount context goes with the write');
+    assert.equal(closes.length, 1);
 });
 
-test('dragging a media onto the bare canvas drops it on the resolved point', async () => {
-    const point = { left: 320, top: 180 };
-    const { surface, imported, closes } = harness({ resolveDropPoint: () => point });
+test('a picture dragged onto the bare canvas drops there; outside, nothing is imported', async () => {
+    const point = { x: 120, y: 80 };
+    const inside = harness({ resolveDropPoint: () => point });
+    await open(inside.surface);
+    await inside.surface.handleEvent({ type: 'media.item.drag_start', value: 'img_1', event: { clientX: 10, clientY: 10 } });
+    await inside.surface.handleEvent({ type: 'media.item.drag_move', value: 'img_1', event: { clientX: 200, clientY: 200 } });
+    await inside.surface.handleEvent({ type: 'media.item.drag_end', value: 'img_1', event: { clientX: 200, clientY: 200 } });
+    assert.equal(inside.imported.length, 1);
+    assert.deepEqual(inside.imported[0].placement.dropPoint, point);
+    const outside = harness();
+    await open(outside.surface);
+    await outside.surface.handleEvent({ type: 'media.item.drag_start', value: 'img_1', event: { clientX: 10, clientY: 10 } });
+    await outside.surface.handleEvent({ type: 'media.item.drag_move', value: 'img_1', event: { clientX: 200, clientY: 200 } });
+    await outside.surface.handleEvent({ type: 'media.item.drag_end', value: 'img_1', event: { clientX: 200, clientY: 200 } });
+    assert.equal(outside.imported.length, 0);
+});
+
+test('a chosen picture dragged carries every chosen one', async () => {
+    const { surface, imported } = harness({ resolveDropPoint: () => ({ x: 1, y: 1 }) });
     await open(surface);
-    surface.buildContent(surface.readState(), { emit: () => {}, bodyWidth: 388 });
-
-    await surface.handleEvent({
-        type: 'media.row.drag_start', value: 'vid_1',
-        event: { client_x: 500, client_y: 400, node_id: 'media_list_entry_1' }
-    });
-    await surface.handleEvent({ type: 'media.row.drag_move', event: { client_x: 512, client_y: 412 } });
-    assert.equal(surface.readState().dragPreview.label, 'montage');
-    assert.equal(surface.readState().dragPreview.count, 1);
-    const solo = surface.buildOverlayContent(surface.readState());
-    assert.equal(visit(solo, (node) => node.id === 'media_drag_preview').style.size[0],
-        resolveListRowTokens('tall').dragThumbnailSizePx, 'la ligne seule montre la vignette agrandie');
-    assert.equal(visit(solo, (node) => node.id === 'media_drag_preview_count_label'), null,
-        'une ligne seule ne porte pas de badge de compte');
-
-    const dropped = await surface.handleEvent({ type: 'media.row.drag_end', event: { client_x: 520, client_y: 420 } });
-
-    assert.equal(dropped.ok, true);
-    assert.equal(imported.length, 1);
-    assert.deepEqual(imported[0].files.map((file) => file.id), ['vid_1']);
-    assert.equal(imported[0].placement.autoPlace, false);
-    assert.deepEqual(imported[0].placement.dropPoint, point);
-    assert.equal(surface.readState().dragPreview, null, 'the preview is gone once dropped');
-    assert.equal(closes.length, 1, 'le dépôt referme le panneau');
+    await surface.handleEvent({ type: 'media.item.activate', value: 'img_1' });
+    await surface.handleEvent({ type: 'media.item.activate', value: 'vid_1' });
+    await surface.handleEvent({ type: 'media.item.drag_start', value: 'img_1', event: { clientX: 10, clientY: 10 } });
+    await surface.handleEvent({ type: 'media.item.drag_move', value: 'img_1', event: { clientX: 200, clientY: 200 } });
+    assert.equal(surface.readState().dragPreview.count, 2);
+    await surface.handleEvent({ type: 'media.item.drag_end', value: 'img_1', event: { clientX: 200, clientY: 200 } });
+    assert.deepEqual(imported[0].files.map(file => file.id), ['img_1', 'vid_1']);
 });
 
-// La sélection est celle de toutes les listes : presser la case, glisser sur le
-// rail, relâcher. Une vignette cochée emporte alors le lot en un seul dépôt.
-test('a checked batch drags as one enlarged thumbnail and lands in a single import', async () => {
-    const point = { left: 320, top: 180 };
-    const { panel, surface, imported, closes } = harness({ resolveDropPoint: () => point });
-    await open(surface);
-    surface.buildContent(surface.readState(), { emit: () => {}, bodyWidth: 388 });
-
-    const rowStep = panel.state.railRanges[1].top - panel.state.railRanges[0].top;
-    await surface.handleEvent({
-        type: 'media.selection.press', value: 'aud_1',
-        event: { y: 0, node_id: 'media_list_entry_0_checkbox' }
-    });
-    await surface.handleEvent({
-        type: 'media.selection.drag', event: { y: rowStep, node_id: 'media_list_entry_1_checkbox' }
-    });
-    await surface.handleEvent({ type: 'media.selection.release' });
-    assert.deepEqual(panel.selection.ids(), ['aud_1', 'vid_1'], 'la série cochée suit le rail');
-
-    await surface.handleEvent({
-        type: 'media.row.drag_start', value: 'aud_1',
-        event: { client_x: 500, client_y: 400, node_id: 'media_list_entry_0_preview' }
-    });
-    await surface.handleEvent({ type: 'media.row.drag_move', event: { client_x: 520, client_y: 420 } });
-
-    const preview = surface.readState().dragPreview;
-    assert.equal(preview.count, 2);
-    assert.equal(preview.thumbnailPx, resolveListRowTokens('tall').dragThumbnailSizePx,
-        'l’aperçu est la vignette agrandie, jamais la ligne');
-
-    const overlay = surface.buildOverlayContent(surface.readState());
-    const ghost = visit(overlay, (node) => node.id === 'media_drag_preview');
-    // Deux cartes glissées forment un paquet : la boîte grandit d'un cran pour
-    // que la pile ne soit pas rognée, et chaque carte porte son décalage.
-    const stack = resolveListRowTokens('tall');
-    assert.deepEqual(ghost.style.size, [
-        preview.thumbnailPx + stack.dragStackOffsetPx,
-        preview.thumbnailPx + stack.dragStackOffsetPx
-    ], 'la boîte du paquet grandit d’un cran par carte supplémentaire');
-    assert.deepEqual(visit(overlay, (node) => node.id === 'media_drag_preview_thumbnail_0').style.position, [0, 0]);
-    assert.deepEqual(visit(overlay, (node) => node.id === 'media_drag_preview_thumbnail_1').style.position,
-        [stack.dragStackOffsetPx, stack.dragStackOffsetPx], 'la carte du fond est décalée d’un cran');
-    assert.equal(visit(overlay, (node) => node.id === 'media_drag_preview_count_label').text, '2',
-        'le badge de compte dit combien partent');
-    assert.equal(visit(overlay, (node) => node.id === 'media_drag_preview_label'), null,
-        'aucune ligne entière n’est dessinée');
-
-    const dropped = await surface.handleEvent({ type: 'media.row.drag_end', event: { client_x: 540, client_y: 440 } });
-    assert.equal(dropped.ok, true);
-    assert.equal(imported.length, 1, 'un lot est un seul import, pas N dépôts');
-    assert.deepEqual(imported[0].files.map((file) => file.id), ['aud_1', 'vid_1']);
-    assert.equal(imported[0].placement.autoPlace, false);
-    assert.deepEqual(imported[0].placement.dropPoint, point);
-    assert.equal(closes.length, 1, 'le dépôt du lot referme le panneau');
-});
-
-test('a click on a checked row still imports that row alone, never the batch', async () => {
-    const { panel, surface, imported } = harness();
-    await open(surface);
-    surface.buildContent(surface.readState(), { emit: () => {}, bodyWidth: 388 });
-
-    await surface.handleEvent({
-        type: 'media.selection.press', value: 'aud_1',
-        event: { y: 0, node_id: 'media_list_entry_0_checkbox' }
-    });
-    await surface.handleEvent({
-        type: 'media.selection.drag',
-        event: { y: panel.state.railRanges[1].top - panel.state.railRanges[0].top, node_id: 'media_list_entry_1_checkbox' }
-    });
-    await surface.handleEvent({ type: 'media.selection.release' });
-    assert.equal(panel.selection.ids().length, 2);
-
-    await surface.handleEvent({ type: 'media.row.activate', value: 'aud_1' });
-    assert.deepEqual(imported[0].files.map((file) => file.id), ['aud_1'],
-        'le clic n’emporte jamais la sélection');
-});
-
-test('a drop outside the bare canvas cancels the import', async () => {
-    const { surface, imported, closes, draw } = harness({ resolveDropPoint: () => null });
-    await open(surface);
-    draw();
-
-    await surface.handleEvent({ type: 'media.row.drag_start', value: 'aud_1', event: { client_x: 500, client_y: 400 } });
-    await surface.handleEvent({ type: 'media.row.drag_move', event: { client_x: 520, client_y: 420 } });
-    const refused = await surface.handleEvent({ type: 'media.row.drag_end', event: { client_x: 520, client_y: 420 } });
-
-    assert.deepEqual(refused, { ok: true, ignored: true }, 'releasing over a panel imports nothing');
-    assert.deepEqual(imported, []);
-    assert.equal(surface.readState().dragPreview, null);
-    assert.deepEqual(closes, [], 'un lâcher refusé ne referme rien');
-
-    await surface.handleEvent({ type: 'media.row.drag_start', value: 'aud_1', event: { client_x: 100, client_y: 100 } });
-    const immobile = await surface.handleEvent({ type: 'media.row.drag_end', event: { client_x: 103, client_y: 102 } });
-    assert.equal(immobile.ignored, true, 'a press that never moved is not a drop');
-    assert.deepEqual(imported, []);
-    assert.deepEqual(closes, []);
-});
-
-test('the fixed button at the bottom hands over to the system import window', async () => {
-    const { surface, system, closes, draw } = harness();
-    await open(surface);
-    const { fixed, emitted } = draw();
-
-    const button = visit(fixed, (node) => node.id === 'media_import_system');
-    assert.equal(button.kind, 'button');
-    assert.equal(button.accessibility.label,
-        'Ajouter des fichiers externes', 'le bouton systeme dit ce qu’il ouvre, pas « importer » tout court');
-
-    button.on.activate();
-    assert.deepEqual(emitted, [{ type: 'media.import.system' }]);
-
-    const result = await surface.handleEvent({ type: 'media.import.system' });
-
-    assert.deepEqual(result, { ok: true });
-    assert.equal(system.length, 1);
-    assert.equal(system[0].projectId, 'p1');
-    assert.equal(system[0].container_id, 'm1');
-    assert.equal(closes.length, 1, 'la fenêtre système a importé : le panneau se referme');
-});
-
-// Annuler la fenêtre système n'importe rien : le panneau reste ouvert pour
-// laisser réessayer.
-test('a cancelled system window or a failed import leaves the panel open', async () => {
+test('Ouvrir, in a project, hands over to the system window; done it closes, cancelled it stays', async () => {
+    const done = harness();
+    await open(done.surface);
+    await done.surface.handleEvent({ type: 'media.source.files' });
+    assert.equal(done.system[0].source, 'files');
+    assert.equal(done.closes.length, 1);
     const cancelled = harness({ systemResult: () => ({ ok: false, error: 'cancelled' }) });
     await open(cancelled.surface);
-    const refused = await cancelled.surface.handleEvent({ type: 'media.import.system' });
-    assert.equal(refused.ok, false);
-    assert.deepEqual(cancelled.closes, [], 'une annulation ne referme pas le panneau');
-
-    const broken = harness({ importResult: () => ({ ok: false, error: 'media_import_failed' }) });
-    await open(broken.surface);
-    const failed = await broken.surface.handleEvent({ type: 'media.row.activate', value: 'img_1' });
-    assert.equal(failed.ok, false);
-    assert.deepEqual(broken.closes, [], 'un import en échec ne referme pas le panneau');
-    const { content } = broken.draw();
-    assert.equal(broken.surface.readState().statusKind, null, 'la liste ne cède pas la place à un état d’erreur');
-    assert.equal(visit(content, (node) => node.id === 'media_list') !== null, true, 'la liste reste utilisable');
-    assert.match(visit(content, (node) => node.id === 'media_notice').text, /media_import_failed/,
-        'l’échec se dit sous la liste');
+    await cancelled.surface.handleEvent({ type: 'media.source.files' });
+    assert.equal(cancelled.closes.length, 0);
+    assert.equal(cancelled.surface.readState().notice, '', 'a window closed is not a failure');
 });
 
-test('an empty library shows the shared panel state instead of a row list', async () => {
-    const { surface, draw } = harness({ files: [] });
+test('a choice: one of the person\'s media comes back by Choix, never written in the project', async () => {
+    const { panel, surface, imported, closes, draw } = harness();
+    const pending = panel.requestSelection({ kinds: ['image'] });
+    await open(surface, { mediaPick: true });
+    await surface.handleEvent({ type: 'media.source.library' });
+    const { content, band, snapshot } = draw();
+    assert.equal(snapshot.title, 'Importer une image');
+    assert.deepEqual(snapshot.entries.map(entry => entry.key), ['img_1'], 'only what is asked for');
+    assert.equal(visit(content, node => node.id === 'media_scopes_row'), null, 'one kind: nothing to filter');
+    assert.ok(!bandKeys(band).includes('media_import_video'), 'a picture asked: no Vidéo');
+    await surface.handleEvent({ type: 'media.item.activate', value: 'img_1' });
+    await surface.handleEvent({ type: 'media.choose' });
+    const result = await pending;
+    assert.equal(result.ok, true);
+    assert.equal(result.items[0].origin, 'library');
+    assert.equal(result.items[0].file.id, 'img_1');
+    assert.equal(imported.length, 0);
+    assert.equal(closes.length, 1);
+});
+
+test('a choice from Ouvrir shows the outside file in the preview first; closed without Choix, it is cancelled', async () => {
+    const file = { name: 'vacances.png', type: 'image/png' };
+    const { panel, surface, picks } = harness({ picked: () => ({ ok: true, files: [file] }) });
+    const pending = panel.requestSelection({ kinds: ['image', 'video'] });
+    await open(surface, { mediaPick: true });
+    await surface.handleEvent({ type: 'media.source.files' });
+    assert.equal(picks[0].source, 'files');
+    assert.equal(picks[0].accept, 'image/*,video/*');
+    const state = surface.readState();
+    assert.equal(state.chosen[0].origin, 'external');
+    assert.equal(state.shown.record.properties.source, 'blob:vacances.png');
+    surface.onClose();
+    assert.deepEqual(await pending, { ok: false, cancelled: true, error: 'cancelled', items: [] });
+});
+
+test('removable: Suppr. takes off what the caller holds', async () => {
+    const { panel, surface, draw, closes } = harness();
+    const pending = panel.requestSelection({ kinds: ['image'], removable: true });
+    await open(surface, { mediaPick: true });
+    assert.ok(bandKeys(draw().band).includes('media_import_remove'));
+    await surface.handleEvent({ type: 'media.remove' });
+    assert.deepEqual(await pending, { ok: true, removed: true, items: [] });
+    assert.equal(closes.length, 1);
+});
+
+test('a sound asked: no camera, no album', async () => {
+    const { panel, surface, draw } = harness({ sources: ['camera', 'photos', 'files'] });
+    void panel.requestSelection({ kinds: ['audio'] });
+    await open(surface, { mediaPick: true });
+    assert.deepEqual(bandKeys(draw().band), ['media_import_medias', 'media_import_system']);
+});
+
+test('owner-scoped filenames keep independent choices for idless library rows', async () => {
+    const { surface } = harness({ files: [
+        { owner_id: 'owner', file_name: 'photo.png', kind: 'image' },
+        { owner_id: 'other', file_name: 'photo.png', kind: 'image' }
+    ] });
     await open(surface);
-    const { content, snapshot } = draw();
-
-    assert.equal(snapshot.statusKind, 'empty');
-    assert.equal(snapshot.status, '', 'le code d’état ne fuit pas dans le pied de panneau partagé');
-    assert.equal(visit(content, (node) => node.id === 'media_list'), null);
-    assert.equal(visit(content, (node) => node.id === 'media_state').kind, 'empty_state');
-    assert.equal(visit(content, (node) => node.id === 'media_state_title').text, 'Aucun média');
+    const rows = surface.readState().entries;
+    assert.equal(rows.length, 2);
+    assert.notEqual(rows[0].key, rows[1].key);
 });
 
-test('the body follows the visual preference: the filter bar sits on the open side', async () => {
-    const { surface, draw } = harness();
-    await open(surface);
-    const blockIds = () => draw().content.map((child) => child.id);
-
-    // Bas → haut en 'up' : filtre, en-tête, résultats, compteur.
-    assert.deepEqual(blockIds(), ['media_count', 'media_list', 'media_header', 'media_scopes_row'],
-        'en up (le défaut) le filtre reste contre le bas et les résultats s’empilent au-dessus');
-
-    globalThis.window = { __eveProfilePreferences: { visual: { accordionDirection: 'down' } } };
-    try {
-        assert.deepEqual(blockIds(), ['media_scopes_row', 'media_header', 'media_list', 'media_count'],
-            'en down le filtre reprend le haut du panneau');
-    } finally {
-        delete globalThis.window;
-    }
+// The listing comes in two waves (uploaded files, then takes): what is read shows at once.
+test('the listing paints each wave and keeps the previous rows while it refreshes', async () => {
+    let release = () => {};
+    const gate = new Promise((resolve) => { release = resolve; });
+    const panel = createMediaPanelSurface({
+        loadFiles: async ({ onProgress } = {}) => {
+            onProgress?.({ ok: true, partial: true, files: [FILES[2]] });
+            await gate;
+            return { ok: true, files: [FILES[0], FILES[2]] };
+        },
+        sources: () => ['files']
+    });
+    panel.surface.onOpen({ context: MOUNT_CONTEXT });
+    await flush();
+    const partial = panel.surface.readState();
+    assert.deepEqual(partial.entries.map((entry) => entry.name), ['affiche'], 'the first wave is already a list');
+    assert.equal(partial.statusKind, null);
+    release();
+    await flush();
+    assert.deepEqual(panel.surface.readState().entries.map((entry) => entry.name), ['montage', 'affiche']);
 });
 
-// Le dossier utilisateur n'est pas au même niveau en natif : la liste vient du
-// serveur local, pas de Fastify, et l'identité y est locale (pas de jeton cloud).
+// Partial transfers retain failures for review without replaying successful entries.
+test('a partial batch keeps the panel open and reports its failure', async () => {
+    const partial = harness({ importResult: () => ({ ok: false, created: 1, error: 'media_create_failed' }) });
+    await open(partial.surface);
+    await partial.surface.handleEvent({ type: 'media.item.activate', value: 'img_1' });
+    const result = await partial.surface.handleEvent({ type: 'media.choose' });
+    assert.equal(result.ok, false);
+    assert.deepEqual(partial.closes, []);
+    assert.match(partial.surface.readState().notice, /media_create_failed/);
+});
+
 test('a native runtime lists the user folder through the local server, without a cloud token', async () => {
     const calls = [];
     const files = [{ name: 'clip.mp4', size: 12, modified: 1759000000 }];
@@ -445,125 +306,7 @@ test('a native runtime without local identity refuses instead of listing nothing
 });
 
 // Le pied fixe porte deux gestes distincts. Les confondre faisait croire que la
-// fenêtre système allait importer la sélection : le bouton de droite la valide,
-// comme le ferait un clic de ligne, et reste grisé tant qu'il n'y a rien à
-// valider.
-test('the fixed foot validates the checked batch and stays greyed without one', async () => {
-    const { panel, surface, imported, closes, draw } = harness();
-    await open(surface);
-    surface.buildContent(surface.readState(), { emit: () => {}, bodyWidth: 388 });
 
-    const idle = visit(draw().fixed, (node) => node.id === 'media_import_selection');
-    assert.equal(idle.kind, 'button');
-    assert.equal(visit(draw().fixed, (node) => node.id === 'media_import_selection_label').text, 'Importer');
-    assert.equal(idle.style.opacity, BEVY_PANEL_TOKENS.actionButton.disabledOpacity,
-        'sans sélection, le bouton est grisé');
-    assert.equal(idle.on, undefined, 'un bouton grisé n’arme aucun geste');
-
-    assert.deepEqual(await surface.handleEvent({ type: 'media.import.selection' }),
-        { ok: false, error: 'media_selection_empty' }, 'rien de coché : rien à valider');
-    assert.deepEqual(imported, []);
-    assert.deepEqual(closes, []);
-
-    const rowStep = panel.state.railRanges[1].top - panel.state.railRanges[0].top;
-    await surface.handleEvent({
-        type: 'media.selection.press', value: 'aud_1',
-        event: { y: 0, node_id: 'media_list_entry_0_checkbox' }
-    });
-    await surface.handleEvent({
-        type: 'media.selection.drag', event: { y: rowStep, node_id: 'media_list_entry_1_checkbox' }
-    });
-    await surface.handleEvent({ type: 'media.selection.release' });
-    surface.buildContent(surface.readState(), { emit: () => {}, bodyWidth: 388 });
-
-    const armed = visit(draw().fixed, (node) => node.id === 'media_import_selection');
-    assert.equal(visit(draw().fixed, (node) => node.id === 'media_import_selection_label').text, 'Importer (2)',
-        'le bouton dit combien d’éléments il valide');
-    assert.equal(armed.style.opacity, 1, 'avec une sélection, le bouton est actif');
-
-    const emitted = [];
-    const armedFoot = surface.buildFixedContent(surface.readState(), {
-        emit: (intent) => emitted.push(intent), bodyWidth: 388
-    });
-    visit(armedFoot, (node) => node.id === 'media_import_selection').on.activate();
-    assert.deepEqual(emitted, [{ type: 'media.import.selection' }],
-        'le bouton du bas demande la validation de la sélection cochée');
-
-    const result = await surface.handleEvent({ type: 'media.import.selection' });
-
-    assert.deepEqual(result, { ok: true });
-    assert.equal(imported.length, 1, 'la sélection est un seul import, pas N dépôts');
-    assert.deepEqual(imported[0].files.map((file) => file.id), ['aud_1', 'vid_1']);
-    assert.deepEqual(imported[0].placement, { autoPlace: true },
-        'le bouton se comporte exactement comme un clic de ligne');
-    assert.equal(closes.length, 1, 'un import abouti referme le panneau');
-});
-
-// Un lot glissé est un paquet : jusqu'à trois cartes en escalier, et le badge
-// dit combien partent réellement, même au-delà de la pile visible.
-test('a batch drag shows up to three staggered cards under the pointer', async () => {
-    const point = { left: 320, top: 180 };
-    const { panel, surface, imported } = harness({ resolveDropPoint: () => point });
-    await open(surface);
-    surface.buildContent(surface.readState(), { emit: () => {}, bodyWidth: 388 });
-
-    const ranges = panel.state.railRanges;
-    await surface.handleEvent({
-        type: 'media.selection.press', value: 'aud_1',
-        event: { y: 0, node_id: 'media_list_entry_0_checkbox' }
-    });
-    await surface.handleEvent({
-        type: 'media.selection.drag',
-        event: { y: ranges[2].top - ranges[0].top, node_id: 'media_list_entry_2_checkbox' }
-    });
-    await surface.handleEvent({ type: 'media.selection.release' });
-    assert.equal(panel.selection.ids().length, 3);
-
-    await surface.handleEvent({
-        type: 'media.row.drag_start', value: 'aud_1',
-        event: { client_x: 500, client_y: 400, node_id: 'media_list_entry_0_preview' }
-    });
-    await surface.handleEvent({ type: 'media.row.drag_move', event: { client_x: 520, client_y: 420 } });
-
-    const preview = surface.readState().dragPreview;
-    const stack = resolveListRowTokens('tall');
-    assert.equal(preview.count, 3);
-    assert.equal(preview.stackMaxPx, stack.dragStackMaxPx, 'le plafond de la pile vient de l’habillage');
-    assert.equal(preview.stackOffsetPx, stack.dragStackOffsetPx);
-
-    const overlay = surface.buildOverlayContent(surface.readState());
-    const ghost = visit(overlay, (node) => node.id === 'media_drag_preview');
-    const expectedBox = preview.thumbnailPx + (2 * stack.dragStackOffsetPx);
-    assert.deepEqual(ghost.style.size, [expectedBox, expectedBox],
-        'la boîte contient la pile entière, sinon son propre overflow la rognerait');
-    [0, 1, 2].forEach((index) => {
-        assert.deepEqual(
-            visit(overlay, (node) => node.id === `media_drag_preview_thumbnail_${index}`).style.position,
-            [index * stack.dragStackOffsetPx, index * stack.dragStackOffsetPx],
-            `la carte ${index} est décalée d’un cran de plus`
-        );
-    });
-    assert.equal(visit(overlay, (node) => node.id === 'media_drag_preview_thumbnail_3'), null,
-        'la pile ne dessine jamais une carte de plus que son plafond');
-    assert.equal(visit(overlay, (node) => node.id === 'media_drag_preview_count_label').text, '3');
-
-    // Un paquet montre le paquet : chaque carte est le media qu'elle emporte.
-    // Les repeter toutes a l'identique faisait croire a trois fois le meme
-    // fichier glisse.
-    const cardMedia = (index) => {
-        const card = visit(overlay, (node) => node.id === `media_drag_preview_thumbnail_${index}`);
-        return card?.children?.[0]?.overlayRecord?.properties?.name || '';
-    };
-    assert.deepEqual([cardMedia(0), cardMedia(1), cardMedia(2)], ['bande', 'montage', 'affiche'],
-        'les trois vignettes de la pile sont trois medias distincts');
-
-    await surface.handleEvent({ type: 'media.row.drag_end', event: { client_x: 540, client_y: 440 } });
-    assert.equal(imported.length, 1);
-    assert.deepEqual(imported[0].files.map((file) => file.id), ['aud_1', 'vid_1', 'img_1']);
-});
-
-// La sonde de dimensions est le seul coût média du premier dépôt : elle ne doit
-// pas être repayée pour la même source, ni deux fois pour un même lot.
 test('a media size probe is paid once per source, never once per drop', async () => {
     const previousImage = globalThis.Image;
     const probes = [];
@@ -678,69 +421,6 @@ test('library references to the same file collapse, while homonyms from another 
     }
 });
 
-test('owner-scoped filenames keep independent selection for idless library rows', async () => {
-    const { surface } = harness({ files: [
-        { owner_id: 'owner', file_name: 'photo.png', kind: 'image' },
-        { owner_id: 'other', file_name: 'photo.png', kind: 'image' }
-    ] });
-    await open(surface);
-    const rows = surface.readState().entries;
-    assert.equal(rows.length, 2);
-    assert.notEqual(rows[0].id, rows[1].id);
-});
-
-// Le listage se fait en deux vagues (fichiers uploades, puis atomes de prise).
-// Les lignes deja lues doivent s'afficher tout de suite : recevoir le lot d'un
-// bloc a la fin faisait attendre le panneau plusieurs secondes, et une
-// reouverture repartait d'un panneau vide.
-test('the listing paints each wave and keeps the previous rows while it refreshes', async () => {
-    let release = () => {};
-    const gate = new Promise((resolve) => { release = resolve; });
-    const closes = [];
-    const panel = createMediaPanelSurface({
-        loadFiles: async ({ onProgress } = {}) => {
-            onProgress?.({ ok: true, partial: true, files: [FILES[2]] });
-            await gate;
-            return { ok: true, files: [FILES[0], FILES[2]] };
-        },
-        importFiles: async () => ({ ok: true }),
-        closePanel: () => closes.push(true),
-        resolveDropPoint: () => null
-    });
-
-    panel.surface.onOpen({ context: MOUNT_CONTEXT });
-    await flush();
-
-    const partial = panel.surface.readState();
-    assert.deepEqual(partial.entries.map((entry) => entry.label), ['affiche'],
-        'la premiere vague est deja une liste, pas un etat de chargement');
-    assert.equal(partial.statusKind, null, 'les lignes lues restent a l ecran pendant la suite du listage');
-
-    release();
-    await flush();
-    assert.deepEqual(panel.surface.readState().entries.map((entry) => entry.label), ['montage', 'affiche'],
-        'la vague suivante remplace la precedente');
-});
-
-// Partial transfers retain failures for review without replaying successful entries.
-test('a partial batch restores the panel and reports its failure', async () => {
-    const partial = harness({ importResult: () => ({ ok: false, created: 1, error: 'media_create_failed' }) });
-    await open(partial.surface);
-    const result = await partial.surface.handleEvent({ type: 'media.row.activate', value: 'img_1' });
-
-    assert.equal(result.ok, false);
-    assert.deepEqual(partial.closes, []);
-    assert.match(partial.surface.readState().notice, /media_create_failed/);
-
-    const nothing = harness({ importResult: () => ({ ok: false, created: 0, error: 'media_create_failed' }) });
-    await open(nothing.surface);
-    await nothing.surface.handleEvent({ type: 'media.row.activate', value: 'img_1' });
-    assert.deepEqual(nothing.closes, [], 'aucun atome cree : le panneau reste ouvert');
-});
-
-// La sonde de dimensions d une video ne doit JAMAIS rester en attente : un
-// demontage qui echoue la laissait pendante, et tout le lot du panneau Media
-// attendait cette promesse pour toujours — le depot ne faisait plus rien.
 test('a video element that fails to tear down still settles its size probe', async () => {
     const previousDocument = globalThis.document;
     let loadCalls = 0;

@@ -161,9 +161,11 @@ async function synchronizeBrowserWorkspaceOnce({ send, ensureSession, uploadFile
     if (refused.length) {
         globalThis.window?.dispatchEvent(new CustomEvent('squirrel:workspace-sync-refused', { detail: { userId: owner, refused } }));
     }
-    for (let offset = 0; ; offset += 250) {
+    // Oldest change first, from after the last state received: a state changed during
+    // the walk comes again at its end instead of slipping between two pages.
+    for (let after = null; ;) {
         stillAuthorized();
-        const response = await send({ type: 'state-current', action: 'list', owner_id: owner, include_deleted: true, limit: 250, offset });
+        const response = await send({ type: 'state-current', action: 'list', owner_id: owner, include_deleted: true, limit: 250, order: 'oldest', ...(after ? { after } : {}) });
         if (!response?.ok || !Array.isArray(response.states)) throw new Error(response?.error || 'workspace_sync_failed');
         await importWorkspaceStates(owner, response.states);
         stillAuthorized();
@@ -173,6 +175,8 @@ async function synchronizeBrowserWorkspaceOnce({ send, ensureSession, uploadFile
             detail: { principal_id: owner, replay: true }
         }));
         if (response.states.length < 250) break;
+        const last = response.states[response.states.length - 1];
+        after = { updated_at: last.meta?.updated_at || last.updated_at || '', atome_id: last.id || last.atome_id };
     }
     stillAuthorized();
     globalThis.window?.dispatchEvent(new CustomEvent('squirrel:workspace-synchronized', { detail: { userId: owner } }));

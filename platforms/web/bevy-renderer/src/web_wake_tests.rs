@@ -41,6 +41,7 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         star_inner_radius: None,
         polygon_sides: None,
         mask: None,
+        progress_ring: None,
         mask_source: false,
         menu_plane: 0,
         procedural: None,

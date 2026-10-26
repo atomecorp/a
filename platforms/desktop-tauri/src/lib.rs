@@ -17,7 +17,9 @@ mod runtime_logging;
 mod server;
 mod streaming_view;
 mod taxonomy_editor;
+#[cfg(not(target_os = "android"))]
 mod viewport_runtime;
+#[cfg(target_os = "android")] mod android_tls_roots;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -214,8 +216,10 @@ pub fn run() {
                 native_health::reset_on_page_load(&webview.state::<std::sync::Mutex<native_health::HealthChannelState>>());
             }
         })
-        .on_window_event(|window, event| {
-            viewport_runtime::publish_native_viewport(window, event);
+        .on_window_event(|_window, event| {
+            // Android: the Kotlin host (MainActivity) owns the viewport and its safe-area insets.
+            #[cfg(not(target_os = "android"))]
+            viewport_runtime::publish_native_viewport(_window, event);
             if let tauri::WindowEvent::Focused(focused) = event {
                 if let Err(error) = audio_engine::wake_capture::set_foreground(*focused) {
                     eprintln!("wake foreground transition failed: {}", error);
@@ -228,6 +232,7 @@ pub fn run() {
             auth_device::auth_development_request,
             dev_logging::log_from_webview,
             native_contacts::macos_contacts_snapshot,
+            native_contacts::contacts_open_settings,
             native_personal_import::native_calendar_snapshot,
             native_personal_import::native_import_device_id,
             native_midi::start_native_midi,
@@ -286,9 +291,8 @@ pub fn run() {
             project_root
         ])
         .setup(|app| {
-            println!("[tauri] fs plugin enabled");
-            println!("[tauri] stt plugin enabled");
             let path_resolver = app.path();
+            #[cfg(target_os = "android")] android_tls_roots::install(path_resolver)?;
 
             // Android exposes no file system path for bundled resources:
             // `resource_dir()` returns the URI "asset://localhost/" there. The staged
@@ -447,11 +451,20 @@ pub fn run() {
                     eprintln!("[tauri] Unable to parse local Axum URL");
                     return;
                 };
-                if let Err(err) = win.navigate(url) {
+                // Android: the boot page is replaced, never stacked, so the system Back
+                // (Tauri's app plugin goes back in the WebView history) cannot return to it.
+                #[cfg(target_os = "android")]
+                let navigated = win.eval(&format!("location.replace({:?})", url.as_str()));
+                #[cfg(not(target_os = "android"))]
+                let navigated = win.navigate(url);
+                if let Err(err) = navigated {
                     eprintln!("[tauri] Unable to navigate main window to local Axum server: {}", err);
                 }
-                std::thread::sleep(std::time::Duration::from_millis(350));
-                viewport_runtime::publish_current_webview_viewport(&win);
+                #[cfg(not(target_os = "android"))]
+                {
+                    std::thread::sleep(std::time::Duration::from_millis(350));
+                    viewport_runtime::publish_current_webview_viewport(&win);
+                }
             });
 
             {

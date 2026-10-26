@@ -3,14 +3,14 @@ const TOOL_SLIDER_DRAG_THRESHOLD_PX = 4;
 import { quantizeSliderValue as quantize } from './slider_contract.js';
 const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 
+// The one gesture of every tool slider (user rule): a press opens it; a drag past the threshold
+// sets the value relatively and, on release, closes it again unless it was pinned; a click
+// (no drag) on a closed slider pins it open, a click anywhere on a pinned one closes it.
+// Cancel restores the starting value and the open state the press found.
 const beginToolSliderSession = (value, config = {}, options = {}) => {
     const startValue = quantize(value, config);
     const pinned = options.pinned === true && options.expanded === true;
-    return {
-        state: 'pressed', expanded: true, pinned, wasPinned: pinned,
-        compactAnchor: options.compactAnchor !== false,
-        value: startValue, startValue, delta: 0, dragged: false
-    };
+    return { state: 'pressed', expanded: true, pinned, wasPinned: pinned, value: startValue, startValue, delta: 0, dragged: false };
 };
 
 const dragToolSliderSession = (session = {}, delta = 0, travelPx = 1, config = {}) => {
@@ -19,34 +19,21 @@ const dragToolSliderSession = (session = {}, delta = 0, travelPx = 1, config = {
     const dragged = session.dragged === true || Math.abs(nextDelta) >= TOOL_SLIDER_DRAG_THRESHOLD_PX;
     if (!dragged) return { ...session, delta: nextDelta };
     const min = finite(config.min, 0);
-    const max = Math.max(min, finite(config.max, 100));
-    const range = max - min;
+    const range = Math.max(min, finite(config.max, 100)) - min;
     return {
-        ...session,
-        state: 'dragging',
-        delta: nextDelta,
-        dragged: true,
+        ...session, state: 'dragging', delta: nextDelta, dragged: true,
         value: quantize(finite(session.startValue, min) + ((nextDelta / Math.max(1, finite(travelPx, 1))) * range), config)
     };
 };
 
-const releaseToolSliderSession = (session = {}, options = {}) => {
-    const cancelled = options.cancelled === true;
+const releaseToolSliderSession = (session = {}, { cancelled = false } = {}) => {
     const wasPinned = session.wasPinned === true;
-    if (cancelled) {
-        return {
-            ...session, state: wasPinned ? 'pinned' : 'collapsed', expanded: wasPinned,
-            pinned: wasPinned, value: finite(session.startValue, session.value), dragged: false
-        };
-    }
-    if (session.dragged === true) {
-        return { ...session, state: wasPinned ? 'pinned' : 'collapsed', expanded: wasPinned, pinned: wasPinned };
-    }
-    const compactAnchor = options.compactAnchor ?? session.compactAnchor;
-    if (wasPinned && compactAnchor === true) {
-        return { ...session, state: 'collapsed', expanded: false, pinned: false };
-    }
-    return { ...session, state: 'pinned', expanded: true, pinned: true };
+    // A drag (or a cancel) gives back the open state the press found; a click toggles it.
+    const pinned = cancelled || session.dragged === true ? wasPinned : !wasPinned;
+    return {
+        ...session, state: pinned ? 'pinned' : 'collapsed', expanded: pinned, pinned,
+        ...(cancelled ? { value: finite(session.startValue, session.value), dragged: false } : {})
+    };
 };
 
 const createDirectSliderDragController = ({

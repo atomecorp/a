@@ -13,6 +13,7 @@ import {
 } from './atomePropertySecurity.js';
 import { createServerConditionAuthority } from './conditionsQueryAuthority.js';
 import { handleAtomeHistoryCommand } from './atomeHistoryCommands.js';
+import { afterCommitted } from './ws_api_commit_effects.js';
 import { wsResponse as response, wsErrorResponse as errorResponse, requestIdOf } from './wsResponse.js';
 const MUTATING_ACTIONS = new Set([
     'events:commit',
@@ -165,12 +166,7 @@ async function handleEvents(message, connection, userId) {
                 authenticatedUserId: userId,
                 syncSource: message.sync_source || event?.sync_source || ''
             });
-        if (result.ok && result.inserted) {
-            await connection?._wsApiSyncRuntime?.publish(result.event);
-            if (String(result.event?.atome_id || '') === String(userId)) {
-                await connection?._wsApiDirectoryService?.refreshPrincipal(userId);
-            }
-        }
+        if (result.ok && result.inserted) await afterCommitted(connection, userId, [result.event]);
         return response('events', message, result.ok, result.ok
             ? { event: result.event }
             : { error: result.error || 'commit_failed' });
@@ -198,15 +194,10 @@ async function handleEvents(message, connection, userId) {
                 syncSource: message.sync_source || ''
             });
         if (result.ok && result.inserted_count > 0) {
-            let refreshDirectory = false;
             const insertedEvents = Array.isArray(result.inserted_events)
                 ? result.inserted_events
                 : (result.events || []).filter((event) => db.wasEventInserted(event));
-            for (const committedEvent of insertedEvents) {
-                await connection?._wsApiSyncRuntime?.publish(committedEvent);
-                if (String(committedEvent?.atome_id || '') === String(userId)) refreshDirectory = true;
-            }
-            if (refreshDirectory) await connection?._wsApiDirectoryService?.refreshPrincipal(userId);
+            await afterCommitted(connection, userId, insertedEvents);
         }
         return response('events', message, result.ok, result.ok
             ? { events: result.events }
@@ -251,6 +242,8 @@ async function handleStateCurrent(message, userId, connection) {
         const options = {
             limit: message.limit,
             offset: message.offset,
+            order: message.order === 'oldest' ? 'oldest' : null,
+            after: message.after && typeof message.after === 'object' ? message.after : null,
             atomeType: message.atome_type || message.atomeType || null,
             ownerId: userId,
             includeShared: message.include_shared === true || message.includeShared === true,
@@ -432,12 +425,7 @@ async function handleSync(message, userId, connection) {
                 txId: message.tx_id || message.txId || null,
                 syncSource: message.sync_source || 'ws-api'
             });
-        if (committed.ok) {
-            for (const event of committed.events || []) {
-                if (event?.inserted !== true) continue;
-                await connection?._wsApiSyncRuntime?.publish(event);
-            }
-        }
+        if (committed.ok) await afterCommitted(connection, userId, (committed.events || []).filter(event => event?.inserted === true));
         return committed.ok
             ? response('sync', message, true, { changes: committed.events })
             : errorResponse('sync', message, committed.error);

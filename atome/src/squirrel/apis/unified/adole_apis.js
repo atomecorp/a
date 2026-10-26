@@ -299,6 +299,10 @@ export const AdoleAPI = {
     like: (newsId) => fastifyCall({ type: 'news', action: 'like', newsId }, 'news_auth_unavailable'),
     repost: (newsId) => fastifyCall({ type: 'news', action: 'repost', newsId }, 'news_auth_unavailable')
   },
+  // Public events (server/public_events.js): reading goes through `shows-nearby` kind `declared`; a report here.
+  publicEvents: {
+    report: (eventId, reason) => fastifyCall({ type: 'public-events', action: 'report', eventId, reason }, 'events_auth_unavailable')
+  },
   // Communities (atome/src/shared/community_contract.js): joining, the thread of its members,
   // the host's moderation. A member posts through `news.publish` with `{ community }` as audience.
   communities: {

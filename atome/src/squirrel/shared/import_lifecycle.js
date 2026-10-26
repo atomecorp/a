@@ -32,6 +32,10 @@ export function createImportLifecycle({ domain, run, restore, env = globalThis, 
     const ensureDevice = async () => (deviceId ||= device ? device() : await resolveImportDevice(env));
     const store = createCanonicalImport({ type: domain, api, session });
     const active = new Map();
+    // Sources stopped in this session (a refused permission, a stop): a resume read before
+    // their stop was written never starts them again; only activate() does. On Android the
+    // permission sheet hides the page, and its return resumes while the refusal is stopping it.
+    const stopped = new Set();
     let timer = null, generation = 0, disposed = false, resuming = null, owner = null;
     // Seulement les pages qui ont ecrit quelque chose (et les echecs) : un cycle sans
     // nouveaute (retour au premier plan, minuterie) ne fait relire ni le Dashboard ni
@@ -114,6 +118,7 @@ export function createImportLifecycle({ domain, run, restore, env = globalThis, 
             if (entry.debounce) clearTimeout(entry.debounce);
         }
         active.clear();
+        stopped.clear();
         owner = null;
         if (timer) clearInterval(timer);
         timer = null;
@@ -137,6 +142,7 @@ export function createImportLifecycle({ domain, run, restore, env = globalThis, 
     };
     const activate = async (id, config = {}) => {
         if (disposed) throw new Error('import_lifecycle_disposed');
+        stopped.delete(id);
         const context = store.capture();
         const safeConfig = Object.fromEntries(['source_key', 'auth_ref', 'addressbook_url', 'calendar_url', 'collections', 'start_year', 'future_years']
             .filter(key => config[key] !== undefined).map(key => [key, config[key]]));
@@ -156,6 +162,7 @@ export function createImportLifecycle({ domain, run, restore, env = globalThis, 
     const deactivate = async id => {
         const context = store.capture(), entry = active.get(id);
         if (!entry) return { ok: false, error: 'import_source_inactive' };
+        stopped.add(id);
         entry.controller.abort(); active.delete(id);
         if (entry.debounce) clearTimeout(entry.debounce);
         const rows = await store.list(IMPORT_SOURCE_TYPE, context);
@@ -172,9 +179,10 @@ export function createImportLifecycle({ domain, run, restore, env = globalThis, 
             const currentDevice = await ensureDevice();
             for (const row of rows) {
                 const props = importRecordProps(row);
-                if (!props.enabled || props.domain_type !== domain || props.device_id !== currentDevice) continue;
+                if (!props.enabled || props.domain_type !== domain || props.device_id !== currentDevice || stopped.has(props.source_id)) continue;
                 await restore?.(props.source_id, props.config || {});
                 context.check();
+                if (stopped.has(props.source_id)) continue;
                 const entry = await install(props.source_id, props.config || {}, context);
                 // A checkpoint written under a former key moves to the current one
                 // (without its cursor: one full read adopts the former records).

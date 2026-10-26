@@ -17,7 +17,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
 // The app's authentication, notification and streaming-view owners validate their contracts.
 // This plugin registers no JavaScript command and adds no identity authority.
 pub fn call<R: Runtime>(_app: &AppHandle<R>, method: &str, _payload: Value) -> Result<Value, String> {
-    if !matches!(method, "authDevice" | "notifications" | "streamingView") { return Err("mobile_host_command_invalid".into()); }
+    if !matches!(method, "authDevice" | "notifications" | "streamingView" | "contacts" | "openAppSettings") { return Err("mobile_host_command_invalid".into()); }
     #[cfg(target_os = "android")]
     return _app.try_state::<Host<R>>().ok_or("mobile_host_unavailable")?.0
         .run_mobile_plugin::<Value>(method, _payload).map_err(|_| "mobile_host_operation_failed".into());

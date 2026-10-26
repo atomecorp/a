@@ -21,6 +21,10 @@ export const createWakeCapture = ({ env = globalThis, onFrame, onError }) => {
     const startNative = async () => {
         const invoke = getTauriInvoke(env);
         if (!invoke) throw new Error('wake_native_capture_unavailable');
+        // Android grants the microphone at run time (the STT plugin owns that permission; a desktop has it):
+        // without it the native capture only delivered silence while eVe looked to be listening.
+        if (isTauriAudioRuntime(env) && (await invoke('plugin:stt|request_permission'))?.microphone !== 'granted') throw new Error('microphone_permission_denied');
+        if (closed) return;
         let timer = null, subscribed = true;
         stopCapture = async () => {
             if (timer !== null) env.clearTimeout(timer);

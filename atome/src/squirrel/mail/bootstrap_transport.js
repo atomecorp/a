@@ -233,16 +233,16 @@ const loadPersistedMailPreferences = async (env) => {
 
 const resolveRuntimeMailCredentials = async (env, options = {}) => {
     const prefs = env?.__eveProfilePreferences;
+    const explicit = options?.credentials && typeof options.credentials === 'object' ? options.credentials : null;
+    // The account's settings win over this device's copy (later sources win): the copy
+    // may predate a change made on another device, or belong to another account.
     let source = mergeMailCredentialSources(
-        prefs?.mail && typeof prefs.mail === 'object' ? prefs.mail : null,
         readPersistedRuntimeMailPreferences(env),
-        options?.credentials && typeof options.credentials === 'object' ? options.credentials : null
+        prefs?.mail && typeof prefs.mail === 'object' ? prefs.mail : null,
+        explicit
     );
     if (!hasCompleteRuntimeMailCredentials(source)) {
-        source = mergeMailCredentialSources(
-            await loadPersistedMailPreferences(env),
-            source
-        );
+        source = mergeMailCredentialSources(source, await loadPersistedMailPreferences(env), explicit);
     }
     if (!source) return null;
     source = normalizeRuntimeMailPreferences(source);

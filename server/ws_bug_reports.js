@@ -17,7 +17,7 @@
 // (`{ resolved_at, note, fixed_in }`) into it with scripts/bug_reports_admin.mjs. A
 // `bug-report-status` frame asks which of a device's sent reports are resolved, by
 // their id and day (the ids are random, a report is only known to who filed it): the
-// device then removes those from its list.
+// device then shows those as fixed, and the user removes them from their list.
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

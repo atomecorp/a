@@ -3,13 +3,16 @@ import { fileURLToPath } from 'node:url';
 import { logStructured } from './server_logger.js';
 import { loadLocalShowsConfig, loadLocalTourismConfig } from './auth_secret_config.js';
 import { TOURISM_KINDS, readTourism } from './shows_tourism.js';
+import { SHOWS_SORTS } from '../atome/src/squirrel/shows/contracts.js';
+import { activityAgendaWords } from '../atome/src/shared/activity_categories.js';
+import { distanceKm } from '../atome/src/shared/public_event_contract.js';
 
 // Public `shows-nearby` operation of /ws/api: what is on around a position, for the
 // Spectacles rubric of the Dashboard (eVe/domains/shows/shows_client.js). Every
 // answer is one list of `show` entries, a page at a time (`pageToken`):
 //
 // - OpenAgenda kinds (`concerts`, `stage`, `expos`, `events`, `family`, `free`,
-//   `sport`): the public OpenAgenda events dataset (OpenDataSoft, no key), within
+//   `sport`, `outings`): the public OpenAgenda events dataset (OpenDataSoft, no key), within
 //   `radiusKm` of `lat`/`lon`, soonest first.
 // - Places (`cinemas`, `heritage`, `restaurants`, `bars`): the places of France from
 //   OpenStreetMap (OpenDataSoft, no key, ODbL), nearest first, with their own website
@@ -21,8 +24,13 @@ import { TOURISM_KINDS, readTourism } from './shows_tourism.js';
 //   key), kept MATCH_TTL_MS (the free key allows 30 calls a minute).
 // - Tourism kinds (`museums`, `nature`, `hiking`, `experiences`, `wellbeing`): the
 //   DATAtourisme places around (server/shows_tourism.js, `DATATOURISME_API_KEY`).
+// - `declared`: the events users declared around, of the activity `categories` asked
+//   (server/public_events.js), soonest first.
 // - `sources`: which keyed sources this server holds (`{ tourism }`), so the rubric lays
 //   only the plates it can fill.
+// `sort` (SHOWS_SORTS, the shared contract): the order a kind can be read in, its first by default: an outing by
+// `date` (soonest), `distance` (nearest) or `name` (its place's name), a place by
+// `distance` or `name`; the other kinds keep their one order.
 
 const ODS = 'https://public.opendatasoft.com/api/explore/v2.1/catalog/datasets';
 const TMDB = 'https://api.themoviedb.org/3';
@@ -43,17 +51,10 @@ const localConfigRead = new WeakSet();
 const films = new Map();
 let matches = { entries: null, at: 0 };
 
-// What each OpenAgenda kind looks for, in an event's title or keywords; job-centre
-// workshops (France Travail) name every trade and are never a show.
-const AGENDA_WORDS = Object.freeze({
-    concerts: ['concert', 'musique', 'jazz', 'rock', 'chanson', 'récital'],
-    stage: ['théâtre', 'humour', 'cirque', 'opéra', 'danse', 'spectacle', 'marionnette', 'stand-up'],
-    expos: ['exposition', 'expo', 'musée', 'vernissage'],
-    events: ['festival', 'fête', 'carnaval', 'marché', 'brocante', 'vide-grenier', 'foire', 'salon', 'kermesse'],
-    family: ['jeune public', 'enfant', 'famille', 'conte'],
-    sport: ['sport', 'match', 'course', 'tournoi', 'marathon', 'football', 'rugby', 'basket', 'handball', 'vélo', 'randonnée'],
-    free: []
-});
+// What each OpenAgenda kind looks for, in an event's title or keywords: the words of the activity
+// categories feeding it (atome/src/shared/activity_categories.js); `free` reads the conditions.
+// Job-centre workshops (France Travail) name every trade and are never a show.
+const AGENDA_WORDS = Object.freeze({ ...activityAgendaWords(), free: [] });
 // What each place kind reads: its OpenStreetMap dataset, the `type` values it keeps (a heritage
 // place worth a visit, not a plaque, a tomb or a wayside cross) and the fields that dataset has.
 const PLACES = Object.freeze({
@@ -63,7 +64,7 @@ const PLACES = Object.freeze({
     restaurants: { dataset: 'osm-france-food-service', types: ['restaurant', 'cafe'], fields: 'website,phone' },
     bars: { dataset: 'osm-france-food-service', types: ['bar', 'pub', 'biergarten'], fields: 'website,phone' }
 });
-const KINDS = new Set([...Object.keys(AGENDA_WORDS), ...Object.keys(PLACES), ...Object.keys(TOURISM_KINDS), 'films', 'matches', 'sources']);
+const KINDS = new Set([...Object.keys(AGENDA_WORDS), ...Object.keys(PLACES), ...Object.keys(TOURISM_KINDS), 'films', 'matches', 'sources', 'declared']);
 const UNPOSITIONED = new Set(['films', 'matches', 'sources']);
 
 const text = value => String(value == null ? '' : value).trim();
@@ -92,12 +93,6 @@ const readJson = async (fetchResource, url) => {
     return response.json();
 };
 
-const distanceKm = (from, lat, lon) => {
-    if (!from || !Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-    const rad = Math.PI / 180, dLat = (lat - from.lat) * rad, dLon = (lon - from.lon) * rad;
-    const a = Math.sin(dLat / 2) ** 2 + Math.cos(from.lat * rad) * Math.cos(lat * rad) * Math.sin(dLon / 2) ** 2;
-    return Math.round(12742 * Math.asin(Math.sqrt(a)) * 10) / 10;
-};
 const point = ({ lat, lon }) => `geom'POINT(${lon} ${lat})'`;
 const geo = value => (value && typeof value === 'object' ? { lat: Number(value.lat), lon: Number(value.lon) } : { lat: NaN, lon: NaN });
 
@@ -129,8 +124,10 @@ const ticketUrl = (value) => {
     try { entries = typeof value === 'string' ? JSON.parse(value) : value; } catch { return ''; }
     return (Array.isArray(entries) ? entries : []).filter(entry => entry?.type === 'link').map(entry => httpsUrl(entry.value)).find(Boolean) || '';
 };
+const AGENDA_ORDER = Object.freeze({ date: () => 'firstdate_begin', distance: spec => `distance(location_coordinates, ${point(spec)}), firstdate_begin`,
+    name: () => 'location_name, firstdate_begin' });
 const readAgenda = async (kind, spec, { fetchResource, now }) => {
-    const params = new URLSearchParams({ where: agendaWhere(kind, spec), order_by: 'firstdate_begin', limit: String(PAGE_SIZE), offset: String(spec.offset),
+    const params = new URLSearchParams({ where: agendaWhere(kind, spec), order_by: AGENDA_ORDER[spec.sort](spec), limit: String(PAGE_SIZE), offset: String(spec.offset),
         select: 'uid,title_fr,description_fr,daterange_fr,firstdate_begin,firstdate_end,timings,conditions_fr,registration,thumbnail,image,canonicalurl,location_name,location_address,location_city,location_coordinates' });
     const payload = await readJson(fetchResource, `${ODS}/evenements-publics-openagenda/records?${params}`);
     const records = Array.isArray(payload?.results) ? payload.results : [];
@@ -153,7 +150,7 @@ const readPlaces = async (kind, spec, { fetchResource }) => {
     const where = [`within_distance(meta_geo_point, ${point(spec)}, ${spec.radiusKm}km)`, 'name is not null',
         ...(types.length ? [`(${types.map(type => `type = "${type}"`).join(' or ')})`] : []),
         ...(spec.query ? [`(name like "${spec.query}" or meta_name_com like "${spec.query}")`] : [])].join(' and ');
-    const params = new URLSearchParams({ where, order_by: `distance(meta_geo_point, ${point(spec)})`, limit: String(PAGE_SIZE), offset: String(spec.offset),
+    const params = new URLSearchParams({ where, order_by: spec.sort === 'name' ? 'name' : `distance(meta_geo_point, ${point(spec)})`, limit: String(PAGE_SIZE), offset: String(spec.offset),
         select: `meta_osm_id,name,meta_name_com,meta_geo_point,${fields}` });
     const payload = await readJson(fetchResource, `${ODS}/${dataset}/records?${params}`);
     const records = (Array.isArray(payload?.results) ? payload.results : []).filter(record => text(record.name));
@@ -208,10 +205,17 @@ const readSpec = (message) => {
     if (!KINDS.has(kind) || !Number.isInteger(offset) || offset < 0 || offset > MAX_OFFSET) return null;
     if (!UNPOSITIONED.has(kind) && (!(lat >= -90 && lat <= 90) || !(lon >= -180 && lon <= 180) || !(radiusKm >= 1 && radiusKm <= 100))) return null;
     if (kind === 'films' && (!/^[A-Z]{2}$/.test(region) || !/^[a-z]{2}$/.test(language))) return null;
-    return { kind, lat, lon, radiusKm, offset, region, language, query: literal(message.query) };
+    const sorts = SHOWS_SORTS[kind] || [], sort = text(message.sort) || sorts[0] || '';
+    if (sort && !sorts.includes(sort)) return null;
+    const categories = (Array.isArray(message.categories) ? message.categories : []).map(text).filter(Boolean).slice(0, 13);
+    if (kind === 'declared' && !categories.length) return null;
+    return { kind, lat, lon, radiusKm, offset, region, language, sort, categories, query: literal(message.query) };
 };
 
-export const handleWsShows = async (message, address, { fetchResource = fetch, now = Date.now(), log = logStructured, env = process.env } = {}) => {
+// `publicEvents` (server/public_events.js) answers the `declared` kind: the events users declared
+// around, for `viewerId` when the connection has an account (the people they blocked left out).
+export const handleWsShows = async (message, address, { fetchResource = fetch, now = Date.now(), log = logStructured, env = process.env,
+    publicEvents = null, viewerId = null } = {}) => {
     if (message?.type !== 'shows-nearby') return null;
     const requestId = message.requestId || message.request_id || null;
     const spec = readSpec(message);
@@ -224,6 +228,11 @@ export const handleWsShows = async (message, address, { fetchResource = fetch, n
     const tourism = Object.hasOwn(TOURISM_KINDS, spec.kind);
     if (tourism && !tourismKey) return reply(requestId, { ok: false, error: 'shows_tourism_not_configured' });
     try {
+        if (spec.kind === 'declared') {
+            if (!publicEvents) return reply(requestId, { ok: false, error: 'shows_unavailable' });
+            const found = await publicEvents.nearby({ ...spec, viewerId, now });
+            return reply(requestId, { ok: true, entries: found.entries, nextPageToken: found.next });
+        }
         const deps = { fetchResource, now, key, distanceKm };
         const { total, entries } = tourism ? await readTourism(spec.kind, spec, { ...deps, key: tourismKey })
             : Object.hasOwn(PLACES, spec.kind) ? await readPlaces(spec.kind, spec, deps)

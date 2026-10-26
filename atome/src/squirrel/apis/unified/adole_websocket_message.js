@@ -63,6 +63,8 @@ PUSH_EVENTS['share-invitation'] = (message) => {
     return { share: message.share || null, streams };
 };
 PUSH_EVENTS['share-decision'] = (message) => ({ share: message.share || null });
+// A public event changed in these grid cells (server/public_events.js): an open Activité list reads again.
+PUSH_EVENTS['public-events-changed'] = (message) => ({ cells: Array.isArray(message.cells) ? message.cells : [] });
 PUSH_EVENTS['share-revoked'] = (message) => ({
     share_id: message.share_id || null,
     stream_id: message.stream_id || null

@@ -25,6 +25,20 @@ export const sliderValueCaption = (value, options = {}) => {
     if (!Object.hasOwn(options.valueLabels, key)) throw new Error('slider_value_caption_required');
     return options.valueLabels[key];
 };
+// Where a value lies in its range, 0..1.
+export const sliderFraction = (value, { min = 0, max = 100 } = {}) => {
+    const low = finite(min, 0), high = finite(max, 100);
+    return high === low ? 0 : Math.min(1, Math.max(0, (finite(value, low) - low) / (high - low)));
+};
+// The one text of a slider's value: its caption when it has one, else its number (two decimals at
+// most, in `locale`), signed when its range goes below zero, its unit after it.
+export const sliderValueText = (value, { min = 0, unit = '', options = {}, locale } = {}) => {
+    const caption = sliderValueCaption(value, options);
+    if (caption !== null) return caption;
+    const numeric = finite(value, 0);
+    const printable = new Intl.NumberFormat(locale, { maximumFractionDigits: 2, signDisplay: min < 0 ? 'exceptZero' : 'auto', useGrouping: false }).format(numeric);
+    return unit ? `${printable} ${unit}` : printable;
+};
 export const formatSliderBound = (value, unit = '') => {
     const numeric = Number(Number(value).toFixed(6));
     return unit ? `${numeric} ${unit}` : String(numeric);

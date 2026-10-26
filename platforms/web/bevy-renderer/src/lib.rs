@@ -574,17 +574,11 @@ fn drain_ui_events_for_web(world: &mut World) {
     WEB_DRAINED_UI_EVENTS.with(|cell| cell.borrow_mut().extend(drained));
 }
 
+// The surface configured from JS is canonical (its DPR capped): whatever moved the window away from it
+// — a browser resize, a scale factor winit read from the screen — it is given back before the frame is
+// drawn. Waiting for a resize message alone let a scale factor change through: the canvas was then
+// reconfigured at the screen's own density for a frame and cleared when the page set it back.
 fn apply_browser_window_resize_to_surface(world: &mut World) {
-    let has_valid_resize = world
-        .resource::<Messages<WindowResized>>()
-        .iter_current_update_messages()
-        .filter(|event| event.width.is_finite() && event.height.is_finite())
-        .filter(|event| event.width > 0.0 && event.height > 0.0)
-        .next()
-        .is_some();
-    if !has_valid_resize {
-        return;
-    }
     let (width, height, pixel_width, pixel_height, device_pixel_ratio) = {
         let current = world.resource::<AtomeBevyRendererConfig>();
         (
@@ -595,12 +589,13 @@ fn apply_browser_window_resize_to_surface(world: &mut World) {
             current.device_pixel_ratio,
         )
     };
+    // No window yet (or none at all): nothing to give back.
     let window_surface_matches =
         world
             .query::<&Window>()
             .iter(world)
             .next()
-            .is_some_and(|window| {
+            .map(|window| {
                 let resolution = &window.resolution;
                 (resolution.width() - width).abs() <= 1.0
                     && (resolution.height() - height).abs() <= 1.0
@@ -608,7 +603,7 @@ fn apply_browser_window_resize_to_surface(world: &mut World) {
                     && (resolution.physical_height() as f32 - pixel_height).abs() <= 1.0
                     && (resolution.scale_factor() - device_pixel_ratio).abs() <= 0.01
             });
-    if window_surface_matches {
+    if window_surface_matches != Some(false) {
         return;
     }
     if let Err(error) = apply_surface(

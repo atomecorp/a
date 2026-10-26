@@ -1,5 +1,5 @@
 import { expect, test, vi } from 'vitest';
-import { APPLE_MUSIC_COMMANDS, APPLE_MUSIC_ERRORS, validateAppleMusicInput } from '../../atome/src/squirrel/apple_music/contracts.js';
+import { APPLE_MUSIC_ASSISTANT_INSTRUCTIONS, APPLE_MUSIC_COMMANDS, APPLE_MUSIC_ERRORS, validateAppleMusicInput } from '../../atome/src/squirrel/apple_music/contracts.js';
 import { createMcpAppleMusicHandlers } from '../../atome/src/squirrel/atome/mcp_handlers_contracts.js';
 import { resolveAccessPolicy } from '../../atome/src/squirrel/atome/mcp_security_policy.js';
 import { resolveActorProfile, hasActorCapability, writeIdempotencyRecord, readIdempotencyRecord } from '../../atome/src/squirrel/atome/mcp_security.js';
@@ -47,9 +47,15 @@ test('music MCP uses canonical Runtime V2, granular capabilities and write idemp
 });
 test('voice gets music listening tools immediately and preserves the same MCP execution path as television', async () => {
     const invoked = [], catalog = APPLE_MUSIC_COMMANDS.map(command => ({ name: command.name, description: command.description, parameters: command.input_schema }));
-    const session = createConversationSession({ actor: () => ({ id: 'alice' }), quota: { getSummary: () => ({}) },
+    const sessionOn = toolContext => createConversationSession({ actor: () => ({ id: 'alice' }), quota: { getSummary: () => ({}) }, toolContext,
         mcp: async ({ method, params }) => ({ result: method === 'runtime.tools.list' ? { tools: catalog } : method === 'ai.tools.list' ? { tools: [] }
             : (invoked.push(params), { ok: true, playback: 'opened_unconfirmed' }) }) });
+    // A host without Apple Music (Web, desktop) contributes nothing: the assistant is never told to use it.
+    const elsewhere = await sessionOn(async () => null).createVoiceTools({ signal: new AbortController().signal, deliver: async () => {} });
+    expect(elsewhere.instructions).not.toContain('Apple Music:');
+    expect(elsewhere.tools.some(entry => entry.description?.startsWith('apple_music.'))).toBe(false);
+    // The iPhone and iPad app: the Apple Music owner gives play/search and its rules (apple_music_runtime.js#appleMusicAssistantContext).
+    const session = sessionOn(async () => ({ preload: ['apple_music.play', 'apple_music.search'], instructions: [APPLE_MUSIC_ASSISTANT_INSTRUCTIONS], notes: [] }));
     const voice = await session.createVoiceTools({ signal: new AbortController().signal, deliver: async () => {} });
     expect(voice.instructions).toContain('Television:'); expect(voice.instructions).toContain('Apple Music:');
     expect(voice.instructions).toContain('OPERATION_UNCONFIRMED');

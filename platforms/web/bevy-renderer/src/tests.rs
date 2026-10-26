@@ -40,6 +40,7 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         star_inner_radius: None,
         polygon_sides: None,
         mask: None,
+        progress_ring: None,
         mask_source: false,
         menu_plane: 0,
         procedural: None,
@@ -262,6 +263,81 @@ fn browser_backing_store_resize_event_keeps_configured_logical_surface() {
 }
 
 #[test]
+fn surface_patch_tells_the_cameras_in_the_same_update() {
+    // A resolution set without `WindowResized` left the cameras (and the UI viewport) on the
+    // former size until the browser's own resize event, frames later: the UI pass drew stretched.
+    let mut app = App::new();
+    app.add_message::<WindowResized>();
+    app.add_message::<RequestRedraw>();
+    app.insert_resource(AtomeBevyRendererConfig::empty(430.0, 932.0));
+    app.insert_resource(AtomeEntityTable::default());
+    app.insert_resource(AtomeRendererDiagnostics::default());
+    app.insert_resource(Assets::<Image>::default());
+    app.world_mut()
+        .spawn((Camera2d, atome_camera_projection(430.0, 932.0)));
+    let window = app
+        .world_mut()
+        .spawn(Window {
+            resolution: WindowResolution::new(430, 932),
+            ..default()
+        })
+        .id();
+
+    apply_surface(
+        app.world_mut(),
+        AtomeSurfacePatch {
+            width: 430.0,
+            height: 602.0,
+            pixel_width: Some(430.0),
+            pixel_height: Some(602.0),
+            device_pixel_ratio: Some(1.0),
+        },
+    )
+    .unwrap();
+
+    let resized: Vec<_> = app
+        .world()
+        .resource::<Messages<WindowResized>>()
+        .iter_current_update_messages()
+        .map(|event| (event.window, event.width, event.height))
+        .collect();
+    assert_eq!(resized, vec![(window, 430.0, 602.0)]);
+    // Told again by the browser, the window already matches: nothing more is written.
+    apply_browser_window_resize_to_surface(app.world_mut());
+    assert_eq!(app.world().resource::<Messages<WindowResized>>().iter_current_update_messages().count(), 1);
+}
+
+#[test]
+fn screen_density_drift_without_resize_message_is_given_back() {
+    // winit read the screen's density (a scale factor change, no `WindowResized`): the capped
+    // surface is restored before the frame is drawn, or wgpu reconfigures the canvas for a frame.
+    let mut app = App::new();
+    app.add_message::<WindowResized>();
+    app.add_message::<RequestRedraw>();
+    app.insert_resource(AtomeBevyRendererConfig::empty(430.0, 602.0));
+    app.insert_resource(AtomeEntityTable::default());
+    app.insert_resource(AtomeRendererDiagnostics::default());
+    app.insert_resource(Assets::<Image>::default());
+    app.world_mut()
+        .spawn((Camera2d, atome_camera_projection(430.0, 602.0)));
+    let window = app
+        .world_mut()
+        .spawn(Window {
+            resolution: WindowResolution::new(860, 1204),
+            ..default()
+        })
+        .id();
+    app.world_mut().entity_mut(window).get_mut::<Window>().unwrap().resolution.set_scale_factor(2.0);
+
+    apply_browser_window_resize_to_surface(app.world_mut());
+
+    let window = app.world().get::<Window>(window).unwrap();
+    assert_eq!(window.resolution.physical_width(), 430);
+    assert_eq!(window.resolution.physical_height(), 602);
+    assert_eq!(window.resolution.scale_factor(), 1.0);
+}
+
+#[test]
 fn browser_native_dpr_drift_restores_capped_surface_scale() {
     let mut app = App::new();
     app.add_message::<WindowResized>();
@@ -399,6 +475,7 @@ fn queued_audio_progress_styles_are_coalesced_per_atome() {
         star_inner_radius: None,
         polygon_sides: None,
         mask: None,
+        progress_ring: None,
     }));
     queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
         id: "waveform_1".to_string(),
@@ -419,6 +496,7 @@ fn queued_audio_progress_styles_are_coalesced_per_atome() {
         star_inner_radius: None,
         polygon_sides: None,
         mask: None,
+        progress_ring: None,
     }));
     queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
         id: "waveform_2".to_string(),
@@ -439,6 +517,7 @@ fn queued_audio_progress_styles_are_coalesced_per_atome() {
         star_inner_radius: None,
         polygon_sides: None,
         mask: None,
+        progress_ring: None,
     }));
 
     let ops = drain_web_ops();
@@ -478,6 +557,7 @@ fn queued_opacity_styles_are_merged_per_atome() {
         star_inner_radius: None,
         polygon_sides: None,
         mask: None,
+        progress_ring: None,
     }));
     queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
         id: "video_1".to_string(),
@@ -498,6 +578,7 @@ fn queued_opacity_styles_are_merged_per_atome() {
         star_inner_radius: None,
         polygon_sides: None,
         mask: None,
+        progress_ring: None,
     }));
 
     let ops = drain_web_ops();
@@ -532,6 +613,7 @@ fn queued_styles_are_not_merged_across_non_style_ops_for_same_atome() {
         star_inner_radius: None,
         polygon_sides: None,
         mask: None,
+        progress_ring: None,
     }));
     queue_web_op(AtomeRenderOp::Despawn("atom_1".to_string()));
     queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
@@ -553,6 +635,7 @@ fn queued_styles_are_not_merged_across_non_style_ops_for_same_atome() {
         star_inner_radius: None,
         polygon_sides: None,
         mask: None,
+        progress_ring: None,
     }));
 
     let ops = drain_web_ops();
@@ -582,6 +665,7 @@ fn queued_styles_with_transition_are_not_merged() {
         star_inner_radius: None,
         polygon_sides: None,
         mask: None,
+        progress_ring: None,
     }));
     queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
         id: "atom_t".to_string(),
@@ -602,6 +686,7 @@ fn queued_styles_with_transition_are_not_merged() {
         star_inner_radius: None,
         polygon_sides: None,
         mask: None,
+        progress_ring: None,
     }));
 
     let ops = drain_web_ops();

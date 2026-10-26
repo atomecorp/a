@@ -30,7 +30,8 @@ const RELAY_PREFLIGHT_FAILURES = new Set([
 // the same answer twice, so only the credential actions, which are idempotent,
 // are retried on it.
 const RELAY_CLOSED_FAILURE = 'provider_connection_closed';
-const IDEMPOTENT_PROVIDER_ACTIONS = new Set(['models', 'credential.status', 'credential.store', 'credential.remove']);
+const IDEMPOTENT_PROVIDER_ACTIONS = new Set(['models', 'credential.status', 'credential.store', 'credential.remove',
+    'secret.list', 'secret.read', 'secret.store', 'secret.remove']);
 const isRelinkable = (action, error) => RELAY_PREFLIGHT_FAILURES.has(error)
     || (error === RELAY_CLOSED_FAILURE && IDEMPOTENT_PROVIDER_ACTIONS.has(action));
 
@@ -44,6 +45,11 @@ const PROVIDER_ACTION_TIMEOUT_MS = Object.freeze({
     'credential.status': 15000,
     'credential.store': 25000,
     'credential.remove': 15000,
+    // The account's own secrets: a read or a write in our own server's vault.
+    'secret.list': 15000,
+    'secret.read': 15000,
+    'secret.store': 15000,
+    'secret.remove': 15000,
     // Audio generation is an async job: every call is a short question, the
     // minutes are spent between polls, never inside one request.
     'audio.providers': 15000,

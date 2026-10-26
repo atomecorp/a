@@ -61,7 +61,7 @@ async function openDatabase(config) {
     const here = path.dirname(fileURLToPath(import.meta.url));
     const schema = fs.readFileSync(path.join(here, 'schema.sql'), 'utf8');
     const authSchema = fs.readFileSync(path.join(here, 'auth_security_schema.sql'), 'utf8');
-    const migrations = ['adole_schema_migrations.js', 'adole_principal_identity_schema.js']
+    const migrations = ['adole_schema_migrations.js', 'adole_principal_identity_schema.js', 'adole_public_events_schema.js']
         .map((file) => fs.readFileSync(path.join(here, file), 'utf8')).join('\n');
     const expectedVersion = ddlFingerprint(schema, authSchema, migrations);
 

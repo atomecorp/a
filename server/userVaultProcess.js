@@ -86,7 +86,9 @@ const handleOperation = async (operation, payload = {}) => {
             includeShared: false,
             excludeSystem: payload.exclude_system === true || payload.excludeSystem === true,
             limit: payload.limit,
-            offset: payload.offset
+            offset: payload.offset,
+            order: payload.order,
+            after: payload.after
         });
     }
     if (operation === 'events:list') {

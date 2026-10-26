@@ -2,8 +2,8 @@
 
 [[set]]
 identifier = "personal-import"
-description = "Allows the main webview to read this Mac's own address book and agenda for the canonical import, and the installation identity that keeps its checkpoints across rebuilt apps. The system prompts for Contacts and Calendar access before any read."
-permissions = ["allow-macos-contacts-snapshot", "allow-native-calendar-snapshot", "allow-native-import-device-id"]
+description = "Allows the main webview to read this device's own address book (Mac, Windows, Android) and agenda (Mac) for the canonical import, the installation identity that keeps its checkpoints across rebuilt apps, and to open this app's Android Settings page after a refusal the system will not ask about again. The system prompts for Contacts and Calendar access before any read."
+permissions = ["allow-macos-contacts-snapshot", "allow-native-calendar-snapshot", "allow-native-import-device-id", "allow-contacts-open-settings"]
 
 [[permission]]
 identifier = "allow-macos-contacts-snapshot"
@@ -19,3 +19,8 @@ commands.allow = ["native_calendar_snapshot"]
 identifier = "allow-native-import-device-id"
 description = "Enables the native_import_device_id command."
 commands.allow = ["native_import_device_id"]
+
+[[permission]]
+identifier = "allow-contacts-open-settings"
+description = "Enables the contacts_open_settings command."
+commands.allow = ["contacts_open_settings"]

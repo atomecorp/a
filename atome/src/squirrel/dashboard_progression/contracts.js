@@ -12,7 +12,8 @@ const count = { type: 'number', minimum: 0 };
 export const DASHBOARD_PROGRESSION_ERRORS = Object.freeze(['progression_actor_required', 'progression_context_changed',
     'progression_objective_required', 'progression_target_invalid', 'progression_monitor_unknown', 'progression_monitor_not_selected',
     'progression_commit_failed', 'progression_unlock_invalid', 'progression_read_incomplete', 'progression_unknown_command',
-    'progression_invalid_argument', 'progression_settings_invalid', 'progression_settings_unavailable']);
+    'progression_invalid_argument', 'progression_settings_invalid', 'progression_settings_unavailable', 'progression_schedule_unavailable',
+    'progression_time_budget_required']);
 
 const progress = { type: 'object', properties: { source: { type: 'string', enum: DASHBOARD_UNLOCK_SOURCES }, met: count, required: count, window_days: count } };
 const brick = { type: 'object', properties: { brick_id: { type: 'string' }, kind: { type: 'string', enum: ['tile', 'activity', 'tool'] },
@@ -21,6 +22,8 @@ const brick = { type: 'object', properties: { brick_id: { type: 'string' }, kind
 const nullable = schema => ({ anyOf: [schema, { type: 'null' }] });
 const settings = read => ({ type: 'object', additionalProperties: false, properties: { time_budget: read ? nullable(OBJECTIVE_TIME_BUDGET_SCHEMA) : OBJECTIVE_TIME_BUDGET_SCHEMA,
     effort: read ? nullable(OBJECTIVE_EFFORT_SCHEMA) : OBJECTIVE_EFFORT_SCHEMA, money_budget: nullable(OBJECTIVE_MONEY_BUDGET_SCHEMA) } });
+const schedule = { type: 'object', properties: { start_minutes: count, minutes: count, days: { type: 'array', items: { type: 'integer' } },
+    calendar: { type: 'boolean' } } };
 const output = properties => ({ type: 'object', required: ['ok'], properties: { ok: { type: 'boolean' },
     error: { type: 'string', enum: DASHBOARD_PROGRESSION_ERRORS }, ...properties } });
 const definitions = {
@@ -56,12 +59,22 @@ const definitions = {
         + 'chosen days, 0 Sunday … 6 Saturday), effort (1 minimum, 2 gentle, 3 regular, 4 sustained, 5 ambitious), money_budget '
         + '(amount, ISO currency, basis total, month or week; null removes the budget). Omitted settings keep their value.',
         { objective_id: { type: 'string' }, settings: settings(true) }],
+    'objective.schedule.read': [{ objective_id: { type: 'string', minLength: 1, maxLength: 200 } }, ['objective_id'], false,
+        'Read the schedule of one of the user\'s objectives other than sleep: the hour of its session (minutes after midnight), its length '
+        + 'and days (from its time budget) and whether its sessions are in the calendar (null when none was set).',
+        { objective_id: { type: 'string' }, schedule: nullable(schedule) }],
+    'objective.schedule.set': [{ objective_id: { type: 'string', minLength: 1, maxLength: 200 }, start_minutes: { type: 'integer', minimum: 0, maximum: 1439 },
+        calendar: { type: 'boolean' } }, ['objective_id'], true,
+        'Set the schedule of one of the user\'s objectives other than sleep, as its preparation screen does: start_minutes the hour of its '
+        + 'session (minutes after midnight, 1080 = 18:00), calendar true to keep its sessions in the calendar with their reminder, false '
+        + 'to suspend them. Its length and days come from its time budget (dashboard.objective.settings.set). Omitted fields keep their value.',
+        { objective_id: { type: 'string' }, schedule }],
     'monitors.select': [{ ids: { type: 'array', maxItems: 64, uniqueItems: true, items: { type: 'string', pattern: '^[a-z0-9_]{1,64}$' } } }, ['ids'], true,
         'Choose the health monitors the user\'s home shows, in order (ids from the health catalog). Replaces the selection.',
         { ids: { type: 'array', items: { type: 'string' } } }],
-    'monitors.place': [{ id: { type: 'string', pattern: '^[a-z0-9_]{1,64}$' }, position: { type: 'integer', enum: [0, 1, 2] } }, ['id', 'position'], true,
-        'Place one selected health monitor on the eVe Pro home: position 1 or 2 (its two monitor cells), 0 = not on the home '
-        + '(still selected). A taken position: the two swap when the monitor held the other one, else the former one leaves the home.',
+    'monitors.place': [{ id: { type: 'string', pattern: '^[a-z0-9_]{1,64}$' }, position: { type: 'integer', enum: [0, 1, 2, 3] } }, ['id', 'position'], true,
+        'Place one selected health monitor on the eVe Pro home: position 1, 2 or 3 (its three monitor cells), 0 = not on the home '
+        + '(still selected). A taken position: the two swap when the monitor held another one, else the former one leaves the home.',
         { ids: { type: 'array', items: { type: 'string' } }, slots: { type: 'array', items: { type: 'string' } } }]
 };
 export const DASHBOARD_PROGRESSION_COMMANDS = Object.freeze(Object.entries(definitions)
@@ -81,5 +94,6 @@ export const DASHBOARD_PROGRESSION_ASSISTANT_INSTRUCTIONS = 'Home progression: t
     + 'brick and its count (days or sessions held), never a health value you do not have. « mes objectifs » calls '
     + 'dashboard.objectives.list; « vise 8000 pas par jour », « je veux dormir 7 heures » call dashboard.objective.target.set '
     + '(sleep in minutes). « j\'y consacre 20 minutes par jour », « effort léger », « budget de 50 euros par mois », « plus de budget » '
-    + 'call dashboard.objective.settings.set on that objective (dashboard.objective.settings.read to answer about them). A locked brick is only hidden from that home: it removes no capability, so never refuse a Sport, '
+    + 'call dashboard.objective.settings.set on that objective (dashboard.objective.settings.read to answer about them); « fais-moi ma séance à 18 h », « enlève-la du calendrier » call '
+    + 'dashboard.objective.schedule.set (dashboard.objective.schedule.read to answer about it). A locked brick is only hidden from that home: it removes no capability, so never refuse a Sport, '
     + 'shopping, food, GPS or any other request because of the tier, call its tool directly.';

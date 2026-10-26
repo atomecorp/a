@@ -50,9 +50,31 @@ pub async fn macos_contacts_snapshot(app: tauri::AppHandle, cursor: Option<Strin
             .map_err(|error| format!("windows_contacts_task_failed:{error}"))?;
     }
 
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    // Android: the phone's address book, through the host plugin (it asks for the permission first).
+    #[cfg(target_os = "android")]
+    {
+        let _ = (cursor, collections);
+        return tokio::task::spawn_blocking(move || tauri_plugin_mobile_host::call(&app, "contacts", serde_json::json!({})))
+            .await
+            .map_err(|error| format!("android_contacts_task_failed:{error}"))?;
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "android")))]
     {
         let _ = (app, cursor, collections);
         Err("macos_contacts_unsupported".to_string())
+    }
+}
+
+// This app's page in the Android Settings, where a refused contacts access is granted
+// (the import's `…_settings` answer, as `contacts_open_settings` on iOS).
+#[tauri::command]
+pub async fn contacts_open_settings(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    #[cfg(target_os = "android")]
+    return tauri_plugin_mobile_host::call(&app, "openAppSettings", serde_json::json!({}));
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = app;
+        Err("personal_import_settings_unavailable".to_string())
     }
 }

@@ -1,7 +1,7 @@
-import { createEncryptedTokenVault } from './token_vault.js';
+import { requestProviderService } from '../ai/provider_broker.js';
+import { getSessionState } from '../apis/unified/adole_api/session.js';
 
 const SECURITY_KEY = '__SQUIRREL_SECURITY_API__';
-const VAULT_KEY = '__SQUIRREL_TOKEN_VAULT__';
 
 const installSecurityGlobals = (env, api) => {
     env.Squirrel = env.Squirrel || {};
@@ -16,17 +16,20 @@ const installSecurityGlobals = (env, api) => {
     return api;
 };
 
-const getOrCreateVault = (env) => {
-    if (env[VAULT_KEY]) return env[VAULT_KEY];
-    const vault = createEncryptedTokenVault({
-        storage: env?.localStorage || null
-    });
-    env[VAULT_KEY] = vault;
-    return vault;
+const entryIdOf = (value) => {
+    const entryId = String(value ?? '').trim();
+    if (!entryId) throw new Error('token_vault_entry_id_required');
+    return entryId;
 };
 
+// The user's secrets (mail password, saved logins, provider keys the device uses
+// itself…) live in the account's vault on the server, sealed there: any device
+// signed in to the account — recovered, paired or new — reads the same ones.
+// Nothing is kept on the device.
 export const createGlobalSecurityApi = ({
-    env = globalThis
+    env = globalThis,
+    request = requestProviderService,
+    session = getSessionState
 } = {}) => {
     if (!env || typeof env !== 'object') {
         throw new Error('Global security bootstrap requires an object-like environment');
@@ -34,29 +37,26 @@ export const createGlobalSecurityApi = ({
     if (env[SECURITY_KEY]) return env[SECURITY_KEY];
 
     const api = {
-        get tokenVault() {
-            return getOrCreateVault(env);
-        },
-        configureVaultSecret(secret) {
-            return getOrCreateVault(env).setSecret(secret);
-        },
         vaultStatus() {
-            return {
-                ok: true,
-                configured: getOrCreateVault(env).hasSecret()
-            };
+            return { ok: true, configured: session()?.mode === 'authenticated' };
         },
         async storeToken(entryId, value, metadata = {}) {
-            return getOrCreateVault(env).store(entryId, value, metadata);
+            const stored = await request('secret.store', { entry_id: entryIdOf(entryId), value, metadata });
+            return { ok: true, entry_id: stored.entry_id, metadata: stored.metadata || {} };
         },
         async readToken(entryId) {
-            return getOrCreateVault(env).read(entryId);
+            const id = entryIdOf(entryId);
+            const stored = await request('secret.read', { entry_id: id });
+            return stored?.entry_id
+                ? { ok: true, entry_id: stored.entry_id, metadata: stored.metadata || {}, value: stored.value }
+                : { ok: false, error: 'token_vault_entry_not_found', entry_id: id };
         },
-        removeToken(entryId) {
-            return getOrCreateVault(env).remove(entryId);
+        async removeToken(entryId) {
+            const removed = await request('secret.remove', { entry_id: entryIdOf(entryId) });
+            return { ok: true, entry_id: removed.entry_id };
         },
-        listTokens() {
-            return getOrCreateVault(env).list();
+        async listTokens() {
+            return { ok: true, items: (await request('secret.list', {})).items || [] };
         }
     };
 

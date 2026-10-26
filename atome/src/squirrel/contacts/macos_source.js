@@ -20,22 +20,24 @@ export const getNativeImportInvoke = () => {
 
 // Whether this host reads the system book (`contact`) or agenda (`calendar_event`):
 // the iOS app (its AUv3 extension answers `personal_import_app_required`), Tauri on
-// macOS, and Tauri on Windows for contacts only. Elsewhere (Android, Linux, a
+// macOS, and Tauri on Windows and Android for contacts only. Elsewhere (Linux, a
 // browser) the native command is absent or answers `*_unsupported`.
 export const nativePersonalImportSupported = (domain) => {
     if (!getNativeImportInvoke()) return false;
     if (typeof window.__ATOME_IOS_NATIVE_INVOKE === 'function') return String(window.__HOST_ENV || '').toLowerCase() !== 'auv3';
     const agent = String(window.navigator?.userAgent || '');
-    if (/Android/i.test(agent)) return false;
+    if (/Android/i.test(agent)) return domain === 'contact';
     if (/Macintosh|Mac OS X/i.test(agent)) return true;
     return domain === 'contact' && /Windows/i.test(agent);
 };
 
-// This app's page in the iOS Settings, where a refused or limited access to
-// Contacts and Calendars is granted (a user gesture only).
+// This app's page in the iOS or Android Settings, where a refused or limited access to
+// Contacts (and Calendars on iOS) is granted (a user gesture only).
 export const openPersonalImportSettings = async () => {
-    if (typeof window === 'undefined' || typeof window.__ATOME_IOS_NATIVE_INVOKE !== 'function') return { ok: false, error: 'personal_import_settings_unavailable' };
-    return window.__ATOME_IOS_NATIVE_INVOKE('contacts_open_settings', {});
+    const invoke = getNativeImportInvoke();
+    const android = /Android/i.test(String(window.navigator?.userAgent || ''));
+    if (!invoke || (typeof window.__ATOME_IOS_NATIVE_INVOKE !== 'function' && !android)) return { ok: false, error: 'personal_import_settings_unavailable' };
+    return invoke('contacts_open_settings', {});
 };
 
 const normalizeLabel = (value) => toText(value).replace(/^_\$!<|>!\$$/g, '').replace(/_/g, ' ');
@@ -62,7 +64,8 @@ const buildCustomFields = ({ phones = [], emails = [], organization = '', note =
     return fields;
 };
 
-export const normalizeMacosContact = (record = {}) => {
+// `sourceLabel`: the book the host read (Apple Contacts unless its snapshot names another).
+export const normalizeMacosContact = (record = {}, sourceLabel = 'Apple Contacts') => {
     const phones = normalizeList(record.phones);
     const emails = normalizeList(record.emails);
     const firstName = toText(record.first_name || record.firstName || '');
@@ -84,7 +87,7 @@ export const normalizeMacosContact = (record = {}) => {
         visibility: 'private',
         read_only: true,
         source_provider: 'macos_contacts',
-        source_label: 'Apple Contacts',
+        source_label: sourceLabel,
         source_writable: false,
         custom_fields: buildCustomFields({
             phones,
@@ -165,7 +168,7 @@ export const createMacosContactsSource = ({
         // Une fiche native sans identifiant est ignoree seule : elle ne doit pas
         // faire echouer tout l'instantane.
         const normalized = (Array.isArray(response.contacts) ? response.contacts : []).flatMap((entry) => {
-            try { return [normalizeMacosContact(entry)]; } catch (_) { return []; }
+            try { return [normalizeMacosContact(entry, toText(response.source_label) || undefined)]; } catch (_) { return []; }
         });
         normalized.forEach((entry) => {
             contactsById.set(entry.source_contact_id, entry);

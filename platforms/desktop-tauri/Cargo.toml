@@ -132,3 +132,15 @@ jni = "=0.21.1"
 # times slower (1000 calendar rows: ~11 s). Only this package is optimised.
 [profile.dev.package.libsqlite3-sys]
 opt-level = 3
+
+# Android materializes its embedded web root from the shared library: every launch hashes the
+# stored assets (sha2) and a first launch decompresses them (brotli). Unoptimised by the dev
+# profile, a debug APK spent 43 s per warm launch and 63 s on the first one (Galaxy A23, 2026-10-26).
+[profile.dev.package.sha2]
+opt-level = 3
+
+[profile.dev.package.brotli]
+opt-level = 3
+
+[profile.dev.package.brotli-decompressor]
+opt-level = 3

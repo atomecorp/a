@@ -1,7 +1,6 @@
 // Point d'entrée du bundle CDN
 import * as Apis from '../atome/src/squirrel/apis.js';
 import Squirrel from '../atome/src/squirrel/squirrel.js';
-import Slider from '../atome/src/squirrel/components/slider_builder.js';
 import ToolSlider from '../atome/src/squirrel/components/tool_slider_builder.js';
 import Badge from '../atome/src/squirrel/components/badge_builder.js';
 import Button from '../atome/src/squirrel/components/button_builder.js';
@@ -15,9 +14,8 @@ import Template from '../atome/src/squirrel/components/template_builder.js';
 import Tooltip from '../atome/src/squirrel/components/tooltip_builder.js';
 import Unit from '../atome/src/squirrel/components/unit_builder.js';
 
-// Ajout du composant Slider dans Squirrel.components pour accès via le CDN
+// Composants Squirrel exposés via le CDN
 Squirrel.components = {
-  Slider,
   ToolSlider,
   Badge,
   Button,
@@ -59,7 +57,6 @@ if (typeof window !== 'undefined') {
   window.define = Squirrel.define;
   window.batch = Squirrel.batch;
   window.observeMutations = Squirrel.observeMutations;
-  window.Squirrel.Slider = Slider;
   window.Squirrel.ToolSlider = ToolSlider;
   window.Squirrel.Badge = Badge;
   window.Squirrel.Button = Button;
@@ -76,7 +73,6 @@ if (typeof window !== 'undefined') {
   window.Squirrel.Tooltip = Tooltip;
   window.Squirrel.Unit = Unit;
 
-  window.Slider = window.Squirrel.Slider;
   window.ToolSlider = window.Squirrel.ToolSlider;
   window.Badge = window.Squirrel.Badge;
   window.Button = window.Squirrel.Button;
@@ -119,7 +115,6 @@ export default Squirrel;
 export {
   Squirrel,
   Apis,
-  Slider,
   ToolSlider,
   Badge,
   Button,

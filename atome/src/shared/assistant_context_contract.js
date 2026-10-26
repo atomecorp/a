@@ -25,7 +25,13 @@ export const ASSISTANT_CONTEXT_COMMANDS = Object.freeze([
             conversation: { type: 'object', description: 'Attached by the assistant session; never fill it.' }
         } },
     { name: 'debug.reports.list', required: [], properties: { limit: { type: 'number', minimum: 1, maximum: 50 } },
-        description: 'List the latest bug reports (filed by the user or the assistant), newest first, and whether each was sent.' },
+        description: 'List the latest bug reports (filed by the user or the assistant), newest first, whether each was sent and '
+            + 'whether the eVe team fixed it.' },
+    { name: 'debug.reports.delete', persistent: true, required: ['ids'],
+        properties: { ids: { type: 'array', minItems: 1, maxItems: 50, items: line(80) } },
+        description: 'Remove bug reports from the user\'s list in Réglages > Avancé, as its Supprimer tool does: "supprime les '
+            + 'rapports résolus", "efface ce rapport de bug". Take the ids from debug.reports.list; only when the user asked for it. '
+            + 'The eVe team keeps the reports it received.' },
     { name: 'assistant.session.end', required: [], properties: {},
         description: 'End the assistant session and stop listening, as a hang-up. Call it when the user dismisses the assistant: '
             + '"au revoir", "tu peux partir", "raccroche", "c\'est bon, tu peux raccrocher", "quitte", "arrête de m\'écouter", "c\'est tout, merci", "goodbye", '

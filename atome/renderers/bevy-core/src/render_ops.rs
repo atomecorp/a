@@ -1,4 +1,4 @@
-use bevy::{image::Image, prelude::*, text::TextBounds};
+use bevy::{image::Image, prelude::*, text::TextBounds, window::WindowResized};
 
 use crate::workspace_backdrop::resize_workspace_backdrop;
 use crate::workspace_blur::refresh_backdrop_blur_metrics;
@@ -211,9 +211,18 @@ pub fn apply_surface(world: &mut World, patch: AtomeSurfacePatch) -> Result<(), 
         config.pixel_height = pixel_height;
         config.device_pixel_ratio = device_pixel_ratio;
     }
-    if let Some(mut window) = world.query::<&mut Window>().iter_mut(world).next() {
+    let resized_window = world.query::<(Entity, &mut Window)>().iter_mut(world).next().map(|(entity, mut window)| {
         window.resolution.set_scale_factor(device_pixel_ratio);
         window.resolution.set_physical_resolution(pixel_width, pixel_height);
+        entity
+    });
+    // The cameras (and the UI viewport they give) recompute their target only on this
+    // message: set silently, the resolution waited for the platform's own resize event
+    // (frames later on the web), and the UI pass drew stretched to the former viewport.
+    if let Some(window) = resized_window {
+        if world.contains_resource::<Messages<WindowResized>>() {
+            world.write_message(WindowResized { window, width, height });
+        }
     }
     for mut projection in world.query_filtered::<&mut Projection, With<Camera2d>>().iter_mut(world) {
         *projection = atome_camera_projection(width, height);

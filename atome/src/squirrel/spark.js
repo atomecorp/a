@@ -133,7 +133,6 @@ const SPARK_BOOT_WAVES = [
 // error, just a component missing from the registry at runtime.
 const SPARK_COMPONENT_MODULES = [
   { id: 'components.button', path: './components/button_builder.js', registry: { Button: 'default' } },
-  { id: 'components.slider', path: './components/slider_builder.js', registry: { Slider: 'default' } },
   { id: 'components.toolSlider', path: './components/tool_slider_builder.js', registry: { ToolSlider: 'default' } },
   { id: 'components.input', path: './components/input_builder.js', registry: { Input: 'default' } },
   { id: 'components.table', path: './components/table_builder.js', registry: { Table: 'default' } },

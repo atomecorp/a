@@ -54,16 +54,6 @@ describe('framework optional slider contract', () => {
             expect(slider.valueEl.textContent).toBe(caption); expect(Number(slider.input.value)).toBe(Number(value));
         }
     }));
-    it.each(['horizontal', 'vertical', 'circular'])('the generic %s owner retains named value semantics', async type => withDom(async window => {
-        const { createSlider } = await import('../../atome/src/squirrel/components/slider_builder.js');
-        const slider = createSlider({ id: 'named', type, min: 1, max: 5, value: 1, step: 1, sliderOptions: { valueLabels } });
-        window.document.body.appendChild(slider);
-        for (const [value, caption] of Object.entries(valueLabels)) {
-            slider.setValue(Number(value)); expect(slider.querySelector('#named_label').textContent).toBe(caption);
-            expect(slider.getAttribute('aria-valuetext')).toBe(caption); expect(slider.getValue()).toBe(Number(value));
-        }
-        slider.destroy();
-    }));
     it('keeps the ordinary presentation opt-in and validates the shared length', () => {
         expect(normalizeSliderOptions()).toEqual({ showBounds: false, lengthPx: null, valueInsetPx: 0 });
         expect(resolveSliderLength({ lengthPx: 'fill' }, 180, 344)).toBe(344);
@@ -78,10 +68,10 @@ describe('framework optional slider contract', () => {
         const configured = buildBevyToolSliderNode({ id: 's', orientation, expanded: true, min: 1, max: 11, unit: 'h', sliderOptions: options });
         expect(configured.style.size).toEqual(orientation === 'horizontal' ? [360, 60] : [60, 360]);
         expect(find(configured, 's_min').text).toBe('1 h'); expect(find(configured, 's_max').text).toBe('11 h');
-        const current = find(configured, 's_value'); expect(current.style.position[1]).toBeGreaterThanOrEqual(8);
-        for (const part of ['background', 'thumb']) {
+        // One look whatever the options: the same pressed-in ground and the same raised slab.
+        for (const part of ['gauge', 'fill']) {
             const a = find(ordinary, 's_' + part).style, b = find(configured, 's_' + part).style;
-            expect(b.background).toEqual(a.background); expect(b.radius).toEqual(a.radius);
+            expect(b.background).toEqual(a.background); expect(b.radius).toEqual(a.radius); expect(b.surfacePaint).toEqual(a.surfacePaint);
         }
     });
     it('uses the configured travel for quantized drag and preserves cancellation', () => {
@@ -91,13 +81,13 @@ describe('framework optional slider contract', () => {
             write: next => { session = next; }, itemSize: () => 60, refresh: () => {}, change: next => { value = next; } });
         handlers.press(); handlers.drag({ delta_x: -180 }); expect(value).toBe(3); handlers.cancel(); expect(value).toBe(8);
     });
-    it.each([false, true])('vertical bounds leave room for both end thumbs (preview=%s)', previewOnly => {
+    it.each([false, true])('vertical bounds read the maximum above the minimum, inside the gauge (preview=%s)', previewOnly => {
         for (const value of [1, 11]) {
             const tree = buildBevyToolSliderNode({ id: 'v', orientation: 'vertical', expanded: true, previewOnly,
                 value, min: 1, max: 11, sliderOptions: options });
-            const thumb = find(tree, 'v_thumb').style, minimum = find(tree, 'v_min').style, maximum = find(tree, 'v_max').style;
-            expect(thumb.position[1] + thumb.size[1]).toBeLessThanOrEqual(minimum.position[1]);
-            expect(thumb.position[1]).toBeGreaterThanOrEqual(maximum.position[1] + maximum.size[1]);
+            const gauge = find(tree, 'v_gauge').style, minimum = find(tree, 'v_min').style, maximum = find(tree, 'v_max').style;
+            expect(maximum.position[1] + maximum.size[1]).toBeLessThanOrEqual(minimum.position[1]);
+            expect(minimum.position[1] + minimum.size[1]).toBeLessThanOrEqual(gauge.size[1]);
         }
     });
     it('reverse bounds keep their semantic identity and fill requires measured space', () => {
@@ -124,31 +114,6 @@ describe('framework optional slider contract', () => {
         const filled = buildToolParamsFromEntry({ key: 'fill', sliderOptions: { lengthPx: 'fill' } }, { availableLength: 344 });
         expect(filled.options.availableLength).toBe(344); expect(serializeToolParams(filled).options.availableLength).toBeUndefined();
     });
-    it.each(['horizontal', 'vertical', 'circular'])('the generic %s API supports options and live range changes', async type => withDom(async window => {
-        const { createSlider } = await import('../../atome/src/squirrel/components/slider_builder.js');
-        const slider = createSlider({ id: 'generic', type, min: 1, max: 11, value: 8, step: .5, unit: 'h', sliderOptions: options });
-        window.document.body.appendChild(slider);
-        expect(slider.querySelector('#generic_min').textContent).toBe('1 h'); expect(slider.getValue()).toBe(8);
-        slider.setRange(2, 4); expect(slider.getValue()).toBe(4);
-        expect(slider.querySelector('#generic_max').textContent).toBe('4 h');
-        slider.setValue(2.7); expect(slider.getValue()).toBe(2.5);
-        slider.setDisabled(true);
-        const track = slider.querySelector('#generic_track');
-        track.dispatchEvent(new window.MouseEvent('mousedown', { bubbles: true, clientX: 100, clientY: 10 }));
-        expect(slider.getValue()).toBe(2.5); slider.destroy();
-    }));
-    it.each(['horizontal', 'vertical', 'circular'])('generic %s gestures use the current range and release listeners', async type => withDom(async window => {
-        const { createSlider } = await import('../../atome/src/squirrel/components/slider_builder.js');
-        const slider = createSlider({ id: 'gesture', type, min: 1, max: 11, value: 8, step: .5, sliderOptions: options });
-        window.document.body.appendChild(slider); slider.setRange(2, 4);
-        const track = slider.querySelector('#gesture_track'), rect = () => ({ left: 0, top: 0, width: 100, height: 100 });
-        track.getBoundingClientRect = rect; slider.getBoundingClientRect = rect;
-        track.dispatchEvent(new window.MouseEvent('mousedown', { bubbles: true, clientX: 50, clientY: 100 }));
-        expect(slider.getValue()).toBe(type === 'vertical' ? 2 : 3);
-        window.document.dispatchEvent(new window.MouseEvent('mouseup')); slider.destroy();
-        track.dispatchEvent(new window.MouseEvent('mousedown', { bubbles: true, clientX: 100, clientY: 0 }));
-        expect(slider.getValue()).toBe(type === 'vertical' ? 2 : 3);
-    }));
     it.each(['horizontal', 'vertical'])('the canonical DOM ToolSlider exposes optional %s bounds', async orientation => withDom(async window => {
         const { mountIntuitionXSliderToolContent } = await import('../../atome/src/squirrel/components/tool_slider_builder.js');
         const button = window.document.getElementById('tool');

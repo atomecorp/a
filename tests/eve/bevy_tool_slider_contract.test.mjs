@@ -28,7 +28,7 @@ test('shared vertical tool slider renders an upward compact anchor and clamps it
     const collapsed = buildBevyToolSliderNode({ id: 'slider', label: 'Size', value: 50 });
     assert.deepEqual(collapsed.style.size, [60, 60]);
     assert.equal(collapsed.accessibility.label, 'Size');
-    assert.equal(findNode(collapsed, 'slider_rail'), null);
+    assert.equal(findNode(collapsed, 'slider_gauge'), null);
 
     const expanded = buildBevyToolSliderNode({
         id: 'slider', label: 'Size', value: 50, unit: '%', expanded: true
@@ -37,23 +37,23 @@ test('shared vertical tool slider renders an upward compact anchor and clamps it
     assert.deepEqual(findNode(expanded, 'slider_background').style.position, [0, 0]);
     assert.deepEqual(findNode(expanded, 'slider_background').style.size, [60, 180]);
     assert.equal(findNode(expanded, 'slider_value').text, '50 %');
-    assert.ok(findNode(expanded, 'slider_rail'));
-    assert.ok(findNode(expanded, 'slider_thumb'));
+    // The one look: a pressed-in gauge and its raised slab, above the tool square at its foot.
+    assert.deepEqual(findNode(expanded, 'slider_gauge').style.size, [60, 120]);
+    assert.ok(findNode(expanded, 'slider_gauge').style.surfacePaint.insetShadows.length);
+    assert.ok(findNode(expanded, 'slider_fill').style.surfacePaint.gradient);
+    assert.equal(findNode(expanded, 'slider_thumb'), null);
 });
 
 test('shared tool slider distinguishes pinned clicks from transient direct drags', () => {
     const config = resolveBevyToolSliderConfig({ min: 0, max: 100, step: 1 });
     const pressed = beginBevyToolSliderSession(50, config);
-    const pinned = releaseBevyToolSliderSession(pressed, { compactAnchor: true });
+    const pinned = releaseBevyToolSliderSession(pressed);
     assert.equal(pinned.expanded, true);
     assert.equal(pinned.pinned, true);
 
-    const pinnedPress = beginBevyToolSliderSession(pinned.value, config, {
-        expanded: pinned.expanded,
-        pinned: pinned.pinned,
-        compactAnchor: true
-    });
-    const closed = releaseBevyToolSliderSession(pinnedPress, { compactAnchor: true });
+    // A click anywhere on a pinned slider (its square or its gauge) closes it.
+    const pinnedPress = beginBevyToolSliderSession(pinned.value, config, { expanded: pinned.expanded, pinned: pinned.pinned });
+    const closed = releaseBevyToolSliderSession(dragBevyToolSliderSession(pinnedPress, -2, 100, config));
     assert.equal(closed.expanded, false);
     assert.equal(closed.pinned, false);
 
@@ -68,13 +68,9 @@ test('shared tool slider distinguishes pinned clicks from transient direct drags
     assert.equal(transientEnd.expanded, false);
     assert.equal(transientEnd.pinned, false);
 
-    const pinnedRailPress = beginBevyToolSliderSession(60, config, {
-        expanded: true,
-        pinned: true,
-        compactAnchor: false
-    });
+    const pinnedRailPress = beginBevyToolSliderSession(60, config, { expanded: true, pinned: true });
     const pinnedDrag = dragBevyToolSliderSession(pinnedRailPress, -10, 100, config);
-    const pinnedEnd = releaseBevyToolSliderSession(pinnedDrag, { compactAnchor: false });
+    const pinnedEnd = releaseBevyToolSliderSession(pinnedDrag);
     assert.equal(pinnedEnd.expanded, true);
     assert.equal(pinnedEnd.pinned, true);
 });
@@ -103,22 +99,22 @@ test('a tool slider owns its vertical drag instead of starting panel scroll', ()
     assert.deepEqual(emitted.map((event) => event.type), ['press', 'focus', 'drag', 'release', 'activate']);
 });
 
-test('shared horizontal slider uses only the rail and value, without a compact icon', () => {
+test('shared horizontal slider is its gauge and its value, without a compact icon', () => {
     const slider = buildBevyToolSliderNode({ id: 'mix', label: 'Strength', orientation: 'horizontal', value: 50, expanded: true });
     assert.deepEqual(slider.style.size, [180,60]);
     assert.equal(findNode(slider, 'mix_icon'), null);
-    assert.ok(findNode(slider, 'mix_rail').style.size[0] > findNode(slider, 'mix_rail').style.size[1]);
+    assert.deepEqual(findNode(slider, 'mix_gauge').style.size, [180, 60]);
 });
 
 test('shared horizontal slider retains its native square until expanded and formats the retained value', () => {
     const input = { id: 'compact', icon: './assets/images/icons/calendar.svg', label: 'Time', orientation: 'horizontal',
         expanded: false, itemSize: 60, value: 35, min: 0, max: 60, step: 5, unit: 'min', sliderOptions: { lengthPx: 196 } };
     const closed = buildBevyToolSliderNode(input);
-    assert.deepEqual(closed.style.size, [60, 60]); assert.equal(findNode(closed, 'compact_rail'), null);
+    assert.deepEqual(closed.style.size, [60, 60]); assert.equal(findNode(closed, 'compact_gauge'), null);
     assert.ok(findNode(closed, 'compact_icon')); assert.equal(closed.accessibility.label, 'Time');
     const open = buildBevyToolSliderNode({ ...input, expanded: true });
     assert.deepEqual(open.style.size, [196, 60]); assert.equal(findNode(open, 'compact_value').text, '35 min');
-    assert.ok(findNode(open, 'compact_rail')); assert.equal(findNode(open, 'compact_icon'), null);
+    assert.ok(findNode(open, 'compact_gauge')); assert.equal(findNode(open, 'compact_icon'), null);
 });
 
 test('a held palette gesture opens on press and selects the release target exactly once', () => {

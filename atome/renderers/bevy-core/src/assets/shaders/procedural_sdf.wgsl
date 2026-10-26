@@ -567,6 +567,12 @@ fn intuition_mystic_plate(box_distance: f32, screen_uv: vec2<f32>, family: vec4<
 }
 
 fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32> {
+    // The captures (mystic_capture.rs) cover the surface drawn NOW; the record keeps the size it was
+    // laid for until the menu is laid again (a resize lands first). A point of the record (logical
+    // px, bottom origin) is therefore found on the screen from this fragment's own place, its offset
+    // turned into screen UV by the record's measured scale: never stretched to a former surface.
+    let screen_per_record = vec2(1.0, -1.0)
+        / (max(vec2(abs(dpdx(pixel_position.x)), abs(dpdy(pixel_position.y))), vec2(0.0001)) * view.viewport.zw);
     let declared = i32(round(material.mystic_count.x));
     if declared <= 0 {
         return vec4<f32>(0.0, 0.0, 0.0, 0.0);
@@ -585,8 +591,6 @@ fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32
     let shadow_dose = clamp(material.surface_tint.a, 0.0, 1.0);
     let tint = clamp(material.assistant_background_tint, vec4(0.0), vec4(1.0));
     let glass_mix = clamp(material.transition.x, 0.0, 1.0);
-    let surface = max(material.geometry.xy, vec2(1.0));
-
     // A LEVEL TURN (`mystic_style.z`: a grid's submenu, page or return) turns the
     // plates from the level shown so far — `menu_front` then holds its face
     // (mystic_capture.rs) — never from the workspace. `|motion.z|` says what the
@@ -682,7 +686,7 @@ fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32
             if cosine < 0.0 {
                 // MENU side: the shared system surface, tinted by the rung.
                 let source = select(tile.xy + vec2(-aside, bside), tile.xy + vec2(bside, -aside), turning_y);
-                let face_uv = vec2(source.x / surface.x, 1.0 - source.y / surface.y);
+                let face_uv = screen_uv + (source - pixel_position) * screen_per_record;
                 let content = textureSampleLevel(menu_face, menu_face_sampler, face_uv, 0.0);
                 plate_color = intuition_mystic_plate(box_distance, face_uv, family, glass_mix, tint);
                 plate_color = mix(plate_color, content.rgb / max(content.a, 0.001), content.a);
@@ -692,11 +696,7 @@ fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32
                 // the plate instead of ghosting over the hole. The plate coordinate
                 // IS the source offset, so at rest the sample lands on its own pixel.
                 let source = select(tile.xy + vec2(aside, bside), tile.xy + vec2(bside, aside), turning_y);
-                let source_uv = clamp(
-                    vec2(source.x / surface.x, 1.0 - (source.y / surface.y)),
-                    vec2(0.0),
-                    vec2(1.0)
-                );
+                let source_uv = clamp(screen_uv + (source - pixel_position) * screen_per_record, vec2(0.0), vec2(1.0));
                 let previous = textureSampleLevel(menu_front, menu_front_sampler, source_uv, 0.0);
                 if level_turn {
                     // The previous level's plate: the same glass, with the face it carried.
@@ -738,7 +738,7 @@ fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32
         let hole_distance = sd_mystic_tile(delta, half_side, clamp(tile.w, 0.0, half_side), fold) - hole_edge;
         let hole_mask = (1.0 - smoothstep(-softness, softness, hole_distance)) * hole_dose;
         if hole_mask > 0.002 {
-            let back_uv = clamp(vec2(pixel_position.x / surface.x, 1.0 - (pixel_position.y / surface.y)), vec2(0.0), vec2(1.0));
+            let back_uv = screen_uv;
             let hole_color = textureSampleLevel(menu_back, menu_back_sampler, back_uv, 0.0).rgb;
             let hole_contribution = hole_mask * (1.0 - alpha);
             color = color * alpha + hole_color * hole_contribution;

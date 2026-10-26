@@ -590,6 +590,54 @@ fn backdrop_clip_crops_the_resident_mesh_without_stretching_or_accumulating_asse
     );
 }
 
+// An animated glass (the Dashboard Atom's spring and breath) receives a transform patch every
+// frame. Rewriting its unchanged quad made Bevy reallocate a 1 MiB vertex slab per frame, which
+// the web backend never destroyed: the app was killed for GPU memory on a 4 GB phone.
+#[test]
+fn backdrop_transform_keeps_an_unchanged_crop_out_of_the_mesh() {
+    let glass = AtomeRenderNode {
+        project_space: false,
+        clip_rect: Some([42.0, 34.0, 50.0, 30.0]),
+        clip_rotation: 0.0, clip_rounded_rects: vec![],
+        surface_paint: None,
+        backdrop: Some(AtomeBackdropStyle { blur_px: 12.0, tint: [0.2, 0.3, 0.4, 0.5], tint_fade: 0.0, corner_cut_px: 0.0 }),
+        ..shape_node("animated_backdrop")
+    };
+    let mut app = App::new();
+    app.add_plugins(AtomeBevyRendererPlugin::new(AtomeBevyRendererConfig::empty(640.0, 480.0)));
+    app.update();
+    let entity = apply_spawn(app.world_mut(), glass).unwrap();
+    let mesh_handle = app.world().get::<Mesh2d>(entity).unwrap().0.clone();
+    let patch = |scale: f32, clip_rect: Option<[f32; 4]>| AtomeTransformPatch {
+        id: "animated_backdrop".to_string(),
+        logical_position: [12.0, 24.0],
+        logical_size: [120.0, 50.0],
+        scale: [scale, scale],
+        rotation: 0.0,
+        origin: [0.5, 0.5],
+        clip_rect,
+        clip_rotation: 0.0, clip_rounded_rects: vec![],
+    };
+    apply_transform(app.world_mut(), patch(1.0, None)).unwrap();
+    let sentinel = vec![[7.0, 7.0, 7.0]; 4];
+    app.world_mut().resource_mut::<Assets<Mesh>>().get_mut(&mesh_handle).unwrap()
+        .insert_attribute(Mesh::ATTRIBUTE_POSITION, sentinel.clone());
+    let positions = |app: &App| match app.world().resource::<Assets<Mesh>>().get(&mesh_handle).unwrap()
+        .attribute(Mesh::ATTRIBUTE_POSITION) {
+        Some(VertexAttributeValues::Float32x3(values)) => values.clone(),
+        _ => panic!("backdrop mesh should carry Float32x3 positions"),
+    };
+
+    for step in 1..=8 {
+        apply_transform(app.world_mut(), patch(1.0 + step as f32 * 0.01, None)).unwrap();
+    }
+    assert_eq!(positions(&app), sentinel, "a pose change must not rewrite an unchanged crop");
+
+    apply_transform(app.world_mut(), patch(1.0, Some([12.0, 24.0, 60.0, 50.0]))).unwrap();
+    assert_eq!(positions(&app)[1], [30.0, -25.0, 0.0], "a new crop rewrites the quad");
+    assert_eq!(app.world().get::<Mesh2d>(entity).unwrap().0, mesh_handle);
+}
+
 #[test]
 fn style_opacity_patch_updates_shape_sprite_without_cumulative_alpha() {
     let mut world = World::new();

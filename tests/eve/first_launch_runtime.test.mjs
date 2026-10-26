@@ -220,11 +220,14 @@ describe('first-launch canonical lifecycle', () => {
     it.each(['nutrition', 'movement', 'journal'])('finishes the guest %s goal through the canonical project and home owners', async goal => {
         const f = fixture(); await f.flow.open(); await f.flow.handle({ operation: 'guest' });
         expect(await f.flow.handle({ operation: 'goal', value: goal })).toMatchObject({ ok: true });
-        expect(owners.create).toHaveBeenCalledWith({ family: 'health', goal });
-        expect(f.finish).toHaveBeenCalledWith({ projectId: 'sleep-project', homeId: 'basic' });
+        expect(owners.create).toHaveBeenCalledWith({ family: 'health', goal }); expect(f.flow.state.stage).toBe('objective');
+        owners.gateway.mockResolvedValue({ ok: true, result: { ok: true } });
+        expect(await f.flow.handle({ operation: 'finish' })).toMatchObject({ ok: true });
+        expect(f.finish).toHaveBeenCalledWith({ projectId: 'basic', homeId: 'basic' });
         expect(f.flow.state.progress.step).toBe('complete'); expect(f.flow.isOpen()).toBe(false);
         expect(f.flow.state.profile.preferences.visual.masteryLevel).toBe('beginner');
-        expect(f.loadProfile).not.toHaveBeenCalled(); expect(f.saves).toHaveLength(0);
+        // Its beginner profile is stored at once (a guest leaving early keeps eVe Basic), then its completion.
+        expect(f.loadProfile).not.toHaveBeenCalled(); expect(f.saves).toHaveLength(2);
     });
     it('keeps guest sleep configuration and programme controls on the shared tool path', async () => {
         const f = fixture(); await f.flow.open(); await f.flow.handle({ operation: 'guest' });
@@ -422,7 +425,7 @@ describe('first-launch canonical lifecycle', () => {
         expect(f.saves).toHaveLength(before); expect(f.flow.state.notice).toBe('');
         owners.media.mockResolvedValueOnce({ ok: true, items: [{ origin: 'external', file: { type: 'image/png' } }] });
         expect((await f.flow.handle({ operation: 'photo' })).ok).toBe(true);
-        expect(owners.media).toHaveBeenLastCalledWith({ kinds: ['image'], multiple: false });
+        expect(owners.media).toHaveBeenLastCalledWith(expect.objectContaining({ kinds: ['image'], multiple: false }));
         expect(f.profile().user_face).toBe('data:image/png;base64,selected');
         expect(f.flow.state.fields.name).toBe('Still editing'); expect(f.profile().preferences.custom).toBe('preserved');
         const resumed = fixture(f.profile()); await resumed.flow.authenticated({ user });
@@ -450,10 +453,18 @@ describe('first-launch canonical lifecycle', () => {
         expect(await f.flow.handle({ operation: 'goals' })).toMatchObject({ ok: false, error: 'first_launch_context_changed' });
         expect(f.saves).toHaveLength(1);
     });
-    it.each(['nutrition', 'movement', 'journal'])('opens the canonical %s project and ends onboarding', async goal => {
+    // Every goal walks its objective's screen; its Finish writes the objective's settings and schedule, then ends on the home.
+    it.each(['nutrition', 'movement', 'journal'])('walks the %s objective screen, then ends onboarding on the home', async goal => {
         const f = fixture(); await f.flow.authenticated({ user }); await f.flow.handle({ operation: 'goals' });
         await f.flow.handle({ operation: 'goal', value: goal }); expect(owners.create).toHaveBeenCalledWith({ family: 'health', goal });
-        expect(f.finish).toHaveBeenCalledWith({ projectId: 'sleep-project', homeId: 'basic' }); expect(f.profile().preferences.first_launch.step).toBe('complete');
+        expect(f.flow.state.stage).toBe('objective'); expect(f.finish).not.toHaveBeenCalled();
+        owners.gateway.mockResolvedValue({ ok: true, result: { ok: true } });
+        expect((await f.flow.handle({ operation: 'finish' })).ok).toBe(true);
+        expect(owners.gateway).toHaveBeenCalledWith(expect.objectContaining({ tool_id: 'dashboard.objective.settings.set',
+            input: { objective_id: 'sleep-project', effort: 3, time_budget: { minutes: 20, basis: 'day', days: [] } } }));
+        expect(owners.gateway).toHaveBeenCalledWith(expect.objectContaining({ tool_id: 'dashboard.objective.schedule.set',
+            input: { objective_id: 'sleep-project', start_minutes: 1080, calendar: true } }));
+        expect(f.finish).toHaveBeenCalledWith({ projectId: 'basic', homeId: 'basic' }); expect(f.profile().preferences.first_launch.step).toBe('complete');
     });
 });
 

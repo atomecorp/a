@@ -36,7 +36,7 @@ const ROUTES = Object.freeze({
     'skills.versions.content': ['GET', '/skills/:id/versions/:version/content']
 });
 
-const CATALOG_ACTIONS = new Set(['models', 'credential.status']);
+const CATALOG_ACTIONS = new Set(['models', 'credential.status', 'secret.list', 'secret.read', 'secret.store', 'secret.remove']);
 const activeFor = (connection) => {
     if (!operations.has(connection)) {
         const active = new Map();
@@ -80,6 +80,15 @@ const handleVideoAction = async (action, payload, { video, principal, vault, fet
     if (action === 'video.job') return video.getJob(principal, payload.job_id, ctx);
     if (action === 'video.cancel') return video.cancel(principal, payload.job_id, ctx);
     if (action === 'video.output') return video.storeOutput(principal, payload.job_id, Number(payload.index) || 0, ctx);
+    throw new Error('provider_operation_not_allowed');
+};
+
+// The principal's own secrets, kept with its account (see createAccountSecretVault).
+const handleSecretAction = async (action, payload, secrets) => {
+    if (action === 'secret.list') return { items: secrets.list() };
+    if (action === 'secret.read') return secrets.read(payload.entry_id);
+    if (action === 'secret.store') return secrets.store(payload.entry_id, payload.value, payload.metadata);
+    if (action === 'secret.remove') return secrets.remove(payload.entry_id);
     throw new Error('provider_operation_not_allowed');
 };
 
@@ -170,6 +179,7 @@ export const handleWsAiProviderOperation = async (message, connection, {
         const timeout = setTimeout(() => controller.abort(), SOCIAL_TIMEOUT_MS[action] ?? 180_000);
         entry.timer = timeout;
         const vault = await resolveVault(connection?._wsApiVaultRouter?.provider, principal);
+        if (action.startsWith('secret.')) return reply(true, { data: await handleSecretAction(action, message.payload || {}, vault.secrets) });
         const credentialProvider = String(message.provider || message.payload?.provider || 'openai');
         const audioCredential = credentialProvider !== 'openai' && action.startsWith('credential.')
             ? (audio.providerForCredential(credentialProvider) || video.providerForCredential(credentialProvider)

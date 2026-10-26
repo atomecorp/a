@@ -99,11 +99,10 @@ const projectStore = (level, failure = null) => {
     return { records, commitBatch };
 };
 
-test.each(['fr', 'en'])('official objectives remain distinct, localized and explicit about programme availability (%s)', locale => {
+// Every objective walks its preparation (objective_preparation.js): none is a « preview » any more.
+test.each(['fr', 'en'])('official objectives remain distinct and localized (%s)', locale => {
     setEveLocale(locale);
     expect(DASHBOARD_OBJECTIVES.map(objective => objective.objective_id)).toEqual(ATOME_OBJECTIVE_IDS);
-    expect(DASHBOARD_OBJECTIVES.filter(objective => objective.availability === 'preview')).toHaveLength(12);
-    expect(dashboardObjectiveFor({ objective_id: 'OBJ-02' }).availability).toBe('pilot');
     expect(DASHBOARD_PROJECT_GOALS.health).toContain('free');
     expect(DASHBOARD_OBJECTIVES.every(objective => !eveT(objective.label_key).startsWith('eve.'))).toBe(true);
     expect(dashboardObjectiveFor({ goal: 'aging' }).objective_id).toBe('OBJ-10');

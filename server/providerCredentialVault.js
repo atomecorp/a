@@ -14,13 +14,11 @@ const assertRecord = (name) => {
     if (!PROVIDER_VAULT_RECORDS.includes(name)) throw new Error('provider_not_supported');
 };
 
-// Server-only storage adapter for the existing encrypted token vault. Credentials
-// never enter Atome events, user exports, sync or a browser-readable read route.
-export const createProviderCredentialVault = ({ root, secret } = {}) => {
-    if (!root || !secret) throw new Error('provider_vault_configuration_required');
+// One encrypted record per file, named by the hash of its key, written atomically.
+const fileStorage = (root) => {
     fs.mkdirSync(root, { recursive: true, mode: 0o700 });
     const filename = (key) => path.join(root, `${createHash('sha256').update(key).digest('hex')}.json`);
-    const storage = {
+    return {
         getItem(key) {
             try { return fs.readFileSync(filename(key), 'utf8'); }
             catch (error) { if (error.code === 'ENOENT') return null; throw error; }
@@ -35,8 +33,16 @@ export const createProviderCredentialVault = ({ root, secret } = {}) => {
                 fs.rmSync(temporary, { force: true });
             }
         },
-        removeItem(key) { fs.rmSync(filename(key), { force: true }); }
+        removeItem(key) { fs.rmSync(filename(key), { force: true }); },
+        files: () => fs.readdirSync(root).filter((name) => /^[0-9a-f]{64}\.json$/.test(name))
     };
+};
+
+// Server-only storage adapter for the existing encrypted token vault. Credentials
+// never enter Atome events, user exports, sync or a browser-readable read route.
+export const createProviderCredentialVault = ({ root, secret } = {}) => {
+    if (!root || !secret) throw new Error('provider_vault_configuration_required');
+    const storage = fileStorage(root);
     const vault = createEncryptedTokenVault({ storage, secret });
     return {
         async store(provider, value) {
@@ -73,6 +79,48 @@ export const createProviderCredentialVault = ({ root, secret } = {}) => {
     };
 };
 
+// The principal's own secrets (mail password, saved logins, keys of providers the
+// device calls itself…): stored with the account, so a recovered or new device gets
+// them back. Only that principal reads them, over its authenticated socket.
+const SECRET_ID = /^[A-Za-z0-9._%:-]{1,512}$/;
+const SECRET_MAX_BYTES = 256 * 1024;
+const SECRET_MAX_COUNT = 1000;
+export const createAccountSecretVault = ({ root, secret } = {}) => {
+    if (!root || !secret) throw new Error('provider_vault_configuration_required');
+    const storage = fileStorage(root);
+    const vault = createEncryptedTokenVault({ storage, secret, prefix: 'secret.' });
+    const entryId = (value) => {
+        const id = String(value ?? '').trim();
+        if (!SECRET_ID.test(id)) throw new Error('provider_secret_id_invalid');
+        return id;
+    };
+    return {
+        async store(id, value, metadata = {}) {
+            const normalized = entryId(id);
+            const size = Buffer.byteLength(JSON.stringify({ value, metadata }) || '');
+            if (value === undefined || size > SECRET_MAX_BYTES) throw new Error('provider_secret_invalid');
+            if (!storage.getItem(`secret.${normalized}`) && storage.files().length >= SECRET_MAX_COUNT) throw new Error('provider_secret_limit');
+            const stored = await vault.store(normalized, value, metadata && typeof metadata === 'object' ? metadata : {});
+            return { entry_id: stored.entry_id, metadata: stored.metadata };
+        },
+        async read(id) {
+            const result = await vault.read(entryId(id));
+            return result.ok ? { entry_id: result.entry_id, metadata: result.metadata, value: result.value } : null;
+        },
+        remove(id) {
+            return { entry_id: vault.remove(entryId(id)).entry_id };
+        },
+        // Entry ids and metadata only, never a value.
+        list() {
+            return storage.files().map((name) => {
+                const record = JSON.parse(fs.readFileSync(path.join(root, name), 'utf8'));
+                return { entry_id: record.entry_id, metadata: record.metadata || {},
+                    created_at: record.created_at || null, updated_at: record.updated_at || null };
+            });
+        }
+    };
+};
+
 export const resolveProviderCredentialVault = async (provider, principal) => {
     if (!provider?.ensure || !principal) throw new Error('provider_vault_principal_required');
     const record = await provider.ensure(principal);
@@ -84,5 +132,6 @@ export const resolveProviderCredentialVault = async (provider, principal) => {
     // `socialRoot`: the principal's own directory for sharing jobs and their
     // temporary variants — never shared between principals.
     return Object.assign(createProviderCredentialVault({ root: path.join(record.vaultRoot, 'credentials'), secret }),
-        { socialRoot: path.join(record.vaultRoot, 'social') });
+        { socialRoot: path.join(record.vaultRoot, 'social'),
+            secrets: createAccountSecretVault({ root: path.join(record.vaultRoot, 'secrets'), secret }) });
 };

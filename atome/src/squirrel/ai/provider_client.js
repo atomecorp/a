@@ -5,7 +5,6 @@ import { loadRuntimeUserProfile } from './profile_loader.js';
 import { createGlobalSecurityApi } from '../security/bootstrap.js';
 import { requestProviderService } from './provider_broker.js';
 import { readResponseText } from './openai_stream.js';
-import { getSessionState } from '../apis/unified/adole_api/session.js';
 import {
     DEFAULT_TIMEOUT_MS,
     toText,
@@ -42,40 +41,14 @@ export const aiProviderVaultEntryId = ({ userId, providerId } = {}) => {
     return `ai.provider.${encodeURIComponent(principal)}.${provider}`;
 };
 
-// Both Home and assistant startup migrate through this account-bound owner.
+// The OpenAI key lives in the account's server-side provider entry; a key an earlier
+// version left on this device joins it when the profile loads (device_secret_transfer).
 export const resolveOpenAiCredentialStatus = async ({
-    userId, securityApi = null, env = globalThis,
-    providerRequest = requestProviderService,
-    principal = () => getSessionState()?.user?.id
+    userId, providerRequest = requestProviderService
 } = {}) => {
-    const entryId = aiProviderVaultEntryId({ userId, providerId: 'openai' });
-    const options = { expectedPrincipal: userId };
-    let status = await providerRequest('credential.status', {}, options);
+    aiProviderVaultEntryId({ userId, providerId: 'openai' });
+    const status = await providerRequest('credential.status', {}, { expectedPrincipal: userId });
     if (typeof status?.configured !== 'boolean') throw new Error('provider_credential_status_invalid');
-    const vault = securityApi || resolveSecurityApi(env);
-    if (!(vault.listTokens?.()?.items || []).some(item => item.entry_id === entryId)) return status;
-    const requireSameAccount = () => {
-        if (principal() !== userId) throw new Error('provider_principal_changed');
-    };
-    requireSameAccount();
-    if (!status.configured) {
-        if (vault.vaultStatus?.().configured !== true) {
-            const owner = env?.window || env;
-            const secret = owner?.localStorage?.getItem(
-                'squirrel.home.device_key.' + encodeURIComponent(userId)
-            );
-            if (!secret) throw new Error('ai_vault_locked');
-            vault.configureVaultSecret(secret);
-        }
-        const legacy = await vault.readToken(entryId);
-        requireSameAccount();
-        const key = toText(legacy?.value?.apiKey ?? legacy?.value);
-        if (!legacy?.ok || !key) throw new Error('ai_vault_unlock_failed');
-        status = await providerRequest('credential.store', { key }, options);
-        requireSameAccount();
-        if (status.configured !== true) throw new Error('ai_credential_store_failed');
-    }
-    vault.removeToken(entryId);
     return status;
 };
 
@@ -109,7 +82,7 @@ export const resolveConfiguredAiProviderCredentials = async ({
         const entryId = aiProviderVaultEntryId({ userId, providerId: entry.providerId });
         if (entry.providerId === 'openai') {
             let status;
-            try { status = await resolveOpenAiCredentialStatus({ userId, securityApi: vault, env, providerRequest }); }
+            try { status = await resolveOpenAiCredentialStatus({ userId, providerRequest }); }
             catch (error) { errors.openai = error.message; continue; }
             if (status.configured) items.push({
                 ...entry, provider: AI_PROVIDER_DEFINITIONS.openai,

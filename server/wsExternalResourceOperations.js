@@ -17,7 +17,7 @@ export async function handleWsExternalResourceOperation(data, connection, addres
         || await handleWsPeertube(data, address)
         || await handleWsTvCatalog(data)
         || await handleWsTvResolve(data)
-        || await handleWsShows(data, address)
+        || await handleWsShows(data, address, { publicEvents: connection?._wsApiPublicEvents, viewerId: connection?._wsApiUserId || null })
         || await handleWsVideoCatalog(data, address)
         || await handleWsGpsOperation(data, address)
         || await handleWsOpenFoodFacts(data, address)

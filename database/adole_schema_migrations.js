@@ -1,5 +1,6 @@
 import { normalizePermissionConditions } from '../atome/src/squirrel/conditions/permission_adapter.js';
 import { ensurePrincipalIdentityTables } from './adole_principal_identity_schema.js';
+import { ensurePublicEventTables } from './adole_public_events_schema.js';
 
 async function ensureColumn({ query, table, column, ddl }) {
     const columns = await query('all', `PRAGMA table_info(${table})`);
@@ -376,6 +377,7 @@ async function runAdoleSchemaMigrations(query) {
     await ensureCommunicationTables(query);
     await backfillEventSequences(query);
     await ensurePrincipalIdentityTables(query);
+    await ensurePublicEventTables(query);
     await refreshUsersView(query);
 }
 

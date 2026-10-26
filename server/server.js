@@ -59,7 +59,8 @@ const {
   newsBroadcast,
   newsPublishRateAllowed,
   communities,
-  directoryPublicService
+  directoryPublicService,
+  publicEvents
 } = createServerServices({ projectRoot_env });
 
 // Check if database is configured (SQLite path or libSQL URL)
@@ -318,7 +319,8 @@ async function startServer() {
       syncSharingService,
       newsBroadcast,
       newsPublishRateAllowed,
-      communities
+      communities,
+      publicEvents
     });
 
     // Route WebSocket unifiée pour sync (inclut file events, atome events, version sync)

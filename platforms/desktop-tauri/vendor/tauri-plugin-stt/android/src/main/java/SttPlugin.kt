@@ -17,6 +17,7 @@ import androidx.core.content.ContextCompat
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.Permission
+import app.tauri.annotation.PermissionCallback
 import app.tauri.annotation.TauriPlugin
 import app.tauri.plugin.Invoke
 import app.tauri.plugin.JSObject
@@ -43,8 +44,6 @@ class SttPlugin(private val activity: Activity) : Plugin(activity) {
     private var isListening = false
     private var currentLanguage: String? = null
     
-    // Pending permission request invoke to resolve after user responds
-    private var pendingPermissionInvoke: Invoke? = null
     
     // maxDuration handling
     private var maxDurationHandler: Handler? = null
@@ -121,34 +120,6 @@ class SttPlugin(private val activity: Activity) : Plugin(activity) {
         cleanup()
     }
     
-    /**
-     * Handle permission request results.
-     * Uses Tauri's PermissionState system instead of deprecated onRequestPermissionsResult.
-     */
-    @Deprecated("Use PermissionState from Tauri instead")
-    private fun handlePermissionResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
-        
-        if (requestCode == PERMISSION_REQUEST_CODE) {
-            val granted = grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
-            
-            pendingPermissionInvoke?.let { invoke ->
-                val result = JSObject()
-                if (granted) {
-                    result.put("microphone", "granted")
-                    result.put("speechRecognition", "granted")
-                } else {
-                    val canRequest = ActivityCompat.shouldShowRequestPermissionRationale(
-                        activity, Manifest.permission.RECORD_AUDIO
-                    )
-                    result.put("microphone", if (canRequest) "denied" else "permanently_denied")
-                    result.put("speechRecognition", if (canRequest) "denied" else "permanently_denied")
-                }
-                invoke.resolve(result)
-                pendingPermissionInvoke = null
-            }
-        }
-    }
-
     @Command
     fun startListening(invoke: Invoke) {
         Log.d(TAG, "startListening called")
@@ -540,32 +511,25 @@ class SttPlugin(private val activity: Activity) : Plugin(activity) {
 
     @Command
     fun requestPermission(invoke: Invoke) {
-        Log.i(TAG, "============================================")
-        Log.i(TAG, "requestPermission() CALLED")
-        
-        val alreadyGranted = ContextCompat.checkSelfPermission(activity, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-        Log.d(TAG, "  Already granted: $alreadyGranted")
-        
-        if (alreadyGranted) {
-            val result = JSObject()
-            result.put("microphone", "granted")
-            result.put("speechRecognition", "granted")
-            Log.d(TAG, "  Returning already granted")
-            invoke.resolve(result)
+        if (ContextCompat.checkSelfPermission(activity, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            resolveMicrophonePermission(invoke)
             return
         }
+        // Tauri routes the system answer to the callback: the invoke resolves once the dialog closes.
+        requestPermissionForAlias("microphone", invoke, "microphonePermission")
+    }
 
-        // Store invoke to resolve after user responds to permission dialog
-        pendingPermissionInvoke = invoke
-        Log.d(TAG, "  Requesting RECORD_AUDIO permission...")
+    @PermissionCallback
+    private fun microphonePermission(invoke: Invoke) { resolveMicrophonePermission(invoke) }
 
-        ActivityCompat.requestPermissions(
-            activity,
-            arrayOf(Manifest.permission.RECORD_AUDIO),
-            PERMISSION_REQUEST_CODE
-        )
-        Log.d(TAG, "  Permission dialog shown, waiting for result...")
-        // Don't resolve here - wait for onRequestPermissionsResult callback
+    private fun resolveMicrophonePermission(invoke: Invoke) {
+        val granted = ContextCompat.checkSelfPermission(activity, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        val state = when {
+            granted -> "granted"
+            ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.RECORD_AUDIO) -> "denied"
+            else -> "permanently_denied"
+        }
+        invoke.resolve(JSObject().put("microphone", state).put("speechRecognition", state))
     }
 
     private fun createRecognizerIntent(config: ListenConfig): Intent {

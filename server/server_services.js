@@ -18,7 +18,11 @@ import { generateOpaquePrincipalId } from './auth_crypto.js';
 import { isWsApiPrincipalProvisioned } from './wsApiIdentity.js';
 import { getFileMetadata, setFileReadResolver } from './userFiles.js';
 import { getLocalVersion } from './githubSync.js';
-import { enqueuePendingConsoleMessage, wsSendJsonToUser } from './wsApiState.js';
+import { enqueuePendingConsoleMessage, wsApiConnections, wsSendJsonToUser } from './wsApiState.js';
+import { wsBroadcastJson } from './wsSend.js';
+import { createPublicEventsStore } from './public_events_store.js';
+import { createPublicEventGuard } from './public_events_guard.js';
+import { createPublicEvents } from './public_events.js';
 import { pushNotificationToUserStack } from './notificationStack.js';
 import { createCommunicationRelations } from './communication_relations.js';
 import { persistAcceptedRequestNote } from './communication_messages.js';
@@ -102,7 +106,21 @@ export function createServerServices({ projectRoot_env }) {
     vaultRouter: userVaultRouter
   });
   wsSyncRuntime.setDirectoryService(directoryPublicService);
+  // Public events: the authors' published calendar events, projected into the shared base read by
+  // the Activité rubrics; every open screen hears which cells changed (todo/evenements_publics_2026-10-26.md).
+  const publicEventsStore = createPublicEventsStore({ query: db.query.bind(db) });
+  const publicEvents = createPublicEvents({
+    store: publicEventsStore,
+    guard: createPublicEventGuard({ store: publicEventsStore, findUserById: (id) => findUserById(db.getDataSourceAdapter(), id) }),
+    vaultRouter: userVaultRouter,
+    syncRuntime: wsSyncRuntime,
+    relations: communicationRelations,
+    // The organiser shown: the name the account shares on its public card (its profile's sharing choices).
+    findUserName: async (id) => (await directoryPublicService.sourceProfile(id).catch(() => null))?.display_name || '',
+    broadcast: (cells) => wsBroadcastJson(wsApiConnections, { type: 'public-events-changed', cells }, { scope: 'ws/api', op: 'public-events-changed' })
+  });
   return {
+    publicEvents,
     userVaultRouter,
     wsSyncRuntime,
     deliverCommNotification,

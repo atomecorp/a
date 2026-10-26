@@ -397,6 +397,18 @@ La fenêtre système n'est plus appelée que par le panneau : `importProjectMedi
   - l'emplacement image depuis la bibliothèque : pas exercé en app ;
   - les grosses vidéos via le pont base64 : non mesurées.
 
+## 9. Un seul panneau d'import (26 octobre 2026) — remplace §2 et §8
+
+Règle 18 d'AGENTS.md. Le panneau Média est devenu LE panneau d'import, maquettes validées par l'utilisateur
+(`temp/media_import_unify/mockups/`) : étiquette en haut (« Importer une image », « Importer un fond »…), aperçu de ce
+qui est choisi, et une source par outil de la bande — **Médias** (grille de vignettes, dépliée à la demande seulement),
+**Album** (pellicule, app seulement), **Ouvrir** (fichiers extérieurs), **Photo** et **Vidéo** (prises maintenant, rangées
+dans les médias de la personne, jamais dans un projet), **Arrêt** pendant une vidéo, puis **Choix** (un appelant) ou
+**Import** (un projet), et **Suppr.** quand l'appelant tient déjà un média (`removable`). La liste triable, le rail de cases
+et la rangée de tuiles sous la photo (`bevy_panel_media_sources.js`) n'existent plus. Sur le Dashboard la scène héberge le
+panneau à la place de ce qui s'affichait et le rend après. Le reste du §2 (glisser une vignette sur le canevas, un lot =
+un import) vaut toujours dans un projet. Détails : `eVe/documentations/FRAMEWORK_STATE.md` (26 octobre 2026).
+
 ## Annexe — constats d'origine (reprise au §7)
 
 ### Annexe A — instances dupliquées / multipliées dans le panneau d'import

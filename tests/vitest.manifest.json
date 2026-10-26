@@ -203,7 +203,6 @@
   "tests/eve/interaction_hold_surface.test.mjs",
   "tests/eve/interaction_native_extensions.test.mjs",
   "tests/eve/intuition/projection/button.slider_contract.test.mjs",
-  "tests/eve/intuition/tools/ui/tool_button_factory.slider_contract.test.mjs",
   "tests/eve/kira_audio_commands_payload.test.mjs",
   "tests/eve/lasso_context_action_regression.test.mjs",
   "tests/eve/last_creation_tool_shortcut.test.mjs",

@@ -9,8 +9,6 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const createDefaultState = () => ({
     version: 1,
     updated_at: null,
-    budget_tokens_per_day: 0,
-    budget_configured: false,
     low_remaining_ratio: 0.2, critical_remaining_ratio: 0.1,
     usage_events: [],
     incidents: []
@@ -63,10 +61,19 @@ export const estimateOpenAiLiveCost = ({ model, seconds, now = Date.now() } = {}
     return seconds * rate.perMinute / 60;
 };
 
+// The daily budget is the account's (`preferences.assistant.ai_budget_tokens_per_day`,
+// set in Home), so it follows the user to every device; the usage counted against
+// it is this device's.
+const accountBudget = (env) => {
+    const preferences = env?.__eveProfilePreferences || env?.window?.__eveProfilePreferences;
+    return Math.max(0, toFiniteNumber(preferences?.assistant?.ai_budget_tokens_per_day, 0));
+};
+
 export const createAiQuotaTracker = ({
     env = globalThis,
     storageKey = QUOTA_TRACKER_STORAGE_KEY,
-    principal = () => getSessionState()?.user?.id || 'anonymous'
+    principal = () => getSessionState()?.user?.id || 'anonymous',
+    readBudget = () => accountBudget(env)
 } = {}) => {
     let inMemory = createDefaultState(), owner = null;
     const scopedKey = () => {
@@ -119,16 +126,6 @@ export const createAiQuotaTracker = ({
     };
 
     return {
-        setBudgetTokensPerDay(tokens) {
-            const result = mutate((state) => ({
-                ...state,
-                budget_configured: Number.isFinite(Number(tokens)) && Number(tokens) > 0,
-                budget_tokens_per_day: Math.max(0, toFiniteNumber(tokens, state.budget_tokens_per_day))
-            }));
-            if (env.dispatchEvent && env.CustomEvent) env.dispatchEvent(new env.CustomEvent('squirrel:ai-budget-changed'));
-            return result;
-        },
-
         setThresholds({ low = 0.2, critical = 0.1 } = {}) {
             if (!Number.isFinite(low) || !Number.isFinite(critical) || critical < 0 || low > 1 || critical >= low) throw new Error('quota_thresholds_invalid');
             return mutate(state => ({ ...state, low_remaining_ratio: low, critical_remaining_ratio: critical }));
@@ -223,9 +220,9 @@ export const createAiQuotaTracker = ({
             const promptTokens = usageEvents.reduce((sum, entry) => sum + toFiniteNumber(entry.prompt_tokens, 0), 0);
             const completionTokens = usageEvents.reduce((sum, entry) => sum + toFiniteNumber(entry.completion_tokens, 0), 0);
             const totalTokens = promptTokens + completionTokens;
-            const budgetTokens = Math.max(0, toFiniteNumber(state.budget_tokens_per_day, 0));
+            const budgetTokens = Math.max(0, toFiniteNumber(readBudget(), 0));
             const usageKnown = usageEvents.every(entry => entry.usage_known !== false);
-            const usageRatio = usageKnown && state.budget_configured && budgetTokens > 0 ? totalTokens / budgetTokens : null;
+            const usageRatio = usageKnown && budgetTokens > 0 ? totalTokens / budgetTokens : null;
             const recentQuotaIncident = incidents.find((entry) => entry.error_code === 'provider_quota_exceeded') || null;
             const recentRateLimitIncident = incidents.find((entry) => entry.error_code === 'provider_rate_limited') || null;
 

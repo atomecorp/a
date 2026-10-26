@@ -150,6 +150,15 @@ const panCenter = ({ center, zoom, deltaX = 0, deltaY = 0 } = {}) => {
 
 const clampZoom = (zoom) => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.round(toNumber(zoom) || 0)));
 
+// Ground metres one map pixel covers at `lat` (Web Mercator, the equator's length shrinking with its cosine).
+const EQUATOR_M = 40075016.686;
+const metersPerPixel = ({ lat, zoom }) => (EQUATOR_M * Math.cos(normalizeCenter({ lat, lon: 0 }).lat * Math.PI / 180)) / (TILE_SIZE_PX * (2 ** normalizeZoom(zoom)));
+// The closest whole zoom at which a circle of `radiusKm` around `lat` spans at most `share` of the viewport's smaller side.
+const zoomFittingRadius = ({ lat, radiusKm, width, height, share = 0.8 }) => {
+    const ground = EQUATOR_M * Math.cos(normalizeCenter({ lat, lon: 0 }).lat * Math.PI / 180);
+    return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.floor(Math.log2((share * Math.min(width, height) * ground) / (2 * radiusKm * 1000 * TILE_SIZE_PX)))));
+};
+
 const normalizeMapPresentation = ({ center, zoom, width, height } = {}) => {
     const z = normalizeZoom(zoom);
     const safeCenter = normalizeCenter(center);
@@ -202,11 +211,13 @@ export {
     TILE_SIZE_PX,
     clampZoom,
     lonLatToWorld,
+    metersPerPixel,
     normalizeMapPresentation,
     pathSegmentsForViewport,
     panCenter,
     projectToViewport,
     tilesForViewport,
     worldToLonLat,
-    wrapLongitude
+    wrapLongitude,
+    zoomFittingRadius
 };
