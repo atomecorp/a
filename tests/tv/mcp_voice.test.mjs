@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createMcpTvHandlers } from '../../atome/src/squirrel/atome/mcp_handlers_contracts.js';
+import { createMcpContractHandlers } from '../../atome/src/squirrel/atome/mcp_handlers_contracts.js';
 import { TV_COMMANDS } from '../../atome/src/squirrel/tv/contracts.js';
 import { resolveAccessPolicy } from '../../atome/src/squirrel/atome/mcp_security_policy.js';
 import { createConversationSession } from '../../atome/src/squirrel/ai/conversation_session.js';
 
 test('direct MCP contracts validate inputs and use the canonical audited command route', async () => {
-    const handlers = createMcpTvHandlers();
+    const handlers = createMcpContractHandlers();
     assert.equal(Object.keys(handlers).length, 10);
     assert.equal((await handlers['tv.open_channel']({ channel: 'fr2', source_url: 'https://bad.example' })).error, 'INVALID_ARGUMENT');
     assert.equal((await handlers['tv.get_state']()).error, 'NO_ACTIVE_CLIENT');

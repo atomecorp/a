@@ -36,3 +36,7 @@ export const validateBooksInput = (action, input) => {
     return action === 'page' && !input.direction && input.fraction === undefined ? 'INVALID_ARGUMENT' : null;
 };
 export const booksError = error => (BOOKS_ERRORS.includes(error?.code || error?.message || error) ? (error?.code || error?.message || error) : 'COMMIT_FAILED');
+export const BOOKS_ASSISTANT_INSTRUCTIONS = 'Books and audiobooks: « qu\'est-ce que j\'ai à lire », « mes livres audio » call books.list (kind book '
+    + 'or audiobook); « lis-moi / ouvre <titre> », « reprends mon livre » call books.open with the work_id read from books.list; « page '
+    + 'suivante », « reviens en arrière », « chapitre suivant » call books.page; « pause », « reprends », « avance de 30 secondes » on an '
+    + 'open audiobook call books.transport; « ferme le livre » calls books.close (the position is kept).';

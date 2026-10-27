@@ -24,15 +24,11 @@ test('eVe Basic composes the same home and hides every other tile; retired style
     expect(refs.filter(ref => dashboardEveHomeCellVisible(ref, { mode: 'solo', basic: true }))).toEqual(['atom']);
     expect(refs.filter(ref => dashboardEveHomeCellVisible(ref, { basic: true })).sort()).toEqual(
         ['objectives', 'contacts', 'next_event', 'atom', 'clock', 'weather', 'search'].sort());
-    // A cell earned with the user's objectives (dashboard_progression_catalog.js) shows on Basic.
-    expect(refs.filter(ref => dashboardEveHomeCellVisible(ref, { basic: true, visible: ['objectives', 'contacts', 'next_event', 'activity'] }))
-        .sort()).toEqual(['objectives', 'contacts', 'next_event', 'activity', 'atom', 'clock', 'weather', 'search'].sort());
-    // The monitors chosen show above the Atom, up to six; an earned cell keeps its own tile.
+    // The monitors chosen show above the Atom, up to six; no other tile ever joins eVe Basic.
     const shown = options => refs.filter(ref => dashboardEveHomeCellVisible(ref, { basic: true, ...options })
         && !['objectives', 'contacts', 'next_event', 'atom', 'clock', 'weather', 'search'].includes(ref));
     expect(shown({ monitors: 3 })).toEqual(['monitor_0', 'library', 'monitor_1']);
     expect(shown({ monitors: 9 }).sort()).toEqual(['monitor_0', 'monitor_1', 'library', 'shop', 'create', 'gps'].sort());
-    expect(shown({ monitors: 3, visible: ['objectives', 'contacts', 'next_event', 'library'] }).sort()).toEqual(['monitor_0', 'monitor_1', 'library', 'shop'].sort());
 });
 
 test('eVe Pro reads like the decision grid and eVe Basic lays its four tiles as a cross around the Atom', () => {

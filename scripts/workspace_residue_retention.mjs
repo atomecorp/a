@@ -146,10 +146,39 @@ function planDeviceSupport(deviceSupport, add) {
     }
 }
 
-export function planResidueCleanup({ root, now = Date.now(), days = residueRetentionDays, scratch, deviceSupport }, add) {
+// CoreDevice keeps a copy of every build installed on a device (`devicectl install`, Xcode Run) as the base
+// of the next delta install, and never drops one: 36 copies of the app, 23 GB by 26 Oct. 2026. Only the
+// newest bases of the project's apps are used.
+const INSTALL_BASES_PER_APP = 2;
+function planInstallDeltas(installDeltas, add) {
+    for (const app of entries(installDeltas)) {
+        if (!app.isDirectory() || !app.name.startsWith('one.atome.')) continue;
+        const directory = path.join(installDeltas, app.name);
+        entries(directory).filter(entry => entry.isDirectory())
+            .map(entry => ({ file: path.join(directory, entry.name), time: fs.statSync(path.join(directory, entry.name)).mtimeMs }))
+            .sort((a, b) => b.time - a.time).slice(INSTALL_BASES_PER_APP)
+            .forEach(base => add(base.file, 'superseded-device-install-base', installDeltas));
+    }
+}
+
+// The probes' isolated Fastify servers (temp/comm/comm_harness.mjs) live in the system temp folders: a
+// probe killed before its `stop` left its base and vault sockets behind (2 386 folders, 10 GB).
+const PROBE_SERVER_FOLDERS = [{ name: /^comm-harness-/, base: 'systemTemp' }, { name: /^chv-/, base: 'tmp' }];
+function planProbeServers(folders, cutoff, add) {
+    for (const { name, base } of PROBE_SERVER_FOLDERS) {
+        for (const entry of entries(folders[base])) {
+            const file = path.join(folders[base], entry.name);
+            if (entry.isDirectory() && name.test(entry.name) && !usedSince(file, cutoff, modifiedAt)) add(file, 'stale-probe-server', folders[base]);
+        }
+    }
+}
+
+export function planResidueCleanup({ root, now = Date.now(), days = residueRetentionDays, scratch, deviceSupport, installDeltas, probeServers }, add) {
     const cargoCutoff = now - days.cargo * DAY;
     for (const target of cargoTargets(root)) cargoProfiles(target).forEach(profile => planCargoProfile(profile, cargoCutoff, now, add));
     planTemp(path.join(root, 'temp'), now - days.temp * DAY, add);
     if (scratch) planScratch(scratch, now - days.scratch * DAY, add);
     if (deviceSupport) planDeviceSupport(deviceSupport, add);
+    if (installDeltas) planInstallDeltas(installDeltas, add);
+    if (probeServers) planProbeServers(probeServers, now - days.temp * DAY, add);
 }

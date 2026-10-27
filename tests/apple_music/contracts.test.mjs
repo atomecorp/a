@@ -1,6 +1,6 @@
 import { expect, test, vi } from 'vitest';
 import { APPLE_MUSIC_ASSISTANT_INSTRUCTIONS, APPLE_MUSIC_COMMANDS, APPLE_MUSIC_ERRORS, validateAppleMusicInput } from '../../atome/src/squirrel/apple_music/contracts.js';
-import { createMcpAppleMusicHandlers } from '../../atome/src/squirrel/atome/mcp_handlers_contracts.js';
+import { createMcpContractHandlers } from '../../atome/src/squirrel/atome/mcp_handlers_contracts.js';
 import { resolveAccessPolicy } from '../../atome/src/squirrel/atome/mcp_security_policy.js';
 import { resolveActorProfile, hasActorCapability, writeIdempotencyRecord, readIdempotencyRecord } from '../../atome/src/squirrel/atome/mcp_security.js';
 import { getSessionState, setSessionState } from '../../atome/src/squirrel/apis/unified/adole_api/session.js';
@@ -26,7 +26,7 @@ test('typed music commands reject ambiguous IDs, unknown inputs, limits and dele
     expect(validateAppleMusicInput('favorite_current', { song_id: 'invented' })).toBe('INVALID_ARGUMENT');
 });
 test('music MCP uses canonical Runtime V2, granular capabilities and write idempotency', async () => {
-    const handlers = createMcpAppleMusicHandlers(), calls = [], previous = globalThis.window;
+    const handlers = createMcpContractHandlers(), calls = [], previous = globalThis.window;
     globalThis.window = { document: {}, atome: { tools: { v2Runtime: { invokeById: async input => {
         calls.push(input); return { ok: true, result: { ok: true, playback: 'paused' } };
     } } } } };

@@ -187,7 +187,9 @@ if (process.argv[1] && path.resolve(process.argv[1]) === scriptPath) {
         const phase = process.argv.find(value => value.startsWith('--phase='))?.slice(8) || 'end';
         const scratch = path.join('/private/tmp', `claude-${process.getuid()}`, fs.realpathSync(projectRoot).replaceAll(path.sep, '-'));
         const deviceSupport = path.join(os.homedir(), 'Library/Developer/Xcode/iOS DeviceSupport');
-        const report = cleanBuildCaches({ apply: process.argv.includes('--apply'), phase, residue: { scratch, deviceSupport } });
+        const installDeltas = path.join(os.homedir(), 'Library/Containers/com.apple.CoreDevice.CoreDeviceService/Data/Library/Caches/AppInstallationBinaryDeltas');
+        const probeServers = { systemTemp: fs.realpathSync(os.tmpdir()), tmp: fs.realpathSync('/tmp') };
+        const report = cleanBuildCaches({ apply: process.argv.includes('--apply'), phase, residue: { scratch, deviceSupport, installDeltas, probeServers } });
         process.stdout.write(`[build-cache] ${JSON.stringify(report)}\n`);
     } catch (error) {
         process.stderr.write(`[build-cache] ${error.message}\n`);

@@ -1,19 +1,4 @@
-import { TV_COMMANDS, validateTvInput } from '../tv/contracts.js';
-import { YOUTUBE_COMMANDS, validateYoutubeInput } from '../youtube/contracts.js';
-import { PEERTUBE_COMMANDS, validatePeertubeInput } from '../peertube/contracts.js';
-import { SOCIAL_COMMANDS, validateSocialInput } from '../social/contracts.js';
-import { APPLE_MUSIC_COMMANDS, validateAppleMusicInput } from '../apple_music/contracts.js';
-import { MUSIC_COMMANDS, validateMusicInput } from '../music/contracts.js';
-import { GPS_COMMANDS, validateGpsInput } from '../gps/contracts.js';
-import { TRAINING_COMMANDS, validateTrainingInput } from '../training/contracts.js';
-import { SHOPPING_COMMANDS, validateShoppingInput } from '../shopping/contracts.js';
-import { SHOWS_COMMANDS, validateShowsInput } from '../shows/contracts.js';
-import { EVENTS_COMMANDS, validateEventsInput } from '../public_events/contracts.js';
-import { FILMS_COMMANDS, validateFilmsInput } from '../films/contracts.js';
-import { CREATION_COMMANDS, validateCreationInput } from '../creation/contracts.js';
-import { MEDIA_IMPORT_COMMANDS, validateMediaImportInput } from '../media_import/contracts.js';
-import { FOOD_COMMANDS, validateFoodInput } from '../food/contracts.js';
-import { DASHBOARD_PROGRESSION_COMMANDS, validateDashboardProgressionInput } from '../dashboard_progression/contracts.js';
+import { MCP_CONTRACT_FAMILIES } from './mcp_contract_families.js';
 import { ensureRuntimeToolApi } from './mcp_bridges.js';
 import { buildRuntimeInvocationPayload, projectRuntimeMcpResult } from './mcp_runtime.js';
 
@@ -31,35 +16,4 @@ const createContractHandlers = ({ commands, validate, layer, noClient }) => Obje
     }, { layer, presentation: 'mcp' })));
 }]));
 
-export const createMcpTvHandlers = () => createContractHandlers({
-    commands: TV_COMMANDS, validate: validateTvInput, layer: 'atome_mcp_tv', noClient: 'NO_ACTIVE_CLIENT' });
-export const createMcpYoutubeHandlers = () => createContractHandlers({
-    commands: YOUTUBE_COMMANDS, validate: validateYoutubeInput, layer: 'atome_mcp_youtube', noClient: 'NO_ACTIVE_VIDEO' });
-export const createMcpPeertubeHandlers = () => createContractHandlers({
-    commands: PEERTUBE_COMMANDS, validate: validatePeertubeInput, layer: 'atome_mcp_peertube', noClient: 'NO_ACTIVE_VIDEO' });
-export const createMcpSocialHandlers = () => createContractHandlers({
-    commands: SOCIAL_COMMANDS, validate: validateSocialInput, layer: 'atome_mcp_social', noClient: 'social_handoff_unavailable' });
-export const createMcpAppleMusicHandlers = () => createContractHandlers({
-    commands: APPLE_MUSIC_COMMANDS, validate: validateAppleMusicInput, layer: 'atome_mcp_apple_music', noClient: 'HOST_UNSUPPORTED' });
-export const createMcpMusicHandlers = () => createContractHandlers({
-    commands: MUSIC_COMMANDS, validate: validateMusicInput, layer: 'atome_mcp_music', noClient: 'AUTH_REQUIRED' });
-export const createMcpGpsHandlers = () => createContractHandlers({
-    commands: GPS_COMMANDS, validate: validateGpsInput, layer: 'atome_mcp_gps', noClient: 'HOST_UNSUPPORTED' });
-export const createMcpTrainingHandlers = () => createContractHandlers({
-    commands: TRAINING_COMMANDS, validate: validateTrainingInput, layer: 'atome_mcp_training', noClient: 'AUTH_REQUIRED' });
-export const createMcpShoppingHandlers = () => createContractHandlers({
-    commands: SHOPPING_COMMANDS, validate: validateShoppingInput, layer: 'atome_mcp_shopping', noClient: 'AUTH_REQUIRED' });
-export const createMcpEventsHandlers = () => createContractHandlers({
-    commands: EVENTS_COMMANDS, validate: validateEventsInput, layer: 'atome_mcp_events', noClient: 'PRESENTATION_UNAVAILABLE' });
-export const createMcpShowsHandlers = () => createContractHandlers({
-    commands: SHOWS_COMMANDS, validate: validateShowsInput, layer: 'atome_mcp_shows', noClient: 'PRESENTATION_UNAVAILABLE' });
-export const createMcpFilmsHandlers = () => createContractHandlers({
-    commands: FILMS_COMMANDS, validate: validateFilmsInput, layer: 'atome_mcp_films', noClient: 'PRESENTATION_UNAVAILABLE' });
-export const createMcpCreationHandlers = () => createContractHandlers({
-    commands: CREATION_COMMANDS, validate: validateCreationInput, layer: 'atome_mcp_creation', noClient: 'PRESENTATION_UNAVAILABLE' });
-export const createMcpMediaImportHandlers = () => createContractHandlers({
-    commands: MEDIA_IMPORT_COMMANDS, validate: validateMediaImportInput, layer: 'atome_mcp_media_import', noClient: 'NOT_OPEN' });
-export const createMcpFoodHandlers = () => createContractHandlers({
-    commands: FOOD_COMMANDS, validate: validateFoodInput, layer: 'atome_mcp_food', noClient: 'HOST_UNSUPPORTED' });
-export const createMcpDashboardProgressionHandlers = () => createContractHandlers({
-    commands: DASHBOARD_PROGRESSION_COMMANDS, validate: validateDashboardProgressionInput, layer: 'atome_mcp_dashboard_progression', noClient: 'progression_actor_required' });
+export const createMcpContractHandlers = () => Object.assign({}, ...MCP_CONTRACT_FAMILIES.map(createContractHandlers));

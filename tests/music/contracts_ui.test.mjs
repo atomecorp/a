@@ -5,7 +5,7 @@ import { MUSIC_COMMANDS, MUSIC_ERRORS, validateMusicInput } from '../../atome/sr
 import { createMusicRuntime } from '../../eVe/domains/music/music_runtime.js';
 import { createMusicSource, resolveMusicProvider } from '../../eVe/domains/music/music_source.js';
 import { buildServiceCommandDefs, serviceCommandHandlers } from '../../eVe/intuition/tools/core/tool_runtime_service_commands.js';
-import { createMcpMusicHandlers } from '../../atome/src/squirrel/atome/mcp_handlers_contracts.js';
+import { createMcpContractHandlers } from '../../atome/src/squirrel/atome/mcp_handlers_contracts.js';
 import { resolveAccessPolicy } from '../../atome/src/squirrel/atome/mcp_security_policy.js';
 import { hasActorCapability, resolveActorProfile } from '../../atome/src/squirrel/atome/mcp_security.js';
 import { createConversationSession } from '../../atome/src/squirrel/ai/conversation_session.js';
@@ -23,7 +23,7 @@ test('contracts reject injected endpoints, ambiguous play inputs, tokens and for
     expect(validateMusicInput('play', { provider: 'spotify', id: 'track1', kind: 'song' })).toBeNull();
 });
 test('every declared command has real Runtime and MCP registration, matching capabilities and write idempotency', () => {
-    const defs = buildServiceCommandDefs(value => value, 'registered'), handlers = serviceCommandHandlers(), mcp = createMcpMusicHandlers();
+    const defs = buildServiceCommandDefs(value => value, 'registered'), handlers = serviceCommandHandlers(), mcp = createMcpContractHandlers();
     const owner = resolveActorProfile();
     for (const command of MUSIC_COMMANDS) {
         expect(defs.find(def => def.tool_id === command.name)?.input_schema).toEqual(command.input_schema);
