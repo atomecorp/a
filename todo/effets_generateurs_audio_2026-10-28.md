@@ -35,11 +35,18 @@ Avancement du 29 oct. (soir), vérifié par sondes :
 - **Console du projet = tranche B** (D24) : colonne IN, modules, +, OUT, nom au pied ; panneau soudé (préréglage,
   choix, tool sliders deux par rangée) ; les tranches voisines s'écartent.
 - Charte : règle 14 (D12b, D18), règle 20 (D13), règle 13 (D14), règle 15 (`combo_rail`).
-- Restent ouverts : propriétaire unique du geste de la règle 20 et revue des outils ; dans la console du projet,
-  maintien-réordonner et glissé-bypass sur Volume/Pan, « Enregistrer le préréglage », recherche TONE3000, combo
-  déplié ; virgule décimale selon la langue dans les valeurs ; maître de scène à l'ancien aspect ; Favori des
-  briques d'effet ; clé TONE3000 et `server/ws_tone3000.js` à mettre sur atome.one (déploiement avec l'accord de
-  l'utilisateur).
+- **m7 (29 oct., nuit), vérifié par sondes Web** (`temp/effects/probes/console_m7`, `dashboard_m7`,
+  `audio_fx_mcp_m7`, `scene_master`) : propriétaire unique du geste de la règle 20
+  (`eVe/intuition/shared/tool_gesture.js`, familles validées) ; dans la console du projet, toucher = bypass d'un
+  effet fermé, glissé = panneau, maintien relâché = panneau, maintien puis déplacé = réordonner / autre tranche /
+  zone de suppression (Volume et Pan compris, sans bypass) ; « Enregistrer le préréglage » (champ du nom prérempli,
+  Entrée enregistre) ; recherche TONE3000 dans la ligne « Ampli », tons dépliés avec la photo dans l'aperçu, modèle
+  pris (console et Dashboard) ; combo déplié avec son `combo_rail` ; virgule décimale selon la langue ; maître de
+  scène = colonne standard (Volume en tool slider, nom au pied ; un glissé = un `scene.update { gain_db }`) ; Favori
+  des briques (sa tuile en tête, retour au niveau tenu) ; MCP `audio_fx.favorite`, `save_preset`,
+  `tone3000_search`, `tone3000_models`, `tone3000_take`. Le pilote `bevy_panel_fader.js` est supprimé.
+- Restent à l'utilisateur : clé TONE3000 et `server/ws_tone3000.js` à mettre sur atome.one (déploiement avec son
+  accord) ; essai Windows et décision ASIO ; essai AUM.
 - TONE3000 réel (29 oct., soir) : clé `t3k_cs_` posée par l'utilisateur dans `private/tone3000.txt` (le fichier
   porte aussi la clé publishable et la legacy, non utilisées) ; vrai appel par `handleWsTone3000` : recherche
   « Marshall JCM800 » 25 tons, liste des modèles (8 A2), téléchargement de 295 ko (`SlimmableContainer` 0.7.0,

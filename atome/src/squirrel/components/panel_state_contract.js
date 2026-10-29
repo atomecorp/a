@@ -6,6 +6,7 @@ const requiredText = (value, name) => {
     return normalized;
 };
 
+// The message is optional: a state its title alone says (an empty Scene, no other project) shows no second line.
 const normalizePanelStatePresentation = ({ status, title, message } = {}) => {
     const normalizedStatus = String(status || '').trim().toLowerCase();
     if (!PANEL_STATE_KINDS.has(normalizedStatus)) {
@@ -14,7 +15,7 @@ const normalizePanelStatePresentation = ({ status, title, message } = {}) => {
     return Object.freeze({
         status: normalizedStatus,
         title: requiredText(title, 'title'),
-        message: requiredText(message, 'message')
+        message: String(message || '').trim()
     });
 };
 

@@ -203,7 +203,7 @@ réponses s'inscrivent en §8.
   après réponse : **le synthé est choisi au IN comme toute entrée** (D26 maintenu, pas d'outil séparé) : l'outil IN
   porte son glyphe ; touché, il déplie ses briques **de voix** sous le liseré `combo_rail` ; ce qui suit (Réverb, +,
   Volume, OUT) agit sur toutes les voix. **Validée le 29 oct.**
-- **S5** sorties multiples d'un instrument multitimbre + module **IN secondaire** — à faire.
+- **S5** sorties multiples d’un instrument multitimbre + module **IN secondaire** — fait le 29 oct. (cahier sampler §15).
 - **S2** brancher un modulateur — `s2a_lfo_cibles.png`, `s2b_filtre_module.png` (`gen_s2.mjs`), envoyée le 29 oct. :
   le modulateur ouvert (panneau soudé) a une carte **Cibles** : une rangée par réglage piloté (pastille de la brique,
   nom du réglage, profondeur en slider), un **+** pour en ajouter (liste des réglages de l'instrument, recherche) ;

@@ -397,6 +397,25 @@ par `timeline.batch` ; `eVe/domains/sample_edit/slice_cells.js`).
 marqueur à commande, et lance chaque commande par la passerelle d'outils, après son délai, dans l'ordre des
 priorités (chemin direct natif et WASM, et Kira Web pour la Timeline).
 
+**V1.2 streaming disque** : `atome-instrument` `residency.rs` (une tête de 12 288 trames en mémoire à chaque
+point d'entrée : début de segment + décalages, fin en arrière, boucles entières, cibles de saut ; un son de moins de
+trois têtes tenu entier), `stream.rs` (un anneau sans verrou par voix × lecteur, un fil `atome-sample-stream`),
+`reading.rs` (le rendu lit une plage résidente ou l'anneau ; une trame manquante sonne muette et est comptée, jamais
+d'attente). Natif seulement (audio-engine lit le WAV sur place) ; le Web garde le son entier (déjà décodé en
+mémoire), même mécanisme. Preuve : banque de 24 × 444 s = 3,07 Go, mémoire 20 Mo au plus fort, 0 trame affamée,
+raccord tête → flux exact à l'échantillon. **Un seul espace de trames** : les positions d'un instrument sont les
+trames du fichier à son propre débit sur toutes les plateformes (`sample_source_rate.js`, décodage Web au débit du
+fichier) ; la mise à l'échelle des banques est retirée.
+
+**S5 sorties multiples + IN secondaire** : une zone a sa `output` (16 au plus) ; `mix-graph` rend une sortie par
+tampon, chaque tranche lit la sienne (« Batterie › 2 ») ; module **IN** (`input`, niveau `mix_db`) dans toute chaîne,
+sa source (micro, tranche, instrument › sortie) lue une seule fois par bloc (`source_bus.rs`) ; une boucle par un IN
+est permise, entendue un retour plus tard. Écrans : rouleau « Sortie » à côté de Tirage / Pile ; l'IN s'ajoute par
+le + de la chaîne (Dashboard et console du projet), son panneau = la ligne de choix « Source » + « Niveau » sur le
+curseur d'outil. MCP : `zone_set output`, `audio_fx.add effect input from`, `set_input output | module_id from`
+(`from` et non `source`, clé d'enveloppe MCP réservée). Preuve Web : sortie 2 seule sur la tranche 2 (0 / 0,746),
+IN à −12 dB = 0,061 pour 0,242.
+
 **Écrans** (dans le panneau de chaîne, après les zones) :
 - **Découp.** (S3d0a/b) : `dashboard_instrument_slices.js` + `_view.js` — onde, lignes des points, numéros des
   parties, bulles du point touché glissées, rouleaux Point (Couper / Warp) et Aimant ; un toucher joue la partie,
