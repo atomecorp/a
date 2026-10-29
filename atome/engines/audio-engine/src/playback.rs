@@ -88,7 +88,7 @@ fn lock_err<E: std::fmt::Display>(e: E) -> String {
     format!("Lock error: {e}")
 }
 
-fn clip_extension_hint(path: &str) -> Option<String> {
+pub(crate) fn clip_extension_hint(path: &str) -> Option<String> {
     std::path::Path::new(path)
         .extension()
         .and_then(|extension| extension.to_str())
@@ -460,7 +460,7 @@ fn decode_clip_with_symphonia(
     })
 }
 
-fn decode_static_sound_data(
+pub(crate) fn decode_static_sound_data(
     bytes: Vec<u8>,
     extension_hint: Option<&str>,
     source_label: &str,
@@ -489,7 +489,7 @@ pub fn init() -> Result<(), String> {
 
 // The output stays awake while a voice sounds, one is scheduled or a live input is open.
 fn engine_busy() -> bool {
-    if scheduled_backend::has_pending() || super::live_input::is_open() {
+    if scheduled_backend::has_pending() || super::live_input::is_open() || super::direct::is_active() {
         return true;
     }
     ENGINE.try_read().ok()

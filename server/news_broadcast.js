@@ -7,7 +7,8 @@
 // - filtre par la liste blanche de tags du destinataire : vide = tout, sinon au moins un
 //   tag commun (D1/D2) ;
 // - audience { community: id } : les membres de cette communaute (server/communities.js),
-//   sans filtre de tags (en etre membre est l'abonnement) ; son auteur doit en etre membre.
+//   sans filtre de tags (en etre membre est l'abonnement) ; son auteur doit en etre membre ;
+// - audience { forum: id } : de meme, les membres de ce forum (server/forums.js).
 // Un destinataire en echec n'arrete jamais les suivants.
 // VideoTrain (server/news_thread.js): an origin carries `news_thread_ref` and goes to chosen people only; a
 // reply (`message.reply`: parent_id, anchor_ms) is told to its parent's and origin's authors, read by the thread.
@@ -16,6 +17,7 @@
 import db from '../database/adole.js';
 import { hasPrivateProgramAncestor } from './syncShareHierarchy.js';
 import { communityAudience, communityOfAudience } from '../atome/src/shared/community_contract.js';
+import { forumAudience, forumOfAudience } from '../atome/src/shared/forum_contract.js';
 import { createNewsThread } from './news_thread.js';
 
 const text = (value) => String(value == null ? '' : value).trim();
@@ -57,12 +59,24 @@ export function createNewsBroadcast({
     // (authorId, fileMeta) -> { atomeId } of the clean copy the audience reads (server/news_media_cleaner.js).
     cleanMedia = null,
     // () -> server/communities.js (created after this broadcast: it seeds through `distribute`).
-    getCommunities = () => null
+    getCommunities = () => null,
+    // () -> server/forums.js.
+    getForums = () => null
 }) {
     const communities = () => {
         const service = getCommunities();
         if (!service) throw new Error('communities_unavailable');
         return service;
+    };
+    // A community or a forum: an allow-list of members, its posts never leaving them (no tag filter, no repost out).
+    const circleOf = (audience) => {
+        const community = communityOfAudience(audience);
+        if (community) return { kind: 'community', members: communities(), id: community, audience: communityAudience(community) };
+        const forum = forumOfAudience(audience);
+        if (!forum) return null;
+        const members = getForums();
+        if (!members) throw new Error('forums_unavailable');
+        return { kind: 'forum', members, id: forum, audience: forumAudience(forum) };
     };
     const threads = createNewsThread({ query, relations });
     // Un media n'est publiable que par son proprietaire : sinon lister l'id d'un media
@@ -100,8 +114,8 @@ export function createNewsBroadcast({
     };
 
     const resolveAudience = async (authorId, audience) => {
-        const community = communityOfAudience(audience);
-        if (community) return (await communities().memberIds(community)).filter((id) => id !== authorId);
+        const circle = circleOf(audience);
+        if (circle) return (await circle.members.memberIds(circle.id)).filter((id) => id !== authorId);
         if (audience && typeof audience === 'object' && Array.isArray(audience.group)) {
             const ids = [...new Set(audience.group.map(text).filter(Boolean))].filter((id) => id !== authorId);
             const allowed = [];
@@ -149,15 +163,15 @@ export function createNewsBroadcast({
             id: postId,
             properties: { ...props, ...(payload ? { news_payload: payload } : {}), author_id: author, author_name: authorName, news_tags: tags }
         };
-        const community = communityOfAudience(message.audience);
-        if (community && !await communities().isMember(community, author)) throw new Error('community_not_member');
+        const circle = circleOf(message.audience);
+        if (circle && !await circle.members.isMember(circle.id, author)) throw new Error(`${circle.kind}_not_member`);
         const reply = message.reply && typeof message.reply === 'object' ? message.reply : null;
         const thread = reply ? await threads.replyContext(author, reply)
             : text(props.news_thread_ref) ? threads.originContext(text(props.news_thread_ref), message.audience) : null;
         if (thread) Object.assign(publication.properties, { news_thread_ref: thread.ref, parent_id: thread.parent, anchor_ms: thread.anchor });
         // A thread's origin keeps the people it may reach (contacts, never blocked): they alone read the thread.
         const audience = thread?.root ? { thread: thread.root } : thread ? { group: await resolveAudience(author, message.audience) }
-            : community ? communityAudience(community) : message.audience && typeof message.audience === 'object' ? message.audience : 'all';
+            : circle ? circle.audience : message.audience && typeof message.audience === 'object' ? message.audience : 'all';
         if (thread && !thread.root && !audience.group.length) throw new Error('news_thread_audience_private');
 
         if (!existing) await registerTags(tags);
@@ -178,13 +192,13 @@ export function createNewsBroadcast({
                 JSON.stringify(tags), JSON.stringify(audience), JSON.stringify(publication), JSON.stringify(media),
                 thread?.ref || null, thread?.root || null, thread?.parent || null, thread?.anchor ?? null]);
         const candidates = thread?.root ? await threads.replyRecipients(author, thread.parent) : await resolveAudience(author, audience);
-        const community = communityOfAudience(audience);
+        const circle = circleOf(audience);
         const result = { ok: true, news_id: postId, tags, delivered: 0, filtered: 0, blocked: 0, failed: 0, recipients: [] };
         for (const userId of candidates) {
             try {
                 if (await relations.blockedEitherWay(author, userId)) { result.blocked += 1; continue; }
                 // A thread's people were chosen by name: no tag of theirs narrows it.
-                if (!community && !thread && !acceptsTags(await subscriptionOf(userId), tags)) { result.filtered += 1; continue; }
+                if (!circle && !thread && !acceptsTags(await subscriptionOf(userId), tags)) { result.filtered += 1; continue; }
                 await deliver(userId, author, {
                     kind: 'publication', id: postId,
                     subject: text(props.title) || null,
@@ -205,9 +219,9 @@ export function createNewsBroadcast({
     const received = async (userId, newsId) => {
         const row = await query('get', 'SELECT * FROM news_publications WHERE news_id = ?', [text(newsId)]);
         if (!row || text(row.author_id) === text(userId) || await relations.blockedEitherWay(row.author_id, userId)) return null;
-        const audience = parseJson(row.audience_json, 'all'), community = communityOfAudience(audience);
+        const audience = parseJson(row.audience_json, 'all'), circle = circleOf(audience);
         if (text(row.thread_ref)) return await threads.readable(userId, row) && !row.retired_at ? row : null;
-        if (community) return await communities().isMember(community, userId) ? row : null;
+        if (circle) return await circle.members.isMember(circle.id, userId) ? row : null;
         if (Array.isArray(audience?.group) ? !audience.group.map(text).includes(text(userId))
             : !acceptsTags(await subscriptionOf(userId), parseJson(row.tags_json, []))) return null;
         return row;
@@ -222,7 +236,7 @@ export function createNewsBroadcast({
     };
     // Reprendre: the publication again, to the reposter's audience, credited to its author;
     // its media stay the author's and readable by that audience (`canReadNewsMedia`).
-    // A community's post is taken up in its community: it never leaves the members.
+    // A community's or a forum's post is taken up in it: it never leaves the members.
     const repost = async (userId, message = {}) => {
         const row = await received(userId, message.newsId);
         if (!row) throw new Error('news_not_found');
@@ -234,9 +248,9 @@ export function createNewsBroadcast({
         const origin = source.properties.reposted_from || { news_id: row.news_id, author_id: text(row.author_id), author_name: text(source.properties.author_name) };
         const publication = { ...source, id: postId, properties: { ...source.properties, news_id: postId, news_post_id: postId, news_source_project_id: '',
             author_id: text(userId), author_name: (await findUserName(userId)) || '', reposted_from: origin } };
-        const community = communityOfAudience(parseJson(row.audience_json, 'all'));
+        const circle = circleOf(parseJson(row.audience_json, 'all'));
         return distribute({ author: text(userId), postId, projectId: null, publication, tags: parseJson(row.tags_json, []),
-            audience: community ? communityAudience(community) : 'all', media: parseJson(row.media_json, []) });
+            audience: circle ? circle.audience : 'all', media: parseJson(row.media_json, []) });
     };
 
     const setSubscriptions = async (userId, tags) => {
@@ -283,9 +297,9 @@ export function createNewsBroadcast({
                 if (await threads.readable(reader, row)) return true;
                 continue;
             }
-            const audience = parseJson(row.audience_json, 'all'), community = communityOfAudience(audience);
-            if (community) {
-                if (await communities().isMember(community, reader)) return true;
+            const audience = parseJson(row.audience_json, 'all'), circle = circleOf(audience);
+            if (circle) {
+                if (await circle.members.isMember(circle.id, reader)) return true;
                 continue;
             }
             if (Array.isArray(audience?.group)) {

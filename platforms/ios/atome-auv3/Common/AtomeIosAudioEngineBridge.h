@@ -17,5 +17,7 @@ bool atome_ios_voice_push(const float *samples, size_t count);
 // AUv3: the engine runs on the plugin host's clock; the render block pulls it.
 bool atome_ios_audio_host_start(uint32_t sample_rate);
 uint32_t atome_ios_audio_host_render(float *left, float *right, uint32_t frames, int64_t host_ns);
+// AUv3: the host's input to the strips whose IN is `host`; true when one listens.
+bool atome_ios_audio_host_input(const float *left, const float *right, uint32_t frames);
 
 #endif

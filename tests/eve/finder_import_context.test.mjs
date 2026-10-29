@@ -39,8 +39,8 @@ test('V2 exposure follows fixed, immutable, object and activity declarations, ex
     assert.deepEqual([...found.keys()], ['ui.real']);
 });
 
-test('Finder separates seven kinds from cumulative semantic tags', () => {
-    assert.deepEqual(FINDER_CATEGORY_KEYS, ['all', 'images', 'videos', 'sounds', 'tools', 'place', 'contacts']);
+test('Finder separates eight kinds from cumulative semantic tags', () => {
+    assert.deepEqual(FINDER_CATEGORY_KEYS, ['all', 'images', 'videos', 'sounds', 'tools', 'effects', 'place', 'contacts']);
     const records = [
         { id: 'a', type: 'image', textIndex: 'art', properties: { tags: ['creation', 'health'] } },
         { id: 'b', type: 'image', textIndex: 'art', properties: { tags: ['creation'] } },
@@ -48,6 +48,9 @@ test('Finder separates seven kinds from cumulative semantic tags', () => {
     ];
     assert.deepEqual(filterRecords({ records, scope: 'images', query: 'art', tags: ['creation', 'health'] }).map(r => r.id), ['a']);
     assert.equal(filterRecords({ records, scope: 'all', tags: [] }).length, 3);
+    // Effets lists the user's saved effects (todo/effets_generateurs_audio D2).
+    assert.deepEqual(filterRecords({ records: [...records, { id: 'e', type: 'audio_effect', textIndex: '', properties: {} }], scope: 'effects', tags: [] })
+        .map(r => r.id), ['e']);
 });
 
 test('Finder virtualizes a long list, reaches its last result and imports checked records once', async () => {

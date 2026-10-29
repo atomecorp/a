@@ -1,16 +1,3 @@
-# packages/network.yml
-# Pile réseau : DHCP, DNS, TLS, outils de diagnostic, service auto-update.
-
 stack:
   name: network
-  pkg:
-    - ca_root_nss         # bundle CA
-    - openssl
-    - openssh-portable
-    - curl
-    - wget
-    - bind-tools          # dig, host
-    - iperf3
-    - tcpdump
-    - avahi-app           # mDNS / zeroconf
-    - nss_mdns
+  pkg: [ca_root_nss]

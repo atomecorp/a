@@ -375,6 +375,35 @@ CREATE TABLE IF NOT EXISTS community_members (
     CHECK(status IN ('member', 'refused', 'banned'))
 );
 
+-- Forums (server/forums.js): a name and its people, invited by their founder; a person invited reads and
+-- writes once they accept. A forum's posts are News publications whose audience is the forum. A person not
+-- on eVe is invited by e-mail: the link's token makes the account that opens it a member.
+CREATE TABLE IF NOT EXISTS forums (
+    forum_id TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS forum_members (
+    forum_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    invited_by TEXT,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY(forum_id, user_id),
+    CHECK(status IN ('invited', 'member'))
+);
+
+CREATE TABLE IF NOT EXISTS forum_guests (
+    token TEXT PRIMARY KEY,
+    forum_id TEXT NOT NULL,
+    name TEXT,
+    invited_by TEXT NOT NULL,
+    claimed_by TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- Visio planifiee (invitation au calendrier) : la salle survit au redemarrage du serveur.
 CREATE TABLE IF NOT EXISTS visio_rooms (
     room_id TEXT PRIMARY KEY,

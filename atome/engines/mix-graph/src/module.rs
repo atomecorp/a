@@ -1,12 +1,12 @@
-// One chain module at render time, shared between successive compiled graphs
-// so effect state (reverb tails, envelopes) survives structural edits.
+// One chain module at render time. The graph that runs it owns it; the next
+// compiled graph adopts it from the one before (graph.rs), so effect state
+// (reverb tails, envelopes) survives structural edits with no lock at all.
 
-use crate::dsp::{self, AtomicParam, CompressorSettings, SidechainCompressor, SmoothedGain};
-use kira::effect::Effect;
-use kira::info::Info;
+use crate::dsp::{self, AtomicParam, SmoothedGain};
+use crate::dsp_module::DspRuntime;
 use kira::Frame;
 use std::sync::atomic::{AtomicU8, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 // Bypass request written by the control thread.
 pub const REQUEST_ACTIVE: u8 = 0;
@@ -27,29 +27,18 @@ pub struct ModuleControls {
     pub value: AtomicParam,
     pub request: AtomicU8,
     pub state: AtomicU8,
-    pub compressor: [AtomicParam; 6],
+    // A `dsp` module's parameters, in its kind's table order.
+    pub parameters: Vec<AtomicParam>,
 }
 
 impl ModuleControls {
-    pub fn new(value: f32, bypass: bool) -> Arc<Self> {
+    pub fn new(value: f32, bypass: bool, parameters: Vec<AtomicParam>) -> Arc<Self> {
         Arc::new(Self {
             value: AtomicParam::new(value),
             request: AtomicU8::new(if bypass { REQUEST_BYPASS } else { REQUEST_ACTIVE }),
             state: AtomicU8::new(if bypass { STATE_BYPASSED } else { STATE_ACTIVE }),
-            compressor: std::array::from_fn(|_| AtomicParam::new(0.0)),
+            parameters,
         })
-    }
-
-    pub fn compressor_settings(&self) -> CompressorSettings {
-        let [threshold, ratio, attack, release, makeup, mix] = &self.compressor;
-        CompressorSettings {
-            threshold_db: threshold.get(),
-            ratio: ratio.get(),
-            attack_ms: attack.get(),
-            release_ms: release.get(),
-            makeup_db: makeup.get(),
-            mix: mix.get(),
-        }
     }
 }
 
@@ -58,45 +47,29 @@ pub enum Processor {
     Pan,
     Mono,
     Send(SmoothedGain),
-    Effect { effects: Vec<Box<dyn Effect>>, has_tail: bool, scratch: Vec<Frame>, silent_frames: usize },
-    Sidechain(SidechainCompressor),
+    // An IN module: its source mixed into the chain at its level (graph.rs).
+    Input(SmoothedGain),
+    Dsp(Box<DspRuntime>),
 }
 
 pub struct ModuleRuntime {
     pub controls: Arc<ModuleControls>,
     pub processor: Processor,
-    // Fresh effect instance delivered by a tail cut (control thread builds it).
-    pub replacement: Arc<Mutex<Option<Vec<Box<dyn Effect>>>>>,
     pub sample_rate: u32,
 }
 
-pub type ModuleCell = Arc<Mutex<ModuleRuntime>>;
+pub type ModuleBox = Box<ModuleRuntime>;
 
 impl ModuleRuntime {
-    pub fn new(controls: Arc<ModuleControls>, processor: Processor, sample_rate: u32) -> ModuleCell {
-        Arc::new(Mutex::new(Self { controls, processor, replacement: Arc::new(Mutex::new(None)), sample_rate }))
+    pub fn new(controls: Arc<ModuleControls>, processor: Processor, sample_rate: u32) -> ModuleBox {
+        Box::new(Self { controls, processor, sample_rate })
     }
 
-    pub fn effect(effects: Vec<Box<dyn Effect>>, has_tail: bool, block: usize) -> Processor {
-        Processor::Effect { effects, has_tail, scratch: vec![Frame::ZERO; block], silent_frames: 0 }
-    }
-
-    fn adopt_replacement(&mut self) {
-        let Ok(mut slot) = self.replacement.try_lock() else { return };
-        let Some(fresh) = slot.take() else { return };
-        if let Processor::Effect { effects, silent_frames, .. } = &mut self.processor {
-            // The old instance goes back to the slot so the control thread drops it.
-            *slot = Some(std::mem::replace(effects, fresh));
-            *silent_frames = 0;
-        }
-    }
-
-    // Resolve the request against the current state; returns whether the
-    // module processes its input normally this block.
+    // Resolve the request against the current state.
     fn resolve_state(&mut self) -> u8 {
         let request = self.controls.request.load(Ordering::Relaxed);
         let current = self.controls.state.load(Ordering::Relaxed);
-        let has_tail = matches!(self.processor, Processor::Effect { has_tail: true, .. });
+        let has_tail = matches!(&self.processor, Processor::Dsp(runtime) if runtime.has_tail);
         let next = match (request, current) {
             (REQUEST_ACTIVE, _) => STATE_ACTIVE,
             (REQUEST_CUT, _) => STATE_BYPASSED,
@@ -105,21 +78,39 @@ impl ModuleRuntime {
             _ => STATE_BYPASSED,
         };
         if next != current {
-            if let Processor::Effect { silent_frames, .. } = &mut self.processor {
-                *silent_frames = 0;
+            if let Processor::Dsp(runtime) = &mut self.processor {
+                runtime.silent_frames = 0;
+                if next == STATE_BYPASSED {
+                    runtime.reset();
+                }
             }
             self.controls.state.store(next, Ordering::Relaxed);
         }
         next
     }
 
-    pub fn is_active(&self) -> bool {
-        self.controls.state.load(Ordering::Relaxed) == STATE_ACTIVE
+    // Signals the module writes (port 0 continues the chain).
+    pub fn ports(&self) -> usize {
+        match &self.processor {
+            Processor::Dsp(runtime) => runtime.ports(),
+            _ => 1,
+        }
     }
 
-    // Processes everything except sends (routing belongs to the graph).
-    pub fn process(&mut self, buffer: &mut [Frame], dt: f64, info: &Info, key: Option<&[Frame]>) {
-        self.adopt_replacement();
+    // Processes everything except sends (routing belongs to the graph); a
+    // split module folds its ports back into `buffer`.
+    pub fn process(&mut self, buffer: &mut [Frame], key: Option<&[Frame]>) {
+        self.run(buffer, key, false);
+    }
+
+    // A split module leaves port 0 in `buffer` and keeps its other ports for
+    // `add_port`; returns false when it is bypassed (`buffer` holds all, the
+    // other ports are silent).
+    pub fn process_split(&mut self, buffer: &mut [Frame], key: Option<&[Frame]>) -> bool {
+        self.run(buffer, key, true)
+    }
+
+    fn run(&mut self, buffer: &mut [Frame], key: Option<&[Frame]>, split: bool) -> bool {
         let state = self.resolve_state();
         let value = self.controls.value.get();
         let sample_rate = self.sample_rate;
@@ -139,51 +130,42 @@ impl ModuleRuntime {
                     dsp::apply_mono(buffer);
                 }
             }
-            Processor::Send(_) => {}
-            Processor::Sidechain(compressor) => {
-                if state == STATE_ACTIVE {
-                    let settings = self.controls.compressor_settings();
-                    compressor.process(buffer, key.unwrap_or(&[]), &settings);
-                } else {
-                    compressor.reset();
+            Processor::Send(_) | Processor::Input(_) => {}
+            Processor::Dsp(runtime) => match state {
+                STATE_ACTIVE => {
+                    runtime.process(buffer, &self.controls.parameters, key, split);
+                    return split;
                 }
-            }
-            Processor::Effect { effects, scratch, silent_frames, .. } => {
-                for effect in effects.iter_mut() {
-                    effect.on_start_processing();
-                }
-                if state == STATE_ACTIVE {
-                    for effect in effects.iter_mut() {
-                        effect.process(buffer, dt, info);
-                    }
-                } else if state == STATE_DRAINING {
-                    // Feed silence and let the tail ring out over the dry signal.
-                    let tail = &mut scratch[..buffer.len()];
-                    tail.fill(Frame::ZERO);
-                    for effect in effects.iter_mut() {
-                        effect.process(tail, dt, info);
-                    }
-                    for (out, ring) in buffer.iter_mut().zip(tail.iter()) {
-                        *out += *ring;
-                    }
-                    if dsp::peak(tail) < TAIL_SILENCE_AMPLITUDE {
-                        *silent_frames += buffer.len();
+                STATE_DRAINING => {
+                    let peak = runtime.drain(buffer, &self.controls.parameters);
+                    if peak < TAIL_SILENCE_AMPLITUDE {
+                        runtime.silent_frames += buffer.len();
                     } else {
-                        *silent_frames = 0;
+                        runtime.silent_frames = 0;
                     }
-                    if *silent_frames as f32 >= TAIL_SILENCE_SECONDS * sample_rate as f32 {
+                    if runtime.silent_frames as f32 >= TAIL_SILENCE_SECONDS * sample_rate as f32 {
                         self.controls.state.store(STATE_BYPASSED, Ordering::Relaxed);
                     }
                 }
-            }
+                _ => runtime.pass(buffer),
+            },
+        }
+        false
+    }
+
+    // Adds port `port` (1..) of the last split block into `out`.
+    pub fn add_port(&self, port: usize, out: &mut [Frame]) {
+        if let Processor::Dsp(runtime) = &self.processor {
+            runtime.add_port(port, out);
         }
     }
 
-    // Adds the send's share of `source` into `destination`.
+    // Adds `source` at the module's level into `destination`: a send's share
+    // leaving the chain, or what an IN mixes into it.
     pub fn send_into(&mut self, source: &[Frame], destination: &mut [Frame]) {
         let state = self.resolve_state();
         let level = dsp::db_to_amplitude(self.controls.value.get());
-        if let Processor::Send(gain) = &mut self.processor {
+        if let Processor::Send(gain) | Processor::Input(gain) = &mut self.processor {
             gain.add_into(source, destination, if state == STATE_ACTIVE { level } else { 0.0 });
         }
     }

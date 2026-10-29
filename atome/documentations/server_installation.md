@@ -171,6 +171,36 @@ system service is active, so it never runs the development bootstrap or `npm ci`
 | **Production foreground diagnostics** | `./run.sh stop && ./run.sh --server` | HTTP behind manual session | Direct Fastify diagnostics with the service environment |
 | **Production** | `./run.sh --https` | HTTPS (via Nginx) | Production servers |
 
+### Test server: staging.atome.one
+
+Every test against a public server runs on the test server, never on atome.one (user decision, 2026-10-29: atome.one
+is production and will be reset once). It lives on the same machine as production and shares nothing with it:
+
+| | Production | Test server |
+| :--- | :--- | :--- |
+| Checkout | `/opt/a` | `/opt/a-staging` |
+| Service | `squirrel` | `squirrel-staging` |
+| Settings, identity | `/etc/squirrel/` | `/etc/squirrel-staging/` (own secrets and server identity, generated) |
+| Port | 3001 | 3101 |
+| Database, vaults, sites | `/opt/a/database_storage`, `/opt/a/data/sites` | the same paths under `/opt/a-staging` |
+| Backups | `/var/backups/squirrel` | `/var/backups/squirrel-staging` |
+
+Its settings name it (`ATOME_SITE_ORIGIN=https://staging.atome.one`, `ATOME_APP_HOSTS=staging.atome.one,…`, WebAuthn
+`SQUIRREL_WEBAUTHN_RP_ID` / `_ORIGINS`), keep the visio ports apart (`MEDIASOUP_RTC_MIN_PORT=50000`…`50999`), and carry
+no provider key: no assistant, no paid API, sign-up open. Update it from its own checkout:
+
+```bash
+cd /opt/a-staging && node scripts/server_update.js --staging
+```
+
+`--staging` selects the `squirrel-staging` service, `/etc/squirrel-staging/squirrel.env` and its backups; the health
+check reads the port from that file. Its public name needs the DNS A record `staging` → the server in atome.one's zone;
+then `/usr/local/lib/atome-sites/site_domain_cert.mjs --host staging.atome.one 3101` takes its certificate and writes
+its nginx servers (`scripts/site_domain_cert.mjs`). Until then it answers at `https://atome.one:8443` (user
+authorization, 2026-10-29): `/etc/nginx/sites-available/atome-staging-8443`, atome.one's certificate, proxy to 3101 with
+`Host: localhost` and no `Set-Cookie` passed (browsers share atome.one's cookies across ports, a staging session must
+never overwrite production's). Remove that file and its `sites-enabled` link once staging.atome.one exists.
+
 ---
 
 ## 🖥️ Tauri Clients: Fastify Endpoint (Sync + Share)

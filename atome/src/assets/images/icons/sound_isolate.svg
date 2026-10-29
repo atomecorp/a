@@ -1,0 +1,6 @@
+<svg width="128" height="128" viewBox="0 0 128 128" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+  <g transform="scale(5.333333)" fill="none" stroke="rgb(255, 255, 255)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 7h16"/>
+    <path d="M4 17h3l2-3 2 5 2-7 2 6 2-3h3"/>
+  </g>
+</svg>

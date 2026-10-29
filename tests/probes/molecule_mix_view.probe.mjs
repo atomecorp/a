@@ -63,21 +63,21 @@ test('strips, tiles and the node contract (only interactive kinds carry handlers
     const tree = build();
     const nodes = flatten(tree);
     const ids = nodes.map((entry) => entry.id);
+    // One column each: nothing is open until a tool is touched (D18).
     assert.deepEqual(content.readState().strips.map((strip) => [strip.strip_id, strip.selection]), [
-        ['voice:audio', 'voice:audio:volume'], ['film:video', 'film:video:opacity'], ['film:audio', 'film:audio:volume']
+        ['voice:audio', ''], ['film:video', ''], ['film:audio', '']
     ]);
     assert.ok(ids.includes('molecule_mix_strip_voice_audio_in'));
     assert.ok(ids.includes('molecule_mix_strip_voice_audio_add'));
     assert.ok(ids.includes('molecule_mix_strip_voice_audio_out'));
-    // The selected module and its zone are lit as an active tool is.
-    const selectedIndex = ids.findIndex((id) => /^molecule_mix_strip_voice_audio_module_\d+_glow$/.test(id));
-    assert.ok(selectedIndex >= 0, 'the selected module carries the active-tool glow');
-    const zone = nodes.find((entry) => entry.id === 'molecule_mix_strip_voice_audio_zone');
-    assert.ok(Array.isArray(zone.style.surfacePaint?.border?.color) && zone.style.shadow, 'its zone wears the same edge and halo');
+    assert.ok(ids.includes('molecule_mix_strip_voice_audio_name'), 'the strip\'s name tool at its foot');
+    assert.equal(ids.some((id) => id.endsWith('_welded')), false, 'no welded panel while nothing is open');
+    assert.equal(nodes.some((entry) => entry.style?.surfacePaint?.border), false, 'no border anywhere');
     assert.equal(ids.some((id) => /_outline_(zone|tile|bridge)$/.test(id)), false, 'no private outline remains');
-    assert.ok(ids.includes('molecule_mix_zone_voice_audio_fader'), 'Volume selected shows the big fader');
-    // Native video group: closed, so only its master (video) strip shows, with a chevron.
-    assert.ok(ids.includes('molecule_mix_strip_film_video_chevron'));
+    // Volume is the column's tool slider (D16): no fader.
+    assert.equal(ids.some((id) => id.includes('fader')), false, 'the old fader is gone');
+    // Native video group: closed, so only its master (video) strip shows; its name tool folds and unfolds it.
+    assert.ok(ids.includes('molecule_mix_strip_film_video_name'));
     assert.equal(ids.includes('molecule_mix_strip_film_audio'), false);
     for (const entry of nodes) {
         assert.ok(SUPPORTED_KINDS.has(entry.kind), `unsupported kind ${entry.kind} on ${entry.id}`);
@@ -89,13 +89,24 @@ test('strips, tiles and the node contract (only interactive kinds carry handlers
 });
 
 test('tap, swipe, hold-move, hold-delete, + and OUT map to canonical operations', async () => {
-    const { send, strip, calls } = await setup();
+    const { send, strip, calls, build, content } = await setup();
     const at = (x, y) => ({ x, y, client_x: x, client_y: y });
     await send('tile.activate', { stripId: 'voice:audio', target: 'add' });
-    await send('picker.choose', { key: 'fx_reverb' });
+    await send('picker.choose', { key: 'dsp_reverb' });
     let chain = strip('voice:audio').chain;
-    assert.deepEqual(chain.map((module) => module.type), ['volume', 'pan', 'fx']);
+    assert.deepEqual(chain.map((module) => module.type), ['volume', 'pan', 'dsp']);
     const fx = chain[2].module_id;
+    // The effect added is open: its panel welded to its tool, the strip widened by it (D18, D24).
+    const opened = flatten(build());
+    assert.ok(opened.some((entry) => entry.id === 'molecule_mix_strip_voice_audio_welded'), 'the welded panel shows');
+    assert.ok(opened.some((entry) => /molecule_mix_strip_voice_audio_preset/.test(entry.id)), 'its preset row');
+    const width = (nodes) => nodes.find((entry) => entry.id === 'molecule_mix_strip_voice_audio').style.size[0];
+    const film = (nodes) => nodes.find((entry) => entry.id === 'molecule_mix_strip_film_video').style.position[0];
+    const openX = film(opened), openW = width(opened);
+    // Touched again it folds: one column, the neighbour back in its place.
+    await send('tile.activate', { stripId: 'voice:audio', target: fx });
+    const folded = flatten(build());
+    assert.ok(width(folded) < openW && film(folded) < openX, 'folded, the strip narrows and its neighbour comes back');
     // Short swipe left (no hold): bypass; right: back on.
     for (const [type, event] of [['press', at(10, 10)], ['drag', at(-40, 12)], ['release', at(-40, 12)]]) {
         await send(`tile.${type}`, { stripId: 'voice:audio', target: fx, event });
@@ -115,7 +126,7 @@ test('tap, swipe, hold-move, hold-delete, + and OUT map to canonical operations'
     await send('tile.long_press', { stripId: 'voice:audio', target: fx, event: at(20, 20) });
     await send('tile.drag', { stripId: 'voice:audio', target: fx, event: at(20, -110) });
     await send('tile.release', { stripId: 'voice:audio', target: fx, event: at(20, -110) });
-    assert.deepEqual(strip('voice:audio').chain.map((module) => module.type), ['fx', 'volume', 'pan']);
+    assert.deepEqual(strip('voice:audio').chain.map((module) => module.type), ['dsp', 'volume', 'pan']);
     // Hold then pull right but release inside the strip: cancelled.
     await send('tile.press', { stripId: 'voice:audio', target: fx, event: at(20, 20) });
     await send('tile.long_press', { stripId: 'voice:audio', target: fx, event: at(20, 20) });
@@ -128,30 +139,33 @@ test('tap, swipe, hold-move, hold-delete, + and OUT map to canonical operations'
     await send('tile.drag', { stripId: 'voice:audio', target: fx, event: at(400, 22) });
     await send('tile.release', { stripId: 'voice:audio', target: fx, event: at(400, 22) });
     assert.deepEqual(strip('voice:audio').chain.map((module) => module.type), ['volume', 'pan']);
-    // OUT toggles the main output, keeping its destination.
+    // OUT picks where the strip goes.
     await send('tile.activate', { stripId: 'voice:audio', target: 'out' });
-    assert.deepEqual(strip('voice:audio').output, { destination: { kind: 'main' }, enabled: false });
+    assert.equal(content.readState().picker.kind, 'destination');
 });
 
-test('fader previews live and commits once; destinations, new bus, sends and groups', async () => {
-    const { send, strip, calls, session, content } = await setup();
-    const moduleId = 'voice:audio:volume';
-    await send('fader.press', { stripId: 'voice:audio', moduleId, law: 'db', trackLength: 300, event: {} });
-    await send('fader.drag', { stripId: 'voice:audio', moduleId, law: 'db', trackLength: 300, event: { delta_y: 60 } });
-    await send('fader.drag', { stripId: 'voice:audio', moduleId, law: 'db', trackLength: 300, event: { delta_y: 30 } });
-    assert.equal(calls.preview.length, 2);
+test('the Volume tool slider previews live and commits once; destinations, new bus, sends and groups', async () => {
+    const { send, strip, calls, session, content, build } = await setup();
+    // The column's Volume: pressed, dragged down twice, released (the tool slider's own handlers).
+    const volume = () => flatten(build()).find((entry) => entry.id === 'molecule_mix_strip_voice_audio_module_0' && entry.on?.drag);
+    volume().on.press({});
+    volume().on.drag({ delta_y: 60 });
+    volume().on.drag({ delta_y: 30 });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.ok(calls.preview.length >= 1, `previewed live (${calls.preview.length})`);
     assert.equal(strip('voice:audio').chain[0].params.gain_db, 0, 'no durable write while the finger moves');
     const before = session.getHistory().undo.length;
-    await send('fader.release', { stripId: 'voice:audio', moduleId, law: 'db', trackLength: 300, event: {} });
+    volume().on.release({});
+    await new Promise((resolve) => setTimeout(resolve, 20));
     assert.ok(strip('voice:audio').chain[0].params.gain_db < 0);
     assert.equal(session.getHistory().undo.length, before + 1);
-    // Band tap → destination picker → « Nouveau bus » creates the bus and routes to it.
-    await send('band.activate', { stripId: 'voice:audio', event: {} });
+    // OUT → destination picker → « Nouveau bus » creates the bus and routes to it.
+    await send('tile.activate', { stripId: 'voice:audio', target: 'out' });
     assert.equal(content.readState().picker.kind, 'destination');
     await send('picker.choose', { key: 'new_bus' });
     const busId = strip('voice:audio').output.destination.id;
     assert.equal(session.getState().tracks.find((track) => track.track_id === busId).role, 'group');
-    await send('band.activate', { stripId: 'voice:audio', event: {} });
+    await send('tile.activate', { stripId: 'voice:audio', target: 'out' });
     await send('picker.choose', { key: 'none' });
     assert.equal(strip('voice:audio').output.destination, null);
     // A send added from + opens its targets at once; it feeds the bus.
@@ -178,11 +192,11 @@ test('a strip held by its band and dropped on a group joins it; dropped outside,
     await send('group.toggle', { groupId: 'auto:film' });
     const unitX = (stripId) => content.readState().strips.findIndex((strip) => strip.strip_id === stripId);
     assert.ok(unitX('voice:audio') === 0);
-    // The voice band is at x 0..w; the open film group follows it on the row.
+    // The voice strip is at x 0..w; the open film group follows it on the row, one column a strip.
     await send('band.press', { stripId: 'voice:audio', event: { x: 20, y: 10 } });
     await send('band.long_press', { stripId: 'voice:audio', event: { x: 20, y: 10 } });
-    await send('band.drag', { stripId: 'voice:audio', event: { x: 520, y: 12 } });
-    await send('band.release', { stripId: 'voice:audio', event: { x: 520, y: 12 } });
+    await send('band.drag', { stripId: 'voice:audio', event: { x: 150, y: 12 } });
+    await send('band.release', { stripId: 'voice:audio', event: { x: 150, y: 12 } });
     const joined = session.getState().mix.groups.find((group) => group.group_id === 'auto:film');
     assert.ok(joined?.member_strip_ids.includes('voice:audio'), JSON.stringify(session.getState().mix));
     // Now dropped back at the far left: it leaves the group.

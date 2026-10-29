@@ -79,6 +79,7 @@ pub enum BufferSizeHint {
 }
 
 impl BufferSizeHint {
+    #[cfg(not(target_os = "windows"))]
     pub(super) fn to_cpal(self) -> cpal::BufferSize {
         match self {
             Self::Default => cpal::BufferSize::Default,

@@ -16,12 +16,15 @@ const TIMELINE_TOOLS = [
     ['batch', 'applyGroupTimelineBatch', 'Apply an atomic Molecule timeline operation batch through the active session.', 'timeline.write', 'MODERATE'],
     ['transfer', 'transferGroupTimelineEntity', 'Atomically transfer a Section or Track between two open Molecules.', 'timeline.write', 'MODERATE'],
     ['transport.toggle', 'toggleGroupTimelineTransport', 'Toggle Molecule, Section, or Track playback on the canonical Kira transport.', 'timeline.write', 'LOW'],
+    ['clip.place', 'placeGroupTimelineClip', 'Place a ribbon tool (placed_tool_id) or another project (placed_project_id) on a track at start_seconds: a tool executes when the playhead reaches it (a lasting tool runs to the clip end); a project plays nested, or is launched/opened (mode).', 'timeline.write', 'LOW'],
+    ['transport.play', 'launchGroupTimelineTransport', 'Play a project\'s timeline (group_id = the project id) from start_seconds, opening it first if needed: a launched project.', 'timeline.write', 'LOW'],
     ['transport.stop', 'stopGroupTimelineTransport', 'Stop the active Molecule transport.', 'timeline.write', 'LOW'],
     ['cells.trigger', 'triggerGroupTimelineCells', 'Cells (non-linear transport): press or release cells [{scene_id, track_id}] ("scene" = the whole Scene); each follows its own quantization, play mode, passes and Follow Action.', 'timeline.write', 'LOW'],
     ['cells.stop', 'stopGroupTimelineCells', 'Stop every playing cell of a Molecule.', 'timeline.write', 'LOW'],
     ['transport.list.toggle', 'toggleGroupTimelineListTransport', 'Toggle sequential playback of the ordered open Molecules on the canonical Kira transport.', 'timeline.write', 'LOW'],
     ['transport.list.stop', 'stopGroupTimelineListTransport', 'Stop sequential Molecule List playback.', 'timeline.write', 'LOW'],
     ['record.prepare', 'prepareGroupTimelineRecording', 'Prepare the current project for microphone recording using the existing Record tool owner. Return group_id and track_id for record.start; creates a Molecule only when needed.', 'timeline.write', 'MODERATE'],
+    ['mix.param.set', 'setGroupTimelineMixParam', 'Set one mix module parameter of a strip (strip_id, module_id, param, value): heard at once, kept once it rests.', 'timeline.write', 'LOW'],
     ['history.undo', 'undoGroupTimeline', 'Undo the last Molecule timeline edit on the active session.', 'timeline.write', 'MODERATE'],
     ['history.redo', 'redoGroupTimeline', 'Redo the last undone Molecule timeline edit on the active session.', 'timeline.write', 'MODERATE']
 ];

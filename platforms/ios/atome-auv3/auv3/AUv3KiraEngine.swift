@@ -27,6 +27,38 @@ extension auv3Utils {
         return Double(info.numer) / Double(max(1, info.denom))
     }()
 
+    /// The host's input, just pulled into the output buffers, handed to the strips whose IN is `host`
+    /// (todo/effets_generateurs_audio L8). When one listens, the dry input leaves the output: the chain
+    /// plays it, added by `mixKiraEngine` in this same quantum. Real-time safe: the scratch is preallocated.
+    func routeHostInput(bufferList: AudioBufferListWrapper,
+                        frameCount: AUAudioFrameCount,
+                        channels: Int,
+                        interleaved: Bool,
+                        isFloat32: Bool) {
+        let frames = Int(frameCount)
+        guard kiraEngineStarted, isFloat32, frames <= Self.kiraScratchFrames, bufferList.numberOfBuffers > 0 else { return }
+        let listened: Bool
+        if interleaved || bufferList.numberOfBuffers == 1 {
+            guard let mData = bufferList.buffer(at: 0).mData else { return }
+            let input = mData.assumingMemoryBound(to: Float.self)
+            let stride = max(1, channels)
+            for frame in 0..<frames {
+                kiraLeft[frame] = input[frame * stride]
+                kiraRight[frame] = stride > 1 ? input[frame * stride + 1] : input[frame * stride]
+            }
+            listened = atome_ios_audio_host_input(kiraLeft, kiraRight, frameCount)
+        } else {
+            guard let left = bufferList.buffer(at: 0).mData?.assumingMemoryBound(to: Float.self) else { return }
+            let right = bufferList.buffer(at: 1).mData?.assumingMemoryBound(to: Float.self) ?? left
+            listened = atome_ios_audio_host_input(left, right, frameCount)
+        }
+        guard listened else { return }
+        for index in 0..<bufferList.numberOfBuffers {
+            let buffer = bufferList.buffer(at: index)
+            if let mData = buffer.mData { memset(mData, 0, Int(buffer.mDataByteSize)) }
+        }
+    }
+
     func mixKiraEngine(bufferList: AudioBufferListWrapper,
                        frameCount: AUAudioFrameCount,
                        timestamp: UnsafePointer<AudioTimeStamp>,

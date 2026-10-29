@@ -16,7 +16,7 @@ function fileExists(filePath) {
     }
 }
 
-function readEnvValue(content, key) {
+export function readEnvValue(content, key) {
     const line = content
         .split(/\r?\n/)
         .find((candidate) => candidate.startsWith(`${key}=`));

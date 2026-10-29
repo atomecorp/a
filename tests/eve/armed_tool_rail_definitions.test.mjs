@@ -162,18 +162,17 @@ test('the Generator rail is the registry projection, in its order, with the curr
     assert.deepEqual(definitions.map((definition) => definition.key), [
         'generator_run_audio_ai', 'generator_run_video_ai', 'generator_run_image_ai', 'generator_run_vector_ai',
         'generator_run_texture_color_field', 'generator_run_texture_ramp',
-        'generator_run_text_title', 'generator_run_text_paragraph', 'generator_run_text_prompteur'
+        'generator_run_text_title', 'generator_run_text_paragraph'
     ], 'one flat case per registered generator, families replaced by their own generators, in registry order');
     assert.deepEqual(definitions.filter((definition) => definition.active).map((definition) => definition.key),
         ['generator_run_audio_ai']);
     assert.deepEqual(definitions.map((definition) => definition.generatorId), [
         'audio.ai', 'video.ai', 'image.ai', 'vector.ai',
-        'texture.color_field', 'texture.ramp', 'text.title', 'text.paragraph', 'text.prompteur'
+        'texture.color_field', 'texture.ramp', 'text.title', 'text.paragraph'
     ]);
     assert.ok(definitions.every((definition) => definition.toolId === 'ui.generator.run'));
-    // Only the prompteur opens a tool on long press (its panel).
-    assert.deepEqual(definitions.filter((definition) => definition.longPressToolId).map((definition) => definition.longPressToolId),
-        ['ui.prompter.panel']);
+    // No generator opens a tool on long press (the prompteur is the text itself, no generator since 2026-10-29).
+    assert.deepEqual(definitions.filter((definition) => definition.longPressToolId), []);
     const other = railOf('generator', { eveGeneratorApi: { readChoice: () => 'text.ramp' } });
     assert.deepEqual(other.filter((definition) => definition.active).map((definition) => definition.key), [],
         'a choice that no longer exists lights nothing');

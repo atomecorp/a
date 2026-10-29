@@ -23,9 +23,12 @@ const publicRow = row => row && ({
 // What a send carries: at least one channel, each in the shape its live path takes.
 const validPayload = (payload) => {
     if (!payload || typeof payload !== 'object') return 'scheduled_payload_required';
-    const { news, messages, social } = payload;
-    if (!news && !(Array.isArray(messages) && messages.length) && !social) return 'scheduled_channel_required';
+    const { news, forums, messages, social } = payload;
+    if (!news && !(Array.isArray(forums) && forums.length) && !(Array.isArray(messages) && messages.length) && !social) return 'scheduled_channel_required';
     if (news && (typeof news.publication !== 'object' || !news.publication)) return 'scheduled_news_publication_required';
+    // A forum's post: a News whose audience is the forum, named for the owner (`name`).
+    if (forums && (!Array.isArray(forums) || forums.some(entry => !entry || typeof entry.publication !== 'object' || !entry.publication
+        || typeof entry.audience?.forum !== 'string'))) return 'scheduled_forum_invalid';
     if (messages && (!Array.isArray(messages) || messages.some(entry => !entry || typeof entry.message !== 'string' || !(entry.toUserId || entry.toPhone)))) return 'scheduled_message_invalid';
     // The networks: what to prepare at the time (a send), or the new text of the posts its parent published (an update).
     if (social && (!Array.isArray(social.destinations) || !social.destinations.length || social.destinations.length > 8
@@ -80,10 +83,14 @@ export function createScheduledSends({ query, newsPublish, sendMessage, socialPu
     // Each channel through its live path; one failing never stops the others.
     const run = async (row) => {
         const payload = parse(row.payload_json, {});
-        const result = { news: null, messages: [], social: null };
+        const result = { news: null, forums: [], messages: [], social: null };
         if (payload.news) {
             try { const published = await newsPublish(row.owner_id, payload.news); result.news = { ok: true, news_id: published?.news_id || null }; }
             catch (error) { result.news = { ok: false, error: error.message }; }
+        }
+        for (const { name, ...entry } of payload.forums || []) {
+            try { const published = await newsPublish(row.owner_id, entry); result.forums.push({ to: text(name), ok: true, news_id: published?.news_id || null }); }
+            catch (error) { result.forums.push({ to: text(name), ok: false, error: error.message }); }
         }
         for (const entry of payload.messages || []) {
             const to = text(entry.toUserId || entry.toPhone);
@@ -100,11 +107,12 @@ export function createScheduledSends({ query, newsPublish, sendMessage, socialPu
         return result;
     };
     // The networks count one by one (their channel itself only when it failed as a whole).
-    const outcomes = result => [result.news, ...result.messages, ...(result.social?.ok === false ? [result.social] : []), ...(result.social?.deliveries || [])
+    const outcomes = result => [result.news, ...(result.forums || []), ...result.messages, ...(result.social?.ok === false ? [result.social] : []), ...(result.social?.deliveries || [])
         .map(delivery => ({ ok: !delivery.error && delivery.status !== 'failed', error: delivery.error, network: delivery.network }))].filter(Boolean);
     // The networks or people a send could not reach, named for the owner.
     const refused = result => [
         ...(result.news?.ok === false ? ['eVe'] : []),
+        ...(result.forums || []).filter(entry => !entry.ok).map(entry => entry.to),
         ...result.messages.filter(entry => !entry.ok).map(entry => entry.to),
         ...(result.social?.ok === false ? ['social'] : []),
         ...(result.social?.deliveries || []).filter(delivery => delivery.error || delivery.status === 'failed').map(delivery => delivery.network || delivery.destination)

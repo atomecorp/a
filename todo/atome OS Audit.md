@@ -1,5 +1,51 @@
 # Atom OS Audit
 
+## 2026-10-29 — Existing builder extension and duplicate check
+
+This is the continuing OS task record, not a second OS implementation. Scoped
+searches of the framework, eVe, scripts, hidden project documentation and local
+Git history found the existing `platforms/atomeOS/builder` as the sole local boot
+image generator. The FreeBSD cases in `install_server.sh`/setup install services,
+not disk images; they are preserved. The app's 50 recent-thread listing is not an
+exhaustive older/archived-task search. Historical `atomecorp/atomic_builder`
+master `7e81811da72b2b8f25419a57bde9427b42905ff8` was inspected read-only through
+GitHub (README, Makefile, both builders, DTB Makefile, rc/loader/display overlays).
+Its old FreeBSD versions, BeagleBone DTB and desktop launcher are not copied.
+
+Implementation continues in the existing builder with `scripts/aOS.sh` as its
+public entry. PC amd64, PINE64 A64+ 2 GB and both Mac VM architectures coexist;
+display/audio/MIDI selections compose. Existing profile/package/stage ownership
+is retained. Checksum/cache validation, explicit committed payload/eVe, VM
+formats/manifests, independent Fastify service, first-boot device identities,
+bounded supervision and a shared macOS external-media command were added.
+Obsolete heuristic YAML/latest resolution, unsafe updater and unused/unmeasured
+JACK/silent-boot overlays were removed after caller inspection. No second runtime
+or renderer, OS capability registry or system provider was introduced.
+
+Evidence: 13 focused Node tests passed on macOS, including all requested targets,
+cumulative modules, committed-source export, archive/payload hashes, short reads,
+interruption/partial writes and disk/boot-store identity protections. Shell syntax
+passed. Read-only macOS discovery found no external physical media. Native
+FreeBSD build, VM/physical boot, real WebGPU, autonomous audio/MIDI and peripheral
+performance are **not tested**; no backend/hypervisor was available. WebSDL was
+not found after scoped source searches. Cog package/runtime availability is
+unverified. No image, signature, publication, internal install or rollback is
+claimed. Source branches/working changes are preserved; no Git writes performed.
+
+The recent app conversation titled `atomeBSD` was read: it prepares the mission
+prompt and refers to the old BeagleBone builder; it does not report another
+implemented image generator. M0 is blocked outside this task by the existing
+record-preview reuse violation in `dashboard_training_disc.js`; subsequent checks
+in that chained command did not run. See `temp/aos-m0.log` and the state record.
+
+Current commands and limits: [builder README](../platforms/atomeOS/builder/README.md),
+[qualification matrix](../platforms/atomeOS/builder/docs/known_issues.md),
+[system comparison status](../platforms/atomeOS/builder/docs/os_decision.md).
+
+The older architecture recommendations below are historical proposals. In
+particular, they do not demonstrate a System Capability Registry/provider or
+authorize replacing the current canonical framework mechanisms.
+
 **Date :** 9 septembre 2026  
 **Périmètre :** Atom Core / dépôt `atomecorp/a`, sous-module eVe / dépôt `atomecorp/eVe`, et architecture Atome OS basée sur FreeBSD.  
 **Hypothèse fondamentale de cet audit :** **FreeBSD reste le véritable système d'exploitation de bas niveau. Atom OS ne doit pas réimplémenter le kernel, le scheduler, les drivers, le réseau, le stockage, les jails, le firewall, le gestionnaire de paquets ou l'hyperviseur.**

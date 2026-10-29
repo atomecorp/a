@@ -17,6 +17,7 @@ mod runtime_logging;
 mod server;
 mod streaming_view;
 mod taxonomy_editor;
+mod code_workspace;
 #[cfg(not(target_os = "android"))]
 mod viewport_runtime;
 #[cfg(target_os = "android")] mod android_tls_roots;
@@ -250,7 +251,16 @@ pub fn run() {
             audio_engine::bridge::audio_mix_levels,
             audio_engine::bridge::audio_mix_devices,
             audio_engine::bridge::audio_mix_cut_tail,
+            audio_engine::bridge::audio_mix_asset_load,
+            audio_engine::bridge::audio_mix_asset_unload,
             audio_engine::bridge::audio_mix_module_state,
+            audio_engine::bridge::audio_instrument_sample_load,
+            audio_engine::bridge::audio_instrument,
+            audio_engine::bridge::audio_direct_apply,
+            audio_engine::bridge::audio_direct_levels,
+            audio_engine::bridge::audio_direct_cut_tail,
+            audio_engine::bridge::audio_direct_module_state,
+            audio_engine::bridge::audio_direct_measure_latency,
             audio_engine::bridge::audio_stop,
             audio_engine::bridge::audio_stop_instance,
             audio_engine::bridge::audio_set_voice_end,
@@ -287,6 +297,10 @@ pub fn run() {
             streaming_view::streaming_view_invoke,
             taxonomy_editor::taxonomy_read,
             taxonomy_editor::taxonomy_save,
+            code_workspace::code_repo_list,
+            code_workspace::code_repo_read,
+            code_workspace::code_repo_search,
+            code_workspace::code_todo_write,
             assistant_link::assistant_request_take,
             project_root
         ])

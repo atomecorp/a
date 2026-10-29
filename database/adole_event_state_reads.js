@@ -78,7 +78,7 @@ export async function getStateCurrent(atomeId) {
     if (!atomeId) return null;
     const row = await query(
         'get',
-        `SELECT sc.*, a.atome_type, a.parent_id
+        `SELECT sc.*, a.atome_type, a.parent_id, a.created_at AS created_at
          FROM state_current sc
          LEFT JOIN atomes a ON a.atome_id = sc.atome_id
          WHERE sc.atome_id = ?`,
@@ -164,7 +164,7 @@ export async function listStateCurrent(projectId, options = {}) {
     // SQLite spill OFFSET + LIMIT `properties` blobs to a temporary file per page.
     const rows = await query(
         'all',
-        `SELECT sc.*, a.atome_type AS atome_type, a.parent_id AS parent_id,
+        `SELECT sc.*, a.atome_type AS atome_type, a.parent_id AS parent_id, a.created_at AS created_at,
                 COALESCE(sc.owner_id, a.owner_id) AS owner_id
          FROM state_current sc LEFT JOIN atomes a ON a.atome_id = sc.atome_id
          WHERE sc.atome_id IN (

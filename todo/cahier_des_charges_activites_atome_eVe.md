@@ -431,3 +431,19 @@ Utiliser les objets et relations réellement disponibles ; documenter toute migr
   - idée à challenger : une capture **combinée** qui enregistre en même temps la vidéo (ou la photo) et les performances affichées (temps, répétitions, disque), pour qu'elles soient sur la prise ;
   - à savoir avant : `ui.capture.screen` est déclaré mais n'a pas encore d'enregistreur (plan `todo/screen_recording_plan_2026-10-14.md`) ;
   - maquette d'abord (règle 16).
+  - **Fait le 29 oct. au soir** : remplacé par « Filmer » ci-dessous.
+- **29 oct. au soir — décisions de Jeezs, codées et vérifiées au Web** (sonde `temp/activities_audit/q29/verify.probe.mjs`, 25/25, planche `temp/activities_audit/q29/verify/sheet_verif.png`) :
+  - **zones fixes** : la fiche et les écrans de séance = en-tête / zone de valeurs qui défile / pied fixe (le disque) ; rien ne passe sous le disque ; le « i » ouvert garde sa ligne en place ;
+  - **bord teinté qui s'estompe** sur toutes les listes qui défilent, seulement quand il cache quelque chose ;
+  - **ligne de rappel** « 3 séries de 8 · repos 60 s » retirée ;
+  - **disque** : taille d'une tuile, ou d'un outil (chiffre seul) quand l'écran est trop court ; décidé par écran ; exception nommée à la règle 12 ;
+  - **« Filmer »** à la place d'« Auto » pendant la séance (Pause, Passer, Filmer, Stop) ; « Auto » reste sur la fiche avant le départ ; la caméra au milieu de la fiche, le compte et ses segments posés dessus, Rép./Pouls cachés ; appui long = niveau Vidéo / Photo / Son (Retour au pied) ;
+  - **chaque prise est liée à la séance** ; à la relecture eVe pose le compte et les valeurs du moment sur l'image, jamais gravés dans le fichier ; une photo montre son instant, un son se rejoue avec les valeurs ; commande voix/MCP `training.film`.
+  - **Limites** : le cardio en cours n'a pas de cadre caméra ; la relecture avance par seconde ; un son se rejoue sur fond noir ; photo et son non relus en vrai ; iOS, Tauri et Android non essayés.
+- **29 oct. (tard) — décisions de Jeezs (Q1, Q2, Q3 = A ; planche `temp/activities_audit/q29b/sheet_ombres.png`), codées et vérifiées au Web** (sondes `temp/activities_audit/q29b/card.probe.mjs`, `temp/scroll_glide/glide.probe.mjs`, `temp/activities_audit/q29/verify.probe.mjs`) :
+  - **ombres** au bord d'une liste qui déborde, sur toute la largeur du panneau et par-dessus tout ce que la liste contient ; aucune ombre quand rien ne déborde ;
+  - **Durée totale fixe** au-dessus de la zone de valeurs, sans trait ; la zone défile dessous, son bord haut s'estompe ;
+  - **disque** : une tuile tant que les valeurs tiennent dans la place qu'une tuile leur laisse, sinon un outil ; décidé quand la fiche est posée, un « i » ouvert ne le change jamais, un autre niveau peut ;
+  - **défilement unique, à la manière d'iOS**, partout : lancé, il glisse longtemps et ralentit doucement ; tiré au-delà d'un bout, il suit le doigt de moins en moins puis revient avec un petit rebond ; une liste qui tient ne bouge pas ;
+  - un glissé vertical qui part d'une ligne de valeur fait défiler la liste ; un glissé le long de la ligne règle la valeur ;
+  - règles 12 et 14 d'AGENTS.md réécrites ; **limites** : toucher réel sur iPhone/iPad non essayé.

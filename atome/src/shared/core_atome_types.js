@@ -6,6 +6,9 @@ import { COMMUNICATION_MESSAGE_TYPE } from './communication_contract.js';
 import { APPLE_MUSIC_OPERATION_TYPE } from './apple_music_operation_contract.js';
 import { MUSIC_OPERATION_TYPE } from './music_operation_contract.js';
 import { LIFE_PROFILE_TYPE, LIFE_PROFILES_PROPERTY_SCHEMA } from './life_profile_contract.js';
+import { AUDIO_EFFECT_TYPE, AUDIO_RACK_TYPE } from './audio_fx_contract.js';
+import { INSTRUMENT_TYPE } from './instrument_contract.js';
+import { AUDIO_SLICE_TYPE, SAMPLE_EDIT_TYPE } from './sample_edit_contract.js';
 import { registerAtomeType } from './atome_universal_contract.js';
 import { PROGRAM_PREFERENCE_SCHEMA, PROGRAM_DATA_PERMISSION_SCHEMA, PROGRAM_PREFERENCE_KEYS } from './program_collection_contract.js';
 import { PROGRAM_SESSION_SCHEMA, PROGRAM_SESSION_TRANSITION_SCHEMA } from './program_session_contract.js';
@@ -115,7 +118,8 @@ export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
     defineType(APPLE_MUSIC_OPERATION_TYPE),
     defineType(MUSIC_OPERATION_TYPE),
     defineType(GPS_TRIP_TYPE), defineType(LIVE_POSITION_TYPE), defineType(SHOPPING_ITEM_TYPE), defineType(SHOPPING_LIST_TYPE), defineType(LIBRARY_WORK_TYPE),
-    defineType(COMMUNICATION_MESSAGE_TYPE), defineType(LIFE_PROFILE_TYPE),
+    defineType(COMMUNICATION_MESSAGE_TYPE), defineType(LIFE_PROFILE_TYPE), defineType(AUDIO_RACK_TYPE), defineType(AUDIO_EFFECT_TYPE), defineType(INSTRUMENT_TYPE),
+    defineType(SAMPLE_EDIT_TYPE), defineType(AUDIO_SLICE_TYPE),
     ...PERSONAL_IMPORT_TYPES.map(defineType),
     defineType({
         type: 'project',
@@ -203,11 +207,11 @@ export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
             playback_dwell_seconds: { type: 'number', minimum: 0 },
             // A prompteur is a text carrying this property (eVe/intuition/tools/prompter).
             prompter: { type: 'object', properties: {
-                version: { type: 'number', enum: [1] }, source_id: { type: 'string' },
-                mode: { type: 'string', enum: ['manual', 'duration', 'keypoints'] },
-                between: { type: 'string', enum: ['scroll', 'page'] }, clock: { type: 'string', enum: ['project', 'host'] },
-                offset_seconds: { type: 'number' }, weight_by_length: { type: 'boolean' }, cues: { type: 'array' }
-            }, required: ['version', 'mode', 'cues'] }
+                version: { type: 'number', enum: [1] }, clock: { type: 'string', enum: ['project', 'host'] },
+                weight_by_length: { type: 'boolean' }, cues: { type: 'array' },
+                // Several texts read as one prompteur: their ids, in reading order (the same list on every page).
+                pages: { type: 'array', items: { type: 'string' } }
+            }, required: ['version', 'cues'] }
         }
     }),
     defineType({

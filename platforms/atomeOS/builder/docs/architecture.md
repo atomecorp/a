@@ -1,91 +1,34 @@
-# Architecture du builder universel
+# Image-builder ownership
 
-## Vue d'ensemble
+The existing builder owns all OS image assembly. The new public
+`scripts/aOS.sh` delegates to its CLI; no second FreeBSD generator is introduced.
+The pre-existing audit `todo/atome OS Audit.md` remains the task record.
 
-Le builder est une pipeline **déclarative** : toutes les décisions sont dans des fichiers YAML, le code shell se contente d'appliquer ce que décrivent `config.yml`, les profils et les packages.
+- `core/config.yml`, `profiles/`, `packages/`: one target/module/profile recipe.
+  Targets determine architecture, official boot image and formats; modules compose.
+- `core/recipe.mjs`: strict YAML through the existing root `yaml` dependency,
+  source/submodule identity, builder-input hash, recipe and preflight.
+- `core/build.sh`, `core/lib/common.sh`, `scripts/`: native FreeBSD pipeline.
+  Only the orchestrator owns mounts/detachment, in reverse order. Failure retains
+  evidence and never force-unmounts unrelated resources.
+- `core/source.mjs`: explicit committed payload allowlist; no working data, secrets,
+  host dependencies, research symlinks or second application runtime.
+- `core/artifacts.mjs`: official checksum parsing, payload/archive integrity,
+  conversion verification, provenance and machine-readable manifest.
+- `core/remote.mjs`: optional SSH dispatch to already-provisioned FreeBSD backends,
+  recipe comparison and bounded artifact retrieval. Not a host installer.
+- `installer/sbc/flash.mjs`: shared macOS USB/SD discovery, confirmation, write,
+  exact-length readback and ejection. Desktop boot media use this same owner.
+- `overlays/services/` and `overlays/ui/`: rc.d, unique first-boot identities,
+  independently supervised real Fastify service and existing Cage/Cog candidate.
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                  core/build.sh                          │
-│  (orchestrateur : lit config, résout versions, pipeline)│
-└───────┬─────────────────────────────────────────────────┘
-        │
-        ├──► preflight.sh          (vérifs host)
-        ├──► fetch_base_image.sh   (download FreeBSD)
-        ├──► mount_image.sh        (chroot setup)
-        ├──► install_packages.sh   (pkg install selon profil)
-        ├──► install_runtime.sh    (clone + build framework `a`)
-        ├──► configure_boot.sh     (silent boot + splash)
-        ├──► configure_ui.sh       (cage + webview)
-        ├──► configure_audio.sh    (si profil audio)
-        ├──► configure_network.sh  (DHCP + TLS + auto-update)
-        └──► finalize_image.sh     (cleanup + compress + checksum)
-```
+Fastify still serves atome/eVe through its canonical APIs. Bevy/WebGPU, Kira WASM,
+MIDI owners, persistence and commands remain in their existing framework owners.
+A native autonomous FreeBSD audio/MIDI runtime has not been found/validated.
+WebSDL was not found after repository searches; it is not invented or packaged.
 
-## Les 4 couches conceptuelles
-
-### 1. Couche matérielle (`architectures` dans `config.yml`)
-- Sélectionne l'image de base FreeBSD (amd64 ou arm64)
-- Définit le bootloader (UEFI) et le layout de partition
-- Sur ARM, gère les device trees (`dts/`)
-
-### 2. Couche système (`overlays/boot` + `overlays/services`)
-- `loader.conf` : boot silencieux, splash BMP
-- `rc.conf` : services minimaux
-- Getty désactivés sur consoles virtuelles (pas de tty visible)
-- Service `atome_updater` cron toutes les 6h
-
-### 3. Couche runtime (`packages/*.yml` + `install_runtime.sh`)
-- Stacks : base, js, ruby, rust, native, webview, audio, network
-- Résolution dynamique "latest" :
-  - FreeBSD RELEASE courant depuis download.freebsd.org
-  - Node LTS depuis nodejs.org/dist/
-  - Ruby 3.x depuis pkg FreeBSD
-  - Rust stable depuis rustup
-- Framework Atome cloné depuis `atomecorp/a` avec audit des deps
-- **Blocklist wavesurfer** appliquée automatiquement
-
-### 4. Couche applicative (`overlays/ui` + `runtime` dans `config.yml`)
-- Service rc.d `atome` qui lance sous l'user `atome`
-- `start_atome.sh` → démarre Fastify/Tauri backend → attend qu'il réponde → lance `cage` + `cog` (webview plein écran)
-- Watchdog : relance automatique en cas de crash
-
-## Pourquoi ce découpage ?
-
-1. **Ajouter une stack** = un seul fichier `packages/<nom>.yml`, aucun script à modifier
-2. **Changer un profil** = éditer un seul YAML, pas toucher le code
-3. **Supporter un SBC** = ajouter un DTB dans `dts/` + variante dans `config.yml` (section `sbc_targets`)
-4. **Mettre à jour une dépendance** = rien à faire côté builder (tout est en `latest`)
-
-## Flux des versions "latest"
-
-```
-build.sh --arch amd64 --profile desktop
-   │
-   ├─► versions.sh::resolve_freebsd_latest()
-   │       └─► GET download.freebsd.org/releases/amd64/amd64/
-   │               └─► parse HTML, sort -V, tail -1  →  "15.0-RELEASE"
-   │
-   ├─► versions.sh::resolve_node_lts()
-   │       └─► GET nodejs.org/dist/index.json
-   │               └─► premier "lts":"..." != false  →  "22.15.0"
-   │
-   └─► install_packages.sh écrit /usr/local/etc/pkg/repos/FreeBSD.conf
-           avec url: "pkg+http://pkg.FreeBSD.org/${ABI}/latest"
-               └─► pkg install tire toujours la dernière version du repo
-```
-
-## Points de débat / décisions prises
-
-| Sujet                     | Choix                          | Raison                                    |
-|---------------------------|--------------------------------|-------------------------------------------|
-| Compositor                | `cage` (Wayland kiosk)         | Simple, pas de WM, plein écran natif      |
-| Webview                   | `cog` (WebKit2GTK)             | Léger, pas d'Electron, compatible Tauri   |
-| Backend par défaut        | Fastify sur 3001               | Ce que le framework `a` lance             |
-| Audio                     | OSS + JACK                     | OSS natif stable, JACK pour basse latence |
-| PipeWire                  | Désactivé                      | Support FreeBSD encore irrégulier         |
-| Ruby                      | Inclus                         | Demandé explicitement (profil legacy)     |
-| wavesurfer.js             | Blocklist                      | Abandonné côté Squirrel                   |
-| Versions                  | Toutes en "latest"             | Demandé explicitement                     |
-| Auto-update               | cron 6h + jitter               | Évite tempêtes de requêtes sync           |
-| Firewall                  | PF — entrant fermé             | Posture kiosk                             |
+Removed after caller inspection: heuristic YAML reader, moving-version resolver,
+unsafe pkg/Git updater, silent-boot overlay and unmeasured JACK tuning/autostart.
+Makefile shortcuts now call the same public CLI. Historical upstream builder is
+reference material, not another local executable lane. See the README for current
+commands and the qualification matrix for precise evidence limits.

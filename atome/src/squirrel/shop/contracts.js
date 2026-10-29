@@ -51,8 +51,10 @@ const definitions = {
         'Report a sale; three reports hide it.', true, 'write'],
     favorite: [{ listing_id: id, favorite: { type: 'boolean' } }, ['listing_id'], 'Keep a sale among the user\'s favourites, or take it out.', true, 'write'],
     favorites: [{}, [], 'The sales the user keeps as favourites.', false, 'read'],
-    open: [{ listing_id: id, peer_id: id, order_id: id, seller_id: id, mine: { type: 'boolean' } }, [],
-        'Show Boutiques: a sale\'s page (on the conversation with peer_id), a seller\'s shop, the user\'s own shop (mine), or every shop.', false, 'control']
+    open: [{ listing_id: id, peer_id: id, order_id: id, seller_id: id, mine: { type: 'boolean' },
+        sell: { type: 'boolean', description: 'Nouvelle vente, its card already holding title and content_ids (an instrument of the user and its sounds).' },
+        title: fields.title, content_ids: fields.content_ids }, [],
+        'Show Boutiques: a sale\'s page (on the conversation with peer_id), a seller\'s shop, the user\'s own shop (mine), every shop, or Nouvelle vente (sell).', false, 'control']
 };
 const listingSchema = { type: 'object', properties: { listing_id: { type: 'string' }, kind: { type: 'string' }, title: { type: 'string' },
     price_eur: { type: 'number' }, seller: { type: 'string' }, seller_id: { type: 'string' }, status: { type: 'string' }, reason: { type: 'string' } } };

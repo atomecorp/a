@@ -1,78 +1,33 @@
 #!/bin/sh
-# scripts/mount_image.sh — monte l'image FreeBSD pour chroot
+# Identify UFS from partition metadata, never by trying arbitrary partitions.
 set -eu
-
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-. "${SCRIPT_DIR}/../core/lib/common.sh"
-
-WORK_DIR="/var/tmp/atome_builder"
-WORK_IMG=$(cat "${WORK_DIR}/current_image.txt")
-WORK_MNT="${WORK_DIR}/mnt"
-mkdir -p "${WORK_MNT}"
-
-# Gestion FreeBSD vs Linux host
-if is_freebsd; then
-    # mdconfig + mount UFS
-    log_info "Attache image via mdconfig"
-    # Détache d'abord d'éventuels restes
-    for md in $(mdconfig -l 2>/dev/null | tr ' ' '\n' | grep -E '^md[0-9]+'); do
-        if mdconfig -l -u "${md#md}" 2>/dev/null | grep -q "${WORK_IMG}"; then
-            mdconfig -d -u "${md#md}" 2>/dev/null || true
-        fi
-    done
-    MD_UNIT=$(mdconfig -a -t vnode -f "${WORK_IMG}")
-    log_info "Unité: ${MD_UNIT}"
-
-    # Détection partition principale (p4 sur VM images récentes, p2 sur certaines)
-    for p in p4 p3 p2; do
-        DEV="/dev/${MD_UNIT}${p}"
-        if [ -e "${DEV}" ]; then
-            if fsck_ufs -y "${DEV}" >/dev/null 2>&1 || true; then
-                if mount "${DEV}" "${WORK_MNT}" 2>/dev/null; then
-                    log_info "Monté ${DEV} sur ${WORK_MNT}"
-                    echo "${MD_UNIT}" > "${WORK_DIR}/current_md.txt"
-                    echo "${DEV}"     > "${WORK_DIR}/current_dev.txt"
-                    break
-                fi
-            fi
-        fi
-    done
-
-elif is_linux; then
-    # losetup + mount UFS (kernel avec module ufs2 requis + binfmt_misc qemu pour chroot arm64)
-    log_info "Attache image via losetup"
-    LOOP_DEV=$(losetup --show -fP "${WORK_IMG}")
-    echo "${LOOP_DEV}" > "${WORK_DIR}/current_loop.txt"
-
-    for p in p4 p3 p2; do
-        PART="${LOOP_DEV}${p}"
-        [ -e "${PART}" ] || continue
-        if mount -t ufs -o ufstype=ufs2,rw "${PART}" "${WORK_MNT}" 2>/dev/null; then
-            log_info "Monté ${PART} sur ${WORK_MNT}"
-            break
-        fi
-    done
-    [ -z "$(mountpoint -q "${WORK_MNT}" && echo ok)" ] && {
-        log_error "Impossible de monter l'image (kernel sans support UFS2 ?)"
-        log_error "Sur Linux, vérifier: modprobe ufs && CONFIG_UFS_FS_WRITE"
-        exit 1
-    }
-
-    # Monte proc/sys/dev pour chroot
-    mount --bind /dev     "${WORK_MNT}/dev"     2>/dev/null || true
-    mount --bind /proc    "${WORK_MNT}/proc"    2>/dev/null || true
-    # Copie qemu pour cross arm64
-    if [ "${ARCH}" = "arm64" ]; then
-        cp /usr/bin/qemu-aarch64-static "${WORK_MNT}/usr/bin/" 2>/dev/null || true
-    fi
-else
-    log_error "Host non supporté: $(uname -s)"
-    exit 1
-fi
-
-# Résolution DNS dans le chroot
-cp /etc/resolv.conf "${WORK_MNT}/etc/resolv.conf" 2>/dev/null || true
-
-export WORK_MNT
-echo "${WORK_MNT}" > "${WORK_DIR}/current_mnt.txt"
-log_ok "Image montée: ${WORK_MNT}"
+. "$(dirname -- "$0")/../core/lib/common.sh"
+mkdir -p "$WORK_MNT"
+MD_UNIT=$(mdconfig -a -t vnode -f "$WORK_IMG")
+printf '%s\n' "$MD_UNIT" > "${WORK_DIR}/md-unit"
+gpart show -p "$MD_UNIT" > "${WORK_DIR}/partitions.txt"
+ROOT_PARTS=$(awk '$4 == "freebsd-ufs" { print $3 }' "${WORK_DIR}/partitions.txt")
+COUNT=$(printf '%s\n' "$ROOT_PARTS" | awk 'NF { n++ } END { print n+0 }')
+[ "$COUNT" -eq 1 ] || { log_error 'Expected exactly one UFS root partition; unsupported layout'; exit 1; }
+ROOT_PART=$ROOT_PARTS
+case "$ROOT_PART" in "${MD_UNIT}"p[0-9]*|"${MD_UNIT}"s[0-9]*[a-h]) ;; *) log_error 'Invalid UFS provider'; exit 1 ;; esac
+# Grow GPT only if the UFS root is the last data partition. Other layouts retain
+# the official board boot bytes and filesystem size; capacity is checked below.
+case "$ROOT_PART" in "${MD_UNIT}"p*)
+    LAST_PART=$(awk '$3 ~ /^md[0-9]+p[0-9]+$/ { part=$3 } END { print part }' "${WORK_DIR}/partitions.txt")
+    if [ "$ROOT_PART" = "$LAST_PART" ]; then
+        gpart recover "$MD_UNIT"
+        gpart resize -i "${ROOT_PART##*p}" "$MD_UNIT"
+        fsck_ufs -p "/dev/${ROOT_PART}"
+        growfs -y "/dev/${ROOT_PART}"
+    fi ;;
+esac
+mount -t ufs "/dev/${ROOT_PART}" "$WORK_MNT"
+: > "${WORK_DIR}/root-mounted"
+[ -x "${WORK_MNT}/bin/sh" ] && [ -f "${WORK_MNT}/etc/master.passwd" ] || { log_error 'Mounted partition is not a FreeBSD root'; exit 1; }
+mount -t devfs devfs "${WORK_MNT}/dev"
+: > "${WORK_DIR}/devfs-mounted"
+cp /etc/resolv.conf "${WORK_MNT}/etc/resolv.conf"
+# Fail before package installation if a board root partition has insufficient space.
+AVAILABLE=$(df -Pk "$WORK_MNT" | awk 'NR == 2 { print $4 }')
+[ "$AVAILABLE" -ge 3145728 ] || { log_error 'UFS root has less than 3 GiB free; expand its actual partition/filesystem before building'; exit 1; }

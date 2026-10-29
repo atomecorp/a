@@ -37,6 +37,7 @@ import { persistAcceptedRequestNote } from './communication_messages.js';
 import { createNotificationDelivery, createRateLimiter } from './communication_delivery.js';
 import { createNewsBroadcast } from './news_broadcast.js';
 import { createCommunities } from './communities.js';
+import { createForums } from './forums.js';
 import { logStructured } from './server_logger.js';
 
 export function createServerServices({ projectRoot_env }) {
@@ -86,6 +87,11 @@ export function createServerServices({ projectRoot_env }) {
   // A community's posts are News with the community as audience.
   let communities = null;
   const findUserName = async (id) => (await findUserById(db.getDataSourceAdapter(), id).catch(() => null))?.username || null;
+  // A forum's posts too, the forum as audience (server/forums.js); its members named as its posts' authors.
+  const forums = createForums({ relations: communicationRelations,
+    notify: (targetId, senderId, notification) => deliverCommNotification(targetId, senderId, notification),
+    findUserByPhone: (phone) => findUserByPhone(db.getDataSourceAdapter(), phone),
+    findUserName });
   const newsBroadcast = createNewsBroadcast({
     vaultProvider: userVaultRouter.provider,
     relations: communicationRelations,
@@ -96,7 +102,8 @@ export function createServerServices({ projectRoot_env }) {
     // What the audience reads of a media: a clean copy, its EXIF and GPS stripped.
     cleanMedia: createNewsMediaCleaner({ resolveSource: resolveDownloadTarget, registerFile: registerFileUpload,
       assetPath: (ownerId, relative) => resolveUserAssetPath(projectRoot_env, { id: ownerId }, relative) }),
-    getCommunities: () => communities
+    getCommunities: () => communities,
+    getForums: () => forums
   });
   communities = createCommunities({
     relations: communicationRelations,
@@ -166,6 +173,7 @@ export function createServerServices({ projectRoot_env }) {
     newsBroadcast,
     newsPublishRateAllowed,
     communities,
+    forums,
     directoryPublicService
   };
 }

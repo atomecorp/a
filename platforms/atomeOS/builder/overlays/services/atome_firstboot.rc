@@ -1,0 +1,13 @@
+#!/bin/sh
+# PROVIDE: atome_firstboot
+# REQUIRE: FILESYSTEMS
+# BEFORE: atome_server atome
+. /etc/rc.subr
+name="atome_firstboot"
+rcvar="atome_firstboot_enable"
+load_rc_config "$name"
+: "${atome_firstboot_enable:=NO}"
+start_cmd="atome_firstboot_start"
+stop_cmd=":"
+atome_firstboot_start() { /usr/local/bin/node /usr/local/libexec/aos/firstboot.mjs; }
+run_rc_command "$1"

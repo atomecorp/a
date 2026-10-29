@@ -351,10 +351,10 @@
           "markdownDescription": "Lets the main webview take the assistant request opened by the atome://assistant link.\n#### This permission set includes:\n\n- `allow-assistant-request-take`"
         },
         {
-          "description": "Allows the main webview to use the native Kira audio engine commands.\n#### This permission set includes:\n\n- `allow-audio-init`\n- `allow-audio-load-clip`\n- `allow-audio-load-clip-from-bytes`\n- `allow-audio-has-clip`\n- `allow-audio-play`\n- `allow-audio-play-instance`\n- `allow-audio-schedule-instances`\n- `allow-audio-measure-input-latency`\n- `allow-audio-render-clock`\n- `allow-audio-mix-apply`\n- `allow-audio-mix-levels`\n- `allow-audio-mix-devices`\n- `allow-audio-mix-cut-tail`\n- `allow-audio-mix-module-state`\n- `allow-audio-stop`\n- `allow-audio-stop-instance`\n- `allow-audio-set-voice-end`\n- `allow-audio-destroy-clip`\n- `allow-audio-set-volume`\n- `allow-audio-set-pan`\n- `allow-audio-set-playback-rate`\n- `allow-audio-wake-start`\n- `allow-audio-wake-stop`\n- `allow-audio-wake-read`\n- `allow-audio-voice-start`\n- `allow-audio-voice-stop`\n- `allow-audio-voice-set-phrases`\n- `allow-audio-voice-set-speaking`\n- `allow-audio-voice-set-listening`\n- `allow-audio-voice-set-wake-verifier`\n- `allow-audio-voice-read`\n- `allow-audio-record-start`\n- `allow-audio-record-stop`\n- `allow-audio-get-levels`\n- `allow-audio-get-scope`\n- `allow-audio-shutdown`",
+          "description": "Allows the main webview to use the native Kira audio engine commands.\n#### This permission set includes:\n\n- `allow-audio-init`\n- `allow-audio-load-clip`\n- `allow-audio-load-clip-from-bytes`\n- `allow-audio-has-clip`\n- `allow-audio-play`\n- `allow-audio-play-instance`\n- `allow-audio-schedule-instances`\n- `allow-audio-measure-input-latency`\n- `allow-audio-render-clock`\n- `allow-audio-mix-apply`\n- `allow-audio-mix-levels`\n- `allow-audio-mix-devices`\n- `allow-audio-mix-cut-tail`\n- `allow-audio-mix-module-state`\n- `allow-audio-direct-apply`\n- `allow-audio-direct-levels`\n- `allow-audio-direct-cut-tail`\n- `allow-audio-direct-module-state`\n- `allow-audio-direct-measure-latency`\n- `allow-audio-stop`\n- `allow-audio-stop-instance`\n- `allow-audio-set-voice-end`\n- `allow-audio-destroy-clip`\n- `allow-audio-set-volume`\n- `allow-audio-set-pan`\n- `allow-audio-set-playback-rate`\n- `allow-audio-wake-start`\n- `allow-audio-wake-stop`\n- `allow-audio-wake-read`\n- `allow-audio-voice-start`\n- `allow-audio-voice-stop`\n- `allow-audio-voice-set-phrases`\n- `allow-audio-voice-set-speaking`\n- `allow-audio-voice-set-listening`\n- `allow-audio-voice-set-wake-verifier`\n- `allow-audio-voice-read`\n- `allow-audio-record-start`\n- `allow-audio-record-stop`\n- `allow-audio-get-levels`\n- `allow-audio-get-scope`\n- `allow-audio-shutdown`",
           "type": "string",
           "const": "audio-engine",
-          "markdownDescription": "Allows the main webview to use the native Kira audio engine commands.\n#### This permission set includes:\n\n- `allow-audio-init`\n- `allow-audio-load-clip`\n- `allow-audio-load-clip-from-bytes`\n- `allow-audio-has-clip`\n- `allow-audio-play`\n- `allow-audio-play-instance`\n- `allow-audio-schedule-instances`\n- `allow-audio-measure-input-latency`\n- `allow-audio-render-clock`\n- `allow-audio-mix-apply`\n- `allow-audio-mix-levels`\n- `allow-audio-mix-devices`\n- `allow-audio-mix-cut-tail`\n- `allow-audio-mix-module-state`\n- `allow-audio-stop`\n- `allow-audio-stop-instance`\n- `allow-audio-set-voice-end`\n- `allow-audio-destroy-clip`\n- `allow-audio-set-volume`\n- `allow-audio-set-pan`\n- `allow-audio-set-playback-rate`\n- `allow-audio-wake-start`\n- `allow-audio-wake-stop`\n- `allow-audio-wake-read`\n- `allow-audio-voice-start`\n- `allow-audio-voice-stop`\n- `allow-audio-voice-set-phrases`\n- `allow-audio-voice-set-speaking`\n- `allow-audio-voice-set-listening`\n- `allow-audio-voice-set-wake-verifier`\n- `allow-audio-voice-read`\n- `allow-audio-record-start`\n- `allow-audio-record-stop`\n- `allow-audio-get-levels`\n- `allow-audio-get-scope`\n- `allow-audio-shutdown`"
+          "markdownDescription": "Allows the main webview to use the native Kira audio engine commands.\n#### This permission set includes:\n\n- `allow-audio-init`\n- `allow-audio-load-clip`\n- `allow-audio-load-clip-from-bytes`\n- `allow-audio-has-clip`\n- `allow-audio-play`\n- `allow-audio-play-instance`\n- `allow-audio-schedule-instances`\n- `allow-audio-measure-input-latency`\n- `allow-audio-render-clock`\n- `allow-audio-mix-apply`\n- `allow-audio-mix-levels`\n- `allow-audio-mix-devices`\n- `allow-audio-mix-cut-tail`\n- `allow-audio-mix-module-state`\n- `allow-audio-direct-apply`\n- `allow-audio-direct-levels`\n- `allow-audio-direct-cut-tail`\n- `allow-audio-direct-module-state`\n- `allow-audio-direct-measure-latency`\n- `allow-audio-stop`\n- `allow-audio-stop-instance`\n- `allow-audio-set-voice-end`\n- `allow-audio-destroy-clip`\n- `allow-audio-set-volume`\n- `allow-audio-set-pan`\n- `allow-audio-set-playback-rate`\n- `allow-audio-wake-start`\n- `allow-audio-wake-stop`\n- `allow-audio-wake-read`\n- `allow-audio-voice-start`\n- `allow-audio-voice-stop`\n- `allow-audio-voice-set-phrases`\n- `allow-audio-voice-set-speaking`\n- `allow-audio-voice-set-listening`\n- `allow-audio-voice-set-wake-verifier`\n- `allow-audio-voice-read`\n- `allow-audio-record-start`\n- `allow-audio-record-stop`\n- `allow-audio-get-levels`\n- `allow-audio-get-scope`\n- `allow-audio-shutdown`"
         },
         {
           "description": "Allows the main webview to use the native Bevy renderer commands.\n#### This permission set includes:\n\n- `allow-bevy-native-start`\n- `allow-bevy-native-apply-ops`\n- `allow-bevy-native-resize`",
@@ -373,6 +373,12 @@
           "type": "string",
           "const": "clipboard-bridge",
           "markdownDescription": "Allows the main webview to read and write the host system clipboard.\n#### This permission set includes:\n\n- `allow-clipboard-write-text`\n- `allow-clipboard-read-text`\n- `allow-clipboard-has-text`\n- `allow-clipboard-read-items`"
+        },
+        {
+          "description": "Lets a code project read the source checkout and file its plan in todo/code_projects/ (debug builds only; release builds refuse).\n#### This permission set includes:\n\n- `allow-code-repo-list`\n- `allow-code-repo-read`\n- `allow-code-repo-search`\n- `allow-code-todo-write`",
+          "type": "string",
+          "const": "code-workspace",
+          "markdownDescription": "Lets a code project read the source checkout and file its plan in todo/code_projects/ (debug builds only; release builds refuse).\n#### This permission set includes:\n\n- `allow-code-repo-list`\n- `allow-code-repo-read`\n- `allow-code-repo-search`\n- `allow-code-todo-write`"
         },
         {
           "description": "Allows the main webview to save an exported file into the Downloads folder.\n#### This permission set includes:\n\n- `allow-export-file-save`",
@@ -409,6 +415,36 @@
           "type": "string",
           "const": "allow-audio-destroy-clip",
           "markdownDescription": "Enables the audio_destroy_clip command."
+        },
+        {
+          "description": "Enables the audio_direct_apply command.",
+          "type": "string",
+          "const": "allow-audio-direct-apply",
+          "markdownDescription": "Enables the audio_direct_apply command."
+        },
+        {
+          "description": "Enables the audio_direct_cut_tail command.",
+          "type": "string",
+          "const": "allow-audio-direct-cut-tail",
+          "markdownDescription": "Enables the audio_direct_cut_tail command."
+        },
+        {
+          "description": "Enables the audio_direct_levels command.",
+          "type": "string",
+          "const": "allow-audio-direct-levels",
+          "markdownDescription": "Enables the audio_direct_levels command."
+        },
+        {
+          "description": "Enables the audio_direct_measure_latency command.",
+          "type": "string",
+          "const": "allow-audio-direct-measure-latency",
+          "markdownDescription": "Enables the audio_direct_measure_latency command."
+        },
+        {
+          "description": "Enables the audio_direct_module_state command.",
+          "type": "string",
+          "const": "allow-audio-direct-module-state",
+          "markdownDescription": "Enables the audio_direct_module_state command."
         },
         {
           "description": "Enables the audio_get_levels command.",
@@ -667,6 +703,30 @@
           "type": "string",
           "const": "allow-clipboard-write-text",
           "markdownDescription": "Enables the clipboard_write_text command."
+        },
+        {
+          "description": "Enables the code_repo_list command.",
+          "type": "string",
+          "const": "allow-code-repo-list",
+          "markdownDescription": "Enables the code_repo_list command."
+        },
+        {
+          "description": "Enables the code_repo_read command.",
+          "type": "string",
+          "const": "allow-code-repo-read",
+          "markdownDescription": "Enables the code_repo_read command."
+        },
+        {
+          "description": "Enables the code_repo_search command.",
+          "type": "string",
+          "const": "allow-code-repo-search",
+          "markdownDescription": "Enables the code_repo_search command."
+        },
+        {
+          "description": "Enables the code_todo_write command.",
+          "type": "string",
+          "const": "allow-code-todo-write",
+          "markdownDescription": "Enables the code_todo_write command."
         },
         {
           "description": "Enables the contacts_open_settings command.",

@@ -7,12 +7,14 @@ export const PROJECTS_ERRORS = Object.freeze(['INVALID_ARGUMENT', 'NOT_FOUND', '
     'PRESENTATION_UNAVAILABLE']);
 // The Trouver panel's categories that hold a project's objects.
 export const PROJECT_SEARCH_KINDS = Object.freeze(['all', 'images', 'videos', 'sounds']);
+// A project's type, as the Projets rubric's Type tool keeps it (eVe/domains/projects/project_type.js).
+export const PROJECT_TYPES = Object.freeze(['health', 'code', 'creation']);
 
 const id = { type: 'string', minLength: 1, maxLength: 200 };
 const text = { type: 'string', minLength: 1, maxLength: 200, pattern: '\\S' };
 const limit = { type: 'integer', minimum: 1, maximum: 200 };
 const definitions = {
-    list: [{ query: text, limit, favorites: { type: 'boolean' } }, [], 'List the user\'s projects, last changed first: project_id, name, whether it is a favourite, and which one is current (open, or last opened while the Dashboard shows). `query` keeps the projects whose name holds it; `favorites` true keeps the favourites only, as the Dashboard\'s Favori tool does.', false],
+    list: [{ query: text, limit, favorites: { type: 'boolean' }, type: { type: 'string', enum: PROJECT_TYPES } }, [], 'List the user\'s projects, last changed first: project_id, name, whether it is a favourite, and which one is current (open, or last opened while the Dashboard shows). `query` keeps the projects whose name holds it; `favorites` true keeps the favourites only, as the Dashboard\'s Favori tool does; `type` keeps one type (health, code, creation), as its Type tool does.', false],
     create: [{ name: { type: 'string', minLength: 1, maxLength: 512, pattern: '\\S' } }, [],
         'Create a new empty project (named `name`, else the next default name) and open it. Returns its project_id.', true],
     open: [{ project_id: id }, ['project_id'], 'Open one of the user\'s projects (its project_id from projects.list).', false],
@@ -22,7 +24,7 @@ const definitions = {
         'Search the objects of one project (the current one when project_id is not given: open, or last opened while the Dashboard shows) whose name, text, type or tags hold `text`, as the Trouver panel does; `kind` keeps images, videos or sounds only.', false]
 };
 const projectSchema = { type: 'object', required: ['project_id', 'name'], properties: {
-    project_id: { type: 'string' }, name: { type: 'string' }, updated_at: { type: 'string' }, current: { type: 'boolean' }, favorite: { type: 'boolean' } } };
+    project_id: { type: 'string' }, name: { type: 'string' }, updated_at: { type: 'string' }, current: { type: 'boolean' }, favorite: { type: 'boolean' }, type: { type: 'string', enum: PROJECT_TYPES } } };
 const itemSchema = { type: 'object', required: ['atome_id', 'type', 'name'], properties: {
     atome_id: { type: 'string' }, type: { type: 'string' }, name: { type: 'string' }, updated_at: { type: 'string' } } };
 export const PROJECTS_COMMANDS = Object.freeze(Object.entries(definitions).map(([action, [properties, required, description, persistent]]) => Object.freeze({

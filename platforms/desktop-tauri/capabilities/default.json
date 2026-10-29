@@ -21,6 +21,7 @@
     "clipboard-bridge",
     "file-export",
     "taxonomy-editor",
+    "code-workspace",
     "health-bridge",
     "billing-store",
     "assistant-link",

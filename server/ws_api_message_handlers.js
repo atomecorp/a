@@ -24,18 +24,19 @@ export async function handleWsNewsRequest({ data, connection, safeSend, newsBroa
   }
 }
 
-export async function handleWsCommunityRequest({ data, connection, safeSend, communities }) {
+// A community's or a forum's request (`kind`: its frame type), answered by its service's `handle`.
+export async function handleWsMembershipRequest({ data, connection, safeSend, service, kind }) {
   const requestId = data.requestId || data.request_id;
   const userId = connection?._wsApiUserId ? String(connection._wsApiUserId) : null;
   if (!userId || !await isWsApiPrincipalProvisioned(userId)) {
-    safeSend({ type: 'community-response', requestId, success: false, error: 'community_auth_required' });
+    safeSend({ type: `${kind}-response`, requestId, success: false, error: `${kind}_auth_required` });
     return;
   }
   try {
-    const result = await communities.handle(data, userId);
-    safeSend({ type: 'community-response', requestId, success: result.ok !== false, ...result });
+    const result = await service.handle(data, userId);
+    safeSend({ type: `${kind}-response`, requestId, success: result.ok !== false, ...result });
   } catch (error) {
-    safeSend({ type: 'community-response', requestId, success: false, error: error.message });
+    safeSend({ type: `${kind}-response`, requestId, success: false, error: error.message });
   }
 }
 

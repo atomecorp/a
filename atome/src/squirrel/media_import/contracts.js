@@ -16,8 +16,8 @@ const definitions = {
     list: [{ kind: { type: 'string', enum: MEDIA_IMPORT_KINDS }, limit: { type: 'integer', minimum: 1, maximum: 200 } }, [],
         'List the person\'s own media (pictures, videos, sounds), newest first: media_id, name, kind, date.', false, 'read'],
     open: [{}, [], 'Open the import panel to import media into the current project (the project\'s Import tool); the user sees it.', false, 'control'],
-    source: [{ view: { type: 'string', enum: ['medias', 'album', 'files', 'random', 'web'] } }, ['view'],
-        'In the open import panel: show the person\'s media (medias: their filters at the foot, none lit at first), the device\'s album, or outside files; random (when an image is asked for) downloads one image of the web at random, files it among the person\'s media and chooses it; web (when the Médiathèque asked) leaves the panel for its list of the web\'s free media.', true, 'control'],
+    source: [{ view: { type: 'string', enum: ['medias', 'album', 'files', 'random', 'screen', 'web'] } }, ['view'],
+        'In the open import panel: show the person\'s media (medias: their filters at the foot, none lit at first), the device\'s album, or outside files; random (when an image is asked for) downloads one image of the web at random, files it among the person\'s media and chooses it; screen (when an image is asked for, in a browser) asks the person what to share, takes one still of it, files it among their media and chooses it; web (when the Médiathèque asked) leaves the panel for its list of the web\'s free media.', true, 'control'],
     filter: [{ filters: { type: 'array', maxItems: MEDIA_IMPORT_FILTERS.length, items: { type: 'string', enum: MEDIA_IMPORT_FILTERS } } }, ['filters'],
         'In the open import panel: list exactly the person\'s media of these filters (all = every kind it offers; an empty list shows none); it shows their media first.', false, 'control'],
     // `layout`, never `view`: the MCP boundary drops a result's `view` (mcp_runtime.js#projectRuntimeMcpResult).

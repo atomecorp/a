@@ -333,6 +333,8 @@ extension AiSRuntime {
             state["atome_type"] = meta.atomeType
             state["type"] = meta.atomeType
             if let parentId = meta.parentId { state["parent_id"] = parentId }
+            // When the atome was made, as Fastify and Tauri list it (the Projets order breaks ties on it).
+            if !meta.createdAt.isEmpty { state["created_at"] = meta.createdAt }
         }
         return state
     }

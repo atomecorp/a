@@ -6,23 +6,27 @@
 // frames and notes which rendered frame it plays at which host instant; the
 // recorder notes the host instant of its first captured sample on the same host
 // clock, so a take recorded during playback lands on the frame that was heard.
+// The direct path (`direct.rs`) is played in that same callback, after the copy.
 
 use super::aux_outputs::{self, SharedAuxConsumers};
+use super::direct::{self, SharedDirect};
+use super::output_fill::OutputFill;
 use super::{host_output, output_idle};
+#[cfg(not(target_os = "windows"))]
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use kira::backend::{Backend, Renderer};
 use atome_mix_graph::voice::VoiceSound;
-use ringbuf::traits::{Consumer, Observer, Producer, Split};
+use ringbuf::traits::{Observer, Producer, Split};
 use ringbuf::HeapRb;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-const BLOCK_FRAMES: usize = 256;
+pub(crate) const BLOCK_FRAMES: usize = 256;
 pub(crate) const CHANNELS: usize = 2;
 // Frames rendered ahead of the device: room for the main thread to schedule.
 const LOOKAHEAD_FRAMES: u64 = 2048;
-const FIFO_FRAMES: usize = 16_384;
+pub(crate) const FIFO_FRAMES: usize = 16_384;
 
 struct PendingStart {
     voice_id: String,
@@ -43,6 +47,7 @@ struct Anchor {
 static PENDING: Mutex<Vec<PendingStart>> = Mutex::new(Vec::new());
 static START_HOOK: Mutex<Option<StartHook>> = Mutex::new(None);
 static ANCHOR: Mutex<Option<Anchor>> = Mutex::new(None);
+#[cfg(not(target_os = "windows"))]
 static EPOCH: OnceLock<cpal::StreamInstant> = OnceLock::new();
 // The next rendered block starts at this frame.
 static FRAMES_RENDERED: AtomicU64 = AtomicU64::new(0);
@@ -57,6 +62,7 @@ static GENERATION: AtomicU64 = AtomicU64::new(0);
 
 // Host instants as signed nanoseconds on one process-wide origin, so output and
 // input streams compare (CoreAudio stamps both with the host clock).
+#[cfg(not(target_os = "windows"))]
 pub fn host_ns(instant: &cpal::StreamInstant) -> i64 {
     let epoch = *EPOCH.get_or_init(|| *instant);
     match instant.duration_since(&epoch) {
@@ -146,15 +152,37 @@ pub struct CaptureClock {
     pub discontinuities: u32,
 }
 
+// The host instant of an input callback. On Windows the output is no cpal
+// stream: both sides read the process clock when their period arrives.
+#[cfg(not(target_os = "windows"))]
+pub fn capture_host_ns(info: &cpal::InputCallbackInfo) -> i64 {
+    host_ns(&info.timestamp().callback)
+}
+
+#[cfg(target_os = "windows")]
+pub fn capture_host_ns(_info: &cpal::InputCallbackInfo) -> i64 {
+    now_host_ns()
+}
+
+#[cfg(target_os = "windows")]
+pub(crate) fn now_host_ns() -> i64 {
+    static ORIGIN: OnceLock<Instant> = OnceLock::new();
+    ORIGIN.get_or_init(Instant::now).elapsed().as_nanos() as i64
+}
+
 // Called by an input callback: notes the capture clock once (never blocks).
 pub fn note_capture_start(slot: &Mutex<Option<CaptureClock>>, info: &cpal::InputCallbackInfo) {
+    note_capture_start_at(slot, capture_host_ns(info));
+}
+
+pub(crate) fn note_capture_start_at(slot: &Mutex<Option<CaptureClock>>, first_capture_host_ns: i64) {
     let Ok(mut clock) = slot.try_lock() else { return };
     if clock.is_some() {
         return;
     }
     let anchor = ANCHOR.try_lock().ok().and_then(|value| *value);
     *clock = Some(CaptureClock {
-        first_capture_host_ns: host_ns(&info.timestamp().callback),
+        first_capture_host_ns,
         anchor_frame: anchor.map(|value| value.frame),
         anchor_host_ns: anchor.map(|value| value.host_ns),
         output_sample_rate: SAMPLE_RATE.load(Ordering::Acquire),
@@ -233,14 +261,16 @@ pub struct ScheduledCpalBackend {
     stop: Arc<AtomicBool>,
 }
 
+#[cfg(not(target_os = "windows"))]
 fn default_output() -> Result<(cpal::Device, cpal::StreamConfig), ScheduledBackendError> {
     let device = cpal::default_host()
         .default_output_device()
         .ok_or_else(|| ScheduledBackendError("no_default_output_device".into()))?;
-    let config = device
+    let supported = device
         .default_output_config()
-        .map_err(|error| ScheduledBackendError(format!("default_output_config: {error}")))?
-        .config();
+        .map_err(|error| ScheduledBackendError(format!("default_output_config: {error}")))?;
+    let mut config = supported.config();
+    config.buffer_size = direct::buffer_size(supported.buffer_size());
     // The mixer may route strips to this device's extra channel pairs.
     aux_outputs::note_output_device(device.name().unwrap_or_else(|_| "default".into()), config.channels, BLOCK_FRAMES);
     Ok((device, config))
@@ -261,46 +291,33 @@ pub(crate) fn note_output_quantum(host_ns: i64, frames: usize, popped: usize) {
     }
 }
 
+// The output rests: the frame/host relation is lost, the next quantum re-anchors it.
+pub(crate) fn note_rest() {
+    if let Ok(mut slot) = ANCHOR.lock() {
+        *slot = None;
+    }
+    DISCONTINUITIES.fetch_add(1, Ordering::AcqRel);
+}
+
+pub(crate) fn note_discontinuity() {
+    DISCONTINUITIES.fetch_add(1, Ordering::AcqRel);
+}
+
+#[cfg(not(target_os = "windows"))]
 fn build_stream(
     device: &cpal::Device,
     config: &cpal::StreamConfig,
     consumer: SharedConsumer,
     aux: SharedAuxConsumers,
+    direct: SharedDirect,
     lost: Arc<AtomicBool>,
 ) -> Result<cpal::Stream, ScheduledBackendError> {
     let device_channels = usize::from(config.channels.max(1));
-    let mut scratch = vec![0.0f32; FIFO_FRAMES * CHANNELS];
-    let mut aux_scratch = vec![0.0f32; FIFO_FRAMES * CHANNELS];
+    let mut fill = OutputFill::new(consumer, aux, direct);
     let stream = device
         .build_output_stream(
             config,
-            move |data: &mut [f32], info: &cpal::OutputCallbackInfo| {
-                let frames = data.len() / device_channels;
-                if scratch.len() < frames * CHANNELS {
-                    scratch.resize(frames * CHANNELS, 0.0);
-                }
-                let popped = match consumer.try_lock() {
-                    Ok(mut fifo) => fifo.pop_slice(&mut scratch[..frames * CHANNELS]) / CHANNELS,
-                    Err(_) => 0,
-                };
-                for frame in 0..frames {
-                    let (left, right) = if frame < popped {
-                        (scratch[frame * CHANNELS], scratch[frame * CHANNELS + 1])
-                    } else {
-                        (0.0, 0.0)
-                    };
-                    let out = &mut data[frame * device_channels..(frame + 1) * device_channels];
-                    if device_channels == 1 {
-                        out[0] = (left + right) * 0.5;
-                    } else {
-                        out[0] = left;
-                        out[1] = right;
-                        out[2..].iter_mut().for_each(|sample| *sample = 0.0);
-                    }
-                }
-                aux_outputs::write_aux(&aux, data, device_channels, frames.min(FIFO_FRAMES), &mut aux_scratch);
-                note_output_quantum(host_ns(&info.timestamp().callback), frames, popped);
-            },
+            move |data: &mut [f32], info: &cpal::OutputCallbackInfo| fill.fill(data, device_channels, host_ns(&info.timestamp().callback)),
             move |error| {
                 if matches!(error, cpal::StreamError::DeviceNotAvailable) {
                     lost.store(true, Ordering::Release);
@@ -322,9 +339,12 @@ impl Backend for ScheduledCpalBackend {
             SAMPLE_RATE.store(rate, Ordering::Release);
             return Ok((Self { stop: Arc::new(AtomicBool::new(false)) }, rate));
         }
-        let (_, config) = default_output()?;
-        SAMPLE_RATE.store(config.sample_rate.0, Ordering::Release);
-        Ok((Self { stop: Arc::new(AtomicBool::new(false)) }, config.sample_rate.0))
+        #[cfg(target_os = "windows")]
+        let rate = super::wasapi_duplex::output_rate().map_err(ScheduledBackendError)?;
+        #[cfg(not(target_os = "windows"))]
+        let rate = default_output()?.1.sample_rate.0;
+        SAMPLE_RATE.store(rate, Ordering::Release);
+        Ok((Self { stop: Arc::new(AtomicBool::new(false)) }, rate))
     }
 
     fn start(&mut self, renderer: Renderer) -> Result<(), Self::Error> {
@@ -338,13 +358,14 @@ impl Backend for ScheduledCpalBackend {
         let (aux_feeder, aux_consumers) = aux_outputs::create_aux(FIFO_FRAMES, BLOCK_FRAMES);
         let stop = Arc::clone(&self.stop);
         let (wake_tx, wake_rx) = std::sync::mpsc::channel::<()>();
+        let direct = direct::install(SAMPLE_RATE.load(Ordering::Acquire));
         if host_output::host_rate().is_some() {
             // The plugin host pulls the FIFO from its render block: no device, never at rest.
-            host_output::install(consumer);
+            host_output::install(consumer, direct);
             output_idle::stay_awake();
             drop(aux_consumers);
         } else {
-            start_device_thread(consumer, aux_consumers, Arc::clone(&stop), wake_rx)?;
+            start_device_thread(consumer, aux_consumers, direct, Arc::clone(&stop), wake_rx)?;
         }
         RUNNING.store(true, Ordering::Release);
         // The render thread keeps LOOKAHEAD_FRAMES rendered ahead of the device.
@@ -354,14 +375,21 @@ impl Backend for ScheduledCpalBackend {
     }
 }
 
+// On Windows the device thread is the WASAPI exclusive duplex one (wasapi_duplex.rs).
+#[cfg(target_os = "windows")]
+fn start_device_thread(consumer: SharedConsumer, aux: SharedAuxConsumers, direct: SharedDirect, stop: Arc<AtomicBool>, wake: std::sync::mpsc::Receiver<()>) -> Result<(), ScheduledBackendError> {
+    super::wasapi_duplex::start(OutputFill::new(consumer, aux, direct), stop, wake).map_err(ScheduledBackendError)
+}
+
 // The device thread owns the cpal stream (a cpal Stream is not Send),
 // rebuilds it on the default device when the device goes away, and pauses it
 // while the output rests (`output_idle`).
-fn start_device_thread(consumer: SharedConsumer, aux: SharedAuxConsumers, stop: Arc<AtomicBool>, wake: std::sync::mpsc::Receiver<()>) -> Result<(), ScheduledBackendError> {
+#[cfg(not(target_os = "windows"))]
+fn start_device_thread(consumer: SharedConsumer, aux: SharedAuxConsumers, direct: SharedDirect, stop: Arc<AtomicBool>, wake: std::sync::mpsc::Receiver<()>) -> Result<(), ScheduledBackendError> {
     let (ready_tx, ready_rx) = std::sync::mpsc::channel::<Result<(), String>>();
     crate::engine_thread::spawn(move || {
         let lost = Arc::new(AtomicBool::new(false));
-        let open = || default_output().and_then(|(device, config)| build_stream(&device, &config, Arc::clone(&consumer), Arc::clone(&aux), Arc::clone(&lost)));
+        let open = || default_output().and_then(|(device, config)| build_stream(&device, &config, Arc::clone(&consumer), Arc::clone(&aux), Arc::clone(&direct), Arc::clone(&lost)));
         let mut stream = match open() {
             Ok(stream) => {
                 let _ = ready_tx.send(Ok(()));
@@ -375,9 +403,10 @@ fn start_device_thread(consumer: SharedConsumer, aux: SharedAuxConsumers, stop: 
         let mut playing = true;
         while !stop.load(Ordering::Acquire) {
             let _ = wake.recv_timeout(Duration::from_millis(250));
-            if lost.swap(false, Ordering::AcqRel) || stream.is_none() {
+            // A lost device, or the direct path starting or ending (its buffer size).
+            if lost.swap(false, Ordering::AcqRel) | direct::take_rebuild() || stream.is_none() {
                 drop(stream.take());
-                DISCONTINUITIES.fetch_add(1, Ordering::AcqRel);
+                note_discontinuity();
                 stream = open().ok();
                 playing = stream.is_some();
             }
@@ -387,10 +416,7 @@ fn start_device_thread(consumer: SharedConsumer, aux: SharedAuxConsumers, stop: 
             } else if playing && output_idle::should_rest() {
                 // At rest the frame/host relation is lost: the next callback re-anchors it.
                 playing = current.pause().is_err();
-                if let Ok(mut slot) = ANCHOR.lock() {
-                    *slot = None;
-                }
-                DISCONTINUITIES.fetch_add(1, Ordering::AcqRel);
+                note_rest();
             }
         }
         drop(stream);

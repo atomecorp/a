@@ -1,7 +1,50 @@
 # Effets et générateurs audio — plan à suivre (28 oct. 2026)
 
-Statut : **plan, rien n'est codé.** Questions de conception à valider une à une (§9), maquettes
-panneau par panneau, code seulement après la dernière réponse.
+Statut (29 oct.) : maquettes validées, **code en cours, d'un seul tenant jusqu'au dernier lot** (règle
+AGENTS.md « A task runs to its end » : on ne rend pas la main tant qu'un lot reste, sauf blocage nommé).
+Fait : L1 (briques `atome-dsp`, hôte `dsp` dans `mix-graph`, latence réelle compensée), cœur de L3/L4 (NAM, convolution, reverb),
+L10 (effets Kira retirés de `mix-graph`, projets anciens convertis au chargement par
+`kernel/mix_kira_effects_conversion.js` ; sans équivalent : `stereo_width` de la reverb, `mix` du compresseur et du
+filtre), L11 + L12 (ports, clés, Retour de boucle, sondes `mix-graph` `port_tests` + `tests/no_alloc.rs`, noyau JS,
+lignes « Clé » et « Bande N → » dans la zone de la console), D27, D28 (1) (2 natif ; 2 Web avec L2) (3).
+
+Avancement du 29 oct. (soir), vérifié par sondes :
+- **L2** chemin direct : Tauri ≤ 256 trames, ≤ 5,3 ms à 48 kHz (sortie) ; Web par AudioWorklet (D28-2 Web : plus
+  d'allocation par pompe). Sur macOS, entrée et sortie restent deux flux cpal alignés par l'anneau d'entrée (cpal
+  0.15 n'a de flux duplex sur aucun hôte).
+- **D23-1 Windows (29 oct., nuit)** : sortie **WASAPI exclusive** par défaut, à la plus petite période de
+  l'interface, pilotée par événement, fil en classe « Pro Audio » ; **duplex** : toutes les entrées du moteur
+  (tranches en direct et prises) sont ouvertes en exclusif et lues **dans le même cycle que la sortie, sur le même
+  fil**, avant le chemin direct (`wasapi_client.rs`, `wasapi_duplex.rs`, `output_fill.rs`, `recorder_capture.rs`).
+  Une interface qui refuse l'exclusif est une erreur nommée (`wasapi_exclusive_refused`), jamais un flux partagé.
+  Vérifié ici : `cargo check --target x86_64-pc-windows-msvc` (lib et tests) sans avertissement, tests macOS
+  28/28. **Pas encore entendu : à essayer par l'utilisateur sur un PC Windows** (sortie, entrée en direct, prise
+  pendant la lecture, test `wasapi_client::tests`). **ASIO non fait** : il faut le SDK Steinberg (licence) et un
+  build sur Windows ; à décider par l'utilisateur.
+- **L3–L5** : Capture › Effets, tuiles, panneau d'interrupteur (D14), chaîne à la volée, Volume (D16, D19), Mes
+  effets ; retour à la réouverture (restauration au lancement, au premier toucher sur le Web).
+- **L6** : Mes effets dans l'ajout d'un module de la console du projet ; catégorie **Effets** du Finder
+  (`audio_effect`) ; **Effets** dans la bibliothèque du Dashboard (Média d'eVe Pro après Images, dernier rayon de la Médiathèque ; la tuile de Capture, même niveau) ; but
+  `creation/effects` de `ui.new_project` : un projet ouvert sur sa console, une piste son posée (sa 1re tranche).
+- **L7** : famille MCP `audio_fx` (catalog, inputs, start, stop, add, move, remove, set_param, bypass, set_input,
+  save, update, compose, delete), sonde bout à bout.
+- **L8** : entrée `host` de l'AUv3 (`host_output.rs#push_host_input`, `AUv3KiraEngine.swift#routeHostInput`) : une
+  tranche dont l'IN est « Hôte » joue le son de l'appli hôte à travers sa chaîne, le son sec n'est plus recopié
+  tant qu'elle l'écoute ; test Rust `direct_tests::the_host_input_reaches_the_strip_that_listens_to_it`. **À
+  essayer par l'utilisateur dans AUM.**
+- **Console du projet = tranche B** (D24) : colonne IN, modules, +, OUT, nom au pied ; panneau soudé (préréglage,
+  choix, tool sliders deux par rangée) ; les tranches voisines s'écartent.
+- Charte : règle 14 (D12b, D18), règle 20 (D13), règle 13 (D14), règle 15 (`combo_rail`).
+- Restent ouverts : propriétaire unique du geste de la règle 20 et revue des outils ; dans la console du projet,
+  maintien-réordonner et glissé-bypass sur Volume/Pan, « Enregistrer le préréglage », recherche TONE3000, combo
+  déplié ; virgule décimale selon la langue dans les valeurs ; maître de scène à l'ancien aspect ; Favori des
+  briques d'effet ; clé TONE3000 et `server/ws_tone3000.js` à mettre sur atome.one (déploiement avec l'accord de
+  l'utilisateur).
+- TONE3000 réel (29 oct., soir) : clé `t3k_cs_` posée par l'utilisateur dans `private/tone3000.txt` (le fichier
+  porte aussi la clé publishable et la legacy, non utilisées) ; vrai appel par `handleWsTone3000` : recherche
+  « Marshall JCM800 » 25 tons, liste des modèles (8 A2), téléchargement de 295 ko (`SlimmableContainer` 0.7.0,
+  48 kHz), chargé par `AmpModel` et joué à 48 et 44,1 kHz, tailles 1 et 0,3, sortie finie, ≈ 0,2 s de calcul par
+  seconde à pleine taille (sonde `temp/tone3000/`).
 
 Demande de l'utilisateur, résumée :
 
@@ -179,6 +222,8 @@ relève du développement (une session sur le repo), pas de l'app en marche — 
 | **L7** | Famille MCP `audio_fx` + `compose` | sonde MCP bout à bout |
 | **L8** | AUv3 : l'entrée de l'hôte traverse la chaîne | l'utilisateur dans AUM |
 | **L9** | Générateurs : mêmes processeurs sans entrée (oscillateurs, enveloppes, synthé simple), entrée MIDI, tranche d'entrée `generator`, « Mes instruments » | à planifier après L6 sur le même modèle |
+| **L11** | **Effets multi-sorties** : un module peut avoir plusieurs sorties (séparation en bandes, mid/side, gauche/droite…) ; chaque sortie part vers une ou plusieurs destinations (entrée d'une autre tranche, sortie, clé d'un module) ; la sortie principale continue la chaîne ; latence compensée sur chaque chemin | sonde Rust : bandes recombinées = signal d'origine ; bande routée vers une autre tranche alignée |
+| **L12** | **Sidechain générique** : toute brique à entrée de clé (compresseur, gate, ducking…) prend sa clé d'une tranche, d'une entrée ou d'une sortie de module ; boucles autorisées par un Retour (D27) | sonde : ducking d'une tranche par une autre ; clé prise sur une bande |
 | **L10** | Remplacer les effets Kira intégrés (reverb façon Freeverb…) par ceux d'`atome-dsp` | écoute A/B + CPU |
 
 Plateformes : Web + Tauri d'abord (vérifiables ici), iOS/AUv3 ensuite (testés par l'utilisateur sur l'iPad).
@@ -375,3 +420,33 @@ processeur couvre le besoin) — à rediscuter au lot L9.
      sonde ; L9 sort du lot.
   9. Jeu : MIDI, séquenceur, timeline ; clavier à l'écran = plus tard, avec maquette.
   10. Anciens effets convertis automatiquement à l'ouverture, puis ancien code supprimé.
+- **D24 (29 oct.) — Q5 : la nouvelle tranche (B) partout**, Dashboard et projet ; l'ancienne console disparaît.
+  Dans un projet, un effet ouvert garde le **panneau soudé standard** (cartes : préréglage, puis ses réglages en tool
+  sliders deux par rangée, D12b) ; les tranches voisines se décalent, jamais recouvertes. Maquette
+  `m6b3_console_reverb_panneau.png` (à valider).
+- **Volume déployé gradué** (à valider, `m3f_volume_gradue.png`) : la valeur en haut à la place du haut-parleur
+  (supprimé), la graduation dB sur le côté (+12…−∞), l'outil déployé prend la largeur de la tranche (deux outils).
+- **D25 (29 oct.) — `m3f_volume_gradue.png` et `m6b3_console_reverb_panneau.png` validés.** Toutes les questions et
+  maquettes sont closes ; feu vert pour coder tous les lots (L1–L8, L10 ; L9 réduit aux briques DSP de base).
+- **D26 (29 oct.) — routage** (confirmé par l'utilisateur) : un générateur (synthé) est un **nœud d'entrée** de
+  tranche (choisi au IN comme un micro). Le routage est un **graphe** : la sortie d'une tranche peut aller vers une
+  autre tranche, une tranche peut être choisie comme entrée d'une autre, et un **nœud « tranche »** insère une
+  tranche entière comme module dans une autre (insert). Plusieurs sorties et envois possibles. ~~Toute boucle est
+  refusée à la connexion~~ — **erreur de transcription, corrigée par D27** ; la compensation de latence
+  couvre tous les chemins parallèles (D3).
+- **D27 (29 oct.) — les boucles de retour sont AUTORISÉES** (validé deux fois par l'utilisateur ; le refus écrit en
+  D26 était faux). Entre briques et entre tranches. Une boucle se ferme par un **Retour** qui lit le bloc précédent
+  (128 trames fixes, rendu déterministe), protégé par un limiteur et une garde contre les valeurs non finies ;
+  signalée dans le design, jamais par pop-up ni notification. À changer dans le code : `graph.rs#dependency_order`
+  (« mix routing loop ») et `kernel/mix_routing.js#findCycle`, qui refusent encore toute boucle.
+- **D28 (29 oct.) — défauts à corriger dans L1** (relevés par l'audit du chantier synthé, l'utilisateur demande
+  de les corriger) : (1) `graph.rs:252` saute un module dont le `try_lock` échoue (son sec, ou trou pour un
+  générateur) → aucun verrou dans le rendu ; (2) ni FTZ/DAZ ni test « zéro allocation » ; le Web alloue des `Vec`
+  à chaque pompe (`audio-wasm/src/scheduled_backend.rs#render_ahead`) ; (3) `mix.module.add`
+  (`timeline_tool_contract.js:19-20`) n'accepte pas `type: 'dsp'` : le MCP ne peut pas poser une brique.
+- **D29 (29 oct.) — multi-sorties et sidechain (L11, L12)** : un effet à bandes garde **par défaut chaque bande dans
+  la tranche** (rien ne se perd) ; une bande peut être envoyée vers une autre tranche, elle quitte alors la tranche.
+  La destination d'une sortie en plus et la **clé** d'un sidechain se choisissent **dans le panneau soudé** du module :
+  carte « Sorties » (une ligne par sortie) et ligne « Clé », qui déplient la même liste que IN/OUT (motif existant).
+  Dans la colonne de la tranche, **rien** ne le signale (zen). Premiers effets : Bandes 2/3/4 (Linkwitz-Riley),
+  compresseur à clé, ducking, gate à clé, Mid/Side et Gauche/Droite.

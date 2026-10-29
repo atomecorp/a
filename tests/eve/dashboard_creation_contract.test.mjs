@@ -65,9 +65,15 @@ test.each(Object.entries(DASHBOARD_PROJECT_GOALS).flatMap(([family, goals]) => g
     const create = vi.fn(async input => ({ project: { id: 'new', name: input.name } }));
     const newsCreator = vi.fn();
     const openProject = vi.fn(async () => ({ ok: true }));
+    const soundTrack = vi.fn(async () => {});
     const actions = createDashboardCreationActions({ projectCreator: async () => create, newsCreator,
-        openProject });
+        openProject, soundTrack });
     const result = await actions.createGuidedProject({ family, goal });
+    // A project of effects opens on its console, one sound track laid in its timeline.
+    if (family === 'creation' && goal === 'effects') {
+        expect(create.mock.calls[0][0].properties.view_mode).toBe('mix');
+        expect(soundTrack).toHaveBeenCalledExactlyOnceWith('new', expect.any(String));
+    } else expect(soundTrack).not.toHaveBeenCalled();
     expect(result.ok).toBe(true);
     expect(create).toHaveBeenCalledExactlyOnceWith({ name: expect.any(String), empty: true,
         properties: expect.objectContaining({ project_intent: expect.objectContaining({ family, goal }) }) });

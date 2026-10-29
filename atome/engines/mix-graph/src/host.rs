@@ -86,6 +86,18 @@ impl MixHost {
         self.graph.module_state(module_id)
     }
 
+    pub fn load_asset(&mut self, asset_id: &str, asset: crate::dsp_module::StoredAsset) {
+        self.graph.load_asset(asset_id, asset);
+    }
+
+    pub fn unload_asset(&mut self, asset_id: &str) -> Result<(), String> {
+        self.graph.unload_asset(asset_id)
+    }
+
+    pub fn graph_mut(&mut self) -> &mut MixGraph {
+        &mut self.graph
+    }
+
     pub fn graph(&self) -> &MixGraph {
         &self.graph
     }

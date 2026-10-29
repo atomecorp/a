@@ -1,0 +1,19 @@
+[package]
+name = "atome-direct-wasm"
+version = "0.1.0"
+edition = "2021"
+description = "The direct path (live inputs, standalone effects) for an AudioWorklet: atome-mix-graph + atome-dsp behind a plain C ABI"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+atome-mix-graph = { path = "../../../atome/engines/mix-graph" }
+kira = { version = "0.12", default-features = false }
+serde_json = "1"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"

@@ -80,7 +80,7 @@ test('strips follow content lanes; a video with sound is a native group, a silen
 
 test('modules are added, tuned, moved, bypassed and removed on the chain', () => {
     let timeline = fixture();
-    timeline = addMixModule(timeline, { strip_id: voice, module_id: 'fx_rev', type: 'fx', effect: 'reverb', index: 0 });
+    timeline = addMixModule(timeline, { strip_id: voice, module_id: 'fx_rev', type: 'dsp', effect: 'reverb', index: 0 });
     timeline = updateMixModule(timeline, { strip_id: voice, module_id: 'fx_rev', params: { mix: 0.5 } });
     timeline = addMixModule(timeline, { strip_id: voice, module_id: 'send_a', type: 'send', destination: { kind: 'bus', id: 'mix_bus' } });
     timeline = moveMixModule(timeline, { strip_id: voice, module_id: 'mix_empty_1:audio:volume', index: 0 });
@@ -89,8 +89,8 @@ test('modules are added, tuned, moved, bypassed and removed on the chain', () =>
     assert.deepEqual(chain.map((module) => module.module_id), ['mix_empty_1:audio:volume', 'fx_rev', 'mix_empty_1:audio:pan', 'send_a']);
     assert.equal(chain[1].params.mix, 0.5);
     assert.equal(chain[1].bypass, true);
-    timeline = updateMixModule(timeline, { strip_id: voice, module_id: 'fx_rev', effect: 'delay' });
-    assert.equal(readMixStrip(timeline, voice).chain[1].params.time, 0.375);
+    timeline = updateMixModule(timeline, { strip_id: voice, module_id: 'fx_rev', effect: 'echo' });
+    assert.equal(readMixStrip(timeline, voice).chain[1].params.time_ms, 377);
     timeline = removeMixModule(timeline, { strip_id: voice, module_id: 'fx_rev' });
     chain = readMixStrip(timeline, voice).chain;
     assert.equal(chain.length, 3);
@@ -98,7 +98,7 @@ test('modules are added, tuned, moved, bypassed and removed on the chain', () =>
     assert.throws(() => updateMixModule(timeline, { strip_id: voice, module_id: 'mix_empty_1:audio:volume', params: { gain_db: 40 } }), /between/);
 });
 
-test('outputs: none keeps sends, incompatible destinations and loops are refused', () => {
+test('outputs: none keeps sends, incompatible destinations are refused, loops are allowed', () => {
     let timeline = fixture();
     timeline = addMixModule(timeline, { strip_id: voice, module_id: 'send_a', type: 'send', destination: { kind: 'bus', id: 'mix_bus' } });
     timeline = setMixOutput(timeline, { strip_id: voice, destination: null });
@@ -109,7 +109,10 @@ test('outputs: none keeps sends, incompatible destinations and loops are refused
     assert.equal(readMixStrip(timeline, voice).output.enabled, false);
     assert.throws(() => setMixOutput(timeline, { strip_id: filmVideo, destination: { kind: 'main' } }), /not compatible/);
     assert.throws(() => setMixOutput(timeline, { strip_id: voice, destination: { kind: 'strip', id: filmVideo } }), /another signal type/);
-    assert.throws(() => setMixOutput(timeline, { strip_id: busStrip, destination: { kind: 'strip', id: voice } }), /routing loop/);
+    // A loop is allowed: the engine closes it through a return (D27).
+    timeline = setMixOutput(timeline, { strip_id: voice, destination: { kind: 'bus', id: 'mix_bus' } });
+    timeline = setMixOutput(timeline, { strip_id: busStrip, destination: { kind: 'strip', id: voice } });
+    assert.deepEqual(readMixStrip(timeline, busStrip).output.destination, { kind: 'strip', id: voice });
 });
 
 test('audio groups are sub-mix buses; leaving restores the master destination; native groups detach', () => {

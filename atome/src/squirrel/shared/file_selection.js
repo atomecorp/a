@@ -12,7 +12,7 @@ const isNativeImportBridgeAvailable = () => {
 
 // The sources a caller may offer inline, on this host: the native app opens
 // its camera, camera roll and files directly; an Audio Unit has no camera; a
-// browser has its file window and, in a secure context, the camera.
+// browser has its file window and, in a secure context, the camera and a still of the screen (Écran).
 const availableMediaSources = ({ kinds = ['image'] } = {}) => {
     const win = typeof window !== 'undefined' ? window : null;
     const visual = (Array.isArray(kinds) ? kinds : [kinds]).some((kind) => kind === 'image' || kind === 'video');
@@ -22,7 +22,8 @@ const availableMediaSources = ({ kinds = ['image'] } = {}) => {
         return extension ? ['photos', 'files'] : ['camera', 'photos', 'files'];
     }
     const camera = win?.isSecureContext === true && typeof win.navigator?.mediaDevices?.getUserMedia === 'function';
-    return camera ? ['camera', 'files'] : ['files'];
+    const screen = win?.isSecureContext === true && typeof win.navigator?.mediaDevices?.getDisplayMedia === 'function';
+    return [...(camera ? ['camera'] : []), 'files', ...(screen ? ['screen'] : [])];
 };
 
 const inferMimeTypeFromName = (name = '') => {

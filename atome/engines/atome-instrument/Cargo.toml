@@ -1,0 +1,21 @@
+[package]
+name = "atome-instrument"
+version = "0.1.0"
+edition = "2021"
+description = "eVe instruments: note events, voice allocation and the sampler, played through the atome-dsp processor contract"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+atome-dsp = { path = "../atome-dsp" }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+
+# Real-time stretch (Q2, measured against Rubber Band: temp/synth/stretch_probe).
+# Its C++ core does not build for wasm32: there a stretched segment is refused.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+signalsmith-stretch = "0.1.3"

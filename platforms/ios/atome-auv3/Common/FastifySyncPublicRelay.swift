@@ -11,7 +11,7 @@ extension FastifySyncClient {
     // returned.
     static let publicTypes: Set<String> = ["youtube-search", "peertube-search", "peertube-resolve", "tv-catalog",
         "tv-resolve", "shows-nearby", "video-catalog", "gps-resource", "food-facts",
-        "book-source", "book-fetch", "media-library-search", "media-library-fetch", "bug-report-submit", "bug-report-status", "shop-public", "coaches-public"]
+        "book-source", "book-fetch", "media-library-search", "media-library-fetch", "bug-report-submit", "bug-report-status", "shop-public", "coaches-public", "tone3000"]
 
     func relayPublic(_ payload: [String: Any], reply: @escaping ([String: Any]) -> Void) {
         let requestId = payload["requestId"] ?? NSNull()

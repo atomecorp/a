@@ -1,127 +1,36 @@
 #!/bin/sh
-# =============================================================================
-# Atome OS / eVe — Universal Builder
-# core/build.sh — orchestrateur principal
-#
-# Usage:
-#   sudo ./core/build.sh --arch amd64 --profile desktop
-#   sudo ./core/build.sh --arch arm64 --profile minimal
-#   sudo ./core/build.sh --arch amd64 --profile dev
-#   sudo ./core/build.sh --arch amd64 --profile audio
-#
-# Options:
-#   --arch <amd64|arm64>         architecture cible
-#   --profile <name>             profil (minimal|desktop|dev|audio|custom)
-#   --freebsd-version <x.y>      override la détection "latest"
-#   --keep-work                  conserve le chroot après build (debug)
-#   --no-auto-update             désactive le service auto-update dans l'image
-#   --help                       affiche cette aide
-# =============================================================================
-
+# Native executor for the canonical AOS recipe; macOS uses the CLI/SSH boundary.
 set -eu
-
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-BUILDER_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-LIB_DIR="${SCRIPT_DIR}/lib"
-SCRIPTS_DIR="${BUILDER_ROOT}/scripts"
-
-# shellcheck source=lib/common.sh
-. "${LIB_DIR}/common.sh"
-# shellcheck source=lib/yaml.sh
-. "${LIB_DIR}/yaml.sh"
-# shellcheck source=lib/versions.sh
-. "${LIB_DIR}/versions.sh"
-
-# ---------------------------------------------------------------------------
-# Defaults + parsing arguments
-# ---------------------------------------------------------------------------
-ARCH=""
-PROFILE="desktop"
-FREEBSD_VERSION=""
-KEEP_WORK=false
-AUTO_UPDATE=true
-
-usage() {
-    sed -n '2,20p' "$0"
-    exit 0
-}
-
-while [ $# -gt 0 ]; do
-    case "$1" in
-        --arch)              ARCH="$2"; shift 2 ;;
-        --profile)           PROFILE="$2"; shift 2 ;;
-        --freebsd-version)   FREEBSD_VERSION="$2"; shift 2 ;;
-        --keep-work)         KEEP_WORK=true; shift ;;
-        --no-auto-update)    AUTO_UPDATE=false; shift ;;
-        --help|-h)           usage ;;
-        *) log_error "Option inconnue: $1"; usage ;;
-    esac
-done
-
-[ -z "${ARCH}" ] && { log_error "--arch est requis (amd64 ou arm64)"; exit 1; }
-[ "$(id -u)" -ne 0 ] && { log_error "build.sh doit être exécuté en root (sudo)"; exit 1; }
-
-case "${ARCH}" in
-    amd64|arm64) ;;
-    *) log_error "Architecture non supportée: ${ARCH}"; exit 1 ;;
-esac
-
-PROFILE_FILE="${BUILDER_ROOT}/profiles/${PROFILE}.yml"
-[ ! -f "${PROFILE_FILE}" ] && { log_error "Profil introuvable: ${PROFILE_FILE}"; exit 1; }
-
-log_info "=========================================="
-log_info "Atome OS Universal Builder"
-log_info "  Architecture : ${ARCH}"
-log_info "  Profil       : ${PROFILE}"
-log_info "  Auto-update  : ${AUTO_UPDATE}"
-log_info "=========================================="
-
-# ---------------------------------------------------------------------------
-# Résolution des versions "latest"
-# ---------------------------------------------------------------------------
-if [ -z "${FREEBSD_VERSION}" ]; then
-    FREEBSD_VERSION="$(resolve_freebsd_latest)"
-fi
-log_info "FreeBSD RELEASE ciblé : ${FREEBSD_VERSION}"
-
-NODE_VERSION="$(resolve_node_lts)"
-log_info "Node LTS ciblé        : ${NODE_VERSION}"
-
-RUBY_VERSION="$(resolve_ruby_latest)"
-log_info "Ruby ciblé            : ${RUBY_VERSION}"
-
-export BUILDER_ROOT ARCH PROFILE FREEBSD_VERSION NODE_VERSION RUBY_VERSION AUTO_UPDATE KEEP_WORK
-
-# ---------------------------------------------------------------------------
-# Pipeline de build
-# ---------------------------------------------------------------------------
-run_step() {
-    step_name="$1"
-    script="$2"
-    log_info ">>> [Étape] ${step_name}"
-    if ! "${SCRIPTS_DIR}/${script}"; then
-        log_error "Étape échouée : ${step_name}"
-        exit 1
+[ "$#" -eq 1 ] && [ -f "$1" ] || { printf '%s\n' 'Use scripts/aOS.sh build --target ... --source-commit ...' >&2; exit 1; }
+AOS_PLAN=$1
+BUILDER_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+export AOS_PLAN BUILDER_ROOT
+. "${BUILDER_ROOT}/core/lib/common.sh"
+cleanup() {
+    result=0
+    if [ -f "${WORK_DIR}/devfs-mounted" ]; then
+        if umount "${WORK_MNT}/dev"; then rm "${WORK_DIR}/devfs-mounted"; else result=1; fi
     fi
-    log_ok   "<<< [OK]     ${step_name}"
+    if [ -f "${WORK_DIR}/root-mounted" ]; then
+        if umount "${WORK_MNT}"; then rm "${WORK_DIR}/root-mounted"; else result=1; fi
+    fi
+    if [ -f "${WORK_DIR}/md-unit" ] && [ "$result" -eq 0 ]; then
+        unit=$(cat "${WORK_DIR}/md-unit")
+        case "$unit" in md*[!0-9]*|'') result=1 ;; md*)
+            if mdconfig -d -u "${unit#md}"; then rm "${WORK_DIR}/md-unit"; else result=1; fi ;;
+            *) result=1 ;;
+        esac
+    fi
+    [ "$result" -eq 0 ] || log_error "Cleanup incomplete: keep ${WORK_DIR} and detach its recorded resources manually"
+    return "$result"
 }
-
-run_step "Pré-vérifs environnement"         preflight.sh
-run_step "Téléchargement image FreeBSD"     fetch_base_image.sh
-run_step "Montage image de travail"         mount_image.sh
-run_step "Installation paquets système"     install_packages.sh
-run_step "Installation runtime Atome"       install_runtime.sh
-run_step "Configuration boot silencieux"    configure_boot.sh
-run_step "Configuration UI / webview"       configure_ui.sh
-run_step "Configuration réseau + update"    configure_network.sh
-
-# Config audio uniquement si le profil le demande
-if profile_has_stack "${PROFILE_FILE}" audio; then
-    run_step "Configuration audio basse latence" configure_audio.sh
-fi
-
-run_step "Finalisation image"               finalize_image.sh
-
-log_ok "=========================================="
-log_ok "Image générée avec succès dans ${BUILDER_ROOT}/output/"
-log_ok "=========================================="
+trap 'status=$?; trap - EXIT; if ! cleanup; then status=1; fi; exit "$status"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+for stage in preflight fetch_base_image mount_image install_packages install_runtime configure_boot configure_ui configure_audio configure_network; do
+    log_info "Stage: ${stage} (${TARGET})"
+    /bin/sh "${BUILDER_ROOT}/scripts/${stage}.sh"
+done
+cleanup
+/bin/sh "${BUILDER_ROOT}/scripts/finalize_image.sh"
+log_info "Assembly complete. Boot, WebGPU, audio and MIDI remain unvalidated."

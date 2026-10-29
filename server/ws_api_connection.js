@@ -26,7 +26,7 @@ import { ensureVideoPlaybackCache } from './server_media.js';
 import { sanitizeUploadId, coerceWsChunkSize, resolveUserId } from './server_utils.js';
 import { listUserDownloadsSnapshot, resolveDownloadTarget } from './server_uploads.js';
 import { handleWsApiAtomeRequest } from './ws_api_atome_request.js';
-import { handleWsNewsRequest, handleWsCommunityRequest, handleWsContactRequest, handleWsShareRequest, handleWsShellRequest } from './ws_api_message_handlers.js';
+import { handleWsNewsRequest, handleWsMembershipRequest, handleWsContactRequest, handleWsShareRequest, handleWsShellRequest } from './ws_api_message_handlers.js';
 
 export function registerWsApiRoute(server, {
   projectRoot,
@@ -43,6 +43,7 @@ export function registerWsApiRoute(server, {
   newsBroadcast,
   newsPublishRateAllowed,
   communities,
+  forums,
   publicEvents,
   shop,
   coaches,
@@ -195,8 +196,8 @@ export function registerWsApiRoute(server, {
           return;
         }
 
-        if (data.type === 'community') {
-          await handleWsCommunityRequest({ data, connection, safeSend, communities });
+        if (data.type === 'community' || data.type === 'forum') {
+          await handleWsMembershipRequest({ data, connection, safeSend, service: data.type === 'forum' ? forums : communities, kind: data.type });
           return;
         }
 

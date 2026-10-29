@@ -38,7 +38,7 @@ test('only audio lanes compile, with buses as strip targets and canonical module
     timeline = addMixModule(timeline, {
         strip_id: 'voice:audio', module_id: 'send_1', type: 'send', destination: { kind: 'bus', id: 'bus' }, index: 0
     });
-    timeline = addMixModule(timeline, { strip_id: 'voice:audio', module_id: 'rev', type: 'fx', effect: 'reverb' });
+    timeline = addMixModule(timeline, { strip_id: 'voice:audio', module_id: 'rev', type: 'dsp', effect: 'reverb' });
     timeline = setMixOutput(timeline, { strip_id: 'film:audio', enabled: false });
     const program = compileMoleculeMixProgram(timeline);
     assert.deepEqual(program.map((strip) => strip.id), ['voice:audio', 'film:audio', 'bus:audio']);
@@ -47,7 +47,7 @@ test('only audio lanes compile, with buses as strip targets and canonical module
         ['send_1', 'send', { kind: 'strip', id: 'bus:audio' }],
         ['voice:audio:volume', 'volume', null],
         ['voice:audio:pan', 'pan', null],
-        ['rev', 'fx', null]
+        ['rev', 'dsp', null]
     ]);
     assert.equal(voice.chain[3].effect, 'reverb');
     assert.deepEqual(voice.output, { kind: 'main' });

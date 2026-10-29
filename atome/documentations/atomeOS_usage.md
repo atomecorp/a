@@ -1,80 +1,24 @@
-# Atome OS usage
+# atome/eVe OS usage
 
-Atome OS is the FreeBSD image builder for running Atome/eVe as a bootable kiosk-style operating system. It is platform packaging infrastructure, not part of the Atome runtime API.
-
-## Location
-
-```text
-platforms/atomeOS/builder/
-```
-
-The builder owns its scripts, profiles, package manifests, overlays, installers, and local technical docs as one coherent platform target.
-
-## Purpose
-
-The builder creates bootable FreeBSD images that start the Atome/eVe environment directly, with a silent boot and fullscreen webview.
-
-Supported targets are:
-
-- `amd64` for desktop, laptop, and VM.
-- `arm64` for Apple Silicon VMs and SBC-style targets.
-
-## Main commands
-
-Run commands from:
+The canonical FreeBSD image builder lives at `platforms/atomeOS/builder/`.
+It is packaging infrastructure, not a new atome application runtime. Its public
+entry point is `scripts/aOS.sh` from the framework root.
 
 ```sh
-cd platforms/atomeOS/builder
+./scripts/aOS.sh list
+./scripts/aOS.sh plan --target all --modules display,audio,midi
+./scripts/aOS.sh preflight --target all
 ```
 
-Preflight:
+PC amd64, PINE64 A64+ 2 GB and Mac Intel/Apple Silicon VM recipes coexist.
+Display, audio and MIDI are composable selections. A configuration declaration
+is not proof of boot, graphical operation or native headless audio/MIDI support.
+Builds require an explicitly selected source commit and a native FreeBSD backend
+of matching architecture/version. The Mac can dispatch to existing backends,
+retrieve/verify artifacts and safely flash explicitly selected external media.
+No runtime, physical boot or peripheral qualification has yet been performed for
+this builder revision. No publication, internal installer or rollback is implied.
 
-```sh
-sudo ./scripts/preflight.sh
-```
-
-Desktop image:
-
-```sh
-sudo ./core/build.sh --arch amd64 --profile desktop
-```
-
-Minimal image:
-
-```sh
-sudo ./core/build.sh --arch arm64 --profile minimal
-```
-
-Development image:
-
-```sh
-sudo ./core/build.sh --arch amd64 --profile dev
-```
-
-Audio profile:
-
-```sh
-sudo ./core/build.sh --arch amd64 --profile audio
-```
-
-The output image is produced under:
-
-```text
-platforms/atomeOS/builder/output/
-```
-
-## Internal structure
-
-- `core/`: build orchestrator and shared shell libraries.
-- `scripts/`: build pipeline steps.
-- `profiles/`: image profiles such as `minimal`, `desktop`, `dev`, and `audio`.
-- `packages/`: package stacks installed into the image.
-- `overlays/`: files injected into the FreeBSD image.
-- `installer/`: notes and plans for desktop and SBC install flows.
-- `docs/`: detailed builder documentation.
-
-## Placement rule
-
-Keep Atome OS under `platforms/atomeOS/`.
-
-Do not move it into `atome/`, because it is not runtime code. Do not flatten it into root `scripts/`, because the scripts depend on colocated profiles, package manifests, overlays, and local docs.
+Current commands, safeguards and limitations are maintained in the
+[builder README](../../platforms/atomeOS/builder/README.md); the existing task
+record is [atome OS Audit](../../todo/atome%20OS%20Audit.md).

@@ -2279,17 +2279,17 @@ async fn handle_state_current_get(
     };
 
     // Same row as the Fastify read (database/adole_event_state_reads.js): the atome type comes from `atomes`.
-    let row: Option<(String, Option<String>, Option<String>, Option<String>, String, i64, Option<String>, Option<String>)> = db
+    let row: Option<(String, Option<String>, Option<String>, Option<String>, String, i64, Option<String>, Option<String>, Option<String>)> = db
         .query_row(
-            "SELECT sc.atome_id, sc.owner_id, sc.project_id, sc.properties, sc.updated_at, sc.version, a.parent_id, a.atome_type FROM state_current sc LEFT JOIN atomes a ON a.atome_id = sc.atome_id WHERE sc.atome_id = ?1",
+            "SELECT sc.atome_id, sc.owner_id, sc.project_id, sc.properties, sc.updated_at, sc.version, a.parent_id, a.atome_type, a.created_at FROM state_current sc LEFT JOIN atomes a ON a.atome_id = sc.atome_id WHERE sc.atome_id = ?1",
             rusqlite::params![atome_id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?)),
         )
         .optional()
         .unwrap_or(None);
 
     let state_payload = row.and_then(
-        |(id, owner_id, project_id, properties, updated_at, version, parent_id, atome_type)| {
+        |(id, owner_id, project_id, properties, updated_at, version, parent_id, atome_type, created_at)| {
             let properties = parse_json_value(properties.as_ref());
             let projected = super::local_atome_security::project_properties_for_read(
                 &db, &id, user_id, &properties
@@ -2310,6 +2310,7 @@ async fn handle_state_current_get(
                 "capabilities": super::local_atome_security::project_capabilities_for_read(
                     &db, &id, user_id, keys.into_iter()
                 ),
+                "created_at": created_at,
                 "updated_at": updated_at,
                 "version": version
             }))
@@ -2407,7 +2408,7 @@ async fn handle_state_current_list(
     // The page is chosen on ids only: sorting whole rows spilled OFFSET + LIMIT
     // `properties` blobs to a temporary file for every page.
     let query = format!(
-        "SELECT sc.atome_id, sc.owner_id, sc.project_id, sc.properties, sc.updated_at, sc.version, a.parent_id, a.atome_type FROM state_current sc LEFT JOIN atomes a ON a.atome_id = sc.atome_id WHERE sc.atome_id IN (SELECT sc.atome_id FROM state_current sc LEFT JOIN atomes a ON a.atome_id = sc.atome_id{} ORDER BY sc.updated_at DESC, sc.atome_id LIMIT ? OFFSET ?) ORDER BY sc.updated_at DESC, sc.atome_id",
+        "SELECT sc.atome_id, sc.owner_id, sc.project_id, sc.properties, sc.updated_at, sc.version, a.parent_id, a.atome_type, a.created_at FROM state_current sc LEFT JOIN atomes a ON a.atome_id = sc.atome_id WHERE sc.atome_id IN (SELECT sc.atome_id FROM state_current sc LEFT JOIN atomes a ON a.atome_id = sc.atome_id{} ORDER BY sc.updated_at DESC, sc.atome_id LIMIT ? OFFSET ?) ORDER BY sc.updated_at DESC, sc.atome_id",
         where_clause
     );
     let mut params = scope_params;
@@ -2429,6 +2430,7 @@ async fn handle_state_current_list(
                 "parent_id": row.get::<_, Option<String>>(6)?,
                 "atome_type": row.get::<_, Option<String>>(7)?,
                 "properties": parse_json_value(properties.as_ref()),
+                "created_at": row.get::<_, Option<String>>(8)?,
                 "updated_at": row.get::<_, String>(4)?,
                 "version": row.get::<_, i64>(5)?
             }))

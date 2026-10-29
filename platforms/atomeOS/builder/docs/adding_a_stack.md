@@ -1,121 +1,17 @@
-# Ajouter une nouvelle stack
+# Extend the existing recipe
 
-Le builder est pensé pour qu'ajouter une stack technique (ex : Python, Go, Elixir, DSP spécifique) soit **une opération locale** qui ne touche aucun script.
+Add a cohesive `packages/<stack>.yml` with `stack.name` and `stack.pkg`.
+Connect it through `core/config.yml` module stacks or an existing profile's stacks.
+No per-target orchestrator, application runtime or package installer is added.
 
-## Étapes
+Add a target in `core/config.yml` only after identifying its official base image,
+architecture/boot chain and output formats. The common `baseImage` owner handles
+image selection; extend it for an evidenced new upstream naming/boot requirement.
+Keep model/peripheral qualification in the existing matrix, marked untested until
+proved. An option or package declaration is not a validated capability.
 
-### 1. Créer `packages/<nom>.yml`
-
-Exemple : ajouter Python comme stack first-class.
-
-```yaml
-# packages/python.yml
-stack:
-  name: python
-  pkg:
-    - python3
-    - py311-pip
-    - py311-virtualenv
-    - py311-setuptools
-  pip_global:
-    - "fastapi"
-    - "uvicorn"
-```
-
-### 2. Déclarer la stack dans `core/config.yml`
-
-Sous `stacks_available` :
-
-```yaml
-stacks_available:
-  - base
-  - js
-  - ruby
-  - rust
-  - native
-  - webview
-  - audio
-  - network
-  - python        # ← ajouté
-```
-
-### 3. Activer la stack dans les profils concernés
-
-Dans `profiles/dev.yml` par exemple :
-
-```yaml
-stacks:
-  - base
-  - js
-  - ruby
-  - rust
-  - native
-  - webview
-  - audio
-  - network
-  - python        # ← activée pour le profil dev
-```
-
-### 4. (Optionnel) Post-install spécifique
-
-Si la stack a besoin d'une installation globale d'outils (pip, gem, cargo, npm…), ajouter un case dans `scripts/install_packages.sh` section "Post-install spécifiques aux stacks".
-
-```sh
-case "${stack}" in
-    # ...
-    python)
-        pips=$(awk '
-            /^[[:space:]]+pip_global:/ { capture=1; next }
-            capture && /^[[:space:]]+-/ {
-                sub(/^[[:space:]]+-[[:space:]]*/, "")
-                gsub(/"/, "")
-                print
-            }
-            capture && /^[[:space:]]*[a-z_]+:/ && !/^[[:space:]]+-/ { capture=0 }
-        ' "${BUILDER_ROOT}/packages/python.yml")
-        if [ -n "${pips}" ]; then
-            ${CHROOT} pip3 install ${pips}
-        fi
-        ;;
-esac
-```
-
-### 5. Tester
-
-```sh
-sudo ./core/build.sh --arch amd64 --profile dev
-```
-
-## Cas spéciaux
-
-### Stack avec service au boot
-
-Si la stack doit démarrer un daemon au boot, ajouter dans `overlays/services/<nom>.rc` un script rc.d et l'activer dans un `configure_*.sh` ou directement dans `install_packages.sh` via `sysrc <name>_enable="YES"`.
-
-### Stack avec configuration utilisateur
-
-Placer les fichiers dans `overlays/<domaine>/` et les copier dans `${INSTALL_HOME}/.config/<stack>/` depuis le script de configuration approprié.
-
-### Stack cross-architecture
-
-Si une stack ne fonctionne pas sur une architecture (ex : certaines libs AVX-only), le signaler dans le YAML :
-
-```yaml
-stack:
-  name: ma_stack
-  arch_blocklist:
-    - arm64
-  pkg:
-    - ...
-```
-
-Et dans `install_packages.sh`, vérifier `arch_blocklist` avant d'installer.
-
-## Exemples de stacks potentielles
-
-- `python` — backend data / ML
-- `go` — services réseau légers
-- `java` — compat appli legacy
-- `dsp_extra` — libs audio supplémentaires (lv2, ladspa plugins)
-- `gpu_cuda` — si besoin sur machines avec GPU Nvidia (complexe sur FreeBSD)
-- `containers` — Jails / Podman-like pour sandbox
+Run `node --test tests/governance/aos_builder.test.mjs` from the framework root,
+inspect all-target plans, then perform native/VM/physical acceptance for the new
+scope and the previously validated targets. Keep dependencies out of the control
+host unless separately authorized. No new dependency is needed for YAML parsing:
+the framework already declares `yaml`.

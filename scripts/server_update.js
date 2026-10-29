@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { verifyDeployedSource, verifyRuntimeDependencies } from './verify_deployed_source.js';
-import { backupServerIdentity, ensureProductionSecureConfig } from './server_secure_config.js';
+import { backupServerIdentity, ensureProductionSecureConfig, readEnvValue } from './server_secure_config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -348,15 +348,18 @@ function ensureRuntimeDirs() {
 
 function parseArgs(argv) {
     const args = new Set(argv);
+    // `--staging`: the test server (staging.atome.one, /opt/a-staging) beside production on the same machine,
+    // with its own service, settings, identity and backups; it never touches production's.
+    const serviceName = args.has('--staging') ? 'squirrel-staging' : 'squirrel';
     return {
         reset: args.has('--reset'),
         noGit: args.has('--no-git'),
         noDeps: args.has('--no-deps'),
         noRestart: args.has('--no-restart'),
-        serviceName: 'squirrel',
-        envDir: '/etc/squirrel',
-        envFile: '/etc/squirrel/squirrel.env',
-        backupRoot: '/var/backups/squirrel',
+        serviceName,
+        envDir: `/etc/${serviceName}`,
+        envFile: `/etc/${serviceName}/squirrel.env`,
+        backupRoot: `/var/backups/${serviceName}`,
     };
 }
 
@@ -423,7 +426,7 @@ async function main() {
     phase('status', () => run(`systemctl status ${opts.serviceName} --no-pager -l`, { allowFailure: true }));
 
     // Health check - if it fails, nginx will 502.
-    phase('health', () => run('curl -fsS http://127.0.0.1:3001/health', { allowFailure: true }));
+    phase('health', () => run(`curl -fsS http://127.0.0.1:${readEnvValue(readText(opts.envFile), 'PORT')}/health`, { allowFailure: true }));
 
     // Reload nginx if present
     phase('nginx-reload', () => {

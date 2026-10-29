@@ -300,6 +300,10 @@ extension auv3Utils {
                             let buffer = bufferList.buffer(at: i)
                             if let mData = buffer.mData { memset(mData, 0, Int(buffer.mDataByteSize)) }
                         }
+                    } else {
+                        // A strip whose IN is the host plays it through its effects instead of the dry copy.
+                        strongSelf.routeHostInput(bufferList: bufferList, frameCount: frameCount, channels: outChannels,
+                                                  interleaved: outInterleaved, isFloat32: outIsFloat32)
                     }
                 } else {
                     for i in 0..<bufferList.numberOfBuffers {

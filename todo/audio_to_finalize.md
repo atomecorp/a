@@ -132,11 +132,12 @@ Reste à faire sur la tâche Timeline v1.6, première ébauche du 14 oct. 2026. 
 - [~] 6. Entrées live iOS : le moteur ouvre l'entrée cpal ; Swift tient la session capture tant que le programme a une entrée live. **À vérifier** sur appareil (le simulateur ne liste aucune entrée).
 - [ ] 7. Preuves de bout en bout sur iPhone (`mix_graph_real_app`, `timeline_sync`) : le simulateur n'a pas de WebGPU (pas d'interface), ligne #36 de la recette à repasser sur appareil.
 
-**Problème.** Sur iOS, `audio_*` est traité par du Swift (`platforms/ios/atome-auv3/application/AppNativeAudioCommands.swift`, AVAudioEngine) et non par Kira.
-- Le graphe de mixage n'y existe donc pas.
-- `mixGraphSupported()` (`molecule_mix_engine.js`) exclut `ios_native_kira` et `ios_auv3_native`.
-- La voix ne porte que le Volume×Pan statique de sa tranche (`mixStripVoiceLevel`).
-- Ne sont pas rendus : effets, envois, bus, sidechain, Mono, OUT coupé, entrées live, paires de sorties, vumètres, queue d'effet.
+**Problème (avant le 14 oct., résolu par les points 1–5 ci-dessus : iOS et l'AUv3 font tourner le moteur Kira natif et
+son graphe ; garder pour l'historique).** Sur iOS, `audio_*` était traité par du Swift (`platforms/ios/atome-auv3/application/AppNativeAudioCommands.swift`, AVAudioEngine) et non par Kira.
+- Le graphe de mixage n'y existait donc pas.
+- `mixGraphSupported()` (`molecule_mix_engine.js`) excluait `ios_native_kira` et `ios_auv3_native`.
+- La voix ne portait que le Volume×Pan statique de sa tranche (`mixStripVoiceLevel`).
+- N'étaient pas rendus : effets, envois, bus, sidechain, Mono, OUT coupé, entrées live, paires de sorties, vumètres, queue d'effet.
 
 **Décision.** On passe iOS et l'AUv3 en Kira natif Rust, le même moteur que Tauri desktop. Pas de réimplémentation du DSP en Swift.
 

@@ -1,5 +1,6 @@
 // The public side of the websites (server/site_publishing.js): atome.one/<slug>[/<page>/] read by anyone, a personal
-// domain read by its host, the media of an online version by their content, the site font, and the contact form.
+// domain read by its host, the media of an online version by their content, the site font, the atome mark signing a
+// page (the app's own glyph, `assets/images/icons/atome.svg`), and the contact form.
 // Pages are answered from Fastify's not-found step, so no file of the app is ever shadowed by an address.
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -14,7 +15,7 @@ const notice = (title, body, extra = '') => `<!doctype html><html lang="fr"><hea
 <style>body{margin:0;min-height:100vh;display:grid;place-items:center;font-family:system-ui,sans-serif;background:#15182c;color:#efeaff}main{max-width:34rem;padding:2rem;text-align:center}a{color:#a9b2ff}</style></head><body><main><h1>${escapeHtml(title)}</h1>${body}</main></body></html>`;
 const month = at => new Date(at).toISOString().slice(0, 7);
 
-export function registerSiteHttp(server, { publishing, store, notify, fontRoot, appHosts = [], origin = 'https://atome.one', now = () => Date.now() }) {
+export function registerSiteHttp(server, { publishing, store, notify, fontRoot, logoFile, appHosts = [], origin = 'https://atome.one', now = () => Date.now() }) {
     const hosts = new Set(appHosts.map(host => host.toLowerCase()));
     const sendPage = async (reply, row, pageSlug, request) => {
         if (row.state === 'retired') return reply.code(410).header('x-robots-tag', 'noindex').type('text/html; charset=utf-8')
@@ -47,6 +48,9 @@ export function registerSiteHttp(server, { publishing, store, notify, fontRoot, 
         return reply.header('cache-control', 'public, max-age=31536000, immutable').type('font/ttf')
             .send(fs.createReadStream(path.join(fontRoot, request.params.file)));
     });
+
+    server.get('/_site/logo.svg', async (_request, reply) => reply.header('cache-control', 'public, max-age=86400')
+        .type('image/svg+xml').send(fs.createReadStream(logoFile)));
 
     // A media of an online version, read from its original file; video and sound by ranges.
     server.get('/_site/m/:sha', async (request, reply) => {

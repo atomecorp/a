@@ -1,7 +1,8 @@
 // CPAL-based audio recorder
 // Pure Rust replacement for the Obj-C AVAudioEngine recorder.
-// Records input audio to WAV files via CPAL + hound.
-// The CPAL stream lives on a dedicated thread to avoid Send issues.
+// Records input audio to WAV files via CPAL + hound (on Windows, the exclusive
+// input of the output's thread: recorder_capture.rs).
+// The input lives on a dedicated thread to avoid Send issues.
 //
 // Optimizations over previous version:
 // - Condvar-based stop signaling replaces 50ms polling loop (near-zero CPU when idle)
@@ -10,9 +11,9 @@
 // - Sample rate validation with explicit warnings
 // - Batch sample writes to reduce per-sample overhead
 
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{SampleFormat, StreamConfig};
-use super::scheduled_backend::{note_capture_start, CaptureClock};
+use cpal::traits::{DeviceTrait, HostTrait};
+use super::recorder_capture::{self, TakeSink};
+use super::scheduled_backend::CaptureClock;
 use ringbuf::{traits::*, HeapRb};
 use std::collections::HashMap;
 use std::fs;
@@ -163,19 +164,9 @@ pub fn start_with_options(
         return Err(format!("Session '{session_id}' already active"));
     }
 
-    let default_input_config = input_device(device_name.as_deref())?
-        .default_input_config()
-        .map_err(|e| format!("No default input config: {e}"))?;
-    let actual_sample_rate = if sample_rate > 0 {
-        sample_rate
-    } else {
-        default_input_config.sample_rate().0
-    };
-    let actual_channels = if channels > 0 {
-        channels
-    } else {
-        default_input_config.channels()
-    };
+    let (input_rate, input_channels) = recorder_capture::input_format(device_name.as_deref())?;
+    let actual_sample_rate = if sample_rate > 0 { sample_rate } else { input_rate };
+    let actual_channels = if channels > 0 { channels } else { input_channels };
 
     // Ensure parent directory exists
     if let Some(parent) = Path::new(abs_wav_path).parent() {
@@ -200,172 +191,40 @@ pub fn start_with_options(
     let buf_hint = buffer_hint;
     let (ready_tx, ready_rx) = mpsc::channel::<Result<(), String>>();
 
-    // Spawn a thread that owns the CPAL stream (Stream is !Send, so it must
+    // Spawn a thread that owns the input (a cpal Stream is !Send, so it must
     // be created and dropped on the same thread).
     let thread_handle = crate::engine_thread::spawn(move || -> Result<f64, String> {
         let init_result = (|| {
-            let device = input_device(device_name.as_deref())?;
-
-            let default_config = device
-                .default_input_config()
-                .map_err(|e| format!("No default input config: {e}"))?;
-
-            let actual_sr = sr;
-            let actual_ch = ch;
-            metering::configure_scope(actual_sr, actual_ch);
+            metering::configure_scope(sr, ch);
 
             // Validate sample rate range
-            if actual_sr < 8000 || actual_sr > 384000 {
+            if !(8000..=384000).contains(&sr) {
                 eprintln!(
-                    "[audio_engine::recorder] Warning: unusual sample rate {actual_sr} Hz — \
+                    "[audio_engine::recorder] Warning: unusual sample rate {sr} Hz — \
                      typical values are 16000, 44100, 48000, 96000"
                 );
             }
 
-            let stream_config = StreamConfig {
-                channels: actual_ch,
-                sample_rate: cpal::SampleRate(actual_sr),
-                buffer_size: buf_hint.to_cpal(),
-            };
-
-            let writer = create_wav_writer(&path_owned, fmt, actual_sr, written_channels(actual_ch))?;
-            let rb_capacity = usize::try_from(actual_sr)
+            let writer = create_wav_writer(&path_owned, fmt, sr, written_channels(ch))?;
+            let rb_capacity = usize::try_from(sr)
                 .unwrap_or(48_000)
-                .saturating_mul(usize::from(actual_ch.max(1)))
+                .saturating_mul(usize::from(ch.max(1)))
                 .saturating_mul(4)
                 .max(4096);
-            let rb = HeapRb::<f32>::new(rb_capacity);
-            let (producer, consumer) = rb.split();
+            let (producer, consumer) = HeapRb::<f32>::new(rb_capacity).split();
             let writer_stop = Arc::new(AtomicBool::new(false));
             let writer_handle =
-                spawn_wav_writer_thread(consumer, writer, fmt, Arc::clone(&writer_stop), actual_ch);
-
-            let stop_for_callback = Arc::clone(&stop_atomic_cb);
-            let frame_count_cb = Arc::clone(&frame_count_thread);
-            let overrun_frames_cb = Arc::clone(&overrun_frames_thread);
-            let clock_cb = Arc::clone(&capture_clock_thread);
-
-            let sample_format = default_config.sample_format();
-
-            let err_fn = |err: cpal::StreamError| {
-                eprintln!("[audio_engine::recorder] Stream error: {err}");
+                spawn_wav_writer_thread(consumer, writer, fmt, Arc::clone(&writer_stop), ch);
+            let sink = TakeSink {
+                producer,
+                stop: Arc::clone(&stop_atomic_cb),
+                frames: Arc::clone(&frame_count_thread),
+                overruns: Arc::clone(&overrun_frames_thread),
+                clock: Arc::clone(&capture_clock_thread),
+                channels: usize::from(ch.max(1)),
             };
-
-            let stream = match sample_format {
-                SampleFormat::F32 => {
-                    let mut producer = producer;
-                    device
-                        .build_input_stream(
-                            &stream_config,
-                            move |data: &[f32], info: &cpal::InputCallbackInfo| {
-                                if stop_for_callback.load(Ordering::Relaxed) {
-                                    return;
-                                }
-                                note_capture_start(&clock_cb, info);
-                                metering::push_samples(data);
-                                let frames = (data.len() / usize::from(actual_ch.max(1))) as u64;
-                                if producer.vacant_len() >= data.len() {
-                                    let written = producer.push_slice(data);
-                                    frame_count_cb.fetch_add(
-                                        (written / usize::from(actual_ch.max(1))) as u64,
-                                        Ordering::Relaxed,
-                                    );
-                                } else {
-                                    overrun_frames_cb.fetch_add(frames, Ordering::Relaxed);
-                                }
-                            },
-                            err_fn,
-                            None,
-                        )
-                        .map_err(|e| format!("Failed to build input stream: {e}"))?
-                }
-                SampleFormat::I16 => {
-                    let mut producer = producer;
-                    let stop_for_callback2 = Arc::clone(&stop_atomic_cb);
-                    let frame_count_cb2 = Arc::clone(&frame_count_thread);
-                    let overrun_frames_cb2 = Arc::clone(&overrun_frames_thread);
-                    let clock_cb2 = Arc::clone(&capture_clock_thread);
-                    device
-                        .build_input_stream(
-                            &stream_config,
-                            move |data: &[i16], info: &cpal::InputCallbackInfo| {
-                                if stop_for_callback2.load(Ordering::Relaxed) {
-                                    return;
-                                }
-                                note_capture_start(&clock_cb2, info);
-                                metering::push_i16_samples(data);
-                                let frames = (data.len() / usize::from(actual_ch.max(1))) as u64;
-                                if producer.vacant_len() >= data.len() {
-                                    let mut written = 0usize;
-                                    for &sample in data {
-                                        if producer.try_push(sample as f32 / 32768.0).is_ok() {
-                                            written += 1;
-                                        } else {
-                                            break;
-                                        }
-                                    }
-                                    frame_count_cb2.fetch_add(
-                                        (written / usize::from(actual_ch.max(1))) as u64,
-                                        Ordering::Relaxed,
-                                    );
-                                } else {
-                                    overrun_frames_cb2.fetch_add(frames, Ordering::Relaxed);
-                                }
-                            },
-                            err_fn,
-                            None,
-                        )
-                        .map_err(|e| format!("Failed to build input stream (i16): {e}"))?
-                }
-                SampleFormat::U16 => {
-                    let mut producer = producer;
-                    let stop_for_callback3 = Arc::clone(&stop_atomic_cb);
-                    let frame_count_cb3 = Arc::clone(&frame_count_thread);
-                    let overrun_frames_cb3 = Arc::clone(&overrun_frames_thread);
-                    let clock_cb3 = Arc::clone(&capture_clock_thread);
-                    device
-                        .build_input_stream(
-                            &stream_config,
-                            move |data: &[u16], info: &cpal::InputCallbackInfo| {
-                                if stop_for_callback3.load(Ordering::Relaxed) {
-                                    return;
-                                }
-                                note_capture_start(&clock_cb3, info);
-                                metering::push_u16_samples(data);
-                                let frames = (data.len() / usize::from(actual_ch.max(1))) as u64;
-                                if producer.vacant_len() >= data.len() {
-                                    let mut written = 0usize;
-                                    for &sample in data {
-                                        let centered = sample as f32 - 32768.0;
-                                        if producer.try_push(centered / 32768.0).is_ok() {
-                                            written += 1;
-                                        } else {
-                                            break;
-                                        }
-                                    }
-                                    frame_count_cb3.fetch_add(
-                                        (written / usize::from(actual_ch.max(1))) as u64,
-                                        Ordering::Relaxed,
-                                    );
-                                } else {
-                                    overrun_frames_cb3.fetch_add(frames, Ordering::Relaxed);
-                                }
-                            },
-                            err_fn,
-                            None,
-                        )
-                        .map_err(|e| format!("Failed to build input stream (u16): {e}"))?
-                }
-                _ => {
-                    return Err(format!("Unsupported sample format: {:?}", sample_format));
-                }
-            };
-
-            stream
-                .play()
-                .map_err(|e| format!("Failed to start recording stream: {e}"))?;
-
-            Ok((stream, writer_stop, writer_handle))
+            let stream = recorder_capture::open(device_name.as_deref(), sr, ch, buf_hint, sink)?;
+            Ok::<_, String>((stream, writer_stop, writer_handle))
         })();
 
         let (stream, writer_stop, writer_handle) = match init_result {

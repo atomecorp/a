@@ -174,6 +174,9 @@ function mapStateCurrentToAtome(state) {
             project_id: state.meta?.project_id || state.meta?.projectId || state.project_id || state.projectId || properties.project_id || properties.projectId || null
         },
         project_id: state.project_id || state.projectId || state.meta?.project_id || state.meta?.projectId || properties.project_id || properties.projectId || null,
+        // When the state was made and last changed, as every backend lists it (the Projets order and day read them).
+        created_at: state.created_at || state.meta?.created_at || null,
+        updated_at: state.updated_at || state.meta?.updated_at || null,
         properties
     });
 }

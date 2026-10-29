@@ -1,0 +1,31 @@
+"$schema" = "schemas/schema.json"
+
+[[set]]
+identifier = "code-workspace"
+description = "Lets a code project read the source checkout and file its plan in todo/code_projects/ (debug builds only; release builds refuse)."
+permissions = [
+  "allow-code-repo-list",
+  "allow-code-repo-read",
+  "allow-code-repo-search",
+  "allow-code-todo-write",
+]
+
+[[permission]]
+identifier = "allow-code-repo-list"
+description = "Enables the code_repo_list command."
+commands.allow = ["code_repo_list"]
+
+[[permission]]
+identifier = "allow-code-repo-read"
+description = "Enables the code_repo_read command."
+commands.allow = ["code_repo_read"]
+
+[[permission]]
+identifier = "allow-code-repo-search"
+description = "Enables the code_repo_search command."
+commands.allow = ["code_repo_search"]
+
+[[permission]]
+identifier = "allow-code-todo-write"
+description = "Enables the code_todo_write command."
+commands.allow = ["code_todo_write"]

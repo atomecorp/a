@@ -5,7 +5,9 @@
 // Let's Encrypt for its certificate (webroot: nginx keeps serving), writes the domain's nginx servers and reloads nginx.
 // Renewal is certbot's own timer (the deploy hook reloads nginx). `--setup`, run once, installs the port-80 catch-all
 // answering the challenges and the include of the domains' servers. The person never sees any of it.
-// Usage (root): site_domain_cert.mjs <domain> | --setup
+// `--host <name>.atome.one <port>` gives one of atome.one's own names (the test server staging.atome.one on 3101)
+// the same certificate and servers, proxying to that local port, once its DNS A record reaches this machine.
+// Usage (root): site_domain_cert.mjs <domain> | --setup | --host <name>.atome.one <port>
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -40,7 +42,7 @@ ${challenge}    location / {
 include ${HOSTS_DIR}/*.conf;
 `;
 // The same proxying as atome.one's own server: the app routes a personal host to its site (server/site_http.js).
-const hostServers = domain => `# ${domain}: written by scripts/site_domain_cert.mjs
+const hostServers = (domain, app = APP) => `# ${domain}: written by scripts/site_domain_cert.mjs
 server {
     listen 80;
     server_name ${domain};
@@ -56,7 +58,7 @@ server {
     include /etc/letsencrypt/options-ssl-nginx.conf;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
     location / {
-        proxy_pass ${APP};
+        proxy_pass ${app};
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -91,17 +93,33 @@ const issue = async (domain) => {
     const txt = (await dns.resolveTxt(`_atome.${domain}`).catch(() => [])).map(parts => parts.join(''));
     const cname = (await dns.resolveCname(domain).catch(() => [])).map(name => name.toLowerCase().replace(/\.$/, ''));
     if (!txt.includes(`atome-verify=${row.domain_token}`) || !cname.includes(SITE_CNAME_TARGET)) fail(`DNS not verified: ${domain}`);
+    certify(domain, APP);
+};
+
+// The certificate by webroot, then the domain's servers; nginx refusing them removes them.
+const certify = (domain, app) => {
     run('certbot', ['certonly', '--webroot', '-w', WEBROOT, '-d', domain, '--cert-name', domain, '--non-interactive', '--agree-tos',
         '--keep-until-expiring', '--deploy-hook', 'systemctl reload nginx']);
     const file = path.join(HOSTS_DIR, `${domain}.conf`);
-    fs.writeFileSync(file, hostServers(domain));
+    fs.writeFileSync(file, hostServers(domain, app));
     try { reloadNginx(); } catch {
         fs.rmSync(file, { force: true });
         fail(`nginx refused the host of ${domain}; removed`);
     }
 };
 
-const [argument = ''] = process.argv.slice(2);
+// One of atome.one's own names on a local port: its A record must already reach this machine (atome.one's own).
+const issueHost = async (name, port) => {
+    if (!/^[a-z0-9-]+\.atome\.one$/.test(name) || !/^\d{4,5}$/.test(port)) fail(`refused: ${name} ${port}`);
+    if (!fs.existsSync(ENABLED)) fail('run --setup first');
+    const here = await dns.resolve4('atome.one').catch(() => []);
+    const there = await dns.resolve4(name).catch(() => []);
+    if (!there.length || !there.every(ip => here.includes(ip))) fail(`DNS not pointing here: ${name}`);
+    certify(name, `http://127.0.0.1:${port}`);
+};
+
+const [argument = '', ...rest] = process.argv.slice(2);
 if (argument === '--setup') setup();
+else if (argument === '--host') await issueHost(String(rest[0] || '').trim().toLowerCase(), String(rest[1] || ''));
 else if (argument) await issue(argument.trim().toLowerCase());
-else fail('usage: site_domain_cert.mjs <domain> | --setup');
+else fail('usage: site_domain_cert.mjs <domain> | --setup | --host <name>.atome.one <port>');

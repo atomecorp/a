@@ -10,20 +10,26 @@ use kira::info::MockInfoBuilder;
 use kira::Frame;
 
 const RATE: u32 = 48_000;
-const BLOCK: usize = 128;
+pub(crate) const BLOCK: usize = 128;
 
-struct Rig {
-    graph: MixGraph,
+pub(crate) struct Rig {
+    pub(crate) graph: MixGraph,
     effect: MixGraphEffect,
     captures: Vec<(String, StripCapture)>,
 }
 
-fn program(json: &str) -> Program {
+pub(crate) fn program(json: &str) -> Program {
     serde_json::from_str(json).expect("program json")
 }
 
-fn rig(json: &str) -> Rig {
+pub(crate) fn rig(json: &str) -> Rig {
+    rig_with(json, |_| {})
+}
+
+// `before` runs ahead of the first apply (assets a program refers to).
+pub(crate) fn rig_with(json: &str, before: impl FnOnce(&mut MixGraph)) -> Rig {
     let mut graph = MixGraph::new(RATE);
+    before(&mut graph);
     let program = program(json);
     let captures = program.strips.iter().map(|strip| (strip.id.clone(), StripCapture::new(graph.capture_slot(&strip.id)))).collect();
     graph.apply(program).expect("apply");
@@ -34,7 +40,7 @@ fn rig(json: &str) -> Rig {
 
 impl Rig {
     // Feeds one block per strip (same frame everywhere) and returns the main mix.
-    fn block(&mut self, inputs: &[(&str, Frame)]) -> Vec<Frame> {
+    pub(crate) fn block(&mut self, inputs: &[(&str, Frame)]) -> Vec<Frame> {
         let info = MockInfoBuilder::new().build();
         for (strip_id, capture) in &mut self.captures {
             let frame = inputs.iter().find(|(id, _)| id == strip_id).map(|(_, frame)| *frame).unwrap_or(Frame::ZERO);
@@ -43,11 +49,23 @@ impl Rig {
             assert!(buffer.iter().all(|frame| *frame == Frame::ZERO), "a captured sub-track must be silenced");
         }
         let mut out = vec![Frame::ZERO; BLOCK];
-        self.effect.render(&mut out, 1.0 / RATE as f64, &info);
+        self.effect.render(&mut out);
         out
     }
 
-    fn settle(&mut self, inputs: &[(&str, Frame)]) -> Frame {
+    // Feeds whole blocks of frames per strip and returns the main mix.
+    pub(crate) fn block_frames(&mut self, inputs: &[(&str, Vec<Frame>)]) -> Vec<Frame> {
+        let info = MockInfoBuilder::new().build();
+        for (strip_id, capture) in &mut self.captures {
+            let mut buffer = inputs.iter().find(|(id, _)| id == strip_id).map(|(_, frames)| frames.clone()).unwrap_or_else(|| vec![Frame::ZERO; BLOCK]);
+            capture.process(&mut buffer, 1.0 / RATE as f64, &info);
+        }
+        let mut out = vec![Frame::ZERO; BLOCK];
+        self.effect.render(&mut out);
+        out
+    }
+
+    pub(crate) fn settle(&mut self, inputs: &[(&str, Frame)]) -> Frame {
         let mut last = Vec::new();
         for _ in 0..4 {
             last = self.block(inputs);
@@ -108,12 +126,25 @@ fn mono_pan_and_bus_chains_sum_correctly() {
 }
 
 #[test]
-fn routing_loops_are_refused() {
-    let looped = program(r#"{"strips":[
-        {"id":"a","output":{"kind":"strip","id":"b"}},
-        {"id":"b","chain":[{"id":"s","type":"send","target":{"kind":"strip","id":"a"}}]}]}"#);
-    assert!(dependency_order(&looped).is_err());
-    assert!(MixGraph::new(RATE).apply(looped).is_err());
+fn a_routing_loop_closes_through_a_return() {
+    // D27: `a` feeds `b`, `b` feeds `a` back at half level; each turn of the
+    // loop comes back RETURN_FRAMES later.
+    let looped = r#"{"strips":[
+        {"id":"a","chain":[{"id":"s","type":"send","params":{"level_db":-6.0206},"target":{"kind":"strip","id":"b"}}],"output":{"kind":"main"}},
+        {"id":"b","output":{"kind":"strip","id":"a"}}]}"#;
+    assert!(dependency_order(&program(looped)).is_ok());
+    let mut rig = rig(looped);
+    let mut impulse = vec![Frame::ZERO; BLOCK];
+    impulse[0] = Frame::new(1.0, 1.0);
+    let mut heard = Vec::new();
+    heard.extend(rig.block_frames(&[("a", impulse)]));
+    for _ in 0..3 {
+        heard.extend(rig.block(&[]));
+    }
+    for (turn, level) in [(0, 1.0), (1, 0.5), (2, 0.25), (3, 0.125)] {
+        close(heard[turn * crate::graph::RETURN_FRAMES], level, level);
+    }
+    assert!(heard.iter().enumerate().all(|(index, frame)| index % crate::graph::RETURN_FRAMES == 0 || frame.left.abs() < 1e-6));
 }
 
 #[test]
@@ -126,7 +157,7 @@ fn mute_silences_the_strip_but_not_its_bus_siblings() {
 
 #[test]
 fn reverb_tail_drains_then_stops_and_a_cut_stops_at_once() {
-    let json = r#"{"strips":[{"id":"a","chain":[{"id":"r","type":"fx","effect":"reverb","params":{"mix":1.0,"feedback":0.5,"damping":0.5,"stereo_width":1.0}}],"output":{"kind":"main"}}]}"#;
+    let json = r#"{"strips":[{"id":"a","chain":[{"id":"r","type":"dsp","effect":"reverb","params":{"mix":1.0,"decay_s":0.5}}],"output":{"kind":"main"}}]}"#;
     let mut rig = rig(json);
     for _ in 0..40 {
         rig.block(&[("a", Frame::new(0.5, 0.5))]);
@@ -171,7 +202,7 @@ fn rig_again(json: &str) -> Rig {
 fn sidechain_key_ducks_the_consumer() {
     let json = r#"{"strips":[
         {"id":"kick","output":null},
-        {"id":"pad","chain":[{"id":"c","type":"fx","effect":"compressor","params":{"threshold_db":-40,"ratio":20,"attack_ms":0.1,"release_ms":50,"makeup_db":0,"mix":1.0,"sidechain_strip_id":"kick"}}],"output":{"kind":"main"}}]}"#;
+        {"id":"pad","chain":[{"id":"c","type":"dsp","effect":"compressor","params":{"threshold_db":-40,"ratio":20,"attack_ms":0.1,"release_ms":50,"makeup_db":0},"key":{"kind":"strip","id":"kick"}}],"output":{"kind":"main"}}]}"#;
     let mut rig = rig(json);
     let quiet_key = rig.settle(&[("pad", Frame::new(0.5, 0.5))]);
     close(quiet_key, 0.5, 0.5);
@@ -185,7 +216,7 @@ fn parallel_routes_are_latency_aligned() {
         {"id":"slow","chain":[{"id":"x","type":"mono"}],"output":{"kind":"main"}},
         {"id":"fast","output":{"kind":"main"}}]}"#);
     let order = dependency_order(&routes).unwrap();
-    let (delays, _) = compensation(&routes, &order, &|module| if module.id == "x" { 64 } else { 0 });
+    let delays = compensation(&routes, &order, &|module| if module.id == "x" { 64 } else { 0 }).unwrap();
     assert_eq!(delays, vec![vec![0], vec![64]]);
 }
 
@@ -239,7 +270,7 @@ fn the_graph_adds_no_latency_even_through_sends_and_buses() {
     input[37] = Frame::new(1.0, 1.0);
     capture.process(&mut input, 1.0 / RATE as f64, &info);
     let mut out = vec![Frame::ZERO; BLOCK];
-    effect.render(&mut out, 1.0 / RATE as f64, &info);
+    effect.render(&mut out);
     let first = out.iter().position(|frame| frame.left.abs() > 0.5);
     assert_eq!(first, Some(37), "the impulse leaves on the frame it entered");
 }

@@ -17,7 +17,7 @@ const settings = {
     slug: { type: 'string', minLength: 1, maxLength: SITE_SLUG_MAX, description: 'The address part after atome.one/.' },
     title: { type: 'string', maxLength: 120 }, description: { type: 'string', maxLength: 300 },
     page_ids: { type: 'array', maxItems: 200, items: id, description: 'The pages published (all the project\'s pages when absent).' },
-    credit: { type: 'boolean', description: 'The « Créé avec atome » line at the foot of each page.' }
+    credit: { type: 'boolean', description: 'The small atome mark (« Créé avec atome ») at the bottom right of each page.' }
 };
 const definitions = {
     goto: [{ page_id: id, url: { type: 'string', minLength: 1, maxLength: 2000 }, new_tab: { type: 'boolean' } }, [],

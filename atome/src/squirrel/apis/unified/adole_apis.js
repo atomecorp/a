@@ -336,6 +336,11 @@ export const AdoleAPI = {
   scheduledSends: {
     call: (action, fields = {}) => fastifyCall({ ...fields, type: 'scheduled-send', action }, 'scheduled_auth_unavailable')
   },
+  // Forums (server/forums.js): create, invite, respond, claim (an e-mail's link), leave, list, members, feed.
+  // A member posts through `news.publish` with `{ forum }` as audience.
+  forums: {
+    call: (action, fields = {}) => fastifyCall({ ...fields, type: 'forum', action }, 'forum_auth_unavailable')
+  },
   // Communities (atome/src/shared/community_contract.js): joining, the thread of its members,
   // the host's moderation. A member posts through `news.publish` with `{ community }` as audience.
   communities: {

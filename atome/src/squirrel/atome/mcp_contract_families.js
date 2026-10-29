@@ -17,18 +17,22 @@ import { SHOP_ASSISTANT_INSTRUCTIONS, SHOP_COMMANDS, SHOP_CONFIRMED_COMMANDS, va
 import { COACH_ASSISTANT_INSTRUCTIONS, COACH_COMMANDS, COACH_CONFIRMED_COMMANDS, validateCoachInput } from '../coaches/contracts.js';
 import { FILMS_ASSISTANT_INSTRUCTIONS, FILMS_COMMANDS, validateFilmsInput } from '../films/contracts.js';
 import { CREATION_ASSISTANT_INSTRUCTIONS, CREATION_COMMANDS, validateCreationInput } from '../creation/contracts.js';
+import { AUDIO_FX_ASSISTANT_INSTRUCTIONS, AUDIO_FX_COMMANDS, validateAudioFxInput } from '../audio_fx/contracts.js';
 import { MEDIA_IMPORT_ASSISTANT_INSTRUCTIONS, MEDIA_IMPORT_COMMANDS, validateMediaImportInput } from '../media_import/contracts.js';
 import { FOOD_ASSISTANT_INSTRUCTIONS, FOOD_COMMANDS, validateFoodInput } from '../food/contracts.js';
 import { BOOKS_ASSISTANT_INSTRUCTIONS, BOOKS_COMMANDS, validateBooksInput } from '../books/contracts.js';
 import { CAPTURE_ASSISTANT_INSTRUCTIONS, CAPTURE_COMMANDS, validateCaptureInput } from '../capture/contracts.js';
 import { LIFE_PROFILE_ASSISTANT_INSTRUCTIONS, LIFE_PROFILE_COMMANDS, validateLifeProfileInput } from '../life_profiles/contracts.js';
 import { PROJECTS_ASSISTANT_INSTRUCTIONS, PROJECTS_COMMANDS, validateProjectsInput } from '../projects/contracts.js';
+import { CODE_PROJECT_ASSISTANT_INSTRUCTIONS, CODE_PROJECT_COMMANDS, validateCodeProjectInput } from '../code_projects/contracts.js';
 import { DASHBOARD_PROGRESSION_ASSISTANT_INSTRUCTIONS, DASHBOARD_PROGRESSION_COMMANDS, validateDashboardProgressionInput } from '../dashboard_progression/contracts.js';
 import { SENSORS_ASSISTANT_INSTRUCTIONS, SENSORS_COMMANDS, validateSensorsInput } from '../health/sensor_contracts.js';
 import { BODY_DATA_ASSISTANT_INSTRUCTIONS, BODY_DATA_COMMANDS, validateBodyDataInput } from '../health/body_data_contracts.js';
 import { SITE_ASSISTANT_INSTRUCTIONS, SITE_COMMANDS, SITE_CONFIRMED_COMMANDS, validateSiteInput } from '../site/contracts.js';
+import { QR_ASSISTANT_INSTRUCTIONS, QR_COMMANDS, validateQrInput } from '../qr/contracts.js';
 import { INTERACTIONS_ASSISTANT_INSTRUCTIONS, INTERACTIONS_COMMANDS, validateInteractionsInput } from '../interactions/contracts.js';
 import { PUBLISH_ASSISTANT_INSTRUCTIONS, PUBLISH_COMMANDS, PUBLISH_CONFIRMED_COMMANDS, validatePublishInput } from '../publish/contracts.js';
+import { FORUM_ASSISTANT_INSTRUCTIONS, FORUM_COMMANDS, FORUM_CONFIRMED_COMMANDS, validateForumInput } from '../forum/contracts.js';
 import { VIDEO_TRAIN_ASSISTANT_INSTRUCTIONS, VIDEO_TRAIN_COMMANDS, VIDEO_TRAIN_CONFIRMED_COMMANDS, validateVideoTrainInput } from '../video_train/contracts.js';
 
 // The one list of the domain command families. Direct MCP handlers, the access policy, the
@@ -93,6 +97,10 @@ export const MCP_CONTRACT_FAMILIES = Object.freeze([
     { id: 'captures', commands: CAPTURE_COMMANDS, validate: validateCaptureInput, noClient: 'PRESENTATION_UNAVAILABLE',
         confirmed: ['captures.start', 'captures.delete'], instructions: CAPTURE_ASSISTANT_INSTRUCTIONS,
         preload: ['captures.state', 'captures.show', 'captures.play', 'captures.stop', 'captures.camera'] },
+    // Lighting an effect turns the microphone on, a delete takes an effect or an instrument away for good: the user's to allow.
+    { id: 'audio_fx', commands: AUDIO_FX_COMMANDS, validate: validateAudioFxInput, noClient: 'HOST_UNSUPPORTED',
+        confirmed: ['audio_fx.start', 'audio_fx.delete', 'audio_fx.instrument_delete'], instructions: AUDIO_FX_ASSISTANT_INSTRUCTIONS,
+        preload: ['audio_fx.catalog', 'audio_fx.start', 'audio_fx.stop', 'audio_fx.set_param'] },
     // Deleting a profile changes what every list shows: the user's to allow.
     { id: 'profiles', commands: LIFE_PROFILE_COMMANDS, validate: validateLifeProfileInput, noClient: 'AUTH_REQUIRED',
         confirmed: ['profiles.delete'], instructions: LIFE_PROFILE_ASSISTANT_INSTRUCTIONS,
@@ -103,12 +111,16 @@ export const MCP_CONTRACT_FAMILIES = Object.freeze([
         instructions: BOOKS_ASSISTANT_INSTRUCTIONS, preload: ['books.list', 'books.open', 'books.page', 'books.transport'] },
     { id: 'projects', commands: PROJECTS_COMMANDS, validate: validateProjectsInput, noClient: 'PRESENTATION_UNAVAILABLE',
         instructions: PROJECTS_ASSISTANT_INSTRUCTIONS, preload: ['projects.list', 'projects.search', 'projects.open', 'projects.create', 'projects.favorite'] },
+    { id: 'code_project', commands: CODE_PROJECT_COMMANDS, validate: validateCodeProjectInput, noClient: 'PRESENTATION_UNAVAILABLE',
+        instructions: CODE_PROJECT_ASSISTANT_INSTRUCTIONS, preload: ['code_project.create', 'code_project.open'] },
     { id: 'dashboard_progression', commands: DASHBOARD_PROGRESSION_COMMANDS, validate: validateDashboardProgressionInput,
         noClient: 'progression_actor_required', instructions: DASHBOARD_PROGRESSION_ASSISTANT_INSTRUCTIONS },
     // Putting a site online, buying a domain or a mail box is the user's to confirm.
     { id: 'site', commands: SITE_COMMANDS, validate: validateSiteInput, noClient: 'PRESENTATION_UNAVAILABLE',
         confirmed: SITE_CONFIRMED_COMMANDS, instructions: SITE_ASSISTANT_INSTRUCTIONS,
         preload: ['site.state', 'site.publish', 'site.pages', 'site.list', 'site.menu', 'site.form', 'site.goto'] },
+    { id: 'qr', commands: QR_COMMANDS, validate: validateQrInput, noClient: 'PRESENTATION_UNAVAILABLE',
+        instructions: QR_ASSISTANT_INSTRUCTIONS, preload: ['qr.open', 'qr.keep', 'qr.make'] },
     { id: 'interactions', commands: INTERACTIONS_COMMANDS, validate: validateInteractionsInput, noClient: 'PRESENTATION_UNAVAILABLE',
         instructions: INTERACTIONS_ASSISTANT_INSTRUCTIONS, preload: ['interactions.list', 'interactions.create'] },
     // Sending a session to people and withdrawing a contribution are the user's to confirm.
@@ -118,7 +130,11 @@ export const MCP_CONTRACT_FAMILIES = Object.freeze([
     // Publier: a send, an update, a send now and a cancel are the user's to confirm.
     { id: 'publish', commands: PUBLISH_COMMANDS, validate: validatePublishInput, noClient: 'AUTH_REQUIRED',
         confirmed: PUBLISH_CONFIRMED_COMMANDS, instructions: PUBLISH_ASSISTANT_INSTRUCTIONS,
-        preload: ['publish.recipients', 'publish.send', 'publish.list', 'publish.edit', 'publish.cancel'] }
+        preload: ['publish.recipients', 'publish.send', 'publish.list', 'publish.edit', 'publish.cancel'] },
+    // Forums: making one, inviting, answering an invitation, leaving and writing are the user's to confirm.
+    { id: 'forum', commands: FORUM_COMMANDS, validate: validateForumInput, noClient: 'AUTH_REQUIRED',
+        confirmed: FORUM_CONFIRMED_COMMANDS, instructions: FORUM_ASSISTANT_INSTRUCTIONS,
+        preload: ['forum.list', 'forum.create', 'forum.post', 'forum.members', 'forum.open'] }
 ].map(family => Object.freeze({ confirmed: [], preload: [], instructions: '', ...family, layer: `atome_mcp_${family.id}` })));
 
 export const MCP_CONTRACT_COMMANDS = Object.freeze(MCP_CONTRACT_FAMILIES.flatMap(family => family.commands));

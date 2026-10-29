@@ -71,7 +71,7 @@ import './auv3_host_bridge.js';
   }
 
   // API facade: routes to active backend
-  const immediateNames = new Set(['create_clip', 'destroy_clip', 'unlock', 'play', 'play_instance', 'stop', 'stop_clip', 'stop_instance', 'jump', 'set_param', 'shared_context', 'render_clock', 'schedule_instances', 'set_voice_end', 'mix_apply', 'mix_levels', 'mix_cut_tail', 'mix_module_state', 'mix_output_devices', 'mix_live_push']);
+  const immediateNames = new Set(['create_clip', 'destroy_clip', 'unlock', 'play', 'play_instance', 'stop', 'stop_clip', 'stop_instance', 'jump', 'set_param', 'shared_context', 'render_clock', 'schedule_instances', 'set_voice_end', 'mix_apply', 'mix_levels', 'mix_cut_tail', 'mix_asset_load', 'mix_asset_unload', 'mix_module_state', 'mix_output_devices', 'mix_live_push', 'direct_apply', 'direct_levels', 'direct_cut_tail', 'direct_module_state', 'direct_measure_latency', 'instrument_sample_load', 'instrument']);
   const callBackendMethod = (name, arg) => {
     if (!active || !backends[active] || typeof backends[active][name] !== 'function') {
       return false;
@@ -148,9 +148,19 @@ import './auv3_host_bridge.js';
   audio.mix_apply = proxyCall('mix_apply');
   audio.mix_levels = proxyCall('mix_levels');
   audio.mix_cut_tail = proxyCall('mix_cut_tail');
+  audio.mix_asset_load = proxyCall('mix_asset_load');
+  audio.mix_asset_unload = proxyCall('mix_asset_unload');
   audio.mix_module_state = proxyCall('mix_module_state');
   audio.mix_output_devices = proxyCall('mix_output_devices');
   audio.mix_live_push = proxyCall('mix_live_push');
+  // Direct path (native engines): live inputs and standalone effects in the device callback.
+  audio.direct_apply = proxyCall('direct_apply');
+  audio.instrument_sample_load = proxyCall('instrument_sample_load');
+  audio.instrument = proxyCall('instrument');
+  audio.direct_levels = proxyCall('direct_levels');
+  audio.direct_cut_tail = proxyCall('direct_cut_tail');
+  audio.direct_module_state = proxyCall('direct_module_state');
+  audio.direct_measure_latency = proxyCall('direct_measure_latency');
 
   av.devices.listAudioInputs = () => av.devices.list({ media_kind: 'audio', direction: 'input' });
   av.devices.listAudioOutputs = () => av.devices.list({ media_kind: 'audio', direction: 'output' });

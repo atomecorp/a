@@ -8,6 +8,8 @@ description = "eVe mixer signal graph hosted inside the Kira mixer (strips, modu
 path = "src/lib.rs"
 
 [dependencies]
+atome-dsp = { path = "../atome-dsp" }
+atome-instrument = { path = "../atome-instrument" }
 kira = { version = "0.12", default-features = false }
 serde = { version = "1", features = ["derive"] }
 

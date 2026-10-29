@@ -134,16 +134,16 @@ fn live_input_follows_the_output_rate_and_refuses_unknown_devices() {
     playback::init().expect("audio engine init");
     let clock = started_clock();
     let input = atome_mix_graph::shared::LiveInput::new(clock.sample_rate as usize * 4);
-    let unknown = super::live_input::sync(vec![("no such microphone".into(), input.clone())]).unwrap_err();
+    let unknown = super::live_input::sync_console(vec![("no such microphone".into(), input.clone())]).unwrap_err();
     assert!(unknown.contains("audio_input_device_not_found"), "{unknown}");
     let name = cpal::default_host().default_input_device().and_then(|device| device.name().ok()).expect("default input");
-    super::live_input::sync(vec![(name, input.clone())]).expect("open live input");
+    super::live_input::sync_console(vec![(name, input.clone())]).expect("open live input");
     std::thread::sleep(Duration::from_millis(300));
     let mut drain = vec![kira::Frame::ZERO; input.available()];
     input.pull(&mut drain);
     std::thread::sleep(Duration::from_millis(1000));
     let arrived = input.available() as f64;
-    super::live_input::sync(Vec::new()).expect("close live input");
+    super::live_input::sync_console(Vec::new()).expect("close live input");
     let expected = clock.sample_rate as f64;
     assert!((arrived - expected).abs() < expected * 0.08, "one second of input = one second at the output rate: {arrived} vs {expected}");
 }

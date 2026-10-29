@@ -79,13 +79,13 @@ const objectHtml = (item, origin, context) => {
         const inner = escapeHtml(p.text).replace(/\n/g, '<br>');
         return link ? `<a class="o t" ${attributes} style="${style}" href="${escapeHtml(link.href)}"${link.newTab ? ' target="_blank" rel="noopener noreferrer"' : ''}>${inner}</a>` : `<div class="o t" ${attributes} style="${style}">${inner}</div>`;
     }
-    if (item.type === 'shape' || item.type === 'group') return wrap(`<div class="o s"${link ? '' : ` ${attributes}`} style="${link ? 'position:absolute;inset:0' : item.style};background:${cssColor(p.color || p.background || p.fill)}"></div>`);
+    if (item.type === 'shape' || item.type === 'group') return wrap(`<div class="o s"${link ? '' : ` ${attributes}`} style="${link ? 'position:absolute;inset:0;border-radius:inherit' : item.style};background:${cssColor(p.color || p.background || p.fill)}"></div>`);
     if (item.type === 'form') return formHtml(item, attributes, context);
     const media = context.media.get(item.id);
     const alt = escapeHtml(p.alt || p.name || '');
     if (item.type === 'video') return `<video class="o v" ${attributes} style="${item.style}" src="${media}" controls preload="metadata" playsinline></video>`;
     if (item.type === 'audio' || item.type === 'sound') return `<audio class="o" ${attributes} style="${item.style}" src="${media}" controls preload="none"></audio>`;
-    return wrap(`<img class="o i"${link ? '' : ` ${attributes}`} style="${link ? 'position:absolute;inset:0;width:100%;height:100%' : item.style}" src="${media}" alt="${alt}" loading="lazy">`);
+    return wrap(`<img class="o i"${link ? '' : ` ${attributes}`} style="${link ? 'position:absolute;inset:0;width:100%;height:100%;border-radius:inherit' : item.style}" src="${media}" alt="${alt}" loading="lazy">`);
 };
 
 const clusterHtml = (cluster, context) => `<div class="c" style="--w:${cluster.width};--h:${cluster.height};width:${cluster.width}px;height:${cluster.height}px;left:${cluster.left}px;top:${cluster.top}px">${cluster.members.map(item => objectHtml(item, cluster, context)).join('')}</div>`;
@@ -126,7 +126,7 @@ export const projectSite = ({ records, projectId, siteId, slug, title = '', desc
             image ? `<meta property="og:image" content="${escapeHtml(origin + media.get(image.id))}">` : ''].filter(Boolean).join('');
         const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${head}
 <style>${siteStylesheet({ width: frame.width, height: frame.height, background: props.fill || props.background })}</style></head>
-<body style="color:${context.ink}"><main class="page">${body}</main>${credit ? '<a class="credit" href="https://atome.one">Créé avec atome</a>' : ''}</body></html>`;
+<body style="color:${context.ink}"><main class="page">${body}</main>${credit ? '<a class="credit" href="https://atome.one" aria-label="Créé avec atome"></a>' : ''}</body></html>`;
         return { page_id: pageId, slug: pageSlug, name, path, html };
     });
     return { ok: true, pages: out, issues, home: idOf(home), title: siteTitle, slug: slug || slugify(siteTitle) };

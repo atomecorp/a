@@ -15,7 +15,7 @@ pub fn apply_program(program: Program) -> Result<usize, String> {
         let count = engine.mix.apply(&mut engine.manager, program)?;
         Ok((count, engine.mix.graph().live_inputs()))
     })?;
-    super::live_input::sync(inputs)?;
+    super::live_input::sync_console(inputs)?;
     Ok(count)
 }
 
@@ -28,6 +28,22 @@ pub fn devices() -> serde_json::Value {
         })]).unwrap_or_default(),
         "inputs": super::live_input::input_devices()
     })
+}
+
+// A `.nam` capture or a WAV impulse response, decoded once for every `dsp`
+// module that names it.
+pub fn load_asset(asset_id: &str, asset: atome_mix_graph::dsp_module::StoredAsset) -> Result<(), String> {
+    // The direct path's graph gets the same decoded asset (shared, not copied).
+    super::direct::load_asset(asset_id, asset.clone())?;
+    with_engine(|engine| {
+        engine.mix.load_asset(asset_id, asset);
+        Ok(())
+    })
+}
+
+pub fn unload_asset(asset_id: &str) -> Result<(), String> {
+    super::direct::unload_asset(asset_id)?;
+    with_engine(|engine| engine.mix.unload_asset(asset_id))
 }
 
 pub fn levels() -> Result<Vec<StripLevel>, String> {

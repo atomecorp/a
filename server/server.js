@@ -60,6 +60,7 @@ const {
   newsBroadcast,
   newsPublishRateAllowed,
   communities,
+  forums,
   directoryPublicService,
   publicEvents,
   shop,
@@ -309,7 +310,8 @@ async function startServer() {
     registerDbStatusRoutes(server, { DATABASE_ENABLED, DB_REQUIRED_MESSAGE, SCHEMA_PATH });
     // Websites at atome.one/<slug> and on personal domains, answered after every route of the app (server/site_http.js).
     registerSiteHttp(server, { publishing: site.publishing, store: site.store, notify: deliverCommNotification,
-      fontRoot: path.join(staticRoot, 'assets', 'fonts', 'Roboto'), origin: process.env.ATOME_SITE_ORIGIN || 'https://atome.one',
+      fontRoot: path.join(staticRoot, 'assets', 'fonts', 'Roboto'), logoFile: path.join(staticRoot, 'assets', 'images', 'icons', 'atome.svg'),
+      origin: process.env.ATOME_SITE_ORIGIN || 'https://atome.one',
       appHosts: (process.env.ATOME_APP_HOSTS || 'atome.one,www.atome.one,localhost,127.0.0.1,::1').split(',').map(host => host.trim()).filter(Boolean) });
 
     // ===========================
@@ -331,6 +333,7 @@ async function startServer() {
       newsBroadcast,
       newsPublishRateAllowed,
       communities,
+      forums,
       publicEvents,
       shop,
       coaches,

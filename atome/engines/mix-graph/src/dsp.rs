@@ -1,4 +1,4 @@
-// Small DSP blocks owned by the mixer itself (the Kira effects cover the rest).
+// Small DSP blocks owned by the mixer itself (atome-dsp covers the effects).
 
 use kira::Frame;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -115,50 +115,6 @@ impl DelayLine {
             self.ring[self.position] = *frame;
             *frame = delayed;
             self.position = (self.position + 1) % self.ring.len();
-        }
-    }
-}
-
-// Feed-forward compressor whose detector listens to another strip (sidechain).
-pub struct SidechainCompressor {
-    sample_rate: f32,
-    envelope: f32,
-}
-
-pub struct CompressorSettings {
-    pub threshold_db: f32,
-    pub ratio: f32,
-    pub attack_ms: f32,
-    pub release_ms: f32,
-    pub makeup_db: f32,
-    pub mix: f32,
-}
-
-impl SidechainCompressor {
-    pub fn new(sample_rate: u32) -> Self {
-        Self { sample_rate: sample_rate.max(1) as f32, envelope: 0.0 }
-    }
-
-    pub fn reset(&mut self) {
-        self.envelope = 0.0;
-    }
-
-    pub fn process(&mut self, buffer: &mut [Frame], key: &[Frame], settings: &CompressorSettings) {
-        let attack = (-1.0 / (settings.attack_ms.max(0.01) * 0.001 * self.sample_rate)).exp();
-        let release = (-1.0 / (settings.release_ms.max(0.01) * 0.001 * self.sample_rate)).exp();
-        let makeup = db_to_amplitude(settings.makeup_db);
-        let ratio = settings.ratio.max(1.0);
-        for (index, frame) in buffer.iter_mut().enumerate() {
-            let key_frame = key.get(index).copied().unwrap_or(Frame::ZERO);
-            let level = key_frame.left.abs().max(key_frame.right.abs());
-            let coefficient = if level > self.envelope { attack } else { release };
-            self.envelope = level + coefficient * (self.envelope - level);
-            let level_db = if self.envelope > 0.0 { 20.0 * self.envelope.log10() } else { SILENCE_DB };
-            let over = level_db - settings.threshold_db;
-            let reduction_db = if over > 0.0 { over - over / ratio } else { 0.0 };
-            let gain = db_to_amplitude(-reduction_db) * makeup;
-            let wet = *frame * gain;
-            *frame = *frame * (1.0 - settings.mix) + wet * settings.mix;
         }
     }
 }

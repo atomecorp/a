@@ -36,6 +36,9 @@ export const CALENDAR_AGENDA_TOOLS = [
     contract('delete_event', 'Delete a calendar event.', true, { eventId: id }, ['eventId']),
     contract('ensure_calendar', 'Ensure a calendar exists (creates the default one when calendarId is omitted); name names a calendar made now.', true,
         { calendarId: id, name: { type: 'string', minLength: 1 } }, [], { risk: 'LOW' }),
+    contract('calendars', 'List the account\'s calendars (Perso first, then its own: a life profile\'s, « Publications »…), each with shown: false when the person hid it from the Agenda.', false),
+    contract('calendar_show', 'Show (shown true) or hide (shown false) a calendar\'s events in the Agenda; the calendar and its events stay. Its id comes from calendar.calendars.', true,
+        { calendarId: id, shown: { type: 'boolean' } }, ['calendarId', 'shown'], { risk: 'LOW' }),
     contract('share', 'Share a calendar with another user by phone.', true, {
         phone: { type: 'string', minLength: 1 }, calendarId: id, shareType: { type: 'string' },
         permissions: { type: 'object', additionalProperties: false, properties: {

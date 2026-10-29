@@ -11,6 +11,7 @@ import {
   resolveAudioRuntime
 } from './runtime_audio_backend.js';
 import { createKiraClipMeta, isAuv3NativeRuntime, postAuv3LocalClipLoad } from './kira_backend_support.js';
+import { createKiraLiveMethods } from './kira_live_methods.js';
 
 // Kira backend for Squirrel.av.audio
 // Routes audio commands to either Tauri invoke (native) or WASM module (web).
@@ -364,6 +365,29 @@ import { createKiraClipMeta, isAuv3NativeRuntime, postAuv3LocalClipLoad } from '
       });
     },
 
+    // A capture (.nam) or an impulse response for the `dsp` modules naming
+    // `assetId`. Native reads `path` itself; the Web engine takes the decoded
+    // data: `capture` (the .nam text) or `impulse` { left, right, sampleRate }.
+    mix_asset_load(arg) {
+      var assetId = String((arg && arg.assetId) || '');
+      if (!assetId) return Promise.reject(new Error('mix_asset_load needs an assetId'));
+      return ensureRuntimeMode({ audioManager: true }).then(function () {
+        if (mode !== 'wasm') return invoke('audio_mix_asset_load', { assetId: assetId, path: String(arg.path || '') });
+        if (typeof arg.capture === 'string') return wasm.audio_mix_asset_load_capture(assetId, arg.capture);
+        if (arg.impulse && arg.impulse.left) {
+          var impulse = arg.impulse;
+          return wasm.audio_mix_asset_load_impulse(assetId, Float32Array.from(impulse.left), impulse.right ? Float32Array.from(impulse.right) : undefined, Number(impulse.sampleRate));
+        }
+        throw new Error('mix_asset_load on the Web needs a capture or an impulse');
+      });
+    },
+
+    mix_asset_unload(assetId) {
+      return ensureRuntimeMode({ audioManager: true }).then(function () {
+        return mode === 'wasm' ? wasm.audio_mix_asset_unload(String(assetId)) : invoke('audio_mix_asset_unload', { assetId: String(assetId) });
+      });
+    },
+
     // The real inputs and outputs a strip can use. Web: the destination's
     // channels and the browser's audio inputs; native: the engine's devices.
     mix_output_devices() {
@@ -443,6 +467,7 @@ import { createKiraClipMeta, isAuv3NativeRuntime, postAuv3LocalClipLoad } from '
     },
 
     ...clipMeta.methods,
+    ...createKiraLiveMethods({ invoke, ensureRuntimeMode, readWasm: () => (mode === 'wasm' ? wasm : null) }),
 
     dispatch_batch(batch) {
       for (var i = 0; i < batch.length; i++) {

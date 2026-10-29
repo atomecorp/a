@@ -81,9 +81,67 @@ pub fn audio_mix_devices() -> Result<Value, String> {
     commands::mix_devices()
 }
 
+// Reading and decoding a capture or a long impulse response stays off the UI thread.
+#[tauri::command]
+pub async fn audio_mix_asset_load(paths: tauri::State<'_, crate::ProjectPaths>, asset_id: String, path: String) -> Result<Value, String> {
+    let project_root = paths.project_root.clone();
+    tauri::async_runtime::spawn_blocking(move || commands::mix_asset_load(Some(&project_root), &asset_id, &path))
+        .await
+        .map_err(|error| format!("audio_mix_asset_load_task_failed: {error}"))?
+}
+
+#[tauri::command]
+pub fn audio_mix_asset_unload(asset_id: String) -> Result<Value, String> {
+    commands::mix_asset_unload(&asset_id)
+}
+
 #[tauri::command]
 pub fn audio_mix_cut_tail(module_id: String) -> Result<Value, String> {
     commands::mix_cut_tail(&module_id)
+}
+
+// A Sampler's sample, decoded off the UI thread; then the instrument commands
+// (description, notes, settings) for the timeline's and the direct path's graphs.
+#[tauri::command]
+pub async fn audio_instrument_sample_load(paths: tauri::State<'_, crate::ProjectPaths>, sample_id: String, path: String) -> Result<Value, String> {
+    let project_root = paths.project_root.clone();
+    tauri::async_runtime::spawn_blocking(move || commands::instrument_sample_load(Some(&project_root), &sample_id, &path))
+        .await
+        .map_err(|error| format!("audio_instrument_sample_load_task_failed: {error}"))?
+}
+
+#[tauri::command]
+pub fn audio_instrument(command: Value) -> Result<Value, String> {
+    commands::instrument_run(command)
+}
+
+// The direct path: live inputs and standalone effects played in the device callback.
+#[tauri::command]
+pub fn audio_direct_apply(program: Value) -> Result<Value, String> {
+    commands::direct_apply(program)
+}
+
+#[tauri::command]
+pub fn audio_direct_levels() -> Result<Value, String> {
+    commands::direct_levels()
+}
+
+#[tauri::command]
+pub fn audio_direct_cut_tail(module_id: String) -> Result<Value, String> {
+    commands::direct_cut_tail(&module_id)
+}
+
+#[tauri::command]
+pub fn audio_direct_module_state(module_id: String) -> Result<Value, String> {
+    commands::direct_module_state(&module_id)
+}
+
+// The measure plays and listens for a few seconds: off the UI thread.
+#[tauri::command]
+pub async fn audio_direct_measure_latency(device_name: Option<String>) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || commands::direct_measure_latency(device_name.as_deref()))
+        .await
+        .map_err(|error| format!("audio_direct_measure_latency_task_failed: {error}"))?
 }
 
 #[tauri::command]

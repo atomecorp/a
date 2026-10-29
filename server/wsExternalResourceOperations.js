@@ -12,6 +12,7 @@ import { handleWsOpenFoodFacts } from './ws_open_food_facts.js';
 import { handleWsBookSource } from './ws_book_sources.js';
 import { handleWsMediaLibrary } from './ws_media_library.js';
 import { handleWsBugReport } from './ws_bug_reports.js';
+import { handleWsTone3000 } from './ws_tone3000.js';
 
 export async function handleWsExternalResourceOperation(data, connection, address) {
     return await handleWsPersonalImport(data, connection)
@@ -26,6 +27,7 @@ export async function handleWsExternalResourceOperation(data, connection, addres
         || await handleWsGpsOperation(data, address)
         || await handleWsOpenFoodFacts(data, address)
         || await handleWsBookSource(data, address)
+        || await handleWsTone3000(data, address)
         // An account is its own client (a proxied server sees every address alike).
         || await handleWsMediaLibrary(data, connection?._wsApiUserId ? `user:${connection._wsApiUserId}` : address)
         || await handleWsBugReport(data, connection, address);

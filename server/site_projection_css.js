@@ -8,7 +8,7 @@ export const cssNumber = (value, fallback = 0) => { const number = Number.parseF
 export const PHONE_BREAKPOINT_PX = 720;
 const PAGE_BACKGROUND = '#ffffff';
 // The page's ink (a page is a group: its `color` is its own, never a text's): dark on a light ground, white on a dark
-// one (relative luminance, sRGB), so the credit line, the form and an uncoloured text always read. A ground given by name keeps the dark ink.
+// one (relative luminance, sRGB), so the credit mark, the form and an uncoloured text always read. A ground given by name keeps the dark ink.
 export const inkOn = (background) => {
     const value = cssColor(background, PAGE_BACKGROUND).toLowerCase();
     const hex = value.match(/^#([0-9a-f]{3}|[0-9a-f]{6})(?:[0-9a-f]{2})?$/)?.[1];
@@ -32,7 +32,8 @@ a.o,.o a{color:inherit;text-decoration:none}a.o:focus-visible,.o a:focus-visible
 .f input,.f textarea{font:inherit;font-weight:400;font-size:16px;color:var(--ink);background:rgba(127,127,127,.14);border:0;border-radius:10px;padding:12px 14px;resize:none}
 .f .consent,.f .said{color:var(--ink);opacity:.6;font-size:13px}.f .hp{position:absolute;left:-9999px}
 .f button{align-self:flex-start;font:inherit;font-weight:700;font-size:17px;color:#15182c;background:var(--accent);border:0;border-radius:15px;padding:14px 28px;cursor:pointer}
-.credit{display:block;text-align:center;padding:24px;font-size:13px;color:inherit;opacity:.5;text-decoration:none}
+.credit{display:block;width:21px;height:21px;margin:21px 21px 21px auto;color:inherit;background:currentColor;opacity:.34;transition:opacity .2s;
+ -webkit-mask:url(/_site/logo.svg) center/contain no-repeat;mask:url(/_site/logo.svg) center/contain no-repeat}.credit:hover,.credit:focus-visible{opacity:.8}
 @media (max-width:${width}px) and (min-width:${PHONE_BREAKPOINT_PX + 1}px){.page{zoom:calc(100vw / ${width}px)}}
 @media (max-width:${PHONE_BREAKPOINT_PX}px){.page{width:auto;height:auto;padding:24px 20px 8px;display:flex;flex-direction:column;gap:20px}
  .r{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center}

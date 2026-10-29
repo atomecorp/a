@@ -13,6 +13,7 @@ const definitions = {
     list: [{}, [], 'The person\'s life profiles (id, name, color, calendar_id) in their order, and the ids active on this device ([] = every profile, the eVe logo).', false, 'read'],
     create: [{ name }, ['name'], 'Create a life profile (Pro, Sport, Passion…): it joins the row of the home\'s centre, and a calendar of the same name is created with it.', true, 'write'],
     rename: [{ profile_id: id, name }, ['profile_id', 'name'], 'Rename a life profile (its calendar takes the new name).', true, 'write'],
+    color: [{ profile_id: id, color: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' } }, ['profile_id', 'color'], 'Change a life profile\'s colour (#rrggbb, its calendar takes it too).', true, 'write'],
     delete: [{ profile_id: id }, ['profile_id'], 'Delete a life profile. Nothing else is deleted: the items it held belong again to every profile unless another profile holds them.', true, 'write'],
     activate: [{ profile_ids: ids }, ['profile_ids'], 'Work in these profiles on this device: lists and the agenda show what they hold (and what holds no profile); '
         + 'what is created takes them. [] = every profile (the eVe logo).', false, 'control'],
@@ -33,5 +34,5 @@ export const validateLifeProfileInput = (action, input) => {
 export const lifeProfileError = error => (LIFE_PROFILE_ERRORS.includes(error?.code || error?.message || error) ? (error?.code || error?.message || error) : 'WRITE_FAILED');
 export const LIFE_PROFILE_ASSISTANT_INSTRUCTIONS = 'Life profiles (contexts: Pro, Sport, Passion, Privé…): « passe en mode pro », « mets-moi sur mon profil sport » call profiles.activate '
     + 'with that profile\'s id (profiles.list gives them); « tous les profils », « reviens à tout » profiles.activate with []; « active aussi Passion » adds its id to the active ones. '
-    + '« crée un profil Musique » profiles.create; « renomme… » profiles.rename; « supprime le profil… » profiles.delete. « mets ce projet dans Pro » profiles.assign '
+    + '« crée un profil Musique » profiles.create; « renomme… » profiles.rename; « mets Sport en bleu » profiles.color; « supprime le profil… » profiles.delete. « mets ce projet dans Pro » profiles.assign '
     + 'with the project\'s atome_id. Never invent an id.';

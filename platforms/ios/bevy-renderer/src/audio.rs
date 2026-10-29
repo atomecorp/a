@@ -76,3 +76,15 @@ pub extern "C" fn atome_ios_audio_host_render(left: *mut f32, right: *mut f32, f
     let (left, right) = unsafe { (std::slice::from_raw_parts_mut(left, frames as usize), std::slice::from_raw_parts_mut(right, frames as usize)) };
     atome_audio_engine::host_output::render(left, right, host_ns) as u32
 }
+
+/// Real-time: hands the host's input (`frames` frames of `left`/`right`) to the
+/// strips listening to it (IN `host`); true when one does, the chain then plays it.
+#[no_mangle]
+pub extern "C" fn atome_ios_audio_host_input(left: *const f32, right: *const f32, frames: u32) -> bool {
+    if left.is_null() || right.is_null() || frames == 0 {
+        return false;
+    }
+    // SAFETY: the render block passes two buffers of at least `frames` floats it owns for the call.
+    let (left, right) = unsafe { (std::slice::from_raw_parts(left, frames as usize), std::slice::from_raw_parts(right, frames as usize)) };
+    atome_audio_engine::host_output::push_host_input(left, right)
+}

@@ -1,15 +1,16 @@
 // Render-side plumbing: per-strip capture effect, meters, the graph hand-off
 // between threads and the effect that runs the whole graph on the main track.
 //
-// Render-thread rule: only `try_lock` (never blocking), no allocation, and
-// replaced graphs go back to the control thread to be dropped there.
+// Render-thread rule: no blocking lock, no allocation, and replaced graphs go
+// back to the control thread to be dropped there. A capture slot is written
+// and read on the render thread alone, so its `try_lock` never meets a rival.
 
 use crate::dsp::AtomicParam;
 use crate::graph::{Graph, MAX_BLOCK};
 use kira::effect::{Effect, EffectBuilder};
 use kira::info::Info;
 use kira::Frame;
-use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 pub struct CaptureSlot {
@@ -30,15 +31,21 @@ impl CaptureSlot {
         }
     }
 
-    // Moves this block's captured audio into `out` (silence when the strip's
-    // track rendered nothing this block).
-    pub fn take_into(&self, out: &mut [Frame]) {
+    // Copies the captured frames from `offset` into `out` (silence past what
+    // the strip's track rendered this block).
+    pub fn read_at(&self, offset: usize, out: &mut [Frame]) {
         out.fill(Frame::ZERO);
+        if let Ok(guard) = self.frames.try_lock() {
+            let (frames, len) = &*guard;
+            let count = len.saturating_sub(offset).min(out.len());
+            out[..count].copy_from_slice(&frames[offset..offset + count]);
+        }
+    }
+
+    // The block is consumed: a track silent next block plays silence.
+    pub fn finish(&self) {
         if let Ok(mut guard) = self.frames.try_lock() {
-            let (frames, len) = &mut *guard;
-            let count = (*len).min(out.len());
-            out[..count].copy_from_slice(&frames[..count]);
-            *len = 0;
+            guard.1 = 0;
         }
     }
 
@@ -49,47 +56,64 @@ impl CaptureSlot {
 }
 
 // A live input (microphone, interface input) monitored through a strip: the
-// input thread pushes frames, the render thread pulls exactly one block.
-// Fixed capacity; both sides only `try_lock`, a busy side drops or plays silence.
+// input thread pushes frames, the render thread pulls exactly one block. A
+// single-producer single-consumer ring of atomics: neither side ever waits.
+// The reader keeps the backlog under half the ring, dropping the oldest
+// frames, so a slow start never turns into a growing delay.
 pub struct LiveInput {
-    ring: Mutex<(Vec<Frame>, usize, usize)>,
+    samples: Box<[AtomicU32]>,
+    mask: usize,
+    written: AtomicUsize,
+    read: AtomicUsize,
 }
 
 impl LiveInput {
     pub fn new(capacity: usize) -> Arc<Self> {
-        Arc::new(Self { ring: Mutex::new((vec![Frame::ZERO; capacity.max(1)], 0, 0)) })
+        let frames = capacity.max(2).next_power_of_two();
+        Arc::new(Self {
+            samples: (0..frames * 2).map(|_| AtomicU32::new(0)).collect(),
+            mask: frames - 1,
+            written: AtomicUsize::new(0),
+            read: AtomicUsize::new(0),
+        })
     }
 
+    fn frames(&self) -> usize {
+        self.mask + 1
+    }
+
+    // A full ring drops what does not fit.
     pub fn push(&self, input: &[Frame]) {
-        let Ok(mut guard) = self.ring.try_lock() else { return };
-        let (frames, read, len) = &mut *guard;
-        let capacity = frames.len();
-        for frame in input {
-            frames[(*read + *len) % capacity] = *frame;
-            if *len == capacity {
-                *read = (*read + 1) % capacity;
-            } else {
-                *len += 1;
-            }
+        let written = self.written.load(Ordering::Relaxed);
+        let read = self.read.load(Ordering::Acquire);
+        let free = self.frames() - written.wrapping_sub(read);
+        for (index, frame) in input.iter().take(free).enumerate() {
+            let slot = (written.wrapping_add(index) & self.mask) * 2;
+            self.samples[slot].store(frame.left.to_bits(), Ordering::Relaxed);
+            self.samples[slot + 1].store(frame.right.to_bits(), Ordering::Relaxed);
         }
+        self.written.store(written.wrapping_add(input.len().min(free)), Ordering::Release);
     }
 
-    // Frames waiting to be pulled (0 while the ring is busy).
+    // Frames waiting to be pulled.
     pub fn available(&self) -> usize {
-        self.ring.try_lock().map(|guard| guard.2).unwrap_or(0)
+        self.written.load(Ordering::Acquire).wrapping_sub(self.read.load(Ordering::Relaxed))
     }
 
     pub fn pull(&self, out: &mut [Frame]) {
         out.fill(Frame::ZERO);
-        let Ok(mut guard) = self.ring.try_lock() else { return };
-        let (frames, read, len) = &mut *guard;
-        let capacity = frames.len();
-        let count = (*len).min(out.len());
-        for slot in out.iter_mut().take(count) {
-            *slot = frames[*read];
-            *read = (*read + 1) % capacity;
+        let written = self.written.load(Ordering::Acquire);
+        let mut read = self.read.load(Ordering::Relaxed);
+        let backlog = written.wrapping_sub(read);
+        if backlog > self.frames() / 2 {
+            read = written.wrapping_sub(self.frames() / 2);
         }
-        *len -= count;
+        let count = written.wrapping_sub(read).min(out.len());
+        for (index, slot) in out.iter_mut().take(count).enumerate() {
+            let at = (read.wrapping_add(index) & self.mask) * 2;
+            *slot = Frame::new(f32::from_bits(self.samples[at].load(Ordering::Relaxed)), f32::from_bits(self.samples[at + 1].load(Ordering::Relaxed)));
+        }
+        self.read.store(read.wrapping_add(count), Ordering::Release);
     }
 }
 
@@ -156,6 +180,8 @@ pub struct GraphShared {
     pub block_size: AtomicUsize,
     pub aux: Arc<AuxOutputs>,
     pub output_gain: AtomicParam,
+    // Frames rendered so far: the clock a transport is anchored on (automation.rs).
+    pub frames: AtomicU64,
 }
 
 impl GraphShared {
@@ -167,6 +193,7 @@ impl GraphShared {
             block_size: AtomicUsize::new(MAX_BLOCK),
             aux: Arc::new(AuxOutputs::default()),
             output_gain: AtomicParam::new(1.0),
+            frames: AtomicU64::new(0),
         })
     }
 }
@@ -185,18 +212,25 @@ impl MixGraphEffect {
             return;
         }
         let Ok(mut pending) = self.shared.pending.try_lock() else { return };
-        let Some(next) = pending.take() else { return };
+        let Some(mut next) = pending.take() else { return };
+        if let Some(previous) = self.graph.as_mut() {
+            next.adopt(previous);
+        }
         if let Some(previous) = self.graph.replace(next) {
             retired.push(previous);
         }
     }
 
     // Exposed for tests and offline rendering.
-    pub fn render(&mut self, out: &mut [Frame], dt: f64, info: &Info) {
+    pub fn render(&mut self, out: &mut [Frame]) {
+        let _flush = atome_dsp::denormal::FlushDenormals::new();
         self.adopt_pending();
         let Some(graph) = self.graph.as_mut() else { return };
+        let sample_rate = self.shared.sample_rate.load(Ordering::Relaxed).max(1) as f64;
         for block in out.chunks_mut(MAX_BLOCK) {
-            graph.process(block.len(), dt, info);
+            graph.automation.run(self.shared.frames.load(Ordering::Relaxed), sample_rate);
+            graph.process(block.len());
+            self.shared.frames.fetch_add(block.len() as u64, Ordering::Relaxed);
             for (frame, mixed) in block.iter_mut().zip(graph.main.iter()) {
                 *frame += *mixed;
             }
@@ -220,8 +254,8 @@ impl Effect for MixGraphEffect {
         self.shared.block_size.store(internal_buffer_size, Ordering::Relaxed);
     }
 
-    fn process(&mut self, input: &mut [Frame], dt: f64, info: &Info) {
-        self.render(input, dt, info);
+    fn process(&mut self, input: &mut [Frame], _dt: f64, _info: &Info) {
+        self.render(input);
     }
 }
 

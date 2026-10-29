@@ -1,88 +1,63 @@
-# Problèmes connus et zones à valider
+# Qualification matrix and limits — 2026-10-29
 
-Cette liste reprend les "points critiques à valider" du cahier des charges et ajoute ce que l'audit du framework a révélé. Ce sont les chantiers à suivre en priorité.
+All current target entries are recipes inspected/tested on macOS, not boot claims.
 
-## Compatibilité
+| Target | RAM / model | Boot recipe | VM proof | Physical proof | Display / GPU | Audio / MIDI |
+| --- | --- | --- | --- | --- | --- | --- |
+| PC amd64 UEFI | actual model/GPU/RAM not supplied | official UFS VM base, external disk | none | none | WebGPU and input unverified | interfaces/latency/reconnect unverified |
+| PINE64 A64+ | A64-DB-V1.1 2 GB, Allwinner A64 | official PINE64 microSD, SPL/U-Boot | none | none | HDMI/framebuffer/DRM/Mali unverified | USB/OSS/MIDI unverified |
+| Mac VM Intel | host/guest resources unrecorded | amd64 UEFI, raw/qcow2/vmdk | none | not applicable to guest boot proof | virtual GPU/WebGPU unverified | guest audio/USB passthrough unverified |
+| Mac VM Apple Silicon | control host arm64 macOS 27.0.1; guest resources unrecorded | aarch64 UEFI, raw/qcow2/vmdk | none | not bare-metal Mac support | virtual GPU/WebGPU unverified | guest audio/USB passthrough unverified |
+| Generic ARM64 UEFI | actual machine unknown | aarch64 UFS image | none | none | unverified per model | unverified per model |
 
-### Webview FreeBSD
-- **État** : WebKit2GTK4 fonctionne sur FreeBSD via le port `webkit2-gtk4`
-- **Risque** : la version du port peut traîner derrière upstream → vérifier à chaque release
-- **Plan B** : Tauri 2 embarque sa propre webview ; si WebKit pose problème, lancer directement le bundle Tauri
+For each actual run append date, exact model/revision/firmware, RAM, medium,
+FreeBSD/kernel/package/source identities, commands and trace paths. Qualify
+network, USB, storage, input, stability and recovery independently. No adapters
+or peripherals have yet been identified/tested. Do not extrapolate a PC result
+to ARM or a VM result to physical hardware.
 
-### Support GPU
-- **Intel** : OK (pilotes `drm-kmod` dans les ports)
-- **AMD** : OK (`drm-kmod` récent)
-- **NVIDIA** : nécessite le pilote propriétaire, non testé dans ce builder
-- **Raspberry Pi** : VideoCore OK avec le DTB approprié ; vc4 DRM activé par défaut
+## Observed limits
 
-### Wayland stable
-- `cage` + `wlroots` : stables sur amd64
-- Sur ARM, certains SBC ont des bugs GL (contourner en forçant `WLR_RENDERER=pixman`)
+- Native FreeBSD backend unavailable in this session. macOS cannot execute the
+  native image mount/pkg pipeline. No hypervisor/QEMU was found in PATH or the
+  common UTM/Fusion/Parallels app locations inspected. No dependencies installed.
+- About 22 GiB free on the control host at audit time, below default assembly's
+  conservative working-space requirement. No storage was erased/freed for builds.
+- macOS external physical-media discovery succeeded with no devices attached.
+  Flash identity/readback tests are simulations, not physical-media acceptance.
+- No second local OS image generator was found in the scoped repository searches.
+  `install_server.sh`/setup FreeBSD cases deploy services/dependencies, not boot disks;
+  they are preserved. App-thread listing is limited to 50 recent entries, so it
+  does not prove that no older/archived task exists.
+- eVe requires `navigator.gpu` and its real Bevy/WASM renderer. Cage/Cog was only
+  declared in the previous builder. Cog package resolution and WebGPU must be
+  established; the upstream ports `www/cog/Makefile` query returned 404. No browser
+  substitution, Tauri FreeBSD bundle or GPU acceleration is asserted.
+- Fastify serves browser audio; it does not make a headless audio/MIDI appliance.
+  Existing MIDI ports are Web MIDI or native Tauri contracts. Autonomous audio/MIDI
+  builds are explicitly blocked pending a real canonical native execution path.
+- Kernel USB drivers and JACK installation do not prove browser MIDI or real-time
+  performance. No latency, xrun, capture, drawing or video benchmark has been run.
+- Only explicit development builds are traceable. Package versions are recorded,
+  but pkg repositories are not frozen; rebuild identity and bit reproducibility
+  are not established. All artifacts are unsigned.
+- No secure remote pairing/discovery UI, internal installer, CI, publisher,
+  boot-verified update, rollback, A/B, automatic log-rotation validation or
+  production-maintenance chain is delivered by this builder change.
 
-### ARM complet
-- RPi 4/5 : validés
-- Pine64 : validé
-- Apple Silicon via VM (UTM/Parallels) : non testé, la VM doit exposer UEFI
+## Acceptance procedure
 
-### JACK / audio basse latence
-- OSS + JACK : stable sur amd64
-- Sur certains chipsets USB (notamment USB 3.0 Alpine Ridge) : bugs latence ponctuels → tester cas par cas
-
-### Interfaces audio USB multicanal
-- Testé OK : Focusrite Scarlett (2i2, 4i4, 18i20), RME Babyface
-- Risqué : interfaces class-compliant non-UAC1 (MOTU récents), à tester
-
-### Runtime Atome + pile audio
-- Le DSP core du framework (`atome/engines/audio/core/`) doit être recompilé côté runtime si l'architecture cible diffère de celle de construction
-- **Pas géré actuellement** : l'image amd64 contient les binaires compilés pour amd64 ; l'image arm64 doit être construite sur ARM ou via qemu-user-static
-
-### Synchronisation offline/online
-- **Pas implémenté** côté builder ; c'est une responsabilité du framework et du serveur central
-- Le builder installe seulement le runtime et les outils réseau
-
-### Stabilité auto-update
-- Intervalle 6h + jitter = pas de tempête
-- **Risque** : un update qui casse le build côté framework → le service `atome` se relancera en boucle
-- **Mitigation à ajouter** : détecter les crashes en boucle et rollback automatique sur le tag `atome-backup-*`
-
-### Sécurité réseau
-- TLS OK via `ca_root_nss`
-- **À renforcer** : pinning certificat du serveur central, signature GPG des commits framework
-
-## Limites connues du builder actuel
-
-### Cross-build depuis Linux
-- Fonctionne pour la partie pkg install via qemu-user-static + binfmt_misc
-- **Instable** : certains packages FreeBSD plantent en cross (ports qui assument FreeBSD host)
-- **Recommandation** : builder l'image sur un host FreeBSD quand c'est possible
-
-### Détection version FreeBSD
-- `resolve_freebsd_latest()` parse du HTML → fragile si le listing change de format
-- **Mitigation** : option `--freebsd-version 15.0-RELEASE` pour pinner
-
-### Blocklist WaveSurfer
-- La dépendance a été retirée du framework courant.
-- La blocklist reste utile pour neutraliser d'anciens clones ou branches qui embarqueraient encore `wavesurfer.js`.
-
-### Profile `dev` trop permissif
-- Clone en éditable, autostart off, watchdog off
-- Sur une machine réellement publique (kiosk), utiliser `desktop` ou `minimal`, pas `dev`
-
-### PF firewall entrant fermé
-- Bloque SSH par défaut
-- **Workaround** : décommenter la règle dans `overlays/network/pf.conf` avant build
-
-### Pas d'UI de configuration au premier boot
-- L'utilisateur atterrit directement sur la webview Atome
-- Si le wifi n'est pas configuré avant flash → pas de réseau, pas d'auto-update
-- **À ajouter** : un "onboarding" Atome-side au premier boot pour le wifi
-
-## Roadmap suggérée
-
-1. Tester le build end-to-end sur un host FreeBSD réel (amd64 d'abord)
-2. Ajouter la signature GPG + checksums releases
-3. Implémenter l'installeur Tauri (`installer/desktop/`)
-4. Ajouter la détection rollback automatique dans `atome_updater.sh`
-5. Écrire un onboarding wifi/langue au premier boot côté framework
-6. Valider la pile audio sur 2-3 interfaces USB référence
-7. Ajouter les tests CI GitHub Actions (au moins `shellcheck` + lint YAML)
+1. Build and verify under native FreeBSD of matching architecture/version.
+2. VM: serial console, UEFI, disk/network, service startup and shutdown; record
+   host/hypervisor/version/resources. Test matching architecture and do not label
+   emulation as hardware acceleration.
+3. Physical PC and PINE64: record boot trace and exact media; PINE64 tests include
+   microSD/ROM/SPL/U-Boot, serial or Ethernet access, USB and HDMI. Never presume
+   standalone USB boot, Wi-Fi dongle support or Mali acceleration.
+4. Display: follow the canonical UI debug procedure, real WebGPU pixels and input;
+   test reload/persistence and inspect browser/server logs. No desktop replacement.
+5. Audio/MIDI: actual devices, capture/output, sample rate/buffer, notes/control,
+   hotplug, load/stability and measured round-trip latency if possible. Remote
+   client peripherals and local appliance peripherals are separate evidence rows.
+6. Measure boot/first use, disk usage/raw/compressed size, RAM, CPU and interaction
+   response before optimizing. Publish observations without invented thresholds.

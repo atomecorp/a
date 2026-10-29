@@ -33,6 +33,28 @@ struct RenderClock {
     segments: Vec<(u64, f64)>,
     renderer: Option<Renderer>,
     pump: Option<Closure<dyn FnMut()>>,
+    scratch: Scratch,
+}
+
+// Block buffers made once: a pump renders into them, never into new ones (D28).
+struct Scratch {
+    interleaved: Vec<f32>,
+    left: Vec<f32>,
+    right: Vec<f32>,
+    aux: Vec<(Vec<f32>, Vec<f32>)>,
+    aux_frames: Vec<kira::Frame>,
+}
+
+impl Scratch {
+    fn new() -> Self {
+        Self {
+            interleaved: vec![0.0; BLOCK_FRAMES * CHANNELS],
+            left: vec![0.0; BLOCK_FRAMES],
+            right: vec![0.0; BLOCK_FRAMES],
+            aux: Vec::new(),
+            aux_frames: vec![kira::Frame::ZERO; BLOCK_FRAMES],
+        }
+    }
 }
 
 // A voice waiting for its exact rendered frame.
@@ -158,6 +180,7 @@ impl Backend for ScheduledContextBackend {
                 segments: Vec::new(),
                 renderer: None,
                 pump: None,
+                scratch: Scratch::new(),
             });
         });
         Ok((Self, sample_rate as u32))
@@ -207,9 +230,7 @@ fn render_ahead() {
             }
         }
         let horizon = now_frame + LOOKAHEAD_SECONDS * clock.sample_rate;
-        let mut interleaved = vec![0.0f32; BLOCK_FRAMES * CHANNELS];
-        let mut left = vec![0.0f32; BLOCK_FRAMES];
-        let mut right = vec![0.0f32; BLOCK_FRAMES];
+        let Scratch { interleaved, left, right, aux, aux_frames } = &mut clock.scratch;
         while clock.base_context_frame + (clock.frames_rendered as f64) < horizon {
             // The block is rendered in pieces split at the frames where scheduled
             // voices are due: each starts exactly on its frame.
@@ -232,9 +253,10 @@ fn render_ahead() {
                 left[frame] = interleaved[frame * CHANNELS];
                 right[frame] = interleaved[frame * CHANNELS + 1];
             }
+            interleaved.fill(0.0);
             let when = (clock.base_context_frame + clock.frames_rendered as f64) / clock.sample_rate;
-            let aux = drain_aux();
-            if schedule_block(&clock.context, clock.sample_rate, &mut left, &mut right, &aux, when).is_err() {
+            drain_aux(aux, aux_frames);
+            if schedule_block(&clock.context, clock.sample_rate, left, right, aux, when).is_err() {
                 break;
             }
             clock.frames_rendered += BLOCK_FRAMES as u64;
@@ -243,17 +265,25 @@ fn render_ahead() {
     });
 }
 
-// The graph's extra pairs for this block, as (left, right) channel arrays.
-fn drain_aux() -> Vec<(Vec<f32>, Vec<f32>)> {
+// The graph's extra pairs for this block, as (left, right) channel arrays;
+// the arrays are made again only when the number of pairs changes.
+fn drain_aux(out: &mut Vec<(Vec<f32>, Vec<f32>)>, frames: &mut [kira::Frame]) {
     let pairs = AUX_PAIRS.with(Cell::get);
     AUX.with(|slot| {
-        let Some(aux) = slot.borrow().as_ref().cloned() else { return Vec::new() };
-        let mut frames = vec![kira::Frame::ZERO; BLOCK_FRAMES];
-        (1..=pairs).map(|pair| {
-            aux.drain_pair(pair as u16, &mut frames);
-            (frames.iter().map(|frame| frame.left).collect(), frames.iter().map(|frame| frame.right).collect())
-        }).collect()
-    })
+        let slot = slot.borrow();
+        let Some(aux) = slot.as_ref() else {
+            out.clear();
+            return;
+        };
+        out.resize_with(pairs, || (vec![0.0; BLOCK_FRAMES], vec![0.0; BLOCK_FRAMES]));
+        for (index, (left, right)) in out.iter_mut().enumerate() {
+            aux.drain_pair(index as u16 + 1, frames);
+            for ((frame, left), right) in frames.iter().zip(left.iter_mut()).zip(right.iter_mut()) {
+                *left = frame.left;
+                *right = frame.right;
+            }
+        }
+    });
 }
 
 fn schedule_block(
@@ -261,17 +291,15 @@ fn schedule_block(
     sample_rate: f64,
     left: &mut [f32],
     right: &mut [f32],
-    aux: &[(Vec<f32>, Vec<f32>)],
+    aux: &mut [(Vec<f32>, Vec<f32>)],
     when: f64,
 ) -> Result<(), JsValue> {
     let buffer = context.create_buffer((CHANNELS + aux.len() * 2) as u32, BLOCK_FRAMES as u32, sample_rate as f32)?;
     buffer.copy_to_channel(left, 0)?;
     buffer.copy_to_channel(right, 1)?;
-    for (index, (aux_left, aux_right)) in aux.iter().enumerate() {
-        let mut aux_left = aux_left.clone();
-        let mut aux_right = aux_right.clone();
-        buffer.copy_to_channel(&mut aux_left, (CHANNELS + index * 2) as i32)?;
-        buffer.copy_to_channel(&mut aux_right, (CHANNELS + index * 2 + 1) as i32)?;
+    for (index, (aux_left, aux_right)) in aux.iter_mut().enumerate() {
+        buffer.copy_to_channel(aux_left, (CHANNELS + index * 2) as i32)?;
+        buffer.copy_to_channel(aux_right, (CHANNELS + index * 2 + 1) as i32)?;
     }
     let source = context.create_buffer_source()?;
     source.set_buffer(Some(&buffer));

@@ -94,6 +94,7 @@ const projectStoredStateCurrent = (row = {}) => {
             owner_id: row.owner_id || row.ownerId || null,
             parent_id: row.parent_id || row.parentId || null,
             project_id: row.project_id || row.projectId || null,
+            created_at: row.created_at || row.createdAt || null,
             updated_at: row.updated_at || row.updatedAt || null,
             version: row.version || null
         },

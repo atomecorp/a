@@ -1,6 +1,7 @@
 // Mix program: the audio part of the canonical `timeline.mix`, compiled by the
 // eVe mix engine (JS) and applied here. Strip/module ids are the canonical ids.
 
+use crate::automation::{AutomationLane, TransportSpec};
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -17,12 +18,49 @@ pub enum Target {
 pub enum InputSpec {
     Track,
     LiveAudio { device_id: String },
+    // One of the instrument's outputs (D-S2), 0 unless named.
+    Instrument {
+        instrument_id: String,
+        #[serde(default)]
+        output: usize,
+    },
 }
 
 impl Default for InputSpec {
     fn default() -> Self {
         InputSpec::Track
     }
+}
+
+// One destination of a module's port; a port may have several.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct PortRoute {
+    pub port: usize,
+    pub target: Target,
+}
+
+// What a keyed module listens to: a strip's post-chain signal, or one port of
+// a module (a band of a split).
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum KeySource {
+    Strip { id: String },
+    Port { module_id: String, port: usize },
+}
+
+// What an IN module (`type: "input"`, D-S3) mixes into its chain at its level:
+// a live input, a strip's post-chain signal (a loop closes through a return,
+// RETURN_FRAMES later) or one output of an instrument.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum MixSource {
+    LiveAudio { device_id: String },
+    Strip { id: String },
+    Instrument {
+        instrument_id: String,
+        #[serde(default)]
+        output: usize,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -38,6 +76,17 @@ pub struct ModuleSpec {
     pub params: HashMap<String, serde_json_value::Value>,
     #[serde(default)]
     pub target: Option<Target>,
+    // Ports sent out of the strip; a port not listed stays in it.
+    #[serde(default)]
+    pub outputs: Vec<PortRoute>,
+    #[serde(default)]
+    pub key: Option<KeySource>,
+    // What an IN module mixes in.
+    #[serde(default)]
+    pub source: Option<MixSource>,
+    // Curves its parameters follow while the strip's transport plays (automation.rs).
+    #[serde(default)]
+    pub automation: Vec<AutomationLane>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -54,6 +103,9 @@ pub struct StripSpec {
     // Track-level mute/solo resolved by the compiler (live, sample-accurate).
     #[serde(default)]
     pub muted: bool,
+    // The transport its modules' automation follows (a Molecule's).
+    #[serde(default)]
+    pub transport: Option<String>,
 }
 
 fn enabled() -> bool {
@@ -64,6 +116,8 @@ fn enabled() -> bool {
 pub struct Program {
     #[serde(default)]
     pub strips: Vec<StripSpec>,
+    #[serde(default)]
+    pub transports: Vec<TransportSpec>,
 }
 
 impl ModuleSpec {

@@ -1,0 +1,5 @@
+stack:
+  name: midi
+  # snd_uaudio/snd_umidi are base-system drivers, not pkg packages.
+  # Runtime access and physical loopback remain unverified.
+  pkg: []

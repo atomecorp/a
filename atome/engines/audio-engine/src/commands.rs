@@ -4,7 +4,8 @@
 // (camelCase, as the JS `backend.kira.js` sends them). Results are the JSON
 // the JS side reads.
 
-use crate::{calibration, metering, mix, playback, playback_schedule, recorder, wake_capture};
+use crate::{calibration, direct, instrument, metering, mix, mix_assets, playback, playback_schedule, recorder, wake_capture};
+use atome_mix_graph::instrument_command::InstrumentAnswer;
 use atome_mix_graph::voice::{ScheduledVoice, VoiceRequest};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -123,6 +124,38 @@ pub fn mix_devices() -> Result<Value, String> {
     Ok(json!({ "success": true, "devices": mix::devices() }))
 }
 
+pub fn mix_asset_load(project_root: Option<&Path>, asset_id: &str, path: &str) -> Result<Value, String> {
+    if asset_id.is_empty() {
+        return Err("mix_asset_load needs an asset id".to_string());
+    }
+    let asset = mix_assets::read(&existing(resolve_path(project_root, path)?)?)?;
+    mix::load_asset(asset_id, asset)?;
+    Ok(json!({ "success": true, "asset_id": asset_id }))
+}
+
+// A Sampler's sample, decoded once for every instrument that names `sample_id`.
+pub fn instrument_sample_load(project_root: Option<&Path>, sample_id: &str, path: &str) -> Result<Value, String> {
+    if sample_id.is_empty() {
+        return Err("instrument_sample_load needs a sample id".to_string());
+    }
+    let (frames, sample_rate) = instrument::load_sample(sample_id, &existing(resolve_path(project_root, path)?)?)?;
+    Ok(json!({ "success": true, "sample_id": sample_id, "frames": frames, "sample_rate": sample_rate, "channels": 2 }))
+}
+
+pub fn instrument_run(command: Value) -> Result<Value, String> {
+    let command = serde_json::from_value(command).map_err(|error| format!("instrument command invalid: {error}"))?;
+    Ok(match instrument::run(command)? {
+        InstrumentAnswer::Actions(drained) => json!({ "success": true, "frame": null, "drained": drained }),
+        InstrumentAnswer::Frames(frames) => json!({ "success": true, "frame": frames }),
+        InstrumentAnswer::Done => json!({ "success": true, "frame": null }),
+    })
+}
+
+pub fn mix_asset_unload(asset_id: &str) -> Result<Value, String> {
+    mix::unload_asset(asset_id)?;
+    Ok(json!({ "success": true, "asset_id": asset_id }))
+}
+
 pub fn mix_cut_tail(module_id: &str) -> Result<Value, String> {
     mix::cut_tail(module_id)?;
     Ok(json!({ "success": true, "module_id": module_id }))
@@ -130,6 +163,38 @@ pub fn mix_cut_tail(module_id: &str) -> Result<Value, String> {
 
 pub fn mix_module_state(module_id: &str) -> Result<Value, String> {
     Ok(json!({ "success": true, "module_id": module_id, "state": mix::module_state(module_id)? }))
+}
+
+// The direct path: what is played live, in the device callback (L2).
+pub fn direct_apply(program: Value) -> Result<Value, String> {
+    let program: atome_mix_graph::Program = serde_json::from_value(program).map_err(|error| format!("direct program invalid: {error}"))?;
+    Ok(json!({ "success": true, "strips": direct::apply(program)?, "buffer_frames": direct::BUFFER_FRAMES }))
+}
+
+// Round trip of the direct path through an input (default: the default input).
+pub fn direct_measure_latency(device_name: Option<&str>) -> Result<Value, String> {
+    let device = match device_name.filter(|name| !name.is_empty()) {
+        Some(name) => name.to_string(),
+        None => cpal::traits::DeviceTrait::name(&recorder::input_device(None)?).map_err(|error| format!("input_device_name: {error}"))?,
+    };
+    let rate = playback_schedule::render_clock().map(|clock| clock.sample_rate).ok_or("Audio engine not initialized")?;
+    Ok(json!({ "success": true, "round_trip": direct::measure_round_trip(&device, rate)? }))
+}
+
+pub fn direct_levels() -> Result<Value, String> {
+    let levels: Vec<Value> = direct::levels()?.into_iter()
+        .map(|level| json!({ "strip_id": level.strip_id, "peak": level.peak, "rms": level.rms }))
+        .collect();
+    Ok(json!({ "success": true, "levels": levels }))
+}
+
+pub fn direct_cut_tail(module_id: &str) -> Result<Value, String> {
+    direct::cut_tail(module_id)?;
+    Ok(json!({ "success": true, "module_id": module_id }))
+}
+
+pub fn direct_module_state(module_id: &str) -> Result<Value, String> {
+    Ok(json!({ "success": true, "module_id": module_id, "state": direct::module_state(module_id)? }))
 }
 
 pub fn stop(id: &str) -> Result<Value, String> {
@@ -239,6 +304,8 @@ struct Args {
     speaking: bool,
     listening: String,
     verifier: Option<String>,
+    sample_id: String,
+    command: Value,
 }
 
 // Every command by name, with the JSON arguments the JS side sends.
@@ -259,7 +326,16 @@ pub fn dispatch(name: &str, args: &Value, project_root: Option<&Path>) -> Result
         "mix_levels" => mix_levels(),
         "mix_devices" => mix_devices(),
         "mix_cut_tail" => mix_cut_tail(&parsed.module_id),
+        "mix_asset_load" => mix_asset_load(project_root, &parsed.asset_id, &parsed.path),
+        "mix_asset_unload" => mix_asset_unload(&parsed.asset_id),
         "mix_module_state" => mix_module_state(&parsed.module_id),
+        "instrument_sample_load" => instrument_sample_load(project_root, &parsed.sample_id, &parsed.path),
+        "instrument" => instrument_run(parsed.command),
+        "direct_apply" => direct_apply(parsed.program),
+        "direct_levels" => direct_levels(),
+        "direct_measure_latency" => direct_measure_latency(parsed.device_name.as_deref()),
+        "direct_cut_tail" => direct_cut_tail(&parsed.module_id),
+        "direct_module_state" => direct_module_state(&parsed.module_id),
         "stop" => stop(&parsed.id),
         "stop_instance" => stop_instance(&parsed.voice_id),
         "set_voice_end" => set_voice_end(&parsed.voice_id, parsed.end_frame, parsed.release_frames),

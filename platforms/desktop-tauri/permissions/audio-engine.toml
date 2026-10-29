@@ -18,6 +18,11 @@ permissions = [
   "allow-audio-mix-devices",
   "allow-audio-mix-cut-tail",
   "allow-audio-mix-module-state",
+  "allow-audio-direct-apply",
+  "allow-audio-direct-levels",
+  "allow-audio-direct-cut-tail",
+  "allow-audio-direct-module-state",
+  "allow-audio-direct-measure-latency",
   "allow-audio-stop",
   "allow-audio-stop-instance",
   "allow-audio-set-voice-end",
@@ -161,6 +166,31 @@ commands.allow = ["audio_mix_cut_tail"]
 identifier = "allow-audio-mix-module-state"
 description = "Enables the audio_mix_module_state command."
 commands.allow = ["audio_mix_module_state"]
+
+[[permission]]
+identifier = "allow-audio-direct-apply"
+description = "Enables the audio_direct_apply command."
+commands.allow = ["audio_direct_apply"]
+
+[[permission]]
+identifier = "allow-audio-direct-levels"
+description = "Enables the audio_direct_levels command."
+commands.allow = ["audio_direct_levels"]
+
+[[permission]]
+identifier = "allow-audio-direct-cut-tail"
+description = "Enables the audio_direct_cut_tail command."
+commands.allow = ["audio_direct_cut_tail"]
+
+[[permission]]
+identifier = "allow-audio-direct-module-state"
+description = "Enables the audio_direct_module_state command."
+commands.allow = ["audio_direct_module_state"]
+
+[[permission]]
+identifier = "allow-audio-direct-measure-latency"
+description = "Enables the audio_direct_measure_latency command."
+commands.allow = ["audio_direct_measure_latency"]
 
 [[permission]]
 identifier = "allow-audio-set-voice-end"

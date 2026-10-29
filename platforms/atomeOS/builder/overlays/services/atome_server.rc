@@ -1,0 +1,13 @@
+#!/bin/sh
+# PROVIDE: atome_server
+# REQUIRE: LOGIN atome_firstboot
+# KEYWORD: shutdown
+. /etc/rc.subr
+name="atome_server"
+rcvar="atome_server_enable"
+load_rc_config "$name"
+: "${atome_server_enable:=NO}"
+pidfile="/var/run/atome/server.pid"
+command="/usr/sbin/daemon"
+command_args="-P ${pidfile} -f -u atome /usr/local/libexec/aos/supervise.sh /usr/local/libexec/aos/start_server.sh"
+run_rc_command "$1"

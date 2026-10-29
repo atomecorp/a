@@ -487,3 +487,4 @@ tests/squirrel/*
 # Music provider contract, authorization and receipt regressions
 !tests/music/
 !tests/music/**
+!tests/governance/aos_builder.test.mjs
