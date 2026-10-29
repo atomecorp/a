@@ -415,6 +415,19 @@ Utiliser les objets et relations réellement disponibles ; documenter toute migr
 - **28 octobre 2026, nuit — O16 et O17 :**
   - **O16** : comportement au verrouillage, en arrière-plan et à l'arrêt, plateforme par plateforme, dans `todo/seances_en_cours_par_plateforme_2026-10-28.md`. Écarts : la course écran verrouillé sur iOS ne compte plus la distance, et les bips ne sonnent pas écran verrouillé.
   - **O17** : mesures dans `todo/mesures_activites_2026-10-28.md`. Il n'y a pas de mesure « avant » pour L1–L2.
-- **Questions encore ouvertes :**
-  - largeur de la grille Perso (pleine largeur ou deux par rangée) ;
-  - place de l'entrée « Fil » de l'exercice sur la fiche, la bande étant pleine ; d'ici là, elle passe par la voix / MCP `video_train.open_thread`.
+- **Questions tranchées le 29 oct.** :
+  - **valeurs Perso** : en lignes, l'une sous l'autre (vue 3 de `temp/dashboard_root_above_atom/sheet_perso.png`), une ligne d'un demi-outil par rangée d'un outil, le « i » d'un outil entier ; la Durée totale aussi en ligne ; règle 14 réécrite ;
+  - **« Fil »** : un outil dans le pied du niveau Médias de l'exercice (pictogramme › Médias › Fil).
+- **29 oct. 2026 — l'outil « en cours » (▶), validé par Jeezs, à coder** (maquette `temp/dashboard_root_above_atom/sheet2.png`) :
+  - l'outil Dashboard ne bouge jamais, il reste dans la bande ;
+  - ▶ quitte la bande et se pose au-dessus de l'assistant, sur toutes les vues ;
+  - sur le panneau « En direct », il est dans le pied du panneau, à droite (norme du pied de panneau du 29 oct. : ✕ à gauche, nom au centre) ;
+  - grille pleine : **option A**, la grille réserve la case au-dessus de l'assistant ; les tuiles se décalent, et la dernière d'une page vraiment pleine passe à la page suivante.
+- **Tranché (29 oct.)** : ▶ touché dans le pied du panneau « En direct » met en pause la séance choisie ou la relance ; il est allumé tant qu'elle tourne.
+- **29 oct. — codé et vérifié au Web** (sonde `temp/activities_audit/q29/probe.mjs`) : lignes de valeurs, bulle du curseur qui ne couvre plus le nom, « Fil » dans les Médias, ▶ au-dessus de l'assistant avec case réservée, ▶ du pied « En direct ».
+- **À reprendre plus tard (Jeezs, 29 oct.) — se filmer pendant la séance** :
+  - aujourd'hui le seul chemin est pictogramme › Médias › Ajout › Caméra › Vidéo ;
+  - souhait : une petite caméra sur la fiche, qui est l'outil de capture existant (écran, vidéo, son, photo), pas un outil nouveau ;
+  - idée à challenger : une capture **combinée** qui enregistre en même temps la vidéo (ou la photo) et les performances affichées (temps, répétitions, disque), pour qu'elles soient sur la prise ;
+  - à savoir avant : `ui.capture.screen` est déclaré mais n'a pas encore d'enregistreur (plan `todo/screen_recording_plan_2026-10-14.md`) ;
+  - maquette d'abord (règle 16).

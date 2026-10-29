@@ -1,4 +1,4 @@
-import { publicDeviceKey, reject, requireHandle } from './auth_link_security.js';
+import { publicDeviceKey, reject, requireHandle, requireSignupOpen } from './auth_link_security.js';
 import { normalizeDeviceMeta, resolveDeviceClass } from './auth_devices.js';
 
 // Approve-class purposes and the subject each one is bound to.
@@ -24,6 +24,7 @@ const subjectOf = (purpose, subject = {}) => {
 export function createAccountAuth({ query, transaction, proof, sessions, devices, handles, approvals, createAccount, notify, disconnectSession, now, billing }) {
     if (typeof billing?.prepareCreation !== 'function') throw new Error('auth_billing_required');
     async function createChallenge({ sessionKey, clientNonce }, network) {
+        requireSignupOpen();
         requireHandle(clientNonce);
         const { keyId } = publicDeviceKey(sessionKey);
         return transaction(async () => {
@@ -34,6 +35,8 @@ export function createAccountAuth({ query, transaction, proof, sessions, devices
         });
     }
     async function create(input, network) {
+        // Refused before the store verification: a closed sign-up takes no payment.
+        requireSignupOpen();
         const { keyId, jwk } = publicDeviceKey(input.sessionKey);
         const meta = normalizeDeviceMeta(input.deviceMeta);
         const deviceClass = resolveDeviceClass(meta.platform, input.deviceClass);

@@ -275,11 +275,103 @@ processeur couvre le besoin) — à rediscuter au lot L9.
   TONE3000, puis réglages). À refaire avec des **sliders horizontaux** (comme la tranche) — en arbitrage contre
   la règle 14 de la charte (slider d'outil). **Préréglages** (presets) à prévoir sur la tranche et sur chaque
   effet, dans les deux panneaux : une liste nommée qu'on choisit et qu'on sauve, pas une rangée de valeurs.
+- **D12b (29 oct.) — règle des sliders, arbitrée** : **dans un projet**, le slider est le slider d'outil (un
+  bouton qui se déploie selon le mouvement : barre, colonne), partout et systématiquement. **Dans le Dashboard**
+  (ses tuiles, ses panneaux, plus guidé, plus de place), les valeurs sont des **sliders horizontaux** posés
+  ouverts ; le slider d'outil y reste possible mais optionnel. À écrire dans la règle 14 d'AGENTS.md au moment du
+  code ; conséquence : les cartes du Dashboard qui ont des sliders d'outil (Sport…) passent aux barres.
 - **D13 (28 oct.) — geste transverse à tout atome (à arbitrer avant code)** : sur un effet (tuile, tranche de
   console) **un toucher active/désactive** ; **un glissé dessus retourne la carte** (le retournement Mystic du
   Dashboard), qui grandit au passage et montre le panneau de réglages. À rendre générique (un seul owner) et à
   appliquer aux modules existants. Rencontres à trancher : glissé latéral = tourner la page d'une grille (règle
   13) ; glissé = bypass dans la console actuelle ; appui long = options (scène de l'appui long) ; D10 (appui lent
   ouvre le panneau) remplacé par ce glissé.
+- **D13 tranché (29 oct.) — future règle 20 d'AGENTS.md (gestes transverses à tout atome)** :
+  - trois familles d'outils, déclarées par chaque outil : **interrupteur** (effet, métronome, boucle,
+    écoute) — toucher = marche/arrêt ; **action** (Supprimer, Exporter) — toucher = l'action ; **choix**
+    (Couleur, Police, Taille, modèle de l'Ampli) — toucher = son panneau ;
+  - **appui long** = le panneau par défaut (activation, réglages, préréglages, puis les options habituelles en
+    bas : c'est la scène d'appui long existante) ; un outil peut le débrayer ; **tenir puis bouger** = déplacer
+    (dans la console : réordonner la chaîne, passer un module d'une tranche à une autre) ;
+  - **outil** : un glissé dans n'importe quelle direction ouvre le panneau, le même geste le referme ; dans une
+    rangée qui défile (ruban du projet sur téléphone), un glissé **le long de la rangée la fait défiler**, et
+    seul un glissé **en travers** ouvre le panneau (comportement déjà codé du ruban,
+    `bevy_ui_main_menu_model.js` `slideDirection: 'up'`) ;
+  - **tuile** : glissé vertical = bascule du panneau, glissé latéral = page de la grille (règle 13) ;
+  - panneau ouvert : on le referme par le même glissé sur l'élément monté en haut, ou par ✕ ; un glissé dans le
+    panneau fait défiler ses réglages ;
+  - la bande du bas du Dashboard (Retour, champ, assistant) reste immuable, hors de cette règle ;
+  - sécurité audio : limiteur de sortie toujours actif sur le chemin direct ; au premier allumage d'un effet sur
+    une entrée micro, le panneau s'ouvre une fois (entrée, casque) ;
+  - un seul owner du geste, puis revue des outils existants (classer chacun, signaler les écarts).
+- **D14 (29 oct.) — panneau d'un interrupteur, design officiel de tous les marche/arrêt du Dashboard** : la
+  tuile ne reste pas affichée au-dessus, c'est **elle qui grandit en panneau** (un élément ne peut être à la
+  fois icône et agrandi). Au pied du panneau, une bande : à gauche le **nom** de ce qui est réglé (« Ampli »,
+  pour savoir sur quel panneau on est), à droite **l'outil lui-même** (son glyphe, allumé quand il joue) qui sert
+  d'interrupteur ; la ligne « Allumé » disparaît. Le reste (préréglage, entrée, modèle, sliders horizontaux)
+  validé. Maquette `temp/effects/mockups/m2c_panneau_ampli.png`. À écrire dans la charte : ce nom au pied est
+  une exception nommée à la règle 11 (libellé inerte en haut).
+  Retouches du 29 oct. (`m2d_panneau_ampli.png`) : le nom **centré** dans la bande du pied ; le **✕ dans cette
+  même bande, à gauche**, au niveau de l'interrupteur (gain de place, plus de rangée ✕ sous le panneau : place
+  nommée par l'utilisateur, exception à la règle 13) ; le panneau aussi haut que son contenu. **Gaucher** : la
+  bande s'inverse (interrupteur à gauche, ✕ à droite) et les sliders aussi (remplissage depuis la droite).
 - **D7** (déduit du même motif) Un combo peut contenir un combo : il se déplie de même, et le compilateur aplatit
   le tout ; une boucle (un combo qui se contient) est refusée à la sauvegarde.
+- **D15 (29 oct.) — M3 validé** (`m3a_deux_effets.png`, `m3b_tranche.png`) : toucher un 2e effet forme la chaîne,
+  une tuile « Chaîne » allumée dans la grille (nom par défaut, puis « Chaîne 2 »…, renommable à l'enregistrement) ;
+  son panneau = la vraie tranche (IN, modules, +, OUT à gauche ; réglages du module choisi à droite ; pied ✕ / nom /
+  interrupteur de la chaîne). La chaîne non enregistrée vit dans Capture › Effets et revient allumée à la réouverture.
+  Réordonner = appui long puis déplacer (aussi d'une tranche à l'autre).
+- **D16 (29 oct.) — module Volume** : un outil Volume (gain, sans latence) se range dans la chaîne comme un effet ;
+  toute tranche naît avec un Volume en dernier, avant OUT, et **c'est lui** le slider général (pas de second
+  réglage) ; on peut en ajouter d'autres ailleurs. Tranche fermée = un outil + ce volume dessous (barre
+  horizontale au Dashboard, tool slider en projet, D12b). Aucun module choisi : la zone de droite montre la carte
+  de la tranche (entrée, sortie, volume). Maquette M3c à valider.
+- **D17 (29 oct.) — appui long sur une tuile d'effet = comme toute tuile** (choix A) : l'élément monte au-dessus
+  de sa liste d'options (Favori compris) ; le panneau s'ouvre par le glissé vertical. L'appui long = panneau (D13)
+  ne vaut que pour les **outils**, pas pour les tuiles.
+- **D18 (29 oct.) — M3d validé** (`m3c2_chaine_fermee.png`, `m3d1_tranche_repliee.png`, `m3d2_reverb_ouverte.png`) :
+  trois états — chaîne fermée (tuile + volume dans sa demi-rangée basse ; un glissé qui démarre sur la barre règle le
+  volume, ailleurs il tourne la page), chaîne ouverte sans outil (une seule colonne : IN, modules, +, Volume, OUT ;
+  pied ✕ + interrupteur, sans nom), un module ouvert : **l'outil et son panneau ne font qu'un objet**, une seule ombre
+  en contour, l'outil prend la couleur du panneau (plus de nom répété, plus de look « rempli » pour l'ouvert ;
+  allumé = joue). Le panneau soudé se referme en retouchant son outil ; le ✕ du pied ferme la tranche. À écrire
+  dans la charte (règles 13/14) au moment du code.
+- **D19 (29 oct.) — Volume = outil qui s'agrandit** : au repos un outil comme les autres (glyphe + valeur) ; touché, il
+  prend toute la hauteur de la colonne (remplace IN…OUT, le pied reste) en slider vertical long et précis ; un
+  glissé sur la jauge règle, la valeur s'affiche à côté pendant le geste ; un toucher sur son glyphe le referme.
+  Maquettes `m3e1_volume_outil.png`, `m3e2_volume_ouvert.png`.
+  Geste (29 oct., validé) : **toucher** l'outil Volume l'ouvre et il reste ouvert (on glisse pour régler, on
+  retouche pour refermer) ; **glisser directement** sur l'outil le déploie pendant le geste, on règle, on relâche et
+  il se referme — comme le tool slider standard. Pour le Volume, le glissé règle donc la valeur (il n'ouvre pas de
+  panneau, D13 ne s'applique pas à un outil slider).
+- **D20 (29 oct.) — M4 validé** (`m4a_maintien_chaine.png`, `m4b_mes_effets.png`) : appui long sur la tuile Chaîne →
+  ses options au pied (Enregistrer comme effet, Ajouter aux favoris, Renommer, Dupliquer, Supprimer) ; à
+  l'enregistrement le champ du bas devient le champ du nom (prérempli « Chaîne », clavier ouvert) ; la tuile de
+  Capture › Effets devient cet effet (pas une copie). Glyphe par défaut : celui du premier effet de la chaîne
+  (pas d'option de plus tant que l'utilisateur ne la demande pas).
+- **D21 (29 oct.) — M5 validé** (`m5a_combo_replie.png`, `m5b_combo_deplie.png`, `m5c_liseres.png`) : un combo est un
+  outil dans la tranche ; touché, il déplie ses modules sur place, sans fond de groupe ; le groupe est montré par le
+  **liseré `combo_rail`** (3 px, côté extérieur, une couleur par niveau, l'enfant coupe le parent). Inscrit dans la
+  charte (AGENTS.md règle 15) ; le même liseré marque le contenu d'un accordéon ouvert (à appliquer au brick
+  `bevy_panel_accordion_direction.js` et à ajouter à `DESIGN_CHARTER_BORDERS`). Libellé d'outil ≤ 6 lettres : un
+  effet enregistré gagne un nom court (« Guitar »), sinon coupé avec « … ».
+- **Maquettes terminées le 29 oct.** — tout est validé ; prochaine étape : le code, lot L1 (crate `atome-dsp`).
+- **D22 (29 oct.) — TONE3000 : un seul compte « Atome » pour tout le monde** (remplace D0c sur ce point) : la clé ou
+  les identifiants sont dans `./private/tone3000.txt` (ignoré par git), lus côté serveur seulement ; le serveur
+  télécharge les modèles pour les utilisateurs ; jamais de clé dans le dépôt ni envoyée au client.
+- **D23 (29 oct.) — réponses aux 10 questions** :
+  1. Windows : **latence minimale**, mode exclusif (WASAPI exclusif / ASIO) par défaut ; bloquer la carte pour les
+     autres applis est accepté.
+  3. Modèles NAM = atomes de la bibliothèque, synchronisés, hors ligne ; choix depuis la ligne « modèle » de l'Ampli
+     (liste avec recherche, motif standard).
+  4. Réponses impulsionnelles : jeu CC0 livré + panneau d'import unique + TONE3000 (compte Atome).
+  5. **Une seule tranche partout** (Dashboard et projet) : ancienne ou nouvelle à trancher sur maquette.
+  6. AUv3 : traite aussi le son de l'appli hôte (effet), en plus de l'instrument MIDI.
+  7. Tuile « Instruments » dans Capture, mêmes motifs — **elle viendra avec la tâche générateurs**.
+  8. **Pas de synthé de test** (tranché) : un synthé jetable serait non standard et à supprimer. Les générateurs
+     seront une tâche à part, par assemblage de briques (oscillateur, enveloppe, filtre…) comme la tranche. Dans ce
+     chantier, seules les briques DSP de base (oscillateur, enveloppe) entrent dans `atome-dsp` (L1), vérifiées par
+     sonde ; L9 sort du lot.
+  9. Jeu : MIDI, séquenceur, timeline ; clavier à l'écran = plus tard, avec maquette.
+  10. Anciens effets convertis automatiquement à l'ouverture, puis ancien code supprimé.

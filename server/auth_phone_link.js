@@ -1,5 +1,5 @@
 import { AUTH_LINK_ORIGIN, AUTH_LINK_TTL_MS } from '../atome/src/shared/auth_link_contract.js';
-import { createAuthProofSecurity, publicDeviceKey, randomHandle, digest, reject, requireHandle } from './auth_link_security.js';
+import { createAuthProofSecurity, publicDeviceKey, randomHandle, digest, reject, requireHandle, requireSignupOpen } from './auth_link_security.js';
 import { createDeviceSessions } from './auth_sessions.js';
 import { createPasswordAuth } from './auth_password.js';
 import { createDeviceRegistry } from './auth_devices.js';
@@ -92,6 +92,7 @@ export function createPhoneLinkAuth({ query, transaction, findByPhone, findById,
     // itself: the SMS and device proofs remain mandatory. The store purchase is
     // bound to this attempt's device key, which becomes the account's key.
     async function pay(input) {
+        requireSignupOpen();
         const pending = await attempt(input.attemptId);
         const purchase = await billing.prepareCreation(input.payment, pending.key_id);
         const result = await transaction(async () => {
@@ -153,6 +154,8 @@ export function createPhoneLinkAuth({ query, transaction, findByPhone, findById,
         // A replaced binding or a concurrent account creation invalidates stale attempts.
         if ((existing?.user_id || null) !== value.candidate_id) reject();
         const changing = await query('get', 'SELECT * FROM auth_phone_changes WHERE attempt_id = ?', [value.attempt_id]);
+        // Told only once the SMS proved the number: before, the answer is the same whether it is taken or not.
+        if (!existing && !changing) requireSignupOpen();
         if (!existing && !changing && !paid) {
             await query('run', "UPDATE auth_link_attempts SET state = 'verified_payment' WHERE attempt_id = ?", [value.attempt_id]);
             return pending({ ...value, state: 'verified_payment' });

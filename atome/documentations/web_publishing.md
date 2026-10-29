@@ -38,6 +38,22 @@ Versions live on disk under `data/sites/<site>/<version>/` (`ATOME_SITES_ROOT`);
 points to the original file by its content hash. The history is append-only: a rollback publishes an earlier version
 as a new one. A contact form's messages arrive in Communiquer (`kind: 'site-contact'`).
 
+## Personal domains in production
+
+The person adds two DNS records (TXT `_atome.<domain>` with the proof, CNAME `<domain>` → `sites.atome.one`); the
+rest is automatic. On « Vérifier », `server/site_domains.js` checks the DNS, then runs `ATOME_SITE_CERT_COMMAND`
+(`/usr/local/lib/atome-sites/site_domain_cert.mjs`, source `scripts/site_domain_cert.mjs`) with the domain. The script
+checks again that the domain is a site's with its proof and CNAME, gets a Let's Encrypt certificate by webroot (nginx
+keeps serving), writes `/etc/nginx/atome-sites/<domain>.conf` (port 80 → https, port 443 → the app on 3001), tests and
+reloads nginx; the domain turns `active` only then. Installed once with `--setup`: a port-80 `default_server` that only
+answers ACME challenges (`/var/www/atome-acme`) and the include of `/etc/nginx/atome-sites/*.conf`
+(`/etc/nginx/sites-enabled/atome-sites`). Renewal: certbot's timer, deploy hook `systemctl reload nginx`.
+
+Limits: `sites.atome.one` needs an A record to the server in atome.one's zone; a CNAME cannot sit on an apex, so only
+subdomains (e.g. `www.` or `site.`) connect; atome.one's own certificate renews in standalone mode (nginx stopped
+for a moment), so a domain due in the same run renews on the next one; unlinking a domain leaves its nginx file and
+certificate in place.
+
 ## Interface
 
 - Site panel `eVe/domains/site/site_panel.js` (cards Mon site, Dates, Depuis la mise en ligne, Quand; band Voir, MàJ,

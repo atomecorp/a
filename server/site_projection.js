@@ -3,7 +3,7 @@
 // served as is. Text, shapes, images, video and sound become HTML; a link is the object's « Aller » interaction; a
 // contact form posts to the server. What a web page cannot show is reported, never silently dropped.
 import { SITE_FORM_PROPERTY, siteHomePage, sitePageName, sitePageSlugs, sitePages, slugify } from '../atome/src/shared/site_contract.js';
-import { cssColor, cssNumber, siteStylesheet } from './site_projection_css.js';
+import { cssColor, cssNumber, inkOn, siteStylesheet } from './site_projection_css.js';
 
 const ROW_TOLERANCE_PX = 24;
 const MEDIA_TYPES = new Set(['image', 'video', 'audio', 'sound', 'svg']);
@@ -115,7 +115,7 @@ export const projectSite = ({ records, projectId, siteId, slug, title = '', desc
         const shown = items.filter(i => SHOWN_TYPES.has(i.type) && (!MEDIA_TYPES.has(i.type) || media.has(i.id)))
             .map(item => ({ ...item, left: item.left - frame.left, top: item.top - frame.top }));
         if (!shown.length) issues.push({ kind: 'page_empty', page_id: pageId });
-        const context = { links, media, siteId, ink: cssColor(props.color, '#15182c') };
+        const context = { links, media, siteId, ink: inkOn(props.fill || props.background) };
         const body = rowsOf(shown).map(row => `<div class="r">${clustersOf(row).map(cluster => clusterHtml(cluster, context)).join('')}</div>`).join('');
         const name = sitePageName(page), path = `/${slug}/${pageSlug ? `${pageSlug}/` : ''}`;
         const pageTitle = page === home ? siteTitle : `${name} · ${siteTitle}`;
