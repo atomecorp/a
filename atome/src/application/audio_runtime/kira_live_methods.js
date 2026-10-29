@@ -29,7 +29,8 @@ export const createKiraLiveMethods = ({ invoke, ensureRuntimeMode, readWasm }) =
         });
     },
 
-    // Answers the sample's shape: { frames, sample_rate, channels }.
+    // Answers the sample's shape: { frames, sample_rate, channels, streamed } (a long WAV streams
+    // natively from its heads; the Web holds the decoded PCM whole).
     instrument_sample_load(arg) {
         var sampleId = String((arg && arg.sampleId) || '');
         if (!sampleId) return Promise.reject(new Error('instrument_sample_load needs a sampleId'));
@@ -37,17 +38,17 @@ export const createKiraLiveMethods = ({ invoke, ensureRuntimeMode, readWasm }) =
             var wasm = readWasm();
             if (!wasm) {
                 return invoke('audio_instrument_sample_load', { sampleId: sampleId, path: String(arg.path || '') }).then(function (r) {
-                    return { frames: r.frames, sample_rate: r.sample_rate, channels: r.channels };
+                    return { frames: r.frames, sample_rate: r.sample_rate, channels: r.channels, streamed: r.streamed === true };
                 });
             }
             if (!arg.left) throw new Error('instrument_sample_load on the Web needs the decoded left channel');
             wasm.audio_instrument_sample_load(sampleId, Float32Array.from(arg.left), arg.right ? Float32Array.from(arg.right) : undefined, Number(arg.sampleRate));
-            return { frames: arg.left.length, sample_rate: Number(arg.sampleRate), channels: arg.right ? 2 : 1 };
+            return { frames: arg.left.length, sample_rate: Number(arg.sampleRate), channels: arg.right ? 2 : 1, streamed: false };
         });
     },
 
     // Answers the instrument's rendered frames for a `clock` command, the fired command markers
-    // ({ actions, dropped, stale }) for `drain_actions`, else null.
+    // ({ actions, dropped, stale, starved, failures? }) for `drain_actions`, else null.
     instrument(command) {
         return ensureRuntimeMode({ audioManager: true }).then(function () {
             var wasm = readWasm();

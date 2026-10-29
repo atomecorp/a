@@ -381,3 +381,40 @@ sur une zone : Altern / Mixer / Couche / Rempl. ; réglages de zone et de prise 
 `mix_schema.js`, le passage des événements par le contrat `Processor` d'`atome-dsp`, l'enregistrement des commandes
 dans `AUDIO_FX_COMMANDS` / la famille MCP et leur exécuteur, le catalogue Rust généré. Puis l'interface (S3…S5),
 le streaming disque (V1.2) et la suite de §11.
+
+## 15. Branchement et écrans (29 oct., nuit)
+
+**Branché** : les commandes du Sampler (`instrument_contracts.js`), de l'outil Slice et de l'éditeur
+(`slice_contracts.js`, 19 commandes) et des banques (`bank_contracts.js`, 5 commandes) sont dans
+`AUDIO_FX_COMMANDS` (famille MCP `audio_fx`, 69 commandes, noms uniques) ; un seul exécuteur
+`audio_fx_commands.js#executeAudioFxCommand`, chaque famille échouant avec le code de son contrat et la raison.
+`audio_fx.facade_set` (façade : réglages directs et macros à cibles, S3f) ; `audio_fx.slices_to_cells` (chaque slice
+une Scène posée après la dernière, la slice un clip de cette Scène sur la piste, fenêtre de source = la région,
+par `timeline.batch` ; `eVe/domains/sample_edit/slice_cells.js`).
+
+**Marqueurs à action (V1.4, côté hôte)** : le moteur ne fait que mettre en file ce qui a sonné ;
+`eVe/domains/audio_fx/instrument_marker_actions.js` vide la file toutes les 21 ms tant qu'un instrument porte un
+marqueur à commande, et lance chaque commande par la passerelle d'outils, après son délai, dans l'ordre des
+priorités (chemin direct natif et WASM, et Kira Web pour la Timeline).
+
+**Écrans** (dans le panneau de chaîne, après les zones) :
+- **Découp.** (S3d0a/b) : `dashboard_instrument_slices.js` + `_view.js` — onde, lignes des points, numéros des
+  parties, bulles du point touché glissées, rouleaux Point (Couper / Warp) et Aimant ; un toucher joue la partie,
+  deux touchers posent un point ; au pied Suppr., Kit (les slices sur les touches dès C2), l'outil Slice allumé
+  (« En 2 »).
+- **Note composée** (S3e) : `dashboard_instrument_composed.js` — case « Composée » de la fiche de zone, étapes en
+  tuiles + ajout (panneau d'import unique), Tirage, une paire Quand / Puis par transition (« Aucun » la retire), +
+  pour en ajouter une, Suppr. de l'étape au pied.
+- **Vendre un instrument** (V1.7) : maintien sur l'instrument › Vendre → `shop.open {sell, title, content_ids}`.
+
+**Preuves** : sonde de la façade 7/7 ; famille 69 commandes sans doublon ; outil Slice + éditeur sur la page réelle
+27/30 (slices → cellules compris), seules ratées : la grille partagée de la sonde d'accueil et `edit_undo` (voir
+ci-dessous) ; banques 9/9 + 5/5 + 11/11 sur la page ; note composée 10/10 (noyau).
+
+**Défaut trouvé hors du Sampler** : sur le Web, un `undoTransaction` envoyé avant que l'outbox du navigateur ait
+téléversé la transaction répond `history_source_transaction_not_found`, et les états rendus sont lus en local avant
+le retour du serveur (convergence 0,5 à 0,8 s, plus sous charge). Propriétaire : `eVe/core/atome_commit.js#executeHistoryCommand`
+et `adole_api/browser_workspace.js` — à corriger à part (touche toute annulation Web).
+
+**Reste bloqué** : l'écran complet de l'éditeur de sample (§8, au-delà des maquettes ponctuelles S3d0a/b) n'a pas de
+maquette validée (règle 16) ; ses opérations sont disponibles à la voix et par MCP.

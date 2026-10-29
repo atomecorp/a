@@ -51,7 +51,7 @@ fn pack(generation: u16, target: Option<Target>) -> u64 {
 
 fn unpack(word: u64) -> (u16, Option<Target>) {
     let sample = (word >> 32) & IDLE_SAMPLE;
-    let target = (sample != IDLE_SAMPLE).then(|| Target { sample: sample as usize, reverse: (word >> 47) & 1 == 1, origin: (word & 0xffff_ffff) as usize });
+    let target = (sample != IDLE_SAMPLE).then_some(Target { sample: sample as usize, reverse: (word >> 47) & 1 == 1, origin: (word & 0xffff_ffff) as usize });
     ((word >> 48) as u16, target)
 }
 

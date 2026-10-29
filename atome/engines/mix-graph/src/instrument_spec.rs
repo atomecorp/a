@@ -200,9 +200,14 @@ pub fn build_sampler(spec: &InstrumentSpec, samples: &HashMap<String, SampleData
     }).collect::<Result<Vec<_>, String>>()?;
     let (markers, infos) = markers.finish();
     let keymap = Keymap::with_markers(zones, markers, &bank, spec.seed)?;
+    // A streamed sample reads the heads this keymap can start from (atome-instrument residency.rs).
+    bank.reside(&keymap)?;
     let values = param_values(spec)?;
     let mut sampler = Sampler::new(keymap, bank, values[POLYPHONY as usize] as usize + FADING_VOICES);
     sampler.prepare(sample_rate as f32, MAX_BLOCK);
+    if let Some(streams) = sampler.streams() {
+        atome_instrument::stream::serve(streams)?;
+    }
     for (id, value) in values.iter().enumerate() {
         sampler.set_param(id as u32, *value);
     }

@@ -1,25 +1,23 @@
 /* tslint:disable */
 /* eslint-disable */
-export function audio_set_volume(id: string, db: number): void;
+export function audio_play(id: string): number;
+export function audio_destroy_clip(id: string): void;
 export function audio_set_playback_rate(id: string, rate: number): void;
+export function audio_set_pan(id: string, pan: number): void;
+export function audio_init(): void;
 /**
  * A late end for a scheduled or sounding voice: `end_frame` frames after its
  * first one, fading over `release_frames`. Returns whether the voice is known.
  */
 export function audio_set_voice_end(voice_id: string, end_frame: number, release_frames: number): boolean;
-export function audio_set_pan(id: string, pan: number): void;
+export function audio_set_volume(id: string, db: number): void;
+export function audio_play_instance(asset_id: string, voice_id: string, start_seconds: number, duration_seconds: number | null | undefined, gain: number, pan: number, rate: number, loop_start_seconds?: number | null, loop_end_seconds?: number | null, strip_id?: string | null): number;
+export function audio_shutdown(): void;
 /**
- * Load an audio clip from raw bytes (WAV, MP3, OGG).
- * In WASM, we cannot read files from disk so JS must pass the bytes.
+ * The AudioContext playback renders into; recording opens its worklet on it.
  */
-export function audio_load_clip_from_bytes(id: string, data: Uint8Array): number;
-/**
- * `{ frames_rendered, base_context_frame, sample_rate, discontinuities, block_frames }`.
- */
-export function audio_render_clock(): object;
-export function audio_init(): void;
-export function audio_destroy_clip(id: string): void;
-export function audio_play(id: string): number;
+export function audio_shared_context(): AudioContext;
+export function audio_stop(id: string): void;
 export function audio_stop_instance(voice_id: string): void;
 /**
  * Starts each voice exactly on its rendered frame (`ScheduledVoice` list, as
@@ -29,22 +27,24 @@ export function audio_stop_instance(voice_id: string): void;
  */
 export function audio_schedule_voices(voices: any): Float64Array;
 /**
- * The AudioContext playback renders into; recording opens its worklet on it.
+ * `{ frames_rendered, base_context_frame, sample_rate, discontinuities, block_frames }`.
  */
-export function audio_shared_context(): AudioContext;
-export function audio_play_instance(asset_id: string, voice_id: string, start_seconds: number, duration_seconds: number | null | undefined, gain: number, pan: number, rate: number, loop_start_seconds?: number | null, loop_end_seconds?: number | null, strip_id?: string | null): number;
-export function audio_shutdown(): void;
-export function audio_stop(id: string): void;
-export function audio_mix_asset_load_impulse(asset_id: string, left: Float32Array, right: Float32Array | null | undefined, sample_rate: number): void;
-export function audio_mix_levels(): Array<any>;
-export function audio_mix_asset_load_capture(asset_id: string, json: string): void;
-export function audio_mix_live_push(device_id: string, pcm: Float32Array): void;
-export function audio_mix_asset_unload(asset_id: string): void;
-export function audio_mix_module_state(module_id: string): number | undefined;
-export function audio_mix_apply(program: any): number;
+export function audio_render_clock(): object;
+/**
+ * Load an audio clip from raw bytes (WAV, MP3, OGG).
+ * In WASM, we cannot read files from disk so JS must pass the bytes.
+ */
+export function audio_load_clip_from_bytes(id: string, data: Uint8Array): number;
 export function audio_instrument(command: any): any;
-export function audio_instrument_sample_load(sample_id: string, left: Float32Array, right: Float32Array | null | undefined, sample_rate: number): void;
+export function audio_mix_live_push(device_id: string, pcm: Float32Array): void;
+export function audio_mix_levels(): Array<any>;
+export function audio_mix_asset_load_impulse(asset_id: string, left: Float32Array, right: Float32Array | null | undefined, sample_rate: number): void;
+export function audio_mix_apply(program: any): number;
+export function audio_mix_module_state(module_id: string): number | undefined;
+export function audio_mix_asset_load_capture(asset_id: string, json: string): void;
 export function audio_mix_cut_tail(module_id: string): void;
+export function audio_instrument_sample_load(sample_id: string, left: Float32Array, right: Float32Array | null | undefined, sample_rate: number): void;
+export function audio_mix_asset_unload(asset_id: string): void;
 export class VoiceConversation {
   free(): void;
   /**
@@ -82,13 +82,6 @@ export interface InitOutput {
   readonly audio_shared_context: () => [number, number, number];
   readonly audio_shutdown: () => [number, number];
   readonly audio_stop: (a: number, b: number) => [number, number];
-  readonly __wbg_voiceconversation_free: (a: number, b: number) => void;
-  readonly voiceconversation_inputDb: (a: number) => number;
-  readonly voiceconversation_listen: (a: number, b: number, c: number) => number;
-  readonly voiceconversation_new: () => number;
-  readonly voiceconversation_push: (a: number, b: number, c: number, d: number) => any;
-  readonly voiceconversation_reset: (a: number) => void;
-  readonly voiceconversation_setSpeaking: (a: number, b: number) => number;
   readonly audio_instrument: (a: any) => [number, number, number];
   readonly audio_instrument_sample_load: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
   readonly audio_mix_apply: (a: any) => [number, number, number];
@@ -99,6 +92,13 @@ export interface InitOutput {
   readonly audio_mix_levels: () => [number, number, number];
   readonly audio_mix_live_push: (a: number, b: number, c: number, d: number) => [number, number];
   readonly audio_mix_module_state: (a: number, b: number) => [number, number, number];
+  readonly __wbg_voiceconversation_free: (a: number, b: number) => void;
+  readonly voiceconversation_inputDb: (a: number) => number;
+  readonly voiceconversation_listen: (a: number, b: number, c: number) => number;
+  readonly voiceconversation_new: () => number;
+  readonly voiceconversation_push: (a: number, b: number, c: number, d: number) => any;
+  readonly voiceconversation_reset: (a: number) => void;
+  readonly voiceconversation_setSpeaking: (a: number, b: number) => number;
   readonly audio_stop_instance: (a: number, b: number) => [number, number];
   readonly __wbindgen_malloc: (a: number, b: number) => number;
   readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
@@ -108,7 +108,7 @@ export interface InitOutput {
   readonly __wbindgen_export_5: WebAssembly.Table;
   readonly __externref_table_dealloc: (a: number) => void;
   readonly __wbindgen_free: (a: number, b: number, c: number) => void;
-  readonly _dyn_core__ops__function__FnMut_____Output___R_as_wasm_bindgen__closure__WasmClosure___describe__invoke__hb7b890de020291d0: (a: number, b: number) => void;
+  readonly _dyn_core__ops__function__FnMut_____Output___R_as_wasm_bindgen__closure__WasmClosure___describe__invoke__h3802db6fd2132821: (a: number, b: number) => void;
   readonly __wbindgen_start: () => void;
 }
 

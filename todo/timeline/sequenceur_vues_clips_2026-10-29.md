@@ -1,7 +1,7 @@
 # Séquenceur — pistes agnostiques et vues des clips
 ## Cahier des charges minimal — 29 octobre 2026
 
-**Statut :** tout est tranché (Q1–Q12, O1–O4, B, A-Q) et codé le 29 oct., vérifié sur le Web (`temp/sequencer_build/`, FRAMEWORK_STATE §5 du 29 oct.). Reste : les questions Q13–Q18 ci-dessous, posées d'un seul coup le 29 oct. au soir (maquette M13), et les écarts aux maquettes validées (C1–C5), corrigés avec elles.
+**Statut :** tout est tranché (Q1–Q18, O1–O4, B, A-Q) et codé le 29 oct., C1–C5 corrigés, vérifié sur le Web (`temp/sequencer_build/`, FRAMEWORK_STATE §5 du 29 oct., deux entrées). Reste hors de ce cahier : reconstruire le WASM audio Web quand le crate partagé recompile (les courbes du moteur ne sont pas encore entendues sur le Web).
 **Base :** `timeline_cellules_cahier_des_charges_v1.6.md` (fait autorité sur tout ce qui n'est pas repris ici) et `todo/mixer/mixer.md`.
 **Suite prévue :** réponses → maquettes aux vrais jetons, une par une → code en une passe.
 
@@ -172,7 +172,9 @@ Liste prévue :
 - M12 : pas à pas, polyrythme, roulés, lignes dépliées.
 
 
-## Questions du 29 oct. au soir (posées ensemble, à trancher avant tout code)
+## Questions du 29 oct. au soir — tranchées et codées le 29 oct.
+
+Réponses : Q13 A + B (toucher = posé à la tête de lecture, appui long + glisser = posé où l'on veut) et par la voix ; Q14 B (la vidéo reste muette) ; Q15 B (le son part avec la vidéo) ; Q16 B (une paire copiée reste liée, un seul copié est libre) ; Q17 A (l'outil démarre à cet endroit) ; Q18 A (le moteur audio calcule la courbe). C1–C5 et le 1er dépôt immédiat : faits.
 
 - **Q13 — Prendre un projet (M13)** : outil « Projet » du rail → panneau au pied, liste des projets (sans le projet ouvert ni ceux qui le contiennent) ; toucher = posé à la tête de lecture sur la piste choisie ; appui long + glisser = emporté sur une piste.
 - **Q14 — Supprimer le son séparé** d'une vidéo liée : la vidéo reprend son propre son, ou reste muette.

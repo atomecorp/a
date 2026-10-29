@@ -29,6 +29,11 @@ pub struct DrainedActions {
     // Firings the full queue refused, and reports from forgotten builds.
     pub dropped: usize,
     pub stale: usize,
+    // Frames a streamed sample's ring could not supply in time (played silent),
+    // and the source reads that failed (filled by a host that streams).
+    pub starved: usize,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub failures: Vec<String>,
 }
 
 pub struct ActionBook {
@@ -61,7 +66,7 @@ impl ActionBook {
     }
 
     pub fn drain(&self) -> DrainedActions {
-        let mut drained = DrainedActions { dropped: self.queue.take_dropped(), ..DrainedActions::default() };
+        let mut drained = DrainedActions { dropped: self.queue.take_dropped(), starved: self.queue.take_starved(), ..DrainedActions::default() };
         self.queue.drain(|fired| {
             let info = self.builds.iter().find(|(generation, _)| *generation == fired.generation).and_then(|(_, infos)| infos.get(fired.marker as usize));
             match info {

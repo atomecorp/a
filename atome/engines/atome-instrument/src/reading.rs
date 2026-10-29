@@ -73,7 +73,9 @@ impl<'a> Source<'a> {
     pub fn aim(&self, position: f64, direction: f64, force: bool) {
         let Some(ring) = self.ring else { return };
         let frame = position.max(0.0) as usize;
-        let Some(span) = self.data.span_at(frame) else {
+        // Inside a span with all its taps: a read still taking taps from the ring keeps it.
+        let held = |span: &&crate::sample::Span| (span.start == 0 || span.start + TAPS <= frame) && (frame + TAPS < span.end() || span.end() == self.frames());
+        let Some(span) = self.data.span_at(frame).filter(held) else {
             if force {
                 ring.aim(None, true);
             }

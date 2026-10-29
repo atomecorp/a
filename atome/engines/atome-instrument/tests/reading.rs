@@ -66,3 +66,23 @@ fn a_spliced_seam_plays_a_loop_of_any_length_without_a_click() {
     assert!(seam(0) > smooth * 3.0, "a bare seam clicks ({} vs {smooth})", seam(0));
     assert!(seam(1200) < smooth * 1.2, "the splice is smooth ({} vs {smooth})", seam(1200));
 }
+
+// One frame space on every platform: a sample's positions count its own file's
+// frames at its own rate; the engine (48 kHz here) resamples at play.
+#[test]
+fn a_sample_at_its_own_rate_plays_its_pitch_and_its_positions() {
+    let source = 44_100.0;
+    let tone: Vec<f32> = (0..88_200).map(|i| (std::f32::consts::TAU * 441.0 * i as f32 / source).sin()).collect();
+    let data = SampleData::mono(tone, source);
+    let mut played = sampler(vec![Zone::new(0, 127, vec![Segment::whole(0, data.frames(), 60)])], bank(vec![data]));
+    let (left, _) = render(&mut played, 48_000, &[NoteEvent::note_on(0, 60, 1.0)]);
+    let measured = frequency(&left[4800..43_200]);
+    assert!((measured - 441.0).abs() < 2.0, "at its root, its own pitch: {measured} Hz");
+    // An offset of 22 050 source frames is half a second into the file, whatever the output rate.
+    let data = SampleData::mono(ramp(44_100), source);
+    let mut segment = Segment::whole(0, 44_100, 60);
+    segment.offset = 22_050;
+    let mut played = sampler(vec![Zone::new(0, 127, vec![segment])], bank(vec![data]));
+    let (left, _) = render(&mut played, 24_000, &[NoteEvent::note_on(0, 60, 1.0)]);
+    assert!((left[480] - (22_050.0 + 480.0 * source / RATE) / 44_100.0).abs() < 1.0e-3, "read from the file's half: {}", left[480]);
+}

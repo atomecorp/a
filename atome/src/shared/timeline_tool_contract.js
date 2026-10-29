@@ -20,21 +20,28 @@ const key = {
     description: 'What a keyed module (compressor, gate, ducker) listens to: {kind:"strip",id} or {kind:"port",module_id,port}.',
     properties: { kind: { type: 'string', enum: ['strip', 'port'] }, id: { type: 'string' }, module_id: { type: 'string' }, port: { type: 'integer', minimum: 0 } }
 };
+// What an IN module mixes in (D-S3), and which output of a multitimbral instrument (0-based, D-S2).
+const output = { type: 'integer', minimum: 0, maximum: 15, description: 'An instrument output, 0-based (the first output by default).' };
+const source = {
+    type: ['object', 'null'],
+    description: 'What an IN module mixes in: {kind:"live_audio",device_id}, {kind:"strip",id} (its own strip closes a loop, heard one return later) or {kind:"instrument",instrument_id,output}.',
+    properties: { kind: { type: 'string', enum: ['live_audio', 'strip', 'instrument'] }, device_id: { type: 'string' }, id: { type: 'string' }, instrument_id: { type: 'string' }, output }
+};
 const effect = { type: 'string', description: 'dsp: an atome-dsp kind (reverb, echo, compressor, amp, convolution, bands_3, ducker...); video_fx: color.' };
 const MIX_COMMANDS = Object.freeze({
     'mix.module.add': stripCommand({
         module_id: { type: 'string' },
-        type: { type: 'string', enum: ['volume', 'pan', 'mono', 'dsp', 'user_effect', 'send', 'opacity', 'video_fx'] },
+        type: { type: 'string', enum: ['volume', 'pan', 'mono', 'dsp', 'user_effect', 'send', 'input', 'opacity', 'video_fx'] },
         effect, effect_id: { type: 'string', description: 'For a user_effect: the audio_effect atome (Mes effets) it places, linked.' },
-        params: { type: 'object' }, destination, outputs, key, index: { type: 'integer' }
+        params: { type: 'object' }, destination, outputs, key, source, index: { type: 'integer' }
     }, ['module_id', 'type']),
-    'mix.module.update': stripCommand({ module_id: { type: 'string' }, effect, params: { type: 'object' }, destination, outputs, key }, ['module_id']),
+    'mix.module.update': stripCommand({ module_id: { type: 'string' }, effect, params: { type: 'object' }, destination, outputs, key, source }, ['module_id']),
     'mix.module.move': stripCommand({ module_id: { type: 'string' }, index: { type: 'integer' }, to_strip_id: { type: 'string', description: 'Another strip of a compatible lane the module moves into, at index.' } }, ['module_id', 'index']),
     'mix.module.remove': stripCommand({ module_id: { type: 'string' } }, ['module_id']),
     'mix.module.bypass': stripCommand({ module_id: { type: 'string' }, bypass: { type: 'boolean' } }, ['module_id', 'bypass']),
     'mix.output.set': stripCommand({ destination, enabled: { type: 'boolean' } }),
     'mix.input.set': stripCommand({ input: { type: 'object', properties: { kind: { type: 'string', enum: ['track', 'live_audio', 'instrument'] }, device_id: { type: 'string' },
-        instrument_id: { type: 'string', description: 'For an instrument: the instrument atome (Mes instruments) whose notes the strip plays.' } } } }, ['input']),
+        instrument_id: { type: 'string', description: 'For an instrument: the instrument atome (Mes instruments) whose notes the strip plays.' }, output } } }, ['input']),
     'mix.group.create': { type: 'object', required: ['group_id', 'master_strip_id', 'member_strip_ids'], properties: { group_id: { type: 'string' }, master_strip_id: { type: 'string' }, member_strip_ids: { type: 'array', items: { type: 'string' } } } },
     'mix.group.join': stripCommand({ group_id: { type: 'string' } }, ['group_id']),
     'mix.group.leave': stripCommand({}),

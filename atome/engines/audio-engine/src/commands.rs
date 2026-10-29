@@ -133,13 +133,13 @@ pub fn mix_asset_load(project_root: Option<&Path>, asset_id: &str, path: &str) -
     Ok(json!({ "success": true, "asset_id": asset_id }))
 }
 
-// A Sampler's sample, decoded once for every instrument that names `sample_id`.
+// A Sampler's sample, loaded once for every instrument that names `sample_id` (a long WAV streams).
 pub fn instrument_sample_load(project_root: Option<&Path>, sample_id: &str, path: &str) -> Result<Value, String> {
     if sample_id.is_empty() {
         return Err("instrument_sample_load needs a sample id".to_string());
     }
-    let (frames, sample_rate) = instrument::load_sample(sample_id, &existing(resolve_path(project_root, path)?)?)?;
-    Ok(json!({ "success": true, "sample_id": sample_id, "frames": frames, "sample_rate": sample_rate, "channels": 2 }))
+    let loaded = instrument::load_sample(sample_id, &existing(resolve_path(project_root, path)?)?)?;
+    Ok(json!({ "success": true, "sample_id": sample_id, "frames": loaded.frames, "sample_rate": loaded.sample_rate, "channels": loaded.channels, "streamed": loaded.streamed }))
 }
 
 pub fn instrument_run(command: Value) -> Result<Value, String> {

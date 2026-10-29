@@ -11,6 +11,7 @@ pub mod direct;
 mod engine_thread;
 pub mod host_output;
 mod instrument;
+mod instrument_source;
 mod live_input;
 pub mod metering;
 mod metering_scope;

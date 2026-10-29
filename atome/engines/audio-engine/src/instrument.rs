@@ -1,6 +1,8 @@
 // Instruments of the native engine (todo/sampler_cahier_des_charges §14): a
-// sample is decoded once from its file and shared by the timeline's mix graph
-// and the direct path's (an `Arc`, never a copy); every other command
+// sample is loaded once from its file and shared by the timeline's mix graph
+// and the direct path's (an `Arc`, never a copy) — a WAV read in place, whole
+// or streamed from its heads (instrument_source.rs), another format decoded
+// whole; every other command
 // (atome_mix_graph::instrument_command) reaches both graphs, a note the graphs
 // where a strip plays the instrument.
 
@@ -24,10 +26,20 @@ pub fn decode(path: &Path) -> Result<SampleData, String> {
     Ok(SampleData::stereo(left, right, data.sample_rate as f32))
 }
 
-// Its length and rate, which the instrument's description records.
-pub fn load_sample(sample_id: &str, path: &Path) -> Result<(usize, f32), String> {
-    let data = decode(path)?;
-    let shape = (data.frames(), data.sample_rate);
+// What the instrument's description records, and how it is held.
+pub struct Loaded {
+    pub frames: usize,
+    pub sample_rate: f32,
+    pub channels: usize,
+    pub streamed: bool,
+}
+
+pub fn load_sample(sample_id: &str, path: &Path) -> Result<Loaded, String> {
+    let data = match super::instrument_source::open(path)? {
+        Some(data) => data,
+        None => decode(path)?,
+    };
+    let shape = Loaded { frames: data.frames(), sample_rate: data.sample_rate, channels: if data.is_mono() { 1 } else { 2 }, streamed: data.is_streamed() };
     super::direct::with_graph(|graph| {
         graph.instruments().load_sample(sample_id, data.clone());
         Ok(())
@@ -43,6 +55,17 @@ pub fn load_sample(sample_id: &str, path: &Path) -> Result<(usize, f32), String>
 // or a clock the graphs that play the instrument (an error when none does); the
 // fired command markers of both graphs are drained together.
 pub fn run(command: InstrumentCommand) -> Result<InstrumentAnswer, String> {
+    // The reads the stream worker could not make go with the drain (their frames starved).
+    match run_graphs(command)? {
+        InstrumentAnswer::Actions(mut drained) => {
+            drained.failures = atome_mix_graph::sample_stream::take_failures();
+            Ok(InstrumentAnswer::Actions(drained))
+        }
+        answer => Ok(answer),
+    }
+}
+
+fn run_graphs(command: InstrumentCommand) -> Result<InstrumentAnswer, String> {
     let shared = matches!(command, InstrumentCommand::Set { .. } | InstrumentCommand::Remove { .. } | InstrumentCommand::UnloadSample { .. });
     let direct = super::direct::with_graph(|graph| instrument_command::run(graph, command.clone()));
     let timeline = with_timeline(|graph| instrument_command::run(graph, command));
@@ -52,6 +75,7 @@ pub fn run(command: InstrumentCommand) -> Result<InstrumentAnswer, String> {
             direct.actions.sort_by_key(|fired| fired.frame);
             direct.dropped += timeline.dropped;
             direct.stale += timeline.stale;
+            direct.starved += timeline.starved;
             Ok(InstrumentAnswer::Actions(direct))
         }
         (Err(error), _) | (_, Err(error)) if shared => Err(error),
@@ -75,7 +99,8 @@ mod tests {
         let data = super::decode(&path).unwrap();
         std::fs::remove_file(&path).unwrap();
         assert_eq!((data.frames(), data.sample_rate), (4410, 44_100.0));
-        assert!((data.left[0] - 0.25).abs() < 1.0e-3 && (data.left[1] + 0.25).abs() < 1.0e-3, "left keeps its samples");
-        assert!(data.right.iter().all(|sample| sample.abs() < 1.0e-6), "right is its own channel");
+        let (first, second) = (data.frame(0).unwrap(), data.frame(1).unwrap());
+        assert!((first.0 - 0.25).abs() < 1.0e-3 && (second.0 + 0.25).abs() < 1.0e-3, "left keeps its samples");
+        assert!((0..4410).all(|index| data.frame(index).unwrap().1.abs() < 1.0e-6), "right is its own channel");
     }
 }

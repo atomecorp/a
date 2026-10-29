@@ -41,6 +41,8 @@ const definitions = {
         'Put the slices on one zone of a Sampler instrument at note, played in turn (cycle, random, random without repeat).', true, 'write'],
     slices_to_midi: [{ media_atome_id: media, project_id: text, note }, ['media_atome_id', 'project_id'],
         'A MIDI clip in the project replaying the slices in their original order and timing at the sound\'s tempo (slice i on note + i, 36 unless given): change its tempo without stretching, rearrange it. Needs the tempo (slice_tempo_set). Returns media_atome_id.', true, 'write'],
+    slices_to_cells: [{ media_atome_id: media, project_id: text, track_id: text }, ['media_atome_id', 'project_id'],
+        'Each slice into a cell of the project: a Scene per slice laid after the last one, the slice a clip of that Scene on track_id (the first content track unless given), its source window the slice\'s region (nothing copied). Returns scene_ids, clip_ids, track_id.', true, 'write'],
     edit_from_slices: [{ media_atome_id: media }, ['media_atome_id'],
         'Lay the edit as the slices, one piece each, so a slice can be removed, moved, duplicated, reversed, set apart (edit_apply with index).', true, 'write'],
     edit_apply: [{ media_atome_id: media, op: { type: 'string', enum: ['cut', 'copy', 'paste', 'silence', 'trim', 'fade_in', 'fade_out', 'reverse', 'gain', 'normalize',
@@ -61,13 +63,14 @@ export const SAMPLE_EDIT_COMMANDS = Object.freeze(Object.entries(definitions).ma
     name: `audio_fx.${action}`, action, description, persistent, capability: `audio_fx.${access}`,
     input_schema: { type: 'object', additionalProperties: false, properties, required },
     output_schema: { type: 'object', required: ['ok'], properties: { ok: { type: 'boolean' }, error: { type: 'string', enum: SAMPLE_EDIT_ERRORS },
-        reason: { type: 'string' }, sample_edit_id: { type: 'string' }, revision: { type: 'number' }, points: { type: 'array', items: { type: 'object' } },
+        reason: { type: 'string' }, scene_ids: { type: 'array', items: { type: 'string' } }, clip_ids: { type: 'array', items: { type: 'string' } },
+        track_id: { type: 'string' }, sample_edit_id: { type: 'string' }, revision: { type: 'number' }, points: { type: 'array', items: { type: 'object' } },
         slices: { type: 'array', items: { type: 'object' } }, pieces: { type: 'array', items: { type: 'object' } }, length: { type: 'integer' },
         tempo: { type: 'object' }, instrument_id: { type: 'string' }, zone_ids: { type: 'array', items: { type: 'string' } },
         slice_atome_ids: { type: 'array', items: { type: 'string' } }, media_atome_id: { type: 'string' }, analysis: { type: 'object' } } }
 })));
 export const SAMPLE_EDIT_ASSISTANT_INSTRUCTIONS = 'Slice tool and sample editor (any sound): « coupe cette boucle en 8 » calls audio_fx.slice_divide parts 8; '
     + '« redivise la deuxième partie en 4 » slice_divide slice 1 parts 4; « coupe aux attaques » audio_fx.slice_detect; « fais-en un kit » '
-    + 'audio_fx.slices_to_keys on an instrument (audio_fx.instrument_create first if none); « en clip MIDI » audio_fx.slices_to_midi (the tempo first: '
+    + 'audio_fx.slices_to_keys on an instrument (audio_fx.instrument_create first if none); « dans les cellules » audio_fx.slices_to_cells with the project id; « en clip MIDI » audio_fx.slices_to_midi (the tempo first: '
     + 'audio_fx.slice_tempo_set); « enlève le silence de la fin » audio_fx.sample_analyze what end_silence apply true; « fige-le » audio_fx.sample_freeze. '
     + 'Never invent a point_id or a slice index: read audio_fx.slice_read first.';

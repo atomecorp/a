@@ -362,7 +362,7 @@ mod tests {
             assert_eq!(direct_instrument_clock(handle, "keys".as_ptr(), 4), 256.0);
             let length = direct_instrument_actions(handle, "keys".as_ptr(), 4);
             let json = std::str::from_utf8(std::slice::from_raw_parts(direct_text(handle), length.max(0) as usize)).unwrap();
-            assert_eq!(json, r#"{"actions":[],"dropped":0,"stale":0}"#, "no command marker fired");
+            assert_eq!(json, r#"{"actions":[],"dropped":0,"stale":0,"starved":0}"#, "no command marker fired, no frame starved");
             assert!(direct_instrument_actions(handle, "organ".as_ptr(), 5) < 0, "an unknown instrument is an error");
             let drain = r#"{"command":"drain_actions","instrument_id":"keys"}"#;
             assert!(direct_instrument(handle, drain.as_ptr(), drain.len()) > 0, "drained through its own export");

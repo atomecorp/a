@@ -96,7 +96,7 @@ pub fn audio_instrument_sample_load(sample_id: &str, left: Vec<f32>, right: Opti
 }
 
 // An instrument command (atome_mix_graph::instrument_command); answers the
-// clock's frames, the fired command markers ({actions, dropped, stale}) for
+// clock's frames, the fired command markers ({actions, dropped, stale, starved}) for
 // `drain_actions`, else null.
 #[wasm_bindgen]
 pub fn audio_instrument(command: JsValue) -> Result<JsValue, JsValue> {

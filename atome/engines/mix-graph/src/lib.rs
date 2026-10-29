@@ -52,7 +52,7 @@ use graph::{Graph, StepModule, StripParts};
 use instrument::Instruments;
 use source_bus::Feeds;
 pub use instrument_spec::InstrumentSpec;
-pub use atome_instrument::{EventKind, SampleData};
+pub use atome_instrument::{stream as sample_stream, EventKind, FrameSource, SampleData};
 use module::{ModuleBox, ModuleControls, ModuleRuntime, Processor, REQUEST_ACTIVE, REQUEST_BYPASS, REQUEST_CUT};
 pub use program::{InputSpec, KeySource, MixSource, ModuleSpec, PortRoute, Program, StripSpec, Target};
 use shared::{CaptureSlot, GraphShared, LiveInput, StripMeter};
