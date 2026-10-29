@@ -65,6 +65,7 @@
 
 /* Begin PBXFileReference section */
 		6BWTCH000000000000000001 /* atomeWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = atomeWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		6BWTCH000000000000000017 /* atomeWatch.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = configuration/atomeWatch.xcconfig; sourceTree = SOURCE_ROOT; };
 		349603E42818619000E13C15 /* atome.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = atome.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		349603FF281861B500E13C15 /* atomeAudioUnit.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = atomeAudioUnit.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		34960426281861EE00E13C15 /* src */ = {isa = PBXFileReference; lastKnownFileType = folder; name = src; path = ../../../atome/src; sourceTree = "<group>"; };
@@ -178,6 +179,7 @@
 				6B864DC82D5DDDD7006DEA72 /* auv3 */,
 				6BWTCH000000000000000005 /* sensors */,
 				6BWTCH000000000000000006 /* watch */,
+				6BWTCH000000000000000017 /* atomeWatch.xcconfig */,
 				349603E52818619000E13C15 /* Products */,
 				6BB7DA3B2D63233600CD6691 /* LICENSE */,
 				6BB7DA3C2D63233600CD6691 /* README.md */,
@@ -870,55 +872,19 @@
 		};
 		6BWTCH000000000000000015 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 6BWTCH000000000000000017 /* atomeWatch.xcconfig */;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = watch/atomeWatch.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 37;
-				DEVELOPMENT_TEAM = 2W25PVZ57F;
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = watch/Info.plist;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
 				MARKETING_VERSION = 1.38;
-				PRODUCT_BUNDLE_IDENTIFIER = one.atome.app.watchkitapp;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = watchos;
-				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = "watchos watchsimulator";
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 4;
-				WATCHOS_DEPLOYMENT_TARGET = 10.0;
 			};
 			name = Debug;
 		};
 		6BWTCH000000000000000016 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 6BWTCH000000000000000017 /* atomeWatch.xcconfig */;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = watch/atomeWatch.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 37;
-				DEVELOPMENT_TEAM = 2W25PVZ57F;
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = watch/Info.plist;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
 				MARKETING_VERSION = 1.38;
-				PRODUCT_BUNDLE_IDENTIFIER = one.atome.app.watchkitapp;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = watchos;
-				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = "watchos watchsimulator";
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 4;
-				WATCHOS_DEPLOYMENT_TARGET = 10.0;
 			};
 			name = Release;
 		};
