@@ -92,14 +92,6 @@ discover_application_scheme() {
     project_json="$(xcodebuild_for_container -list -json)"
     printf '%s' "$project_json" | /usr/bin/ruby -rjson -e 'JSON.parse(STDIN.read)' 2>/dev/null \
         || fail "xcodebuild -list -json did not return readable JSON."
-    while IFS= read -r scheme; do
-        settings="$(release_settings_for_scheme "$scheme")"
-        product_type="$(extract_setting "$settings" "PRODUCT_TYPE")"
-        if [ "$product_type" = "com.apple.product-type.application" ]; then
-            application_schemes+=("$scheme")
-        fi
-    done < <(append_json_values "$project_json" "schemes")
-
     while IFS= read -r target; do
         settings="$(release_settings_for_target "$target")"
         product_type="$(extract_setting "$settings" "PRODUCT_TYPE")"
@@ -108,6 +100,19 @@ discover_application_scheme() {
             application_targets+=("$target")
         fi
     done < <(append_json_values "$project_json" "targets")
+
+    # Only a scheme named after an iOS application target can be the app's: another scheme (the
+    # Apple Watch app's) has no iOS destination to read its settings for.
+    while IFS= read -r scheme; do
+        for target in ${application_targets[@]+"${application_targets[@]}"}; do
+            [ "$scheme" = "$target" ] || continue
+            settings="$(release_settings_for_scheme "$scheme")"
+            product_type="$(extract_setting "$settings" "PRODUCT_TYPE")"
+            if [ "$product_type" = "com.apple.product-type.application" ]; then
+                application_schemes+=("$scheme")
+            fi
+        done
+    done < <(append_json_values "$project_json" "schemes")
 
     # macOS ships bash 3.2, where an empty "${array[@]}" is an unbound
     # variable under `set -u`; the guarded form reports the real error instead.
