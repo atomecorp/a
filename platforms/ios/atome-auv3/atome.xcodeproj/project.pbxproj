@@ -648,7 +648,7 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = application/atomeCarPlaySimulator.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 36;
+				CURRENT_PROJECT_VERSION = 37;
 				DEVELOPMENT_TEAM = 2W25PVZ57F;
 				"FRAMEWORK_SEARCH_PATHS[arch=*]" = "$(SRCROOT)/Common ";
 				GENERATE_INFOPLIST_FILE = NO;
@@ -669,7 +669,7 @@
 					"$(BUILT_PRODUCTS_DIR)",
 					"$(TARGET_TEMP_DIR)",
 				);
-				MARKETING_VERSION = 1.37;
+				MARKETING_VERSION = 1.38;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-latome_ios_bevy_renderer",
@@ -699,7 +699,7 @@
 				CODE_SIGN_ENTITLEMENTS = application/atomeRelease.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 36;
+				CURRENT_PROJECT_VERSION = 37;
 				DEVELOPMENT_TEAM = 2W25PVZ57F;
 				"FRAMEWORK_SEARCH_PATHS[arch=*]" = "$(SRCROOT)/Common ";
 				GENERATE_INFOPLIST_FILE = NO;
@@ -720,7 +720,7 @@
 					"$(BUILT_PRODUCTS_DIR)",
 					"$(TARGET_TEMP_DIR)",
 				);
-				MARKETING_VERSION = 1.37;
+				MARKETING_VERSION = 1.38;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-latome_ios_bevy_renderer",
@@ -749,7 +749,7 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=*]" = auv3/auv3.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 36;
+				CURRENT_PROJECT_VERSION = 37;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = auv3/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = atome;
@@ -767,7 +767,7 @@
 					"$(BUILT_PRODUCTS_DIR)",
 					"$(TARGET_TEMP_DIR)",
 				);
-				MARKETING_VERSION = 1.37;
+				MARKETING_VERSION = 1.38;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-latome_ios_bevy_renderer",
@@ -792,7 +792,7 @@
 				CODE_SIGN_ENTITLEMENTS = auv3/auv3Release.entitlements;
 				"CODE_SIGN_ENTITLEMENTS[sdk=*]" = auv3/auv3Release.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 36;
+				CURRENT_PROJECT_VERSION = 37;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = auv3/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = atome;
@@ -810,7 +810,7 @@
 					"$(BUILT_PRODUCTS_DIR)",
 					"$(TARGET_TEMP_DIR)",
 				);
-				MARKETING_VERSION = 1.37;
+				MARKETING_VERSION = 1.38;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-latome_ios_bevy_renderer",
@@ -874,7 +874,7 @@
 				CODE_SIGN_ENTITLEMENTS = watch/atomeWatch.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 36;
+				CURRENT_PROJECT_VERSION = 37;
 				DEVELOPMENT_TEAM = 2W25PVZ57F;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = watch/Info.plist;
@@ -882,7 +882,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.37;
+				MARKETING_VERSION = 1.38;
 				PRODUCT_BUNDLE_IDENTIFIER = one.atome.app.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
@@ -901,7 +901,7 @@
 				CODE_SIGN_ENTITLEMENTS = watch/atomeWatch.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 36;
+				CURRENT_PROJECT_VERSION = 37;
 				DEVELOPMENT_TEAM = 2W25PVZ57F;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = watch/Info.plist;
@@ -909,7 +909,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.37;
+				MARKETING_VERSION = 1.38;
 				PRODUCT_BUNDLE_IDENTIFIER = one.atome.app.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
