@@ -1,7 +1,8 @@
-import { createCanonicalImport, createImportSnapshot, IMPORT_SOURCE_TYPE, importIdentity, importRecordId, importRecordProps, ownsImportedRecords } from './canonical_import.js';
+import { acquireImportSnapshot, createCanonicalImport, IMPORT_SOURCE_TYPE, importIdentity, importRecordId, importRecordProps, ownsImportedRecords, releaseImportSnapshot } from './canonical_import.js';
 import { getLocalSurfaceId } from '../apis/unified/adole_api/surfaces.js';
 import { getSessionState } from '../apis/unified/adole_api/session.js';
 import { sameImportValue } from './import_reconciliation.js';
+import { whenBackgroundAllowed } from './background_work.js';
 
 // A native book is read on one device. Contact and calendar identifiers belong
 // to the system stores and survive an app reinstall, unlike the WebView surface
@@ -60,11 +61,14 @@ export function createImportLifecycle({ domain, run, restore, env = globalThis, 
         entry.pending = true;
         if (entry.running) return entry.running;
         const currentGeneration = generation;
+        // The pages of this pass, and the passes running with it, share their table reads (canonical_import.js).
+        const snapshot = acquireImportSnapshot();
         entry.running = (async () => {
             let result, recovering = null;
-            // The pages of this pass share their table reads (canonical_import.js).
-            const snapshot = createImportSnapshot();
             while (entry.pending && currentGeneration === generation && !entry.controller.signal.aborted) {
+                // Each page waits for the foreground to be free (background_work.js).
+                await whenBackgroundAllowed();
+                if (currentGeneration !== generation || entry.controller.signal.aborted) break;
                 entry.pending = false;
                 const context = store.capture();
                 const checkpoints = await store.list(IMPORT_SOURCE_TYPE, context);
@@ -108,7 +112,7 @@ export function createImportLifecycle({ domain, run, restore, env = globalThis, 
             await endOnPermissionLoss(id, entry, result, currentGeneration);
             if (currentGeneration === generation && !entry.controller.signal.aborted) notify(id, result);
             return result;
-        }).finally(() => { entry.running = null; });
+        }).finally(() => { entry.running = null; releaseImportSnapshot(); });
         return entry.running;
     };
     const stopRuntime = () => {
@@ -175,6 +179,7 @@ export function createImportLifecycle({ domain, run, restore, env = globalThis, 
         if (resuming || disposed || !ownsImportedRecords(session())) return resuming || Promise.resolve();
         const resumeGeneration = generation;
         resuming = (async () => {
+            await whenBackgroundAllowed();
             const context = store.capture(), rows = await store.list(IMPORT_SOURCE_TYPE, context);
             const currentDevice = await ensureDevice();
             for (const row of rows) {

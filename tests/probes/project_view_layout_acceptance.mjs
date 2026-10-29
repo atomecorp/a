@@ -41,8 +41,8 @@ export const runProjectViewLayoutAcceptance = async ({ page, report, check, ensu
         assert(view.nodes.project_view_footer_band.size[1] === view.toolSize, 'footer_tool_height_mismatch');
         assert(view.nodes[`${rowId}_preview`].position[0] === view.nodes.project_view_footer_transport.position[0], 'timeline_start_misaligned');
         assert(view.nodes[`${rowId}_preview`].size[0] === view.nodes.project_view_footer_transport.size[0], 'timeline_end_misaligned');
-        assert(view.nodes[`${rowId}_playhead`].size[1] === view.toolSize, 'row_playhead_not_full_height');
-        assert(view.nodes.project_view_footer_playhead.size[1] === view.toolSize, 'footer_playhead_not_full_height');
+        assert(view.nodes[`${rowId}_preview_remaining`].size[1] === view.toolSize, 'row_veil_not_full_height');
+        assert(view.nodes.project_view_footer_remaining.size[1] === view.toolSize, 'footer_veil_not_full_height');
         await screenshot({ page, report, outDir, name: 'structured_rows_aligned' });
     });
     await check('separator resizes viewer without resizing the canvas and persists List ratio', async () => {

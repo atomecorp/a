@@ -103,7 +103,8 @@ discover_application_scheme() {
     while IFS= read -r target; do
         settings="$(release_settings_for_target "$target")"
         product_type="$(extract_setting "$settings" "PRODUCT_TYPE")"
-        if [ "$product_type" = "com.apple.product-type.application" ]; then
+        # The Apple Watch app ships inside the iOS app: it is never the scheme's application.
+        if [ "$product_type" = "com.apple.product-type.application" ] && [ "$(extract_setting "$settings" "PLATFORM_NAME")" != "watchos" ]; then
             application_targets+=("$target")
         fi
     done < <(append_json_values "$project_json" "targets")
@@ -144,7 +145,11 @@ discover_release_targets() {
         product_type="$(extract_setting "$settings" "PRODUCT_TYPE")"
         target_bundle_identifier="$(extract_setting "$settings" "PRODUCT_BUNDLE_IDENTIFIER")"
 
-        if [ "$product_type" = "com.apple.product-type.application" ]; then
+        # The Apple Watch app ships inside the iOS app: versioned with it, like an extension.
+        if [ "$product_type" = "com.apple.product-type.application" ] && [ "$(extract_setting "$settings" "PLATFORM_NAME")" = "watchos" ]; then
+            EXTENSION_TARGETS+=("$target")
+            ((EXTENSION_TARGET_COUNT += 1))
+        elif [ "$product_type" = "com.apple.product-type.application" ]; then
             application_targets+=("$target")
             ((application_target_count += 1))
             if [ "$target_bundle_identifier" = "$APP_BUNDLE_IDENTIFIER" ]; then

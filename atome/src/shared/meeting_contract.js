@@ -26,6 +26,30 @@ export const MEETING_ORIENTATIONS = Object.freeze(['hetero', 'homo', 'bi']);
 // searcher declared on their own card.
 export const MEETING_SCOPES = Object.freeze(['france', 'world', 'area']);
 
+// Rencontre is for adults only. The age is read from the birth date of the
+// person's own card (`bio.birth`), never from a declaration: a missing, unreadable,
+// impossible or future date, or one under 18 years ago, keeps Rencontre closed —
+// no entry, no section on the card, no search, and the person never appears in it.
+export const MEETING_MINIMUM_AGE = 18;
+const OLDEST_AGE = 120;
+
+// A birth date, as typed: day/month/year (`12/03/1990`, `12.03.1990`, `12-03-1990`)
+// or year-month-day (`1990-03-12`, an ISO timestamp too). The age in whole years
+// at `now`, or null when the date is not a real one.
+export const ageFromBirth = (birth, now = new Date()) => {
+    const parts = text(birth).split('T')[0].split(/[/.-]/);
+    if (parts.length !== 3 || parts.some(part => !part || !/^\d+$/.test(part))) return null;
+    const [year, month, day] = (parts[0].length === 4 ? parts : [...parts].reverse()).map(Number);
+    if (String(year).length !== 4) return null;
+    const date = new Date(year, month - 1, day);
+    if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day || date > now) return null;
+    const age = now.getFullYear() - year - (now < new Date(now.getFullYear(), month - 1, day) ? 1 : 0);
+    return age <= OLDEST_AGE ? age : null;
+};
+
+// May the owner of this birth date see, declare for and appear in Rencontre?
+export const meetingAllowed = (birth, now = new Date()) => (ageFromBirth(birth, now) ?? -1) >= MEETING_MINIMUM_AGE;
+
 // The Rencontre card: its photos (beside the profile photo), its one-line hook, its presentation.
 export const MEETING_PHOTOS_MAX = 6;
 export const MEETING_HOOK_MAX = 60;

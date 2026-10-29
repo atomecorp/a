@@ -30,7 +30,10 @@ export const SOCIAL_ERRORS = Object.freeze([
     'social_provider_rejected', 'social_provider_rate_limited', 'social_provider_unavailable',
     'social_network_interrupted', 'social_publish_unconfirmed', 'social_job_not_found', 'social_job_busy',
     'social_destination_invalid', 'social_option_required', 'social_cancelled', 'social_app_unavailable',
-    'social_handoff_unavailable', 'social_request_invalid'
+    'social_handoff_unavailable', 'social_request_invalid',
+    // A scheduled send: a destination only the person can finish (share sheet, export, copied text), and an
+    // update a network's API cannot apply to a post (Instagram, TikTok, a personal profile).
+    'social_needs_person', 'social_update_unsupported'
 ]);
 export const normalizeSocialError = (code) => (SOCIAL_ERRORS.includes(code) ? code : 'social_provider_unavailable');
 

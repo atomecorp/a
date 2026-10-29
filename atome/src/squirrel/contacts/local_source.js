@@ -132,13 +132,13 @@ async function removeFormerImportCopies(store, items, collected, prefix, snapsho
 }
 
 export function createLocalContactsSource({ source_id = 'eve_contacts_local', role = 'primary', writable = true,
-    api, session, publishProfile } = {}) {
+    api, session, loadProfile } = {}) {
     // Un meme numero = une meme personne : un import repete, un autre appareil ou
     // un autre carnet completent la fiche existante au lieu de la dupliquer.
     const store = createCanonicalImport({ type: 'contact', api, session, normalize: normalizeContactProperties,
         identityKeys: contactPhoneKeys, mergeIntoExisting: mergeContactIntoExisting });
     const groups = createCanonicalImport({ type: 'contact_group', api, session, normalize: input => ({ name: String(input.name || ''), members: input.members || [] }) });
-    const personal = createPersonalContactImport({ api, session, publish: publishProfile });
+    const personal = createPersonalContactImport({ api, session, loadProfile });
     // One canonical read of the book serves every pull (each home opening, each panel)
     // until a contact changes: a write through this source, or a canonical signal for a
     // contact (a realtime arrival, a native replay, an import). A full read costs one
@@ -227,6 +227,8 @@ export function createLocalContactsSource({ source_id = 'eve_contacts_local', ro
             });
             if (!origins.length) return { ok: false, error: 'personal_native_contact_required' };
             const result = await personal.select({ ...contact, source_contact_id: importRecordProps(origins[0]).external_id });
+            // The card stays a contact until the account's profile, here, can take it.
+            if (result.deferred) return { ok: false, error: 'atome_not_available_locally' };
             for (const group of await store.list('contact_group', context)) {
                 const props = importRecordProps(group);
                 if (props.members?.includes(id)) await store.write(importRecordId(group), 'contact_group',

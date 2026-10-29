@@ -2,28 +2,32 @@
  * server uploads/downloads listing + download target resolution.
  */
 
-import { promises as fs, existsSync, createReadStream, statSync, readFileSync, mkdirSync } from 'fs';
+import { promises as fs } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import db from '../database/adole.js';
 import { sanitizeFileName, ensureUserDownloadsDir, normalizeUserRelativePath, resolveUserAssetPath, resolveUserFilePath } from './fileStorage.js';
-import { getAccessibleFiles, getFileMetadata, canAccessFile } from './userFiles.js';
+import { getFileMetadata, canAccessFile } from './userFiles.js';
 import { pickDisplayName } from './server_utils.js';
 import { reconcilePrincipalFilePath } from './principal_file_migration.js';
 
-const DATABASE_ENABLED = Boolean(process.env.SQLITE_PATH || process.env.LIBSQL_URL);
-
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-export const uploadsDir = (() => {
-  try {
-    return resolveUploadsDir();
-  } catch (error) {
-    const message = error?.message || error;
-    console.warn('⚠️ Unable to resolve uploads directory:', message);
-    return null;
+// Whether the shared database tracks file ownership and sharing. server.js sets it once
+// from its own DATABASE_ENABLED: `.env` is read after this module is evaluated, so an
+// import-time read of process.env would miss the database on dev and production.
+let databaseEnabled = null;
+
+export function configureUploadDatabase(enabled) {
+  databaseEnabled = enabled === true;
+}
+
+function requireUploadDatabaseConfiguration() {
+  if (databaseEnabled === null) {
+    throw new Error('server_uploads: configureUploadDatabase() must run before downloads are resolved');
   }
-})();
+  return databaseEnabled;
+}
 
 export async function listUserDownloadsSnapshot(userId) {
   if (!userId) {
@@ -76,51 +80,36 @@ export function resolveUploadsDir() {
   return path.resolve(absolute);
 }
 
-export async function listAnonymousUploads() {
-  if (!uploadsDir) return [];
-  const entries = await fs.readdir(uploadsDir, { withFileTypes: true });
-  const files = [];
-
-  for (const entry of entries) {
-    if (!entry.isFile()) continue;
-    const safeName = sanitizeFileName(entry.name);
-    const absolutePath = path.join(uploadsDir, safeName);
-    try {
-      const stats = await fs.stat(absolutePath);
-      files.push({
-        name: safeName,
-        size: stats.size,
-        modified: stats.mtime.toISOString(),
-        origin: 'previous'
-      });
-    } catch (error) {
-      console.warn('⚠️ Impossible de lire les métadonnées pour', absolutePath, error);
+export async function listUserDownloads(userId, { vaultRouter }) {
+  const { downloadsDir } = await ensureUserDownloadsDir(projectRoot, { id: userId });
+  const entries = (await fs.readdir(downloadsDir, { withFileTypes: true })).filter((entry) => entry.isFile());
+  // A stored file is named by the Atome that describes it in its owner's vault (the
+  // name the person's file had); the anonymous principal has no vault.
+  const descriptions = new Map();
+  const storedNames = userId === 'anonymous' ? [] : entries.map((entry) => sanitizeFileName(entry.name));
+  for (let start = 0; start < storedNames.length; start += 1000) {
+    for (const row of await vaultRouter.describeFiles(userId, storedNames.slice(start, start + 1000))) {
+      if (!descriptions.has(row.file_name)) descriptions.set(row.file_name, row);
     }
   }
-
-  files.sort((a, b) => b.modified.localeCompare(a.modified));
-  return files;
-}
-
-export async function listUserDownloads(userId) {
-  const { downloadsDir } = await ensureUserDownloadsDir(projectRoot, { id: userId });
-  const entries = await fs.readdir(downloadsDir, { withFileTypes: true });
   const files = [];
 
   for (const entry of entries) {
-    if (!entry.isFile()) continue;
     const safeName = sanitizeFileName(entry.name);
     const absolutePath = path.join(downloadsDir, safeName);
+    const description = descriptions.get(safeName) || null;
     try {
       const stats = await fs.stat(absolutePath);
       files.push({
-        name: safeName,
+        id: description?.atome_id || null,
+        name: pickDisplayName(description, safeName),
         file_name: safeName,
         size: stats.size,
         modified: stats.mtime.toISOString(),
         owner_id: userId,
         access: 'owner',
-        shared: false
+        shared: false,
+        profiles: description?.profiles || []
       });
     } catch (error) {
       console.warn('⚠️ Impossible de lire les métadonnées pour', absolutePath, error);
@@ -128,76 +117,6 @@ export async function listUserDownloads(userId) {
   }
 
   files.sort((a, b) => b.modified.localeCompare(a.modified));
-  return files;
-}
-
-export async function listUploadsForUser(userId) {
-  if (!DATABASE_ENABLED) {
-    return listUserDownloads(userId);
-  }
-
-  const accessible = await getAccessibleFiles(userId);
-  const files = [];
-
-  for (const entry of (accessible || [])) {
-    const ownerId = entry.owner_id || userId;
-    const safeName = typeof entry.file_name === 'string' && entry.file_name.trim()
-      ? entry.file_name
-      : sanitizeFileName(entry.original_name || entry.name || 'upload.bin');
-    let stats = null;
-    const rawPath = entry.file_path || entry.filePath || null;
-    if (rawPath) {
-      const normalizedRelative = normalizeUserRelativePath(rawPath, ownerId);
-      if (normalizedRelative) {
-        const resolved = await resolveUserAssetPath(
-          projectRoot,
-          { id: ownerId },
-          normalizedRelative
-        );
-        stats = await fs.stat(resolved.filePath);
-      }
-    }
-
-    if (!stats) {
-      const filePath = await resolveUserFilePath(projectRoot, ownerId, safeName);
-      stats = await fs.stat(filePath);
-    }
-
-    const parsedSize = typeof entry.size === 'number' ? entry.size : Number(entry.size);
-    files.push({
-      id: entry.atome_id,
-      name: pickDisplayName(entry, safeName),
-      file_name: safeName,
-      size: Number.isFinite(parsedSize) ? parsedSize : (stats?.size || 0),
-      modified: stats?.mtime?.toISOString() || entry.updated_at || entry.created_at || null,
-      owner_id: ownerId,
-      access: entry.access || (ownerId === userId ? 'owner' : 'read'),
-      shared: ownerId !== userId
-    });
-  }
-
-  if (userId === 'anonymous') {
-    const previous = await listAnonymousUploads();
-    const mapped = previous.map((file) => ({
-      id: null,
-      name: file.name,
-      file_name: file.name,
-      size: file.size || 0,
-      modified: file.modified || null,
-      owner_id: userId,
-      access: 'owner',
-      shared: false,
-      previous: true
-    }));
-    files.push(...mapped);
-  }
-
-  const toTimestamp = (value) => {
-    if (!value) return 0;
-    const parsed = Date.parse(value);
-    return Number.isNaN(parsed) ? 0 : parsed;
-  };
-  files.sort((a, b) => toTimestamp(b.modified) - toTimestamp(a.modified));
   return files;
 }
 
@@ -205,85 +124,16 @@ export async function resolveDownloadTarget(fileParam, userId) {
   const raw = typeof fileParam === 'string' ? fileParam : String(fileParam || '');
   const safeParam = raw.trim();
 
-  const resolveLegacyOwnerlessTarget = async () => {
-    if (!DATABASE_ENABLED || !safeParam || userId !== 'anonymous') return null;
-    try {
-      const rows = await db.query('all', `
-        SELECT a.atome_id, a.atome_type, a.owner_id, a.created_at, a.updated_at
-        FROM atomes a
-        JOIN particles p ON a.atome_id = p.atome_id
-        WHERE p.particle_key IN ('file_name', 'original_name')
-          AND p.particle_value = ?
-          AND a.deleted_at IS NULL
-        ORDER BY COALESCE(a.updated_at, a.created_at) DESC
-        LIMIT 12
-      `, [JSON.stringify(safeParam)]);
-      for (const row of (rows || [])) {
-        const particles = await db.query('all', `
-          SELECT particle_key, particle_value FROM particles WHERE atome_id = ?
-        `, [row.atome_id]);
-        // « Sans proprietaire » au sens strict : un fichier possede n'est JAMAIS servi a un
-        // visiteur anonyme par son simple nom (il l'etait, quel que soit son proprietaire).
-        if (row.owner_id && String(row.owner_id) !== 'anonymous') continue;
-        const meta = {
-          atome_id: row.atome_id,
-          atome_type: row.atome_type,
-          owner_id: row.owner_id,
-          created_at: row.created_at,
-          updated_at: row.updated_at
-        };
-        for (const particle of (particles || [])) {
-          try {
-            meta[particle.particle_key] = JSON.parse(particle.particle_value);
-          } catch (_) {
-            meta[particle.particle_key] = particle.particle_value;
-          }
-        }
-        const safeName = typeof meta.file_name === 'string' && meta.file_name.trim()
-          ? meta.file_name
-          : sanitizeFileName(meta.original_name || safeParam);
-        const downloadName = typeof meta.original_name === 'string' && meta.original_name.trim()
-          ? meta.original_name
-          : safeName;
-        const rawPath = meta.file_path || meta.filePath || null;
-        try {
-          if (rawPath) {
-            const normalizedRelative = normalizeUserRelativePath(rawPath, meta.owner_id || userId);
-            if (normalizedRelative) {
-              const resolved = await resolveUserAssetPath(
-                projectRoot,
-                { id: meta.owner_id || userId },
-                normalizedRelative
-              );
-              await fs.access(resolved.filePath);
-              return { filePath: resolved.filePath, downloadName, meta };
-            }
-          }
-          const filePath = await resolveUserFilePath(projectRoot, meta.owner_id || userId, safeName);
-          await fs.access(filePath);
-          return { filePath, downloadName, meta };
-        } catch (_) {
-          // Try the next legacy metadata candidate.
-        }
-      }
-    } catch (error) {
-      console.warn('[Uploads] Legacy ownerless media fallback failed', {
-        userId,
-        fileParam: safeParam,
-        error: error?.message || String(error || '')
-      });
-    }
-    return null;
-  };
+  const useDatabase = requireUploadDatabaseConfiguration();
 
-  if (DATABASE_ENABLED && safeParam) {
+  if (useDatabase && safeParam) {
     let meta = await getFileMetadata(safeParam);
     if (meta && meta.atome_id !== safeParam) {
       meta = null;
     }
 
     if (!meta) {
-      meta = await getFileMetadata(safeParam, { userId });
+      meta = await getFileMetadata(safeParam, { ownerId: userId });
     }
 
     if (meta) {
@@ -337,7 +187,7 @@ export async function resolveDownloadTarget(fileParam, userId) {
   // Un media PARTAGE (note vocale/video, media d'une News) garde la source de son auteur
   // (`/api/uploads/<nom>`), qui ne designe rien dans le dossier du destinataire. On cherche
   // alors, parmi les fichiers de ce nom, celui que ce compte a le DROIT de lire.
-  if (DATABASE_ENABLED && safeParam && userId && userId !== 'anonymous') {
+  if (useDatabase && safeParam && userId && userId !== 'anonymous') {
     const candidates = await db.query('all', `
       SELECT a.atome_id FROM atomes a
       JOIN particles p ON a.atome_id = p.atome_id
@@ -345,16 +195,13 @@ export async function resolveDownloadTarget(fileParam, userId) {
         AND a.owner_id != ? AND a.deleted_at IS NULL
       ORDER BY COALESCE(a.updated_at, a.created_at) DESC
       LIMIT 12
-    `, [JSON.stringify(safeParam), String(userId)]).catch(() => []);
+    `, [JSON.stringify(safeParam), String(userId)]);
     for (const candidate of (candidates || [])) {
       if (!await canAccessFile(candidate.atome_id, userId)) continue;
       const shared = await resolveDownloadTarget(candidate.atome_id, userId);
       if (shared?.filePath) return shared;
     }
   }
-
-  const legacyTarget = await resolveLegacyOwnerlessTarget();
-  if (legacyTarget?.filePath) return legacyTarget;
 
   const safeRequestedName = sanitizeFileName(safeParam);
   const userPath = await resolveUserFilePath(projectRoot, userId, safeRequestedName);

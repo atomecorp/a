@@ -9,11 +9,19 @@ import Foundation
 enum AppNativeAudioConsumerKind: String {
     /// Playback only. Requires no microphone and must never request one.
     case playback
+    /// Playback that lowers the other apps' audio while held (a Sport beep over
+    /// the person's Apple Music, L10). Requires no microphone.
+    case duckingPlayback
     /// Musical or sound capture. Keeps the best available musical output.
     case musicCapture
     /// Two-way voice. Voice processing is reserved for this role; no product
     /// surface uses it yet in the standalone application.
     case communicationCapture
+}
+
+extension AppNativeAudioConsumerKind {
+    /// Whether the role records: only capture roles own the microphone.
+    var capturesAudio: Bool { self == .musicCapture || self == .communicationCapture }
 }
 
 /// One consumer currently holding the application audio session.
@@ -61,12 +69,12 @@ struct AppNativeAudioConsumerRegistry {
     /// Capture consumers only; playback never owns the microphone.
     var captureConsumerIds: [String] {
         consumers.compactMap { entry in
-            entry.value.kind == .playback ? nil : entry.key
+            entry.value.kind.capturesAudio ? entry.key : nil
         }.sorted()
     }
 
     var requiresMicrophone: Bool {
-        consumers.values.contains { $0.kind != .playback }
+        consumers.values.contains { $0.kind.capturesAudio }
     }
 
     var plan: AppNativeAudioSessionPlan {
@@ -82,7 +90,10 @@ struct AppNativeAudioConsumerRegistry {
     ///    microphone; only an explicitly selected Bluetooth input offers HFP,
     ///    with full-bandwidth capture when the OS and the device support it;
     /// 3. playback never carries an input route.
+    /// A ducking consumer adds `.duckOthers` to the musical and playback
+    /// profiles; releasing it re-applies the options without it.
     static func plan(for consumers: [String: AppNativeAudioConsumer]) -> AppNativeAudioSessionPlan {
+        let ducks = consumers.values.contains { $0.kind == .duckingPlayback }
         if consumers.values.contains(where: { $0.kind == .communicationCapture }) {
             return AppNativeAudioSessionPlan(
                 category: .playAndRecord,
@@ -96,6 +107,7 @@ struct AppNativeAudioConsumerRegistry {
                 $0.kind == .musicCapture && $0.prefersBluetoothMicrophone
             }
             var options: AVAudioSession.CategoryOptions = [.mixWithOthers, .defaultToSpeaker]
+            if ducks { options.insert(.duckOthers) }
             if wantsBluetoothMicrophone {
                 options.insert(.allowBluetoothHFP)
                 if #available(iOS 26.0, *) {
@@ -123,8 +135,8 @@ struct AppNativeAudioConsumerRegistry {
         return AppNativeAudioSessionPlan(
             category: .playback,
             mode: .default,
-            options: [.mixWithOthers],
-            reason: "playback"
+            options: ducks ? [.mixWithOthers, .duckOthers] : [.mixWithOthers],
+            reason: ducks ? "playback_ducking_others" : "playback"
         )
     }
 }

@@ -75,6 +75,8 @@ export class SyncSharingService {
         this.syncRuntime = options.syncRuntime;
         this.isProvisioned = options.isProvisioned;
         this.notifyPrincipal = options.notifyPrincipal || (() => {});
+        // The communication stack (`deliver(target, sender, notification)`): a share to accept waits there, with every request.
+        this.deliver = options.deliver || null;
     }
 
     async targetId(message) {
@@ -208,6 +210,7 @@ export class SyncSharingService {
             if (initialStatus === 'active' || initialStatus === 'accepted') row = await this.activate(row);
             const visible = visibleRow(row);
             rows.push(visible);
+            if (visible.status === 'pending') await this.deliverInvitation(principalId, granterId, authority.ownerId, visible);
             this.notifyPrincipal(principalId, {
                 type: 'share-invitation',
                 share: visible,
@@ -217,6 +220,15 @@ export class SyncSharingService {
             });
         }
         return { ok: true, requests: rows, streams: rows.filter((row) => row.share_type === 'linked').map((row) => row.stream_id) };
+    }
+
+    // A share to accept is one more received request: Communication shows it and answers it (share respond).
+    async deliverInvitation(principalId, granterId, ownerId, share) {
+        if (!this.deliver) return;
+        const state = await this.vaultRouter.provider.request(ownerId, 'state:get', { atome_id: share.atome_id });
+        await this.deliver(principalId, granterId, { kind: 'share-request', id: `share_${share.share_id}`, extra: {
+            share_id: share.share_id, atomeIds: [share.atome_id], atome_type: state?.atome_type || state?.type || null,
+            mode: share.share_mode, share_type: share.share_type, status: 'pending' } });
     }
 
     // Tous les partages issus de `shareId` (repartages en chaine), sans cycle.

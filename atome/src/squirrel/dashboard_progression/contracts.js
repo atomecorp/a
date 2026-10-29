@@ -13,7 +13,8 @@ export const DASHBOARD_PROGRESSION_ERRORS = Object.freeze(['progression_actor_re
     'progression_objective_required', 'progression_target_invalid', 'progression_monitor_unknown', 'progression_monitor_not_selected',
     'progression_commit_failed', 'progression_unlock_invalid', 'progression_read_incomplete', 'progression_unknown_command',
     'progression_invalid_argument', 'progression_settings_invalid', 'progression_settings_unavailable', 'progression_schedule_unavailable',
-    'progression_time_budget_required']);
+    'progression_time_budget_required', 'progression_aim_invalid', 'progression_deadline_invalid', 'progression_challenge_invalid',
+    'progression_done_invalid', 'progression_session_required', 'progression_session_choice_invalid', 'progression_ongoing_unavailable', 'progression_ongoing_none', 'progression_ongoing_unknown']);
 
 const progress = { type: 'object', properties: { source: { type: 'string', enum: DASHBOARD_UNLOCK_SOURCES }, met: count, required: count, window_days: count } };
 const brick = { type: 'object', properties: { brick_id: { type: 'string' }, kind: { type: 'string', enum: ['tile', 'activity', 'tool'] },
@@ -24,6 +25,11 @@ const settings = read => ({ type: 'object', additionalProperties: false, propert
     effort: read ? nullable(OBJECTIVE_EFFORT_SCHEMA) : OBJECTIVE_EFFORT_SCHEMA, money_budget: nullable(OBJECTIVE_MONEY_BUDGET_SCHEMA) } });
 const schedule = { type: 'object', properties: { start_minutes: count, minutes: count, days: { type: 'array', items: { type: 'integer' } },
     calendar: { type: 'boolean' } } };
+// An objective named by its id, or by its goal (one per official goal: muscle, movement, weight, aging…).
+const named = { objective_id: { type: 'string', minLength: 1, maxLength: 200 }, goal: { type: 'string', minLength: 1, maxLength: 64 } };
+const day = { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' };
+const sessionRows = { session_id: { type: 'string' }, objectives: { type: 'array', items: { type: 'object', properties: {
+    objective_id: { type: 'string' }, name: { type: 'string' }, goal: { type: 'string' }, counted: { type: 'boolean' } } } } };
 const output = properties => ({ type: 'object', required: ['ok'], properties: { ok: { type: 'boolean' },
     error: { type: 'string', enum: DASHBOARD_PROGRESSION_ERRORS }, ...properties } });
 const definitions = {
@@ -44,7 +50,9 @@ const definitions = {
     'objectives.list': [{}, [], false,
         'List the user\'s own health objectives (projects) with their goal, measurable target and progress counts.',
         { objectives: { type: 'array', items: { type: 'object', properties: { objective_id: { type: 'string' }, name: { type: 'string' },
-            goal: { type: 'string' }, catalog_id: { type: 'string' }, target: DASHBOARD_OBJECTIVE_TARGET_SCHEMA, tier: { type: 'number' } } } } }],
+            goal: { type: 'string' }, catalog_id: { type: 'string' }, target: DASHBOARD_OBJECTIVE_TARGET_SCHEMA, tier: { type: 'number' },
+            aim: { type: ['string', 'null'] }, deadline: { type: ['object', 'null'] }, challenge: { type: ['object', 'null'] }, sessions: count,
+            today: { type: 'object' }, exercises: { type: 'array', items: { type: 'string' } } } } } }],
     'objective.target.set': [{ objective_id: { type: 'string', minLength: 1, maxLength: 200 }, monitor_id: { type: 'string', minLength: 1, maxLength: 64 },
         comparator: { type: 'string', enum: ['gte', 'lte'] }, value: { type: 'number', minimum: 0 }, sessions_only: { type: 'boolean' } }, ['objective_id'], true,
         'Set or adjust the measurable target of one of the user\'s health objectives: a health monitor (e.g. steps, sleep) with '
@@ -69,13 +77,38 @@ const definitions = {
         + 'session (minutes after midnight, 1080 = 18:00), calendar true to keep its sessions in the calendar with their reminder, false '
         + 'to suspend them. Its length and days come from its time budget (dashboard.objective.settings.set). Omitted fields keep their value.',
         { objective_id: { type: 'string' }, schedule }],
+    'objective.aim.set': [{ ...named, aim: { type: 'string', enum: ['mass', 'strength', 'tone', 'endurance', 'cardio', 'mobility', 'upkeep'] } }, ['aim'], true,
+        'Set the general sport aim of an objective: Muscles (goal muscle) mass, strength or tone; Forme (goal movement) endurance, cardio, '
+        + 'mobility or upkeep. An exercise\'s own settings never change it.', { objective_id: { type: 'string' }, aim: { type: 'string' } }],
+    'objective.deadline.set': [{ ...named, date: { type: 'string', pattern: '^(\\d{4}-\\d{2}-\\d{2})?$' } }, ['date'], true,
+        'Give an objective a deadline (date YYYY-MM-DD, today or later), its sessions counted until then; an empty date takes it away.',
+        { objective_id: { type: 'string' }, deadline: { type: ['object', 'null'] } }],
+    'objective.challenge.set': [{ ...named, count: { type: 'integer', minimum: 0, maximum: 365 }, unit: { type: 'string', enum: ['days', 'sessions'] } }, ['count'], true,
+        'Make an objective a counted challenge (« 21 jours de planche »: count 21, unit days, the days with a counted session; '
+        + 'unit sessions counts sessions), advancing by itself with the sessions; count 0 takes it away.',
+        { objective_id: { type: 'string' }, challenge: { type: ['object', 'null'] } }],
+    'objective.done': [{ ...named, day }, [], true,
+        'Declare a session of an objective done without phone or watch (« j\'ai fait ma séance »): on a day its routine plans one it '
+        + 'accomplishes that session, else it adds one; one declaration per day (already true when the day was done). Without objective_id '
+        + 'or goal, the objective whose session is planned today. day (YYYY-MM-DD, today by default) may be a past day.',
+        { objective_id: { type: 'string' }, day: { type: 'string' }, already: { type: 'boolean' }, accomplished: { type: 'boolean' } }],
+    'session.objectives.read': [{ session_id: { type: 'string', minLength: 1 } }, [], false,
+        'List the objectives one Sport, nap or meditation session counts for (the session followed now when session_id is omitted), '
+        + 'each with counted true or false.', sessionRows],
+    'session.objectives.set': [{ session_id: { type: 'string', minLength: 1 }, ...named, counted: { type: 'boolean' } }, ['counted'], true,
+        'While a session runs or on its summary, make it count (true) or no longer count (false) for one objective, without '
+        + 'interrupting it (« compte aussi pour Bien vieillir », « pas pour Poids »). Its other objectives keep counting.', sessionRows],
     'monitors.select': [{ ids: { type: 'array', maxItems: 64, uniqueItems: true, items: { type: 'string', pattern: '^[a-z0-9_]{1,64}$' } } }, ['ids'], true,
         'Choose the health monitors the user\'s home shows, in order (ids from the health catalog). Replaces the selection.',
         { ids: { type: 'array', items: { type: 'string' } } }],
-    'monitors.place': [{ id: { type: 'string', pattern: '^[a-z0-9_]{1,64}$' }, position: { type: 'integer', enum: [0, 1, 2, 3] } }, ['id', 'position'], true,
-        'Place one selected health monitor on the eVe Pro home: position 1, 2 or 3 (its three monitor cells), 0 = not on the home '
-        + '(still selected). A taken position: the two swap when the monitor held another one, else the former one leaves the home.',
-        { ids: { type: 'array', items: { type: 'string' } }, slots: { type: 'array', items: { type: 'string' } } }]
+    'monitors.favorite': [{ id: { type: 'string', pattern: '^[a-z0-9_]{1,64}$' }, favorite: { type: 'boolean' } }, ['id', 'favorite'], true,
+        'Make one selected health monitor the favourite the eVe Pro home\'s Moniteur tile shows (favorite true; another favourite is '
+        + 'replaced, there is only one), or no longer the favourite (false: the tile then shows no monitor).',
+        { ids: { type: 'array', items: { type: 'string' } }, favorite: { type: 'string' } }],
+    'ongoing.open': [{ key: { type: 'string', minLength: 1, maxLength: 200 } }, [], false,
+        'Show on the home the activities under way (a Sport exercise, a nap, a meditation, a breathing, a relaxation, running or '
+        + 'paused): the one named by key (else the last chosen, else the first) large with its time, a row for each. Writes nothing.',
+        { shown: { type: 'array', items: { type: 'string' } }, chosen: { type: 'string' } }]
 };
 export const DASHBOARD_PROGRESSION_COMMANDS = Object.freeze(Object.entries(definitions)
     .map(([action, [properties, required, persistent, description, result]]) => Object.freeze({
@@ -95,5 +128,11 @@ export const DASHBOARD_PROGRESSION_ASSISTANT_INSTRUCTIONS = 'Home progression: t
     + 'dashboard.objectives.list; « vise 8000 pas par jour », « je veux dormir 7 heures » call dashboard.objective.target.set '
     + '(sleep in minutes). « j\'y consacre 20 minutes par jour », « effort léger », « budget de 50 euros par mois », « plus de budget » '
     + 'call dashboard.objective.settings.set on that objective (dashboard.objective.settings.read to answer about them); « fais-moi ma séance à 18 h », « enlève-la du calendrier » call '
-    + 'dashboard.objective.schedule.set (dashboard.objective.schedule.read to answer about it). A locked brick is only hidden from that home: it removes no capability, so never refuse a Sport, '
-    + 'shopping, food, GPS or any other request because of the tier, call its tool directly.';
+    + 'dashboard.objective.schedule.set (dashboard.objective.schedule.read to answer about it). A tracked session counts for '
+    + 'its objectives by itself: « j\'ai fait ma séance » (done without phone or watch) calls dashboard.objective.done; during a session or '
+    + 'on its summary « compte aussi pour Bien vieillir » calls dashboard.session.objectives.set counted true with goal aging, « pas pour Poids » '
+    + 'counted false with goal weight; « je veux courir 5 km avant le 15 mars » calls dashboard.objective.deadline.set, « défi : 21 jours de '
+    + 'planche » dashboard.objective.challenge.set count 21 unit days, « je vise la force » dashboard.objective.aim.set (dashboard.objectives.list '
+    + 'answers about them). A locked brick is only hidden from that home: it removes no capability, so never refuse a Sport, '
+    + 'shopping, food, GPS or any other request because of the tier, call its tool directly. « qu\'est-ce qui est en cours », « montre ma '
+    + 'séance en cours » call dashboard.ongoing.open.';

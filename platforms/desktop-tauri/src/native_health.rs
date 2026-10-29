@@ -93,6 +93,24 @@ fn workout_payload(payload: &Value) -> Value {
         "save": payload["save"].as_bool().unwrap_or(false) })
 }
 
+// The raw motion recorder: the verified account, the eVe session id and its start, a file name, and switches only.
+fn sensors_payload(account: &str, payload: &Value) -> Value {
+    let text = |key: &str, max: usize| payload[key].as_str().map(|value| value.chars().take(max).collect::<String>()).unwrap_or_default();
+    let mut value = json!({ "account": account, "session": text("session", 300), "file": text("file", 64),
+        "at": payload["at"].as_f64().unwrap_or(0.0) as i64, "all": payload["all"].as_bool().unwrap_or(false) });
+    if let Some(enabled) = payload["enabled"].as_bool() {
+        value["enabled"] = json!(enabled);
+    }
+    // A piece of a recording read for, or restored from, its encrypted copy (≤ 256 KiB, base64).
+    if let Some(offset) = payload["offset"].as_i64() {
+        value["offset"] = json!(offset);
+        value["length"] = json!(payload["length"].as_i64().unwrap_or(0));
+        value["data"] = json!(text("data", 350_000));
+        value["final"] = json!(payload["final"].as_bool().unwrap_or(false));
+    }
+    value
+}
+
 async fn plugin<R: Runtime>(app: &AppHandle<R>, method: &'static str, payload: Value) -> Result<Value, String> {
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || tauri_plugin_health::call(&app, method, payload))
@@ -144,12 +162,36 @@ pub async fn health_invoke<R: Runtime>(
         "health_open_settings" => plugin(&app, "openSettings", monitors_payload(&payload)).await,
         "health_link_status" | "health_link" | "health_request_access" | "health_read" | "health_observe"
         | "health_unobserve" | "health_workout_prepare" | "health_workout_start" | "health_workout_pause"
-        | "health_workout_resume" | "health_workout_end" => {
+        | "health_workout_resume" | "health_workout_end" | "health_sensors_start" | "health_sensors_stop"
+        | "health_sensors_status" | "health_sensors_list" | "health_sensors_delete" | "health_sensors_enable"
+        | "health_sensors_read" | "health_sensors_restore" => {
             let account = match verified_account(&payload["auth"]).await {
                 Ok(account) => account,
                 Err(code) => return Ok(failure(code)),
             };
-            let linked = plugin(&app, "isLinked", json!({ "account": account })).await?;
+            // This phone's own motion sensors, stored on it: no health store read, so no association needed.
+            let sensors = match command.as_str() {
+                "health_sensors_start" => Some("sensorsStart"),
+                "health_sensors_stop" => Some("sensorsStop"),
+                "health_sensors_status" => Some("sensorsStatus"),
+                "health_sensors_list" => Some("sensorsList"),
+                "health_sensors_delete" => Some("sensorsDelete"),
+                "health_sensors_enable" => Some("sensorsEnable"),
+                "health_sensors_read" => Some("sensorsRead"),
+                "health_sensors_restore" => Some("sensorsRestore"),
+                _ => None,
+            };
+            let linked = match sensors {
+                Some(method) => {
+                    let result = plugin(&app, method, sensors_payload(&account, &payload)).await;
+                    let current = channel.lock().map(|state| state.generation == generation && !state.closed).unwrap_or(false);
+                    if !current {
+                        return Ok(failure("health_context_changed"));
+                    }
+                    return Ok(result.unwrap_or_else(|error| failure(&error)));
+                }
+                None => plugin(&app, "isLinked", json!({ "account": account })).await?,
+            };
             match command.as_str() {
                 "health_link_status" => Ok(linked),
                 "health_link" => plugin(&app, "link", json!({ "account": account })).await,

@@ -5,7 +5,7 @@ import { normalizeTextInputPresentation } from '../../atome/src/squirrel/compone
 import { getTextServiceState } from '../../eVe/domains/rendering/hidden_text_service_runtime.js';
 import { createTextEditingLayout } from '../../eVe/domains/rendering/text_editing_layout.js';
 import { projectBevyUiTreeRecords } from '../../eVe/domains/rendering/bevy_ui_overlay_record_projection.js';
-import { BEVY_PANEL_TOKENS } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
+import { BEVY_PANEL_TOKENS, hoverSurface } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
 import { textInputNode } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tree.js';
 import { textInputProjectionUpdates } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_editable_text.js';
 
@@ -52,7 +52,9 @@ test('shared panel input builder owns geometry, state paint, and selection proje
     assert.equal(focused.kind, 'text_input');
     assert.deepEqual(focused.style.size, [BEVY_PANEL_TOKENS.inputWidthPx, BEVY_PANEL_TOKENS.inputHeightPx]);
     assert.equal(focused.style.radius, BEVY_PANEL_TOKENS.radiusPx);
-    assert.deepEqual(focused.style.background, BEVY_PANEL_TOKENS.input.focusBackground);
+    // A focused field takes the hover look of its own ground (AGENTS.md rule 15).
+    const ground = { ...BEVY_PANEL_TOKENS.surfaces.input, background: BEVY_PANEL_TOKENS.input.idleBackground };
+    assert.deepEqual(focused.style.background, hoverSurface(ground).background);
     assert.deepEqual(focused.style.shadow, BEVY_PANEL_TOKENS.input.focusShadow);
     assert.equal(findNode([focused], 'field_text').text, 'Hello');
     assert.deepEqual(findNode([focused], 'field_text').style.position, [10, 0]);
@@ -220,7 +222,7 @@ test('empty and populated fields have an inset tint without a permanent outline'
         const idle = textInputNode({ id: 'phone', value, placeholder: 'Phone' });
         const focused = textInputNode({ id: 'phone', value, focused: true });
         assert.deepEqual(idle.style.background, [0, 0, 0, .14]);
-        assert.deepEqual(focused.style.background, [0, 0, 0, .20]);
+        assert.deepEqual(focused.style.background, hoverSurface(idle.style).background);
         assert.equal(idle.style.backdrop, null);
         assert.equal(idle.style.surfacePaint.border.color[3], 0);
         assert.equal(idle.style.border, undefined);

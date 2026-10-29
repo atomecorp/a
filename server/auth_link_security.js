@@ -17,6 +17,18 @@ export function publicDeviceKey(value) {
     return { jwk, keyId: digest(JSON.stringify(jwk)) };
 }
 
+// The account's backup keys as a device carries them (#squirrel/security/backup_keyring.js): opaque here,
+// wrapped or sealed for a key the server never holds; only their shape and size are checked.
+export function backupKeysOf(value) {
+    if (value === undefined || value === null) return null;
+    let box;
+    try { box = typeof value === 'string' && value.length <= 16384 ? JSON.parse(value) : null; } catch { box = null; }
+    if (box?.version !== 1 || typeof box.iv !== 'string' || typeof box.data !== 'string') reject('auth_request_invalid');
+    return value;
+}
+// What an approval binds carried backup keys to (the client computes the same).
+export const backupKeysDigest = (value) => (value ? digest(value) : '-');
+
 export function createAuthProofSecurity({ query, transaction, masterSecret, now = Date.now }) {
     if (typeof masterSecret !== 'string' || masterSecret.length < 32) reject('auth_secret_required');
     const sealKey = Buffer.from(crypto.hkdfSync('sha256', masterSecret, 'atome-auth-v1', 'phone-encryption', 32));

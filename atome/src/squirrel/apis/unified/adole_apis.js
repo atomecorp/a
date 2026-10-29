@@ -47,8 +47,9 @@ import {
   getLocalSurfaceId,
   listSurfaces,
   pingSurface,
-  retireSurface,
-  setLocalSurfaceLabel
+  readLocalSurfaceName,
+  renameLocalSurface,
+  retireSurface
 } from './adole_api/surfaces.js';
 // Also installs the executor that answers commands from the account's other devices.
 import { listRemoteSurfaces, runRemoteCommand } from '../../teleport/remote_command.js';
@@ -154,7 +155,8 @@ export const AdoleAPI = {
   surfaces: {
     localId: getLocalSurfaceId,
     describeLocal: describeLocalSurface,
-    setLabel: setLocalSurfaceLabel,
+    localName: readLocalSurfaceName,
+    rename: renameLocalSurface,
     announce: announceSurface,
     ensureAnnounced: ensureSurfaceAnnounced,
     list: listSurfaces,
@@ -227,6 +229,13 @@ export const AdoleAPI = {
       if (!result.ok) throw new Error(result.error || 'conversation_read_failed');
       return result;
     },
+    // Deleted for me only (the other participant keeps theirs): `messageIds`, or `all` the conversation.
+    deleteConversation: async ({ contactId, targetPhone = '', messageIds = [], all = false } = {}) => {
+      const result = await fastifyCall({ type: 'conversation', action: 'delete', contactId, targetPhone: dialledPhone(targetPhone),
+        messageIds, all: all === true }, 'communication_auth_unavailable');
+      if (!result.ok) throw new Error(result.error || 'conversation_delete_failed');
+      return result;
+    },
     visio: async ({ action, input = {} } = {}) => {
       const result = await fastifyCall({ type: 'visio', action, input }, 'communication_auth_unavailable');
       if (!result.ok) throw new Error(result.error || 'visio_command_failed');
@@ -289,19 +298,43 @@ export const AdoleAPI = {
   },
   // News diffusees par le serveur : publication unique, abonnements par tags, registre de tags.
   news: {
-    publish: ({ publication, tags = [], audience = 'all' } = {}) => fastifyCall(
-      { type: 'news', action: 'publish', publication, tags, audience }, 'news_auth_unavailable'
+    // `reply` ({ parent_id, anchor_ms }): a VideoTrain reply, its audience the thread's (server/news_thread.js).
+    publish: ({ publication, tags = [], audience = 'all', reply = null } = {}) => fastifyCall(
+      { type: 'news', action: 'publish', publication, tags, audience, ...(reply ? { reply } : {}) }, 'news_auth_unavailable'
     ),
     getSubscriptions: () => fastifyCall({ type: 'news', action: 'subscriptions-get' }, 'news_auth_unavailable'),
     setSubscriptions: (tags = []) => fastifyCall({ type: 'news', action: 'subscriptions-set', tags }, 'news_auth_unavailable'),
     searchTags: (query = '', { limit = 20 } = {}) => fastifyCall({ type: 'news', action: 'tags-search', query, limit }, 'news_auth_unavailable'),
     // A received publication: liked (its author alone learns it), or reposted to the reader's audience.
     like: (newsId) => fastifyCall({ type: 'news', action: 'like', newsId }, 'news_auth_unavailable'),
-    repost: (newsId) => fastifyCall({ type: 'news', action: 'repost', newsId }, 'news_auth_unavailable')
+    repost: (newsId) => fastifyCall({ type: 'news', action: 'repost', newsId }, 'news_auth_unavailable'),
+    // VideoTrain: an exercise's threads as this reader sees them, one vote per contribution, a report, a withdrawal.
+    thread: (threadRef) => fastifyCall({ type: 'news', action: 'thread', threadRef }, 'news_auth_unavailable'),
+    vote: (newsId, on = true) => fastifyCall({ type: 'news', action: 'vote', newsId, on: on !== false }, 'news_auth_unavailable'),
+    report: (newsId, reason = '') => fastifyCall({ type: 'news', action: 'report', newsId, reason }, 'news_auth_unavailable'),
+    retire: (newsId) => fastifyCall({ type: 'news', action: 'retire', newsId }, 'news_auth_unavailable')
   },
   // Public events (server/public_events.js): reading goes through `shows-nearby` kind `declared`; a report here.
   publicEvents: {
     report: (eventId, reason) => fastifyCall({ type: 'public-events', action: 'report', eventId, reason }, 'events_auth_unavailable')
+  },
+  // The shop (server/ws_shop.js) with an account: buying, an order's moves, a sale's conversations, a report.
+  // Browsing is the public `shop-public` frame (eVe/domains/shop/shop_runtime.js).
+  shop: {
+    call: (action, fields = {}) => fastifyCall({ ...fields, type: 'shop', action }, 'shop_auth_unavailable')
+  },
+  // Coaches (server/ws_coaches.js) with an account: asking for a session, a coach's answer, a cancellation, one's bookings.
+  // Searching is the public `coaches-public` frame (eVe/domains/coaches/coach_runtime.js).
+  coaches: {
+    call: (action, fields = {}) => fastifyCall({ ...fields, type: 'coaches', action }, 'coach_auth_unavailable')
+  },
+  // Websites (server/site_services.js): publishing, versions, planned operations, domains, mail, hosting.
+  site: {
+    call: (action, fields = {}) => fastifyCall({ ...fields, type: 'site', action }, 'site_auth_unavailable')
+  },
+  // Scheduled sends (server/scheduled_sends.js): save, cancel, send-now, read, list; the server's clock sends them.
+  scheduledSends: {
+    call: (action, fields = {}) => fastifyCall({ ...fields, type: 'scheduled-send', action }, 'scheduled_auth_unavailable')
   },
   // Communities (atome/src/shared/community_contract.js): joining, the thread of its members,
   // the host's moderation. A member posts through `news.publish` with `{ community }` as audience.

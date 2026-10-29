@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import db from '../database/adole.js';
 import { normalizePhone } from './auth_crypto.js';
 import { normalizeSharedProfileFields } from '../atome/src/shared/profile_sharing.js';
-import { meetingDeclarations, meetingDeclared, meetingMatches, normalizeMeetingProfile } from '../atome/src/shared/meeting_contract.js';
+import { meetingAllowed, meetingDeclarations, meetingDeclared, meetingMatches, normalizeMeetingProfile } from '../atome/src/shared/meeting_contract.js';
 
 // A public card's Rencontre declarations are kept with it for matching only: never
 // published (`list`, `meet` return names and photos), and only when at least one
@@ -102,14 +102,17 @@ const projectProfile = (row) => {
     const profile = parse(row.eve_profile);
     const canonicalProfile = profile && typeof profile === 'object' && !Array.isArray(profile) ? profile : {};
     const shared = new Set(normalizeSharedProfileFields(canonicalProfile.sharing?.fields));
+    const adult = meetingAllowed(canonicalProfile.bio?.birth);
     return {
         principal_id: String(row.atome_id),
         display_name: isBootstrapPhoneIdentity(row, canonicalProfile) ? '' : displayName(row, canonicalProfile, shared),
         user_face: shared.has('user_face') ? rowValue(row, canonicalProfile, 'user_face') : '',
         card: { ...sharedCard(row, canonicalProfile, shared),
-            ...(meetingDeclared(canonicalProfile.meeting) ? { [MEETING_KEY]: meetingDeclarations(canonicalProfile.meeting) } : {}) },
+            // Only an adult's declarations are published: a minor never appears in Rencontre.
+            ...(adult && meetingDeclared(canonicalProfile.meeting) ? { [MEETING_KEY]: meetingDeclarations(canonicalProfile.meeting) } : {}) },
         // The Rencontre photos live in their own property (`meeting_photos`), beside the profile's.
         meeting: normalizeMeetingProfile({ ...canonicalProfile.meeting, photos: parse(row.meeting_photos) }),
+        adult,
         public: publicProfile(row, canonicalProfile)
     };
 };
@@ -301,7 +304,9 @@ export class DirectoryPublicService {
     async meet(options = {}) {
         const requesterId = text(options.requesterId || options.requester_id);
         if (!requesterId) return [];
-        const searcher = (await this.sourceProfile(requesterId))?.meeting || normalizeMeetingProfile({});
+        const source = await this.sourceProfile(requesterId);
+        if (!source?.adult) throw new Error('meeting_adult_required');
+        const searcher = source.meeting;
         const search = { goal: text(options.goal), theme: text(options.theme), scope: text(options.scope), query: text(options.query) };
         const limit = Math.max(1, Math.min(Number(options.limit) || 100, 500));
         const rows = await db.query('all', `SELECT principal_id, display_name, user_face, card_json, revision, updated_at
@@ -321,10 +326,14 @@ export class DirectoryPublicService {
         if (!requesterId || !principalId || requesterId === principalId) return null;
         const row = await db.query('get', `SELECT principal_id, display_name, user_face, card_json, revision, updated_at
              FROM directory_public_profiles WHERE principal_id = ?`, [principalId]);
-        const searcher = (await this.sourceProfile(requesterId))?.meeting || normalizeMeetingProfile({});
+        const source = await this.sourceProfile(requesterId);
+        if (!source?.adult) throw new Error('meeting_adult_required');
         const search = { goal: text(options.goal), theme: text(options.theme), scope: text(options.scope) };
-        if (!row || !meetingMatches({ searcher, candidate: parse(row.card_json)?.[MEETING_KEY], search, name: row.display_name, candidateId: principalId })) return null;
-        const meeting = (await this.sourceProfile(principalId))?.meeting || normalizeMeetingProfile({});
+        if (!row || !meetingMatches({ searcher: source.meeting, candidate: parse(row.card_json)?.[MEETING_KEY], search, name: row.display_name, candidateId: principalId })) return null;
+        // The person's own card, read now: one who is no longer an adult on it is never shown.
+        const candidate = await this.sourceProfile(principalId);
+        if (!candidate?.adult) return null;
+        const meeting = candidate.meeting;
         return { ...await this.publish(row, requesterId), area: meeting.area, country: meeting.country,
             hook: meeting.hook, presentation: meeting.presentation, photos: meeting.photos };
     }

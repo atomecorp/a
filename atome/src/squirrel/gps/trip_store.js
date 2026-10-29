@@ -65,6 +65,13 @@ export function createGpsTripStore({ api, readActor, createId, now = () => new D
             return write(id, { ...identity, revision: 0, status: 'planned', access: 'private', visibility: 'private' }, null,
                 'gps_create_' + input.request_id);
         },
-        async update(record, patch) { return write(record.id, { ...patch, revision: record.properties.revision + 1 }, record); }
+        async update(record, patch) { return write(record.id, { ...patch, revision: record.properties.revision + 1 }, record); },
+        async remove(record) {
+            const owner = actor();
+            if (record.owner_id !== owner) throw error('TRIP_NOT_FOUND');
+            const result = await api.commit({ id: createId(), kind: 'delete', atome_id: record.id, scope: 'global', payload: {} });
+            if (result?.ok !== true) throw Object.assign(error('PROVIDER_UNAVAILABLE'), { cause: new Error(String(result?.error || 'COMMIT_RESULT_INVALID')) });
+            context(owner);
+        }
     };
 }

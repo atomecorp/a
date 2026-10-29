@@ -64,6 +64,11 @@ reproduced it even with causes 1–2 fixed.
    slide) forget the origin first (`leaveForHome`).
 5. A program found by the home search opens on the stage (it was a floating
    panel over the bare home).
+6. (2026-10-27) Closing a panel shrank it into its plate BEFORE the suspended
+   rubric came back (`dashboard_mystic_stage.js#closePanel`): ~400 ms of bare
+   wallpaper, the home to the eye, on every panel of the eVe home. The stage now
+   gives the rubric back first, then the panel shrinks into its plate over it.
+   Probe `temp/contact_directory/close_flash.probe.mjs` (frames + timeline).
 
 ## Acceptance
 

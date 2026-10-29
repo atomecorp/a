@@ -34,7 +34,7 @@ const MOUNT_CONTEXT = { projectId: 'p1', container_id: 'm1', container_entity: '
 
 // The import panel (AGENTS.md rule 18), its writes and the host's sources stubbed.
 const harness = ({ files = FILES, resolveDropPoint = () => null, importResult = null, systemResult = null, picked = null,
-    sources = ['camera', 'files'] } = {}) => {
+    sources = ['camera', 'files'], storeRandomImage = undefined } = {}) => {
     const imported = [];
     const system = [];
     const picks = [];
@@ -47,6 +47,7 @@ const harness = ({ files = FILES, resolveDropPoint = () => null, importResult = 
         },
         importFromSystem: async (context) => { system.push(context); return systemResult ? systemResult() : { ok: true }; },
         pickFromSystem: async (options) => { picks.push(options); return picked ? picked() : { ok: false, error: 'cancelled' }; },
+        storeRandomImage,
         closePanel: () => closes.push(true),
         resolveProjectId: () => 'p1',
         resolveDropPoint,
@@ -78,20 +79,45 @@ test('opened, the panel shows its label and an empty preview; the sources are ba
     assert.deepEqual(content.map(node => node.id), ['media_label', 'media_preview']);
     assert.equal(visit(content, node => String(node.id).startsWith('media_item_')), null, 'the media never show at once');
     assert.equal(snapshot.title, 'Importer');
-    assert.deepEqual(bandKeys(band), ['media_import_medias', 'media_import_system', 'media_import_photo', 'media_import_video']);
+    assert.deepEqual(bandKeys(band), ['media_import_medias', 'media_import_system', 'media_import_camera', 'media_import_random']);
 });
 
-test('Médias unfolds the person\'s media in a grid under the preview, `other` left out', async () => {
+test('Hasard is a source only where an image is asked; an unreachable service says so and chooses nothing', async () => {
+    const { panel, surface, draw } = harness({ storeRandomImage: async () => ({ ok: false, error: 'wallpaper_http_502', random: true }) });
+    void panel.requestSelection({ kinds: ['audio'] });
+    await open(surface, { mediaPick: true });
+    assert.equal(bandKeys(draw().band).includes('media_import_random'), false);
+    assert.equal((await surface.handleEvent({ type: 'media.source.random' })).error, 'media_random_unavailable');
+    void panel.requestSelection({ kinds: ['image'] });
+    await open(surface, { mediaPick: true });
+    assert.equal(bandKeys(draw().band).includes('media_import_random'), true);
+    const result = await surface.handleEvent({ type: 'media.source.random' });
+    assert.equal(result.ok, false);
+    const { snapshot } = draw();
+    assert.equal(snapshot.noticeError, true);
+    assert.equal(snapshot.chosen.length, 0);
+});
+
+test('Médias shows its filters at the foot, none lit: nothing listed until a filter is lit', async () => {
     const { surface, draw } = harness();
     await open(surface);
     await surface.handleEvent({ type: 'media.source.library' });
-    const { content, band, snapshot } = draw();
-    assert.deepEqual(content.map(node => node.id), ['media_label', 'media_preview', 'media_scopes_row', 'media_grid']);
-    assert.equal(visit(content, node => node.id === 'media_grid').kind, 'scroll_area', 'the grid scrolls in its own area');
-    assert.deepEqual(snapshot.entries.map(entry => entry.key), ['aud_1', 'vid_1', 'img_1'], 'newest first, no `other`');
+    let { content, band, snapshot } = draw();
+    assert.deepEqual(content.map(node => node.id), ['media_label', 'media_preview', 'media_filters_row']);
+    assert.deepEqual(snapshot.entries, [], 'no filter lit, nothing listed');
     assert.equal(band.find(item => item.key === 'media_import_medias').lit, true);
-    await surface.handleEvent({ type: 'media.scope.activate', value: 'images' });
+    await surface.handleEvent({ type: 'media.filter.toggle', value: 'all' });
+    ({ content, snapshot } = draw());
+    assert.deepEqual(content.map(node => node.id), ['media_label', 'media_preview', 'media_grid', 'media_filters_row']);
+    assert.equal(visit(content, node => node.id === 'media_grid').kind, 'scroll_area', 'the grid scrolls in its own area');
+    assert.deepEqual(snapshot.entries.map(entry => entry.key), ['aud_1', 'vid_1', 'img_1'], 'Tout: every kind, newest first, no `other`');
+    await surface.handleEvent({ type: 'media.filter.toggle', value: 'all' });
+    assert.deepEqual(surface.readState().entries, [], 'Tout again: none');
+    await surface.handleEvent({ type: 'media.filter.toggle', value: 'images' });
     assert.deepEqual(surface.readState().entries.map(entry => entry.key), ['img_1']);
+    await surface.handleEvent({ type: 'media.view.toggle' });
+    ({ content } = draw());
+    assert.ok(visit(content, node => node.id === 'media_list'), 'the view chip lays the canonical list');
 });
 
 test('a picture touched is chosen and shown; Import writes the chosen ones once, then the panel closes', async () => {
@@ -162,11 +188,12 @@ test('a choice: one of the person\'s media comes back by Choix, never written in
     const pending = panel.requestSelection({ kinds: ['image'] });
     await open(surface, { mediaPick: true });
     await surface.handleEvent({ type: 'media.source.library' });
-    const { content, band, snapshot } = draw();
+    await surface.handleEvent({ type: 'media.filter.toggle', value: 'all' });
+    const { band, snapshot } = draw();
     assert.equal(snapshot.title, 'Importer une image');
     assert.deepEqual(snapshot.entries.map(entry => entry.key), ['img_1'], 'only what is asked for');
-    assert.equal(visit(content, node => node.id === 'media_scopes_row'), null, 'one kind: nothing to filter');
-    assert.ok(!bandKeys(band).includes('media_import_video'), 'a picture asked: no Vidéo');
+    assert.deepEqual(snapshot.filters.offered, ['images', 'contacts'], 'a picture asked: its filters only');
+    assert.ok(!bandKeys(band).includes('media_import_video'), 'no Vidéo tool at the sources\' level');
     await surface.handleEvent({ type: 'media.item.activate', value: 'img_1' });
     await surface.handleEvent({ type: 'media.choose' });
     const result = await pending;
@@ -215,6 +242,7 @@ test('owner-scoped filenames keep independent choices for idless library rows', 
         { owner_id: 'other', file_name: 'photo.png', kind: 'image' }
     ] });
     await open(surface);
+    await surface.handleEvent({ type: 'media.filter.set', values: ['all'] });
     const rows = surface.readState().entries;
     assert.equal(rows.length, 2);
     assert.notEqual(rows[0].key, rows[1].key);
@@ -233,6 +261,7 @@ test('the listing paints each wave and keeps the previous rows while it refreshe
         sources: () => ['files']
     });
     panel.surface.onOpen({ context: MOUNT_CONTEXT });
+    await panel.handleEvent({ type: 'media.filter.set', values: ['all'] });
     await flush();
     const partial = panel.surface.readState();
     assert.deepEqual(partial.entries.map((entry) => entry.name), ['affiche'], 'the first wave is already a list');

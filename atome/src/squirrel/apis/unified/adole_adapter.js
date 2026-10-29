@@ -278,6 +278,10 @@ function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     original_name: data.original_name || data.originalName || null,
                     mime_type: data.mime_type || data.mimeType || null
                 });
+            },
+            // Its owner removes a stored file for good (bytes and registration).
+            async remove(data = {}) {
+                return getWs().send({ type: 'file', action: 'delete', token: getToken(tokenKey), atome_id: data.atome_id || null });
             }
         },
 

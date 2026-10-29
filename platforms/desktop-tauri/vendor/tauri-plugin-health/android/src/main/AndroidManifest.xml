@@ -38,4 +38,14 @@
     <queries>
         <package android:name="com.google.android.apps.healthdata" />
     </queries>
+
+    <application>
+        <!-- The paired Wear OS watch's recording of a session (WearRecordingReceiver.kt). -->
+        <service android:name="one.atome.health.WearRecordingReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.CHANNEL_EVENT" />
+                <data android:scheme="wear" android:host="*" android:pathPrefix="/atome/sensors/file/" />
+            </intent-filter>
+        </service>
+    </application>
 </manifest>

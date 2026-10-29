@@ -65,6 +65,13 @@ PUSH_EVENTS['share-invitation'] = (message) => {
 PUSH_EVENTS['share-decision'] = (message) => ({ share: message.share || null });
 // A public event changed in these grid cells (server/public_events.js): an open Activité list reads again.
 PUSH_EVENTS['public-events-changed'] = (message) => ({ cells: Array.isArray(message.cells) ? message.cells : [] });
+// A shop's sales changed (server/shop_listings.js): an open Boutiques list of that seller reads again.
+PUSH_EVENTS['shop-changed'] = (message) => ({ sellerId: typeof message.sellerId === 'string' ? message.sellerId : '' });
+// A coach of the directory changed (server/coach_directory.js), or one of this account's bookings moved (server/coach_bookings.js).
+PUSH_EVENTS['coaches-changed'] = (message) => ({ coachId: typeof message.coachId === 'string' ? message.coachId : '' });
+PUSH_EVENTS['coach-bookings-changed'] = (message) => ({ bookingId: typeof message.bookingId === 'string' ? message.bookingId : '' });
+// A scheduled send of this account left or changed (server/scheduled_sends.js): its Agenda event follows.
+PUSH_EVENTS['scheduled-send-changed'] = (message) => ({ send: message.send && typeof message.send === 'object' ? message.send : null });
 PUSH_EVENTS['share-revoked'] = (message) => ({
     share_id: message.share_id || null,
     stream_id: message.stream_id || null
@@ -116,6 +123,8 @@ const RESPONSE_PAYLOADS = {
         status: message.status,
         statuses: message.statuses,
         contacts: message.contacts,
+        // The accepted contacts' shared cards (name, photo): what names them here.
+        people: message.people,
         pending: message.pending,
         refused: message.refused,
         blocked: message.blocked,
@@ -135,7 +144,14 @@ const RESPONSE_PAYLOADS = {
         filtered: message.filtered,
         blocked: message.blocked,
         failed: message.failed,
-        recipients: message.recipients
+        recipients: message.recipients,
+        // VideoTrain (server/news_thread.js).
+        thread_ref: message.thread_ref,
+        threads: message.threads,
+        votes: message.votes,
+        voted: message.voted,
+        reported: message.reported,
+        retired: message.retired
     }),
     // Communities (server/communities.js): membership, the thread, the host's moderation.
     'community-response': (message) => ({
@@ -243,7 +259,7 @@ const RESPONSE_PAYLOADS = {
     }),
     'direct-message-response': (message) => ({ delivered: message.delivered, receiver_id: message.receiver_id,
         message_id: message.message_id, queued: message.queued, duplicate: message.duplicate }),
-    'conversation-response': message => ({ items: message.items, nextCursor: message.nextCursor }),
+    'conversation-response': message => ({ items: message.items, nextCursor: message.nextCursor, deleted: message.deleted }),
     'visio-response': message => ({ data: message })
 };
 

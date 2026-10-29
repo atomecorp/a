@@ -1,13 +1,17 @@
-// Builds the shopping list's generic food catalogue from the ANSES Ciqual table
-// (Etalab 2.0, attribution in THIRD_PARTY_LICENSES.md): the foods one buys, by aisle,
-// with their name in French and English and their energy (kcal per 100 g, EU 1169/2011).
+// Builds two assets from the ANSES Ciqual table (Etalab 2.0, attribution in
+// THIRD_PARTY_LICENSES.md):
+//   - the shopping list's generic food catalogue: the foods one buys, by aisle, with
+//     their name in French and English and their energy (kcal per 100 g, EU 1169/2011);
+//   - the nutrition table (eVe/domains/shopping/food_composition.js): every food with
+//     the eight nutrients of the EU nutrition declaration per 100 g.
 // The XML comes from the dataset's files (Dataverse API `/api/access/datafile/<id>`):
-// alim_*.xml and compo_*.xml, both in <ciqual-dir>.
+// alim_*.xml, alim_grp_*.xml and compo_*.xml, all in <ciqual-dir>.
 //
 //   node scripts/generate_food_catalogue.mjs <ciqual-dir>
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { FOOD_CATALOGUE_ASSET } from '../eVe/domains/shopping/food_catalogue.js';
+import { FOOD_COMPOSITION_ASSET } from '../eVe/domains/shopping/food_composition.js';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const SOURCE = Object.freeze({ name: 'Ciqual 2025, ANSES', updated: '2025-11-19', doi: '10.57745/RDMHWY', licence: 'etalab-2.0' });
@@ -59,7 +63,8 @@ const kcalOf = (value) => {
     return Math.round(Number(value.replace(',', '.')));
 };
 
-const energy = new Map(records(fileOf('compo_'), 'COMPO').filter(entry => entry.const_code === ENERGY_KCAL)
+const composition = records(fileOf('compo_'), 'COMPO');
+const energy = new Map(composition.filter(entry => entry.const_code === ENERGY_KCAL)
     .map(entry => [entry.alim_code, kcalOf(entry.teneur)]));
 const aisleOf = new Map(AISLES.flatMap(([, groups], index) => groups.map(group => [group, index])));
 const chosen = new Map();
@@ -82,3 +87,30 @@ const output = path.join(ROOT, 'atome/src', FOOD_CATALOGUE_ASSET);
 writeFileSync(output, `${JSON.stringify({ source: SOURCE, aisles: AISLES.map(([key]) => key), foods })}\n`);
 console.log(`${foods.length} foods → ${path.relative(ROOT, output)}`);
 AISLES.forEach(([key], index) => console.log(key, foods.filter(food => food[1] === index).length));
+
+// The nutrition table: the EU nutrition declaration's nutrients, in its order. A value
+// keeps Ciqual's state: a number, 'traces', '<x' (below the limit x) or null (« - », no
+// data); food_composition.js reads them back, never as a guessed 0.
+const NUTRIENTS = Object.freeze([['energy_kcal', '328', 'kcal'], ['fat', '40000', 'g'], ['saturated_fat', '40302', 'g'],
+    ['carbohydrates', '31000', 'g'], ['sugars', '32000', 'g'], ['fiber', '34100', 'g'], ['proteins', '25000', 'g'], ['salt', '10004', 'g']]);
+const contentOf = (raw) => {
+    const value = decode(raw ?? '-').replace(',', '.');
+    if (value === '-') return null;
+    if (value === 'traces') return value;
+    const below = value.match(/^<\s*(\d+(?:\.\d+)?)$/);
+    if (below) return `<${Number(below[1])}`;
+    if (!/^\d+(?:\.\d+)?$/.test(value)) throw new Error(`ciqual_content_unreadable:${raw}`);
+    return Number(value);
+};
+const contents = new Map();
+for (const entry of composition) contents.set(`${entry.alim_code}|${entry.const_code}`, entry.teneur);
+const groups = Object.fromEntries(records(fileOf('alim_grp'), 'ALIM_GRP')
+    .map(group => [group.alim_ssgrp_code, [decode(group.alim_ssgrp_nom_fr), decode(group.alim_ssgrp_nom_eng)]]));
+const table = records(fileOf('alim_2'), 'ALIM').map((food) => {
+    if (!groups[food.alim_ssgrp_code]) throw new Error(`ciqual_group_missing:${food.alim_code}`);
+    return [Number(food.alim_code), food.alim_ssgrp_code, decode(food.alim_nom_fr), decode(food.alim_nom_eng),
+        ...NUTRIENTS.map(([, code]) => contentOf(contents.get(`${food.alim_code}|${code}`)))];
+}).sort((a, b) => a[0] - b[0]);
+const tableOutput = path.join(ROOT, 'atome/src', FOOD_COMPOSITION_ASSET);
+writeFileSync(tableOutput, `${JSON.stringify({ source: SOURCE, nutrients: NUTRIENTS.map(([key, , unit]) => [key, unit]), groups, foods: table })}\n`);
+console.log(`${table.length} foods, ${NUTRIENTS.length} nutrients → ${path.relative(ROOT, tableOutput)}`);

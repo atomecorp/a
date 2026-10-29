@@ -72,6 +72,8 @@ export const mergeContacts = (base = {}, incoming = {}) => ({
     custom_fields: Array.isArray(base.custom_fields) && base.custom_fields.length
         ? [...base.custom_fields]
         : (Array.isArray(incoming.custom_fields) ? [...incoming.custom_fields] : []),
+    // The life profiles the card is filed under (its hold's « Profils » row): Publier's people follow them (Q7, 28 Oct. 2026).
+    profiles: [...(Array.isArray(base.profiles) ? base.profiles : Array.isArray(incoming.profiles) ? incoming.profiles : [])],
     raw: incoming.raw || base.raw || null
 });
 

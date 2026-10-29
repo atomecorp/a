@@ -20,6 +20,14 @@ extension AppNativeAudioController {
                     let (result, error) = NativeKiraEngine.run("audio_init", [:])
                     self.complete(completion, payload: result, error: error)
 
+                // A Sport beep lowers the person's music a moment (L10, training_sound.js).
+                case "audio_duck_start":
+                    try self.acquireAudioSessionConsumer("duck", kind: .duckingPlayback)
+                    self.complete(completion, payload: ["success": true, "ducking": true])
+                case "audio_duck_stop":
+                    self.releaseAudioSessionConsumer("duck")
+                    self.complete(completion, payload: ["success": true, "ducking": false])
+
                 case "audio_wake_start":
                     self.wakeCaptureFailed = false
                     self.startWakeCapture(payload: payload, completion: completion)

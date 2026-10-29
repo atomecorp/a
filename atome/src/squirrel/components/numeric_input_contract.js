@@ -30,7 +30,9 @@ const normalizeNumericInputPresentation = ({
     max = Infinity,
     step = 1,
     unit = '',
-    disabled = false
+    disabled = false,
+    // A value shown by its own label (a date, a clock time: the roller's `format`) needs no unit.
+    labelled = false
 } = {}) => {
     const normalizedMin = min === -Infinity ? -Infinity : finite(min, 'squirrel_numeric_input_min_invalid');
     const normalizedMax = max === Infinity ? Infinity : finite(max, 'squirrel_numeric_input_max_invalid');
@@ -40,7 +42,7 @@ const normalizeNumericInputPresentation = ({
     const normalizedValue = finite(value, 'squirrel_numeric_input_value_invalid');
     if (normalizedValue < normalizedMin || normalizedValue > normalizedMax) throw new Error('squirrel_numeric_input_value_out_of_range');
     const normalizedUnit = String(unit == null ? '' : unit).trim();
-    if (!normalizedUnit) throw new Error('squirrel_numeric_input_unit_required');
+    if (!normalizedUnit && labelled !== true) throw new Error('squirrel_numeric_input_unit_required');
     return Object.freeze({
         value: normalizedValue,
         min: normalizedMin,

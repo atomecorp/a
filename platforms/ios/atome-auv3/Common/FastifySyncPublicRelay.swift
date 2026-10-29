@@ -6,12 +6,12 @@ extension FastifySyncClient {
     // television catalogue, YouTube live resolution, the shows around a position, the films and series
     // of Divertissement › Vidéo, GPS resources, Open Food
     // Facts, the free book catalogs, the Médiathèque's free media, the bug reports kept on
-    // atome.one). The phone has no copy of them: the frame is forwarded, without
+    // atome.one, the shop's sales everyone browses). The phone has no copy of them: the frame is forwarded, without
     // any credential, to the configured Fastify server and its single reply is
     // returned.
     static let publicTypes: Set<String> = ["youtube-search", "peertube-search", "peertube-resolve", "tv-catalog",
         "tv-resolve", "shows-nearby", "video-catalog", "gps-resource", "food-facts",
-        "book-source", "book-fetch", "media-library-search", "media-library-fetch", "bug-report-submit", "bug-report-status"]
+        "book-source", "book-fetch", "media-library-search", "media-library-fetch", "bug-report-submit", "bug-report-status", "shop-public", "coaches-public"]
 
     func relayPublic(_ payload: [String: Any], reply: @escaping ([String: Any]) -> Void) {
         let requestId = payload["requestId"] ?? NSNull()

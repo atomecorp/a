@@ -224,6 +224,8 @@ export const HEALTH_MONITORS = freeze([
     // Nutrition / mind.
     monitor('hydration', {
         family: 'nutrition', shape: 'quantity', strategy: 'daily_sum', unit: 'mL', meaning: 'water_intake_today',
+        // A glass the person declares (Verre, health_declaration.add), added to what the store measured.
+        declaration: freeze({ value: 250, max: 2000 }),
         ios: { type: 'HKQuantityTypeIdentifierDietaryWater', unit: 'mL' },
         android: { record: 'HydrationRecord', permission: `${HC}READ_HYDRATION`, metric: 'VOLUME_TOTAL' }
     }),

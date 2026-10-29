@@ -1,6 +1,9 @@
 import { test, expect, vi } from 'vitest';
 import { createImportLifecycle } from '../../atome/src/squirrel/shared/import_lifecycle.js';
 import { createCanonicalImport } from '../../atome/src/squirrel/shared/canonical_import.js';
+import { markLaunchSettled } from '../../atome/src/squirrel/shared/background_work.js';
+// Imports are background work: they run once the launch has settled (background_work.js).
+markLaunchSettled();
 function fixture() {
     let state={mode:'authenticated',user:{id:'a'},updatedAt:1};
     const records=new Map();const env=new EventTarget();env.CustomEvent=CustomEvent;

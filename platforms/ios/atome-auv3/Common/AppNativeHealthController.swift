@@ -55,6 +55,8 @@ final class AppNativeHealthController {
     private var observers: [String: HKObserverQuery] = [:]
     private lazy var workout = HealthWorkoutRecorder(store: healthStore) { [weak self] ids in self?.stateQueue.async { self?.signal(ids) } }
     #endif
+    // The raw motion of activity sessions, kept on this device (HealthSensorRecorder.swift).
+    private let sensors = HealthSensorRecorder()
     #if canImport(CoreMotion)
     private let pedometer = CMPedometer()
     private var pedometerLive = false
@@ -72,7 +74,9 @@ final class AppNativeHealthController {
         #endif
     }
 
-    static func canHandle(command: String) -> Bool { commands.contains(command) || HealthWorkoutRecorder.commands.contains(command) }
+    static func canHandle(command: String) -> Bool {
+        commands.contains(command) || HealthWorkoutRecorder.commands.contains(command) || HealthSensorRecorder.commands.contains(command)
+    }
 
     func attach(webView: WKWebView, openSettings: (() -> Void)? = nil) {
         self.webView = webView
@@ -140,6 +144,9 @@ final class AppNativeHealthController {
             reply(["linked": HealthLinkStore.isLinked(account)])
         case "health_link":
             HealthLinkStore.link(account) ? reply(["linked": true]) : fail("health_link_store_unavailable")
+        // This device's own motion sensors, stored here: no health store read, so no association needed.
+        case _ where HealthSensorRecorder.commands.contains(command):
+            sensors.handle(command, account: account, payload: payload) { result in self.stateQueue.async { self.current(generation) ? reply(result) : fail("health_context_changed") } }
         default:
             guard HealthLinkStore.isLinked(account) else { return fail("health_link_required") }
             let ids = Self.monitorIds(payload["monitors"])
@@ -215,6 +222,7 @@ final class AppNativeHealthController {
     }
 
     private func stopEverything() {
+        sensors.finishCurrent()
         #if canImport(HealthKit)
         observers.values.forEach { healthStore.stop($0) }
         observers.removeAll()

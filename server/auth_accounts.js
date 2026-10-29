@@ -3,8 +3,9 @@ import { normalizeDeviceMeta, resolveDeviceClass } from './auth_devices.js';
 
 // Approve-class purposes and the subject each one is bound to.
 const APPROVE_SUBJECTS = {
-    'pair-approve': (s) => `${s.pairId}:${s.requesterSessionKeyId}:${s.requesterApproveKeyId || '-'}:${s.choice}`,
-    'recovery-code-set': (s) => `${s.verifier}:${s.lookup}`,
+    // `backup`: the digest of the backup keys carried along, or '-' (#auth_link_security.js backupKeysDigest).
+    'pair-approve': (s) => `${s.pairId}:${s.requesterSessionKeyId}:${s.requesterApproveKeyId || '-'}:${s.choice}:${s.backup}`,
+    'recovery-code-set': (s) => `${s.verifier}:${s.lookup}:${s.backup}`,
     'recovery-cancel': (s) => s.recoveryId,
     'device-revoke': (s) => s.deviceId,
     'device-class': (s) => `${s.deviceId}:${s.deviceClass}`

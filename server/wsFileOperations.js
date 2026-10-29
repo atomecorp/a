@@ -28,7 +28,7 @@ export async function handleWsFileOperation({ connection, data, safeSend, projec
     const {
         databaseEnabled, coerceWsChunkSize, ensureVideoPlaybackCache, getRequiredJwtSecret,
         listUserDownloadsSnapshot, normalizeUserRelativePath, registerFileUpload,
-        resolveDownloadTarget, resolveUserAssetPath, resolveUserUploadPath, sanitizeUploadId
+        resolveDownloadTarget, resolveUserAssetPath, resolveUserUploadPath, sanitizeUploadId, deleteFile
     } = deps;
     const fs = fsPromises;
     const action = data.action || '';
@@ -358,6 +358,28 @@ export async function handleWsFileOperation({ connection, data, safeSend, projec
         });
       } catch (error) {
         sendFileResponse({ success: false, error: error.message || 'upload_complete_failed' });
+      }
+      return;
+    }
+
+    // Its owner removes a stored file for good: its bytes, then its registration
+    // (a deleted recording leaves no copy behind; #squirrel/health/sensor_backup.js).
+    if (action === 'delete') {
+      try {
+        const target = identifier ? await resolveDownloadTarget(identifier, userId) : null;
+        if (!target?.filePath) {
+          sendFileResponse({ success: false, error: 'File not found', status: 404 });
+          return;
+        }
+        if (target.meta?.owner_id !== userId) {
+          sendFileResponse({ success: false, error: 'file_delete_owner_only', status: 403 });
+          return;
+        }
+        await fs.rm(target.filePath, { force: true });
+        const removed = await deleteFile(target.meta.atome_id, userId);
+        sendFileResponse({ success: removed?.success === true, action, atome_id: target.meta.atome_id, error: removed?.error });
+      } catch (error) {
+        sendFileResponse({ success: false, error: error.message || 'file_delete_failed' });
       }
       return;
     }

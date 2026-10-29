@@ -62,6 +62,7 @@ final class AppPageHost {
     }
 
     private func installNativeBridges() {
+        AppWatchSensorBridge.shared.activate()
         WebViewManager.setNativeInvokeHandler { command, payload, completion in
             if AppNativeCommunication.canHandle(command) {
                 AppNativeCommunication.shared.handle(command, payload: payload, completion: completion)

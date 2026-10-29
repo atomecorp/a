@@ -28,6 +28,8 @@ export function createCommunicationRelations({
     findUserById = async () => null,
     // An accepted request's note becomes the conversation's first message: `({ ownerId, peerId, note, at })`.
     onAccepted = async () => {},
+    // `readCard(peerId)` -> { display_name, user_face } as the peer shares them, or null.
+    readCard = async () => null,
     now = () => Date.now(),
     requestLimits = CONTACT_REQUEST_LIMITS
 } = {}) {
@@ -221,10 +223,18 @@ export function createCommunicationRelations({
             else statuses[peer] = (await contactStatus(peer, owner)) === 'accepted' ? 'contact' : 'outgoing';
         }
         for (const peer of blocked) statuses[peer] = 'blocked';
+        const contacts = rows.filter((row) => row.status === 'accepted').map((row) => String(row.peer_id));
+        // Each accepted contact by the name and photo they share on their card (none when they share none).
+        const people = [];
+        for (const peer of contacts) {
+            const card = await readCard(peer).catch(() => null);
+            if (card?.display_name) people.push({ principal_id: peer, display_name: card.display_name, user_face: card.user_face || '' });
+        }
         return {
             ok: true,
             statuses,
-            contacts: rows.filter((row) => row.status === 'accepted').map((row) => String(row.peer_id)),
+            contacts,
+            people,
             pending: incoming.map((row) => String(row.peer_id)),
             blocked
         };

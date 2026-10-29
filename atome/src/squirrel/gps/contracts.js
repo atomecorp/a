@@ -16,6 +16,8 @@ const definitions = {
     search_places: [{ query }, ['query'], 'Search the configured address service on explicit submission.', false],
     locate: [{}, [], 'Request this device position on an explicit user action. Does not retain or share fixes.', false],
     calculate_route: [{ trip_id: id, origin: GPS_POINT_SCHEMA }, ['trip_id'], 'Calculate and retain a Valhalla itinerary, without starting guidance.', true],
+    set_favorite: [{ trip_id: id, favorite: { type: 'boolean' } }, ['trip_id', 'favorite'], 'Keep a private itinerary among the favourites, or take it out of them.', true],
+    delete_trip: [{ trip_id: id }, ['trip_id'], 'Delete a private itinerary; the one being guided cannot be deleted (NAVIGATION_ALREADY_ACTIVE).', true],
     preview: [{ trip_id: id }, ['trip_id'], 'Open a GPS itinerary on the current presentation surface. Does not start guidance.', false],
     new_trip: [{}, [], 'Open the itinerary creation surface without starting guidance or creating a durable trip.', false],
     start_navigation: [{ trip_id: id }, ['trip_id'], 'Start foreground/background guidance on this device, requesting location access. Refuses a second active trip.', true],

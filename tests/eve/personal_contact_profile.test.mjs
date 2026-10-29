@@ -23,7 +23,11 @@ function fixture() {
                 properties: { ...previous?.properties, ...props }, property_versions: versions, deleted_at: event.kind === 'delete' ? 'deleted' : null });
             return { ok: true };
         } };
-    return { api: () => api, session: () => user, records, writes, change: () => { user = { mode: 'authenticated', user: { id: 'other', phone } }; } };
+    // The eVe profile owner: `atome_not_available_locally` while the account's profile has not reached this device.
+    const profile = { arriving: false, loads: [] };
+    const loadProfile = async (id, options) => { profile.loads.push({ id, ...options });
+        return profile.arriving ? { ok: false, error: 'atome_not_available_locally' } : { ok: true, userId: id }; };
+    return { api: () => api, session: () => user, loadProfile, profile, records, writes, change: () => { user = { mode: 'authenticated', user: { id: 'other', phone } }; } };
 }
 const meta = { source_key: 'macos_contacts', complete: true, cursor: 'one', personal_candidates: [card] };
 test('unique verified phone fills one account and repeated imports preserve manual changes and privacy', async () => {
@@ -83,4 +87,24 @@ test('a manual edit during the profile commit is rejected and never overwritten'
     expect([...f.records.values()].some(row => row.type === 'import_source_state')).toBe(false);
     await createLocalContactsSource(f).importContacts([card], meta);
     expect(f.records.get('owner').properties.name).toBe('Manual value');
+});
+test('a device that has not received the account profile leaves it untouched, keeps the card out of the book, then fills it', async () => {
+    const f = fixture();
+    const bare = { atome_id: 'owner', owner_id: 'owner', type: 'user', properties: { username: 'opaque-account-name' }, property_versions: { username: 1 } };
+    f.records.set('owner', bare);
+    f.profile.arriving = true;
+    const source = createLocalContactsSource(f);
+    const first = await source.importContacts([card, { id: 'other-card', name: 'Bob' }], meta);
+    expect(first.personal_profile).toMatchObject({ external_id: 'me', changed: false, deferred: 'account_profile_arriving' });
+    expect(f.writes.filter(event => event.atome_id === 'owner')).toEqual([]);
+    expect(f.records.get('owner').properties.eve_profile).toBeUndefined();
+    expect(source.listContactsSync().items.map(item => item.name)).toEqual(['Bob']);
+    // The account's profile arrives (synchronization), then the next pass fills only what it lacks.
+    f.records.set('owner', { ...bare, properties: { ...bare.properties, name: 'Account name',
+        eve_profile: { name: 'Account name', preferences: { contacts: { favorites: [{ id: 'contact_1' }] } } } },
+        property_versions: { username: 1, name: 1, eve_profile: 1 } });
+    f.profile.arriving = false;
+    await source.importContacts([card, { id: 'other-card', name: 'Bob' }], meta);
+    expect(f.records.get('owner').properties).toMatchObject({ name: 'Account name', first_name: 'Alice',
+        eve_profile: { name: 'Account name', first_name: 'Alice', preferences: { contacts: { favorites: [{ id: 'contact_1' }] } } } });
 });

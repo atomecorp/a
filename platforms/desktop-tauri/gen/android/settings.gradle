@@ -1,3 +1,5 @@
 include ':app'
+// The Wear OS recorder of eVe sessions, built on its own (wear/build.gradle.kts).
+include ':wear'
 
 apply from: 'tauri.settings.gradle'

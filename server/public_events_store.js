@@ -35,6 +35,13 @@ export function createPublicEventsStore({ query }) {
         WHERE e.cell IN (${cells.map(() => '?').join(',')}) AND e.end_at >= ? AND s.hidden_at IS NULL
         ORDER BY e.start_at, e.occurrence_id LIMIT ?`, [...cells, sqlTime(nowMs), limit]) : Promise.resolve([]));
 
+    // The next occurrence of one series still to end (an announcement's link), with its series.
+    const upcoming = (eventId, nowMs) => query('get', `SELECT e.occurrence_id, e.event_id, e.start_at, e.end_at, e.lat, e.lon,
+            e.categories, e.free, s.author_id, s.author_name, s.payload_json
+        FROM public_events e JOIN public_event_series s ON s.event_id = e.event_id
+        WHERE e.event_id = ? AND e.end_at >= ? AND s.hidden_at IS NULL
+        ORDER BY e.start_at, e.occurrence_id LIMIT 1`, [eventId, sqlTime(nowMs)]);
+
     const report = async (eventId, reporterId, reason) => {
         await query('run', `INSERT INTO public_event_reports (event_id, reporter_id, reason) VALUES (?, ?, ?)
             ON CONFLICT(event_id, reporter_id) DO NOTHING`, [eventId, reporterId, reason]);
@@ -67,5 +74,5 @@ export function createPublicEventsStore({ query }) {
     const reported = () => query('all', `SELECT event_id, author_id, author_name, reports, hidden_at, payload_json FROM public_event_series
         WHERE reports > 0 ORDER BY reports DESC, updated_at DESC LIMIT 200`);
 
-    return { series, put, remove, around, report, hide, restore, authorCounts, stale, purge, reported };
+    return { series, put, remove, around, upcoming, report, hide, restore, authorCounts, stale, purge, reported };
 }

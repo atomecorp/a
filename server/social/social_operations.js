@@ -213,6 +213,15 @@ async function recordClientOutcome({ job_id: jobId, destination, outcome, target
     } finally { release(); }
 }
 
+// A post already published takes its new text where the network's API edits one (a Facebook Page); elsewhere
+// it is refused, never published again (scheduled updates, Q4 of 28 Oct. 2026).
+export async function updateSocialPost({ destination, remote, text }, { ctx }) {
+    const network = String(destination || '').split(':')[0];
+    if (!remote || network !== 'facebook' || !String(destination).startsWith('facebook:page:')) throw new SocialError('social_update_unsupported');
+    const { session } = await connectedSession(network, ctx);
+    return session.adapter.update({ config: ctx.config, record: session.record, remote, text, fetchImpl: ctx.fetchImpl });
+}
+
 export async function handleSocialAction(action, payload = {}, { principal, ctx, signal, resolveTarget = resolveDownloadTarget }) {
     const env = { principal, ctx: { ...ctx, signal }, resolveTarget };
     const name = action.replace(/^social\./, '');

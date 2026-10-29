@@ -21,9 +21,18 @@ export async function importIdentity(parts) {
 // An import cycle (every page of one pass over a source) reads each table once:
 // the lifecycle hands its pages one snapshot, and this module's own writes keep it
 // current. A history import used to reread the calendar and its 8000+ origins
-// (13 s of local database on Tauri) for each year it imported. Outside a cycle,
-// and at the start of every cycle, tables are read afresh.
+// (13 s of local database on Tauri) for each year it imported.
+// Cycles that run at the same time (contacts and calendars at launch, a resume
+// during a pass) share one snapshot: the origins, common to every domain, reach
+// tens of thousands of rows (21 000 on an iPhone, 22 pages of ~400 ms on the
+// local server's single queue), and each cycle read them again, six times per
+// iOS launch, holding every other request (a project opening) behind them. A
+// table asked twice at once is read once. Once no cycle runs, the next one reads
+// the tables afresh.
 export const createImportSnapshot = () => new Map();
+let sharedSnapshot = null, sharedCycles = 0;
+export const acquireImportSnapshot = () => { sharedCycles += 1; return (sharedSnapshot ||= createImportSnapshot()); };
+export const releaseImportSnapshot = () => { sharedCycles = Math.max(0, sharedCycles - 1); if (!sharedCycles) sharedSnapshot = null; };
 const applySnapshotWrite = (rows, id, kind, props, owner) => {
     const index = rows.findIndex(row => importRecordId(row) === id);
     const current = index >= 0 ? rows[index] : null;
@@ -84,9 +93,7 @@ export function createCanonicalImport({ type, api = () => globalThis.window?.Ato
         if (!store?.commit || !store?.listStateCurrent) throw new Error('canonical_import_api_unavailable');
         return { owner, check, store };
     };
-    const list = async (recordType = type, context = capture(), snapshot = null) => {
-        const key = `${context.owner}|${recordType}`;
-        if (snapshot?.has(key)) return snapshot.get(key).slice();
+    const readTable = async (recordType, context) => {
         const rows = [];
         // Import bookkeeping reaches tens of thousands of rows (contacts and
         // calendars share the origins): 1000-row pages keep a full read to a few
@@ -99,8 +106,22 @@ export function createCanonicalImport({ type, api = () => globalThis.window?.Ato
             rows.push(...page.filter(row => !row.owner_id || String(row.owner_id) === context.owner));
             if (page.length < 1000) break;
         }
-        snapshot?.set(key, rows);
-        return rows.slice();
+        return rows;
+    };
+    // A snapshot holds a table's rows, or the reading of them still in flight.
+    const list = async (recordType = type, context = capture(), snapshot = null) => {
+        const key = `${context.owner}|${recordType}`;
+        if (snapshot?.has(key)) return (await snapshot.get(key)).slice();
+        const reading = readTable(recordType, context);
+        snapshot?.set(key, reading);
+        try {
+            const rows = await reading;
+            if (snapshot?.get(key) === reading) snapshot.set(key, rows);
+            return rows.slice();
+        } catch (error) {
+            if (snapshot?.get(key) === reading) snapshot.delete(key);
+            throw error;
+        }
     };
     const write = async (id, recordType, props, context, kind = 'set', snapshot = null) => {
         context.check();
@@ -109,8 +130,9 @@ export function createCanonicalImport({ type, api = () => globalThis.window?.Ato
             ...(kind === 'set' ? { props: written } : {}) });
         context.check();
         if (result?.ok !== true) { snapshot?.delete(`${context.owner}|${recordType}`); throw new Error(result?.error || 'canonical_import_commit_failed'); }
-        const rows = snapshot?.get(`${context.owner}|${recordType}`);
-        if (rows) applySnapshotWrite(rows, id, kind, written, context.owner);
+        const key = `${context.owner}|${recordType}`, rows = snapshot?.get(key);
+        if (Array.isArray(rows)) applySnapshotWrite(rows, id, kind, written, context.owner);
+        else if (rows) snapshot.set(key, rows.then(read => { applySnapshotWrite(read, id, kind, written, context.owner); return read; }));
         return result;
     };
     const identify = async (input, source, context) => {

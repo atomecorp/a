@@ -142,3 +142,56 @@ state (no user-facing setter; learned, not set).
 - `temp/account_restore/native_profile_guard.probe.mjs` — 7/7 (guard on its
   real code; the Tauri/iOS app itself was not run).
 
+
+## 2026-10-27 — favourites, name and photo gone after an app reinstall
+
+### Symptom
+
+User report: after reinstalling the app, every contact favourite (Agenda/Contacts)
+is gone and must be ticked again; the name and photo set in the profile do not
+come back either.
+
+### Root cause
+
+Point 3 above guarded `upsertUserProfile` only. Two writers of the user Atome
+build `eve_profile` themselves and bypassed it; on a native device whose bare
+`bind()` record has not yet received the account's profile, they wrote a fresh
+`eve_profile` holding only a few identity fields:
+
+1. The personal card of the phone's book (« Synchroniser avec le téléphone »,
+   offered again on a reinstalled device):
+   `atome/src/squirrel/contacts/personal_profile.js` merged the card into the bare
+   record (`mergeGuestProfileProperties`) → `eve_profile = { name, first_name… }`
+   from the card, photo from the card.
+2. Accepting the guest's work after recovery (native path of
+   `adole_api/auth_workspace.js#prepareNativeProfileIntent`), built on the same
+   bare local record.
+
+That `eve_profile` is newer than the account's: the local per-key LWW then
+refused every replayed profile event, and its upload won on the server, so the
+whole profile (every preference, `contacts.favorites` included, the chosen name)
+was replaced on every device.
+
+### Correction
+
+Both writers now ask the profile owner through the existing bridge
+(`window.__eveLoadUserProfile`, `profile_api.js#installUserProfileRuntimeBridge`),
+which applies `requireAccountProfileHere`:
+
+- personal card: while the profile is arriving, the card is kept out of the book
+  and the profile untouched (`deferred: 'account_profile_arriving'`); a later
+  import pass fills only what the account's profile lacks. An explicit choice of
+  the personal card answers `atome_not_available_locally`. The contacts bootstrap
+  injects `loadProfile` (required; it replaces the optional `publishProfile`).
+- guest adoption: refused with `atome_not_available_locally` before any step, so
+  it can be retried unchanged once the profile is here.
+
+### Regression checks
+
+- `tests/eve/personal_contact_profile.test.mjs` — new case « a device that has not
+  received the account profile… »: fails on the previous code (bare record
+  written), passes now; the 6 earlier cases unchanged.
+- `tests/eve/guest_profile_native.test.mjs` — new case « refuses the adoption,
+  untouched… »; the fixture installs the real profile bridge.
+- Not run: a physical reinstall + recovery on iOS (needs the user's recovery code
+  and an iOS build with this change).

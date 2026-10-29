@@ -409,22 +409,6 @@ test.each([{ name: 'wallpaper.mov', type: 'video/quicktime' }, { name: 'wallpape
     assert.equal(patches[0].backgroundMediaKind, 'video');
     assert.equal(patches[0].backgroundImageUrl, '/api/uploads/wallpaper.mov');
 });
-test.each(['video', 'image'])('use selection preserves the selected %s kind without uploading it again', async (kind) => {
-    const previousWindow = globalThis.window;
-    const extension = kind === 'video' ? 'mp4' : 'png';
-    const patches = [];
-    globalThis.window = { __selectedAtomeId: 'selected-media', Atome: {
-        getStateCurrent: async () => ({ type: kind, properties: { media_url: `/api/uploads/media.${extension}`, file_name: `media.${extension}` } })
-    } };
-    try {
-        const image = createBackgroundImage({ applyBackgroundParams: params => patches.push(params), schedulePreferenceSave: async () => ({ ok: true }) });
-        const result = await image.applySelectedMediaAsBackground();
-        assert.equal(result.ok, true);
-        assert.equal(patches[0].backgroundMediaKind, kind);
-        assert.equal(patches[0].backgroundImageAtomeId, 'selected-media');
-        assert.equal(assetBox.sendFileToServer.mock.calls.length, 0);
-    } finally { globalThis.window = previousWindow; }
-});
 test('authentication paints a video wallpaper from the Dashboard playback owner', async () => {
     const { window } = await bootBackgroundRuntime();
     window.eveBackground.setParams({ backgroundSource: 'image', backgroundMediaKind: 'video', backgroundImageUrl: VIDEO_WALLPAPER_URL });

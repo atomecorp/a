@@ -4,7 +4,8 @@ import { buildRuntimeInvocationPayload, projectRuntimeMcpResult } from './mcp_ru
 
 // Direct MCP calls of a contract family (TV, social sharing) go through the
 // same runtime tools as the eVe interface: one contract, one owner, one audit.
-const ENVELOPE_KEYS = new Set(['actor', 'source', 'trace_id', 'intent_id', 'idempotency_key', 'meta', '__mcp', 'dry_run']);
+// The confirmation of a confirmed command (mcp_security.js#validateConfirmation) is the envelope's too, never the command's input.
+const ENVELOPE_KEYS = new Set(['actor', 'source', 'trace_id', 'intent_id', 'idempotency_key', 'meta', '__mcp', 'dry_run', 'confirmed', 'confirmation_id', 'confirmationId']);
 const createContractHandlers = ({ commands, validate, layer, noClient }) => Object.fromEntries(commands.map((command) => [command.name, async (params = {}) => {
     const input = Object.fromEntries(Object.entries(params).filter(([key]) => !ENVELOPE_KEYS.has(key)));
     const error = validate(command.action, input);

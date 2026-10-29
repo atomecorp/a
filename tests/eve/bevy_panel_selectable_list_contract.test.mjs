@@ -36,7 +36,7 @@ test('compact canonical rows keep a fixed thumbnail, editable name and independe
         assert.equal(findNode(list.node, 'compact_entry_0_hierarchy'), null);
         assert.equal(findNode(list.node, 'compact_entry_0').listHierarchy, undefined);
         assert.equal(findNode(list.node, 'compact_entry_0_mute'), null);
-        assert.equal(findNode(list.node, 'compact_entry_0_transport_progress'), null);
+        assert.equal(findNode(list.node, 'compact_entry_0_preview_remaining'), null);
         assert.deepEqual(findNode(list.node, 'compact_entry_0_preview').style.size, [44, 44]);
         assert.deepEqual(findNode(list.node, 'compact_entry_0_name_scroll').style.position, [44, 0]);
         assert.equal(findNode(list.node, 'compact_entry_0_name_scroll').kind, 'panel');

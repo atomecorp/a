@@ -75,7 +75,10 @@ export const CONTACT_COMMUNICATION_COMMANDS = Object.freeze([
     { name: 'communication.conversation.send', description: 'Send a text, an existing conversation recording or owned Atomes (a project, a media) to this contact. Reuse messageId when retrying.',
         persistent: true, required: ['contactId', 'messageId'], properties: { contactId, messageId: contactId,
             text: { type: 'string', maxLength: 8000 }, mediaId: contactId, priority: { type: 'string', enum: COMMUNICATION_PRIORITIES },
-            attachmentIds: { type: 'array', items: contactId, maxItems: 10 } } }
+            attachmentIds: { type: 'array', items: contactId, maxItems: 10 } } },
+    { name: 'communication.conversation.delete', description: 'Delete messages of a conversation for the current account only (the other participant keeps theirs): the messageIds read from communication.conversation.read, or all of it.',
+        persistent: true, required: ['contactId'], properties: { contactId, messageIds: { type: 'array', items: contactId, maxItems: 500 },
+            all: { type: 'boolean' } } }
 ]);
 // Communicating with a contact never edits a project: these commands run in every work mode.
 export const isContactCommunicationCommand = id => CONTACT_COMMUNICATION_COMMANDS.some(command => command.name === id);

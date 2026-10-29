@@ -79,6 +79,10 @@ const handleOperation = async (operation, payload = {}) => {
         // `db` est l'espace de noms du module : `query` n'existe que dans son export par defaut.
         return queryCommunicationMessages({ query: db.default.query, userId: principalId, ...payload });
     }
+    if (operation === 'communication:threads') {
+        const { queryListingThreads } = await import('../database/communication_messages.js');
+        return queryListingThreads({ query: db.default.query, userId: principalId, listingId: payload.listingId });
+    }
     if (operation === 'state:list') {
         return db.listStateCurrent(payload.project_id || payload.projectId || null, {
             ownerId: principalId,
@@ -171,6 +175,30 @@ const handleOperation = async (operation, payload = {}) => {
             [surfaceId, JSON.stringify(surfaceId)]
         );
         return (rows || []).map((row) => row.atome_id);
+    }
+    // The live Atome describing each stored file, by its stored name: its id and the
+    // name the person's file had (`original_name`), the life profiles it belongs to, newest first for a name stored twice.
+    if (operation === 'files:described') {
+        const fileNames = Array.isArray(payload.file_names) ? payload.file_names.map(String).filter(Boolean) : [];
+        if (!fileNames.length) return [];
+        if (fileNames.length > 1000) throw new Error('vault_file_batch_too_large');
+        const rows = await db.default.query(
+            'all',
+            `SELECT f.atome_id, f.particle_value AS file_name, o.particle_value AS original_name, p.particle_value AS profiles
+             FROM particles f
+             JOIN atomes a ON a.atome_id = f.atome_id AND a.deleted_at IS NULL
+             LEFT JOIN particles o ON o.atome_id = f.atome_id AND o.particle_key = 'original_name'
+             LEFT JOIN particles p ON p.atome_id = f.atome_id AND p.particle_key = 'profiles'
+             WHERE f.particle_key = 'file_name' AND f.particle_value IN (${fileNames.map(() => '?').join(',')})
+             ORDER BY COALESCE(a.updated_at, a.created_at) DESC`,
+            fileNames.map((name) => JSON.stringify(name))
+        );
+        return (rows || []).map((row) => ({
+            atome_id: row.atome_id,
+            file_name: JSON.parse(row.file_name),
+            original_name: row.original_name === null ? null : JSON.parse(row.original_name),
+            profiles: row.profiles === null ? [] : JSON.parse(row.profiles)
+        }));
     }
     throw new Error('vault_operation_not_allowed');
 };

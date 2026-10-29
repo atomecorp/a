@@ -37,7 +37,6 @@ use std::ops::Range;
 pub(crate) struct SampleRegion {
     pub paint: Rect,
     pub sample: Rect,
-    pub depth: f32,
 }
 
 /// Disposable render extraction, derived from actual clipped meshes/materials.
@@ -117,7 +116,6 @@ pub(crate) fn mesh_region(
         + refraction.abs() / dpr.max(1.0);
     Some(SampleRegion {
         paint,
-        depth: transform.translation().z,
         sample: Rect {
             min: min - Vec2::splat(padding),
             max: max + Vec2::splat(padding),
@@ -226,38 +224,63 @@ fn overlaps(a: Rect, b: Rect) -> bool {
     a.min.x < b.max.x && a.max.x > b.min.x && a.min.y < b.max.y && a.max.y > b.min.y
 }
 
-/// Disjoint coplanar glass shares the backdrop below its plane, independently of
-/// tied phase order. Overlapping paint and different-depth sampling stay ordered.
+fn cut(result: &mut Vec<(Range<usize>, bool)>, start: &mut usize, captured: &mut bool, index: usize) {
+    if index > *start {
+        result.push((*start..index, *captured));
+    }
+    *start = index;
+    *captured = true;
+}
+
+/// Glass samples what lies below its plane. `Transparent2d` sorts by depth only
+/// and reshuffles the items of one plane on every requeue, so a plane's capture
+/// is taken before its first item, whatever it is: no item of that plane, glass
+/// or not, ever reaches it. A new capture is needed only when something drawn
+/// since the last one lies below the plane under the sampling halo (content has
+/// no extent here, so any), or when glass overlaps glass of its own plane.
 pub(crate) fn composition_ranges(
-    items: impl IntoIterator<Item = (usize, Option<SampleRegion>)>,
+    items: impl IntoIterator<Item = (usize, f32, Option<SampleRegion>)>,
     len: usize,
 ) -> Vec<(Range<usize>, bool)> {
+    let items: Vec<_> = items.into_iter().collect();
     let mut result = Vec::new();
     let mut start = 0;
-    let mut glass_group = false;
-    let mut painted: Vec<SampleRegion> = Vec::new();
-    for (index, sample) in items {
-        let split = match sample {
-            Some(region) => !glass_group || painted.iter().any(|p| {
-                let footprint = if region.depth == p.depth { region.paint } else { region.sample };
-                overlaps(footprint, p.paint)
-            }),
-            None => glass_group,
-        };
-        if split {
-            if index > start {
-                result.push((start..index, glass_group));
+    let mut captured = false;
+    // Drawn since the current capture: content and glass of lower planes, glass of this one.
+    let mut content_below = false;
+    let mut glass_below: Vec<Rect> = Vec::new();
+    let mut glass_plane: Vec<Rect> = Vec::new();
+    for plane in items.chunk_by(|a, b| a.1 == b.1) {
+        glass_below.append(&mut glass_plane);
+        let mut glass = plane.iter().filter_map(|(_, _, region)| *region).peekable();
+        if glass.peek().is_some()
+            && (!captured
+                || content_below
+                || glass.any(|g| glass_below.iter().any(|p| overlaps(g.sample, *p))))
+        {
+            cut(&mut result, &mut start, &mut captured, plane[0].0);
+            content_below = false;
+            glass_below.clear();
+        }
+        let mut content_plane = false;
+        for &(index, _, region) in plane {
+            let Some(region) = region else {
+                content_plane = true;
+                continue;
+            };
+            if glass_plane.iter().any(|p| overlaps(region.paint, *p)) {
+                cut(&mut result, &mut start, &mut captured, index);
+                content_below = false;
+                content_plane = false;
+                glass_below.clear();
+                glass_plane.clear();
             }
-            start = index;
-            painted.clear();
+            glass_plane.push(region.paint);
         }
-        glass_group = sample.is_some();
-        if let Some(region) = sample {
-            painted.push(region);
-        }
+        content_below |= content_plane;
     }
     if start < len {
-        result.push((start..len, glass_group));
+        result.push((start..len, captured));
     }
     result
 }
@@ -288,7 +311,13 @@ fn compose_transparent_pass(
             .values()
             .enumerate()
             .filter(|(_, item)| !item.batch_range().is_empty())
-            .map(|(i, item)| (i, regions.0.get(&item.main_entity().id()).copied())),
+            .map(|(i, item)| {
+                (
+                    i,
+                    item.sort_key.0,
+                    regions.0.get(&item.main_entity().id()).copied(),
+                )
+            }),
         phase.items.len(),
     );
     // Compilation belongs to Bevy's pipeline queue. Embedded shaders may not

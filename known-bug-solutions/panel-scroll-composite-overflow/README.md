@@ -36,3 +36,41 @@ The fixture places a phone row and its nested avatar completely below a retained
 ## Real-runtime acceptance
 
 Open Contact with enough entries to scroll. Move a row containing an avatar or placeholder through the lower and upper body boundaries. At every intermediate position, every pixel of the avatar, icon, label, shadow and background must remain inside the body viewport and must never cover `Tout sélectionner`, Import, Add, the Contact footer or the main toolbar. Repeat in Web, Tauri and iOS.
+
+## Regression (29 Oct. 2026): a scrolled panel body drawn blank
+
+### Symptom
+
+A panel hosted on the Dashboard (Activité › Coachs › « Devenir coach », the shop's
+« Nouvelle vente ») drew its whole body blank as soon as it was scrolled by a finger
+drag or the wheel; touches still landed on the hidden rows.
+
+### Cause
+
+The `clippedOut` state above was inherited through EVERY descendant, and the opacity
+handed to the children was the node's painted one (0 once clipped out). A body whose
+wrapper declares a size smaller than its content — the panel hierarchy wrapper
+(`bevy_panel_hierarchy.js#panelHierarchyNode`) sums its children's declared heights, and a
+card column declaring `size: [width, 0]` gives it 1 px — lies above the viewport after
+the first scrolled pixels. That 1 px box was judged clipped out, and its whole subtree
+(every card) projected at opacity 0, although the renderer and the hit test let a
+non-clipping box's children paint and answer past it.
+
+### Fix
+
+`pushNodeRecords` hides a subtree with its node only when that node clips its children
+(`clipsOverflow(node)`, `bevy_ui_layout_runtime.js`, the one list of clipping overflows,
+shared with `overflowClipForNode`); children inherit the node's own opacity, never the 0
+of its clipped-out paint. A non-clipping node's children are each judged by their own box.
+The caret-blink walk (`bevy_ui_tree_motion_runtime.js#clippedNodeIds`) follows the same rule.
+The avatar case above is unchanged (its node clips: its subtree stays hidden).
+
+### Regression check
+
+- `node temp/bevy_scroll_blank/projection.probe.mjs`: through the real scroll layout,
+  cards under a 1 px wrapper stay painted at 0/150/300 px of scroll, and a clipping avatar
+  fully below the viewport keeps its subtree at opacity 0 (`projection_head.probe.mjs`
+  runs the same checks against HEAD's projection: the cards fail).
+- `node temp/bevy_scroll_blank/diag.mjs` (Devenir coach, wheel) and
+  `DRAG=1 node temp/activities_audit/l12/work/scroll.diag.mjs` (also with
+  `LEVEL=activity_shop ITEM=new_shop`): the scrolled body is drawn.

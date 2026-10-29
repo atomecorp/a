@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		6BWTCH000000000000000002 /* atomeWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 6BWTCH000000000000000001 /* atomeWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		34960420281861B500E13C15 /* atomeAudioUnit.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 349603FF281861B500E13C15 /* atomeAudioUnit.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		7A1000030000000000000003 /* GuestAdoptionRuntimeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1000010000000000000001 /* GuestAdoptionRuntimeTests.swift */; };
 		7A1000050000000000000005 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7A1000040000000000000004 /* XCTest.framework */; };
@@ -28,6 +29,13 @@
 			remoteGlobalIDString = 349603E32818619000E13C15;
 			remoteInfo = atome;
 		};
+		6BWTCH000000000000000003 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 349603DC2818618F00E13C15 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 6BWTCH000000000000000010;
+			remoteInfo = atomeWatch;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -42,9 +50,21 @@
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		6BWTCH000000000000000004 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				6BWTCH000000000000000002 /* atomeWatch.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		6BWTCH000000000000000001 /* atomeWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = atomeWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		349603E42818619000E13C15 /* atome.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = atome.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		349603FF281861B500E13C15 /* atomeAudioUnit.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = atomeAudioUnit.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		34960426281861EE00E13C15 /* src */ = {isa = PBXFileReference; lastKnownFileType = folder; name = src; path = ../../../atome/src; sourceTree = "<group>"; };
@@ -97,12 +117,21 @@
 			);
 			target = 349603FE281861B500E13C15 /* atomeAudioUnit */;
 		};
+		6BWTCH000000000000000007 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 6BWTCH000000000000000010 /* atomeWatch */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		6B6B458B2D537B7800706498 /* Common */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (6B2F4D1A2FA8C70100E7A901 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, 6B2F4D1B2FA8C70100E7A901 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = Common; sourceTree = "<group>"; };
 		6B864DBD2D5DDA74006DEA72 /* application */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (6B864DC22D5DDA74006DEA72 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = application; sourceTree = "<group>"; };
 		6B864DC82D5DDDD7006DEA72 /* auv3 */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (6B864DCB2D5DDDD7006DEA72 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = auv3; sourceTree = "<group>"; };
+		6BWTCH000000000000000005 /* sensors */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = sensors; sourceTree = "<group>"; };
+		6BWTCH000000000000000006 /* watch */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (6BWTCH000000000000000007 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = watch; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -128,6 +157,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		6BWTCH000000000000000012 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -140,6 +176,8 @@
 				6BARCH000000000000000002 /* eVe */,
 				6B864DBD2D5DDA74006DEA72 /* application */,
 				6B864DC82D5DDDD7006DEA72 /* auv3 */,
+				6BWTCH000000000000000005 /* sensors */,
+				6BWTCH000000000000000006 /* watch */,
 				349603E52818619000E13C15 /* Products */,
 				6BB7DA3B2D63233600CD6691 /* LICENSE */,
 				6BB7DA3C2D63233600CD6691 /* README.md */,
@@ -154,6 +192,7 @@
 				349603E42818619000E13C15 /* atome.app */,
 				349603FF281861B500E13C15 /* atomeAudioUnit.appex */,
 				7A1000020000000000000002 /* atomeGuestAdoptionTests.xctest */,
+				6BWTCH000000000000000001 /* atomeWatch.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -189,15 +228,18 @@
 				349603E22818619000E13C15 /* Resources */,
 				6BARCH020000000000000001 /* Package Atome Runtime */,
 				34960424281861B500E13C15 /* Embed Foundation Extensions */,
+				6BWTCH000000000000000004 /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				3496041F281861B500E13C15 /* PBXTargetDependency */,
+				6BWTCH000000000000000008 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				6B6B458B2D537B7800706498 /* Common */,
 				6B864DBD2D5DDA74006DEA72 /* application */,
+				6BWTCH000000000000000005 /* sensors */,
 			);
 			name = atome;
 			productName = webview;
@@ -220,6 +262,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				6B6B458B2D537B7800706498 /* Common */,
+				6BWTCH000000000000000005 /* sensors */,
 			);
 			name = atomeAudioUnit;
 			productName = webviewauv3;
@@ -243,6 +286,27 @@
 			productName = atomeGuestAdoptionTests;
 			productReference = 7A1000020000000000000002 /* atomeGuestAdoptionTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		6BWTCH000000000000000010 /* atomeWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6BWTCH000000000000000014 /* Build configuration list for PBXNativeTarget "atomeWatch" */;
+			buildPhases = (
+				6BWTCH000000000000000011 /* Sources */,
+				6BWTCH000000000000000012 /* Frameworks */,
+				6BWTCH000000000000000013 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				6BWTCH000000000000000005 /* sensors */,
+				6BWTCH000000000000000006 /* watch */,
+			);
+			name = atomeWatch;
+			productName = atomeWatch;
+			productReference = 6BWTCH000000000000000001 /* atomeWatch.app */;
+			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
 
@@ -279,6 +343,7 @@
 				349603E32818619000E13C15 /* atome */,
 				349603FE281861B500E13C15 /* atomeAudioUnit */,
 				7A1000070000000000000007 /* atomeGuestAdoptionTests */,
+				6BWTCH000000000000000010 /* atomeWatch */,
 			);
 		};
 /* End PBXProject section */
@@ -299,6 +364,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		7A10000A000000000000000A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6BWTCH000000000000000013 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -410,6 +482,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		6BWTCH000000000000000011 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -422,6 +501,11 @@
 			isa = PBXTargetDependency;
 			target = 349603E32818619000E13C15 /* atome */;
 			targetProxy = 7A10000B000000000000000B /* PBXContainerItemProxy */;
+		};
+		6BWTCH000000000000000008 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 6BWTCH000000000000000010 /* atomeWatch */;
+			targetProxy = 6BWTCH000000000000000003 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -784,6 +868,60 @@
 			};
 			name = Release;
 		};
+		6BWTCH000000000000000015 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = watch/atomeWatch.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 35;
+				DEVELOPMENT_TEAM = 2W25PVZ57F;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = watch/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.36;
+				PRODUCT_BUNDLE_IDENTIFIER = one.atome.app.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
+		6BWTCH000000000000000016 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = watch/atomeWatch.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 35;
+				DEVELOPMENT_TEAM = 2W25PVZ57F;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = watch/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.36;
+				PRODUCT_BUNDLE_IDENTIFIER = one.atome.app.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -819,6 +957,15 @@
 			buildConfigurations = (
 				7A10000D000000000000000D /* Debug */,
 				7A10000E000000000000000E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		6BWTCH000000000000000014 /* Build configuration list for PBXNativeTarget "atomeWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6BWTCH000000000000000015 /* Debug */,
+				6BWTCH000000000000000016 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

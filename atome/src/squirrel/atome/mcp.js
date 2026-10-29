@@ -228,3 +228,5 @@ if (typeof globalThis !== 'undefined') {
     globalThis.handleAtomeMCPRequest = handleAtomeMCPRequest;
     globalThis.handleAtomeMCPRequestAsync = handleAtomeMCPRequestAsync;
 }
+
+export { handleAtomeMCPRequest, handleAtomeMCPRequestAsync };

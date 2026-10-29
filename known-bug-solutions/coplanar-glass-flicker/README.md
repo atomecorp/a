@@ -45,3 +45,39 @@ one capture + mip pyramid per card.
 - Real Web check: pause the wallpaper video, request redraws through
   `request_atome_bevy_redraw` (pointer activity resumes the wallpaper), and
   compare screenshots of the seams between adjacent Dashboard cards.
+
+## Second case (2026-10-27): other items of the glass plane
+
+Symptom: in a panel list (Capture › Audio list on iPad), the row just above the
+selected row flickered (~10 Hz, two states): its lower half alternately took a
+blue glow from the selected row and lost it. Any selected row did it.
+
+Cause: the grouping above only held while glass items of one plane were
+consecutive in the phase. A resting row's drop shadow is projected on a
+transparent shape of the row's own plane (`bevy_ui_overlay_record_projection.js`,
+`<row>_outer_shadow_<n>` at the row's `layer`). Those non-glass items landed
+between the glass rows in an order Bevy reshuffles on every requeue; each one
+closed the group, so the next row took a fresh capture that contained the rows
+already drawn. The light selected row (no drop shadow, pressed in) made the
+bleed visible on its neighbour.
+
+Correction: `composition_ranges` now receives every item's phase depth and
+works plane by plane. A plane holding glass gets its capture before its first
+item, whatever that item is, so no item of the plane — glass or not — ever
+reaches a capture of that plane. A new capture is taken only when something
+drawn since the last one lies below the plane (content, or glass under the
+sampling halo), or when glass overlaps glass of its own plane. `SampleRegion`
+no longer carries a depth: the phase sort key is the one source.
+
+Regression checks:
+- `coplanar_glass_shares_one_capture_whatever_other_items_of_its_plane_come_between`
+  (planner, every rotation of rows and carriers).
+- `equal_depth_glass_remains_pixel_stable_when_transient_content_is_requeued`
+  now holds shadow carriers on the glass plane, a light middle row, panel-like
+  blur and gap, and photographs every frame while rows are requeued on each
+  update (as an animated item does on a device). On the previous planner it
+  fails at logical (128,53), the bottom of the row above the light one; the
+  phase then splits the plane into three captures right after each requeue and
+  settles back a few frames later, which is why a settled screenshot missed it.
+- Web A/B on the real app was not completed (probe harness: isolated server
+  start timeouts and home not laid while other sessions ran their probes).

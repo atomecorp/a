@@ -25,7 +25,7 @@ import { distanceKm } from '../atome/src/shared/public_event_contract.js';
 // - Tourism kinds (`museums`, `nature`, `hiking`, `experiences`, `wellbeing`): the
 //   DATAtourisme places around (server/shows_tourism.js, `DATATOURISME_API_KEY`).
 // - `declared`: the events users declared around, of the activity `categories` asked
-//   (server/public_events.js), soonest first.
+//   (server/public_events.js), soonest first; with `eventId`, that one announcement alone (its link).
 // - `sources`: which keyed sources this server holds (`{ tourism }`), so the rubric lays
 //   only the plates it can fill.
 // `sort` (SHOWS_SORTS, the shared contract): the order a kind can be read in, its first by default: an outing by
@@ -203,6 +203,9 @@ const readSpec = (message) => {
     const radiusKm = Math.round(Number(message.radiusKm)), offset = message.pageToken ? Number(message.pageToken) : 0;
     const region = text(message.region).toUpperCase(), language = text(message.language).toLowerCase();
     if (!KINDS.has(kind) || !Number.isInteger(offset) || offset < 0 || offset > MAX_OFFSET) return null;
+    // One announcement by its link (`eventId`): no place or category needed, the reader's position when given.
+    const eventId = kind === 'declared' ? text(message.eventId).slice(0, 200) : '';
+    if (eventId) return { kind, eventId, lat: Number.isFinite(lat) ? lat : null, lon: Number.isFinite(lon) ? lon : null, language: text(message.language).toLowerCase() };
     if (!UNPOSITIONED.has(kind) && (!(lat >= -90 && lat <= 90) || !(lon >= -180 && lon <= 180) || !(radiusKm >= 1 && radiusKm <= 100))) return null;
     if (kind === 'films' && (!/^[A-Z]{2}$/.test(region) || !/^[a-z]{2}$/.test(language))) return null;
     const sorts = SHOWS_SORTS[kind] || [], sort = text(message.sort) || sorts[0] || '';
@@ -230,7 +233,7 @@ export const handleWsShows = async (message, address, { fetchResource = fetch, n
     try {
         if (spec.kind === 'declared') {
             if (!publicEvents) return reply(requestId, { ok: false, error: 'shows_unavailable' });
-            const found = await publicEvents.nearby({ ...spec, viewerId, now });
+            const found = await (spec.eventId ? publicEvents.one({ ...spec, viewerId }) : publicEvents.nearby({ ...spec, viewerId, now }));
             return reply(requestId, { ok: true, entries: found.entries, nextPageToken: found.next });
         }
         const deps = { fetchResource, now, key, distanceKm };

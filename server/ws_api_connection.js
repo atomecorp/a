@@ -20,7 +20,7 @@ import { handleWsApiOperationFamilies } from './wsApiOperationChain.js';
 import { handleWsFileOperation } from './wsFileOperations.js';
 import { handleWsCommunication } from './wsCommunicationOperations.js';
 import { handleWsNotificationOperation } from './wsNotificationOperations.js';
-import { registerFileUpload } from './userFiles.js';
+import { deleteFile, registerFileUpload } from './userFiles.js';
 import { normalizeUserRelativePath, resolveUserAssetPath, resolveUserUploadPath } from './fileStorage.js';
 import { ensureVideoPlaybackCache } from './server_media.js';
 import { sanitizeUploadId, coerceWsChunkSize, resolveUserId } from './server_utils.js';
@@ -43,7 +43,11 @@ export function registerWsApiRoute(server, {
   newsBroadcast,
   newsPublishRateAllowed,
   communities,
-  publicEvents
+  publicEvents,
+  shop,
+  coaches,
+  scheduledSends,
+  site
 }) {
   // Route WebSocket pour API calls (replaces HTTP fetch)
   server.register(async function (fastify) {
@@ -70,6 +74,10 @@ export function registerWsApiRoute(server, {
       connection._wsApiSyncRuntime = wsSyncRuntime;
       connection._wsApiDirectoryService = directoryPublicService;
       connection._wsApiPublicEvents = publicEvents;
+      connection._wsApiShop = shop;
+      connection._wsApiCoaches = coaches;
+      connection._wsApiScheduledSends = scheduledSends;
+      connection._wsApiSite = site;
 
       try {
         const requestUser = await validateToken(request);
@@ -159,7 +167,7 @@ export function registerWsApiRoute(server, {
             deps: {
               databaseEnabled: DATABASE_ENABLED, coerceWsChunkSize, ensureVideoPlaybackCache, getRequiredJwtSecret,
               listUserDownloadsSnapshot, normalizeUserRelativePath, registerFileUpload,
-              resolveDownloadTarget, resolveUserAssetPath, resolveUserUploadPath, sanitizeUploadId
+              resolveDownloadTarget, resolveUserAssetPath, resolveUserUploadPath, sanitizeUploadId, deleteFile
             }
           });
           return;

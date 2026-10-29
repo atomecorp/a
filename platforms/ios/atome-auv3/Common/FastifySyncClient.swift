@@ -36,12 +36,21 @@ final class FastifySyncClient {
             pending.removeAll(); voices.removeAll()
         }
     }
+    // The assistant's provider channels live on their own queue: on the sync queue, a launch's
+    // replay held each voice request and its answer 2-3 s behind it. Touched only on `providerQueue`.
     private var providerChannels: [ObjectIdentifier: ProviderChannel] = [:]
+    private let providerQueue = DispatchQueue(label: "ais.fastify.provider.queue")
     let queue = DispatchQueue(label: "ais.fastify.sync.queue")
     var session: URLSession?
     var syncTask: URLSessionWebSocketTask?
     var configuration: Configuration?
-    private var remoteAccessToken = ""
+    // Written on `queue`, read by both queues (`resolveConfiguration`).
+    private let remoteAccessTokenLock = NSLock()
+    private var remoteAccessTokenValue = ""
+    private var remoteAccessToken: String {
+        get { remoteAccessTokenLock.lock(); defer { remoteAccessTokenLock.unlock() }; return remoteAccessTokenValue }
+        set { remoteAccessTokenLock.lock(); remoteAccessTokenValue = newValue; remoteAccessTokenLock.unlock() }
+    }
     var activePrincipalId = ""
     var outboxTask: URLSessionWebSocketTask?
     var outboxSession: URLSession?
@@ -279,8 +288,7 @@ final class FastifySyncClient {
         projectionNotice?.cancel(); projectionNotice = nil
         registeredSession = false; pendingSubscriptions.removeAll(); pendingReplays = 0
         cancelOutbox(); outboxIsolation = 0
-        providerChannels.values.forEach { $0.close() }
-        providerChannels.removeAll()
+        providerQueue.async { self.providerChannels.values.forEach { $0.close() }; self.providerChannels.removeAll() }
         connected = false
         connecting = false
         subscribedStreams.removeAll()
@@ -337,12 +345,12 @@ final class FastifySyncClient {
         return nil
     }
     func closeProvider(connectionId: ObjectIdentifier) {
-        queue.async { self.providerChannels.removeValue(forKey: connectionId)?.close() }
+        providerQueue.async { self.providerChannels.removeValue(forKey: connectionId)?.close() }
     }
 
     func sendProvider(_ payload: [String: Any], connectionId: ObjectIdentifier, localUserId: String,
                       reply: @escaping ([String: Any]) -> Void) {
-        queue.async {
+        providerQueue.async {
             guard let config = self.resolveConfiguration(), config.localPrincipalId == localUserId else {
                 reply(["type":"ai-provider-response", "requestId":payload["requestId"] ?? NSNull(),
                        "ok":false, "success":false, "error":"provider_principal_unavailable"])
@@ -386,10 +394,10 @@ final class FastifySyncClient {
     private func scheduleProviderHeartbeat(_ id: ObjectIdentifier, channel: ProviderChannel) {
         // Realtime audio bypasses this control socket. Keep it alive even while
         // no tool call is pending, just as the application transport does.
-        queue.asyncAfter(deadline: .now() + 20) { [weak self, weak channel] in
+        providerQueue.asyncAfter(deadline: .now() + 20) { [weak self, weak channel] in
             guard let self, let channel, self.providerChannels[id] === channel else { return }
             channel.task.sendPing { [weak self, weak channel] error in
-                self?.queue.async {
+                self?.providerQueue.async {
                     guard let self, let channel, self.providerChannels[id] === channel else { return }
                     if error != nil { self.providerChannels.removeValue(forKey: id)?.close(); return }
                     self.scheduleProviderHeartbeat(id, channel: channel)
@@ -400,7 +408,7 @@ final class FastifySyncClient {
 
     private func receiveProvider(_ id: ObjectIdentifier, channel: ProviderChannel) {
         channel.task.receive { [weak self] result in
-            self?.queue.async {
+            self?.providerQueue.async {
                 guard let self, self.providerChannels[id]?.task === channel.task else { return }
                 guard let config = self.resolveConfiguration(), config.sameIdentity(as: channel.configuration) else {
                     self.providerChannels.removeValue(forKey: id)?.close(); return

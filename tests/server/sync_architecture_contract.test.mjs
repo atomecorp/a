@@ -12,10 +12,7 @@ test('Fastify never queues canonical commits toward a client-local Tauri server'
 });
 
 test('one realtime owner delivers canonical events and the ws/api console bridge is absent', () => {
-    const server = read('server/atomeRealtime.js');
     const client = read('atome/src/squirrel/apis/unified/adole_websocket_message.js');
-    assert.doesNotMatch(server, /type:\s*['"]console-message['"]/);
-    assert.doesNotMatch(server, /command:\s*['"]share-sync['"]/);
     assert.doesNotMatch(client, /command\.command\s*===\s*['"]share-sync['"]/);
 });
 

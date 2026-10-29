@@ -10,7 +10,14 @@ the established solution before attempting a new implementation.
 
 | Symptom | Folder |
 | --- | --- |
+| A Dashboard list's cover keeps its old words after an action (« Confirmée » after « Annul. ») although its projected record is new; no repaint fixes it | [scene-render-request-lost](scene-render-request-lost/README.md) |
+| A panel on the Dashboard (Devenir coach, Nouvelle vente) draws its body blank once scrolled, though touches land on the hidden rows | [panel-scroll-composite-overflow](panel-scroll-composite-overflow/README.md) |
+| Dashboard footer (Back, bottom field, docked Atom) drawn but not reacting to a touch on a wide screen (iPad, desktop); band tools above work | [footer-untouchable-past-centred-frame](footer-untouchable-past-centred-frame/README.md) |
+| Web dev server: a code change does not show in an open browser (old behaviour after reload), a fresh server shows it | [web-offline-cache-serves-start-code](web-offline-cache-serves-start-code/README.md) |
+| A text being edited (Créer › Texte) or shown large (Capture › Liste) is cut at the right of a line; the chosen font is not the one painted | [laid-text-cut-at-right](laid-text-cut-at-right/README.md) |
 | A BevyUI node partly outside its rounded parent: soft blurred end or dull colour, at random, not fixed by a repaint | [bevy-ui-rounded-clip-overhanging-child](bevy-ui-rounded-clip-overhanging-child/README.md) |
+| eVe home back from a project: the disc alone in the centre, no tile, a touch beside it does nothing (app looks blocked) | [home-back-from-project-disc-alone](home-back-from-project-disc-alone/README.md) |
+| Android: Capture › Vidéo shows no preview and records nothing; Audio and dictated text record nothing (`NotAllowedError` on the microphone) | [android-webview-capture-sound-denied](android-webview-capture-sound-denied/README.md) |
 | eVe home: the home's tiles flash behind a rubric when a plate opens on the stage (Créer › Texte); stretched (ovals), squashed or blank frames when the keyboard rises or falls | [home-tiles-flash-under-rubric](home-tiles-flash-under-rubric/README.md) |
 | A list over the home: after touching a row, its picture shows but the rows stay in place over it and its tools band is missing until the finger moves again | [scroll-refresh-overtakes-tree-update](scroll-refresh-overtakes-tree-update/README.md) |
 | Visio: own tile (or a WebKit correspondent) upside down / sideways on iOS | [webkit-camera-rotation-ignored-by-webgpu](webkit-camera-rotation-ignored-by-webgpu/README.md) |
@@ -23,6 +30,7 @@ the established solution before attempting a new implementation.
 | iOS guest back on the access screen after relaunch; « Mieux dormir » / « Dashboard eVe » duplicated at each « Commencer » | [guest-session-erased-by-preview-frame](guest-session-erased-by-preview-frame/README.md) |
 | A media preview (Médiathèque Lecture, contact takes) shows Pause but is silent | [preview-playback-silent-null-duration](preview-playback-silent-null-duration/README.md) |
 | Tauri: project opening 10–25 s; return to the home stuck grey in `transition` | [home-return-stuck-in-transition](home-return-stuck-in-transition/README.md) |
+| iOS: opening a project shows a grey page for seconds; the List view jumps in later; the home reopens the assistant on return | [project-opening-grey-and-slow](project-opening-grey-and-slow/README.md) |
 | Home/projects repeatedly reload after restart or suspension; interrupted iOS reconstruction restarts at zero | [durable-startup-sync](durable-startup-sync/README.md) |
 | Home opens another Dashboard than chosen; false « liaison avec le serveur a échoué »; lift on a channel does nothing; TV sound without picture | [home-wrong-dashboard-and-false-link-errors](home-wrong-dashboard-and-false-link-errors/README.md) |
 | Input calibration reports no impulse on a high-latency output | [calibration-impulse-unheard-high-latency](calibration-impulse-unheard-high-latency/README.md) |
@@ -48,7 +56,7 @@ the established solution before attempting a new implementation.
 | Dashboard wallpaper returns to a default or previous choice; project default greys diverge | [wallpaper-selection-races](wallpaper-selection-races/README.md) |
 | Nested User accordions shift or lose their open anchor; List Play covers the hierarchy cap | [nested-panel-anchor-and-row-seams](nested-panel-anchor-and-row-seams/README.md) |
 | Native builds repeatedly fill the disk with Rust objects and per-run Xcode caches | [build-cache-disk-exhaustion](build-cache-disk-exhaustion/README.md) |
-| Edges between adjacent blurred glass cards flicker over an animated wallpaper | [coplanar-glass-flicker](coplanar-glass-flicker/README.md) |
+| Edges between adjacent blurred glass cards flicker over an animated wallpaper; the row above a selected panel row flickers | [coplanar-glass-flicker](coplanar-glass-flicker/README.md) |
 | Logout loses the welcome screen; Billing actions stall; Dashboard restoration flashes gray | [first-launch-logout-and-restore](first-launch-logout-and-restore/README.md) |
 | Guest project rail remains absent and a browser update retains the old reader | [guest-contextual-access](guest-contextual-access/README.md) |
 | Expert List opens without its main menu while catalog registration replaces the first render | [main-menu-projection-admission](main-menu-projection-admission/README.md) |
@@ -78,7 +86,7 @@ the established solution before attempting a new implementation.
 | iPhone assistant answers nothing and shows nothing although the app looks signed in | [ios-assistant-silent-dead-remote-session](ios-assistant-silent-dead-remote-session/README.md) |
 | Dashboard rows (contacts, appointments, health) vanish and come back at boot | [dashboard-lane-flicker](dashboard-lane-flicker/README.md) |
 | Many contacts missing for good, photos missing, editing one contact deletes others | [contacts-lost-by-global-replace](contacts-lost-by-global-replace/README.md) |
-| A new device or reinstalled browser restores nothing; re-imports duplicate contacts/appointments; old duplicate cards remain (merge on request); a recovered device lacks passwords/keys/settings or shows the first launch again (Tauri/iOS) | [new-device-restores-nothing](new-device-restores-nothing/README.md) |
+| A new device or reinstalled browser restores nothing; re-imports duplicate contacts/appointments; old duplicate cards remain (merge on request); a recovered device lacks passwords/keys/settings or shows the first launch again (Tauri/iOS); after an app reinstall the contact favourites, name and photo are gone | [new-device-restores-nothing](new-device-restores-nothing/README.md) |
 | Contact favorites lost; Dashboard rows reload/flicker each visit; one heart shows a person several times | [home-panel-save-erases-favorites](home-panel-save-erases-favorites/README.md) |
 | Project → Dashboard pauses then snaps to the wallpaper | [dashboard-transition-jump](dashboard-transition-jump/README.md) |
 | eVe home: choosing in a rubric (a project…) shows the home before the destination; closing a panel (a recording's list, Créer › Texte, any level) lands on the home instead of the rubric | [rubric-choice-goes-back-home](rubric-choice-goes-back-home/README.md) |

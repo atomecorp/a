@@ -9,7 +9,8 @@ final class AppNativeStreamingView {
     static let shared = AppNativeStreamingView()
 
     private static let commands: Set<String> = ["streaming_view_open", "streaming_view_place", "streaming_view_front",
-                                                "streaming_view_media", "streaming_view_close"]
+                                                "streaming_view_media", "streaming_view_navigate", "streaming_view_page",
+                                                "streaming_view_close"]
     private weak var host: WKWebView?
 
     static func canHandle(command: String) -> Bool { commands.contains(command) }

@@ -5,7 +5,7 @@ import { promises as fs, createReadStream, existsSync, mkdirSync } from 'fs';
 import { execFile } from 'child_process';
 import { issueMediaToken } from './media_capability.js';
 import { requiredJwtSecret as getRequiredJwtSecret } from './wsApiIdentity.js';
-import { listUploadsForUser, resolveDownloadTarget } from './server_uploads.js';
+import { listUserDownloads, resolveDownloadTarget } from './server_uploads.js';
 import { resolveVideoPlaybackTarget } from './server_media.js';
 
 export function registerMediaTokenRoute(server, { validateToken }) {
@@ -22,11 +22,11 @@ export function registerMediaTokenRoute(server, { validateToken }) {
   });
 }
 
-export function registerMediaServingRoutes(server, { resolveUploadIdentity, resolveMediaDownloadIdentity }) {
+export function registerMediaServingRoutes(server, { resolveUploadIdentity, resolveMediaDownloadIdentity, userVaultRouter }) {
   server.get('/api/uploads', async (request, reply) => {
     try {
       const { userId } = await resolveUploadIdentity(request);
-      const files = await listUploadsForUser(userId);
+      const files = await listUserDownloads(userId, { vaultRouter: userVaultRouter });
       return { success: true, files };
     } catch (error) {
       request.log.error({ err: error }, 'Unable to list uploads');

@@ -36,7 +36,7 @@ export async function readPersistedCommunicationMessage(vaultRouter, owner, mess
     return state?.properties || null;
 }
 
-export async function readConversation(vaultRouter, userId, { contactId, cursor = null, messageId = null, limit = 30 } = {}) {
+export async function readConversation(vaultRouter, userId, { contactId, cursor = null, messageId = null, limit = 30, listingId = null } = {}) {
     if (!vaultRouter) throw new Error('conversation_vault_unavailable');
     if (typeof contactId !== 'string' || !contactId.trim() || contactId.length > 200) throw new Error('conversation_contact_invalid');
     limit = Math.max(1, Math.min(100, Math.trunc(Number(limit) || 30)));
@@ -53,10 +53,41 @@ export async function readConversation(vaultRouter, userId, { contactId, cursor 
         }
         oldCursor = old.nextCursor;
     } while (oldCursor);
-    const page = await vaultRouter.provider.request(userId, 'communication:list', { contactId, cursor, messageId, limit });
+    const page = await vaultRouter.provider.request(userId, 'communication:list', { contactId, cursor, messageId, limit, ...(listingId ? { listingId } : {}) });
     const items = await Promise.all((page?.items || []).map(async (item) => ({ ...item,
         media: await readableMedia(vaultRouter, userId, item.atome_ids) })));
     return { ...page, items };
+}
+
+// Deleted for its reader only: each message Atome of the reader's own vault is deleted (an
+// appended `delete` event; the other participant keeps their copy). `all`: the whole
+// conversation with `contactId`, page after page; otherwise the `messageIds` given.
+export async function deleteConversationMessages(vaultRouter, userId, { contactId, messageIds = [], all = false } = {}) {
+    if (!vaultRouter) throw new Error('conversation_vault_unavailable');
+    if (typeof contactId !== 'string' || !contactId.trim() || contactId.length > 200) throw new Error('conversation_contact_invalid');
+    let ids = [...new Set((Array.isArray(messageIds) ? messageIds : []).map(id => String(id || '').trim()).filter(Boolean))];
+    if (all) {
+        ids = [];
+        let cursor = null;
+        do {
+            const page = await vaultRouter.provider.request(userId, 'communication:list', { contactId, cursor, limit: 100 });
+            ids.push(...(page?.items || []).map(item => String(item.message_id || '')).filter(Boolean));
+            cursor = page?.nextCursor || null;
+        } while (cursor);
+    }
+    if (!ids.length || ids.some(id => id.length > 200)) throw new Error('conversation_delete_target_required');
+    let deleted = 0;
+    for (const messageId of ids) {
+        const atomeId = localId(userId, messageId);
+        const message = (await vaultRouter.getState(userId, atomeId))?.properties;
+        // Only a message of this conversation: from one participant to the other. Its delete event
+        // has a stable id, so deleting it again appends nothing.
+        if (!message || ![message.from_id, message.to_user_id].includes(contactId)) continue;
+        await vaultRouter.commit(userId, { id: `message_delete_${identity(userId, messageId)}`, atome_id: atomeId, kind: 'delete',
+            payload: {}, actor: { type: 'user', id: userId }, source: 'communication.conversation.delete' });
+        deleted += 1;
+    }
+    return { deleted };
 }
 
 // What a participant needs to play the Atomes a message carries, read through the vault

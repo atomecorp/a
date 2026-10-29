@@ -408,6 +408,7 @@ tests/native/*
 !tests/eve/objective_time_budget_contract.test.mjs
 !tests/eve/program_collection_contract.test.mjs
 !tests/eve/program_activity_configuration.test.mjs
+!tests/eve/program_brick_catalog.test.mjs
 
 # Original-resolution rendering and shared palette ownership regressions
 !tests/eve/media_zoom_resolution.test.mjs
@@ -473,6 +474,7 @@ tests/native/*
 !tests/server/remote_command_relay.test.mjs
 !tests/squirrel/
 tests/squirrel/*
+!tests/squirrel/device_name.test.mjs
 !tests/squirrel/remote_command.test.mjs
 !tests/eve/assistant_surface_tools.test.mjs
 # Media handoff (what plays moves to another device and goes on there)

@@ -164,6 +164,10 @@ export class UserVaultRouter {
         if (String(ownerId) !== actorId && await this.vaultPrincipalForAtome(normalized.atome_id, null)) {
             await this.authorizeSharedWrite(actorId, normalized, ownerId);
         }
+        // Created through a share, the object is its vault's: the patch names that owner, never the writer.
+        if (String(ownerId) !== actorId && normalized.kind === 'set' && !await this.vaultPrincipalForAtome(normalized.atome_id, null)) {
+            normalized.payload = { ...(normalized.payload || {}), props: { ...(normalized.payload?.props || {}), owner_id: ownerId } };
+        }
         const committed = await this.provider.request(ownerId, 'event:commit', {
             event: normalized,
             source: normalized.source,
@@ -190,6 +194,12 @@ export class UserVaultRouter {
     async teleportHostedAtomes(ownerId, surfaceId) {
         await this.provision(ownerId);
         return this.provider.request(ownerId, 'teleport:hosted', { surface_id: surfaceId });
+    }
+
+    // The Atomes of the owner's vault that describe these stored files (`files:described`).
+    async describeFiles(ownerId, fileNames) {
+        await this.provision(ownerId);
+        return this.provider.request(ownerId, 'files:described', { file_names: fileNames });
     }
 
     async getState(requestingPrincipalId, atomeId) {

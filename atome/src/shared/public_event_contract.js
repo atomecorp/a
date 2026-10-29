@@ -12,13 +12,16 @@ export const PUBLIC_EVENT_HORIZON_DAYS = 60;
 // The poster is a small picture carried by the publication itself (a JPEG data URL).
 export const PUBLIC_EVENT_POSTER_MAX_PX = 360;
 export const PUBLIC_EVENT_POSTER_MAX_CHARS = 120_000;
+// The public text of the announcement (its « Présentation » card); the event's Note stays private.
+export const PUBLIC_EVENT_PRESENTATION_MAX_CHARS = 600;
 export const PUBLIC_EVENT_STATUSES = Object.freeze(['pending', 'live', 'refused', 'hidden']);
 export const PUBLIC_EVENT_REASONS = Object.freeze(['quota', 'suspended', 'invalid', 'reported', 'past']);
 export const PUBLIC_EVENT_REPORT_REASONS = Object.freeze(['spam', 'false', 'offensive', 'other']);
 
 const text = (value, max = 200) => String(value == null ? '' : value).trim().slice(0, max);
+// No position stays none: a publication normalised again keeps its missing place (Number(null) would be 0).
 const coordinate = (value, limit) => {
-    const number = Number(value);
+    const number = value === null || value === '' ? NaN : Number(value);
     return Number.isFinite(number) && Math.abs(number) <= limit ? Math.round(number * 1e6) / 1e6 : null;
 };
 const httpsUrl = (value) => {
@@ -38,7 +41,7 @@ const normalizePrice = (value) => {
     const amount = Math.round(Number(price.amount) * 100) / 100;
     return Number.isFinite(amount) && amount > 0 ? { amount, currency: /^[A-Z]{3}$/.test(text(price.currency)) ? text(price.currency) : 'EUR' } : { free: true };
 };
-const normalizePlace = (value) => {
+export const normalizePlace = (value) => {
     const place = value && typeof value === 'object' ? value : {};
     return { label: text(place.label), address: text(place.address, 300), city: text(place.city, 120),
         lat: coordinate(place.lat, 90), lon: coordinate(place.lon, 180) };
@@ -53,8 +56,8 @@ export const normalizePublication = (value) => {
     const categories = [...new Set((Array.isArray(source.categories) ? source.categories : []).map(slug => text(slug, 40))
         .filter(slug => ACTIVITY_CATEGORY_SLUGS.includes(slug)))].slice(0, PUBLIC_EVENT_MAX_CATEGORIES);
     return { visibility: source.visibility === 'public' ? 'public' : 'private', categories, place: normalizePlace(source.place),
-        poster: normalizePoster(source.poster), price: normalizePrice(source.price), ticket_url: httpsUrl(source.ticket_url),
-        url: httpsUrl(source.url) };
+        presentation: text(source.presentation, PUBLIC_EVENT_PRESENTATION_MAX_CHARS), poster: normalizePoster(source.poster),
+        price: normalizePrice(source.price), ticket_url: httpsUrl(source.ticket_url), url: httpsUrl(source.url) };
 };
 
 // The server's word on a publication (`publication_status` property, JSON).

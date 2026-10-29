@@ -77,7 +77,7 @@ export function createPublicEvents({ store, guard, vaultRouter, syncRuntime = nu
             await leave(atomeId);
             return writeStatus(ownerId, atomeId, properties, 'refused', 'past');
         }
-        const payload = { title: event.title, summary: text(properties.description, 600), allDay: event.allDay, recurring,
+        const payload = { title: event.title, summary: publication.presentation, allDay: event.allDay, recurring,
             categories: publication.categories, place: publication.place, price: publication.price, poster: publication.poster,
             ticketUrl: publication.ticket_url, url: publication.url };
         await store.put({ eventId: atomeId, authorId: ownerId, authorName: text(await findUserName(ownerId), 80), payload, occurrences,
@@ -110,6 +110,16 @@ export function createPublicEvents({ store, guard, vaultRouter, syncRuntime = nu
     const priceLabel = (price, language) => (price?.amount
         ? new Intl.NumberFormat(language || 'fr', { style: 'currency', currency: price.currency || 'EUR' }).format(price.amount) : '');
 
+    // A row of the base as the reader receives it: the public fields only, its distance from `from` when known.
+    const entryOf = (row, payload, distance, language) => ({ id: `declared_${row.occurrence_id}`, kind: 'event', declared: true, eventId: row.event_id,
+        authorId: String(row.author_id), organizer: text(row.author_name, 80), title: payload.title, summary: payload.summary || '',
+        start: row.start_at, end: row.end_at, place: payload.place?.label || '', address: payload.place?.address || '', city: payload.place?.city || '',
+        lat: Number(row.lat), lon: Number(row.lon), distanceKm: distance, free: row.free === 1,
+        price: priceLabel(payload.price, language), categories: payload.categories || [], image: payload.poster || '',
+        url: payload.url || '', ticketUrl: payload.ticketUrl || '' });
+    const blocked = async (viewerId, row) => !!(viewerId && relations && String(viewerId) !== String(row.author_id)
+        && await relations.blockedEitherWay(viewerId, row.author_id));
+
     // `shows-nearby` kind `declared`: the occurrences of `categories` within `radiusKm`, soonest first, a page at a time.
     const nearby = async ({ lat, lon, radiusKm, categories = [], query = '', offset = 0, language = 'fr', viewerId = null }) => {
         await refresh();
@@ -121,16 +131,21 @@ export function createPublicEvents({ store, guard, vaultRouter, syncRuntime = nu
             if (distance == null || distance > radiusKm) continue;
             if (!categories.some(slug => String(row.categories).includes(`,${slug},`))) continue;
             if (needle && !`${payload.title} ${payload.place?.label} ${payload.place?.city} ${row.author_name}`.toLowerCase().includes(needle)) continue;
-            if (viewerId && relations && String(viewerId) !== String(row.author_id) && await relations.blockedEitherWay(viewerId, row.author_id)) continue;
-            kept.push({ id: `declared_${row.occurrence_id}`, kind: 'event', declared: true, eventId: row.event_id, authorId: String(row.author_id),
-                organizer: text(row.author_name, 80), title: payload.title, summary: payload.summary || '', start: row.start_at, end: row.end_at,
-                place: payload.place?.label || '', address: payload.place?.address || '', city: payload.place?.city || '',
-                lat: Number(row.lat), lon: Number(row.lon), distanceKm: distance, free: row.free === 1,
-                price: priceLabel(payload.price, language), categories: payload.categories || [], image: payload.poster || '',
-                url: payload.url || '', ticketUrl: payload.ticketUrl || '' });
+            if (await blocked(viewerId, row)) continue;
+            kept.push(entryOf(row, payload, distance, language));
         }
         const page = kept.slice(offset, offset + PAGE_SIZE);
         return { entries: page, next: offset + PAGE_SIZE < kept.length ? String(offset + PAGE_SIZE) : '' };
+    };
+
+    // `shows-nearby` kind `declared` with `eventId`: one announcement by its link, its next occurrence (none when
+    // withdrawn, hidden, past or of someone the reader blocked).
+    const one = async ({ eventId, lat = null, lon = null, language = 'fr', viewerId = null }) => {
+        await refresh();
+        const row = await store.upcoming(text(eventId, 200), now());
+        if (!row || await blocked(viewerId, row)) return { entries: [], next: '' };
+        const from = Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null;
+        return { entries: [entryOf(row, parse(row.payload_json) || {}, from ? distanceKm(from, Number(row.lat), Number(row.lon)) : null, language)], next: '' };
     };
 
     // A report by an account (never on their own event); three distinct ones hide the event.
@@ -155,5 +170,5 @@ export function createPublicEvents({ store, guard, vaultRouter, syncRuntime = nu
         return { ok: false, error: 'events_action_invalid' };
     };
 
-    return { project, afterCommit, nearby, report, handle, refresh };
+    return { project, afterCommit, nearby, one, report, handle, refresh };
 }

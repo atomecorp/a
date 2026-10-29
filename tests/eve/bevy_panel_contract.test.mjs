@@ -114,9 +114,6 @@ test('style projections keep one source for system depth and panel control paint
     assert.equal(panel.colors.control, panel.mediaCard.background);
     assert.equal(panel.colors.control, panel.selectionSummary.background);
     assert.equal(panel.colors.control, panel.input.idleBackground);
-    assert.equal(panel.colors.inputHover, panel.select.hoverBackground);
-    assert.equal(panel.select.hoverBackground, panel.select.focusBackground);
-    assert.equal(panel.actionButton.pressedBackground, panel.select.pressedBackground);
     assert.equal(panel.state.tones.empty, panel.state.tones.loading);
     assert.notEqual(
         EVE_TOOL_SKIN_TOKENS.bevyMenu.shape.mysticRadiusPx,

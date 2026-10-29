@@ -187,6 +187,10 @@
   "tests/eve/first_launch_phone_payment.test.mjs",
   "tests/eve/first_launch_runtime.test.mjs",
   "tests/eve/first_launch_workspace_restore.test.mjs",
+  "tests/eve/food_composition.test.mjs",
+  "tests/eve/nutrition_calculation.test.mjs",
+  "tests/eve/food_selection.test.mjs",
+  "tests/eve/program_allergens.test.mjs",
   "tests/eve/gps_mystic_stage.test.mjs",
   "tests/eve/gps_navigation_engine.test.mjs",
   "tests/eve/gps_navigation_owner.test.mjs",
@@ -265,6 +269,7 @@
   "tests/eve/personal_import_lifecycle.test.mjs",
   "tests/eve/photo_capture_persistence_contract.test.mjs",
   "tests/eve/program_activity_configuration.test.mjs",
+  "tests/eve/program_brick_catalog.test.mjs",
   "tests/eve/program_collection_contract.test.mjs",
   "tests/eve/program_nutrition.test.mjs",
   "tests/eve/program_session_contract.test.mjs",
@@ -430,6 +435,7 @@
   "tests/server/gesture_history_projection.test.mjs",
   "tests/server/history_gesture_transaction.test.mjs",
   "tests/server/notification_stack_persistence.test.mjs",
+  "tests/server/open_food_facts.test.mjs",
   "tests/server/permission_query_scope.test.mjs",
   "tests/server/provider_model_catalog.test.mjs",
   "tests/server/provider_shared_grant.test.mjs",
@@ -446,5 +452,6 @@
   "tests/social/social_delivery.test.mjs",
   "tests/social/social_media_preparation.test.mjs",
   "tests/social/social_ws_channel.test.mjs",
+  "tests/squirrel/device_name.test.mjs",
   "tests/squirrel/remote_command.test.mjs"
 ]

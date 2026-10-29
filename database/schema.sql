@@ -315,8 +315,30 @@ CREATE TABLE IF NOT EXISTS news_publications (
     audience_json TEXT NOT NULL DEFAULT '"all"',
     payload_json TEXT,
     media_json TEXT NOT NULL DEFAULT '[]',
+    -- VideoTrain (server/news_thread.js): its thread, origin, parent, the moment answered, its withdrawal.
+    thread_ref TEXT,
+    root_id TEXT,
+    parent_id TEXT,
+    anchor_ms INTEGER,
+    retired_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- One vote per voter and contribution; one report per reader and contribution.
+CREATE TABLE IF NOT EXISTS news_votes (
+    news_id TEXT NOT NULL,
+    voter_id TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY(news_id, voter_id)
+);
+
+CREATE TABLE IF NOT EXISTS news_reports (
+    news_id TEXT NOT NULL,
+    reporter_id TEXT NOT NULL,
+    reason TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY(news_id, reporter_id)
 );
 
 CREATE TABLE IF NOT EXISTS news_subscriptions (
@@ -334,6 +356,7 @@ CREATE TABLE IF NOT EXISTS news_tags (
 );
 
 CREATE INDEX IF NOT EXISTS idx_news_publications_author ON news_publications(author_id);
+CREATE INDEX IF NOT EXISTS idx_news_publications_thread ON news_publications(thread_ref, root_id);
 
 -- Communities (server/communities.js): a host account, then the members' opt-in. A
 -- community's posts are News publications whose audience is the community.
@@ -693,7 +716,10 @@ CREATE TABLE IF NOT EXISTS auth_pair_requests (
     approved_by TEXT,
     created_ms INTEGER NOT NULL,
     expires_ms INTEGER NOT NULL,
-    failed_attempts INTEGER NOT NULL DEFAULT 0
+    failed_attempts INTEGER NOT NULL DEFAULT 0,
+    -- The new device's ECDH public key, then the account's backup keys sealed for it by the approver.
+    requester_backup_key TEXT,
+    backup_keys TEXT
 );
 CREATE INDEX IF NOT EXISTS auth_pair_expiry ON auth_pair_requests(expires_ms);
 CREATE INDEX IF NOT EXISTS auth_pair_code ON auth_pair_requests(code_hash, state);
@@ -702,11 +728,13 @@ CREATE INDEX IF NOT EXISTS auth_pair_target ON auth_pair_requests(target_princip
 -- Only a verifier of the recovery code is kept: SHA-256 of a domain-separated
 -- principal + code. A new code replaces the previous one.
 -- `lookup` finds the account from the code alone (domain-separated hash of the code).
+-- `backup_keys`: the account's backup keys wrapped by a key only the code derives (never openable here).
 CREATE TABLE IF NOT EXISTS auth_recovery_codes (
     principal_id TEXT PRIMARY KEY,
     verifier TEXT NOT NULL,
     created_ms INTEGER NOT NULL,
-    lookup TEXT
+    lookup TEXT,
+    backup_keys TEXT
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_auth_recovery_codes_lookup ON auth_recovery_codes(lookup);
 CREATE TABLE IF NOT EXISTS auth_recovery_requests (

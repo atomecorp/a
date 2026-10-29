@@ -19,6 +19,10 @@ final class LocalHTTPServer {
 
     private var listener: NWListener?
     private let queue = DispatchQueue(label: "local.http.server.queue")
+    // Store work (SQLite) of the WebSocket frames, in their order. It ran on `queue`, so one
+    // long read (a cold page of a thousand rows took 3 s at launch) held every frame of every
+    // connection behind it, the assistant's relay requests included.
+    private let storeQueue = DispatchQueue(label: "local.http.server.store")
     private(set) var port: UInt16?
     private var started = false
     // Failed reopenings of the same port; past two, any free port is taken and announced.
@@ -570,27 +574,26 @@ final class LocalHTTPServer {
         }
 
         if type == "atome" {
-            let response = AiSRuntime.handleAtomeMessage(payload)
-            sendWebSocketJson(response, on: connection)
+            answerFromStore(on: connection) { AiSRuntime.handleAtomeMessage(payload) }
             return
         }
 
         if type == "events" {
-            let response = AiSRuntime.handleEventsMessage(payload)
-            sendWebSocketJson(response, on: connection)
-            FastifySyncClient.shared.pushCommittedResponse(response)
+            answerFromStore(on: connection, {
+                let response = AiSRuntime.handleEventsMessage(payload)
+                FastifySyncClient.shared.pushCommittedResponse(response)
+                return response
+            })
             return
         }
 
         if type == "state-current" {
-            let response = AiSRuntime.handleStateCurrentMessage(payload)
-            sendWebSocketJson(response, on: connection)
+            answerFromStore(on: connection) { AiSRuntime.handleStateCurrentMessage(payload) }
             return
         }
 
         if type == "snapshot" {
-            let response = AiSRuntime.handleSnapshotMessage(payload)
-            sendWebSocketJson(response, on: connection)
+            answerFromStore(on: connection) { AiSRuntime.handleSnapshotMessage(payload) }
             return
         }
 
@@ -610,8 +613,7 @@ final class LocalHTTPServer {
         }
 
         if type == "sync" {
-            let response = AiSRuntime.handleSyncMessage(payload)
-            sendWebSocketJson(response, on: connection)
+            answerFromStore(on: connection) { AiSRuntime.handleSyncMessage(payload) }
             return
         }
 
@@ -658,12 +660,25 @@ final class LocalHTTPServer {
     }
 
     private func sendWebSocketJson(_ payload: [String: Any], on connection: NWConnection) {
-        guard JSONSerialization.isValidJSONObject(payload) else { return }
-        guard let data = try? JSONSerialization.data(withJSONObject: payload, options: []) else { return }
-        // The serialized JSON is already the exact UTF-8 frame payload. Routing it
-        // through String and back allocated two further full copies of every
-        // response, which is unaffordable for large state_current lists.
+        guard let data = Self.webSocketJsonData(payload) else { return }
         sendWebSocketFrame(opcode: 0x1, payload: data, on: connection)
+    }
+
+    // The serialized JSON is already the exact UTF-8 frame payload. Routing it
+    // through String and back allocated two further full copies of every
+    // response, which is unaffordable for large state_current lists.
+    private static func webSocketJsonData(_ payload: [String: Any]) -> Data? {
+        guard JSONSerialization.isValidJSONObject(payload) else { return nil }
+        return try? JSONSerialization.data(withJSONObject: payload, options: [])
+    }
+
+    // The frame's store work runs on `storeQueue` (its order kept); its answer is encoded
+    // there too, a large list included, and only the send returns to `queue`.
+    private func answerFromStore(on connection: NWConnection, _ work: @escaping () -> [String: Any]) {
+        storeQueue.async { [weak self] in
+            guard let data = Self.webSocketJsonData(work()) else { return }
+            self?.queue.async { self?.sendWebSocketFrame(opcode: 0x1, payload: data, on: connection) }
+        }
     }
 
     private func sendWebSocketPong(_ payload: Data, on connection: NWConnection) {

@@ -11,16 +11,19 @@ import HealthKit
 //   chest strap) measure at workout rate. Collected samples are saved with the
 //   workout; the page is only told which monitor changed (no value).
 // - earlier iOS: an HKWorkoutBuilder that saves the same workout at the end.
-// Writes are limited to `shareTypes`; nothing is ever deleted. One workout at a
+// It also writes a meditation's mindful minutes (eVe/domains/programs/brick_session_runtime.js), one
+// sample once that session is saved. Writes are limited to `shareTypes` and `mindfulType`; nothing is ever deleted. One workout at a
 // time; a page load, channel close or context reset discards it.
 final class HealthWorkoutRecorder {
     static let commands: Set<String> = [
-        "health_workout_prepare", "health_workout_start", "health_workout_pause", "health_workout_resume", "health_workout_end"
+        "health_workout_prepare", "health_workout_start", "health_workout_pause", "health_workout_resume", "health_workout_end",
+        "health_mindful_prepare", "health_mindful_save"
     ]
     private static let log = Logger(subsystem: "atome", category: "HealthWorkout")
 
     #if canImport(HealthKit)
     static let shareTypes: Set<HKSampleType> = [HKObjectType.workoutType(), HKQuantityType(.heartRate), HKQuantityType(.activeEnergyBurned)]
+    static let mindfulType = HKCategoryType(.mindfulSession)
     // Monitor ids (atome/src/squirrel/health/health_catalog.js) of the collected types.
     private static let monitors: [HKSampleType: String] = [HKQuantityType(.heartRate): "heart_rate", HKQuantityType(.activeEnergyBurned): "active_energy"]
 
@@ -41,12 +44,16 @@ final class HealthWorkoutRecorder {
         let fail: (String) -> Void = { code in reply(["ok": false, "error": code]) }
         guard HKHealthStore.isHealthDataAvailable() else { return fail("health_store_unavailable") }
         if command == "health_workout_prepare" { return prepare(reply: reply, fail: fail) }
+        if command == "health_mindful_prepare" { return prepareMindful(reply: reply, fail: fail) }
         guard let session = payload["session"] as? String, !session.isEmpty, session.count <= 300 else { return fail("health_workout_invalid") }
         let at = (payload["at"] as? Double).map { Date(timeIntervalSince1970: $0 / 1000) } ?? Date()
         queue.async {
             switch command {
             case "health_workout_start": self.start(session, activity: payload["activity"] as? String ?? "", at: at, reply: reply, fail: fail)
             case "health_workout_end": self.end(session, at: at, save: payload["save"] as? Bool == true, reply: reply, fail: fail)
+            case "health_mindful_save":
+                let start = (payload["start"] as? Double).map { Date(timeIntervalSince1970: $0 / 1000) }
+                self.saveMindful(session, start: start, end: at, reply: reply, fail: fail)
             default: self.pauseOrResume(session, pause: command == "health_workout_pause", at: at, reply: reply, fail: fail)
             }
         }
@@ -75,6 +82,33 @@ final class HealthWorkoutRecorder {
                     writable()
                 }
             }
+        }
+    }
+
+    // The meditation's own grant, asked when its session is prepared (never during a Sport session).
+    private func prepareMindful(reply: @escaping ([String: Any]) -> Void, fail: @escaping (String) -> Void) {
+        let share: Set<HKSampleType> = [Self.mindfulType]
+        let writable = { reply(["writable": self.store.authorizationStatus(for: Self.mindfulType) == .sharingAuthorized]) }
+        store.getRequestStatusForAuthorization(toShare: share, read: []) { status, error in
+            if error != nil || status == .unknown { return fail("health_authorization_status_unknown") }
+            guard status == .shouldRequest else { return writable() }
+            DispatchQueue.main.async {
+                self.store.requestAuthorization(toShare: share, read: []) { success, error in
+                    if !success || error != nil { return fail("healthkit_\(AppNativeHealthController.statusCode(error))") }
+                    writable()
+                }
+            }
+        }
+    }
+
+    // The eVe session id identifies the sample: saving it again replaces it.
+    private func saveMindful(_ session: String, start: Date?, end: Date, reply: @escaping ([String: Any]) -> Void, fail: @escaping (String) -> Void) {
+        guard let start, end > start else { return fail("health_mindful_invalid") }
+        guard store.authorizationStatus(for: Self.mindfulType) == .sharingAuthorized else { return fail("health_mindful_write_denied") }
+        let sample = HKCategorySample(type: Self.mindfulType, value: HKCategoryValue.notApplicable.rawValue, start: start, end: end,
+            metadata: [HKMetadataKeySyncIdentifier: session, HKMetadataKeySyncVersion: 1])
+        store.save(sample) { success, error in
+            success ? reply(["saved": true]) : fail("healthkit_\(AppNativeHealthController.statusCode(error))")
         }
     }
 

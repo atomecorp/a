@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { publicDeviceKey, randomHandle, reject, requireHandle } from './auth_link_security.js';
+import { backupKeysDigest, backupKeysOf, publicDeviceKey, randomHandle, reject, requireHandle } from './auth_link_security.js';
 import { normalizeDeviceMeta, resolveDeviceClass, PROBATION_MS } from './auth_devices.js';
 
 export const PAIR_TTL_MS = 10 * 60 * 1000;
@@ -29,7 +29,8 @@ export function createPairing({ query, transaction, proof, sessions, devices, ha
         return row;
     };
     const describe = (row) => ({ pairId: row.request_id, kind: row.kind, ...JSON.parse(row.device_meta),
-        deviceClass: row.device_class, createdAt: row.created_ms, expiresAt: row.expires_ms, choices: JSON.parse(row.choices) });
+        deviceClass: row.device_class, createdAt: row.created_ms, expiresAt: row.expires_ms, choices: JSON.parse(row.choices),
+        ...(row.requester_backup_key ? { backupKey: JSON.parse(row.requester_backup_key) } : {}) });
     async function startChallenge({ sessionKey }, network) {
         const { keyId } = publicDeviceKey(sessionKey);
         await proof.limit(`pair-challenge:${proof.keyedIndex(String(network))}`, 30, 600000);
@@ -40,6 +41,8 @@ export function createPairing({ query, transaction, proof, sessions, devices, ha
         const { keyId, jwk } = publicDeviceKey(input.sessionKey);
         const meta = normalizeDeviceMeta(input.deviceMeta);
         const deviceClass = resolveDeviceClass(meta.platform, input.deviceClass);
+        // The new device's key for the backup keys (a personal device only: a shared one never holds them).
+        const backupKey = input.backupKey && deviceClass === 'personal' ? publicDeviceKey(input.backupKey).jwk : null;
         await proof.cleanup();
         const outcome = await transaction(async () => {
             await proof.limit(`pair-start:${proof.keyedIndex(String(network))}`, 10, 600000);
@@ -65,9 +68,10 @@ export function createPairing({ query, transaction, proof, sessions, devices, ha
             const row = { request_id: randomHandle(), requester_device_id: devices.newDeviceId(), expires_ms: now() + PAIR_TTL_MS };
             await query('run', `INSERT INTO auth_pair_requests (request_id, kind, requester_device_id, requester_session_key,
                 requester_approve_key, device_meta, device_class, code_hash, match_number, choices, target_principal, state,
-                approved_by, created_ms, expires_ms, failed_attempts) VALUES (?, 'enroll', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NULL, ?, ?, 0)`,
+                approved_by, created_ms, expires_ms, failed_attempts, requester_backup_key) VALUES (?, 'enroll', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NULL, ?, ?, 0, ?)`,
             [row.request_id, row.requester_device_id, JSON.stringify({ keyId, jwk, connectionProof: input.connectionProof === true }), approve ? JSON.stringify(approve) : null,
-                JSON.stringify(meta), deviceClass, codeHash(code), match, JSON.stringify(matchChoices(match)), target, now(), row.expires_ms]);
+                JSON.stringify(meta), deviceClass, codeHash(code), match, JSON.stringify(matchChoices(match)), target, now(), row.expires_ms,
+                backupKey ? JSON.stringify(backupKey) : null]);
             await proof.audit('pair_started', target, row.request_id);
             return { ...row, code, match, target };
         });
@@ -150,27 +154,31 @@ export function createPairing({ query, transaction, proof, sessions, devices, ha
         if (row.target_principal !== claims.sub || row.state !== 'pending') reject('auth_pair_unknown');
         return { ok: true, request: describe(row) };
     }
-    const subjectFor = (row, choice) => ({ pairId: row.request_id, requesterSessionKeyId: JSON.parse(row.requester_session_key).keyId,
-        requesterApproveKeyId: row.requester_approve_key ? JSON.parse(row.requester_approve_key).keyId : null, choice });
+    const subjectFor = (row, choice, backup) => ({ pairId: row.request_id, requesterSessionKeyId: JSON.parse(row.requester_session_key).keyId,
+        requesterApproveKeyId: row.requester_approve_key ? JSON.parse(row.requester_approve_key).keyId : null, choice, backup });
     async function approveChallenge(input) {
         const row = await read(input.pairId);
         const session = await sessions.read(input.sessionId);
         if (row.state !== 'pending' || row.target_principal !== session.principal_id) reject('auth_pair_unknown');
-        return accounts.approvalChallenge({ ...input, purpose: 'pair-approve', subject: subjectFor(row, Number(input.choice)) });
+        if (!/^([a-f0-9]{64}|-)$/.test(String(input.backup))) reject('auth_request_invalid');
+        return accounts.approvalChallenge({ ...input, purpose: 'pair-approve', subject: subjectFor(row, Number(input.choice), input.backup) });
     }
     async function approve(input) {
         const choice = Number(input.choice);
+        const backupKeys = backupKeysOf(input.backupKeys);
         const outcome = await transaction(async () => {
             const row = await read(input.pairId);
-            const { session, deviceId } = await accounts.authorize(input, 'pair-approve', subjectFor(row, choice));
+            const { session, deviceId } = await accounts.authorize(input, 'pair-approve', subjectFor(row, choice, backupKeysDigest(backupKeys)));
+            // Backup keys go only to a device that announced its key for them.
+            if (backupKeys && !row.requester_backup_key) reject('auth_request_invalid');
             if (row.state !== 'pending' || row.target_principal !== session.principal_id) reject('auth_pair_unknown');
             if (choice !== row.match_number) {
                 await query('run', "UPDATE auth_pair_requests SET state = 'rejected' WHERE request_id = ?", [row.request_id]);
                 await proof.audit('pair_wrong_number', session.principal_id, row.request_id);
                 return { principalId: session.principal_id, rejected: true, pairId: row.request_id };
             }
-            await query('run', "UPDATE auth_pair_requests SET state = 'approved', approved_by = ? WHERE request_id = ? AND state = 'pending'",
-                [deviceId, row.request_id]);
+            await query('run', "UPDATE auth_pair_requests SET state = 'approved', approved_by = ?, backup_keys = ? WHERE request_id = ? AND state = 'pending'",
+                [deviceId, backupKeys, row.request_id]);
             await proof.audit('pair_approved', session.principal_id, row.request_id);
             return { principalId: session.principal_id, pairId: row.request_id };
         });
@@ -222,14 +230,17 @@ export function createPairing({ query, transaction, proof, sessions, devices, ha
                 restrictedUntil, credentialId: approve.credentialId, signCount: approve.signCount });
             await query('run', "UPDATE auth_pair_requests SET state = 'completed' WHERE request_id = ? AND state = 'approved'", [row.request_id]);
             await proof.audit('device_enrolled', account.user_id, keyId);
+            // The sealed backup keys are handed over once, then forgotten here.
+            await query('run', 'UPDATE auth_pair_requests SET backup_keys = NULL WHERE request_id = ?', [row.request_id]);
             return { account, keyId, deviceId: row.requester_device_id, label: meta.label, platform: meta.platform,
-                canApprove: approve?.assurance === 'hardware_uv' };
+                canApprove: approve?.assurance === 'hardware_uv', backupKeys: row.backup_keys || null };
         });
         const session = await sessions.create(outcome.account, outcome.keyId);
         if (outcome.shared) return { ...session, canApprove: false };
         await notify(outcome.account.user_id, { kind: 'auth-device-added', deviceId: outcome.deviceId,
             label: outcome.label, platform: outcome.platform }, { exceptDeviceId: outcome.deviceId });
-        return { ...session, canApprove: outcome.canApprove, probationUntil: now() + PROBATION_MS };
+        return { ...session, canApprove: outcome.canApprove, probationUntil: now() + PROBATION_MS,
+            ...(outcome.backupKeys ? { backupKeys: outcome.backupKeys } : {}) };
     }
     async function cancel(input, claims = null) {
         const principalId = await transaction(async () => {

@@ -4,6 +4,8 @@ import { handleWsYoutubeSearch } from './ws_youtube_search.js';
 import { handleWsPeertube } from './ws_peertube.js';
 import { handleWsTvCatalog, handleWsTvResolve } from './ws_tv_catalog.js';
 import { handleWsShows } from './ws_shows.js';
+import { handleWsShop } from './ws_shop.js';
+import { handleWsCoaches } from './ws_coaches.js';
 import { handleWsVideoCatalog } from './ws_video_catalog.js';
 import { handleWsGpsOperation } from './wsGpsOperations.js';
 import { handleWsOpenFoodFacts } from './ws_open_food_facts.js';
@@ -18,6 +20,8 @@ export async function handleWsExternalResourceOperation(data, connection, addres
         || await handleWsTvCatalog(data)
         || await handleWsTvResolve(data)
         || await handleWsShows(data, address, { publicEvents: connection?._wsApiPublicEvents, viewerId: connection?._wsApiUserId || null })
+        || await handleWsShop(data, connection)
+        || await handleWsCoaches(data, connection)
         || await handleWsVideoCatalog(data, address)
         || await handleWsGpsOperation(data, address)
         || await handleWsOpenFoodFacts(data, address)

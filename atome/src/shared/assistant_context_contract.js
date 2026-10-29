@@ -37,6 +37,20 @@ export const ASSISTANT_CONTEXT_COMMANDS = Object.freeze([
             + '"au revoir", "tu peux partir", "raccroche", "c\'est bon, tu peux raccrocher", "quitte", "arrête de m\'écouter", "c\'est tout, merci", "goodbye", '
             + '"hang up". Not on a mere mention or a question about these words. The assistant says goodbye itself; '
             + 'the wake phrase "Ève, écoute-moi" or the assistant button opens a new session.' },
+    // A call-back: an event of eVe's own calendar whose alarm rings, then reopens the assistant.
+    { name: 'assistant.callback.schedule', persistent: true, required: ['reason'],
+        description: 'Schedule a call-back when the user asks you to call them back or to talk to them later: « rappelle-moi dans '
+            + '10 minutes », « rappelle-moi à 15 h de … », « reparle-moi de ça demain à 9 h ». At that time it rings and you open by '
+            + 'yourself, ready to listen, and tell why you call. reason = what to call back about, in the user\'s words; give '
+            + 'delay_minutes for a delay, or time (HH:MM, the next one to come) with an optional date (YYYY-MM-DD), both local. '
+            + 'Then say the result\'s when to the user.',
+        properties: {
+            reason: line(500), delay_minutes: { type: 'number', minimum: 1 },
+            time: { type: 'string', pattern: '^\\d{1,2}:\\d{2}$' }, date: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' }
+        } },
+    { name: 'assistant.callback.run', required: ['reason'], properties: { reason: line(500), requested_at: line(40) },
+        description: 'Run by a scheduled call-back\'s alarm: opens the assistant, which tells the user why it calls. Never call it '
+            + 'yourself; use assistant.callback.schedule.' },
     // The user's other devices (surface registry + remote command relay).
     { name: 'surfaces.list', required: [], properties: {},
         description: 'List the other devices where Atome is open and connected now (spoken name, platform, shared by another '

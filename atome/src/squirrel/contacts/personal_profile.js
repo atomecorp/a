@@ -15,19 +15,31 @@ const profileInput = contact => {
         .filter(([, value]) => typeof value === 'string' && value.trim()));
 };
 
-/** Native contact data fills the existing account profile; it never creates an account. */
-export function createPersonalContactImport({ api, session = getSessionState, publish = () => {} } = {}) {
+/** Native contact data fills the existing account profile; it never creates an account.
+ * `loadProfile` is the eVe profile owner (profile_api.js#installUserProfileRuntimeBridge). */
+export function createPersonalContactImport({ api, session = getSessionState, loadProfile } = {}) {
     const store = createCanonicalImport({ type: 'user', api, session });
-    const readOrigin = async context => (await store.list(IMPORT_ORIGIN_TYPE, context))
+    // Inside an import pass, the origins come from its snapshot: read alone, they were the whole table, twice.
+    const readOrigin = async (context, snapshot = null) => (await store.list(IMPORT_ORIGIN_TYPE, context, snapshot))
         .find(row => importRecordProps(row).source_key === sourceKey && importRecordProps(row).canonical_id === context.owner);
-    async function apply(contact, { signal, checkSession, selected = false } = {}) {
+    async function apply(contact, { signal, checkSession, selected = false, snapshot = null } = {}) {
+        if (typeof loadProfile !== 'function') throw new Error('personal_profile_loader_required');
         const context = store.capture();
         const check = () => { context.check(); checkSession?.(); if (signal?.aborted) throw new Error('import_cancelled'); };
         check();
-        const original = await readOrigin(context); check();
+        const original = await readOrigin(context, snapshot); check();
         const old = importRecordProps(original);
         const id = externalId(contact);
         if (!id) throw new Error('import_external_identity_required');
+        // A device that joined the account (recovery, pairing, a reinstall) holds a bare user
+        // record until the account's profile arrives. Filled from the card, that record became
+        // the profile: newer, it replaced the account's name, photo and preferences (contact
+        // favourites included) here and on every device. The card waits for a later pass.
+        const here = await loadProfile(context.owner, { repair: false }); check();
+        if (here?.ok !== true) {
+            if (here?.error !== 'atome_not_available_locally') throw new Error(here?.error || 'personal_profile_unavailable');
+            return { ok: true, external_id: id, principal_id: context.owner, changed: false, deferred: 'account_profile_arriving' };
+        }
         const prepared = await persistContactPhoto(contact, { ...context, check }); check();
         const incoming = profileInput(prepared);
         const row = await context.store.getStateCurrent(context.owner); check();
@@ -65,13 +77,13 @@ export function createPersonalContactImport({ api, session = getSessionState, pu
             // Explicit selection is retained independently of the authentication phone.
             ...(selected || old.source_collection === 'selected' ? { source_collection: 'selected' } : {}) };
         const originId = original ? importRecordId(original) : `origin_${await importIdentity([context.owner, sourceKey])}`;
-        if (!sameImportValue(old, { ...origin, access: 'private', visibility: 'private' })) await store.write(originId, IMPORT_ORIGIN_TYPE, origin, context);
+        if (!sameImportValue(old, { ...origin, access: 'private', visibility: 'private' })) await store.write(originId, IMPORT_ORIGIN_TYPE, origin, context, 'set', snapshot);
         check();
-        await publish(context.owner); check();
+        await loadProfile(context.owner, { repair: false, eventSource: 'ios_personal_import' }); check();
         return { ok: true, external_id: id, principal_id: context.owner, changed: !!patch && !!Object.keys(patch).length };
     }
     async function collect(items, candidates = [], options = {}) {
-        const context = store.capture(), old = importRecordProps(await readOrigin(context));
+        const context = store.capture(), old = importRecordProps(await readOrigin(context, options.snapshot));
         const state = session?.();
         const phone = state?.user?.phone;
         let contact = old.source_collection === 'selected' ? items.find(item => externalId(item) === old.external_id) : null;

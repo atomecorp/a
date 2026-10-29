@@ -64,6 +64,8 @@ class HealthPlugin(private val activity: Activity) : Plugin(activity) {
     private var stepSession = 0.0
     private var stepSince = 0L
     private var lastStepSignal = 0L
+    // The raw motion of activity sessions, kept on this device (HealthSensorRecorder.kt).
+    private val sensors by lazy { HealthSensorRecorder(activity.applicationContext) }
 
     internal class Spec(
         val record: KClass<out Record>,
@@ -356,6 +358,7 @@ class HealthPlugin(private val activity: Activity) : Plugin(activity) {
     @Command
     fun reset(invoke: Invoke) {
         stopStepSensor()
+        sensors.finishCurrent()
         invoke.resolve(JSObject().put("reset", true))
     }
 
@@ -436,6 +439,20 @@ class HealthPlugin(private val activity: Activity) : Plugin(activity) {
             }
         }
     }
+
+    // ---- raw motion of activity sessions (account verified by health_invoke) ---
+
+    private fun sensorCommand(name: String, invoke: Invoke) =
+        sensors.handle(name, invoke.getArgs()) { result -> invoke.resolve(JSObject(result.toString())) }
+
+    @Command fun sensorsStart(invoke: Invoke) = sensorCommand("sensorsStart", invoke)
+    @Command fun sensorsStop(invoke: Invoke) = sensorCommand("sensorsStop", invoke)
+    @Command fun sensorsStatus(invoke: Invoke) = sensorCommand("sensorsStatus", invoke)
+    @Command fun sensorsList(invoke: Invoke) = sensorCommand("sensorsList", invoke)
+    @Command fun sensorsDelete(invoke: Invoke) = sensorCommand("sensorsDelete", invoke)
+    @Command fun sensorsEnable(invoke: Invoke) = sensorCommand("sensorsEnable", invoke)
+    @Command fun sensorsRead(invoke: Invoke) = sensorCommand("sensorsRead", invoke)
+    @Command fun sensorsRestore(invoke: Invoke) = sensorCommand("sensorsRestore", invoke)
 
     // ---- local association device store <-> account --------------------------
     // noBackupFilesDir: excluded from Auto Backup, so the association never

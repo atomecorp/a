@@ -9,10 +9,14 @@
 // - audience { community: id } : les membres de cette communaute (server/communities.js),
 //   sans filtre de tags (en etre membre est l'abonnement) ; son auteur doit en etre membre.
 // Un destinataire en echec n'arrete jamais les suivants.
+// VideoTrain (server/news_thread.js): an origin carries `news_thread_ref` and goes to chosen people only; a
+// reply (`message.reply`: parent_id, anchor_ms) is told to its parent's and origin's authors, read by the thread.
+// A media leaves as a clean copy, its EXIF and GPS stripped (`cleanMedia`, server/news_media_cleaner.js).
 
 import db from '../database/adole.js';
 import { hasPrivateProgramAncestor } from './syncShareHierarchy.js';
 import { communityAudience, communityOfAudience } from '../atome/src/shared/community_contract.js';
+import { createNewsThread } from './news_thread.js';
 
 const text = (value) => String(value == null ? '' : value).trim();
 const parseJson = (value, fallback) => { try { return value ? JSON.parse(value) : fallback; } catch { return fallback; } };
@@ -50,6 +54,8 @@ export function createNewsBroadcast({
     // (identifier, { ownerId }) -> metadonnees du fichier (server/userFiles.js getFileMetadata).
     getFileMetadata = async () => null,
     vaultProvider = null,
+    // (authorId, fileMeta) -> { atomeId } of the clean copy the audience reads (server/news_media_cleaner.js).
+    cleanMedia = null,
     // () -> server/communities.js (created after this broadcast: it seeds through `distribute`).
     getCommunities = () => null
 }) {
@@ -58,6 +64,7 @@ export function createNewsBroadcast({
         if (!service) throw new Error('communities_unavailable');
         return service;
     };
+    const threads = createNewsThread({ query, relations });
     // Un media n'est publiable que par son proprietaire : sinon lister l'id d'un media
     // d'autrui suffirait a en ouvrir la lecture a toute l'audience.
     const ownsAtome = async (authorId, atomeId) => {
@@ -74,7 +81,9 @@ export function createNewsBroadcast({
         const srcName = decodeURIComponent(text(member?.properties?.media_src).split('?')[0].split('/').pop() || '');
         const meta = (await getFileMetadata(atomeId)) || (srcName ? await getFileMetadata(srcName, { ownerId: authorId }) : null);
         if (!meta || text(meta.owner_id) !== authorId) return null;
-        return { atomeId, fileAtomeId: text(meta.atome_id), src: `/api/uploads/${encodeURIComponent(text(meta.atome_id))}` };
+        if (typeof cleanMedia !== 'function') throw new Error('news_media_cleaner_missing');
+        const clean = await cleanMedia(authorId, meta);
+        return { fileAtomeId: clean.atomeId, src: `/api/uploads/${encodeURIComponent(clean.atomeId)}` };
     };
     const subscriptionOf = async (userId) => {
         const row = await query('get', 'SELECT tags_json FROM news_subscriptions WHERE user_id = ?', [text(userId)]);
@@ -130,7 +139,7 @@ export function createNewsBroadcast({
             if (!text(member?.properties?.media_atome_id)) { members.push(member); continue; }
             const resolved = await resolvePublishedMedia(author, member);
             if (!resolved) continue;
-            media.push(resolved.atomeId, resolved.fileAtomeId);
+            media.push(resolved.fileAtomeId);
             members.push({ ...member, properties: { ...member.properties, media_src: resolved.src } });
         }
         const payload = props.news_payload && typeof props.news_payload === 'object'
@@ -142,30 +151,40 @@ export function createNewsBroadcast({
         };
         const community = communityOfAudience(message.audience);
         if (community && !await communities().isMember(community, author)) throw new Error('community_not_member');
-        const audience = community ? communityAudience(community)
-            : message.audience && typeof message.audience === 'object' ? message.audience : 'all';
+        const reply = message.reply && typeof message.reply === 'object' ? message.reply : null;
+        const thread = reply ? await threads.replyContext(author, reply)
+            : text(props.news_thread_ref) ? threads.originContext(text(props.news_thread_ref), message.audience) : null;
+        if (thread) Object.assign(publication.properties, { news_thread_ref: thread.ref, parent_id: thread.parent, anchor_ms: thread.anchor });
+        // A thread's origin keeps the people it may reach (contacts, never blocked): they alone read the thread.
+        const audience = thread?.root ? { thread: thread.root } : thread ? { group: await resolveAudience(author, message.audience) }
+            : community ? communityAudience(community) : message.audience && typeof message.audience === 'object' ? message.audience : 'all';
+        if (thread && !thread.root && !audience.group.length) throw new Error('news_thread_audience_private');
 
         if (!existing) await registerTags(tags);
-        return distribute({ author, postId, projectId: text(props.news_source_project_id) || null, publication, tags, audience, media });
+        return distribute({ author, postId, projectId: text(props.news_source_project_id) || null, publication, tags, audience, media, thread });
     };
 
     // A publication stored once, then delivered to its audience (blocks and tag whitelists respected).
-    const distribute = async ({ author, postId, projectId, publication, tags, audience, media }) => {
+    const distribute = async ({ author, postId, projectId, publication, tags, audience, media, thread = null }) => {
         const props = publication.properties || {};
         await query('run',
-            `INSERT INTO news_publications (news_id, author_id, project_id, title, summary, tags_json, audience_json, payload_json, media_json)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `INSERT INTO news_publications (news_id, author_id, project_id, title, summary, tags_json, audience_json, payload_json, media_json,
+             thread_ref, root_id, parent_id, anchor_ms)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT(news_id) DO UPDATE SET title = excluded.title, summary = excluded.summary,
              tags_json = excluded.tags_json, audience_json = excluded.audience_json,
              payload_json = excluded.payload_json, media_json = excluded.media_json, updated_at = datetime('now')`,
             [postId, author, projectId, text(props.title), text(props.preview),
-                JSON.stringify(tags), JSON.stringify(audience), JSON.stringify(publication), JSON.stringify(media)]);
-        const candidates = await resolveAudience(author, audience), community = communityOfAudience(audience);
+                JSON.stringify(tags), JSON.stringify(audience), JSON.stringify(publication), JSON.stringify(media),
+                thread?.ref || null, thread?.root || null, thread?.parent || null, thread?.anchor ?? null]);
+        const candidates = thread?.root ? await threads.replyRecipients(author, thread.parent) : await resolveAudience(author, audience);
+        const community = communityOfAudience(audience);
         const result = { ok: true, news_id: postId, tags, delivered: 0, filtered: 0, blocked: 0, failed: 0, recipients: [] };
         for (const userId of candidates) {
             try {
                 if (await relations.blockedEitherWay(author, userId)) { result.blocked += 1; continue; }
-                if (!community && !acceptsTags(await subscriptionOf(userId), tags)) { result.filtered += 1; continue; }
+                // A thread's people were chosen by name: no tag of theirs narrows it.
+                if (!community && !thread && !acceptsTags(await subscriptionOf(userId), tags)) { result.filtered += 1; continue; }
                 await deliver(userId, author, {
                     kind: 'publication', id: postId,
                     subject: text(props.title) || null,
@@ -187,6 +206,7 @@ export function createNewsBroadcast({
         const row = await query('get', 'SELECT * FROM news_publications WHERE news_id = ?', [text(newsId)]);
         if (!row || text(row.author_id) === text(userId) || await relations.blockedEitherWay(row.author_id, userId)) return null;
         const audience = parseJson(row.audience_json, 'all'), community = communityOfAudience(audience);
+        if (text(row.thread_ref)) return await threads.readable(userId, row) && !row.retired_at ? row : null;
         if (community) return await communities().isMember(community, userId) ? row : null;
         if (Array.isArray(audience?.group) ? !audience.group.map(text).includes(text(userId))
             : !acceptsTags(await subscriptionOf(userId), parseJson(row.tags_json, []))) return null;
@@ -206,6 +226,8 @@ export function createNewsBroadcast({
     const repost = async (userId, message = {}) => {
         const row = await received(userId, message.newsId);
         if (!row) throw new Error('news_not_found');
+        // A thread stays among its people.
+        if (text(row.thread_ref)) throw new Error('news_thread_private');
         const source = parseJson(row.payload_json, null);
         if (!source?.properties) throw new Error('news_not_found');
         const postId = `repost_${row.news_id}_${text(userId)}`;
@@ -246,8 +268,10 @@ export function createNewsBroadcast({
         // A repost lends its audience the media of the publication's author.
         const ownerOf = (row) => text(parseJson(row.payload_json, {})?.properties?.reposted_from?.author_id) || text(row.author_id);
         const rows = (await query('all',
-            `SELECT author_id, audience_json, tags_json, payload_json FROM news_publications WHERE media_json LIKE ?`,
+            `SELECT news_id, author_id, audience_json, tags_json, payload_json, media_json, thread_ref, root_id FROM news_publications WHERE media_json LIKE ?`,
             [`%${JSON.stringify(text(atomeId)).slice(1, -1)}%`]) || [])
+            // LIKE only narrows: an id that merely contains this one (its clean copy `newsclean_<id>`) opens nothing.
+            .filter((row) => parseJson(row.media_json, []).map(text).includes(text(atomeId)))
             .filter((row) => !text(authorId) || ownerOf(row) === text(authorId));
         if (!rows.length) return false;
         const account = await query('get', `SELECT atome_id FROM atomes WHERE atome_id = ? AND atome_type = 'user' AND deleted_at IS NULL`, [reader]);
@@ -255,6 +279,10 @@ export function createNewsBroadcast({
         for (const row of rows) {
             if (text(row.author_id) === reader) return true;
             if (await relations.blockedEitherWay(row.author_id, reader)) continue;
+            if (text(row.thread_ref)) {
+                if (await threads.readable(reader, row)) return true;
+                continue;
+            }
             const audience = parseJson(row.audience_json, 'all'), community = communityOfAudience(audience);
             if (community) {
                 if (await communities().isMember(community, reader)) return true;
@@ -277,6 +305,10 @@ export function createNewsBroadcast({
         if (action === 'tags-search') return searchTags(message.query, message.limit);
         if (action === 'like') return like(userId, message);
         if (action === 'repost') return repost(userId, message);
+        if (action === 'thread') return threads.thread(userId, text(message.threadRef));
+        if (action === 'vote') return threads.vote(userId, message);
+        if (action === 'report') return threads.report(userId, message);
+        if (action === 'retire') return threads.retire(userId, message);
         throw new Error(`news_action_unsupported:${action || 'missing'}`);
     };
 

@@ -20,7 +20,7 @@ rubric `eVe/intuition/runtime/bevy_panel/bevy_panel_advanced_runtime.js`, server
       one is deleted through the canonical commit pipeline (`kind: 'delete'`, `scope: 'global'`) and leaves the list.
 - [x] Relays: Tauri and iOS forward `bug-report-status` to atome.one.
 - [x] Probes: `temp/bug_reports/status.probe.mjs` 9/9, `temp/bug_reports/resolve_ui.probe.mjs` (real Web app), `server.probe.mjs` 13/13.
-- [ ] Deploy: the server must run the new `ws_bug_reports.js`; Tauri and iOS need a rebuild for the relay entry.
+- [x] Deploy: atome.one runs 1.36 (checked 2026-10-27: `bug-report-status` answers live over wss://atome.one/ws/api); iOS build 35 and the relays carry it.
 
 ## Task A2 — fixed stays visible, the user deletes it (user request 2026-10-26, done Web)
 
@@ -46,11 +46,14 @@ Production read 2026-10-26 (`list`): 3 open reports, all fixed in this checkout 
 - After deploy: `node scripts/bug_reports_admin.mjs resolve 74c9268c-2b9e-43e0-938f-3b5c99a1ef37 --note "Apple Music offered on every host → only where isSupportedHost()"`
   and `node scripts/bug_reports_admin.mjs resolve 17435448-4b11-40f7-94fd-fe383af4668f 539241c6-af20-4ec1-8607-eeab7f4caddc --note "tv.open_channel on the home needed a project → plays on the home's TV list"`.
 
-- [ ] Read every report on atome.one: `node scripts/bug_reports_admin.mjs list --open` (needs the production read
-      the session could not do: either the user allows SSH read of `/opt/a/logs/bug_reports`, or copies that folder
-      into `temp/bug_reports/prod/` locally).
-- [ ] Group by symptom, check `known-bug-solutions/README.md`, fix each root cause, validate with a probe.
-- [ ] For each fixed report: `node scripts/bug_reports_admin.mjs resolve <id> --note "<cause → fix>"`.
+- [x] 2026-10-27: the three reports resolved on atome.one (`resolve`, fixed in atome 1.36 · eVe 1.36); `list --open` is empty and
+      the live `bug-report-status` returns all three resolved. Devices show them « Résolu » at the next Avancé opening.
+- [x] 2026-10-27, iPad « Jeezs's Tab » (Debug 1.36, real assistant through `eveAssistantApi.sendText`, `temp/bug_reports/ipad/say.sh`):
+      « Mettre la chaîne BFM TV » on the home → `tv.open_channel` ok, BFM TV plays live, the app stays on the home (screenshot
+      `temp/bug_reports/ipad/tv_bfm_s.png`). « mets ce morceau » → the assistant asks which song (no HOST_UNSUPPORTED);
+      « Money de Pink Floyd » → `apple_music.play` (preloaded on the iPad) → `AUTHORIZATION_REQUIRED` → `apple_music.authorize`
+      → iOS consent dialog shown.
+- [ ] Apple Music playback itself: waits for the user's answer to the iOS Music consent on the iPad (not given by the agent).
 
 Reports found on this Mac (local stores, 2026-10-25):
 - `bfd895c8…` (Web dev vault, 11 Oct) « mets la boule en rouge » — reason `probe: no color tool found`: a probe

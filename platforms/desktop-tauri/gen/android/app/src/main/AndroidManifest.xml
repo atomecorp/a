@@ -1,6 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Captures in the WebView (getUserMedia: video, sound, dictated text). The WebView grants a
+         page's microphone only once RECORD_AUDIO and MODIFY_AUDIO_SETTINGS are both held
+         (RustWebChromeClient#androidPermissionsForResources): without the latter, every capture
+         with sound was refused (NotAllowedError) while the camera alone worked. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
     <!-- AndroidTV support -->
     <uses-feature android:name="android.software.leanback" android:required="false" />

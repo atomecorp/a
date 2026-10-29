@@ -1,6 +1,10 @@
 import { normalizePermissionConditions } from '../atome/src/squirrel/conditions/permission_adapter.js';
 import { ensurePrincipalIdentityTables } from './adole_principal_identity_schema.js';
 import { ensurePublicEventTables } from './adole_public_events_schema.js';
+import { ensureShopTables } from './adole_shop_schema.js';
+import { ensureCoachTables } from './adole_coach_schema.js';
+import { ensureScheduledSendTables } from './adole_scheduled_sends_schema.js';
+import { ensureSiteTables } from './adole_site_schema.js';
 
 async function ensureColumn({ query, table, column, ddl }) {
     const columns = await query('all', `PRAGMA table_info(${table})`);
@@ -288,10 +292,19 @@ async function prepareAdoleSchemaColumns(query) {
     await ensureAuthDeviceKeyColumns(query);
     // A recovery code names its account by itself (codes created before keep their handle path).
     await ensureColumn({ query, table: 'auth_recovery_codes', column: 'lookup', ddl: 'ALTER TABLE auth_recovery_codes ADD COLUMN lookup TEXT' });
+    // The account's backup keys travel wrapped with the recovery code and sealed through pairing.
+    await ensureColumn({ query, table: 'auth_recovery_codes', column: 'backup_keys', ddl: 'ALTER TABLE auth_recovery_codes ADD COLUMN backup_keys TEXT' });
+    for (const column of ['requester_backup_key', 'backup_keys']) {
+        await ensureColumn({ query, table: 'auth_pair_requests', column, ddl: `ALTER TABLE auth_pair_requests ADD COLUMN ${column} TEXT` });
+    }
     await ensurePermissionsColumns(query);
     await ensureSnapshotColumns(query);
     await ensureEventColumns(query);
     await ensureStateCurrentColumns(query);
+    // VideoTrain (server/news_thread.js): a publication's thread, origin, parent, anchor and withdrawal.
+    for (const [column, type] of [['thread_ref', 'TEXT'], ['root_id', 'TEXT'], ['parent_id', 'TEXT'], ['anchor_ms', 'INTEGER'], ['retired_at', 'TEXT']]) {
+        await ensureColumn({ query, table: 'news_publications', column, ddl: `ALTER TABLE news_publications ADD COLUMN ${column} ${type}` });
+    }
 }
 
 async function ensureCommunicationTables(query) {
@@ -345,6 +358,21 @@ async function ensureCommunicationTables(query) {
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`);
     await query('run', 'CREATE INDEX IF NOT EXISTS idx_news_publications_author ON news_publications(author_id)');
+    // VideoTrain (server/news_thread.js): votes and reports (its columns: prepareAdoleSchemaColumns).
+    await query('run', 'CREATE INDEX IF NOT EXISTS idx_news_publications_thread ON news_publications(thread_ref, root_id)');
+    await query('run', `CREATE TABLE IF NOT EXISTS news_votes (
+        news_id TEXT NOT NULL,
+        voter_id TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY(news_id, voter_id)
+    )`);
+    await query('run', `CREATE TABLE IF NOT EXISTS news_reports (
+        news_id TEXT NOT NULL,
+        reporter_id TEXT NOT NULL,
+        reason TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY(news_id, reporter_id)
+    )`);
     await query('run', `CREATE TABLE IF NOT EXISTS communities (
         community_id TEXT PRIMARY KEY,
         host_id TEXT NOT NULL,
@@ -378,6 +406,10 @@ async function runAdoleSchemaMigrations(query) {
     await backfillEventSequences(query);
     await ensurePrincipalIdentityTables(query);
     await ensurePublicEventTables(query);
+    await ensureShopTables(query);
+    await ensureCoachTables(query);
+    await ensureScheduledSendTables(query);
+    await ensureSiteTables(query);
     await refreshUsersView(query);
 }
 

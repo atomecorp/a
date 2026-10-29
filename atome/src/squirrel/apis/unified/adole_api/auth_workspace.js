@@ -108,6 +108,14 @@ const readConfirmedRemoteProfile = async (adapter, id, allowMissing = false) => 
 const prepareNativeProfileIntent = async (fromId, toId, operationId, targetAdapter) => {
     const guest = getGuestWorkspace();
     if (Object.prototype.hasOwnProperty.call(guest, 'adoptionProfileEvent')) return guest.adoptionProfileEvent;
+    // The event is built on this device's record of the account: before the account's
+    // profile arrives (recovery, pairing, a reinstall), that bare record would make it a
+    // whole new profile, newer than the account's, which it would replace everywhere.
+    const loadProfile = globalThis.window?.__eveLoadUserProfile;
+    if (typeof loadProfile !== 'function') throw new Error('eve_profile_runtime_loader_required');
+    const here = await loadProfile(toId, { repair: false });
+    if (here?.ok !== true) throw new Error(here?.error || 'guest_adoption_profile_unavailable');
+    assertAdoptionIdentity(fromId, toId);
     let personal = guest.adoptionPersonalProfile;
     if (!personal) {
         const sourceAdapter = createWebSocketAdapter('guest_profile_read_' + operationId, 'tauri');

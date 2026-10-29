@@ -114,6 +114,25 @@ interne (`eVe/domains/books/epub_document.js`), sans dépendance.
 
 Extrait par `scripts/generate_food_catalogue.mjs` (sélection des aliments qu'on achète, noms raccourcis, une entrée par nom et par rayon)
 dans `atome/src/assets/food/ciqual_2025.json`, servi sur les quatre cibles avec l'arbre `atome/`. Consommé par le seul
-`eVe/domains/shopping/food_catalogue.js`. La licence autorise la réutilisation et la redistribution, y compris commerciale, à
+`eVe/domains/shopping/food_catalogue.js`. Le même script écrit la table nutritionnelle `atome/src/assets/food/ciqual_2025_composition.json`
+(les 3 484 aliments, 8 nutriments de la déclaration UE pour 100 g, valeurs « traces », « < x » et « - » conservées), consommée par le
+seul `eVe/domains/shopping/food_composition.js`. La licence autorise la réutilisation et la redistribution, y compris commerciale, à
 condition de **mentionner la source et la date de sa dernière mise à jour** : « Anses. 2025. Table de composition nutritionnelle des
 aliments Ciqual » (bloc `source` de l'asset et cette page ; rien n'est affiché dans l'interface, conformément au contrat zen).
+
+
+## Données consultées à attribution — Produits du commerce
+
+| Données | Licence | Rôle |
+|---|---|---|
+| [Open Food Facts](https://world.openfoodfacts.org), [Open Beauty Facts](https://world.openbeautyfacts.org), [Open Products Facts](https://world.openproductsfacts.org) — base de données | **Open Database License (ODbL) 1.0** | fiche d'un produit (code-barres, nom, marque, Nutri-Score, NOVA, additifs, allergènes, nutriments), recherche, alternatives |
+| Contenus individuels de ces bases | **Database Contents License (DbCL) 1.0** | idem |
+| Images des produits (`image_url`) | **Creative Commons Attribution-ShareAlike (CC BY-SA)** ; une image peut contenir des éléments de tiers soumis à d'autres droits | photo du produit sur sa fiche |
+| Taxonomie des additifs d'Open Food Facts (`additives.json`, risque de surexposition évalué par l'EFSA) | ODbL 1.0 | risque de chaque additif, entrée du verdict de `atome/src/shared/food_health_assessment.js` |
+
+Lues à la demande par le seul `server/ws_open_food_facts.js` (trame `food-facts` sur `/ws/api`, relayée par les serveurs natifs
+Tauri et iOS), gardées en mémoire du serveur quelques heures, et sur un article de la liste de courses seulement l'identité, les
+scores et le verdict du produit (`eVe/domains/shopping/food_runtime.js#storedFoodProduct`). Aucune base dérivée n'est publiée.
+Mention : « Données produits : Open Food Facts, contributeurs, sous licence ODbL ». Elle figure sur cette page et sur la
+page « À propos / Sources » de l'application (décision de l'utilisateur du 2026-10-28, `todo/etude_nutrition_menus_2026-10-27.md`
+§8.6 ; page à concevoir), jamais sur la fiche produit. Le verdict est l'évaluation ouverte d'eVe, pas un score d'Open Food Facts.

@@ -66,6 +66,8 @@ const normalizeNotification = (input = {}) => {
         mode: input.mode || input.share_mode || input.shareMode || null,
         share_type: input.share_type || input.shareType || null,
         request_atome_id: input.request_atome_id || input.requestAtomeId || null,
+        // A live share's request (server/syncSharingService.js): what accepting or refusing it answers.
+        share_id: input.share_id || input.shareId || null,
         from_id: input.from_id || input.fromId || null,
         from_name: input.from_name || input.fromName || null,
         from_phone: input.from_phone || input.fromPhone || null,

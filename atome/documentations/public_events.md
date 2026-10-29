@@ -21,6 +21,9 @@ Status (2026-10-26): implemented and verified on Web against an isolated real `s
   - **Quoi**: 1 to 3 categories.
   - **Où**: the place typed; the geocoder's answers read as name · town; the one touched is kept.
   - **Affiche**: the one import panel, AGENTS.md rule 18.
+  - **Présentation** (user, 2026-10-28; mockup `temp/public_showcase/mockups/B_cards.png`): the public text of the
+    announcement, ≤ 600 characters, between Affiche and Entrée. The event's **Note** stays private: it is never
+    published.
   - **Entrée**: Gratuit, or Payant with − price +, plus the ticket link.
   - **Diffuser**: Contacts, a News to the accepted contacts once saved; Réseaux, the system share sheet at
     once with the poster.
@@ -51,7 +54,7 @@ A public event is the author's own `calendar_event` Atome. It is written by the 
 
 | Property | Writer | Shape (`atome/src/shared/public_event_contract.js`) |
 |---|---|---|
-| `publication` | the author's devices | `{ visibility: 'public'\|'private', categories[1..3], place: { label, address, city, lat, lon }, poster: 'data:image/jpeg;base64,…' (≤ 360 px), price: { free } \| { amount, currency }, ticket_url, url }` |
+| `publication` | the author's devices | `{ visibility: 'public'\|'private', categories[1..3], place: { label, address, city, lat, lon }, presentation: '…' (≤ 600, the public summary), poster: 'data:image/jpeg;base64,…' (≤ 360 px), price: { free } \| { amount, currency }, ticket_url, url }` |
 | `publication_status` | the server only | `{ status: 'live'\|'refused'\|'hidden'\|'pending', reason: 'quota'\|'suspended'\|'invalid'\|'past'\|'reported'\|null, at }` |
 
 - **Unpublishing** sets `visibility: 'private'`; the event stays in the calendar.
@@ -128,6 +131,33 @@ an accepted contact gets the message, anyone else gets `contact_required`, so th
 as their contact request (`dashboard_first_contact.js#writeToPerson`). Before this fix, writing to them
 failed with `conversation_contact_unavailable`.
 
+## Showcase for everyone (user decisions, 2026-10-28)
+
+- **Loisirs from the start.** `leisure` is a base Activity brick (`DASHBOARD_PROGRESSION_BASE_ACTIVITY`,
+  `dashboard_progression_catalog.js`), never earned, a guest included (`dashboard_progression_home.js` starts from it).
+- **The public summary is the Présentation** (`server/public_events.js`): the calendar `description` (Note) is no
+  longer projected.
+- **An announcement's link**: `<server>/?event=<event id>` (`eVe/domains/public_events/public_event_link.js`). The
+  Dashboard, once open, reads that one event anonymously (`shows-nearby` kind `declared` with `eventId`, no place or
+  category, same IP rate limit) and shows it on top of its first category's list (`shows.open { plate, entry_id }`);
+  a withdrawn, hidden or past one says « Cette annonce n'est plus là. ». The link is in `events.mine` (live events),
+  in the News sent to contacts and in the voice share text. No indexing, no social preview.
+- **The reader sees the Présentation** (validated mockup `temp/public_showcase/mockups/reader/`): on its list's
+  cover, at most three lines under the date line, cut « … » (`dashboard_stage_list_view.js#stageListCoverNode`
+  `body`, passed by `dashboard_shows.js` for declared entries only); the poster or the glyph lies under them, smaller.
+- **eVe Basic keeps its three tiles** (user, 2026-10-28: an Activité tile mockup was refused). What is new in Loisirs
+  shows instead as a notice in the bottom band, where the field would lie, left of the Atom (validated mockup
+  `temp/public_showcase/mockups/basic_notice/basic_notice.png`; `eVe/domains/public_events/leisure_news.js`):
+  « Loisirs : les sorties près de chez vous », only while public events stand near the person that they have not
+  seen. Near: the place chosen for Loisirs, else the weather's, else the device's position if already granted (the
+  notice never asks). A touch shows the soonest new one on top of its list; it and every one near are then seen
+  (`preferences.dashboard.leisure_seen`), as they are when any Loisirs list opens. Read once per Dashboard start,
+  when the home can show it. Probe `temp/public_showcase/basic_notice.probe.mjs` 8/8.
+- **« Commencer »** now reads « Accès libre / Sans compte, sans échange. ».
+- Unchanged by decision: Billet opens the organiser's site without an account; Signal stays for accounts.
+- Probes: `temp/public_showcase/showcase_server.probe.mjs` 8/8, `showcase_ui.probe.mjs` (real app, typed
+  Présentation, guest opening the link).
+
 ## Known limits
 
 - **Tauri / iOS.** The native local servers relay `shows-nearby` with the token stripped, so reading works
@@ -136,3 +166,8 @@ failed with `conversation_contact_unavailable`.
 - **Texts as posters.** An A4 or screen text exports as PDF or plain text, which gives no poster. The
   panel's Affiche picks one instead.
 - **The `shows-nearby` IP rate limit** (30 a minute) applies to declared reads too.
+- **eVe Basic has no Activité tile on its home** (three tiles only, confirmed 2026-10-28): Loisirs is reachable
+  there by its band notice, the assistant and an announcement's link. The notice is read once per Dashboard start:
+  an event published later shows at the next start.
+- **Links on Tauri and iOS**: no universal link is declared for `/?event=`; on Tauri the server address may be the
+  local loopback, which is not shareable. Verified on Web only.

@@ -123,6 +123,19 @@ test('natural panel height is exactly content, padding, gaps and footer', () => 
     }), Math.ceil(64 + 8 + BEVY_PANEL_TOKENS.paddingPx * 2 + BEVY_PANEL_TOKENS.footerHeightPx));
 });
 
+// A host's rectangle (the Dashboard stage): a short form asked to fit its content lies at the
+// rectangle's foot, as tall as its content; taller content keeps the whole rectangle.
+test('a hosted panel fitted to its content lies at the foot of the host rectangle', () => {
+    const surface = { getBoundingClientRect: () => ({ left: 0, top: 0, width: 430, height: 932 }) };
+    const bounds = { x: 10, y: 120, width: 410, height: 680 };
+    const whole = resolveBevyPanelGeometry({ surface, bounds, naturalHeight: 90 });
+    assert.deepEqual([whole.x, whole.y, whole.width, whole.height], [10, 120, 410, 680]);
+    const fitted = resolveBevyPanelGeometry({ surface, bounds, naturalHeight: 90, hostFit: 'content' });
+    assert.deepEqual([fitted.x, fitted.y, fitted.width, fitted.height], [10, 710, 410, 90]);
+    const tall = resolveBevyPanelGeometry({ surface, bounds, naturalHeight: 2000, hostFit: 'content' });
+    assert.deepEqual([tall.y, tall.height], [120, 680]);
+});
+
 test('mobile panels stay compact and retain floating geometry through viewport changes', () => {
     const surface = {
         getBoundingClientRect: () => ({ width: 390, height: 844 })

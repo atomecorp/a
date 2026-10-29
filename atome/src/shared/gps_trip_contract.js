@@ -31,6 +31,8 @@ export const GPS_TRIP_TYPE = Object.freeze({ type: 'gps_trip', kind: 'data_model
     waypoint_offset: { type: 'integer', minimum: 0, maximum: 16 },
     status: { type: 'string', enum: ['planned', 'navigating', 'stopped', 'arrived', 'interrupted'] },
     revision: { type: 'number', minimum: 0 },
+    // Kept among the user's favourite trips (Trajets' Favoris).
+    favorite: { type: 'boolean' },
     navigation_device: { type: 'string', maxLength: 200 }, started_at: { type: 'string' }, ended_at: { type: 'string' },
     access: { type: 'string', enum: ['private'] },
     visibility: { type: 'string', enum: ['private'] }

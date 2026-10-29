@@ -23,8 +23,7 @@ vi.mock('../../eVe/intuition/tools/media_handoff.js', () => ({
     sendMediaToSurface: async (order) => { handoffs.push(order); return handoffOutcome; }
 }));
 vi.mock('../../atome/src/squirrel/apis/unified/adole_api/surfaces.js', () => ({
-    setLocalSurfaceLabel: (label) => String(label).trim(),
-    ensureSurfaceAnnounced: async () => ({ success: true })
+    renameLocalSurface: async (label) => ({ ok: true, name: String(label).trim(), announced: true })
 }));
 
 const envelope = (toolResult) => ({ ok: true, commandId: 'c', result: {

@@ -7,6 +7,7 @@ import android.graphics.Outline
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewOutlineProvider
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -20,11 +21,16 @@ import org.json.JSONObject
 // Android web views share one cookie store: a sign-in is kept between launches, but the
 // services are not kept apart from each other as on Apple platforms. Playback is read and
 // driven on the page's largest video (Android has no media control of its own for a web view).
+// The Web of Divertissement is one more service, `web`: its history is walked
+// (`streaming_view_navigate`) and its page read (`streaming_view_page`). A site gets no camera,
+// microphone nor download: no chrome client grants a permission, no download listener is set.
 object StreamingView {
     private var host: WebView? = null
     private var view: WebView? = null
     private var service = ""
     private var front = false
+    // Why the last main-frame load failed (cleared when the next one starts), read with the page.
+    private var loadFailure = ""
 
     fun attach(webView: WebView) { host = webView }
 
@@ -38,6 +44,8 @@ object StreamingView {
                 "streaming_view_place" -> reply(place(payload))
                 "streaming_view_front" -> reply(raise(payload))
                 "streaming_view_media" -> media(payload, reply)
+                "streaming_view_navigate" -> reply(navigate(payload))
+                "streaming_view_page" -> reply(page())
                 "streaming_view_close" -> { close(); reply(ok()) }
                 else -> reply(failure("streaming_view_command_invalid"))
             }
@@ -80,6 +88,10 @@ object StreamingView {
         view.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(webView: WebView, request: WebResourceRequest): Boolean =
                 request.url.scheme?.lowercase() !in setOf("https", "http", "about", "blob", "data")
+            override fun onPageStarted(webView: WebView, url: String?, favicon: android.graphics.Bitmap?) { loadFailure = "" }
+            override fun onReceivedError(webView: WebView, request: WebResourceRequest, error: WebResourceError) {
+                if (request.isForMainFrame) loadFailure = "streaming_view_load_failed:${error.errorCode}"
+            }
         }
         val corner = radius * activity.resources.displayMetrics.density
         view.outlineProvider = object : ViewOutlineProvider() {
@@ -129,6 +141,30 @@ object StreamingView {
         return ok().put("front", front)
     }
 
+    // `back` / `forward` walk the page's own history, `reload` loads it again, `load` opens `url`.
+    private fun navigate(payload: JSONObject): JSONObject {
+        val view = view ?: return failure("streaming_view_closed")
+        when (payload.optString("action")) {
+            "back" -> if (view.canGoBack()) view.goBack() else return failure("streaming_view_history_edge")
+            "forward" -> if (view.canGoForward()) view.goForward() else return failure("streaming_view_history_edge")
+            "reload" -> view.reload()
+            "load" -> {
+                val url = payload.optString("url")
+                if (!url.startsWith("https://")) return failure("streaming_view_request_invalid")
+                view.loadUrl(url)
+            }
+            else -> return failure("streaming_view_request_invalid")
+        }
+        return ok()
+    }
+
+    // What the page shows now: its address, its title, where its history can go, a failed load.
+    private fun page(): JSONObject {
+        val view = view ?: return failure("streaming_view_closed")
+        return ok().put("url", view.url ?: "").put("title", view.title ?: "").put("can_go_back", view.canGoBack())
+            .put("can_go_forward", view.canGoForward()).put("loading", view.progress < 100).put("error", loadFailure)
+    }
+
     private fun media(payload: JSONObject, reply: (JSONObject) -> Unit) {
         val view = view ?: return reply(failure("streaming_view_closed"))
         val action = payload.optString("action")
@@ -152,6 +188,7 @@ object StreamingView {
         this.view = null
         service = ""
         front = false
+        loadFailure = ""
         // An Android web view draws white until told otherwise.
         host?.setBackgroundColor(Color.WHITE)
     }

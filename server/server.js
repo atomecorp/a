@@ -12,6 +12,7 @@ import crypto from 'crypto';
 import { registerOfflineAppAssets } from './offline_app_assets.js';
 import { loadServerEnvFiles, resolveHttpsOptions } from './server_boot_config.js';
 import { createServerServices } from './server_services.js';
+import { registerSiteHttp } from './site_http.js';
 import { startABoxMonitoring, stopABoxMonitoring } from './aBoxServer.js';
 import { ensureOpaquePrincipalIdentity } from './auth_identity.js';
 import { createWsPhoneLinkHandler } from './wsPhoneLinkAuth.js';
@@ -26,7 +27,7 @@ import { startPolling as startGitHubPolling } from './githubSync.js';
 import { createVisioService } from './visio.js';
 import { SERVER_VERSION, EVE_VERSION, refreshVersionCache, startVersionWatchers } from './server_version.js';
 import { logger, setLogServer } from './server_logger.js';
-import { uploadsDir } from './server_uploads.js';
+import { configureUploadDatabase, resolveUploadsDir } from './server_uploads.js';
 import { registerHttpServerHooks } from './http_server_hooks.js';
 import { registerHttpDevRoutes } from './http_dev_routes.js';
 import { createHttpRequestIdentity } from './http_request_identity.js';
@@ -60,7 +61,11 @@ const {
   newsPublishRateAllowed,
   communities,
   directoryPublicService,
-  publicEvents
+  publicEvents,
+  shop,
+  coaches,
+  scheduledSends,
+  site
 } = createServerServices({ projectRoot_env });
 
 // Check if database is configured (SQLite path or libSQL URL)
@@ -115,6 +120,8 @@ setLogServer(server);
 const PORT = process.env.PORT || 3001;
 const HOST = process.env.HOST || (process.env.NODE_ENV === 'production' ? '127.0.0.1' : '0.0.0.0');
 const DATABASE_ENABLED = DB_CONFIGURED;
+configureUploadDatabase(DATABASE_ENABLED);
+const uploadsDir = resolveUploadsDir();
 const DB_REQUIRED_MESSAGE = 'Database not configured. Set SQLITE_PATH or LIBSQL_URL/LIBSQL_AUTH_TOKEN.';
 
 function getServerFingerprint() {
@@ -298,8 +305,12 @@ async function startServer() {
     registerUploadRoutes(server, { projectRoot, UPLOADS_TMP_DIR, DATABASE_ENABLED, resolveUploadIdentity });
     registerFileRoutes(server, { projectRoot, replyJson, validateToken });
     registerAdminUserRoutes(server, { DATABASE_ENABLED, DB_REQUIRED_MESSAGE, projectRoot, replyJson, validateToken });
-    registerMediaServingRoutes(server, { resolveUploadIdentity, resolveMediaDownloadIdentity });
+    registerMediaServingRoutes(server, { resolveUploadIdentity, resolveMediaDownloadIdentity, userVaultRouter });
     registerDbStatusRoutes(server, { DATABASE_ENABLED, DB_REQUIRED_MESSAGE, SCHEMA_PATH });
+    // Websites at atome.one/<slug> and on personal domains, answered after every route of the app (server/site_http.js).
+    registerSiteHttp(server, { publishing: site.publishing, store: site.store, notify: deliverCommNotification,
+      fontRoot: path.join(staticRoot, 'assets', 'fonts', 'Roboto'), origin: process.env.ATOME_SITE_ORIGIN || 'https://atome.one',
+      appHosts: (process.env.ATOME_APP_HOSTS || 'atome.one,www.atome.one,localhost,127.0.0.1,::1').split(',').map(host => host.trim()).filter(Boolean) });
 
     // ===========================
     // 3. WEBSOCKET NATIF
@@ -320,7 +331,11 @@ async function startServer() {
       newsBroadcast,
       newsPublishRateAllowed,
       communities,
-      publicEvents
+      publicEvents,
+      shop,
+      coaches,
+      scheduledSends,
+      site
     });
 
     // Route WebSocket unifiée pour sync (inclut file events, atome events, version sync)

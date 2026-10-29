@@ -1,14 +1,17 @@
 import { PERSONAL_IMPORT_TYPES, CALENDAR_IMPORT_FIELDS } from './personal_import_types.js';
 import { GPS_TRIP_TYPE, LIVE_POSITION_TYPE } from './gps_trip_contract.js';
-import { SHOPPING_ITEM_TYPE } from './shopping_list_contract.js';
+import { SHOPPING_ITEM_TYPE, SHOPPING_LIST_TYPE } from './shopping_list_contract.js';
 import { LIBRARY_WORK_TYPE } from './library_work_contract.js';
 import { COMMUNICATION_MESSAGE_TYPE } from './communication_contract.js';
 import { APPLE_MUSIC_OPERATION_TYPE } from './apple_music_operation_contract.js';
 import { MUSIC_OPERATION_TYPE } from './music_operation_contract.js';
+import { LIFE_PROFILE_TYPE, LIFE_PROFILES_PROPERTY_SCHEMA } from './life_profile_contract.js';
 import { registerAtomeType } from './atome_universal_contract.js';
 import { PROGRAM_PREFERENCE_SCHEMA, PROGRAM_DATA_PERMISSION_SCHEMA, PROGRAM_PREFERENCE_KEYS } from './program_collection_contract.js';
 import { PROGRAM_SESSION_SCHEMA, PROGRAM_SESSION_TRANSITION_SCHEMA } from './program_session_contract.js';
 import { NUTRITION_CONSUMPTION_SCHEMA } from './program_nutrition_contract.js';
+import { HEALTH_DECLARATION_SCHEMA } from './health_declaration_contract.js';
+import { HEALTH_FEELING_SCHEMA } from './health_feeling_contract.js';
 import { PROGRAM_ACTIVITY_RECORD_SCHEMAS } from './program_activity_contract.js';
 import { DASHBOARD_OBJECTIVE_TARGET_SCHEMA, DASHBOARD_UNLOCK_SCHEMA } from './dashboard_progression_contract.js';
 
@@ -102,6 +105,8 @@ const defineType = (definition) => Object.freeze({
     ...definition,
     schema: Object.freeze({
         ...(definition.traits?.some((trait) => ['visual', 'audible', 'container'].includes(trait)) ? ATOME_MIX_PROPERTY_SCHEMA : {}),
+        // Any item may belong to life profiles (life_profile_contract.js).
+        ...LIFE_PROFILES_PROPERTY_SCHEMA,
         ...definition.schema
     })
 });
@@ -109,8 +114,8 @@ const defineType = (definition) => Object.freeze({
 export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
     defineType(APPLE_MUSIC_OPERATION_TYPE),
     defineType(MUSIC_OPERATION_TYPE),
-    defineType(GPS_TRIP_TYPE), defineType(LIVE_POSITION_TYPE), defineType(SHOPPING_ITEM_TYPE), defineType(LIBRARY_WORK_TYPE),
-    defineType(COMMUNICATION_MESSAGE_TYPE),
+    defineType(GPS_TRIP_TYPE), defineType(LIVE_POSITION_TYPE), defineType(SHOPPING_ITEM_TYPE), defineType(SHOPPING_LIST_TYPE), defineType(LIBRARY_WORK_TYPE),
+    defineType(COMMUNICATION_MESSAGE_TYPE), defineType(LIFE_PROFILE_TYPE),
     ...PERSONAL_IMPORT_TYPES.map(defineType),
     defineType({
         type: 'project',
@@ -134,7 +139,9 @@ export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
                 goal: { type: 'string' },
                 objective_id: { type: 'string', enum: ATOME_OBJECTIVE_IDS },
                 status: { type: 'string', enum: ['draft'] },
-                audience: { type: 'string', enum: ['everyone', 'group'] }, target: DASHBOARD_OBJECTIVE_TARGET_SCHEMA
+                audience: { type: 'string', enum: ['everyone', 'group'] }, target: DASHBOARD_OBJECTIVE_TARGET_SCHEMA,
+                // Its sport aim, deadline and challenge (#eVe/domains/programs/objective_followup_model.js).
+                aim: { type: 'string' }, deadline: { type: 'object' }, challenge: { type: 'object' }
             }, required: ['family', 'goal'] },
             title: { type: 'string' },
             description: { type: 'string' }
@@ -356,7 +363,11 @@ export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
             program_data_permission: PROGRAM_DATA_PERMISSION_SCHEMA, dashboard_unlock: DASHBOARD_UNLOCK_SCHEMA,
             program_session: PROGRAM_SESSION_SCHEMA,
             program_session_transition: PROGRAM_SESSION_TRANSITION_SCHEMA,
-            program_nutrition_consumption: NUTRITION_CONSUMPTION_SCHEMA,
+            program_nutrition_consumption: NUTRITION_CONSUMPTION_SCHEMA, health_declaration: HEALTH_DECLARATION_SCHEMA,
+            health_feeling: HEALTH_FEELING_SCHEMA,
+            // The agreement to eVe using the card's body weight and age (#eVe/domains/user/body_data_runtime.js).
+            body_data_consent: { type: 'object', required: ['version', 'granted', 'date'], properties: {
+                version: { type: 'number', enum: [1] }, granted: { type: 'boolean' }, date: { type: 'string' } } },
             ...PROGRAM_ACTIVITY_RECORD_SCHEMAS,
             metadata: { type: 'object' },
             payload: { type: 'object' },

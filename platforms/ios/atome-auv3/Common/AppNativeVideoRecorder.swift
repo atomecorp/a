@@ -190,16 +190,10 @@ final class AppNativeVideoRecorder: NSObject, AVCaptureFileOutputRecordingDelega
         }
     }
 
-    /// The rotation that makes a take upright for THIS camera. A fixed 90° for
-    /// portrait assumes a landscape-mounted sensor; the square front camera of
-    /// recent iPhones is mounted otherwise, and a selfie came out sideways.
-    /// The rotation coordinator knows each device's mounting.
+    /// The rotation that makes a take upright for THIS camera
+    /// (AVCaptureDevice.horizonLevelCaptureRotationAngle).
     private func captureRotationAngle() -> CGFloat {
-        if #available(iOS 17.0, *), let device = activeDevice {
-            return AVCaptureDevice.RotationCoordinator(device: device, previewLayer: nil)
-                .videoRotationAngleForHorizonLevelCapture
-        }
-        return videoRotationAngle(from: requestedOrientation)
+        activeDevice?.horizonLevelCaptureRotationAngle ?? videoRotationAngle(from: requestedOrientation)
     }
 
     private func startRecording() {

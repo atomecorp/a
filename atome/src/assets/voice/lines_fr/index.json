@@ -27,6 +27,12 @@
    "phonemes": "^wi , kə vøty ?$",
    "sha256": "b77365e90bc07af39607590b286832e95b3b9593626c7f2933eb61b67e5af46f"
   },
+  "Je te rappelle, comme tu me l’as demandé.": {
+   "file": "c1e8b03b6dfbb4d1.wav",
+   "samples": 54016,
+   "phonemes": "^ʒə tə ʁapɛl , kom ty mə la dəmɑ̃de .$",
+   "sha256": "7cbd096d471d62dd74d2e390bd45e0f21866843d3caf1c7106622ab95cbfddf4"
+  },
   "Ça y est, je t’écoute.": {
    "file": "2b27eecc19952275.wav",
    "samples": 39680,
@@ -603,17 +609,17 @@
    "phonemes": "^sɛ paʁti ! ʃwazi sə ki kɔ̃t lə ply puʁ twa .$",
    "sha256": "712d956007603ea1113a03ee5a3c4776e51860c8c53cea122b4d39bca171d394"
   },
-  "Le sommeil, la nutrition, bouger plus, ou ton journal intime : dis-le-moi, ou appuie sur ton choix.": {
-   "file": "eabf3d6595c5d440.wav",
-   "samples": 141056,
-   "phonemes": "^lə somɛj , la nytʁisjɔ̃ , buʒe ply , u tɔ̃ ʒuʁnal ɛ̃tim : diləmwa , u apɥi syʁ tɔ̃ ʃwa .$",
-   "sha256": "70d068a027e7c0cbcd8e5e6497861bfc8e43223ee458743a86ee378af6174235"
+  "Le poids, le sommeil, la forme, le calme, ton journal… : dis-le-moi, ou appuie sur ton choix.": {
+   "file": "8ee95d14667a82a9.wav",
+   "samples": 145664,
+   "phonemes": "^lə pwa , lə somɛj , la foʁm , lə kalm , tɔ̃ ʒuʁnal : diləmwa , u apɥi syʁ tɔ̃ ʃwa .$",
+   "sha256": "23431687bbce89289f24be010677f26f6fe3c3793acffe2f84db285e3f5f5e70"
   },
-  "Il y a quatre choix : meilleur sommeil, meilleure nutrition, bouger plus, et journal intime.": {
-   "file": "fb4a691a80f9f237.wav",
-   "samples": 116736,
-   "phonemes": "^il i a katʁ ʃwa : mɛjœʁ somɛj , mɛjœʁ nytʁisjɔ̃ , buʒe ply , e ʒuʁnal ɛ̃tim .$",
-   "sha256": "701af27a804bc5f5ff6b407bb8ed3869764e05e72330c34c1b3a3686ec7a8be7"
+  "Tu as le choix entre : poids, sommeil, muscles, douleur, orientation, du temps pour toi, calme, journal, forme, bien vieillir, bien-être, moral, beauté, ou ton propre objectif.": {
+   "file": "d5f4e879b1666c02.wav",
+   "samples": 269568,
+   "phonemes": "^ty a lə ʃwa ɑ̃tʁ : pwa , somɛj , myskl , dulœʁ , oʁjɛ̃tasjɔ̃ , dy tɑ̃ puʁ twa , kalm , ʒuʁnal , foʁm , bjɛ̃ vjɛjiʁ , bjɛ̃ɛtʁ , moʁal , bote , u tɔ̃ pʁopʁ obʒɛktif .$",
+   "sha256": "a4b82f6382750e1ba8856b8f02612100b6948d9a89eae75abc00e6147dc13c5a"
   },
   "Tu règles ton objectif sommeil : la durée de ta nuit, ton heure de lever, l’effort que tu veux faire, et ton temps de préparation avant de te coucher.": {
    "file": "71ac5e036c09076a.wav",
@@ -621,11 +627,11 @@
    "phonemes": "^ty ʁɛɡl tɔ̃ obʒɛktif somɛj : la dyʁe də ta nɥi , tɔ̃ œʁ də ləve , lɛfoʁ kə ty vø fɛʁ , e tɔ̃ tɑ̃ də pʁepaʁasjɔ̃ avɑ̃ də tə kuʃe .$",
    "sha256": "70102924e368739efc3194820c94b4e9193cef4b5420aeb9a6387f8c41e1ec9b"
   },
-  "Tu peux aussi rejoindre le cercle, pour échanger avec des personnes qui ont le même objectif. Dis « valider » quand c’est prêt.": {
-   "file": "dc853b2f4b36d7d8.wav",
-   "samples": 130816,
-   "phonemes": "^ty pø osi ʁəʒwɛ̃dʁ lə sɛʁkl , puʁ eʃɑ̃ʒe avɛk de pɛʁson ki ɔ̃ lə mɛm obʒɛktif . di valide kɑ̃ sɛ pʁɛ .$",
-   "sha256": "9a40ed2fee02c106a2358c44bbf2e9afb7d3a6729d7bff7832b9d975b8ced612"
+  "Tu peux aussi rejoindre le réseau des personnes qui partagent le même objectif que toi. Dis « valider » quand c’est prêt.": {
+   "file": "cceb7af1af8ebc10.wav",
+   "samples": 123648,
+   "phonemes": "^ty pø osi ʁəʒwɛ̃dʁ lə ʁezo de pɛʁson ki paʁtaʒɑ̃ lə mɛm obʒɛktif kə twa . di valide kɑ̃ sɛ pʁɛ .$",
+   "sha256": "befd4691b31d5d647dc9093869459e9d04570b1c591fb9254b317586729315a5"
   },
   "Voici ton programme. J’ai ajouté des événements quotidiens à ton calendrier, tu pourras les désactiver.": {
    "file": "73bbf1a7eccaea7e.wav",
@@ -644,6 +650,12 @@
    "samples": 30464,
    "phonemes": "^di sɛ paʁti kɑ̃ ty vø .$",
    "sha256": "6cb5d96b3d9b24162154d329517555f1e498625ca90668f6818119d27766fff2"
+  },
+  "Tu règles ton objectif : l’effort que tu veux faire, le temps que tu y donnes chaque jour et l’heure de ta séance, que je mets dans ton calendrier.": {
+   "file": "c0c6c2df19f651c6.wav",
+   "samples": 148992,
+   "phonemes": "^ty ʁɛɡl tɔ̃ obʒɛktif : lɛfoʁ kə ty vø fɛʁ , lə tɑ̃ kə ty i don ʃak ʒuʁ e lœʁ də ta seɑ̃s , kə ʒə mɛ dɑ̃ tɔ̃ kalɑ̃dʁje .$",
+   "sha256": "1f3d64a6be3bd2c1e01b482739d8a9ca69d92def857725243e000bf3932a1b75"
   },
   "D’accord, je m’en occupe.": {
    "file": "a24203d4b01a3d9e.wav",

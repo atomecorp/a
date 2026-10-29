@@ -8,13 +8,14 @@
 // be stored, published or used to re-arm an observer.
 //
 // Values stay in memory only. Nothing here persists, syncs or logs a value.
-// The only write is the training workout (`workout`, #health_workout.js).
+// The only writes are the training workout (`workout`) and a meditation's mindful minutes (`mindful`), #health_workout.js.
 
 import { getHealthMonitor, healthMonitorsForHost } from './health_catalog.js';
 import { normalizeHealthResult, requestRangeFor } from './health_values.js';
 import { buildLogEnvelope } from '../../shared/logging.js';
 import { createHealthHistoryReader } from './health_history_reader.js';
-import { createHealthWorkoutRecorder } from './health_workout.js';
+import { createHealthMindfulRecorder, createHealthWorkoutRecorder } from './health_workout.js';
+import { createHealthSensorRecorder } from './health_sensors.js';
 
 const DEFAULT_POLL_MS = 60000;
 const RETAINED_READING_FRESH_MS = 60000;
@@ -461,6 +462,8 @@ export function createHealthOwner({
         subscribe,
         readHistory,
         workout: createHealthWorkoutRecorder({ call, context, loadLinkStatus, describe }),
+        mindful: createHealthMindfulRecorder({ call, context, loadLinkStatus, describe }),
+        sensors: createHealthSensorRecorder({ call, context, describe }),
         refresh: (ids) => scheduleRead(ids || Array.from(consumers.keys())),
         reading: (monitorId) => readings.get(monitorId) || null,
         resetContext,

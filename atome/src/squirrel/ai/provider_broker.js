@@ -117,6 +117,14 @@ export const requestProviderService = async (action, payload = {}, {
             const auth = await ensureFastifyToken();
             if (!auth?.ok) throw new Error('provider_principal_unavailable');
         }
+        // The host relay keeps its remote credential in memory only: after every
+        // launch the first request reached it before the boot had configured it,
+        // was refused, then relinked, seconds later. It waits for that configuration
+        // (shared while in flight, immediate once done) and goes once.
+        if (adapter === TauriAdapter) {
+            const relay = await ensureFastifyToken();
+            if (!relay?.ok) throw Object.assign(new Error('provider_principal_unavailable'), { link_reason: relay?.reason || null });
+        }
         transport = adapter.ws;
         token = adapter.getToken();
         if (adapter === TauriAdapter && !token) throw new Error('not_authenticated');

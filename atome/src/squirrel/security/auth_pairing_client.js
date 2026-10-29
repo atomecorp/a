@@ -1,12 +1,15 @@
-import { generateRecoveryCode, readRecoveryCode, recoveryLookupInput, recoveryVerifierInput } from '../../shared/auth_recovery_code.js';
+import { generateRecoveryCode, readRecoveryCode, recoveryLookupInput, recoveryProof, recoveryVerifierInput, recoveryWrapKey } from '../../shared/auth_recovery_code.js';
+import { backupDigest, createBackupKeyring } from './backup_keyring.js';
 
 // Authentication V1 client (§6.2 – §6.8): account creation without phone,
 // device pairing, approvals, devices, recovery and the connection proof. Keys
-// live in the device store under an account scope; nothing secret is stored.
+// live in the device store under an account scope; nothing secret is stored but
+// the account's backup keys (#backup_keyring.js), which the server never opens.
 const hex = (bytes) => Array.from(new Uint8Array(bytes), (value) => value.toString(16).padStart(2, '0')).join('');
 
 export function createPairingClient({ devices, approver, send, token, ensureSession, installSession, connectionProof = false,
     storePurchase, crypto = globalThis.crypto, now = Date.now }) {
+    const keyring = createBackupKeyring({ devices, crypto });
     async function request(action, fields = {}) {
         const result = await send({ type: 'auth', action, ...fields });
         if (!result?.ok && result?.offline === true) throw new Error('auth_server_unreachable');
@@ -80,11 +83,13 @@ export function createPairingClient({ devices, approver, send, token, ensureSess
             const device = await devices.forScope(scope);
             const pre = await request('pair-start-challenge', { sessionKey: device.publicKey });
             const approve = await registerApprove(pre.register, deviceClass, scope);
+            // The approving device seals the account's backup keys for this key alone.
+            const backupPair = await keyring.pairKey();
             const result = await request('pair-start', { sessionKey: device.publicKey, handle: String(handle || '').trim() || undefined,
-                phone: String(phone || '').trim() || undefined, connectionProof,
+                phone: String(phone || '').trim() || undefined, connectionProof, backupKey: await keyring.publicJwk(backupPair),
                 approve: approve?.approve || null, deviceMeta: { platform, label }, deviceClass });
             const attempt = { scope, pairId: result.pairId, code: result.code, matchNumber: result.matchNumber,
-                expiresAt: result.expiresAt, approve: approve?.record || null, deviceClass };
+                expiresAt: result.expiresAt, approve: approve?.record || null, deviceClass, backupKey: backupPair.privateKey };
             await devices.put('pair-attempt', attempt);
             return { code: attempt.code, matchNumber: attempt.matchNumber, expiresAt: attempt.expiresAt, pairId: attempt.pairId };
         },
@@ -104,7 +109,9 @@ export function createPairingClient({ devices, approver, send, token, ensureSess
             const { challenge } = await request('pair-requester-challenge', { pairId: attempt.pairId, purpose: 'pair-complete' });
             const result = await request('pair-complete', { pairId: attempt.pairId, ...await device.sign(checkChallenge(challenge, 'pair-complete', attempt.pairId)) });
             await devices.remove('pair-attempt');
-            return accept(result, attempt.scope, attempt.approve, attempt.deviceClass);
+            const accepted = await accept(result, attempt.scope, attempt.approve, attempt.deviceClass);
+            if (result.backupKeys && attempt.backupKey) await keyring.receive(result.user.id, result.backupKeys, attempt.backupKey);
+            return accepted;
         },
         // A shared device holding an account's key asks its owner to open it once more (§6.4).
         async startSharedOpen(userId) {
@@ -142,8 +149,11 @@ export function createPairingClient({ devices, approver, send, token, ensureSess
         },
         refusePairing: (pairId) => authenticated('pair-cancel', { pairId }),
         async approvePairing(pairId, choice) {
-            const fields = await approval('pair-approve', { pairId, choice: Number(choice) });
-            return request('pair-approve', { ...fields, pairId, choice: Number(choice) });
+            // The new device (a shared one never) receives the account's backup keys, sealed for its key.
+            const { request: asked } = await authenticated('pair-view', { pairId });
+            const backupKeys = asked?.backupKey ? await keyring.sealFor(await keyring.ensure((await sessionRecord()).userId), asked.backupKey) : undefined;
+            const fields = await approval('pair-approve', { pairId, choice: Number(choice), backup: await backupDigest(backupKeys, crypto) });
+            return request('pair-approve', { ...fields, pairId, choice: Number(choice), backupKeys });
         },
         // "Not my account": the new device withdraws itself at once.
         async notMyAccount() {
@@ -209,6 +219,11 @@ export function createPairingClient({ devices, approver, send, token, ensureSess
             return result;
         },
         listDevices: () => authenticated('devices-list'),
+        // The account's backup keys on this device, made the first time a copy needs them; none without an account.
+        async backupKeys() {
+            const record = await devices.read('session');
+            return record?.session?.id && record.userId ? keyring.ensure(record.userId) : null;
+        },
         renameDevice: (deviceId, label) => authenticated('device-rename', { deviceId, label }),
         async revokeDevice(deviceId) {
             return request('device-revoke', { ...await approval('device-revoke', { subject: { deviceId } }), deviceId });
@@ -216,27 +231,33 @@ export function createPairingClient({ devices, approver, send, token, ensureSess
         async setDeviceClass(deviceId, deviceClass) {
             return request('device-class', { ...await approval('device-class', { subject: { deviceId, deviceClass } }), deviceId, deviceClass });
         },
-        // The code is shown once; the server keeps a verifier only.
+        // The code is shown once; the server keeps a verifier of its proof only, and the
+        // account's backup keys wrapped by a key only the code derives.
         async createRecoveryCode() {
             const record = await sessionRecord();
-            const { code, core } = generateRecoveryCode(crypto);
+            const generated = generateRecoveryCode(crypto);
+            const proof = await recoveryProof(generated, crypto);
             const digest = async (text) => hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)));
-            const verifier = await digest(recoveryVerifierInput(record.userId, core));
+            const verifier = await digest(recoveryVerifierInput(record.userId, proof));
             // The lookup lets the code alone find its account when every device is lost.
-            const lookup = await digest(recoveryLookupInput(core));
-            await request('recovery-code-set', { ...await approval('recovery-code-set', { subject: { verifier, lookup } }), verifier, lookup });
-            return { ok: true, code };
+            const lookup = await digest(recoveryLookupInput(proof));
+            const backupKeys = await keyring.wrap(await keyring.ensure(record.userId), await recoveryWrapKey(generated.core, crypto));
+            const subject = { verifier, lookup, backup: await backupDigest(backupKeys, crypto) };
+            await request('recovery-code-set', { ...await approval('recovery-code-set', { subject }), verifier, lookup, backupKeys });
+            return { ok: true, code: generated.code };
         },
         async startRecovery({ handle = '', phone = '', code, platform = 'web', label = '' } = {}) {
-            const core = readRecoveryCode(code);
+            const typed = readRecoveryCode(code);
             const scope = newScope();
             const device = await devices.forScope(scope);
             const pre = await request('recovery-start-challenge', { sessionKey: device.publicKey });
             const approve = await registerApprove(pre.register, 'personal', scope);
             const result = await request('recovery-start', { handle: String(handle || '').trim() || undefined,
-                phone: String(phone || '').trim() || undefined, code: core, sessionKey: device.publicKey, connectionProof,
+                phone: String(phone || '').trim() || undefined, code: await recoveryProof(typed, crypto), sessionKey: device.publicKey, connectionProof,
                 approve: approve?.approve || null, deviceMeta: { platform, label } });
-            const attempt = { scope, recoveryId: result.recoveryId, notBefore: result.notBefore, approve: approve?.record || null };
+            // Only its key is kept until the space opens (non-extractable): the code itself is never stored.
+            const attempt = { scope, recoveryId: result.recoveryId, notBefore: result.notBefore, approve: approve?.record || null,
+                wrapKey: typed.version === 2 ? await recoveryWrapKey(typed.core, crypto) : null };
             await devices.put('recovery-attempt', attempt);
             return { recoveryId: attempt.recoveryId, notBefore: attempt.notBefore };
         },
@@ -249,7 +270,9 @@ export function createPairingClient({ devices, approver, send, token, ensureSess
             const { challenge } = await request('recovery-requester-challenge', { ...fields, purpose: 'recovery-complete' });
             const result = await request('recovery-complete', { ...fields, ...await device.sign(checkChallenge(challenge, 'recovery-complete', attempt.recoveryId)) });
             await devices.remove('recovery-attempt');
-            return accept(result, attempt.scope, attempt.approve, 'personal');
+            const accepted = await accept(result, attempt.scope, attempt.approve, 'personal');
+            if (result.backupKeys && attempt.wrapKey) await keyring.unwrap(result.user.id, result.backupKeys, attempt.wrapKey);
+            return accepted;
         },
         async abandonRecovery() { await devices.remove('recovery-attempt'); return { ok: true }; },
         async cancelRecovery(recoveryId) {

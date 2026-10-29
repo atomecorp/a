@@ -1,14 +1,16 @@
 import { logStructured } from './server_logger.js';
-import { assessFoodHealth, readAdditiveRisks } from '../atome/src/shared/food_health_assessment.js';
+import { assessFoodHealth, evaluateFoodSelection, readAdditiveRisks } from '../atome/src/shared/food_health_assessment.js';
 
 // Public Open Food Facts provider (`food-facts` on /ws/api, no account):
 //   lookup {barcode, source?}        → { product }
 //   search {query, source?, limit?}  → { products }
-//   alternatives {barcode}           → { product, alternatives }
+//   alternatives {barcode}           → { product, alternatives, to_check }
 // Sources: off = Open Food Facts, obf = Open Beauty Facts, opf = Open Products
 // Facts. OFF requires an identifying User-Agent (OPEN_FOOD_FACTS_USER_AGENT)
-// and caps clients at 100 product reads and 10 searches per minute: this
-// server stays below with its own per-address and global windows, and keeps
+// and caps each IP address at 15 product reads and 10 searches per minute
+// (API documentation, read 2026-10-28; going over can ban the address). Every
+// user reaches OFF through this one server address, so the global windows stay
+// below those caps, a per-address window shares them out, and the server keeps
 // products, searches and the additives taxonomy in memory for their lifetime
 // so repeated questions never reach OFF again. Data licence: ODbL.
 
@@ -20,9 +22,9 @@ const PRODUCT_HOSTS = Object.freeze({
 const FOOD_SEARCH_ENDPOINT = 'https://search.openfoodfacts.org/search';
 const ADDITIVES_TAXONOMY = 'https://static.openfoodfacts.org/data/taxonomies/additives.json';
 const PRODUCT_FIELDS = ['code', 'product_name', 'brands', 'quantity', 'image_url', 'nutriscore_grade', 'nova_group',
-  'ecoscore_grade', 'additives_tags', 'allergens_tags', 'nutriments', 'categories_tags'].join(',');
+  'ecoscore_grade', 'additives_tags', 'ingredients_n', 'allergens_tags', 'traces_tags', 'nutriments', 'categories_tags'].join(',');
 const WINDOW_MS = 60_000;
-const LIMITS = Object.freeze({ read: { address: 30, global: 80 }, search: { address: 5, global: 8 } });
+const LIMITS = Object.freeze({ read: { address: 10, global: 14 }, search: { address: 5, global: 8 } });
 const PRODUCT_TTL_MS = 6 * 60 * 60 * 1000;
 const SEARCH_TTL_MS = 30 * 60 * 1000;
 const TAXONOMY_TTL_MS = 24 * 60 * 60 * 1000;
@@ -65,15 +67,17 @@ export const normalizeFoodProduct = (raw, source, additiveRisks) => {
     nova: [1, 2, 3, 4].includes(Number(raw?.nova_group)) ? Number(raw.nova_group) : null,
     green_score: grade(raw?.ecoscore_grade),
     additives: tags(raw?.additives_tags).map((tag) => ({ tag, risk: additiveRisks.get(tag) || null })),
-    allergens: tags(raw?.allergens_tags),
+    // OFF reads additives from the analysed ingredient list; without one, nothing is known about them.
+    ingredients_known: Number(raw?.ingredients_n) > 0,
+    allergens: tags(raw?.allergens_tags), traces: tags(raw?.traces_tags),
     nutriments_100g: {
       energy_kcal: amount(nutriments['energy-kcal_100g']), fat: amount(nutriments.fat_100g),
-      saturated_fat: amount(nutriments['saturated-fat_100g']), sugars: amount(nutriments.sugars_100g),
+      saturated_fat: amount(nutriments['saturated-fat_100g']), carbohydrates: amount(nutriments.carbohydrates_100g), sugars: amount(nutriments.sugars_100g),
       salt: amount(nutriments.salt_100g), fiber: amount(nutriments.fiber_100g), proteins: amount(nutriments.proteins_100g)
     },
     categories_tags: tags(raw?.categories_tags)
   };
-  return { ...product, verdict: assessFoodHealth(product, additiveRisks) };
+  return { ...product, verdict: assessFoodHealth(product, additiveRisks), selection: evaluateFoodSelection(product) };
 };
 
 const createTtlCache = (ttl, now) => {
@@ -188,20 +192,23 @@ export const createOpenFoodFactsHandler = ({
     const categories = product.categories_tags.filter((tag) => CANONICAL_CATEGORY.test(tag)).slice(-ALTERNATIVE_DEPTH).reverse();
     const ceiling = product.nutriscore ? NUTRISCORE_GRADES.indexOf(product.nutriscore) : 3;
     const grades = [...'abc'].filter((letter) => NUTRISCORE_GRADES.indexOf(letter) < ceiling);
-    if (!categories.length || !grades.length) return { product, alternatives: [] };
+    if (!categories.length || !grades.length) return { product, alternatives: [], to_check: [] };
     const params = new URLSearchParams({
       q: `categories_tags:(${categories.map((tag) => `"${tag}"`).join(' OR ')}) AND nutriscore_grade:(${grades.join(' OR ')})`,
       sort_by: 'nutriscore_grade', page_size: String(ALTERNATIVE_POOL), fields: PRODUCT_FIELDS
     });
     const candidates = await search(`${FOOD_SEARCH_ENDPOINT}?${params}`, (payload) => payload?.hits || [], 'off', address, agent);
     const ranked = candidates
-      .filter((candidate) => candidate.barcode !== barcode && candidate.verdict === 'good' && candidate.nutriscore)
+      .filter((candidate) => candidate.barcode !== barcode && candidate.nutriscore)
       .map((candidate) => ({ candidate, depth: categories.findIndex((tag) => candidate.categories_tags.includes(tag)) }))
       .filter(({ depth }) => depth >= 0)
       .sort((a, b) => a.depth - b.depth
         || NUTRISCORE_GRADES.indexOf(a.candidate.nutriscore) - NUTRISCORE_GRADES.indexOf(b.candidate.nutriscore)
         || a.candidate.barcode.localeCompare(b.candidate.barcode));
-    return { product, alternatives: ranked.slice(0, ALTERNATIVE_COUNT).map(({ candidate }) => candidate) };
+    const first = (test) => ranked.filter(({ candidate }) => test(candidate)).slice(0, ALTERNATIVE_COUNT).map(({ candidate }) => candidate);
+    // The ones the selection policy cannot check come apart, never among the proposals (arbitrage 1).
+    return { product, alternatives: first((candidate) => candidate.verdict === 'good'),
+      to_check: first((candidate) => candidate.selection.state === 'to_check') };
   };
 
   return async (message, address) => {

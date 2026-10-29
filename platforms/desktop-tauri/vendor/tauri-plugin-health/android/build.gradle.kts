@@ -26,6 +26,12 @@ android {
     kotlinOptions {
         jvmTarget = "1.8"
     }
+    // The sensor recording writer and specs, shared with the Wear OS recorder (gen/android/wear).
+    sourceSets {
+        getByName("main") {
+            java.srcDir("../../sensor-recording/android")
+        }
+    }
 }
 
 dependencies {
@@ -34,5 +40,7 @@ dependencies {
     // Stable Health Connect client (Jetpack). Read-only use.
     implementation("androidx.health.connect:connect-client:1.1.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    // The Wear OS data layer: the session told to the watch, its recording received (WearSensorBridge.kt).
+    implementation("com.google.android.gms:play-services-wearable:18.2.0")
     implementation(project(":tauri-android"))
 }

@@ -1,1 +1,1 @@
-export const BEVY_RENDERER_VERSION="d465a9175079ca2a";
+export const BEVY_RENDERER_VERSION="84c092afa0c68ae1";

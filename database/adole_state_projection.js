@@ -155,7 +155,8 @@ export async function applyEventToStateCurrent(event, options = {}) {
         [atomeId]
     );
 
-    let resolvedOwnerId = eventOwnerId || patchOwnerId || actorId || existing?.owner_id || null;
+    // Writing an object (through a share) never makes the writer its owner: the owner it has stays.
+    let resolvedOwnerId = eventOwnerId || patchOwnerId || existing?.owner_id || actorId || null;
     try {
         const ownerRow = await query('get', 'SELECT owner_id FROM atomes WHERE atome_id = ?', [atomeId]);
         if (ownerRow?.owner_id) {

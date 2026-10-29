@@ -17,6 +17,9 @@ export const PROGRAM_ACTIVITY_RECORD_SCHEMAS = Object.freeze({
             exercise_id: { type: 'string' }, level: { type: 'number' }, load_kg: { type: 'number' },
             custom: { type: 'object' }, use_custom: { type: 'boolean' }, sound: { type: 'boolean' }
         } },
+        // A timed brick's own settings (#shared/brick_session_catalog.js#validateBrickSessionSettings): a breathing's
+        // breath and custom seconds, a meditation's bell.
+        brick_session: { type: 'object', properties: { breath: { type: 'string' }, custom: { type: 'object' }, bell: { type: 'number' } } },
         involvement: { type: 'object', required: ['minutes', 'basis', 'days', 'rhythm'], properties: {
             minutes: { type: 'number' }, basis: { type: 'string', enum: ['day', 'week'] },
             days: { type: 'array' }, rhythm: { type: 'number' }
@@ -34,5 +37,14 @@ export const PROGRAM_ACTIVITY_RECORD_SCHEMAS = Object.freeze({
     program_execution_correction: { type: 'object', required: ['execution_id', 'supersedes_ids', 'reason', 'execution'], properties: {
         execution_id: { type: 'string' }, supersedes_ids: { type: 'array' }, reason: { type: 'string' },
         execution: { type: 'object', required: programExecutionRequired, properties: programExecutionSchema }
+    } },
+    // The objectives one tracked session counts for besides (added) or instead of (dropped) its activity's links,
+    // and a session declared done for an objective on a day (#eVe/domains/programs/objective_followup_model.js).
+    objective_session_choice: { type: 'object', required: ['version', 'session_id', 'added', 'dropped'], properties: {
+        version: { type: 'number', enum: [1] }, session_id: { type: 'string' }, added: { type: 'array' }, dropped: { type: 'array' }
+    } },
+    objective_done: { type: 'object', required: ['version', 'objective_id', 'day', 'at'], properties: {
+        version: { type: 'number', enum: [1] }, objective_id: { type: 'string' }, day: { type: 'string' }, at: { type: 'string' },
+        planned_start: { type: 'number' }
     } }
 });

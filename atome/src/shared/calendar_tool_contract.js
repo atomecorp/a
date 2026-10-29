@@ -34,7 +34,8 @@ export const CALENDAR_AGENDA_TOOLS = [
     contract('update_event', 'Update a calendar event: changes holds the event fields to replace.', true,
         { eventId: id, changes: { type: 'object', additionalProperties: false, properties: event } }, ['eventId', 'changes']),
     contract('delete_event', 'Delete a calendar event.', true, { eventId: id }, ['eventId']),
-    contract('ensure_calendar', 'Ensure a calendar exists (creates the default one when calendarId is omitted).', true, { calendarId: id }, [], { risk: 'LOW' }),
+    contract('ensure_calendar', 'Ensure a calendar exists (creates the default one when calendarId is omitted); name names a calendar made now.', true,
+        { calendarId: id, name: { type: 'string', minLength: 1 } }, [], { risk: 'LOW' }),
     contract('share', 'Share a calendar with another user by phone.', true, {
         phone: { type: 'string', minLength: 1 }, calendarId: id, shareType: { type: 'string' },
         permissions: { type: 'object', additionalProperties: false, properties: {

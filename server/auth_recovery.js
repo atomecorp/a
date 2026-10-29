@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { publicDeviceKey, randomHandle, reject, requireHandle } from './auth_link_security.js';
+import { backupKeysDigest, backupKeysOf, publicDeviceKey, randomHandle, reject, requireHandle } from './auth_link_security.js';
 import { normalizeDeviceMeta, PROBATION_MS } from './auth_devices.js';
 import { recoveryLookupInput, recoveryVerifierInput } from '../atome/src/shared/auth_recovery_code.js';
 
@@ -33,11 +33,14 @@ export async function openRecoveryRequest({ query, proof, now }, principalId, { 
 export function createRecovery({ query, transaction, proof, sessions, devices, handles, approvals, accounts, findById, notify, now }) {
     async function setCode(input) {
         if (!HEX_DIGEST.test(String(input.verifier)) || !HEX_DIGEST.test(String(input.lookup))) reject('auth_request_invalid');
+        const backupKeys = backupKeysOf(input.backupKeys);
         const principalId = await transaction(async () => {
-            const { session } = await accounts.authorize(input, 'recovery-code-set', { verifier: input.verifier, lookup: input.lookup });
-            await query('run', `INSERT INTO auth_recovery_codes (principal_id, verifier, lookup, created_ms) VALUES (?, ?, ?, ?)
-                ON CONFLICT(principal_id) DO UPDATE SET verifier = excluded.verifier, lookup = excluded.lookup, created_ms = excluded.created_ms`,
-            [session.principal_id, input.verifier, input.lookup, now()]);
+            const { session } = await accounts.authorize(input, 'recovery-code-set', { verifier: input.verifier, lookup: input.lookup,
+                backup: backupKeysDigest(backupKeys) });
+            await query('run', `INSERT INTO auth_recovery_codes (principal_id, verifier, lookup, created_ms, backup_keys) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(principal_id) DO UPDATE SET verifier = excluded.verifier, lookup = excluded.lookup, created_ms = excluded.created_ms,
+                backup_keys = excluded.backup_keys`,
+            [session.principal_id, input.verifier, input.lookup, now(), backupKeys]);
             await proof.audit('recovery_code_set', session.principal_id, null);
             return session.principal_id;
         });
@@ -124,17 +127,22 @@ export function createRecovery({ query, transaction, proof, sessions, devices, h
             if (approve) await devices.enroll({ keyId: approve.keyId, principalId: row.principal_id, jwk: approve.jwk, role: 'approve',
                 deviceId: row.requester_device_id, assurance: approve.assurance, ...meta, enrolledBy: row.channel, restrictedUntil,
                 credentialId: approve.credentialId, signCount: approve.signCount });
+            // The code's wrapped backup keys go to the device that typed it, then with the code.
+            const code = row.channel === 'recovery_code'
+                ? await query('get', 'SELECT backup_keys FROM auth_recovery_codes WHERE principal_id = ?', [row.principal_id]) : null;
             if (row.channel === 'recovery_code') await query('run', 'DELETE FROM auth_recovery_codes WHERE principal_id = ?', [row.principal_id]);
             await query('run', "UPDATE auth_recovery_requests SET state = 'completed' WHERE request_id = ?", [row.request_id]);
             await query('run', `UPDATE auth_recovery_requests SET state = 'cancelled' WHERE principal_id = ? AND state = 'pending'`, [row.principal_id]);
             await proof.audit('recovery_completed', row.principal_id, row.request_id);
-            return { account, keyId, deviceId: row.requester_device_id, ...meta, canApprove: approve?.assurance === 'hardware_uv' };
+            return { account, keyId, deviceId: row.requester_device_id, ...meta, canApprove: approve?.assurance === 'hardware_uv',
+                backupKeys: code?.backup_keys || null };
         });
         const session = await sessions.create(outcome.account, outcome.keyId);
         await notify(outcome.account.user_id, { kind: 'auth-device-added', deviceId: outcome.deviceId,
             label: outcome.label, platform: outcome.platform }, { exceptDeviceId: outcome.deviceId });
         // The code is consumed: the user is asked to create a new one right away.
-        return { ...session, canApprove: outcome.canApprove, recoveryCodeRequired: true, probationUntil: now() + PROBATION_MS };
+        return { ...session, canApprove: outcome.canApprove, recoveryCodeRequired: true, probationUntil: now() + PROBATION_MS,
+            ...(outcome.backupKeys ? { backupKeys: outcome.backupKeys } : {}) };
     }
     return { setCode, hasCode, startChallenge, open, start, cancel, requesterChallenge, status, complete };
 }

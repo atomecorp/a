@@ -9,6 +9,7 @@ import {
     getAiModelProviderDefinition
 } from './model_catalog_registry.js';
 import { loadRuntimeUserProfile } from './profile_loader.js';
+import { whenBackgroundAllowed } from '../shared/background_work.js';
 import { resolveConfiguredAiProviderCredentials } from './provider_client.js';
 import { cloneJson as clone, toText } from '../shared/scalars.js';
 import { requestProviderService } from './provider_broker.js';
@@ -258,6 +259,8 @@ export const bootstrapAiModelCatalogRefresh = ({
         if (running) return null;
         running = true;
         try {
+            // A background refresh (launch, interval): it asks every provider at once.
+            await whenBackgroundAllowed();
             return await ensureFreshAiModelCatalog({
                 storage,
                 fetchImpl,

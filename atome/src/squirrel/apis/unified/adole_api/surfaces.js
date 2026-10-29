@@ -9,16 +9,25 @@
 // The registry always lives on Fastify, even in Tauri/iOS runtimes: the local
 // Axum/Swift server only ever sees its own device, so it cannot relay between
 // two of them. `FastifyAdapter` is therefore used unconditionally here.
+//
+// The name of this device is the account's, not the surface's: the account device
+// registry (`auth_device_keys.label` on Fastify, the one Home › Security lists) keeps
+// it across a cleared browser or a reinstall that kept the device key. The surface
+// only announces it; every rename (voice `surface.rename`, Home › My hardware,
+// Security › My devices) goes through `renameLocalSurface`.
 
 import { FastifyAdapter } from '../adole.js';
 import { generateUUID } from '../adole_connection.js';
+import { accountMethods, describeThisDevice } from './auth_methods_account.js';
 import { ensureFastifyToken } from './auth_fastify_token.js';
-import { readStorage, writeStorage } from './storage.js';
+import { readStorage, removeStorage, writeStorage } from './storage.js';
 import { isTauriRuntime } from './runtime.js';
 import { getSessionState } from './session.js';
 
 const SURFACE_ID_STORAGE_KEY = 'squirrel.surface_id';
-const SURFACE_LABEL_STORAGE_KEY = 'squirrel.surface_label';
+// Where 1.36 and earlier kept a name given by voice, on this device only: moved once
+// to the account registry, then removed.
+const DEVICE_NAME_TRANSFER_KEY = 'squirrel.surface_label';
 
 // `attachWsApiSurface` rejects anything outside this shape, so a persisted value
 // written by an older or corrupted client must be discarded rather than sent.
@@ -28,6 +37,9 @@ const state = {
     surfaceId: '',
     announcedGeneration: -1,
     announcing: null,
+    // This device in the account registry ({ deviceId, label }), read once per session.
+    device: null,
+    readingDevice: null,
     heartbeatTimer: null,
     lifecycleInstalled: false
 };
@@ -47,12 +59,42 @@ export const getLocalSurfaceId = () => {
     return generated;
 };
 
-export const setLocalSurfaceLabel = (label) => {
-    const normalized = String(label ?? '').trim().slice(0, 120);
-    writeStorage(SURFACE_LABEL_STORAGE_KEY, normalized);
-    // The label is part of the announced descriptor, so a rename must be pushed.
+// The registry's own bound (server/auth_devices.js#normalizeDeviceMeta).
+const normalizeDeviceName = (value) => String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 64);
+
+const readLocalDevice = async () => {
+    if (state.device) return state.device;
+    if (!isAuthenticated()) throw new Error('not_authenticated');
+    state.readingDevice ||= (async () => {
+        const listed = await accountMethods.listDevices();
+        const current = (listed?.devices || []).find((device) => device.current === true);
+        if (!current?.deviceId) throw new Error('surface_device_unknown');
+        let label = normalizeDeviceName(current.label);
+        const given = normalizeDeviceName(readStorage(DEVICE_NAME_TRANSFER_KEY));
+        if (given && given !== label) {
+            await accountMethods.renameDevice(current.deviceId, given);
+            label = given;
+        }
+        removeStorage(DEVICE_NAME_TRANSFER_KEY);
+        state.device = { deviceId: current.deviceId, label };
+        return state.device;
+    })().finally(() => { state.readingDevice = null; });
+    return state.readingDevice;
+};
+
+// A device enrolled without a name is called what its enrollment would have called it.
+export const readLocalSurfaceName = async () => (await readLocalDevice()).label || describeThisDevice().label;
+
+export const renameLocalSurface = async (label) => {
+    const name = normalizeDeviceName(label);
+    if (!name) throw new Error('surface_name_required');
+    const device = await readLocalDevice();
+    await accountMethods.renameDevice(device.deviceId, name);
+    state.device = { ...device, label: name };
+    // The name is part of the announced descriptor, so a rename must be pushed.
     state.announcedGeneration = -1;
-    return normalized;
+    const announced = await ensureSurfaceAnnounced();
+    return { ok: true, name, announced: announced?.success === true, error: announced?.error || undefined };
 };
 
 const resolvePlatform = () => {
@@ -62,14 +104,6 @@ const resolvePlatform = () => {
     if (protocol === 'atome:') return 'ios';
     if (isTauriRuntime()) return 'tauri';
     return 'browser';
-};
-
-const resolveDefaultLabel = (platform) => {
-    const persisted = String(readStorage(SURFACE_LABEL_STORAGE_KEY) || '').trim();
-    if (persisted) return persisted;
-    if (platform === 'ios') return 'iPhone';
-    if (platform === 'tauri') return 'Desktop';
-    return 'Navigateur';
 };
 
 const resolveCapabilities = () => {
@@ -85,11 +119,11 @@ const resolveCapabilities = () => {
     };
 };
 
-export const describeLocalSurface = () => {
+export const describeLocalSurface = async () => {
     const platform = resolvePlatform();
     return {
         surface_id: getLocalSurfaceId(),
-        label: resolveDefaultLabel(platform),
+        label: await readLocalSurfaceName(),
         platform,
         capabilities: resolveCapabilities()
     };
@@ -131,7 +165,13 @@ const sendSurfaceMessage = async (action, fields = {}) => {
 
 export const announceSurface = async () => {
     const generation = currentGeneration();
-    const result = await sendSurfaceMessage('announce', describeLocalSurface());
+    let descriptor = null;
+    try {
+        descriptor = await describeLocalSurface();
+    } catch (error) {
+        return { ok: false, success: false, error: error?.message || String(error) };
+    }
+    const result = await sendSurfaceMessage('announce', descriptor);
     if (result?.success === true) {
         state.announcedGeneration = generation;
     }
@@ -213,6 +253,8 @@ export const installSurfaceLifecycle = () => {
         // reject the announce and there is nothing to teleport between.
         if (event?.detail?.anonymous === true) return;
         state.announcedGeneration = -1;
+        // Another account may open without a logout in between: its registry names this device.
+        state.device = null;
         void ensureSurfaceAnnounced();
         scheduleSurfaceHeartbeat();
     });
@@ -220,6 +262,7 @@ export const installSurfaceLifecycle = () => {
     window.addEventListener('squirrel:user-logged-out', () => {
         state.announcedGeneration = -1;
         state.announcing = null;
+        state.device = null;
         if (state.heartbeatTimer) {
             clearInterval(state.heartbeatTimer);
             state.heartbeatTimer = null;

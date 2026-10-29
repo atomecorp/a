@@ -92,6 +92,15 @@ export const facebookAdapter = {
         await ctx.accepted({ video_id: videoId, page_id: page.id });
         return facebookAdapter.status({ ...ctx, remote: { video_id: videoId, page_id: page.id } });
     },
+    // A scheduled update (Q4 of 28 Oct. 2026): a Page's post takes its new text, in place; a video its description.
+    async update({ record, remote, text, fetchImpl, signal }) {
+        const page = pageOf(record, remote.page_id);
+        const id = remote.video_id || remote.post_id || remote.photo_id;
+        if (!id) throw new SocialError('social_update_unsupported');
+        await socialFetch(fetchImpl, `${GRAPH}/${id}`, { method: 'POST', signal, headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: formBody({ [remote.video_id ? 'description' : 'message']: text, access_token: page.access_token }) }, { reaches: true });
+        return { status: 'published', remote };
+    },
     async status({ record, remote, fetchImpl, signal }) {
         if (!remote.video_id) return { status: remote.post_id ? 'published' : 'unconfirmed', remote };
         const page = pageOf(record, remote.page_id);

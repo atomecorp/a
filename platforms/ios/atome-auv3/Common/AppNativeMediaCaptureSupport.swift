@@ -6,6 +6,17 @@
 import UIKit
 import AVFoundation
 
+extension AVCaptureDevice {
+    /// The rotation that makes a capture upright for THIS camera (nil before iOS 17).
+    /// A fixed 90° for portrait assumes a landscape-mounted sensor; the square front
+    /// camera of recent iPhones is mounted otherwise, and a selfie came out sideways.
+    /// The rotation coordinator knows each device's mounting.
+    var horizonLevelCaptureRotationAngle: CGFloat? {
+        guard #available(iOS 17.0, *) else { return nil }
+        return RotationCoordinator(device: self, previewLayer: nil).videoRotationAngleForHorizonLevelCapture
+    }
+}
+
 extension AppNativeMediaCaptureController {
     func complete(_ completion: @escaping ([String: Any], String?) -> Void,
                           payload: [String: Any],
@@ -93,7 +104,8 @@ extension AppNativeMediaCaptureController {
     func configureVideoConnection(_ connection: AVCaptureConnection?,
                                           position: AVCaptureDevice.Position) {
         guard let connection else { return }
-        let angle = currentVideoRotationAngle()
+        let device = connection.inputPorts.lazy.compactMap { ($0.input as? AVCaptureDeviceInput)?.device }.first
+        let angle = device?.horizonLevelCaptureRotationAngle ?? currentVideoRotationAngle()
         if connection.isVideoRotationAngleSupported(angle) {
             connection.videoRotationAngle = angle
         }

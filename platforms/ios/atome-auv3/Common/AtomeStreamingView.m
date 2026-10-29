@@ -5,6 +5,9 @@
 // It shares nothing with the app page: no bridge, no script, its own website data per
 // service (its sign-in kept between launches). Playback is read and suspended through
 // WebKit's own media controls, in every frame, without touching the service's page.
+// The Web of Divertissement (eVe/domains/dashboard/dashboard_web.js) is one more such
+// service, `web`: its history is walked (`streaming_view_navigate`) and its page read
+// (`streaming_view_page`); a site's camera or microphone request and its downloads are refused.
 #import "AtomeStreamingView.h"
 #import <WebKit/WebKit.h>
 #import <CommonCrypto/CommonDigest.h>
@@ -22,6 +25,8 @@ typedef void (^AtomeStreamingReply)(NSDictionary *result);
 @property(nonatomic, strong) WKWebView *view;
 @property(nonatomic, copy) NSString *service;
 @property(nonatomic) BOOL front;
+// Why the last load failed (cleared when the next one starts), read with the page.
+@property(nonatomic, copy) NSString *loadFailure;
 #if TARGET_OS_IPHONE
 @property(nonatomic) BOOL hostOpaque;
 @property(nonatomic, strong) UIColor *hostBackground;
@@ -109,6 +114,14 @@ static NSDictionary *failure(NSString *error) { return @{@"ok": @NO, @"error": e
     view.UIDelegate = self;
     view.allowsBackForwardNavigationGestures = YES;
     view.allowsLinkPreview = NO;
+#if DEBUG
+    // The app page's opt-in (FeatureFlags.webInspectorEnabled): inspectable only for a deliberate diagnostic launch.
+    if (@available(iOS 16.4, macOS 13.3, *)) {
+        NSProcessInfo *process = NSProcessInfo.processInfo;
+        view.inspectable = [process.arguments containsObject:@"-AtomeWebInspector"]
+            || [process.environment[@"ATOME_IOS_WEB_INSPECTOR"] isEqualToString:@"1"];
+    }
+#endif
 #if TARGET_OS_IPHONE
     view.backgroundColor = UIColor.blackColor;
     view.layer.cornerRadius = radius;
@@ -168,6 +181,30 @@ static NSDictionary *failure(NSString *error) { return @{@"ok": @NO, @"error": e
     return @{@"ok": @YES, @"front": @(self.front)};
 }
 
+// `back` / `forward` walk the page's own history, `reload` loads it again, `load` opens `url`.
+- (NSDictionary *)navigate:(NSDictionary *)payload {
+    if (!self.view) return failure(@"streaming_view_closed");
+    NSString *action = payload[@"action"];
+    if ([action isEqualToString:@"back"] && self.view.canGoBack) [self.view goBack];
+    else if ([action isEqualToString:@"forward"] && self.view.canGoForward) [self.view goForward];
+    else if ([action isEqualToString:@"reload"]) [self.view reload];
+    else if ([action isEqualToString:@"load"]) {
+        NSURL *url = [payload[@"url"] isKindOfClass:NSString.class] ? [NSURL URLWithString:payload[@"url"]] : nil;
+        if (![url.scheme isEqualToString:@"https"]) return failure(@"streaming_view_request_invalid");
+        [self.view loadRequest:[NSURLRequest requestWithURL:url]];
+    } else if ([action isEqualToString:@"back"] || [action isEqualToString:@"forward"]) return failure(@"streaming_view_history_edge");
+    else return failure(@"streaming_view_request_invalid");
+    return @{@"ok": @YES};
+}
+
+// What the page shows now: its address, its title, where its history can go, a failed load.
+- (NSDictionary *)page {
+    if (!self.view) return failure(@"streaming_view_closed");
+    return @{@"ok": @YES, @"url": self.view.URL.absoluteString ?: @"", @"title": self.view.title ?: @"",
+             @"can_go_back": @(self.view.canGoBack), @"can_go_forward": @(self.view.canGoForward),
+             @"loading": @(self.view.isLoading), @"error": self.loadFailure ?: @""};
+}
+
 // `state` reads, `pause` suspends, `play` resumes what `pause` suspended.
 - (void)media:(NSDictionary *)payload reply:(AtomeStreamingReply)reply {
     if (!self.view) { reply(failure(@"streaming_view_closed")); return; }
@@ -196,6 +233,7 @@ static NSDictionary *failure(NSString *error) { return @{@"ok": @NO, @"error": e
     self.view = nil;
     self.service = nil;
     self.front = NO;
+    self.loadFailure = nil;
     [self setHostClear:NO];
 }
 
@@ -206,6 +244,8 @@ static NSDictionary *failure(NSString *error) { return @{@"ok": @NO, @"error": e
     else if ([command isEqualToString:@"streaming_view_place"]) reply([self place:payload]);
     else if ([command isEqualToString:@"streaming_view_front"]) reply([self raise:payload]);
     else if ([command isEqualToString:@"streaming_view_media"]) [self media:payload reply:reply];
+    else if ([command isEqualToString:@"streaming_view_navigate"]) reply([self navigate:payload]);
+    else if ([command isEqualToString:@"streaming_view_page"]) reply([self page]);
     else if ([command isEqualToString:@"streaming_view_close"]) { [self close]; reply(@{@"ok": @YES}); }
     else reply(failure(@"streaming_view_command_invalid"));
 }
@@ -216,6 +256,33 @@ static NSDictionary *failure(NSString *error) { return @{@"ok": @NO, @"error": e
     NSString *scheme = action.request.URL.scheme.lowercaseString ?: @"";
     decisionHandler([@[@"https", @"http", @"about", @"blob", @"data"] containsObject:scheme]
         ? WKNavigationActionPolicyAllow : WKNavigationActionPolicyCancel);
+}
+
+// A response the view cannot show is a download: refused (no download space yet), told by the page state.
+- (void)webView:(WKWebView *)webView decidePolicyForNavigationResponse:(WKNavigationResponse *)response
+    decisionHandler:(void (^)(WKNavigationResponsePolicy))decisionHandler {
+    if (response.canShowMIMEType) { decisionHandler(WKNavigationResponsePolicyAllow); return; }
+    self.loadFailure = @"streaming_view_download_unsupported";
+    decisionHandler(WKNavigationResponsePolicyCancel);
+}
+
+- (void)webView:(WKWebView *)webView didStartProvisionalNavigation:(WKNavigation *)navigation { self.loadFailure = nil; }
+
+- (void)failed:(NSError *)error {
+    // A load the person (or the next load) cancelled is not a failure.
+    if ([error.domain isEqualToString:NSURLErrorDomain] && error.code == NSURLErrorCancelled) return;
+    // A refused download already said why (its cancel fails the load in turn).
+    if (self.loadFailure) return;
+    self.loadFailure = [NSString stringWithFormat:@"streaming_view_load_failed:%@:%ld", error.domain, (long)error.code];
+}
+- (void)webView:(WKWebView *)webView didFailProvisionalNavigation:(WKNavigation *)navigation withError:(NSError *)error { [self failed:error]; }
+- (void)webView:(WKWebView *)webView didFailNavigation:(WKNavigation *)navigation withError:(NSError *)error { [self failed:error]; }
+
+// A site never reaches the camera or the microphone: the host grants none.
+- (void)webView:(WKWebView *)webView requestMediaCapturePermissionForOrigin:(WKSecurityOrigin *)origin
+    initiatedByFrame:(WKFrameInfo *)frame type:(WKMediaCaptureType)type
+    decisionHandler:(void (^)(WKPermissionDecision))decisionHandler API_AVAILABLE(ios(15.0), macos(12.0)) {
+    decisionHandler(WKPermissionDecisionDeny);
 }
 
 // A window the site opens (a sign-in, a consent) loads in the same view.

@@ -1,6 +1,6 @@
 import { validateParams } from '../ai/agent_gateway_normalize.js';
 import { ACTIVITY_CATEGORY_SLUGS } from '../../shared/activity_categories.js';
-import { PUBLIC_EVENT_MAX_CATEGORIES, PUBLIC_EVENT_REPORT_REASONS } from '../../shared/public_event_contract.js';
+import { PUBLIC_EVENT_MAX_CATEGORIES, PUBLIC_EVENT_PRESENTATION_MAX_CHARS, PUBLIC_EVENT_REPORT_REASONS } from '../../shared/public_event_contract.js';
 
 // Public events (todo/evenements_publics_2026-10-26.md): a dated activity a user declares (a concert,
 // a match, a meal, a party…) is published to everyone around its place, in the Activité rubrics. It is
@@ -21,7 +21,8 @@ const fields = {
     repeat: { type: 'string', enum: EVENTS_REPEATS }, categories,
     place: { type: 'string', minLength: 2, maxLength: 200, description: 'The place as said (« salle des fêtes de Nolande »), found by the map geocoder.' },
     price_eur: { type: 'number', minimum: 0, maximum: 100000, description: '0 = free.' }, ticket_url: url, url,
-    description: { type: 'string', maxLength: 2000 },
+    description: { type: 'string', maxLength: 2000, description: 'The event\'s Note: private, never published.' },
+    presentation: { type: 'string', maxLength: PUBLIC_EVENT_PRESENTATION_MAX_CHARS, description: 'Présentation: the public text everyone reads with the announcement.' },
     creation_id: { ...id, description: 'A creation of Créer (creation.list) laid as the poster.' }
 };
 const definitions = {
@@ -31,9 +32,9 @@ const definitions = {
         'Declare a new public event: it joins the user\'s calendar and everyone around its place finds it in the Activité rubrics of its categories. Ask the user to confirm the title, date, place and categories first.', true, 'write'],
     publish: [{ event_id: id, categories, place: fields.place, price_eur: fields.price_eur, ticket_url: url, url, creation_id: fields.creation_id },
         ['event_id', 'categories', 'place'], 'Make an event of the user\'s calendar public (events.mine or calendar.list_events give its id).', true, 'write'],
-    update: [{ event_id: id, ...fields }, ['event_id'], 'Change a public event of the user (its title, date, place, categories, price, links).', true, 'write'],
+    update: [{ event_id: id, ...fields }, ['event_id'], 'Change a public event of the user (its title, date, place, categories, presentation, price, links).', true, 'write'],
     unpublish: [{ event_id: id }, ['event_id'], 'Withdraw a public event of the user from everyone; it stays in their calendar.', true, 'write'],
-    mine: [{}, [], 'The user\'s public events with their status: live, refused (quota, suspended, invalid, past) or hidden (reported).', false, 'read'],
+    mine: [{}, [], 'The user\'s public events with their status: live (with its link to share), refused (quota, suspended, invalid, past) or hidden (reported).', false, 'read'],
     nearby: [{ categories, query: { type: 'string', maxLength: 80 }, radius_km: { type: 'integer', minimum: 1, maximum: 100 } }, [],
         'What people declared around the place the Activité rubrics look around: their events of the categories asked (all when none), soonest first, with the organiser.', false, 'read'],
     report: [{ entry_id: id, reason: { type: 'string', enum: PUBLIC_EVENT_REPORT_REASONS } }, ['entry_id', 'reason'],
@@ -43,7 +44,7 @@ const definitions = {
     panel: [{ ...fields, public: { type: 'boolean', description: 'Annon.: the event public (true) or private (false).' },
         notify_contacts: { type: 'boolean', description: 'Diffuser › Contacts: a News to the contacts once saved.' },
         choose_poster: { type: 'boolean', description: 'Affiche › Import: open the import panel (then media_import.* chooses in it).' } }, [],
-        'Set the fields of the event panel shown (events.open): title, date, repetition, categories, place, price, ticket link, poster, Annon., Contacts. Nothing is saved until events.save.', false, 'control'],
+        'Set the fields of the event panel shown (events.open): title, date, repetition, categories, place, presentation, price, ticket link, poster, Annon., Contacts. Nothing is saved until events.save.', false, 'control'],
     save: [{}, [], 'Garder: save the event panel shown; a public event goes out to everyone around. Confirm with the user first.', true, 'write'],
     share: [{ event_id: id, destinations: { type: 'array', minItems: 1, maxItems: 8, items: { type: 'string', pattern: '^(tiktok|instagram|facebook:profile|facebook:page:[0-9]{1,40})$' } } },
         ['event_id', 'destinations'], 'Diffuser › Réseaux by voice: prepare a public event of the user (its poster and words) for the user\'s connected social networks (social.accounts lists them); returns the job to publish with social.publish.', false, 'read'],
@@ -53,7 +54,7 @@ const definitions = {
 const eventSchema = { type: 'object', properties: { event_id: { type: 'string' }, entry_id: { type: 'string' }, title: { type: 'string' }, start: { type: 'string' },
     end: { type: 'string' }, place: { type: 'string' }, city: { type: 'string' }, categories: { type: 'array', items: { type: 'string' } },
     organizer: { type: 'string' }, distance_km: { type: 'number' }, price: { type: 'string' }, free: { type: 'boolean' }, status: { type: 'string' },
-    reason: { type: 'string' } } };
+    reason: { type: 'string' }, link: { type: 'string', description: 'A live event\'s link: it opens Atome on the announcement.' } } };
 export const EVENTS_COMMANDS = Object.freeze(Object.entries(definitions).map(([action, [properties, required, description, persistent, access]]) => Object.freeze({
     name: `events.${action}`, action, description, persistent, capability: `events.${access}`,
     input_schema: { type: 'object', additionalProperties: false, properties, required },

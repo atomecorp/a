@@ -109,7 +109,7 @@
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>eVe utilise la reconnaissance vocale pour comprendre ce que tu lui dis, et faire à ta place ce que tu lui demandes.</string>
 	<key>NSMotionUsageDescription</key>
-	<string>Atome compte les pas mesurés par cet iPhone pour le moniteur « Pas de cet iPhone » que vous avez choisi.</string>
+	<string>Atome compte les pas mesurés par cet iPhone pour le moniteur « Pas de cet iPhone » que vous avez choisi, et garde sur cet appareil les mouvements de vos séances d’activité.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Atome peut ajouter les captures créées à votre photothèque si vous le demandez.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

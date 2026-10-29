@@ -22,59 +22,68 @@ use bevy::{
 #[path = "backdrop_temporal_order.rs"]
 mod temporal_order;
 
-fn region(x: f32, y: f32, width: f32, height: f32, halo: f32, depth: f32) -> SampleRegion {
+fn region(x: f32, y: f32, width: f32, height: f32, halo: f32) -> SampleRegion {
     let paint = Rect::from_corners(Vec2::new(x, y), Vec2::new(x + width, y + height));
     SampleRegion {
         paint,
-        depth,
         sample: Rect::from_corners(paint.min - Vec2::splat(halo), paint.max + Vec2::splat(halo)),
     }
 }
 
 #[test]
 fn overlapping_glass_and_intervening_content_require_fresh_snapshots() {
-    let panel = region(0.0, 0.0, 300.0, 200.0, 32.0, 10.0);
-    let button = region(20.0, 20.0, 60.0, 30.0, 32.0, 20.0);
-    let third = region(30.0, 24.0, 20.0, 20.0, 32.0, 30.0);
+    let panel = region(0.0, 0.0, 300.0, 200.0, 32.0);
+    let button = region(20.0, 20.0, 60.0, 30.0, 32.0);
+    let third = region(30.0, 24.0, 20.0, 20.0, 32.0);
     assert_eq!(
         composition_ranges(
             [
-                (0, None),
-                (1, Some(panel)),
-                (2, Some(button)),
-                (3, Some(third)),
-                (4, None)
+                (0, 0.0, None),
+                (1, 10.0, Some(panel)),
+                (2, 20.0, Some(button)),
+                (3, 30.0, Some(third)),
+                (4, 40.0, None)
             ],
             5
         ),
-        vec![
-            (0..1, false),
-            (1..2, true),
-            (2..3, true),
-            (3..4, true),
-            (4..5, false)
-        ]
+        vec![(0..1, false), (1..2, true), (2..3, true), (3..5, true)]
     );
+    // Content between two planes of glass lies below the second one.
     assert_eq!(
-        composition_ranges([(0, Some(button)), (1, None), (2, Some(button))], 3),
-        vec![(0..1, true), (1..2, false), (2..3, true)]
+        composition_ranges(
+            [(0, 20.0, Some(button)), (1, 25.0, None), (2, 30.0, Some(button))],
+            3
+        ),
+        vec![(0..2, true), (2..3, true)]
+    );
+    // Overlapping glass of one plane stays ordered.
+    assert_eq!(
+        composition_ranges(
+            [(0, 20.0, Some(button)), (1, 20.0, None), (2, 20.0, Some(button))],
+            3
+        ),
+        vec![(0..2, true), (2..3, true)]
     );
 }
 
 #[test]
 fn grouping_checks_sampling_halo_and_every_previous_surface() {
-    let first = region(0.0, 0.0, 20.0, 20.0, 2.0, 10.0);
-    let distant = region(200.0, 0.0, 20.0, 20.0, 2.0, 10.0);
-    let near_first = region(30.0, 0.0, 20.0, 20.0, 16.0, 20.0);
+    let first = region(0.0, 0.0, 20.0, 20.0, 2.0);
+    let distant = region(200.0, 0.0, 20.0, 20.0, 2.0);
+    let near_first = region(30.0, 0.0, 20.0, 20.0, 16.0);
     assert_eq!(
         composition_ranges(
-            [(0, Some(first)), (1, Some(distant)), (2, Some(near_first))],
+            [
+                (0, 10.0, Some(first)),
+                (1, 10.0, Some(distant)),
+                (2, 20.0, Some(near_first))
+            ],
             3
         ),
         vec![(0..2, true), (2..3, true)]
     );
     assert_eq!(
-        composition_ranges([(0, Some(first)), (1, Some(distant))], 2),
+        composition_ranges([(0, 10.0, Some(first)), (1, 10.0, Some(distant))], 2),
         vec![(0..2, true)]
     );
     assert!(composition_ranges([], 0).is_empty());

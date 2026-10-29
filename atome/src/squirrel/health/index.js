@@ -7,6 +7,11 @@ import { CONFIG } from '../apis/unified/adole_backend.js';
 import { getSessionState } from '../apis/unified/adole_api/session.js';
 import { createHealthChannel, resolveNativeHealthInvoke } from './health_channel.js';
 import { createHealthOwner } from './health_owner.js';
+import { createHealthDeclarations } from './health_declarations.js';
+import { createHealthFeeling } from './health_feeling.js';
+import { createSensorConsent } from './health_sensor_consent.js';
+import { createSensorBackup } from './sensor_backup.js';
+import { getCurrentUserId } from '../../../../eVe/core/project_security.js';
 
 const env = typeof window !== 'undefined' ? window : globalThis;
 
@@ -37,12 +42,32 @@ const channel = createHealthChannel({
 });
 if (native.invoke) void channel.open();
 
-const owner = createHealthOwner({
+const measuredOwner = createHealthOwner({
     channel,
     getAccountId: accountId,
     eventTarget: env.addEventListener ? env : null,
     documentRef: typeof document !== 'undefined' ? document : null
 });
+
+// Read and written as Atomes through the mutation pipeline installed after this boot wave (eVe/core/atome_commit.js),
+// owned like the Programme's records: the signed-in account or this device's guest.
+const store = {
+    read: async (id) => {
+        try { return await env.Atome.getStateCurrent(id); }
+        catch (error) { if (error?.message === 'atome_not_available_locally') return null; throw error; }
+    },
+    commit: (event) => env.Atome.commit(event, { refreshState: true, realtimeBroadcast: true })
+};
+// What the person declares (a glass of water) joins what the store measured; how they feel is theirs too (#health_feeling.js);
+// the raw motion is recorded only with the person's agreement (#health_sensor_consent.js).
+const declared = createHealthDeclarations({ owner: measuredOwner, actor: getCurrentUserId, store });
+// The copies go to the account vault (/ws/api file operations), encrypted with the account's backup keys.
+// Imported lazily: this module is evaluated in the boot wave, before the auth owner and the adapters.
+const backup = createSensorBackup({ sensors: measuredOwner.sensors, store, actor: getCurrentUserId,
+    keys: async () => (await import('../apis/unified/adole_api/auth_methods_account.js')).pairingClient().backupKeys(),
+    files: async () => (await import('../apis/unified/adole.js')).FastifyAdapter.file });
+const owner = Object.freeze({ ...declared, feeling: createHealthFeeling({ store, actor: getCurrentUserId }),
+    sensors: createSensorConsent({ sensors: measuredOwner.sensors, backup, store, actor: getCurrentUserId }) });
 
 export const getHealthOwner = () => owner;
 

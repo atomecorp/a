@@ -6,8 +6,8 @@
 use serde_json::Value;
 use tauri::{AppHandle, Runtime, WebviewWindow};
 
-const COMMANDS: [&str; 5] = ["streaming_view_open", "streaming_view_place", "streaming_view_front",
-    "streaming_view_media", "streaming_view_close"];
+const COMMANDS: [&str; 7] = ["streaming_view_open", "streaming_view_place", "streaming_view_front",
+    "streaming_view_media", "streaming_view_navigate", "streaming_view_page", "streaming_view_close"];
 
 #[cfg(target_os = "macos")]
 extern "C" {

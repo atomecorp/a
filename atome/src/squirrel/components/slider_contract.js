@@ -20,6 +20,8 @@ export const isSliderValueValid = (value, config = {}, options = {}) => {
 };
 // Captions are presentation only. Consumers retain their numeric formatting when absent.
 export const sliderValueCaption = (value, options = {}) => {
+    // `unset`: the value that stands for « not measured yet » (a heart rate without a reading), shown as its caption.
+    if (options.unset && valueKey(value) === valueKey(options.unset.value)) return options.unset.caption;
     if (options.valueLabels == null) return null;
     const key = valueKey(value);
     if (!Object.hasOwn(options.valueLabels, key)) throw new Error('slider_value_caption_required');
@@ -63,6 +65,11 @@ export const normalizeSliderOptions = (options = {}) => {
             || Object.entries(labels).some(([key, label]) => !Number.isFinite(Number(key)) || valueKey(key) !== key
                 || typeof label !== 'string' || !label.trim())) throw new Error('slider_value_labels_invalid');
         normalized.valueLabels = { ...labels };
+    }
+    if (options.unset != null) {
+        const { value, caption } = options.unset;
+        if (!Number.isFinite(Number(value)) || typeof caption !== 'string' || !caption.trim()) throw new Error('slider_unset_invalid');
+        normalized.unset = { value: Number(value), caption };
     }
     if (options.boundLabels != null) {
         const labels = options.boundLabels;

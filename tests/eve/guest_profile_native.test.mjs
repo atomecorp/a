@@ -2,7 +2,7 @@ import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import * as adole from '../../atome/src/squirrel/apis/unified/adole.js';
 import { setGuestWorkspace, getGuestWorkspace, setSessionState } from '../../atome/src/squirrel/apis/unified/adole_api/session.js';
 import { transferGuestWorkspace } from '../../atome/src/squirrel/apis/unified/adole_api/auth_workspace.js';
-import { loadUserProfile, upsertUserProfile } from '../../eVe/domains/user/profile_api.js';
+import { installUserProfileRuntimeBridge, loadUserProfile, upsertUserProfile } from '../../eVe/domains/user/profile_api.js';
 
 const guestId = '660e8400-e29b-41d4-a716-446655440000';
 const accountId = '550e8400-e29b-41d4-a716-446655440000';
@@ -16,7 +16,8 @@ beforeEach(() => {
     Object.assign(win, { CustomEvent, __SQUIRREL_FORCE_TAURI_RUNTIME__: true, __SQUIRREL_AUTH_SOURCE__: 'tauri',
         __SQUIRREL_PROFILE_SOURCE__: 'fastify', Atome: { commit },
         AdoleAPI: { atomes: {}, security: { isAnonymous: () => current.anonymous },
-            auth: { current: async () => current, ensureFastifyToken: vi.fn(() => { throw new Error('unexpected_cloud_auth'); }) } } });
+            auth: { current: async () => current, ensureFastifyToken: vi.fn(async () => ({ ok: true })) } } });
+    installUserProfileRuntimeBridge(win);
     globalThis.window = win;
     setSessionState({ mode: 'authenticated', user: { id: accountId }, backend: 'tauri' });
     setGuestWorkspace({ user: { id: guestId }, adoptionOperationId: operationId, adoptionAccountId: accountId });
@@ -28,6 +29,7 @@ beforeEach(() => {
     transferred = vi.spyOn(adole.TauriAdapter.atome, 'transferOwner').mockResolvedValue({ ok: true });
     sync = vi.spyOn(adole.TauriAdapter.sync, 'getPending').mockResolvedValue({ ok: false, error: 'offline' });
     vi.spyOn(adole.FastifyAdapter.auth, 'me').mockResolvedValue({ ok: true, user: { id: accountId } });
+    vi.spyOn(adole.FastifyAdapter.atome, 'getStateCurrent').mockResolvedValue({ ok: true, state: { properties: { eve_profile: { name: 'Account' } } } });
     vi.spyOn(adole.FastifyAdapter.ws, 'send').mockImplementation(async message => message.type === 'state-current'
         ? { ok: true, state: { properties: { user_face: 'data:image/png;base64,AAAA', eve_profile: { name: 'Account', first_name: 'Ada' } } } }
         : { ok: true, status: message.action === 'finalize' ? 'completed' : 'importing' });
@@ -43,6 +45,16 @@ it('pins a native guest profile to the local adapter even when cloud profile sou
     expect((await loadUserProfile()).ok).toBe(true);
     expect(window.AdoleAPI.auth.ensureFastifyToken).not.toHaveBeenCalled();
     expect(adole.FastifyAdapter.auth.me).not.toHaveBeenCalled();
+});
+
+it('refuses the adoption, untouched, while the account profile has not reached this device', async () => {
+    // A phone's own profile source (the local server), holding the bare record of a new sign-in.
+    window.__SQUIRREL_PROFILE_SOURCE__ = 'tauri';
+    adole.TauriAdapter.atome.getStateCurrent.mockResolvedValue({ ok: true, state: { properties: { username: 'account' } } });
+    const result = await transferGuestWorkspace(guestId, accountId, { operationId });
+    expect(result).toMatchObject({ ok: false, reason: 'transfer_failed', error: 'atome_not_available_locally' });
+    expect(commit).not.toHaveBeenCalled(); expect(transferred).not.toHaveBeenCalled(); expect(source.auth.startGuest).not.toHaveBeenCalled();
+    expect(Object.hasOwn(getGuestWorkspace(), 'adoptionProfileEvent')).toBe(false);
 });
 
 it('journals an immutable native adoption intent and retains it while remote sync is incomplete', async () => {

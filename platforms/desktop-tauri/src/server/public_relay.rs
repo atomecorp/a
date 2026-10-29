@@ -8,12 +8,12 @@ use tokio_tungstenite::{connect_async, tungstenite::Message};
 // television catalogue, YouTube live resolution, the shows around a position, the films and series
 // of Divertissement › Vidéo, GPS resources, Open Food
 // Facts, the free book catalogs, the Médiathèque's free media and the bug reports
-// kept on atome.one). The desktop runtime has no copy of them: it forwards the frame,
+// kept on atome.one, the shop's sales everyone browses, the coaches' directory). The desktop runtime has no copy of them: it forwards the frame,
 // without any credential, to the configured Fastify server and returns its
 // single reply.
-pub(super) const PUBLIC_TYPES: [&str; 15] = ["youtube-search", "peertube-search", "peertube-resolve", "tv-catalog",
+pub(super) const PUBLIC_TYPES: [&str; 17] = ["youtube-search", "peertube-search", "peertube-resolve", "tv-catalog",
     "tv-resolve", "shows-nearby", "video-catalog", "gps-resource", "food-facts",
-    "book-source", "book-fetch", "media-library-search", "media-library-fetch", "bug-report-submit", "bug-report-status"];
+    "book-source", "book-fetch", "media-library-search", "media-library-fetch", "bug-report-submit", "bug-report-status", "shop-public", "coaches-public"];
 
 fn failure_code(request_type: &str) -> &'static str {
     match request_type {

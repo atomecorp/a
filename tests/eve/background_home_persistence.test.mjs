@@ -78,12 +78,11 @@ test('an immediate Background save resolves only after the canonical profile mut
     }
 });
 
-test('import and random download apply the media before awaiting canonical persistence', async () => {
+test('import applies the media before awaiting canonical persistence', async () => {
     const previousWindow = globalThis.window;
     globalThis.window = {};
     const order = [];
     assetBox.sendFileToServer.mockImplementation(async file => ({ ok: true, mediaUrl: `/media/${file.name}`, fileName: file.name, atomeId: `media_${file.name}` }));
-    assetBox.fetchRemoteWallpaperFile.mockResolvedValue({ ok: true, file: { name: 'random.png', type: 'image/png' } });
     const image = createBackgroundImage({
         applyBackgroundParams: (params) => order.push(`apply:${params.backgroundImageUrl}`),
         schedulePreferenceSave: async ({ immediate }) => {
@@ -93,15 +92,8 @@ test('import and random download apply the media before awaiting canonical persi
     });
     try {
         const imported = await image.importBackgroundImageFile({ name: 'imported.png', type: 'image/png' });
-        const downloaded = await image.downloadRandomBackgroundImage();
-        assert.deepEqual(order, [
-            'apply:/media/imported.png',
-            'persist:true',
-            'apply:/media/random.png',
-            'persist:true'
-        ]);
+        assert.deepEqual(order, ['apply:/media/imported.png', 'persist:true']);
         assert.deepEqual(imported, { ok: true, persisted: true, mediaUrl: '/media/imported.png' });
-        assert.equal(downloaded.mediaUrl, '/media/random.png');
     } finally {
         globalThis.window = previousWindow;
     }
@@ -135,7 +127,6 @@ test('Background persistence failures remain explicit alongside the applied imag
     const previousWindow = globalThis.window;
     globalThis.window = {};
     assetBox.sendFileToServer.mockImplementation(async file => ({ ok: true, mediaUrl: `/media/${file.name}`, fileName: file.name, atomeId: `media_${file.name}` }));
-    assetBox.fetchRemoteWallpaperFile.mockResolvedValue({ ok: true, file: { name: 'random.png', type: 'image/png' } });
     const image = createBackgroundImage({
         applyBackgroundParams: () => {},
         schedulePreferenceSave: async () => ({ ok: false, error: 'background_profile_save_failed' })
@@ -145,10 +136,6 @@ test('Background persistence failures remain explicit alongside the applied imag
             await image.importBackgroundImageFile({ name: 'imported.png', type: 'image/png' }),
             { ok: true, persisted: false, persistError: 'background_profile_save_failed', mediaUrl: '/media/imported.png' }
         );
-        assert.deepEqual(await image.downloadRandomBackgroundImage(), {
-            ok: true, persisted: false, persistError: 'background_profile_save_failed',
-            mediaUrl: '/media/random.png', stored: true
-        });
     } finally {
         globalThis.window = previousWindow;
     }

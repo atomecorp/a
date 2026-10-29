@@ -32,6 +32,14 @@ pub const METHODS: &[&str] = &[
     "workoutStart",
     "workoutEvent",
     "workoutEnd",
+    "sensorsStart",
+    "sensorsStop",
+    "sensorsStatus",
+    "sensorsList",
+    "sensorsDelete",
+    "sensorsEnable",
+    "sensorsRead",
+    "sensorsRestore",
 ];
 
 pub fn init<R: Runtime>() -> TauriPlugin<R> {

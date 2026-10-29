@@ -47,9 +47,9 @@ const collectIds = (node, ids = []) => {
     (node?.children || []).forEach((child) => collectIds(child, ids));
     return ids;
 };
-// The tools whose halo the tree paints (`lit` in bevy_ui_menu_surface.js).
-const glowingIds = (tree) => collectIds(tree.root).filter((id) => String(id).endsWith('_glow')
-    && !String(id).endsWith('_icon_glow')).map((id) => id.slice(0, -'_glow'.length)).sort();
+// The tools whose glyph the tree lights (`lit` in bevy_ui_menu_surface.js).
+const glowingIds = (tree) => collectIds(tree.root).filter((id) => String(id).endsWith('_icon_glow'))
+    .map((id) => id.slice(0, -'_icon_glow'.length)).sort();
 const railOf = (tree) => tree.root.children.find((node) => node.id === RAIL_ID);
 const levelIds = (tree) => new Set(collectIds(railOf(tree)?.children?.[0]));
 const pinnedIds = (tree) => tree.root.children
@@ -214,11 +214,12 @@ test('only the engaged ribbon tool itself glows, never a palette — not even th
         assert.deepEqual(glowingIds(lastTree()), ['eve_bevy_ui_main_menu_tool_contact'],
             'the open Contacts panel glows; neither Create (Text is locked inside it) nor View does');
         const contact = findNode(lastTree().root, 'eve_bevy_ui_main_menu_tool_contact');
-        assert.ok(findNode(contact, 'eve_bevy_ui_main_menu_tool_contact_icon_glow'), 'the icon carries its own halo');
+        assert.ok(findNode(contact, 'eve_bevy_ui_main_menu_tool_contact_icon_glow'), 'the icon carries its own light');
+        assert.equal(findNode(contact, 'eve_bevy_ui_main_menu_tool_contact_glow'), null, 'no halo around the tile');
         harness.runtime.setToolLatchedState({ tool_id: 'ui.contact.panel', latched: false });
         await waitFrame();
-        const fading = findNode(lastTree().root, 'eve_bevy_ui_main_menu_tool_contact_glow');
-        assert.ok(fading && fading.style.opacity < 1, 'a stopped tool keeps its halo only while it fades out');
+        const fading = findNode(lastTree().root, 'eve_bevy_ui_main_menu_tool_contact_icon_glow');
+        assert.ok(fading && fading.style.opacity < 1, 'a stopped tool keeps its light only while it fades out');
     } finally {
         harness.runtime.destroy();
         harness.restore();
@@ -317,7 +318,7 @@ test('the rail never moves a tool: Play holds the base, a lit tool stays in plac
     await flushPulse();
     tree = rendered.at(-1);
     assert.deepEqual(positions(tree), idle, 'stopping everything moves nothing either');
-    assert.ok(glowingIds(tree).every((id) => findNode(tree.root, `${id}_glow`).style.opacity < 1),
+    assert.ok(glowingIds(tree).every((id) => findNode(tree.root, `${id}_icon_glow`).style.opacity < 1),
         'what is still drawn only fades out');
     runtime.destroy?.();
 });

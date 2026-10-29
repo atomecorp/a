@@ -40,9 +40,10 @@ const getOrCreateService = (env) => {
     if (env[SERVICE_KEY]) return env[SERVICE_KEY];
     const service = createContactsService({
         primarySource: createLocalContactsSource({ api: () => env.Atome || env.window?.Atome,
-            publishProfile: async id => {
+            loadProfile: (id, options) => {
                 const loader = (env.window || env).__eveLoadUserProfile;
-                if (typeof loader === 'function') await loader(id, { repair: false, eventSource: 'ios_personal_import' });
+                if (typeof loader !== 'function') throw new Error('eve_profile_runtime_loader_required');
+                return loader(id, options);
             } })
     });
     env[SERVICE_KEY] = service;

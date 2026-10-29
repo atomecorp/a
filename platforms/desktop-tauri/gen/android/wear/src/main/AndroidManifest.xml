@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Wear OS recorder of eVe sessions: no screen of its own; the phone tells it each session
+     (WearSensorListener.kt) and a foreground service records the wrist (WearSensorService.kt). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-feature android:name="android.hardware.type.watch" />
+    <!-- Granted at install: what a foreground service of type health requires (BODY_SENSORS is asked at run time). -->
+    <uses-permission android:name="android.permission.HIGH_SAMPLING_RATE_SENSORS" />
+    <!-- Heart rate, recorded only once granted. -->
+    <uses-permission android:name="android.permission.BODY_SENSORS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <application android:label="eVe" android:allowBackup="false">
+        <!-- It works with the phone app only. -->
+        <meta-data android:name="com.google.android.wearable.standalone" android:value="false" />
+        <service android:name=".WearSensorListener" android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />
+                <data android:scheme="wear" android:host="*" android:path="/atome/sensors/state" />
+            </intent-filter>
+        </service>
+        <service android:name=".WearSensorService" android:exported="false" android:foregroundServiceType="health" />
+    </application>
+</manifest>
