@@ -9,6 +9,10 @@ import { authorizeProjectTool, restoreProjectWorkModeValue } from '../../eVe/dom
 import { parseExplicitNumericInputValue } from '../../atome/src/squirrel/components/numeric_input_contract.js';
 import { eveT, setEveLocale } from '../../eVe/i18n/i18n.js';
 
+// A committed time budget is followed by its objective's owner (its calendar session and alarm).
+const progression = vi.hoisted(() => ({ execute: vi.fn(async () => ({ ok: true, ignored: 'not_an_objective' })) }));
+vi.mock('../../eVe/domains/dashboard/dashboard_progression_runtime.js', () => ({ executeDashboardProgressionCommand: progression.execute }));
+
 const walk = node => [node, ...(node.children || []).flatMap(walk)];
 afterEach(() => { vi.unstubAllGlobals(); setEveLocale('fr'); });
 describe('one canonical Matrix time budget', () => {
@@ -75,6 +79,7 @@ describe('one canonical Matrix time budget', () => {
         expect((await commitMatrixControlValue({ atome_id: 'budget', value })).ok).toBe(true);
         expect(record.properties.template_value).toEqual(value); expect(commitBatch).toHaveBeenCalledTimes(1);
         expect(commitBatch.mock.calls[0][0]).toEqual([{ kind: 'set', atome_id: 'budget', project_id: projectId, props: { template_value: value } }]);
+        expect(progression.execute).toHaveBeenCalledWith('objective.schedule.follow', { objective_id: projectId });
         for (const invalid of [null, 0, '', { ...value, minutes: null }, { ...value, minutes: -1 }, { ...value, basis: 'month' },
             { ...value, days: [1, 1] }, { ...value, days: [7] }, { ...value, rhythm: 3 }, { ...value, minutes: Infinity }])
             expect((await commitMatrixControlValue({ atome_id: 'budget', value: invalid })).ok).toBe(false);

@@ -229,6 +229,14 @@ const parseRawEmail = (raw = '') => {
     };
 };
 
+// A header word: one line, and an RFC 2047 encoded word as soon as it leaves ASCII
+// (a raw UTF-8 subject or name is rewritten or refused by mail servers).
+const headerWord = (value) => {
+    const text = String(value || '').replace(/[\r\n]+/g, ' ').trim();
+    if (/^[\x20-\x7e]*$/.test(text)) return text;
+    return `=?UTF-8?B?${btoa(String.fromCharCode(...new TextEncoder().encode(text)))}?=`;
+};
+
 const buildPlainTextMessage = (draft = {}, auth = {}, {
     now = () => new Date()
 } = {}) => {
@@ -248,7 +256,9 @@ const buildPlainTextMessage = (draft = {}, auth = {}, {
         const address = normalizeText(entry.address || entry.email || '');
         if (!address) return null;
         const name = normalizeText(entry.name || '') || null;
-        return name ? `"${name.replace(/"/g, '\\"')}" <${address}>` : `<${address}>`;
+        if (!name) return `<${address}>`;
+        const word = headerWord(name);
+        return word === name.replace(/[\r\n]+/g, ' ') ? `"${word.replace(/"/g, '\\"')}" <${address}>` : `${word} <${address}>`;
     };
     const domain = senderAddress.includes('@') ? senderAddress.split('@')[1] : 'localhost';
     const messageId = draft.message_id
@@ -266,7 +276,7 @@ const buildPlainTextMessage = (draft = {}, auth = {}, {
         `Message-ID: ${messageId}`,
         `From: ${formatAddress({ name: senderName, address: senderAddress })}`,
         `To: ${toList.map((entry) => formatAddress(entry)).filter(Boolean).join(', ')}`,
-        `Subject: ${normalizeText(draft.subject || '(no subject)')}`,
+        `Subject: ${headerWord(draft.subject || '(no subject)')}`,
         'MIME-Version: 1.0',
         'Content-Type: text/plain; charset=utf-8',
         'Content-Transfer-Encoding: 8bit'

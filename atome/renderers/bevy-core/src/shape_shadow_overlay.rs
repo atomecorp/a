@@ -7,8 +7,10 @@ use bevy::{
 };
 
 use crate::{
+    clip_fade::{faded_polygon_mesh, FadeFrame},
+    clip_polygon::{remove_sprite_polygon_proxy, upsert_sprite_polygon_proxy},
     components::{
-        AtomeClipRect, AtomeCornerRadius, AtomeResolvedMask, AtomeShapeProfile, AtomeShapeShadow,
+        AtomeClipFades, AtomeClipRect, AtomeCornerRadius, AtomeResolvedMask, AtomeShapeProfile, AtomeShapeShadow,
         AtomeRenderKind, AtomeShapeShadowOverlay, AtomeVisualOpacity,
     },
     render_math::{atome_rect_transform, depth_for_layer},
@@ -30,9 +32,16 @@ fn clip_shadow_overlay(
     owner: Entity,
     shadow_rect: [f32; 4],
     layer: i32,
-) {
+) -> Result<(), String> {
+    let overlay_entities = world
+        .get::<AtomeShapeShadowOverlay>(owner)
+        .map(|overlay| overlay.entities.clone())
+        .unwrap_or_default();
+    // Only a shadow laid on a straight clip fades with its owner (below): any other drops its relay.
+    let unfaded = |world: &mut World| overlay_entities.iter().for_each(|overlay| remove_sprite_polygon_proxy(world, *overlay));
     let Some(clip) = world.get::<AtomeClipRect>(owner).and_then(|value| value.0) else {
-        return;
+        unfaded(world);
+        return Ok(());
     };
     // Une decoupe tournee (page pivotee) n'est pas un rectangle ecran : l'ombre
     // suit alors la pose de l'atome sans etre recadree. De meme pour une forme
@@ -40,21 +49,19 @@ fn clip_shadow_overlay(
     if world.get::<crate::components::AtomeClipRotation>(owner).is_some_and(|value| value.0 != 0.0)
         || world.get::<crate::components::AtomeLocalTransform>(owner).is_some_and(|local| local.rotation != 0.0)
     {
-        return;
+        unfaded(world);
+        return Ok(());
     }
+    let fades = world.get::<AtomeClipFades>(owner).map(|value| value.0.clone()).unwrap_or_default();
     let left = shadow_rect[0].max(clip[0]);
     let top = shadow_rect[1].max(clip[1]);
     let right = (shadow_rect[0] + shadow_rect[2]).min(clip[0] + clip[2]);
     let bottom = (shadow_rect[1] + shadow_rect[3]).min(clip[1] + clip[3]);
-    let overlay_entities = world
-        .get::<AtomeShapeShadowOverlay>(owner)
-        .map(|overlay| overlay.entities.clone())
-        .unwrap_or_default();
     let (surface_width, surface_height) = {
         let config = world.resource::<AtomeBevyRendererConfig>();
         (config.width, config.height)
     };
-    for overlay_entity in overlay_entities {
+    for overlay_entity in overlay_entities.iter().copied() {
         if right <= left || bottom <= top {
             world.entity_mut(overlay_entity).insert(Visibility::Hidden);
             continue;
@@ -93,7 +100,20 @@ fn clip_shadow_overlay(
         world
             .entity_mut(overlay_entity)
             .insert((Visibility::Visible, transform, GlobalTransform::from(transform)));
+        // A scroll area's edge fade (clip_fade.rs) fades the shadow with its owner, through the same relay.
+        let source = Rect::from_corners(texture_size * start, texture_size * end);
+        let local = [Vec2::ZERO, Vec2::new(visible[2], 0.0), Vec2::new(visible[2], visible[3]), Vec2::new(0.0, visible[3])];
+        let faded = (!fades.is_empty()).then(|| faded_polygon_mesh(&local, [0.0, 0.0, visible[2], visible[3]], &fades,
+            FadeFrame::upright([visible[0], visible[1]]), |point| {
+                let at = (source.min + source.size() * point / Vec2::new(visible[2], visible[3])) / texture_size;
+                [at.x, at.y]
+            })).flatten();
+        match faded {
+            Some((mesh, key)) => upsert_sprite_polygon_proxy(world, overlay_entity, mesh, key, transform)?,
+            None => remove_sprite_polygon_proxy(world, overlay_entity),
+        }
     }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -116,6 +136,7 @@ pub fn remove_shape_shadow_overlay(world: &mut World, entity: Entity) {
     if let Some(overlay) = world.get::<AtomeShapeShadowOverlay>(entity).cloned() {
         for overlay_entity in overlay.entities {
             if world.get_entity(overlay_entity).is_ok() {
+                remove_sprite_polygon_proxy(world, overlay_entity);
                 world.despawn(overlay_entity);
             }
         }
@@ -182,8 +203,7 @@ pub fn sync_shape_shadow_overlay_transform(
         entity,
         [shadow_x, shadow_y, image_width, image_height],
         layer,
-    );
-    Ok(())
+    )
 }
 
 pub fn sync_shape_shadow_overlay_opacity(world: &mut World, entity: Entity, opacity: f32) {
@@ -358,6 +378,5 @@ pub fn rebuild_shape_shadow_overlay(world: &mut World, entity: Entity) -> Result
         entity,
         [shadow_x, shadow_y, shadow_size.x, shadow_size.y],
         layer,
-    );
-    Ok(())
+    )
 }

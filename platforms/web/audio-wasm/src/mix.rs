@@ -17,6 +17,7 @@ fn with_engine<T>(action: impl FnOnce(&mut crate::WasmAudioEngine) -> Result<T, 
 pub fn audio_mix_apply(program: JsValue) -> Result<f64, JsValue> {
     let program: atome_mix_graph::Program = serde_wasm_bindgen::from_value(program)
         .map_err(|error| JsValue::from_str(&format!("mix program invalid: {error}")))?;
+    crate::scheduled_backend::wake()?;
     with_engine(|engine| {
         let manager = engine.manager.as_mut().ok_or("Audio manager not initialized")?;
         engine.mix.apply(manager, program).map(|count| count as f64)
@@ -73,6 +74,7 @@ pub fn audio_mix_module_state(module_id: &str) -> Result<Option<u8>, JsValue> {
 // Web live input: the recorder worklet's chunks (mono) for one input device.
 #[wasm_bindgen]
 pub fn audio_mix_live_push(device_id: &str, pcm: &[f32]) -> Result<(), JsValue> {
+    crate::scheduled_backend::wake()?;
     with_engine(|engine| {
         if let Some((_, input)) = engine.mix.graph().live_inputs().into_iter().find(|(device, _)| device == device_id) {
             let frames: Vec<kira::Frame> = pcm.iter().map(|sample| kira::Frame::from_mono(*sample)).collect();
@@ -102,6 +104,7 @@ pub fn audio_instrument_sample_load(sample_id: &str, left: Vec<f32>, right: Opti
 pub fn audio_instrument(command: JsValue) -> Result<JsValue, JsValue> {
     use atome_mix_graph::instrument_command::{self, InstrumentAnswer};
     let command = serde_wasm_bindgen::from_value(command).map_err(|error| JsValue::from_str(&format!("instrument command invalid: {error}")))?;
+    crate::scheduled_backend::wake()?;
     let answer = with_engine(|engine| instrument_command::run(engine.mix.graph_mut(), command))?;
     match answer {
         InstrumentAnswer::Done => Ok(JsValue::NULL),

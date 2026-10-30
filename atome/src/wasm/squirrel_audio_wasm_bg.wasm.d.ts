@@ -2,6 +2,7 @@
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
 export const audio_destroy_clip: (a: number, b: number) => [number, number];
+export const audio_hold: (a: number, b: number, c: number) => [number, number, number];
 export const audio_init: () => [number, number];
 export const audio_load_clip_from_bytes: (a: number, b: number, c: number, d: number) => [number, number, number];
 export const audio_play: (a: number, b: number) => [number, number, number];
@@ -15,6 +16,7 @@ export const audio_set_volume: (a: number, b: number, c: number) => [number, num
 export const audio_shared_context: () => [number, number, number];
 export const audio_shutdown: () => [number, number];
 export const audio_stop: (a: number, b: number) => [number, number];
+export const audio_wake: () => [number, number, number];
 export const audio_instrument: (a: any) => [number, number, number];
 export const audio_instrument_sample_load: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
 export const audio_mix_apply: (a: any) => [number, number, number];

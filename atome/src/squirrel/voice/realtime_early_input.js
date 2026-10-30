@@ -1,3 +1,5 @@
+import { voiceRoute } from './voice_route.js';
+
 // The voice heard from the touch on, before the voice session is up, is not lost.
 //
 // The microphone opens at the touch and feeds the session's outgoing track through a
@@ -18,12 +20,14 @@ const PAUSE_MARGIN_S = 0.15;
 const MAX_DELAY_S = 60;
 
 export const openRealtimeEarlyInput = async ({ env = globalThis, deviceId = '', onLevel = () => {} } = {}) => {
-    const stream = await env.navigator.mediaDevices.getUserMedia({ audio: {
+    // The microphone of the device the conversation was opened on (voice_route.js): this one's, or a companion's (the watch).
+    const route = voiceRoute();
+    const stream = await (route ? route.input() : env.navigator.mediaDevices.getUserMedia({ audio: {
         echoCancellation: true, noiseSuppression: true, ...(deviceId ? { deviceId: { exact: deviceId } } : {}) } }).catch(error => {
         if (error.name === 'NotAllowedError') throw new Error('realtime_microphone_denied');
         if (error.name === 'NotFoundError') throw new Error('realtime_input_device_lost');
         throw error;
-    });
+    }));
     const context = new (env.AudioContext || env.webkitAudioContext)();
     void context.resume?.();
     const source = context.createMediaStreamSource(stream);

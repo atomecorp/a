@@ -28,6 +28,8 @@
 	<array>
 		<string>workout-processing</string>
 	</array>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>eVe vous écoute au poignet quand vous touchez l’Atome, pour vous répondre.</string>
 	<key>NSMotionUsageDescription</key>
 	<string>eVe garde sur vos appareils les mouvements de votre poignet pendant vos séances d’activité.</string>
 	<key>NSHealthShareUsageDescription</key>

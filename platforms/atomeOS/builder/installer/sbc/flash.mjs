@@ -21,11 +21,11 @@ function mediaEntry(tree, id) {
 }
 
 export function assertSafeDisk(info, registry, requiredBytes = 0) {
-  if (!/^disk\d+$/.test(info.DeviceIdentifier) || info.DeviceNode !== `/dev/${info.DeviceIdentifier}` || info.Whole !== true
+  if (!/^disk\d+$/.test(info.DeviceIdentifier) || info.DeviceNode !== `/dev/${info.DeviceIdentifier}` || info.WholeDisk !== true
     || info.Internal !== false || info.VirtualOrPhysical !== 'Physical' || info.Writable !== true
     || info.Ejectable !== true || !['USB', 'Secure Digital'].includes(info.BusProtocol)
     || !Number.isSafeInteger(info.TotalSize) || info.TotalSize < requiredBytes
-    || !info.MediaName || !registry?.IORegistryEntryID || registry['BSD Name'] !== info.DeviceIdentifier) {
+    || !info.MediaName || !registry?.IORegistryEntryID || registry.Whole !== true || registry['BSD Name'] !== info.DeviceIdentifier) {
     throw new Error('Refusing disk: require an identified writable external physical USB/SD whole disk with sufficient capacity');
   }
   if (info.MountPoint === '/' || info.OSInternalMedia === true || info.ReadOnlyMedia === true) throw new Error('System/sensitive disk refused');
@@ -77,6 +77,22 @@ export function listDevices() {
     return { device: info.DeviceNode, name: info.MediaName, bytes: info.TotalSize, internal: info.Internal,
       volumes: (disk.Partitions || []).map(p => ({ name: p.VolumeName || null, device: p.DeviceIdentifier, bytes: p.Size })) };
   });
+}
+
+export function selectedDevice(answer, devices) {
+  if (!/^[1-9][0-9]*$/.test(answer)) throw new Error('Select an explicit support number; nothing selected automatically');
+  const selected = devices[Number(answer) - 1];
+  if (!selected) throw new Error('Support number is outside the displayed list');
+  return selected.device;
+}
+
+async function chooseDevice() {
+  const devices = listDevices();
+  if (!devices.length) throw new Error('No external physical support found; connect a USB drive or a microSD USB reader');
+  devices.forEach((item, index) => process.stdout.write(`${index + 1}. ${item.device} | ${item.name} | ${item.bytes} bytes | ${item.volumes.map(v => v.name || v.device).join(', ')}\n`));
+  const prompt = createInterface({ input: process.stdin, output: process.stdout });
+  try { return selectedDevice(await prompt.question('Select the support number (no default): '), devices); }
+  finally { prompt.close(); }
 }
 
 export async function copyBytes(source, destination, bytes, { signal, progress = () => {} } = {}) {
@@ -131,8 +147,8 @@ export async function flash({ manifest, image, device, stagingRoot }) {
   if (!process.stdin.isTTY) throw new Error('Flash requires an interactive terminal and an identity-specific confirmation');
   if (process.getuid() !== 0) throw new Error('Run the explicit flash command with sudo; no disk has been changed');
   const data = readManifest(manifest);
-  if (!image || !device) throw new Error('--image and --device are required');
-  const id = device.replace(/^\/dev\//, '');
+  if (!image) throw new Error('--image is required');
+  const id = (device || await chooseDevice()).replace(/^\/dev\//, '');
   const artifact = data.artifacts.find(a => a.file === path.basename(image));
   if (!artifact || !['img', 'raw'].includes(artifact.format) || data.target.family === 'vm') throw new Error('Flash requires an external-boot raw/img artifact, not a VM disk');
   const bytes = artifact.payload.bytes;

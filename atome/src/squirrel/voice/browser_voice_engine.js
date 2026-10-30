@@ -11,7 +11,9 @@ const MODEL_URL = '/src/assets/voice/vosk/vosk-model-small-fr-0.22.tar.gz';
 const FINAL_RESULT_QUIET_MS = 30;
 const UNKNOWN = '[unk]';
 
-export const createBrowserVoiceEngine = ({ env = globalThis, onEvent,
+// `recording()`: the test mode (todo/refonte_assistant_vocal.md §18.7), read at each frame; while on,
+// each closed turn is followed by { type: 'take', pcm, cuts }, the samples the engine scored.
+export const createBrowserVoiceEngine = ({ env = globalThis, onEvent, recording = () => false,
     workerFactory = () => new env.Worker(new URL('./browser_voice_worker.js', import.meta.url), { type: 'module' }),
     wakeBackend = createWakeDetectorBackend({ env }) }) => {
     let model = null, worker = null, capture = null, wake = null, phrases = null, recognizer = null, inputDb = null;
@@ -36,14 +38,15 @@ export const createBrowserVoiceEngine = ({ env = globalThis, onEvent,
         return current;
     };
 
-    const close = async (end) => {
+    const close = async (end, take) => {
         const turn = recognizer;
         recognizer = null;
         if (!turn) return;
         const words = await turn.finish();
-        if (end === 'too_long') { onEvent({ type: 'unknown', reason: 'too_long' }); return; }
         const text = words.filter(word => word.word !== UNKNOWN).map(word => word.word).join(' ');
-        onEvent(text ? { type: 'phrase', text, words } : { type: 'unknown', reason: 'outside_grammar' });
+        onEvent(end === 'too_long' ? { type: 'unknown', reason: 'too_long' }
+            : text ? { type: 'phrase', text, words } : { type: 'unknown', reason: 'outside_grammar' });
+        if (take) onEvent({ type: 'take', pcm: take.pcm, cuts: [...take.cuts] });
     };
 
     const onWorker = ({ data }) => {
@@ -53,12 +56,12 @@ export const createBrowserVoiceEngine = ({ env = globalThis, onEvent,
         for (const action of data.actions) {
             if (action.type === 'speech_start') { recognizer = openTurn(); onEvent({ type: 'speech_start' }); }
             else if (action.type === 'feed') recognizer?.feed(action.pcm);
-            else if (action.type === 'close') void close(action.end);
+            else if (action.type === 'close') void close(action.end, action.take);
         }
     };
 
     const startCapture = async () => {
-        capture = createWakeCapture({ env, onFrame: samples => worker.postMessage({ type: 'frame', samples }, [samples.buffer]),
+        capture = createWakeCapture({ env, onFrame: samples => worker.postMessage({ type: 'frame', samples, record: recording() }, [samples.buffer]),
             onError: error => onEvent({ type: 'error', code: error.message }) });
         await capture.start();
     };

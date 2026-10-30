@@ -78,7 +78,9 @@ const PROVIDER_ACTION_TIMEOUT_MS = Object.freeze({
     'social.handoff': 15000,
     'social.confirm': 15000,
     'music.get_state': 30000, 'music.connect': 15000, 'music.await_connection': 660000,
-    'music.cancel_connection': 15000, 'music.disconnect': 15000
+    'music.cancel_connection': 15000, 'music.disconnect': 15000,
+    'strava.get_state': 30000, 'strava.connect': 15000, 'strava.await_connection': 660000,
+    'strava.cancel_connection': 15000, 'strava.disconnect': 30000, 'strava.activities': 60000
 });
 const DEFAULT_PROVIDER_TIMEOUT_MS = 180000;
 
@@ -96,6 +98,10 @@ const neverSent = (result) => isTransportFailure(result) && String(result?.error
 // replaces it, so it is replayed once like the idempotent actions.
 const isReplayableOnLinkLoss = (action) => IDEMPOTENT_PROVIDER_ACTIONS.has(action) || action === 'realtime-connect';
 
+// Whether a provider call is accepted for the person signed in: an authenticated account (a guest has no server
+// principal). The one rule `requestProviderService` applies, read beforehand by whoever chooses a route (dictation).
+export const providerPrincipalReady = () => getSessionState()?.mode === 'authenticated';
+
 // Online provider traffic uses the platform’s authenticated application socket. The application never retrieves a stored OpenAI credential.
 export const requestProviderService = async (action, payload = {}, {
     expectedPrincipal = null, signal = null, onProgress = null, transport = null, usageTracker = aiQuotaTracker, principal = () => getSessionState()?.user?.id
@@ -112,7 +118,7 @@ export const requestProviderService = async (action, payload = {}, {
         const { isTauriRuntime } = await import('../apis/unified/adole_api/runtime.js');
         const adapter = isTauriRuntime() ? TauriAdapter : FastifyAdapter;
         const { ensureFastifyToken } = await import('../apis/unified/adole_api/auth_fastify_token.js');
-        if (getSessionState()?.mode !== 'authenticated') throw new Error('not_authenticated');
+        if (!providerPrincipalReady()) throw new Error('not_authenticated');
         if (adapter === FastifyAdapter && !adapter.getToken()) {
             const auth = await ensureFastifyToken();
             if (!auth?.ok) throw new Error('provider_principal_unavailable');

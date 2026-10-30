@@ -251,7 +251,8 @@ export function buildIcs(events = [], options = {}) {
                 for (const p of alarm.ical_properties) if (safeProperty(p)) lines.push(buildContentLine(p));
             } else {
                 const minutes = Number(alarm.offsetMinutes ?? -15);
-                add('TRIGGER', `${minutes < 0 ? '-' : ''}PT${Math.abs(minutes)}M`);
+                // Before or after the start, or the end (RFC 5545 3.8.6.3, RELATED=END).
+                add('TRIGGER', `${minutes < 0 ? '-' : ''}PT${Math.abs(minutes)}M`, alarm.relativeTo === 'end' ? { RELATED: 'END' } : {});
                 add('ACTION', 'DISPLAY'); add('DESCRIPTION', escapeContentText(alarm.message || 'Reminder'));
             }
             lines.push('END:VALARM');

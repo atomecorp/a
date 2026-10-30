@@ -18,10 +18,14 @@ const decimalPlaces = (step) => {
     return point < 0 ? 0 : text.length - point - 1;
 };
 
-const formatNumericValue = (value, step = 1) => {
+// `locale`: the text shown to a person, its decimal mark theirs (« 1,5 » in French); without it, the typed form (« 1.5 »).
+const formatNumericValue = (value, step = 1, locale = null) => {
     const numeric = finite(value, 'squirrel_numeric_input_value_invalid');
     const places = Math.min(8, decimalPlaces(step));
-    return places ? numeric.toFixed(places).replace(/\.?0+$/, '') : String(Math.round(numeric));
+    const text = places ? numeric.toFixed(places).replace(/\.?0+$/, '') : String(Math.round(numeric));
+    if (!locale) return text;
+    const mark = new Intl.NumberFormat(locale).formatToParts(1.5).find(part => part.type === 'decimal').value;
+    return text.replace('.', mark);
 };
 
 const normalizeNumericInputPresentation = ({

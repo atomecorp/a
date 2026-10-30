@@ -102,17 +102,18 @@ export const createVoiceInputMeterRuntime = ({ env = globalThis, sessionRuntime,
         };
     };
 
-    const start = async (sessionId, { purpose = 'user_turn' } = {}) => {
+    // `provider`: the recognizer this session listens with (free dictation may take another than `sttProvider`).
+    const start = async (sessionId, { purpose = 'user_turn', provider = sttProvider } = {}) => {
         if (meters.has(String(sessionId))) return;
         let meter;
         try {
-            meter = sttProvider === 'tauri_plugin_stt'
+            meter = provider === 'tauri_plugin_stt'
                 ? await startNativeSttMeter(sessionId, purpose)
                 : startRecognitionMeter(sessionId, purpose);
             meters.set(String(sessionId), meter);
             await meter.start();
             sessionRuntime.publishEvent(sessionId, 'voice.input.state', {
-                state: sttProvider === 'tauri_plugin_stt' ? 'armed' : 'active',
+                state: provider === 'tauri_plugin_stt' ? 'armed' : 'active',
                 purpose
             });
         } catch (error) {

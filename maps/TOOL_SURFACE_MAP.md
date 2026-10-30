@@ -1,3 +1,5 @@
+2026-10-30 Gestes (BUG-052): « Enregistrer les actions » (`container_record`) and « Actions » (`record_actions`) were one tool declared twice on the project rail. One tool remains, « Gestes » / « Moves », `container_record`, declared once (`eVe/domains/rendering/project_view_surface_context_runtime.js#projectViewRecordToolDefinition`), a switch lit while it records. Its MCP/voice command `ui.record.actions` (optional `owner_atome_id`) and the rail share one handler (`eVe/intuition/tools/action_recording_tools.js#toggleActionRecording`): the take goes on the selected atome, else the project. `record_actions`, its taxonomy entries and the unused « rec. › Actions » content (`main_menu_action_recording_content.js`) are deleted.
+
 2026-10-16 Communication keeps existing compose/conversation controls and adds a native three-level priority selector near send. Server authorization derives VIP from the recipient's favorites. Existing eVe search field hosts the same notification stack with Urgent/Messages and Saisie/Ouvrir/Suivant; actions route through the canonical gateway to a scoped conversation/message or declared command. Calendar uses self-only communication.notification.publish and ui.panel.open for its existing Calendar surface. Dashboard Atom is Assistant in grids/rubrics, first-click reveal in solo; Retour exclusively navigates. No new provider or alternate messaging surface/store. Validation: FRAMEWORK_STATE, approved eVe corrections entry.
 
 # Tool surface map — clé de menu ↔ `tool_id`
@@ -48,7 +50,7 @@ Code : `eVe/intuition/tools/core/exposable_tools.js` ; branché dans `finder_dat
 | main › capture | `video` | `ui.capture.video` | video |
 | main › capture | `photo` | `ui.capture.photo` | photo |
 | main › capture | `screen` | `ui.capture.screen` | ecran |
-| main › capture | `record_actions` | `ui.record.actions` | Actions |
+| rail (Naturel, niveau) | `container_record` | `ui.record.actions` | Gestes (Moves) |
 | main | `create` | `tool.main.create` | Créer (palette, voir ses enfants plus bas) |
 | main | `find` | `tool.main.find` | trouver |
 | main | `communicate` | `tool.main.communicate` | communiquer |

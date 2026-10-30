@@ -38,7 +38,11 @@ const withWindow = async (api, run) => {
     const project = { atome_id: 'project_tl', id: 'project_tl', type: 'project', properties: { name: 'tl', playback_mode: 'simultaneous' } };
     globalThis.window = {
         eveMoleculeTimelineApi: api,
-        Atome: { getStateCurrent: async (id) => (id === 'project_tl' ? project : projectRecords.find((record) => record.atome_id === id) || null) },
+        Atome: {
+            getStateCurrent: async (id) => (id === 'project_tl' ? project : projectRecords.find((record) => record.atome_id === id) || null),
+            listStateCurrent: async (_project, options) => { assert.equal(options.atomeType, 'instrument'); return []; },
+            commit: async () => { throw new Error('unexpected_instrument_fixture_write'); }
+        },
         addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => true
     };
     try { return await run(); } finally { globalThis.window = previous; }
@@ -215,13 +219,29 @@ test('lasso and Cumul select several clips; Delete removes them all', async () =
     await withWindow(api, async () => {
         const content = createProjectViewTimelineContent({ requestRefresh: () => {} });
         await content.load({ projectId: 'project_tl', readList: async () => ({ records: projectRecords, totalCount: 2 }) });
-        const ringed = () => {
+        const restBorders = new Map();
+        const selectedCount = () => {
+            const selected = content.readState().selectedClipIds;
+            const expected = new Set(selected.map(id => `project_view_timeline_clip_${id.replace(/[^a-zA-Z0-9_-]/g, '_')}`));
             const ids = [];
-            const walk = (node) => { if (!node) return; if (node.id.startsWith('project_view_timeline_clip_') && node.style?.surfacePaint?.border?.width === 2) ids.push(node.id); (node.children || []).forEach(walk); };
+            const walk = (node) => {
+                if (!node) return;
+                if (node.id.startsWith('project_view_timeline_clip_') && !expected.has(node.id) && !restBorders.has(node.id)) {
+                    restBorders.set(node.id, structuredClone(node.style?.surfacePaint?.border));
+                }
+                if (expected.has(node.id)) {
+                    assert.equal(node.style.shadow, null, 'a selected clip is pressed in');
+                    assert.equal(node.style.surfacePaint?.insetShadows?.length, 1);
+                    assert.deepEqual(node.style.surfacePaint?.border, restBorders.get(node.id), 'selection adds no border to the existing grid paint');
+                    ids.push(node.id);
+                }
+                (node.children || []).forEach(walk);
+            };
             content.build({ width: 900, height: 420, emit: () => {} }).forEach(walk);
+            assert.equal(ids.length, expected.size, 'every selected clip is projected');
             return ids.length;
         };
-        ringed();
+        selectedCount();
         const timeline = api.readGroupTimeline({ group_id: 'project_tl' }).timeline;
         const gesture = (phase, point) => content.handleEvent({ type: 'project_view.timeline.gesture', target: 'lane', trackId: '', phase,
             event: { client_x: point.x, client_y: point.y, x: point.x, y: point.y } });
@@ -233,16 +253,16 @@ test('lasso and Cumul select several clips; Delete removes them all', async () =
         await new Promise((resolve) => setTimeout(resolve, 320));
         await gesture('drag', to);
         await gesture('release', to);
-        assert.equal(ringed(), 2, 'the lasso selects both clips');
+        assert.equal(selectedCount(), 2, 'the lasso selects both clips');
         setCumulativeSelection(true);
         try {
             const first = boxes[0].id;
             await content.handleEvent({ type: 'project_view.timeline.gesture', target: 'clip', clipId: first, phase: 'press', event: { client_x: 1, client_y: 1 } });
             await content.handleEvent({ type: 'project_view.timeline.gesture', target: 'clip', clipId: first, phase: 'release', event: { client_x: 1, client_y: 1 } });
-            assert.equal(ringed(), 1, 'a Cumul tap takes a clip out');
+            assert.equal(selectedCount(), 1, 'a Cumul tap takes a clip out');
             await content.handleEvent({ type: 'project_view.timeline.gesture', target: 'clip', clipId: first, phase: 'press', event: { client_x: 1, client_y: 1 } });
             await content.handleEvent({ type: 'project_view.timeline.gesture', target: 'clip', clipId: first, phase: 'release', event: { client_x: 1, client_y: 1 } });
-            assert.equal(ringed(), 2, 'and back in');
+            assert.equal(selectedCount(), 2, 'and back in');
         } finally {
             setCumulativeSelection(false);
         }

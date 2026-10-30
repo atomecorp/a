@@ -233,4 +233,4 @@ pub fn audio_voice_set_listening(listening: String) -> Result<Value, String> { c
 #[tauri::command]
 pub fn audio_voice_set_wake_verifier(verifier: Option<String>) -> Result<Value, String> { commands::dispatch("voice_set_wake_verifier", &serde_json::json!({ "verifier": verifier }), None) }
 #[tauri::command]
-pub fn audio_voice_read() -> Result<Value, String> { commands::dispatch("voice_read", &serde_json::json!({}), None) }
+pub fn audio_voice_read(record: bool) -> Result<Value, String> { commands::dispatch("voice_read", &serde_json::json!({ "record": record }), None) }

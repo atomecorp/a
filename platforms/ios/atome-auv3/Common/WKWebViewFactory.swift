@@ -35,6 +35,7 @@ final class WKWebViewFactory {
         // is the one WebKit affordance CSS and `preventDefault` cannot reach, so it
         // is turned off at the view.
         webView.allowsLinkPreview = false
+        webView.hideKeyboardAccessoryBar()
         webView.isOpaque = true
         webView.backgroundColor = .black
         webView.scrollView.backgroundColor = .black
@@ -46,5 +47,41 @@ final class WKWebViewFactory {
         }
         log.info("Created WKWebView; mode=\(String(describing: mode)) frame=\(String(describing: frame.debugDescription))")
         return webView
+    }
+}
+
+extension WKWebView {
+    /// Removes WebKit's keyboard input accessory bar (the previous / next / done row)
+    /// from every text field of the page: the product owns its own keyboard flow.
+    /// The bar is the `inputAccessoryView` of WebKit's private content view, the
+    /// web view's first responder; that view's class is replaced once by a runtime
+    /// subclass answering nil. Called by every creator of an application web view.
+    func hideKeyboardAccessoryBar() {
+        guard let content = scrollView.subviews.first(where: { String(describing: type(of: $0)).hasPrefix("WKContent") }) else {
+            Logger(subsystem: "atome", category: "WKWebViewFactory").error("Keyboard accessory bar kept: WebKit content view not found")
+            return
+        }
+        guard let accessoryFree = KeyboardAccessoryFreeClass.subclass(of: type(of: content)) else {
+            Logger(subsystem: "atome", category: "WKWebViewFactory").error("Keyboard accessory bar kept: runtime subclass refused")
+            return
+        }
+        object_setClass(content, accessoryFree)
+    }
+}
+
+/// One runtime subclass per WebKit content class, created on first use.
+private enum KeyboardAccessoryFreeClass {
+    private static let suffix = "_AtomeNoKeyboardAccessory"
+    private static let accessoryNil: @convention(block) (AnyObject) -> AnyObject? = { _ in nil }
+
+    static func subclass(of base: AnyClass) -> AnyClass? {
+        let name = NSStringFromClass(base) + suffix
+        if let existing = NSClassFromString(name) { return existing }
+        guard let created = objc_allocateClassPair(base, name, 0),
+              let method = class_getInstanceMethod(UIView.self, #selector(getter: UIResponder.inputAccessoryView)) else { return nil }
+        class_addMethod(created, #selector(getter: UIResponder.inputAccessoryView),
+                        imp_implementationWithBlock(accessoryNil), method_getTypeEncoding(method))
+        objc_registerClassPair(created)
+        return created
     }
 }

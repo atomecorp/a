@@ -1,4 +1,4 @@
-import { publicDeviceKey, reject, requireHandle, requireSignupOpen } from './auth_link_security.js';
+import { publicDeviceKey, reject, requireHandle, signupClosed } from './auth_link_security.js';
 import { normalizeDeviceMeta, resolveDeviceClass } from './auth_devices.js';
 
 // Approve-class purposes and the subject each one is bound to.
@@ -21,10 +21,23 @@ const subjectOf = (purpose, subject = {}) => {
 // Accounts without phone, email or password: an opaque principal, a public
 // handle, and per-device keys. Approve-class operations of an existing account
 // are authorized here for every owner (pairing, recovery, devices).
-export function createAccountAuth({ query, transaction, proof, sessions, devices, handles, approvals, createAccount, notify, disconnectSession, now, billing }) {
+export function createAccountAuth({ query, transaction, proof, sessions, devices, handles, approvals, invites, createAccount, notify, disconnectSession, now, billing }) {
     if (typeof billing?.prepareCreation !== 'function') throw new Error('auth_billing_required');
-    async function createChallenge({ sessionKey, clientNonce }, network) {
-        requireSignupOpen();
+    // A closed sign-up opens to an invitation still valid (auth_invites.js).
+    const requireOpenOrInvited = async (invite) => {
+        if (!signupClosed()) return;
+        if (!invite) reject('auth_signup_closed');
+        await invites.check(invite);
+    };
+    // Asked before « Créer un compte » goes on: open, or this invitation still valid.
+    async function signupStatus({ invite }, network) {
+        await proof.limit(`signup-status:${proof.keyedIndex(String(network))}`, 60, 60000);
+        if (!signupClosed()) return { ok: true, open: true, invited: false };
+        const invited = !!invite && await invites.valid(invite);
+        return { ok: true, open: false, invited, inviteInvalid: !!invite && !invited };
+    }
+    async function createChallenge({ sessionKey, clientNonce, invite }, network) {
+        await requireOpenOrInvited(invite);
         requireHandle(clientNonce);
         const { keyId } = publicDeviceKey(sessionKey);
         return transaction(async () => {
@@ -36,7 +49,7 @@ export function createAccountAuth({ query, transaction, proof, sessions, devices
     }
     async function create(input, network) {
         // Refused before the store verification: a closed sign-up takes no payment.
-        requireSignupOpen();
+        await requireOpenOrInvited(input.invite);
         const { keyId, jwk } = publicDeviceKey(input.sessionKey);
         const meta = normalizeDeviceMeta(input.deviceMeta);
         const deviceClass = resolveDeviceClass(meta.platform, input.deviceClass);
@@ -53,6 +66,8 @@ export function createAccountAuth({ query, transaction, proof, sessions, devices
             const approve = input.approve && deviceClass === 'personal'
                 ? await approvals.register(input.approve, 'approve-key-register', `register:${keyId}`, keyId) : null;
             const account = await createAccount();
+            // Consumed with the account: a failed creation leaves the invitation open, a second use finds it spent.
+            if (signupClosed()) await invites.consume(input.invite, account.user_id);
             const deviceId = devices.newDeviceId();
             await devices.enroll({ keyId, principalId: account.user_id, jwk, deviceId, deviceClass, ...meta, enrolledBy: 'creation',
                 connectionProof: input.connectionProof === true });
@@ -157,6 +172,6 @@ export function createAccountAuth({ query, transaction, proof, sessions, devices
         await notify(principalId, { kind: 'auth-device-updated', deviceId: input.deviceId });
         return { ok: true };
     }
-    return { createChallenge, create, approveKeyAddChallenge, approveKeyAdd, approvalChallenge, authorize,
+    return { signupStatus, createChallenge, create, approveKeyAddChallenge, approveKeyAdd, approvalChallenge, authorize,
         listDevices, renameDevice, revokeDevice, setDeviceClass, handleOf: handles.of };
 }

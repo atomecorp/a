@@ -35,10 +35,18 @@ const guarded = task => async (input = {}) => {
     catch (error) { return { ok: false, error: error.message }; }
 };
 
+// `host.link()`: associates this device's health store (#health_owner.js `link`). A session being started asks for
+// health (its workout, its heart rate): a device not associated yet is associated here, so that `prepare` reaches
+// the host and its sheet (workout write, heart-rate read) is shown once, instead of failing on `health_link_required`.
 export function createHealthWorkoutRecorder(host) {
     const send = healthWrite(host, 'health_workout_failed');
     return Object.freeze({
         prepare: guarded(async () => {
+            const status = host.describe().supported ? await host.loadLinkStatus() : null;
+            if (status && !status.linked && !status.reason) {
+                const linked = await host.link();
+                if (!linked.ok) return linked;
+            }
             const reply = await send('health_workout_prepare');
             return reply.ok && reply.writable !== true ? { ok: false, error: 'health_workout_write_denied' } : reply;
         }),

@@ -55,7 +55,7 @@ test('host and runtime boundaries block rather than claim support; headless modu
   assert.match(check.issues.join(' '), /Autonomous audio\/MIDI/);
   assert.match(check.issues.join(' '), /Offline assembly/);
   if (process.platform !== 'freebsd') {
-    const result = cli('build', '--target', 'pc-amd64-uefi,pine64-a64', '--source-commit', 'HEAD');
+    const result = cli('build', '--target', 'pc-amd64-uefi,pine64-a64', '--source-commit', 'HEAD', '--freebsd-version', '15.1-RELEASE');
     assert.equal(result.status, 1);
     assert.equal(JSON.parse(result.stdout).length, 2);
     assert.ok(JSON.parse(result.stdout).every(r => r.status === 'blocked-or-failed'));
@@ -121,13 +121,13 @@ test('corruption and short readback cannot pass integrity verification', async (
   try { await assert.rejects(hashHandle(handle, 1024), /Short readback/); } finally { await handle.close(); }
 });
 
-const diskInfo = { DeviceIdentifier: 'disk7', DeviceNode: '/dev/disk7', Whole: true, Internal: false, VirtualOrPhysical: 'Physical',
+const diskInfo = { DeviceIdentifier: 'disk7', DeviceNode: '/dev/disk7', WholeDisk: true, Internal: false, VirtualOrPhysical: 'Physical',
   Writable: true, Ejectable: true, BusProtocol: 'USB', TotalSize: 16 * 1024 ** 3, MediaName: 'Test USB', DeviceTreePath: 'usb/test', DeviceBlockSize: 512 };
-const registry = { 'BSD Name': 'disk7', IORegistryEntryID: 12345 };
+const registry = { 'BSD Name': 'disk7', IORegistryEntryID: 12345, Whole: true };
 test('flash refuses internal, ambiguous, partial, virtual and undersized supports', () => {
   const safe = assertSafeDisk(diskInfo, registry, 13 * 1024 ** 3);
   sameDisk(safe, assertSafeDisk({ ...diskInfo }, { ...registry }));
-  for (const diff of [{ Internal: true }, { Whole: false }, { VirtualOrPhysical: 'Virtual' }, { DeviceIdentifier: 'disk7s1' },
+  for (const diff of [{ Internal: true }, { WholeDisk: false }, { VirtualOrPhysical: 'Virtual' }, { DeviceIdentifier: 'disk7s1' },
     { Writable: false }, { TotalSize: 512 }, { Ejectable: false }, { MountPoint: '/' }, { BusProtocol: 'Unknown' }]) {
     assert.throws(() => assertSafeDisk({ ...diskInfo, ...diff }, registry, 1024));
   }

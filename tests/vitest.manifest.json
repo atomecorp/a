@@ -198,6 +198,8 @@
   "tests/eve/guest_profile_native.test.mjs",
   "tests/eve/health_detail_panel.test.mjs",
   "tests/eve/health_permission_flow.test.mjs",
+  "tests/eve/help_assistant.test.mjs",
+  "tests/eve/help_dashboard.test.mjs",
   "tests/eve/history_shortcuts.test.mjs",
   "tests/eve/home_hydration_lifecycle.test.mjs",
   "tests/eve/home_versions.test.mjs",

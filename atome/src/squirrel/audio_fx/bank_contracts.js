@@ -22,11 +22,11 @@ const definitions = {
         'Arrange sounds automatically (rangement automatique) on instrument_id, or on a new instrument named name: each sound\'s root from its file name (C4, F#3, Db2, a MIDI number, do3 = 60; middle_c says whether C4 or C3 is 60), else its WAV smpl/acid metadata, else pitch analysis; sounds of one root become velocity layers by measured level (a pp…fff or v3 name wins), those within layer_db (3 dB) of each other or named rr1/rr2 play in turn (round-robin); each root spreads halfway to its neighbours. Returns zone_ids and unplaced sounds (root_unknown).', true, 'write'],
     instrument_export_sfz: [{ instrument_id: text }, ['instrument_id'],
         'Write an instrument as an SFZ bank: returns sfz (the text), files [{ sample_id, path, url }] to save beside it, and warnings for what SFZ says another way (a mix, layers, a one-way cut widened). Writes nothing.', false, 'read'],
-    auto_sample: [{ output_id: text, channel: { type: 'integer', minimum: 0, maximum: 15 }, name: text, keys: { type: 'array', minItems: 2, maxItems: 2, items: note },
+    auto_sample: [{ output_id: text, instrument_id: text, channel: { type: 'integer', minimum: 0, maximum: 15 }, name: text, keys: { type: 'array', minItems: 2, maxItems: 2, items: note },
         step: { type: 'integer', minimum: 1, maximum: 127 }, velocities: { type: 'array', minItems: 1, maxItems: 16, uniqueItems: true, items: velocity },
         hold_ms: { type: 'integer', minimum: 1, maximum: 60000 }, tail_ms: { type: 'integer', minimum: 0, maximum: 60000 },
-        threshold_db: { type: 'number', minimum: -120, maximum: -1 } }, ['output_id'],
-        'Auto-sample an external instrument on MIDI output output_id: eVe plays every step-th note of keys (36..96 by 3) at each velocity (34, 89, 127), hold_ms held then tail_ms of tail, records the audio input, cuts each note at threshold_db and lays a new instrument (each take a region of one recording, answering velocities up to its own). eVe\'s own instruments cannot be auto-sampled yet (CAPTURE_UNAVAILABLE). Returns instrument_id, zone_ids, silent notes and how many takes were truncated.', true, 'write']
+        threshold_db: { type: 'number', minimum: -120, maximum: -1 } }, [],
+        'Auto-sample an external instrument on MIDI output output_id, or one of eVe\'s own instruments instrument_id (give one of them): eVe plays every step-th note of keys (36..96 by 3) at each velocity (34, 89, 127), hold_ms held then tail_ms of tail, records the audio input (MIDI) or its own output (an instrument of eVe, stereo; Web only, at most 600 s, else CAPTURE_UNAVAILABLE or INVALID_PLAN), cuts each note at threshold_db and lays a new instrument (each take a region of one recording, answering velocities up to its own). Returns instrument_id, zone_ids, silent notes and how many takes were truncated.', true, 'write']
 };
 export const INSTRUMENT_BANK_COMMANDS = Object.freeze(Object.entries(definitions).map(([action, [properties, required, description, persistent, access]]) => Object.freeze({
     name: `audio_fx.${action}`, action, description, persistent, capability: `audio_fx.${access}`,
@@ -40,5 +40,5 @@ export const INSTRUMENT_BANK_COMMANDS = Object.freeze(Object.entries(definitions
 })));
 export const INSTRUMENT_BANK_ASSISTANT_INSTRUCTIONS = 'Sampler banks: « importe cette banque SFZ » calls audio_fx.bank_inspect then audio_fx.bank_import with the same '
     + 'bank_atome_id (and its sounds\' media ids) or url; for an SF2 pick presets from bank_inspect. « range ces sons » calls audio_fx.samples_arrange with '
-    + 'the media ids. « exporte en SFZ » calls audio_fx.instrument_export_sfz. « échantillonne mon synthé » calls audio_fx.auto_sample with the MIDI output id. '
+    + 'the media ids. « exporte en SFZ » calls audio_fx.instrument_export_sfz. « échantillonne mon synthé » calls audio_fx.auto_sample with the MIDI output id, « échantillonne cet instrument » with the instrument_id. '
     + 'Never invent ids: read them first.';

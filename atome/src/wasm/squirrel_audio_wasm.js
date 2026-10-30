@@ -220,6 +220,18 @@ function takeFromExternrefTable0(idx) {
 }
 /**
  * @param {string} id
+ */
+export function audio_stop(id) {
+    const ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.audio_stop(ptr0, len0);
+    if (ret[1]) {
+        throw takeFromExternrefTable0(ret[0]);
+    }
+}
+
+/**
+ * @param {string} id
  * @param {number} db
  */
 export function audio_set_volume(id, db) {
@@ -232,41 +244,46 @@ export function audio_set_volume(id, db) {
 }
 
 /**
- * @param {string} id
+ * @param {string} asset_id
+ * @param {string} voice_id
+ * @param {number} start_seconds
+ * @param {number | null | undefined} duration_seconds
+ * @param {number} gain
+ * @param {number} pan
  * @param {number} rate
+ * @param {number | null} [loop_start_seconds]
+ * @param {number | null} [loop_end_seconds]
+ * @param {string | null} [strip_id]
+ * @returns {number}
  */
-export function audio_set_playback_rate(id, rate) {
-    const ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+export function audio_play_instance(asset_id, voice_id, start_seconds, duration_seconds, gain, pan, rate, loop_start_seconds, loop_end_seconds, strip_id) {
+    const ptr0 = passStringToWasm0(asset_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.audio_set_playback_rate(ptr0, len0, rate);
+    const ptr1 = passStringToWasm0(voice_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    var ptr2 = isLikeNone(strip_id) ? 0 : passStringToWasm0(strip_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len2 = WASM_VECTOR_LEN;
+    const ret = wasm.audio_play_instance(ptr0, len0, ptr1, len1, start_seconds, !isLikeNone(duration_seconds), isLikeNone(duration_seconds) ? 0 : duration_seconds, gain, pan, rate, !isLikeNone(loop_start_seconds), isLikeNone(loop_start_seconds) ? 0 : loop_start_seconds, !isLikeNone(loop_end_seconds), isLikeNone(loop_end_seconds) ? 0 : loop_end_seconds, ptr2, len2);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return ret[0];
+}
+
+export function audio_shutdown() {
+    const ret = wasm.audio_shutdown();
     if (ret[1]) {
         throw takeFromExternrefTable0(ret[0]);
     }
 }
 
 /**
- * A late end for a scheduled or sounding voice: `end_frame` frames after its
- * first one, fading over `release_frames`. Returns whether the voice is known.
  * @param {string} voice_id
- * @param {number} end_frame
- * @param {number} release_frames
- * @returns {boolean}
  */
-export function audio_set_voice_end(voice_id, end_frame, release_frames) {
+export function audio_stop_instance(voice_id) {
     const ptr0 = passStringToWasm0(voice_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.audio_set_voice_end(ptr0, len0, end_frame, release_frames);
-    return ret !== 0;
-}
-
-/**
- * @param {string} id
- * @param {number} pan
- */
-export function audio_set_pan(id, pan) {
-    const ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.audio_set_pan(ptr0, len0, pan);
+    const ret = wasm.audio_stop_instance(ptr0, len0);
     if (ret[1]) {
         throw takeFromExternrefTable0(ret[0]);
     }
@@ -315,11 +332,12 @@ export function audio_init() {
 
 /**
  * @param {string} id
+ * @param {number} pan
  */
-export function audio_destroy_clip(id) {
+export function audio_set_pan(id, pan) {
     const ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.audio_destroy_clip(ptr0, len0);
+    const ret = wasm.audio_set_pan(ptr0, len0, pan);
     if (ret[1]) {
         throw takeFromExternrefTable0(ret[0]);
     }
@@ -340,12 +358,82 @@ export function audio_play(id) {
 }
 
 /**
+ * A late end for a scheduled or sounding voice: `end_frame` frames after its
+ * first one, fading over `release_frames`. Returns whether the voice is known.
  * @param {string} voice_id
+ * @param {number} end_frame
+ * @param {number} release_frames
+ * @returns {boolean}
  */
-export function audio_stop_instance(voice_id) {
+export function audio_set_voice_end(voice_id, end_frame, release_frames) {
     const ptr0 = passStringToWasm0(voice_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.audio_stop_instance(ptr0, len0);
+    const ret = wasm.audio_set_voice_end(ptr0, len0, end_frame, release_frames);
+    return ret !== 0;
+}
+
+/**
+ * `owner` plays on the engine's context itself (`on`) or lets it go: held,
+ * the engine never sleeps.
+ * @param {string} owner
+ * @param {boolean} on
+ * @returns {Promise<any> | undefined}
+ */
+export function audio_hold(owner, on) {
+    const ptr0 = passStringToWasm0(owner, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.audio_hold(ptr0, len0, on);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * The AudioContext playback renders into; recording opens its worklet on it.
+ * @returns {AudioContext}
+ */
+export function audio_shared_context() {
+    const ret = wasm.audio_shared_context();
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * A demand on the engine: asleep, it renders again; answers its context's
+ * resume then, nothing when it was awake.
+ * @returns {Promise<any> | undefined}
+ */
+export function audio_wake() {
+    const ret = wasm.audio_wake();
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * @param {string} id
+ */
+export function audio_destroy_clip(id) {
+    const ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.audio_destroy_clip(ptr0, len0);
+    if (ret[1]) {
+        throw takeFromExternrefTable0(ret[0]);
+    }
+}
+
+/**
+ * @param {string} id
+ * @param {number} rate
+ */
+export function audio_set_playback_rate(id, rate) {
+    const ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.audio_set_playback_rate(ptr0, len0, rate);
     if (ret[1]) {
         throw takeFromExternrefTable0(ret[0]);
     }
@@ -380,64 +468,6 @@ export function audio_schedule_voices(voices) {
     var v1 = getArrayF64FromWasm0(ret[0], ret[1]).slice();
     wasm.__wbindgen_free(ret[0], ret[1] * 8, 8);
     return v1;
-}
-
-/**
- * The AudioContext playback renders into; recording opens its worklet on it.
- * @returns {AudioContext}
- */
-export function audio_shared_context() {
-    const ret = wasm.audio_shared_context();
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
-    }
-    return takeFromExternrefTable0(ret[0]);
-}
-
-/**
- * @param {string} asset_id
- * @param {string} voice_id
- * @param {number} start_seconds
- * @param {number | null | undefined} duration_seconds
- * @param {number} gain
- * @param {number} pan
- * @param {number} rate
- * @param {number | null} [loop_start_seconds]
- * @param {number | null} [loop_end_seconds]
- * @param {string | null} [strip_id]
- * @returns {number}
- */
-export function audio_play_instance(asset_id, voice_id, start_seconds, duration_seconds, gain, pan, rate, loop_start_seconds, loop_end_seconds, strip_id) {
-    const ptr0 = passStringToWasm0(asset_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(voice_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len1 = WASM_VECTOR_LEN;
-    var ptr2 = isLikeNone(strip_id) ? 0 : passStringToWasm0(strip_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    var len2 = WASM_VECTOR_LEN;
-    const ret = wasm.audio_play_instance(ptr0, len0, ptr1, len1, start_seconds, !isLikeNone(duration_seconds), isLikeNone(duration_seconds) ? 0 : duration_seconds, gain, pan, rate, !isLikeNone(loop_start_seconds), isLikeNone(loop_start_seconds) ? 0 : loop_start_seconds, !isLikeNone(loop_end_seconds), isLikeNone(loop_end_seconds) ? 0 : loop_end_seconds, ptr2, len2);
-    if (ret[2]) {
-        throw takeFromExternrefTable0(ret[1]);
-    }
-    return ret[0];
-}
-
-export function audio_shutdown() {
-    const ret = wasm.audio_shutdown();
-    if (ret[1]) {
-        throw takeFromExternrefTable0(ret[0]);
-    }
-}
-
-/**
- * @param {string} id
- */
-export function audio_stop(id) {
-    const ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.audio_stop(ptr0, len0);
-    if (ret[1]) {
-        throw takeFromExternrefTable0(ret[0]);
-    }
 }
 
 function passArrayF32ToWasm0(arg, malloc) {
@@ -709,6 +739,9 @@ function __wbg_get_imports() {
         const ret = arg0.call(arg1);
         return ret;
     }, arguments) };
+    imports.wbg.__wbg_clearInterval_ad2594253cc39c4b = function(arg0, arg1) {
+        arg0.clearInterval(arg1);
+    };
     imports.wbg.__wbg_connect_b22945d106632a36 = function() { return handleError(function (arg0, arg1) {
         const ret = arg0.connect(arg1);
         return ret;
@@ -739,6 +772,9 @@ function __wbg_get_imports() {
     imports.wbg.__wbg_entries_3265d4158b33e5dc = function(arg0) {
         const ret = Object.entries(arg0);
         return ret;
+    };
+    imports.wbg.__wbg_error_524f506f44df1645 = function(arg0) {
+        console.error(arg0);
     };
     imports.wbg.__wbg_get_67b2ba62fc30de12 = function() { return handleError(function (arg0, arg1) {
         const ret = Reflect.get(arg0, arg1);
@@ -930,6 +966,10 @@ function __wbg_get_imports() {
         const ret = typeof window === 'undefined' ? null : window;
         return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
     };
+    imports.wbg.__wbg_suspend_6011a41599f07de4 = function() { return handleError(function (arg0) {
+        const ret = arg0.suspend();
+        return ret;
+    }, arguments) };
     imports.wbg.__wbg_value_cd1ffa7b1ab794f1 = function(arg0) {
         const ret = arg0.value;
         return ret;
@@ -966,8 +1006,8 @@ function __wbg_get_imports() {
         const ret = false;
         return ret;
     };
-    imports.wbg.__wbindgen_closure_wrapper2642 = function(arg0, arg1, arg2) {
-        const ret = makeMutClosure(arg0, arg1, 63, __wbg_adapter_52);
+    imports.wbg.__wbindgen_closure_wrapper2532 = function(arg0, arg1, arg2) {
+        const ret = makeMutClosure(arg0, arg1, 64, __wbg_adapter_52);
         return ret;
     };
     imports.wbg.__wbindgen_debug_string = function(arg0, arg1) {

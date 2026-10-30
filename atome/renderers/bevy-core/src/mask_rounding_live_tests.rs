@@ -17,7 +17,7 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         logical_position: [12.0, 24.0],
         logical_size: [120.0, 50.0],
         clip_rect: None,
-        clip_rotation: 0.0, clip_rounded_rects: vec![],
+        clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
         scale: [1.0, 1.0],
         rotation: 0.0,
         origin: [0.0, 0.0],
@@ -438,7 +438,7 @@ fn resizing_a_rounded_shape_recuts_its_mask_instead_of_stretching_the_corners() 
             rotation: 0.0,
             origin: [0.0, 0.0],
             clip_rect: None,
-            clip_rotation: 0.0, clip_rounded_rects: vec![],
+            clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
         },
     )
     .unwrap();

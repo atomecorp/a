@@ -1,7 +1,7 @@
 //! The voice session a host drives (Tauri commands, iOS C ABI): one `VoiceEngine` on its own
 //! thread, fed every 40 ms either by the engine's microphone capture (desktop, Android) or by
 //! PCM the host pushes (iOS, where Swift owns the audio session). Events wait in an outbox the
-//! host reads; audio never leaves the native side.
+//! host reads; audio never leaves the native side, but for the test mode's takes (`read`).
 
 use super::{Listening, VoiceEngine, VoiceModels};
 use crate::wake_capture;
@@ -30,6 +30,9 @@ struct Outbox {
     input_db: Option<f64>,
     pushed: Vec<f32>,
     overrun: bool,
+    /// Test mode: set by the reader at each read; its takes wait here until the next one.
+    record: bool,
+    takes: Vec<Value>,
 }
 
 struct Session {
@@ -77,10 +80,12 @@ fn run(mut engine: VoiceEngine, own_capture: bool, outbox: Arc<Mutex<Outbox>>, c
             Err(RecvTimeoutError::Timeout) => {}
         }
         let samples = gather(own_capture, &outbox)?;
+        engine.set_recording(locked(&outbox)?.record);
         let events = engine.push(&samples).map_err(|error| error.to_string())?;
         let mut out = locked(&outbox)?;
         out.input_db = Some(engine.input_db()).filter(|db| db.is_finite());
         out.events.extend(events.iter().filter_map(|event| serde_json::to_value(event).ok()));
+        if let Some(take) = engine.take_recording() { out.takes.push(json!({ "pcm": take.pcm, "cuts": take.cuts })); }
     }
 }
 
@@ -148,13 +153,17 @@ pub fn push(samples: &[f32]) -> Result<(), String> {
     Ok(())
 }
 
-/// Events since the last read, the input level, and whether audio was lost.
-pub fn read() -> Result<Value, String> {
+/// Events since the last read, the input level, and whether audio was lost. `record` (test mode,
+/// todo/refonte_assistant_vocal.md §18.7): the reader keeps the PCM the engine scored, given back
+/// as `takes` ({ pcm in [-1, 1], cuts }), one per closed turn; the only audio that leaves the engine.
+pub fn read(record: bool) -> Result<Value, String> {
     let owner = locked(&SESSION)?;
     let Some(session) = owner.as_ref() else { return Ok(json!({ "active": false, "events": [] })) };
     let active = !session.thread.is_finished();
     let mut out = locked(&session.outbox)?;
+    out.record = record;
     let events = std::mem::take(&mut out.events);
     let overrun = std::mem::take(&mut out.overrun);
-    Ok(json!({ "active": active, "events": events, "input_db": out.input_db, "overrun": overrun }))
+    let takes = std::mem::take(&mut out.takes);
+    Ok(json!({ "active": active, "events": events, "input_db": out.input_db, "overrun": overrun, "takes": takes }))
 }

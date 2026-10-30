@@ -38,14 +38,16 @@ const swipe = async (h, dx, dy = 0) => {
 
 test.each(['right', 'left'])('%s Atom sweep folds, persists and restores without moving the anchor', async handedness => {
     const shortPress = vi.fn();
-    const h = await prepare({ handedness, onAtomShortPress: shortPress });
+    const h = await prepare({ handedness, invokeAssistant: shortPress });
     try {
         const initial = tree(h).itemBoxes.find(box => box.item.id === BEVY_MAIN_MENU_ATOME_ID);
         const dx = handedness === 'right' ? -28 : 28;
         await swipe(h, dx);
-        expect(h.runtime.measure()).toMatchObject({ itemCount: 1, toolsCollapsed: true });
-        expect(tree(h).itemBoxes[0].x).toBe(initial.x);
-        expect(tree(h).itemBoxes[0].y).toBe(initial.y);
+        // Folded in a project: the Atom and Organize, the band's way back (every level).
+        expect(h.runtime.measure()).toMatchObject({ itemCount: 2, toolsCollapsed: true });
+        const folded = tree(h).itemBoxes.find(box => box.item.id === BEVY_MAIN_MENU_ATOME_ID);
+        expect(folded.x).toBe(initial.x);
+        expect(folded.y).toBe(initial.y);
         expect(upsertUserProfile.mock.calls.at(-1)[0].preferences.visual).toMatchObject({ mainMenuToolsCollapsed: true, handedness: 'left' });
         expect(upsertUserProfile.mock.calls.at(-1)[1]).toMatchObject({ allowCreate: false, eventSource: 'main_menu_fold' });
         await atom(h).on.activate();
@@ -53,10 +55,10 @@ test.each(['right', 'left'])('%s Atom sweep folds, persists and restores without
         await h.runtime.hideCompletely(true);
         h.window.__eveWorkspaceMode = { mode: 'project', projectId: 'fold-b' };
         await h.runtime.showFully();
-        expect(h.runtime.measure().itemCount).toBe(1);
+        expect(h.runtime.measure().itemCount).toBe(2);
         await h.runtime.showAtomOnly();
         await h.runtime.showFully();
-        expect(h.runtime.measure().itemCount).toBe(1);
+        expect(h.runtime.measure().itemCount).toBe(2);
         await swipe(h, -dx);
         expect(h.runtime.measure().itemCount).toBeGreaterThan(1);
         expect(h.runtime.measure().toolsCollapsed).toBe(false);
@@ -69,11 +71,11 @@ test.each(['right', 'left'])('%s Atom sweep folds, persists and restores without
 
 test('tap, vertical travel, short motion and cancelled sweep leave the preference alone', async () => {
     const shortPress = vi.fn();
-    const h = await prepare({ onAtomShortPress: shortPress });
+    const h = await prepare({ invokeAssistant: shortPress });
     try {
         await swipe(h, 0);
         await atom(h).on.activate();
-        expect(shortPress).toHaveBeenCalledTimes(1);
+        expect(shortPress).toHaveBeenCalledExactlyOnceWith('toggle', { source: 'bevy_ui_main_menu_atome' });
         await swipe(h, -3);
         await swipe(h, -3, -28);
         atom(h).on.press({ x: 100, y: 100 });
@@ -95,7 +97,7 @@ test('profile hydration and normalisation retain the folded choice', async () =>
         h.window.__eveProfilePreferences = { visual };
         h.window.dispatchEvent(new h.window.CustomEvent('eve:profile-preferences-updated', { detail: { preferences: { visual } } }));
         await h.runtime.refresh();
-        expect(h.runtime.measure().itemCount).toBe(1);
+        expect(h.runtime.measure().itemCount).toBe(2);
         expect(normalizeVisualPreferences(visual).mainMenuToolsCollapsed).toBe(true);
         expect(normalizeVisualPreferences({}).mainMenuToolsCollapsed).toBe(false);
     } finally { cleanup(h); }
@@ -108,7 +110,7 @@ test('folding clears a palette and pinned slider without clearing tool activatio
         h.runtime.state.sliderPreview = { nodeId: 'slider', pinned: true };
         h.runtime.state.latchedByToolId.set('tool.main.capture', true);
         await h.runtime.setToolsCollapsed(true);
-        expect(h.runtime.measure()).toMatchObject({ itemCount: 1, activePaletteKey: '' });
+        expect(h.runtime.measure()).toMatchObject({ itemCount: 2, activePaletteKey: '' });
         expect(h.runtime.state.sliderPreview).toBeNull();
         expect(h.runtime.getToolLatchedState({ toolId: 'tool.main.capture' })).toBe(true);
     } finally { cleanup(h); }

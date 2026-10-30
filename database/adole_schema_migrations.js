@@ -302,9 +302,12 @@ async function prepareAdoleSchemaColumns(query) {
     await ensureEventColumns(query);
     await ensureStateCurrentColumns(query);
     // VideoTrain (server/news_thread.js): a publication's thread, origin, parent, anchor and withdrawal.
-    for (const [column, type] of [['thread_ref', 'TEXT'], ['root_id', 'TEXT'], ['parent_id', 'TEXT'], ['anchor_ms', 'INTEGER'], ['retired_at', 'TEXT']]) {
+    for (const [column, type] of [['thread_ref', 'TEXT'], ['root_id', 'TEXT'], ['parent_id', 'TEXT'], ['anchor_ms', 'INTEGER'], ['retired_at', 'TEXT'],
+        ['replies_closed_at', 'TEXT']]) {
         await ensureColumn({ query, table: 'news_publications', column, ddl: `ALTER TABLE news_publications ADD COLUMN ${column} ${type}` });
     }
+    // A report kept by the thread's owner (« Garder »).
+    await ensureColumn({ query, table: 'news_reports', column: 'dismissed_at', ddl: 'ALTER TABLE news_reports ADD COLUMN dismissed_at TEXT' });
 }
 
 async function ensureCommunicationTables(query) {
@@ -370,6 +373,7 @@ async function ensureCommunicationTables(query) {
         news_id TEXT NOT NULL,
         reporter_id TEXT NOT NULL,
         reason TEXT,
+        dismissed_at TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         PRIMARY KEY(news_id, reporter_id)
     )`);

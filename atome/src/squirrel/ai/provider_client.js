@@ -168,7 +168,8 @@ export const normalizeAiProviderError = (error) => {
         'insufficient_quota',
         'insufficient_balance',
         'billing_hard_limit_reached',
-        'hard_limit_reached'
+        'hard_limit_reached',
+        'exceeded your current quota'
     ];
     const hasHardQuotaSignal = hasStructuredData
         ? HARD_QUOTA_SIGNALS.includes(providerCode)
@@ -301,6 +302,18 @@ export const normalizeAiProviderError = (error) => {
         user_message: "Le fournisseur IA est inaccessible. Vérifie le réseau et sa configuration.",
         ...diagnostics
     };
+};
+
+// The one code a failed assistant request is told by. A code names its cause and
+// stays itself (`insufficient_quota` is the person's own key credit,
+// `provider_shared_quota_exceeded` eVe's shared credit); a raw text (a transport
+// or runtime exception) is classified once here; a failure with no cause at all
+// is `provider_cause_missing`.
+const FAILURE_CODE = /^[A-Za-z][A-Za-z0-9_]*$/;
+export const providerFailureCode = (error) => {
+    const message = toText(error?.message ?? error);
+    if (!message) return 'provider_cause_missing';
+    return FAILURE_CODE.test(message) ? message : normalizeAiProviderError(error).code;
 };
 
 export const requestProviderCompletion = async ({

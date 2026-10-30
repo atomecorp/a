@@ -9,96 +9,109 @@ export const createVoiceSttRuntime = ({
     inputMeter, wake,
     runtimeContext,
     startBrowserRecognition,
-    startTauriRecognition
-} = {}) => ({
-    async prepare({ lang = 'fr-FR' } = {}) {
-        const selectedProvider = providers.stt.selected;
-        ensureSupported('stt', selectedProvider);
-        if (selectedProvider !== 'tauri_plugin_stt') {
-            return { ready: true, provider: selectedProvider };
+    startTauriRecognition,
+    startAssistantTranscription,
+    transcriptionAvailable
+} = {}) => {
+    // Free dictation (`purpose: 'dictation'`, R-013 Q12): the connected assistant transcribes it when it
+    // can serve this person — an account its provider accepts (`providerPrincipalReady`, never a guest)
+    // and the device online (the assistant offline gate's `checkConnection('fastify')`) — the system
+    // recognizer (Web Speech, tauri-plugin-stt, Apple's) otherwise. One decision per dictation, made
+    // before it starts; each route fails with its own error, never handing over to the other.
+    const routeOf = async (options) => (options.purpose === 'dictation' && await transcriptionAvailable()
+        ? 'assistant_transcription' : providers.stt.selected);
+    return {
+        async prepare({ lang = 'fr-FR' } = {}) {
+            const selectedProvider = providers.stt.selected;
+            ensureSupported('stt', selectedProvider);
+            if (selectedProvider !== 'tauri_plugin_stt') {
+                return { ready: true, provider: selectedProvider };
+            }
+            const bridge = getTauriSttBridge(runtimeContext.env);
+            if (typeof bridge?.prepare !== 'function') throw new Error('native_stt_prepare_unavailable');
+            const startedAt = Date.now();
+            debugVoiceService('stt.model.prepare.start', { provider: selectedProvider, lang }, runtimeContext.env);
+            try {
+                await bridge.prepare(lang);
+                const result = { ready: true, provider: selectedProvider, lang, elapsed_ms: Date.now() - startedAt };
+                debugVoiceService('stt.model.prepare.ready', result, runtimeContext.env);
+                return result;
+            } catch (error) {
+                debugVoiceService('stt.model.prepare.failed', {
+                    provider: selectedProvider,
+                    lang,
+                    elapsed_ms: Date.now() - startedAt,
+                    error: error?.message || String(error)
+                }, runtimeContext.env);
+                throw error;
+            }
+        },
+        async start(options = {}) {
+            const selectedProvider = await routeOf(options);
+            if (selectedProvider !== 'assistant_transcription') ensureSupported('stt', selectedProvider);
+            await wake?.suspend('stt');
+            let session;
+            try {
+            session = ensureSession(options);
+            // Native STT provides the canonical microphone stream, so subscribe
+            // before it starts. Browser Web Speech starts immediately while its
+            // separate permission-bound meter initializes asynchronously.
+            const inputMeterReady = inputMeter.start(session.session_id, {
+                purpose: options.purpose || 'user_turn', provider: selectedProvider
+            });
+            if (selectedProvider === 'tauri_plugin_stt') await inputMeterReady;
+                const started = selectedProvider === 'tauri_plugin_stt'
+                    ? await startTauriRecognition(runtimeContext, session.session_id, options, { provider: selectedProvider })
+                    : selectedProvider === 'browser_web_speech'
+                        ? await startBrowserRecognition(runtimeContext, session.session_id, options, { provider: selectedProvider })
+                        : selectedProvider === 'assistant_transcription'
+                            ? await startAssistantTranscription(runtimeContext, session.session_id, options, { provider: selectedProvider })
+                            : (() => { throw new Error(`Unsupported STT provider bridge: ${selectedProvider}`); })();
+                return {
+                    ...started,
+                    promise: Promise.resolve(started?.promise).finally(async () => { await inputMeter.stop(session.session_id); await wake?.resume('stt'); })
+                };
+            } catch (error) {
+                await inputMeter.stop(session?.session_id);
+                await wake?.resume('stt');
+                throw error;
+            }
+        },
+        async stop(sessionId, options = {}) {
+            const state = sttSessions.get(String(sessionId));
+            if (!state) {
+                await inputMeter.stop(sessionId);
+                return sessionRuntime.getSession(sessionId);
+            }
+            const commitPartial = options?.commitPartial === true;
+            if (state.bridge?.stop) {
+                state.stopReason = commitPartial ? 'commit' : 'manual';
+                state.stopRequested = true;
+                await state.bridge.stop();
+            } else {
+                state.recognition.stop();
+            }
+            return state.deferred.promise.finally(() => inputMeter.stop(sessionId));
+        },
+        async cancel(sessionId) {
+            const state = sttSessions.get(String(sessionId));
+            if (!state) {
+                await inputMeter.stop(sessionId);
+                return { session_id: sessionId, cancelled: true };
+            }
+            state.cancelled = true;
+            state.stopReason = 'cancelled';
+            if (state.bridge?.stop) {
+                await state.bridge.stop();
+            } else if (typeof state.recognition.abort === 'function') {
+                state.recognition.abort();
+            } else {
+                state.recognition.stop();
+            }
+            sessionRuntime.publishEvent(sessionId, 'voice.cancel.requested', { source: 'stt' });
+            sessionRuntime.interrupt(sessionId, { reason: 'stt_cancel' });
+            await state.settleCancelled?.();
+            return state.deferred.promise.finally(() => inputMeter.stop(sessionId));
         }
-        const bridge = getTauriSttBridge(runtimeContext.env);
-        if (typeof bridge?.prepare !== 'function') throw new Error('native_stt_prepare_unavailable');
-        const startedAt = Date.now();
-        debugVoiceService('stt.model.prepare.start', { provider: selectedProvider, lang }, runtimeContext.env);
-        try {
-            await bridge.prepare(lang);
-            const result = { ready: true, provider: selectedProvider, lang, elapsed_ms: Date.now() - startedAt };
-            debugVoiceService('stt.model.prepare.ready', result, runtimeContext.env);
-            return result;
-        } catch (error) {
-            debugVoiceService('stt.model.prepare.failed', {
-                provider: selectedProvider,
-                lang,
-                elapsed_ms: Date.now() - startedAt,
-                error: error?.message || String(error)
-            }, runtimeContext.env);
-            throw error;
-        }
-    },
-    async start(options = {}) {
-        const selectedProvider = providers.stt.selected;
-        ensureSupported('stt', selectedProvider);
-        await wake?.suspend('stt');
-        let session;
-        try {
-        session = ensureSession(options);
-        // Native STT provides the canonical microphone stream, so subscribe
-        // before it starts. Browser Web Speech starts immediately while its
-        // separate permission-bound meter initializes asynchronously.
-        const inputMeterReady = inputMeter.start(session.session_id, {
-            purpose: options.purpose || 'user_turn'
-        });
-        if (selectedProvider === 'tauri_plugin_stt') await inputMeterReady;
-            const started = selectedProvider === 'tauri_plugin_stt'
-                ? await startTauriRecognition(runtimeContext, session.session_id, options, { provider: selectedProvider })
-                : selectedProvider === 'browser_web_speech'
-                    ? await startBrowserRecognition(runtimeContext, session.session_id, options, { provider: selectedProvider })
-                    : (() => { throw new Error(`Unsupported STT provider bridge: ${selectedProvider}`); })();
-            return {
-                ...started,
-                promise: Promise.resolve(started?.promise).finally(async () => { await inputMeter.stop(session.session_id); await wake?.resume('stt'); })
-            };
-        } catch (error) {
-            await inputMeter.stop(session?.session_id);
-            await wake?.resume('stt');
-            throw error;
-        }
-    },
-    async stop(sessionId, options = {}) {
-        const state = sttSessions.get(String(sessionId));
-        if (!state) {
-            await inputMeter.stop(sessionId);
-            return sessionRuntime.getSession(sessionId);
-        }
-        const commitPartial = options?.commitPartial === true;
-        if (state.bridge?.stop) {
-            state.stopReason = commitPartial ? 'commit' : 'manual';
-            state.stopRequested = true;
-            await state.bridge.stop();
-        } else {
-            state.recognition.stop();
-        }
-        return state.deferred.promise.finally(() => inputMeter.stop(sessionId));
-    },
-    async cancel(sessionId) {
-        const state = sttSessions.get(String(sessionId));
-        if (!state) {
-            await inputMeter.stop(sessionId);
-            return { session_id: sessionId, cancelled: true };
-        }
-        state.cancelled = true;
-        state.stopReason = 'cancelled';
-        if (state.bridge?.stop) {
-            await state.bridge.stop();
-        } else if (typeof state.recognition.abort === 'function') {
-            state.recognition.abort();
-        } else {
-            state.recognition.stop();
-        }
-        sessionRuntime.publishEvent(sessionId, 'voice.cancel.requested', { source: 'stt' });
-        sessionRuntime.interrupt(sessionId, { reason: 'stt_cancel' });
-        await state.settleCancelled?.();
-        return state.deferred.promise.finally(() => inputMeter.stop(sessionId));
-    }
-});
+    };
+};

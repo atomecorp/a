@@ -110,7 +110,7 @@ test('blank beginner List adds native Delete only for a deletable row, preservin
     }
 });
 
-test('blank beginner List filters Organizer after canonical access and keeps the shared rail at the bottom', async () => {
+test('blank beginner List keeps the shared rail at the bottom, Organize staying in the band', async () => {
     const projectId = 'blank', row = { id: 'row', project_id: projectId, type: 'text', properties: {} };
     const projectRecord = { id: projectId, type: 'project', properties: {}, capabilities: { create: true } };
     const win = { __eveProfilePreferences: { visual: { masteryLevel: 'beginner' } },
@@ -126,8 +126,7 @@ test('blank beginner List filters Organizer after canonical access and keeps the
         bevyRuntimeResolver: () => ({ mountTree: mounted, updateTree: mounted }),
         readMenuAccess: async () => ({ projectRecord, records: [row] }),
         readMainMenuHeight: () => 60, findSceneByAtomeId: () => null });
-    runtime.enter({ atomeId: row.id, projectId, record: { ...row, structured_context: true }, railOnly: true,
-        extraDefinitions: [{ key: 'container_dashboard', priority: 10000 }] });
+    runtime.enter({ atomeId: row.id, projectId, record: { ...row, structured_context: true }, railOnly: true });
     await runtime.render();
     const railKeys = () => mounted.mock.lastCall[0].tree.root.children.find(node => node.kind === 'scroll_area')
         .children[0].children.map(node => node.id.replace('atome_contextual_tool_', ''));
@@ -135,17 +134,5 @@ test('blank beginner List filters Organizer after canonical access and keeps the
     const layout = runtime.readState().railLayout;
     expect(layout.y + layout.railHeight).toBe(layout.bottom);
     expect(layout.bottom).toBe(720 - 60 - layout.gap);
-    projectRecord.properties = { project_intent: { family: 'creation' } };
-    await runtime.render();
-    expect(railKeys().at(-1)).toBe('container_dashboard');
-    projectRecord.properties = {};
-    for (const masteryLevel of ['intermediate', 'advanced']) {
-        win.__eveProfilePreferences.visual.masteryLevel = masteryLevel;
-        await runtime.render();
-        expect(railKeys().at(-1)).toBe('container_dashboard');
-    }
-    win.__eveProfilePreferences.visual.masteryLevel = 'beginner';
-    surfaceState.readProjectViewSurfaceState.mockReturnValue({ mounted: true, projectId, mode: 'matrix' });
-    await runtime.render();
-    expect(railKeys().at(-1)).toBe('container_dashboard');
+    expect(railKeys()).not.toContain('container_dashboard');
 });

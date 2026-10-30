@@ -9,7 +9,7 @@ import { openExternalPage } from '../shared/external_page.js';
 
 export const socialRequest = (action, payload = {}, options = {}) => requestProviderService(`social.${action}`, payload, options);
 
-const OFFICIAL_HOSTS = /^(?:(www\.)?(tiktok\.com|instagram\.com|facebook\.com|deezer\.com)|accounts\.spotify\.com|open\.spotify\.com)$/;
+const OFFICIAL_HOSTS = /^(?:(www\.)?(tiktok\.com|instagram\.com|facebook\.com|deezer\.com)|accounts\.spotify\.com|open\.spotify\.com|www\.strava\.com)$/;
 const isOfficialUrl = (value) => {
     try {
         const url = new URL(value);

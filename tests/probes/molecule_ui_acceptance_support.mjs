@@ -180,9 +180,9 @@ export const readBevyUiHit = (page, target) => page.evaluate(({ x, y }) => {
 }, target);
 
 export const findBevyUiNodeTarget = (page, {
-    nodeId = '', nodePrefix = '', treeId = '', step = 3, hint = null
+    nodeId = '', nodePrefix = '', treeId = '', label = '', step = 3, hint = null
 } = {}) => (
-    page.evaluate(async ({ expectedId, expectedPrefix, expectedTree, stride, pointHint }) => {
+    page.evaluate(async ({ expectedId, expectedPrefix, expectedTree, expectedLabel, stride, pointHint }) => {
         const surface = document.getElementById('eve_surface_project');
         const runtime = window.eveBevyUiRuntime;
         const rect = surface?.getBoundingClientRect?.();
@@ -196,7 +196,8 @@ export const findBevyUiNodeTarget = (page, {
         const visit = (node, parentBox = null, forcedBox = null) => {
             if (!node) return;
             const box = forcedBox || nodeBox(node, parentBox);
-            if ((!expectedId || node.id === expectedId) && (!expectedPrefix || String(node.id || '').startsWith(expectedPrefix))) candidates.push(box);
+            if ((!expectedId || node.id === expectedId) && (!expectedPrefix || String(node.id || '').startsWith(expectedPrefix))
+                && (!expectedLabel || node.accessibility?.label === expectedLabel)) candidates.push(box);
             const boxes = layoutForNodeCached(node, box).childBoxes;
             (node.children || []).forEach((child, index) => visit(child, box, boxes[index]));
         };
@@ -239,6 +240,7 @@ export const findBevyUiNodeTarget = (page, {
         return null;
     }, {
         expectedId: String(nodeId || ''), expectedPrefix: String(nodePrefix || ''),
+        expectedLabel: String(label || ''),
         expectedTree: String(treeId || ''), stride: step,
         pointHint: hint && typeof hint === 'object' ? { x: Number(hint.x), y: Number(hint.y) } : null
     })

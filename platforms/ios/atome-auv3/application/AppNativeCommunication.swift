@@ -217,6 +217,8 @@ final class AppNativeCommunication: NSObject, PKPushRegistryDelegate, CXProvider
 final class AtomeApplicationDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions options: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         AppBackgroundLifecycle.shared.install()
+        // At launch, as WatchConnectivity requires: a watch's request may be what launched this app, in the background.
+        AppWatchSensorBridge.shared.activate()
         AppNativeCommunication.shared.start(); return true
     }
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken token: Data) {

@@ -477,6 +477,8 @@ tests/squirrel/*
 !tests/squirrel/device_name.test.mjs
 !tests/squirrel/remote_command.test.mjs
 !tests/eve/assistant_surface_tools.test.mjs
+!tests/eve/help_assistant.test.mjs
+!tests/eve/help_dashboard.test.mjs
 # Media handoff (what plays moves to another device and goes on there)
 !tests/eve/media_handoff.test.mjs
 !tests/server/teleport_return_arrival.test.mjs
@@ -488,3 +490,4 @@ tests/squirrel/*
 !tests/music/
 !tests/music/**
 !tests/governance/aos_builder.test.mjs
+!tests/governance/aos_installation.test.mjs

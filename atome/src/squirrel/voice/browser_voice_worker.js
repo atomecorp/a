@@ -10,7 +10,7 @@ const WASM_ROOT = '/src/assets/vendor/onnxruntime-web/';
 const FRAME = 512;
 const CONTEXT = 64;
 
-let session = null, conversation = null;
+let session = null, conversation = null, recording = false;
 let state = new Float32Array(256), context = new Float32Array(CONTEXT), pending = new Float32Array(0);
 
 const resetSilero = () => { state = new Float32Array(256); context = new Float32Array(CONTEXT); };
@@ -40,7 +40,10 @@ const probability = async (frame) => {
 };
 
 // 16 kHz samples in int16 scale (the capture's frames), cut into Silero frames in [-1, 1].
-const frames = async (samples) => {
+// `record`: the engine's test mode (todo/refonte_assistant_vocal.md §18.7); a closed turn then
+// carries its take ({ pcm, cuts }, voice-turns `Take`).
+const frames = async (samples, record) => {
+    if (record !== recording) { conversation.setRecording(record); recording = record; }
     const merged = new Float32Array(pending.length + samples.length);
     merged.set(pending); merged.set(samples, pending.length);
     let offset = 0;
@@ -48,15 +51,19 @@ const frames = async (samples) => {
     for (; offset + FRAME <= merged.length; offset += FRAME) {
         const frame = merged.slice(offset, offset + FRAME).map(sample => sample / 32768);
         if (!conversation.listen(frame)) continue;
-        actions.push(...conversation.push(frame, await probability(frame)));
+        for (const action of conversation.push(frame, await probability(frame))) {
+            if (action.type === 'close' && recording) action.take = conversation.takeRecording();
+            actions.push(action);
+        }
     }
     pending = merged.slice(offset);
-    self.postMessage({ type: 'actions', actions, inputDb: conversation.inputDb() }, actions.filter(action => action.pcm).map(action => action.pcm.buffer));
+    const buffers = actions.flatMap(action => [action.pcm?.buffer, action.take?.pcm.buffer, action.take?.cuts.buffer]).filter(Boolean);
+    self.postMessage({ type: 'actions', actions, inputDb: conversation.inputDb() }, buffers);
 };
 
 const handle = async (data) => {
     if (data.type === 'init') { await init(); self.postMessage({ type: 'ready' }); }
-    else if (data.type === 'frame') await frames(data.samples);
+    else if (data.type === 'frame') await frames(data.samples, data.record === true);
     else if (data.type === 'speaking') { if (conversation.setSpeaking(data.speaking)) resetSilero(); }
     else if (data.type === 'reset') { conversation.reset(); resetSilero(); pending = new Float32Array(0); }
     else throw new Error('voice_worker_message_invalid');

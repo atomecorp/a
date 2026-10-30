@@ -13,8 +13,9 @@ use crate::markers::Hits;
 use crate::reading::Source;
 use crate::sample::{SampleBank, SampleData};
 use crate::segment::{LoopMode, SegmentPlayer};
-use crate::zone::MAX_PLAYERS;
+use crate::zone::{ZoneFilter, MAX_PLAYERS};
 use composed_play::Composition;
+use atome_dsp::biquad::{Coefficients, Section};
 use atome_dsp::envelope::{self, Envelope};
 use atome_dsp::{Processor, Smoothed, StereoBlock};
 #[cfg(not(target_arch = "wasm32"))]
@@ -103,6 +104,9 @@ pub struct Voice {
     // Crossings of each marker of the instrument during this note.
     crossings: Vec<u32>,
     composition: Composition,
+    // Its zone's filter (zone.rs), designed at the note: one section per side.
+    filter: Option<Coefficients>,
+    filter_sections: [Section; 2],
 }
 
 impl Voice {
@@ -146,6 +150,8 @@ impl Voice {
             input_right: Vec::new(),
             crossings: Vec::new(),
             composition: Composition::IDLE,
+            filter: None,
+            filter_sections: [Section::default(); 2],
         }
     }
 
@@ -204,6 +210,29 @@ impl Voice {
         self.sustained = false;
         self.choking = false;
         self.one_shot = one_shot;
+    }
+
+    // The zone's filter for this note (its cutoff following key and velocity), or none.
+    pub fn set_filter(&mut self, filter: Option<ZoneFilter>, note: u8, velocity: f32) {
+        self.filter = filter.map(|filter| Coefficients::design(filter.shape, self.sample_rate, filter.cutoff_for(note, velocity), filter.q, 0.0));
+        self.filter_sections = [Section::default(); 2];
+    }
+
+    // A one-shot zone's note: the key let go no longer ends it, its takes play to their end.
+    pub fn play_to_end(&mut self) {
+        self.key_down = false;
+        self.one_shot = true;
+    }
+
+    fn filter_block(&mut self, left: &mut [f32], right: &mut [f32]) {
+        let Some(coefficients) = self.filter else { return };
+        let [left_section, right_section] = &mut self.filter_sections;
+        for sample in left.iter_mut() {
+            *sample = left_section.tick(&coefficients, *sample);
+        }
+        for sample in right.iter_mut() {
+            *sample = right_section.tick(&coefficients, *sample);
+        }
     }
 
     // A note on stretched segments primes its stretcher with the first one.
@@ -273,6 +302,7 @@ impl Voice {
             self.read(context, pitch + transpose, at, &mut left[at..end], &mut right[at..end]);
             at = end;
         }
+        self.filter_block(left, right);
         self.envelope.process(&mut StereoBlock::new(left, right));
         if self.envelope.is_idle() || self.finished() {
             self.active = false;
@@ -364,6 +394,7 @@ impl Voice {
             stretcher.process((&self.input_left[..input], &self.input_right[..input]), &mut left[at..end], &mut right[at..end]);
             at = end;
         }
+        self.filter_block(left, right);
         self.envelope.process(&mut StereoBlock::new(left, right));
         let ringing = self.stretcher.as_ref().expect("prepared").tail_frames();
         if self.envelope.is_idle() || self.tail >= ringing {

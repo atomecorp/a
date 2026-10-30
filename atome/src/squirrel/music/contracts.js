@@ -43,6 +43,7 @@ const shapes = {
     pause: [{ device_id: id }, [], 'control', 'Pause playback on the Spotify device.'],
     next: [{ device_id: id }, [], 'control', 'Skip to the next track on the Spotify device.'],
     previous: [{ device_id: id }, [], 'control', 'Return to the previous track on the Spotify device.'],
+    seek: [{ seconds: { type: 'number', minimum: 0, maximum: 86400 }, device_id: id }, ['seconds'], 'control', 'Move the current Spotify song to a position, in seconds, on its device. Premium required.'],
     create_playlist: [{ name: text, description: { type: 'string', maxLength: 1000 }, request_id: requestId }, ['name'], 'write', 'Create a private Spotify playlist with a durable request/receipt. Never repeat an unconfirmed write.'],
     add_tracks: [{ playlist_id: id, track_ids: { type: 'array', minItems: 1, maxItems: 25, uniqueItems: true, items: id }, request_id: requestId },
         ['playlist_id', 'track_ids'], 'write', 'Append exact song IDs to an authorized playlist, with a durable request/receipt. Never repeat an unconfirmed write.'],

@@ -66,7 +66,7 @@ final class AppNativeHealthController {
     private init() {
         #if canImport(UIKit)
         NotificationCenter.default.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: nil) { [weak self] _ in
-            self?.signalAllObserved()
+            self?.stateQueue.async { self?.signal(Array(self?.observedIds() ?? [])) }
             // Access may have been changed in Settings / Health meanwhile: the
             // page re-checks it (value-less signal, like every invalidation).
             self?.signalAccessChanged()
@@ -204,10 +204,6 @@ final class AppNativeHealthController {
             WebViewManager.evaluateJS("window.dispatchEvent(new CustomEvent('atome:native-health-invalidated',{detail:{access:true}}));",
                                       label: "nativeHealthAccessChanged", targetWebView: self.webView)
         }
-    }
-
-    private func signalAllObserved() {
-        stateQueue.async { self.signal(Array(self.observedIds())) }
     }
 
     private func observedIds() -> Set<String> {
@@ -482,7 +478,8 @@ final class AppNativeHealthController {
                                        "partial": start > from, "reason": start > from ? "platform_earliest_permitted" : NSNull()]
         switch spec.kind {
         case .dailySum: readSum(spec, from: start, to: to, coverage: coverage, completion: completion)
-        case .latest: readLatest(spec, from: start, to: to, coverage: coverage, limit: history ? 1000 : 20, completion: completion)
+        case .latest: readLatest(spec, from: start, to: to, coverage: coverage, limit: history ? 1000 : 20,
+                                 completion: history ? completion : workout.withWatchHeart(spec, from: start, to: to, completion))
         case .pressure: readPressure(spec, from: start, to: to, coverage: coverage, limit: history ? 1000 : 20, completion: completion)
         case .sleep: readSleep(spec, from: start, to: to, coverage: coverage, completion: completion)
         case .sessions: readSessions(spec, from: start, to: to, coverage: coverage, completion: completion)
@@ -492,6 +489,9 @@ final class AppNativeHealthController {
     }
 
     #if canImport(HealthKit)
+    // A heart rate the paired watch measured for the running session (application/AppWatchSensorBridge.swift).
+    func watchHeartRate(bpm: Double, at end: Date) { stateQueue.async { self.workout.watchHeartRate(bpm, at: end) } }
+
     static func statusCode(_ error: Error?) -> String {
         guard let error = error as? HKError else { return "error" }
         switch error.code {

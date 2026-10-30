@@ -7,6 +7,18 @@ export const DEBUG_REPORT_ORIGINS = Object.freeze(['user_requested', 'assistant_
 
 const line = maxLength => ({ type: 'string', minLength: 1, maxLength });
 export const ASSISTANT_CONTEXT_COMMANDS = Object.freeze([
+    { name: 'help.open', required: [], properties: { query: { type: 'string', maxLength: 500 } },
+        description: 'Open the existing eVe Help panel on the dashboard when the user asks to open Help. '
+            + 'A request to explain something alone does not require opening a panel; use help.search for information.' },
+    { name: 'help.search', required: [], properties: {
+        query: { type: 'string', maxLength: 500 },
+        workspace_mode: { type: 'string', enum: ['dashboard', 'project'] }
+    }, description: 'Search the local eVe Help catalogue before answering a question about how to use eVe, or about what atome/eVe is, '
+        + 'why it exists, its purpose, vision or principles (topic about_eve, its author\'s own pitch: query e.g. "pourquoi eve" or '
+        + '"about eve"). Answer those from the returned text, never from general knowledge. Use concise topic keywords '
+        + 'rather than a whole question; the local search requires every word to match. '
+        + 'Returns existing help articles in the current language, without opening tools or changing a project. '
+        + 'Articles marked unverified are not proof that a procedure is currently available; say so and do not invent steps.' },
     { name: 'selection.get', required: [], properties: {},
         description: 'Read the live selection of the current project: selected ids (last = focus) and a compact description '
             + '(type, name or text, position) of the selected objects first, then of the other objects. Call it before acting '

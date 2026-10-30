@@ -1,13 +1,21 @@
 // A note on or off on the voices: poly starts a voice per matching zone; mono and
 // legato keep a stack of held notes (the last one sounds, legato glides to it);
 // a zone's cuts choke what they name; the key let go sounds its release take,
-// quieter the longer it was held.
+// quieter the longer it was held. A keyswitch key chooses which switched zones
+// sound and plays nothing unless a zone covers it; a one-shot zone ignores the
+// key let go; a zone's filter is set on each voice it starts.
 use super::{Sampler, VoiceMode, HELD_NOTES, POLYPHONY, TUNE_CENTS};
 use crate::keymap::{Pick, NO_PICK};
 use crate::zone::{midi_velocity, MAX_PLAYERS};
 
 impl Sampler {
     pub(super) fn note_on(&mut self, note: u8, velocity: f32) {
+        if self.keymap.switches().is_some_and(|switches| switches.contains(note)) {
+            self.switch = note;
+            if !self.sounds(note, Some(velocity)) {
+                return;
+            }
+        }
         if self.mode() == VoiceMode::Poly {
             self.start_note(note, velocity);
             return;
@@ -27,6 +35,9 @@ impl Sampler {
     }
 
     pub(super) fn note_off(&mut self, note: u8) {
+        if self.keymap.switches().is_some_and(|switches| switches.contains(note)) && !self.sounds(note, None) {
+            return;
+        }
         if self.mode() != VoiceMode::Poly && self.held_count > 0 {
             let was_top = self.held[self.held_count - 1] == note;
             self.forget(note);
@@ -76,6 +87,7 @@ impl Sampler {
         let transpose = self.bend + self.values[TUNE_CENTS as usize] / 100.0;
         let voice = &mut self.pool.voices_mut()[index];
         voice.start(&mut context!(self), &picks, note, 1.0, level * (-held_seconds / decay).exp(), shape, true, transpose);
+        voice.set_filter(self.keymap.zone(zone).filter, note, 1.0);
         self.primes += voice.is_stretching() as usize;
         voice.zone = zone;
         voice.started_at = self.now;
@@ -89,7 +101,7 @@ impl Sampler {
         let midi = midi_velocity(velocity);
         let transpose = self.bend + self.values[TUNE_CENTS as usize] / 100.0;
         for zone in 0..self.keymap.len() {
-            if !self.keymap.zone(zone).contains(note, midi) {
+            if !self.keymap.zone(zone).contains(note, midi) || self.keymap.zone(zone).switch.is_some_and(|key| key != self.switch) {
                 continue;
             }
             for cut in 0..self.keymap.zone(zone).cuts.len() {
@@ -107,6 +119,11 @@ impl Sampler {
                 self.pool.voices_mut()[index].start(&mut context!(self), &picks[..count], note, velocity, level, shape, false, transpose);
             }
             let voice = &mut self.pool.voices_mut()[index];
+            let played = self.keymap.zone(zone);
+            voice.set_filter(played.filter, note, velocity);
+            if played.one_shot {
+                voice.play_to_end();
+            }
             self.primes += voice.is_stretching() as usize;
             voice.zone = zone;
             voice.trigger = self.triggers;
@@ -129,6 +146,14 @@ impl Sampler {
         for voice in self.pool.voices_mut().iter_mut().filter(|voice| voice.active && !voice.one_shot && !voice.choking) {
             voice.choke();
         }
+    }
+
+    // Some zone (for the current keyswitch) plays this note, at this velocity or at any.
+    fn sounds(&self, note: u8, velocity: Option<f32>) -> bool {
+        self.keymap.zones().iter().any(|zone| zone.switch.is_none_or(|key| key == self.switch) && match velocity {
+            Some(velocity) => zone.contains(note, midi_velocity(velocity)),
+            None => (zone.key_low..=zone.key_high).contains(&note),
+        })
     }
 
     pub(super) fn forget(&mut self, note: u8) {

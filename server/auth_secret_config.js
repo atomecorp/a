@@ -52,3 +52,9 @@ export function loadLocalTourismConfig(projectRoot, env = process.env) {
     return loadLocalSecretFile({ env, keys: new Set(['DATATOURISME_API_KEY']), error: 'tourism_secret_file',
         file: env.ATOME_TOURISM_ENV_FILE || path.join(projectRoot, 'Private', 'datatourisme.env') });
 }
+
+// The Strava application of the atome operator (server/strava/strava_session.js): one for every user, on the server only.
+export function loadLocalStravaConfig(projectRoot, env = process.env) {
+    return loadLocalSecretFile({ env, keys: new Set(['STRAVA_CLIENT_ID', 'STRAVA_CLIENT_SECRET']), error: 'strava_secret_file',
+        file: env.ATOME_STRAVA_ENV_FILE || path.join(projectRoot, 'Private', 'strava.env') });
+}

@@ -116,6 +116,8 @@ pub struct Sampler {
     held: [u8; HELD_NOTES],
     held_count: usize,
     held_velocity: f32,
+    // The last keyswitch pressed (the keymap's default before any).
+    switch: u8,
     controllers: [f32; 128],
     actions: Arc<ActionQueue>,
     generation: u16,
@@ -128,6 +130,7 @@ impl Sampler {
     pub fn new(keymap: Keymap, mut bank: SampleBank, voices: usize) -> Self {
         bank.prepare_streams(voices.max(2) * MAX_PLAYERS);
         Self {
+            switch: keymap.switches().map_or(0, |switches| switches.default),
             keymap,
             bank,
             tables: SincTables::new(),
@@ -364,6 +367,7 @@ impl Processor for Sampler {
         self.events.clear();
         self.carried.clear();
         self.held_count = 0;
+        self.switch = self.keymap.switches().map_or(0, |switches| switches.default);
         self.sustain_down = false;
         self.bend = 0.0;
         self.controllers = [0.0; 128];

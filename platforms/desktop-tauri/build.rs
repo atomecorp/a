@@ -1,4 +1,10 @@
 fn main() {
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("android") {
+        let status = std::process::Command::new("node").arg("package_tauri_engines.mjs")
+            .status().expect("Engine packaging requires the existing Node build runtime");
+        assert!(status.success(), "Canonical engine packaging failed");
+        println!("cargo:rerun-if-changed=package_tauri_engines.mjs");
+    }
     tauri_build::build();
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
         let status = std::process::Command::new("node").arg("../../scripts/build_gps_native_engine.mjs")

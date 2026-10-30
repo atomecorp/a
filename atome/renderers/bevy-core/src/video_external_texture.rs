@@ -5,7 +5,7 @@ use bevy::{
     prelude::*,
     render::{
         extract_component::{ExtractComponent, ExtractComponentPlugin},
-        render_resource::PrimitiveTopology,
+        render_resource::{Extent3d, PrimitiveTopology, TextureDimension, TextureFormat},
     },
 };
 
@@ -110,6 +110,18 @@ pub fn apply_video_mask_style(
         .ok_or_else(|| format!("bevy_video_external_texture_missing:{id}"))?;
     video.mask_texture = handle;
     Ok(())
+}
+
+/// The 1x1 white mask an unmasked quad binds, so masked and unmasked videos
+/// and media windows run the one shader path (alpha 1 = full coverage).
+pub(crate) fn opaque_mask_image() -> Image {
+    Image::new_fill(
+        Extent3d { width: 1, height: 1, depth_or_array_layers: 1 },
+        TextureDimension::D2,
+        &[255, 255, 255, 255],
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::default(),
+    )
 }
 
 fn video_quad_uvs(uv_rect: [f32; 4]) -> Vec<[f32; 2]> {

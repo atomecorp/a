@@ -27,7 +27,7 @@ export const SAMPLE_EDIT_TYPE = Object.freeze({ type: SAMPLE_EDIT_ATOME_TYPE, ki
         id, frame, origin: { type: 'string', enum: ['division', 'dynamics', 'hand'] }, locked: { type: 'boolean' }, warp_at: frame } } },
     pieces: { type: 'array', minItems: 1, maxItems: EDIT_PIECES_MAX, items: { type: 'object', required: ['kind'], properties: {
         kind: { type: 'string', enum: ['source', 'silence'] }, start: frame, end: frame, frames: frame, reverse: { type: 'boolean' },
-        gain_db: { type: 'number' }, stretch: { type: 'number' }, dc: { type: 'boolean' }, ramps: { type: 'array' } } } },
+        gain_db: { type: 'number' }, stretch: { type: 'number' }, pitch: { type: 'number' }, dc: { type: 'boolean' }, ramps: { type: 'array' } } } },
     tempo: { type: 'object', required: ['bpm'], properties: { bpm: { type: 'number', minimum: 20, maximum: 999 }, origin_frame: frame } },
     // The sounds Figer made from it.
     frozen: { type: 'array', items: id },

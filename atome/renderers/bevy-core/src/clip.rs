@@ -2,6 +2,7 @@ use bevy::{image::Image, prelude::*, sprite_render::MeshMaterial2d};
 
 use crate::{
     backdrop_surface::crop_backdrop_surface,
+    clip_fade::{apply_faded_clip, FadeFrame},
     clip_polygon::{
         clip_convex_polygon, clip_is_axis_aligned, polygon_bounds, polygon_mesh, remove_sprite_polygon_proxy,
         upsert_sprite_polygon_proxy, visible_polygon_in_atom_frame, write_polygon_into_entity_mesh,
@@ -88,7 +89,7 @@ fn intersection(rect: [f32; 4], clip: [f32; 4]) -> Option<[f32; 4]> {
 
 // Rotation ecran (y vers le bas, sens horaire pour un angle positif), comme
 // `atome_rect_transform_with_local` une fois ramene en coordonnees logiques.
-fn rotate_screen(point: Vec2, degrees: f32) -> Vec2 {
+pub(crate) fn rotate_screen(point: Vec2, degrees: f32) -> Vec2 {
     let (sin, cos) = degrees.to_radians().sin_cos();
     Vec2::new(point.x * cos - point.y * sin, point.x * sin + point.y * cos)
 }
@@ -320,6 +321,17 @@ pub fn apply_entity_clip(world: &mut World, entity: Entity) -> Result<(), String
             ));
         }
     }
+    // A scroll area's edge fade (clip_fade.rs) draws the faded part of a sprite or a glass surface as its own mesh.
+    let local_visible = [visible[0] - original[0], visible[1] - original[1], visible[2], visible[3]];
+    let faded = polygon.clone().unwrap_or_else(|| vec![Vec2::new(local_visible[0], local_visible[1]),
+        Vec2::new(local_visible[0] + visible[2], local_visible[1]), Vec2::new(local_visible[0] + visible[2], local_visible[1] + visible[3]),
+        Vec2::new(local_visible[0], local_visible[1] + visible[3])]);
+    let sprite_uv = sprite_uv_of(image_size, source_rect, Vec2::new(original[2], original[3]));
+    let frame = FadeFrame::new([position.x, position.y], [size.width, size.height], local, clip_rotation);
+    let sprite = world.get::<Sprite>(entity).is_some();
+    if apply_faded_clip(world, entity, &faded, frame, original, visible, sprite.then_some(&sprite_uv as &dyn Fn(Vec2) -> [f32; 2]), transform)? {
+        return Ok(());
+    }
     if let Some(points) = polygon.as_deref() {
         return apply_polygon_clip(world, entity, points, original, visible, image_size, source_rect, transform);
     }
@@ -340,6 +352,22 @@ pub fn apply_entity_clip(world: &mut World, entity: Entity) -> Result<(), String
     Ok(())
 }
 
+/// A sprite's UV at an atom-frame point (its box `size`): within its source rectangle of its texture, if any.
+fn sprite_uv_of(image_size: Option<Vec2>, source_rect: Option<Rect>, size: Vec2) -> impl Fn(Vec2) -> [f32; 2] {
+    let size = Vec2::new(size.x.max(f32::EPSILON), size.y.max(f32::EPSILON));
+    move |p| {
+        let fraction = p / size;
+        match image_size {
+            Some(texture_size) if texture_size.x > 0.0 && texture_size.y > 0.0 => {
+                let base = source_rect.unwrap_or(Rect::from_corners(Vec2::ZERO, texture_size));
+                let at = (base.min + base.size() * fraction) / texture_size;
+                [at.x, at.y]
+            }
+            _ => [fraction.x, fraction.y],
+        }
+    }
+}
+
 /// Dessine le polygone visible : maillage du relais pour un sprite, maillage propre
 /// pour une video ou une surface de verre. Un texte sans texture garde la boite.
 #[allow(clippy::too_many_arguments)]
@@ -356,17 +384,7 @@ fn apply_polygon_clip(
     let size = Vec2::new(original[2].max(f32::EPSILON), original[3].max(f32::EPSILON));
     let local_visible = [visible[0] - original[0], visible[1] - original[1], visible[2], visible[3]];
     if world.get::<Sprite>(entity).is_some() {
-        let (mesh, key) = polygon_mesh(polygon, local_visible, |p| {
-            let fraction = p / size;
-            match image_size {
-                Some(texture_size) if texture_size.x > 0.0 && texture_size.y > 0.0 => {
-                    let base = source_rect.unwrap_or(Rect::from_corners(Vec2::ZERO, texture_size));
-                    let at = (base.min + base.size() * fraction) / texture_size;
-                    [at.x, at.y]
-                }
-                _ => [fraction.x, fraction.y],
-            }
-        });
+        let (mesh, key) = polygon_mesh(polygon, local_visible, sprite_uv_of(image_size, source_rect, size));
         return upsert_sprite_polygon_proxy(world, entity, mesh, key, transform);
     }
     let video_uv = world

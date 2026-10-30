@@ -4,7 +4,7 @@
 // never changes under the finger. Each shape maps the finger's travel to the value its
 // own way: along the bar, up the column, around the dial's centre.
 import { quantizeSliderValue as quantize } from './slider_contract.js';
-import { TOOL_SLIDER_DRAG_THRESHOLD_PX } from './tool_slider_drag.js';
+import { TOOL_SLIDER_DRAG_THRESHOLD_PX, travelledSliderValue } from './tool_slider_drag.js';
 
 export const TOOL_SLIDER_SHAPES = Object.freeze(['bar', 'column', 'dial']);
 // The travel after which the shape is known. An arc turns evenly along the gesture: its three
@@ -72,7 +72,8 @@ export const beginShapedSlider = (session, origin) => ({ ...session, origin: { x
 // release closes a slider it opened), the shape is decided once, then the value follows.
 // `metrics.lengthPx`: the bar's and the column's travel for the whole range; `metrics.barSign` /
 // `metrics.columnSign`: -1 where the bar grows leftwards or the column downwards (a host's inside);
-// `metrics.provisional`: the shape shown before the gesture decided one.
+// `metrics.provisional`: the shape shown before the gesture decided one; `metrics.natural`: natural values hold the finger a
+// little along the bar and the column (tool_slider_drag.js#travelledSliderValue).
 export const dragShapedSlider = (session, delta, config = {}, metrics = {}, allowed = TOOL_SLIDER_SHAPES) => {
     const previous = session.path.at(-1) || session.origin;
     const point = { x: previous.x + finite(delta?.x), y: previous.y + finite(delta?.y) };
@@ -95,5 +96,5 @@ export const dragShapedSlider = (session, delta, config = {}, metrics = {}, allo
         return settled({ centre, turn, value: quantize(start + (turn * 180 / Math.PI / DIAL_RANGE_DEGREES) * range, config) });
     }
     const travel = shape === 'bar' ? (point.x - session.origin.x) * (metrics.barSign ?? 1) : (session.origin.y - point.y) * (metrics.columnSign ?? 1);
-    return settled({ value: quantize(start + (travel / length) * range, config) });
+    return settled({ value: travelledSliderValue(start, travel, length, config, metrics.natural === true) });
 };

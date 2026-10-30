@@ -848,52 +848,6 @@ test('Dashboard mode clears contextual edit chrome and project return keeps it c
     }
 });
 
-test('canonical vertical slider is relative for touch and collapses on mouse cancel or stylus capture loss', async () => {
-    const dom = new JSDOM('<!doctype html><button id="slider"></button>');
-    const { window } = dom;
-    Object.assign(globalThis, {
-        window, document: window.document, Node: window.Node, Element: window.Element,
-        HTMLElement: window.HTMLElement, HTMLInputElement: window.HTMLInputElement,
-        CustomEvent: window.CustomEvent, Event: window.Event, MouseEvent: window.MouseEvent,
-        getComputedStyle: window.getComputedStyle.bind(window)
-    });
-    class PointerEventShim extends window.MouseEvent {
-        constructor(type, init = {}) {
-            super(type, init);
-            Object.defineProperties(this, {
-                pointerId: { value: Number(init.pointerId || 1) },
-                pointerType: { value: String(init.pointerType || 'touch') },
-                button: { value: Number(init.button || 0) }
-            });
-        }
-    }
-    window.PointerEvent = PointerEventShim;
-    globalThis.PointerEvent = PointerEventShim;
-    const { mountIntuitionXSliderToolContent } = await import('../../atome/src/squirrel/components/tool_slider_builder.js');
-    const button = document.getElementById('slider');
-    mountIntuitionXSliderToolContent({
-        button, orientation: 'vertical', collapsedWidthPx: 40, expandedWidthPx: 120,
-        definition: { label: 'Size', sliderMin: 0, sliderMax: 100, sliderStep: 1, sliderValue: 50 }
-    });
-    const hitzone = button.querySelector('[data-role="eve_intuitionx-slider-hitzone"]');
-    const input = button.querySelector('[data-role="eve_intuitionx-slider-input"]');
-    const rect = { left: 0, top: 0, right: 18, bottom: 120, width: 18, height: 120 };
-    hitzone.getBoundingClientRect = () => rect;
-    input.getBoundingClientRect = () => rect;
-    hitzone.dispatchEvent(new PointerEventShim('pointerdown', { bubbles: true, pointerId: 7, clientY: 80 }));
-    window.dispatchEvent(new PointerEventShim('pointermove', { bubbles: true, pointerId: 7, clientY: 56 }));
-    assert.equal(button.style.height, '120px');
-    assert.equal(input.value, '70');
-    window.dispatchEvent(new PointerEventShim('pointerup', { bubbles: true, pointerId: 7, clientY: 56 }));
-    assert.equal(button.style.height, '40px');
-    hitzone.dispatchEvent(new PointerEventShim('pointerdown', { bubbles: true, pointerId: 8, pointerType: 'mouse', clientY: 70 }));
-    window.dispatchEvent(new PointerEventShim('pointercancel', { bubbles: true, pointerId: 8, pointerType: 'mouse', clientY: 70 }));
-    assert.equal(button.dataset.sliderExpanded, 'false');
-    hitzone.dispatchEvent(new PointerEventShim('pointerdown', { bubbles: true, pointerId: 9, pointerType: 'pen', clientY: 70 }));
-    input.dispatchEvent(new PointerEventShim('lostpointercapture', { bubbles: true, pointerId: 9, pointerType: 'pen', clientY: 70 }));
-    assert.equal(button.dataset.sliderExpanded, 'false');
-});
-
 test('depth palette survives structured target selection and closes on explicit rail clear', async () => {
     const previousWindow=globalThis.window, previousDocument=globalThis.document;
     const dom=new JSDOM('<!doctype html><canvas id="eve_surface_project"></canvas>');

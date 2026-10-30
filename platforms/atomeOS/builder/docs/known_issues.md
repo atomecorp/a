@@ -41,7 +41,13 @@ to ARM or a VM result to physical hardware.
 - Only explicit development builds are traceable. Package versions are recorded,
   but pkg repositories are not frozen; rebuild identity and bit reproducibility
   are not established. All artifacts are unsigned.
-- No secure remote pairing/discovery UI, internal installer, CI, publisher,
+- `prepare`/`download` and interactive support selection have host tests with
+  fixture responses. No real published atome/eVe OS release endpoint exists.
+  The native `bsdinstall` mode has composition/topology/refusal tests only, not a
+  successful extraction, EFI boot or physical disk installation. It never runs
+  on the Mac. Installer images default to 34 GiB and cannot be staged in the
+  roughly 22 GiB currently free on the control Mac.
+- No qualified secure remote pairing/discovery UI, internal installation, CI, publisher,
   boot-verified update, rollback, A/B, automatic log-rotation validation or
   production-maintenance chain is delivered by this builder change.
 

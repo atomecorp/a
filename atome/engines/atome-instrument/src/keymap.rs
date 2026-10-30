@@ -2,7 +2,8 @@
 // and velocity fall in, and for each, the takes its stack picks. Draw state
 // (round-robin counters, the seeded random) lives here, sized once, so the
 // same seed replays the same performance. It also holds the instrument's
-// markers (markers.rs) and the draws of its composed notes (composed.rs).
+// markers (markers.rs) and the draws of its composed notes (composed.rs), and
+// the instrument's keyswitch range: the keys that choose which zones sound.
 
 use crate::composed::StepDraws;
 use crate::markers::{Marker, MarkerTable};
@@ -29,6 +30,21 @@ pub struct Keymap {
     random: u64,
     markers: MarkerTable,
     steps: StepDraws,
+    switches: Option<Switches>,
+}
+
+// Keys `low..=high` are keyswitches; `default` is the one chosen before any is pressed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Switches {
+    pub low: u8,
+    pub high: u8,
+    pub default: u8,
+}
+
+impl Switches {
+    pub fn contains(&self, note: u8) -> bool {
+        (self.low..=self.high).contains(&note)
+    }
 }
 
 impl Keymap {
@@ -97,7 +113,29 @@ impl Keymap {
             .collect();
         let count = zones.len();
         let steps = StepDraws::new(&zones, seed);
-        Ok(Self { zones, neighbours, counters: vec![0; count], last: vec![usize::MAX; count], release_counters: vec![0; count], random: seed.max(1), markers, steps })
+        Ok(Self { zones, neighbours, counters: vec![0; count], last: vec![usize::MAX; count], release_counters: vec![0; count], random: seed.max(1), markers, steps, switches: None })
+    }
+
+    // The keyswitch range; every zone's switch lies in it, and a zone has one only when the range exists.
+    pub fn with_switches(mut self, switches: Option<Switches>) -> Result<Self, String> {
+        if let Some(range) = switches {
+            if range.low > range.high || range.high > 127 || !range.contains(range.default) {
+                return Err(format!("keyswitches {}..{} cannot start on {}", range.low, range.high, range.default));
+            }
+        }
+        for (index, zone) in self.zones.iter().enumerate() {
+            match (zone.switch, switches) {
+                (Some(key), Some(range)) if !range.contains(key) => return Err(format!("zone {index}: keyswitch {key} is outside the switch range")),
+                (Some(key), None) => return Err(format!("zone {index}: keyswitch {key} without a switch range")),
+                _ => {}
+            }
+        }
+        self.switches = switches;
+        Ok(self)
+    }
+
+    pub fn switches(&self) -> Option<Switches> {
+        self.switches
     }
 
     pub fn stretches(&self) -> bool {

@@ -4,14 +4,19 @@ const clickMenuTarget = clickCanvasTarget;
 import { exerciseMixerLassoBlock, exerciseTimelineEditingGestures } from "./molecule_ui_timeline_gestures.mjs";
 
 export const runMoleculeTimelineAcceptance = async ({ page, project, fixture, report, check, OUT_DIR, ENDURANCE_MS, ENDURANCE_MIN_CYCLES, cdp, projectViewNode, readAcceptanceState }) => {
-        await check('real Mixage, OUT and fader gestures update the canonical mix', async () => {
+        await check('real Mixage, output destination and Volume gestures update the canonical mix', async () => {
             // The Molecule's own Mix: selected in the List, its rail's Activity >
             // Mix enters it and shows its strips (the views present the timeline
             // of the level the user is in).
             const row = await page.evaluate(async (id) => ((await import('/eVe/domains/rendering/project_view_surface_runtime.js'))
                 .readProjectViewSurfaceState().content?.entries || []).findIndex((entry) => entry.id === id), fixture.ownerId);
             assert(row >= 0, 'molecule_row_missing');
-            await clickCanvasTarget(page, await projectViewNode(page, project.id, `project_view_list_entry_${row}_name`));
+            const label = await page.evaluate(async index => (await import('/eVe/domains/rendering/project_view_surface_runtime.js'))
+                .readProjectViewSurfaceState().content.entries[index].label, row);
+            const ownerRow = await awaitBevyUiNodeTarget(page, { nodeId: `project_view_list_entry_${row}_name`,
+                treeId: 'eve_bevy_ui_project_view', label });
+            assert(ownerRow, 'molecule_row_not_projected');
+            await clickCanvasTarget(page, ownerRow);
             const RAIL = 'eve_bevy_panel_atome_contextual_edit';
             const activity = await awaitBevyUiNodeTarget(page, { nodeId: 'atome_contextual_tool_molecule_activity', treeId: RAIL });
             assert(activity, 'molecule_activity_not_actionable');
@@ -32,7 +37,7 @@ export const runMoleculeTimelineAcceptance = async ({ page, project, fixture, re
                     content: view.content
                 };
             });
-            // OUT toggles the strip's main output in the canonical mix document.
+            // OUT chooses a destination; the column's Volume is the canonical tool slider.
             const out = await awaitBevyUiNodeTarget(page, { nodePrefix: 'molecule_mix_strip_', treeId: 'eve_bevy_ui_project_view' });
             assert(out, 'molecule_mix_strip_not_actionable');
             const readMix = () => page.evaluate(async (owner) => {
@@ -47,14 +52,28 @@ export const runMoleculeTimelineAcceptance = async ({ page, project, fixture, re
             const outTile = await awaitBevyUiNodeTarget(page, { nodeId: `${nodeId}_out`, treeId: 'eve_bevy_ui_project_view' });
             assert(outTile, 'molecule_mix_out_not_actionable');
             await clickCanvasTarget(page, outTile);
+            const none = await awaitBevyUiNodeTarget(page, { nodeId: 'molecule_mix_picker_0', treeId: 'eve_bevy_ui_project_view' });
+            assert(none, 'molecule_mix_destination_not_actionable');
+            await clickCanvasTarget(page, none);
             const committed = await waitFor(page, async ({ owner, id }) => {
                 const state = await window.Atome.getStateCurrent(owner);
                 const mix = (state?.molecule_timeline || state?.props?.molecule_timeline || state?.properties?.molecule_timeline)?.mix;
-                return { ok: mix?.strips?.[id]?.output?.enabled === false, output: mix?.strips?.[id]?.output };
+                return { ok: mix?.strips?.[id]?.output?.destination === null, output: mix?.strips?.[id]?.output };
             }, { owner: fixture.ownerId, id: audio.strip_id });
-            const zone = nodeId.replace('molecule_mix_strip_', 'molecule_mix_zone_');
-            const thumb = await awaitBevyUiNodeTarget(page, { nodeId: `${zone}_fader`, treeId: 'eve_bevy_ui_project_view' });
-            assert(thumb, 'molecule_mix_fader_not_actionable');
+            // Restore the audible main output through the same picker before playback acceptance.
+            await clickCanvasTarget(page, await awaitBevyUiNodeTarget(page, { nodeId: `${nodeId}_out`, treeId: 'eve_bevy_ui_project_view' }));
+            const main = await awaitBevyUiNodeTarget(page, { nodeId: 'molecule_mix_picker_1', treeId: 'eve_bevy_ui_project_view' });
+            assert(main, 'molecule_mix_main_output_not_actionable');
+            await clickCanvasTarget(page, main);
+            await waitFor(page, async ({ owner, id }) => {
+                const state = await window.Atome.getStateCurrent(owner);
+                const timeline = state?.molecule_timeline || state?.props?.molecule_timeline || state?.properties?.molecule_timeline;
+                return { ok: timeline?.mix?.strips?.[id]?.output?.destination?.kind === 'main' };
+            }, { owner: fixture.ownerId, id: audio.strip_id });
+            const volumeIndex = (await readMix()).strips[audio.strip_id].chain.findIndex(module => module.type === 'volume');
+            assert(volumeIndex >= 0, 'molecule_mix_volume_missing');
+            const thumb = await awaitBevyUiNodeTarget(page, { nodeId: `${nodeId}_module_${volumeIndex}`, treeId: 'eve_bevy_ui_project_view' });
+            assert(thumb, 'molecule_mix_volume_not_actionable');
             const point = await playwrightPointForClientTarget(page, thumb);
             await page.mouse.move(point.x, point.y); await page.mouse.down();
             await page.mouse.move(point.x, point.y + 60, { steps: 8 }); await page.mouse.up();

@@ -8,6 +8,7 @@ Primary framework contracts:
 - [deepseek_delegation.md](deepseek_delegation.md): guarded task delegation to DeepSeek from ChatGPT/Codex.
 - bevy_integration.md: shared Bevy/WebGPU rendering integration.
 - security_architecture.md and sync_protocol.md: security and synchronization contracts.
+- [account_creation.md](account_creation.md): creating an account on atome.one, by invitation only for now (Contacts › Invit., the mailed link, one use, 21 days).
 - CRUD_apis.md, AI.md, and tools_api_and_coding.md: mutation, AI, and tool interfaces.
 - AUv3_API_Reference.md, media_capture_apis.md, and the AUv3 platform guides: active platform references.
 - [social_sharing.md](social_sharing.md): TikTok, Instagram and Facebook connections and publishing, official routes, delivery statuses and the producer contract (ZRecord Canvas).

@@ -335,16 +335,16 @@ test('the main menu composition is independent of project work context', () => {
         assert.deepEqual(buildBevyMainMenuItems(menuContent(), { workContext }), buildBevyMainMenuItems(menuContent()));
 });
 
-test('BevyUI main menu Atome short press requests the dashboard', async () => {
+test('BevyUI main menu Atome short press toggles the assistant at every level', async () => {
     const toggles = [];
     const harness = createRuntimeHarness({
-        onAtomShortPress: payload => toggles.push(payload)
+        invokeAssistant: (action, payload) => toggles.push([action, payload])
     });
     try {
         await harness.runtime.showFully();
         const tree = harness.calls[0].payload.tree;
         await findNode(tree.root, BEVY_MAIN_MENU_ATOME_ID).on.activate();
-        assert.deepEqual(toggles, [{ source: 'bevy_ui_main_menu_atome' }]);
+        assert.deepEqual(toggles, [['toggle', { source: 'bevy_ui_main_menu_atome' }]]);
     } finally {
         harness.restore();
     }
@@ -715,7 +715,7 @@ const choicePaletteContent = () => ({
 
 test('Atom long press toggles input once and consumes its trailing short click', async () => {
     const actions = [];
-    const h = createRuntimeHarness({ invokeAssistant: action => actions.push(action), onAtomShortPress: () => actions.push('dashboard') });
+    const h = createRuntimeHarness({ invokeAssistant: action => actions.push(action) });
     try {
         await h.runtime.showFully();
         const item = findNode(h.calls.at(-1).payload.tree.root, BEVY_MAIN_MENU_ATOME_ID);
@@ -727,6 +727,6 @@ test('Atom long press toggles input once and consumes its trailing short click',
         item.on.press({ x: 930, y: 690 });
         item.on.release({ x: 930, y: 690 });
         await item.on.activate();
-        assert.deepEqual(actions, ['toggleInput', 'dashboard']);
+        assert.deepEqual(actions, ['toggleInput', 'toggle']);
     } finally { h.runtime.destroy(); h.restore(); }
 });

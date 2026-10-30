@@ -6,7 +6,9 @@ import { BREATH_PATTERN_IDS, BREATH_PHASES, BREATH_CUSTOM_RANGE } from '../../sh
 // lived as one timed session, its card on the Dashboard included (eVe/domains/programs/brick_session_runtime.js).
 export const BRICK_SESSION_ERRORS = Object.freeze(['INVALID_ARGUMENT', 'AUTH_REQUIRED', 'BRICK_SESSION_UNKNOWN', 'BRICK_SESSION_NOT_FOUND',
     'BRICK_SESSION_INVALID', 'BRICK_SESSION_REVISION_CHANGED', 'BRICK_SESSION_OBJECTIVES_UNAVAILABLE', 'PRESENTATION_UNAVAILABLE',
-    'CONTEXT_CHANGED', 'BRICK_SESSION_WRITE_FAILED']);
+    'CONTEXT_CHANGED', 'BRICK_SESSION_WRITE_FAILED', 'BRICK_SESSION_CARD_CLOSED', 'BRICK_SESSION_CARD_ACTION_FAILED', 'BRICK_SESSION_NOT_RUNNING']);
+// What the card's own disc and tools do, asked from elsewhere (the watch, MCP): brick_session.card_action.
+export const BRICK_SESSION_CARD_ACTIONS = Object.freeze(['open', 'start', 'done', 'pause', 'stop', 'finish', 'back', 'set']);
 const id = { type: 'string', minLength: 1, maxLength: 200 };
 const brick_id = { type: 'string', enum: BRICK_SESSION_IDS };
 const minutes = { type: 'integer', minimum: 1, maximum: 240 };
@@ -27,8 +29,12 @@ const definitions = {
         `Prepare a timed nap, meditation, breathing or relaxation session of its length (or minutes when given; a breathing at its breath, or breath when given: ${BREATHS}). What is given becomes the user's own. Does not start it.`, true],
     transition: [{ session_id: id, base_revision: { type: 'integer', minimum: 0 }, request_id: id,
         action: { type: 'string', enum: ['start', 'pause', 'resume', 'confirm', 'elapse', 'finish', 'stop'] }, step_id: id, actual: measure,
-        note: { type: 'string', maxLength: 4000 }, use_in_followup: { type: 'boolean' } }, ['session_id', 'base_revision', 'request_id', 'action'],
-        'Record one event of a nap, meditation, breathing or relaxation session: start, pause, resume, confirm (ended early, with the time done), elapse (its time is up), finish (saved; it counts for the user\'s objectives by itself, use_in_followup is recorded true, one objective left out by dashboard.session.objectives.set; a meditation or a breathing also writes its mindful minutes to the health store) or stop.', true],
+        recorded_at: { type: 'string', format: 'date-time', maxLength: 40 }, note: { type: 'string', maxLength: 4000 }, use_in_followup: { type: 'boolean' } },
+        ['session_id', 'base_revision', 'request_id', 'action'],
+        'Record one event of a nap, meditation, breathing or relaxation session (recorded_at: the instant it happened, now when absent): start, pause, resume, confirm (ended early, with the time done), elapse (its time is up), finish (saved; it counts for the user\'s objectives by itself, use_in_followup is recorded true, one objective left out by dashboard.session.objectives.set; a meditation or a breathing also writes its mindful minutes to the health store) or stop.', true],
+    card_action: [{ action: { type: 'string', enum: BRICK_SESSION_CARD_ACTIONS }, brick_id, field: { type: 'string', enum: ['minutes'] }, value: minutes }, ['action'],
+        'Do on the nap, meditation, breathing or relaxation card what its own disc and tools do (the watch, MCP), its card opened on brick_id first when no session is under way: open (only show it), start (then the 3-2-1), done (the disc: Départ during the 3-2-1, Terminé before its time), pause (pause, or resume when paused), stop, finish (save the ended session), back (ready again), set (field minutes: its length, to value). Returns card: the card as other surfaces show it (its brick, length, session).', true],
+    suggestions: [{ enabled: { type: 'boolean' } }, ['enabled'], 'Let eVe propose a nap, a relaxation or a breathing once a day to a user with the « Se faire plaisir » objective (enabled true), or never again on this device (« Ne plus proposer », enabled false).', true],
     get: [{ session_id: id }, ['session_id'], 'Read a nap, meditation, breathing or relaxation session replayed from its recorded events.', false],
     open_sessions: [{}, [], 'List the nap, meditation, breathing or relaxation sessions left under way (running or paused) in the last 24 hours, as { session_id, brick_id, state }: one the app left when it closed can be resumed or stopped.', false]
 };
@@ -37,12 +43,12 @@ export const BRICK_SESSION_COMMANDS = Object.freeze(Object.entries(definitions).
     input_schema: { type: 'object', additionalProperties: false, properties, required },
     output_schema: { type: 'object', required: ['ok'], properties: { ok: { type: 'boolean' }, error: { type: 'string', enum: BRICK_SESSION_ERRORS },
         brick_id: { type: 'string' }, minutes: { type: 'number' }, session_id: { type: 'string' }, state: { type: 'object' }, sessions: { type: 'array' },
-        objective_links: { type: 'array' }, mindful: { type: 'object' }, breath: { type: 'string' }, custom: { type: 'object' }, bell: { type: 'number' } } }
+        objective_links: { type: 'array' }, mindful: { type: 'object' }, suggestions: { type: 'boolean' }, breath: { type: 'string' }, custom: { type: 'object' }, bell: { type: 'number' }, card: { type: ['object', 'null'] } } }
 })));
 export const validateBrickSessionInput = (action, input) => {
     const contract = BRICK_SESSION_COMMANDS.find(command => command.action === action);
     return contract && validateParams(contract.input_schema, input).ok ? null : 'INVALID_ARGUMENT';
 };
-export const BRICK_SESSION_ASSISTANT_INSTRUCTIONS = 'Nap, meditation, breathing and relaxation: « je fais une sieste », « lance une méditation de 15 minutes », « une relaxation » call brick_session.prepare with a new request_id, brick_id nap, meditation or relaxation and minutes when said, then brick_session.transition start; « fais une cohérence cardiaque de 5 minutes » is brick_id breathing, breath coherence, minutes 5 (« respiration carrée » square, « 4-7-8 » 478, « respiration alternée » alternate, « kapalabhati » kapalabhati). « montre ma sieste » calls brick_session.open; « ma sieste dure 30 minutes » calls brick_session.set_minutes; « ma respiration : inspire 4, tiens 4, expire 6 » calls brick_session.set_breath breath custom; « une cloche toutes les 3 minutes » calls brick_session.set_bell meditation 3 (0 = no bell). During a session « pause », « reprends », « j\'arrête » are pause, resume and stop; « enregistre la séance » calls finish with use_in_followup true only when the user says it counts for their objectives. Say a meditation or a breathing is in the Health app only when mindful.saved is true.';
+export const BRICK_SESSION_ASSISTANT_INSTRUCTIONS = 'Nap, meditation, breathing and relaxation: « je fais une sieste », « lance une méditation de 15 minutes », « une relaxation » call brick_session.prepare with a new request_id, brick_id nap, meditation or relaxation and minutes when said, then brick_session.transition start; « fais une cohérence cardiaque de 5 minutes » is brick_id breathing, breath coherence, minutes 5 (« respiration carrée » square, « 4-7-8 » 478, « respiration alternée » alternate, « kapalabhati » kapalabhati). « montre ma sieste » calls brick_session.open; « ma sieste dure 30 minutes » calls brick_session.set_minutes; « ma respiration : inspire 4, tiens 4, expire 6 » calls brick_session.set_breath breath custom; « une cloche toutes les 3 minutes » calls brick_session.set_bell meditation 3 (0 = no bell). « ne me propose plus rien » calls brick_session.suggestions enabled false (« tu peux de nouveau me proposer » true). During a session « pause », « reprends », « j\'arrête » are pause, resume and stop; « enregistre la séance » calls finish with use_in_followup true only when the user says it counts for their objectives. Say a meditation or a breathing is in the Health app only when mindful.saved is true.';
 export const brickSessionError = error => BRICK_SESSION_ERRORS.includes(error?.code || error?.message || error)
     ? (error?.code || error?.message || error) : 'BRICK_SESSION_WRITE_FAILED';

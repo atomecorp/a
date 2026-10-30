@@ -28,8 +28,15 @@ const openRowMystic = async (page) => {
         return { ok: mystic.isMysticMenuOpen?.() === true };
     });
     assert(opened.ok, 'molecule_mystic_not_open');
-    await wait(400);
-    return [...new Set((await mysticItemIds(page)).map((id) => id.match(/_item_([a-z_]+?)_\d/)?.[1]).filter(Boolean))];
+    const projected = await waitFor(page, async () => {
+        const root = window.eveBevyUiRuntime?.state?.trees?.get?.('eve_bevy_ui_mystic')?.tree?.root;
+        const items = [];
+        const visit = node => { if (!node) return; const key = String(node.id || '').match(/_item_([a-z_]+?)_\d/)?.[1];
+            if (key) items.push(key); (node.children || []).forEach(visit); };
+        visit(root);
+        return { ok: items.includes('delete') && items.includes('info'), items: [...new Set(items)] };
+    });
+    return projected.items;
 };
 const mysticItemTarget = async (page, key) => {
     const nodeId = (await mysticItemIds(page)).find((id) => new RegExp(`_item_${key}_\\d+$`).test(id));
@@ -149,9 +156,11 @@ export const runMoleculeListAcceptance = async ({ page, project, fixture, report
                     entry_count: state.content?.entries?.length || 0
                 };
             });
+            const firstLabel = await page.evaluate(async () => (await import('/eVe/domains/rendering/project_view_surface_runtime.js'))
+                .readProjectViewSurfaceState().content?.entries?.[0]?.label || '');
             assert(await awaitBevyUiNodeTarget(page, {
-                nodeId: 'project_view_list_entry_0_name', treeId: 'eve_bevy_ui_project_view'
-            }),
+                nodeId: 'project_view_list_entry_0_name', treeId: 'eve_bevy_ui_project_view', label: firstLabel
+            }, { timeoutMs: 30000 }),
                 'project_view_first_list_row_not_actionable');
             return opened;
         });
@@ -195,14 +204,17 @@ export const runMoleculeListAcceptance = async ({ page, project, fixture, report
             memberEntryIndex = expandedMolecule.memberIndex;
             assert(await awaitBevyUiNodeTarget(page, {
                 nodeId: `project_view_list_entry_${memberEntryIndex}_name`,
-                treeId: 'eve_bevy_ui_project_view'
-            }), `project_view_member_row_not_actionable:${memberEntryIndex}`);
+                treeId: 'eve_bevy_ui_project_view', label: expandedMolecule.entries[memberEntryIndex].label
+            }, { timeoutMs: 30000 }), `project_view_member_row_not_actionable:${memberEntryIndex}`);
             await wait(500);
             return expandedMolecule;
         });
 
         await check('real member selection remains canonical in the simplified List', async () => {
             assert(Number.isSafeInteger(memberEntryIndex), 'member_entry_index_missing');
+            const expectedId = await page.evaluate(async (index) => (await import('/eVe/domains/rendering/project_view_surface_runtime.js'))
+                .readProjectViewSurfaceState().content?.entries?.[index]?.id || '', memberEntryIndex);
+            assert(expectedId, 'member_entry_id_missing');
             const nameVisual = await projectViewNode(page, project.id, `project_view_list_entry_${memberEntryIndex}_name`);
             const name = await findBevyUiNodeTarget(page, {
                 nodeId: `project_view_list_entry_${memberEntryIndex}_name`,
@@ -218,15 +230,15 @@ export const runMoleculeListAcceptance = async ({ page, project, fixture, report
             assert(String(nameHit.nodeId || '').endsWith(`project_view_list_entry_${memberEntryIndex}_name`),
                 `member_name_hit_mismatch:${JSON.stringify({ name, nameHit })}`);
             await clickCanvasTarget(page, name);
-            const selected = await waitFor(page, async () => {
+            const selected = await waitFor(page, async (expectedId) => {
                 const { readProjectViewSurfaceState } = await import('/eVe/domains/rendering/project_view_surface_runtime.js');
                 const selection = await import('/eVe/intuition/runtime/selection.js');
                 const primaryId = readProjectViewSurfaceState().content?.primaryId || null;
                 return {
-                    ok: Boolean(primaryId) && selection.getCurrentSelectionIds().includes(primaryId),
-                    primaryId, selectedIds: selection.getCurrentSelectionIds()
+                    ok: primaryId === expectedId && selection.getCurrentSelectionIds().includes(expectedId),
+                    primaryId, expectedId, selectedIds: selection.getCurrentSelectionIds()
                 };
-            });
+            }, expectedId);
             await wait(500);
             await waitFor(page, async () => {
                 const registry = await import('/eVe/intuition/runtime/eve_intuition/atome_contextual_edit_registry.js');
@@ -335,12 +347,21 @@ export const runMoleculeListAcceptance = async ({ page, project, fixture, report
             return opened;
         });
 
-        await waitForStableScene(page, project.id);
         const expandedA = path.join(OUT_DIR, 'list_expanded_a.png');
         const expandedB = path.join(OUT_DIR, 'list_expanded_b.png');
-        await page.screenshot({ path: expandedA, animations: 'disabled' });
-        await wait(350);
-        await page.screenshot({ path: expandedB, animations: 'disabled' });
+        // CSS animation disabling does not freeze the assistant painted by
+        // WebGPU. Use its existing reduced-motion contract for static captures,
+        // then restore normal motion before the remaining real gestures.
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        try {
+            await waitForStableScene(page, project.id);
+            await page.screenshot({ path: expandedA, animations: 'disabled' });
+            await wait(350);
+            await page.screenshot({ path: expandedB, animations: 'disabled' });
+            report.measurements.capture_reduced_motion = true;
+        } finally {
+            await page.emulateMedia({ reducedMotion: null });
+        }
         report.screenshots.push(expandedA, expandedB);
         report.visual_diff = diffPng(expandedA, expandedB);
         report.measurements.expanded_capture_signal = analyzePngSignal(expandedA);

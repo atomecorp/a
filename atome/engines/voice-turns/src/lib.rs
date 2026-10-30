@@ -14,6 +14,16 @@ pub const FRAME_SAMPLES: usize = 512;
 const PREROLL_FRAMES: usize = 9; // 300 ms before the first near frame
 const SPEAKING_TAIL_FRAMES: usize = 9; // 300 ms after eVe's voice ends
 
+/// Test mode (todo/refonte_assistant_vocal.md §18.7): the frames scored since the previous take,
+/// in [-1, 1], up to a turn's close, with the offsets where the stream was cut (eVe spoke, the
+/// listening mode changed; 0: before its first frame). Replayed in order, cut only where they
+/// say, the takes give the engine the same stream it heard, its room included.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Take {
+    pub pcm: Vec<f32>,
+    pub cuts: Vec<usize>,
+}
+
 /// What the host does with a scored frame.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Action {
@@ -35,11 +45,15 @@ pub struct Conversation {
     speaking: bool,
     tail: usize,
     input_db: f64,
+    /// Test mode only: the take being gathered, and the one its turn's close completed.
+    recording: Option<Take>,
+    recorded: Option<Take>,
 }
 
 impl Default for Conversation {
     fn default() -> Self {
-        Self { turns: TurnDetector::default(), preroll: VecDeque::new(), speaking: false, tail: 0, input_db: f64::NEG_INFINITY }
+        Self { turns: TurnDetector::default(), preroll: VecDeque::new(), speaking: false, tail: 0, input_db: f64::NEG_INFINITY,
+            recording: None, recorded: None }
     }
 }
 
@@ -57,7 +71,20 @@ impl Conversation {
     pub fn reset(&mut self) {
         self.turns.reset();
         self.preroll.clear();
+        if let Some(take) = self.recording.as_mut() {
+            if take.cuts.last() != Some(&take.pcm.len()) { take.cuts.push(take.pcm.len()); }
+        }
     }
+
+    /// Test mode, off by default: keeps every scored frame and hands them over turn by turn.
+    pub fn set_recording(&mut self, on: bool) {
+        if on == self.recording.is_some() { return; }
+        self.recording = on.then(Take::default);
+        self.recorded = None;
+    }
+
+    /// The take the last closed turn completed, once.
+    pub fn take_recording(&mut self) -> Option<Take> { self.recorded.take() }
 
     /// Level of the last frame, in dBFS.
     pub fn input_db(&self) -> f64 { self.input_db }
@@ -74,6 +101,7 @@ impl Conversation {
     /// Second step, for a frame `listen` accepted: its Silero speech probability.
     pub fn push(&mut self, frame: Vec<f32>, probability: f32) -> Vec<Action> {
         let level = self.input_db;
+        if let Some(take) = self.recording.as_mut() { take.pcm.extend_from_slice(&frame); }
         match self.turns.push(probability, level) {
             TurnStep::Idle => {
                 self.preroll.push_back((frame, level));
@@ -87,7 +115,10 @@ impl Conversation {
                 actions
             }
             TurnStep::Inside { gain } => vec![Action::Feed(to_pcm(&frame, gain))],
-            TurnStep::Closed(end) => vec![Action::Close(end)],
+            TurnStep::Closed(end) => {
+                if let Some(take) = self.recording.as_mut() { self.recorded = Some(std::mem::take(take)); }
+                vec![Action::Close(end)]
+            }
         }
     }
 }

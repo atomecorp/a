@@ -293,6 +293,11 @@ tour sourd (un tour ouvert qui ne rend rien alors qu'une phrase a été dite).
   de l'assistant (`assistant_session_controller.js`, `session_runtime_capture.js`). Elles gardent leur
   chemin actuel pendant la refonte. Leur avenir (transcription par l'assistant connecté ?) est à arbitrer
   par l'utilisateur ; tant qu'elles existent, `tauri-plugin-stt` et `SFSpeech` restent pour elles seules.
+  **Arbitré le 30 oct. 2026 (R-013 Q12, « reco partout »)** : la dictée libre (`purpose: 'dictation'`) passe par la
+  transcription de l'assistant connecté quand l'appareil est en ligne (`checkConnection('fastify')`, le signal de
+  l'assistant), par la reconnaissance du système sinon ; une seule décision par dictée
+  (`service_stt_runtime.js#routeOf`, `service_assistant_stt.js`), jamais de relais de l'une à l'autre. Les deux
+  reconnaissances du système restent (hors ligne, tours de l'assistant, permission micro d'Android) : rien retiré.
 - L'assistant connecté (OpenAI Realtime) et l'IA choisie dans les préférences (Anthropic…).
 - Les nouvelles voix françaises d'OpenAI.
 - La prononciation de « synchroniser ».
@@ -739,7 +744,8 @@ téléphone.
 - **Lot 6, recette au son réel** : fait (§18) ; ouverts : commandes sous la télévision sur l'iPad, « répète » au son
   réel, mode avion (§18.7).
 - Capture réelle sur un téléphone Android.
-- Arbitrage de la dictée libre en ligne (§8).
+- ~~Arbitrage de la dictée libre en ligne (§8).~~ Fait le 30 oct. (R-013 Q12) : voir §8.
+- Mode d'essai du moteur (son exact de chaque tour) : codé le 30 oct. (R-013 Q61) ; les 10 « répète » sur l'iPad restent à faire (§18.7).
 
 ## 18. Lot 6 — recette au son réel (fait, 23 oct. ; points ouverts en §18.7)
 
@@ -856,7 +862,11 @@ Balayage de `MARGIN_DB` (`temp/voice_bench/margin_sweep.sh`, `RISE_DB` tenu à 4
 - **Démarrage sourd** (§18.6 bis) : vu une fois sur 8 installations neuves, cause inconnue, piège en place.
 - Commandes sous la télévision sur l'iPad : 79 % à 8 dB (§18.6). Un « pas compris » reste possible à l'arrivée de la
   télévision, le temps d'apprendre la pièce.
+- **Mode d'essai du moteur** (30 oct., R-013 Q61) : éteint par défaut, `eveVoiceTestTakes.set(true)` garde pour chaque
+  tour le son exact noté par le moteur (`voice-turns` `Take`), relu par `temp/reco_voice/ipad_takes.mjs pull` et rejoué
+  au banc (`temp/r013/bench.mjs <label> device`) ; vérifié sur le Web (3 tours, même résultat 3/3). Reste : les 10
+  « répète » dits sur l'iPad.
 - **« Répète » mal reconnu au son réel** : 0 / 3 sur l'iPad dans une pièce calme, 1 / 2 sur le Mac (micro réel) ;
   « redis », « recommence » et « tu peux répéter » passent. Parfait en numérique (confiance 1,0). À mesurer avec des
   phrases hors grammaire et des variantes dans le corpus.
-- Toujours ouverts : capture réelle sur un téléphone Android, arbitrage de la dictée libre (§8), mode avion sur l'iPad.
+- Toujours ouverts : capture réelle sur un téléphone Android, mode avion sur l'iPad (dictée libre arbitrée le 30 oct., §8).

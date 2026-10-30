@@ -151,7 +151,14 @@ const RESPONSE_PAYLOADS = {
         votes: message.votes,
         voted: message.voted,
         reported: message.reported,
-        retired: message.retired
+        retired: message.retired,
+        moderation: message.moderation,
+        dismissed: message.dismissed,
+        replies_open: message.replies_open,
+        kind: message.kind,
+        media_src: message.media_src,
+        file_name: message.file_name,
+        title: message.title
     }),
     // Communities (server/communities.js): membership, the thread, the host's moderation.
     'community-response': (message) => ({
@@ -232,6 +239,11 @@ const RESPONSE_PAYLOADS = {
         devices: message.devices,
         handle: message.handle,
         recoveryCode: message.recoveryCode,
+        // Sign-up by invitation (server/auth_invites.js).
+        open: message.open,
+        invited: message.invited,
+        inviteInvalid: message.inviteInvalid,
+        inviteId: message.inviteId,
 
         context: message.context
     }),

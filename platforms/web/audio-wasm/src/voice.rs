@@ -2,7 +2,7 @@
 //! engine): the page scores frames with Silero (onnxruntime-web) and feeds Vosk (vosk-browser);
 //! this object decides who speaks to the device and what the recognizer hears.
 use atome_voice_turns::{Action, Conversation, TurnEnd};
-use js_sys::{Array, Int16Array, Object, Reflect};
+use js_sys::{Array, Float32Array, Int16Array, Object, Reflect, Uint32Array};
 use wasm_bindgen::prelude::*;
 
 fn action(kind: &str, extra: Option<(&str, JsValue)>) -> JsValue {
@@ -25,6 +25,21 @@ impl VoiceConversation {
     pub fn set_speaking(&mut self, speaking: bool) -> bool { self.0.set_speaking(speaking) }
 
     pub fn reset(&mut self) { self.0.reset() }
+
+    /// Test mode (todo/refonte_assistant_vocal.md §18.7), off by default: every frame scored is kept.
+    #[wasm_bindgen(js_name = setRecording)]
+    pub fn set_recording(&mut self, on: bool) { self.0.set_recording(on) }
+
+    /// `{ pcm: Float32Array, cuts: Uint32Array }` of the turn the last `close` ended, once; else undefined.
+    #[wasm_bindgen(js_name = takeRecording)]
+    pub fn take_recording(&mut self) -> JsValue {
+        let Some(take) = self.0.take_recording() else { return JsValue::UNDEFINED };
+        let cuts: Vec<u32> = take.cuts.iter().map(|cut| *cut as u32).collect();
+        let object = Object::new();
+        let _ = Reflect::set(&object, &"pcm".into(), &Float32Array::from(take.pcm.as_slice()).into());
+        let _ = Reflect::set(&object, &"cuts".into(), &Uint32Array::from(cuts.as_slice()).into());
+        object.into()
+    }
 
     #[wasm_bindgen(js_name = inputDb)]
     pub fn input_db(&self) -> f64 { self.0.input_db() }

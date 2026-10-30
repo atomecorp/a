@@ -8,8 +8,11 @@ import { GPS_ASSISTANT_INSTRUCTIONS, GPS_COMMANDS, validateGpsInput } from '../g
 import { TRAINING_ASSISTANT_INSTRUCTIONS, TRAINING_COMMANDS, validateTrainingInput } from '../training/contracts.js';
 import { BRICK_SESSION_ASSISTANT_INSTRUCTIONS, BRICK_SESSION_COMMANDS, validateBrickSessionInput } from '../brick_sessions/contracts.js';
 import { HEALTH_FEELING_ASSISTANT_INSTRUCTIONS, HEALTH_FEELING_COMMANDS, validateHealthFeelingInput } from '../health/feeling_contracts.js';
+import { HEALTH_PROFILE_ASSISTANT_INSTRUCTIONS, HEALTH_PROFILE_COMMANDS, HEALTH_PROFILE_CONFIRMED_COMMANDS, validateHealthProfileInput } from '../health/profile_contracts.js';
+import { THALASSO_ASSISTANT_INSTRUCTIONS, THALASSO_COMMANDS, THALASSO_CONFIRMED_COMMANDS, validateThalassoInput } from '../thalasso/contracts.js';
 import { HEALTH_DECLARATION_ASSISTANT_INSTRUCTIONS, HEALTH_DECLARATION_COMMANDS, validateHealthDeclarationInput } from '../health/declaration_contracts.js';
 import { SHOPPING_ASSISTANT_INSTRUCTIONS, SHOPPING_COMMANDS, validateShoppingInput } from '../shopping/contracts.js';
+import { MEDIA_LIST_ASSISTANT_INSTRUCTIONS, MEDIA_LIST_COMMANDS, validateMediaListInput } from '../media_lists/contracts.js';
 import { SHOWS_ASSISTANT_INSTRUCTIONS, SHOWS_COMMANDS, validateShowsInput } from '../shows/contracts.js';
 import { WEB_ASSISTANT_INSTRUCTIONS, WEB_COMMANDS, validateWebInput } from '../web/contracts.js';
 import { EVENTS_ASSISTANT_INSTRUCTIONS, EVENTS_COMMANDS, EVENTS_CONFIRMED_COMMANDS, validateEventsInput } from '../public_events/contracts.js';
@@ -17,6 +20,9 @@ import { SHOP_ASSISTANT_INSTRUCTIONS, SHOP_COMMANDS, SHOP_CONFIRMED_COMMANDS, va
 import { COACH_ASSISTANT_INSTRUCTIONS, COACH_COMMANDS, COACH_CONFIRMED_COMMANDS, validateCoachInput } from '../coaches/contracts.js';
 import { FILMS_ASSISTANT_INSTRUCTIONS, FILMS_COMMANDS, validateFilmsInput } from '../films/contracts.js';
 import { CREATION_ASSISTANT_INSTRUCTIONS, CREATION_COMMANDS, validateCreationInput } from '../creation/contracts.js';
+import { CALC_ASSISTANT_INSTRUCTIONS, CALC_COMMANDS, validateCalcInput } from '../calc/contracts.js';
+import { DOCUMENT_ASSISTANT_INSTRUCTIONS, DOCUMENT_COMMANDS, validateDocumentInput } from '../document/contracts.js';
+import { SCRIPT_ASSISTANT_INSTRUCTIONS, SCRIPT_COMMANDS, SCRIPT_CONFIRMED_COMMANDS, validateScriptInput } from '../script/contracts.js';
 import { AUDIO_FX_ASSISTANT_INSTRUCTIONS, AUDIO_FX_COMMANDS, validateAudioFxInput } from '../audio_fx/contracts.js';
 import { MEDIA_IMPORT_ASSISTANT_INSTRUCTIONS, MEDIA_IMPORT_COMMANDS, validateMediaImportInput } from '../media_import/contracts.js';
 import { FOOD_ASSISTANT_INSTRUCTIONS, FOOD_COMMANDS, validateFoodInput } from '../food/contracts.js';
@@ -34,6 +40,8 @@ import { INTERACTIONS_ASSISTANT_INSTRUCTIONS, INTERACTIONS_COMMANDS, validateInt
 import { PUBLISH_ASSISTANT_INSTRUCTIONS, PUBLISH_COMMANDS, PUBLISH_CONFIRMED_COMMANDS, validatePublishInput } from '../publish/contracts.js';
 import { FORUM_ASSISTANT_INSTRUCTIONS, FORUM_COMMANDS, FORUM_CONFIRMED_COMMANDS, validateForumInput } from '../forum/contracts.js';
 import { VIDEO_TRAIN_ASSISTANT_INSTRUCTIONS, VIDEO_TRAIN_COMMANDS, VIDEO_TRAIN_CONFIRMED_COMMANDS, validateVideoTrainInput } from '../video_train/contracts.js';
+import { RESULTS_SEND_ASSISTANT_INSTRUCTIONS, RESULTS_SEND_COMMANDS, validateResultsSendInput } from '../results_send/contracts.js';
+import { STRAVA_ASSISTANT_INSTRUCTIONS, STRAVA_COMMANDS, validateStravaInput } from '../strava/contracts.js';
 
 // The one list of the domain command families. Direct MCP handlers, the access policy, the
 // default actor's capabilities, the eVe runtime tools and the assistant's instructions and
@@ -59,6 +67,13 @@ export const MCP_CONTRACT_FAMILIES = Object.freeze([
         instructions: HEALTH_DECLARATION_ASSISTANT_INSTRUCTIONS, preload: ['health_declaration.add', 'health_declaration.withdraw'] },
     { id: 'health_feeling', commands: HEALTH_FEELING_COMMANDS, validate: validateHealthFeelingInput, noClient: 'AUTH_REQUIRED',
         instructions: HEALTH_FEELING_ASSISTANT_INSTRUCTIONS, preload: ['health_feeling.set'] },
+    // The health profile read by the assistant or MCP: the user agrees at each question that needs it (decision Q28).
+    { id: 'health_profile', commands: HEALTH_PROFILE_COMMANDS, validate: validateHealthProfileInput, noClient: 'AUTH_REQUIRED',
+        confirmed: HEALTH_PROFILE_CONFIRMED_COMMANDS, instructions: HEALTH_PROFILE_ASSISTANT_INSTRUCTIONS },
+    // A Thalasso stay and its cares (decision Q26); ending a stay is the user's to confirm.
+    { id: 'thalasso', commands: THALASSO_COMMANDS, validate: validateThalassoInput, noClient: 'AUTH_REQUIRED',
+        confirmed: THALASSO_CONFIRMED_COMMANDS, instructions: THALASSO_ASSISTANT_INSTRUCTIONS,
+        preload: ['thalasso.stay_read', 'thalasso.stay_set', 'thalasso.care_add', 'thalasso.care_done'] },
     { id: 'sensors', commands: SENSORS_COMMANDS, validate: validateSensorsInput, noClient: 'health_host_unsupported',
         confirmed: ['sensors.delete'], instructions: SENSORS_ASSISTANT_INSTRUCTIONS, preload: ['sensors.status', 'sensors.list'] },
     // Erasing the body weight and age from the card is the user's to allow.
@@ -67,6 +82,10 @@ export const MCP_CONTRACT_FAMILIES = Object.freeze([
     { id: 'shopping', commands: SHOPPING_COMMANDS, validate: validateShoppingInput, noClient: 'AUTH_REQUIRED',
         confirmed: ['shopping.clear_checked', 'shopping.share'], instructions: SHOPPING_ASSISTANT_INSTRUCTIONS,
         preload: ['shopping.add', 'shopping.check', 'shopping.list', 'shopping.open'] },
+    // Deleting a media list is the user's to confirm (its media stay).
+    { id: 'media_lists', commands: MEDIA_LIST_COMMANDS, validate: validateMediaListInput, noClient: 'AUTH_REQUIRED',
+        confirmed: ['media_lists.delete'], instructions: MEDIA_LIST_ASSISTANT_INSTRUCTIONS,
+        preload: ['media_lists.list', 'media_lists.create', 'media_lists.add', 'media_lists.open'] },
     { id: 'shows', commands: SHOWS_COMMANDS, validate: validateShowsInput, noClient: 'PRESENTATION_UNAVAILABLE',
         instructions: SHOWS_ASSISTANT_INSTRUCTIONS,
         preload: ['shows.search', 'shows.open', 'shows.set_place', 'shows.add_to_calendar', 'shows.navigate', 'shows.open_site', 'shows.open_tickets'] },
@@ -89,6 +108,13 @@ export const MCP_CONTRACT_FAMILIES = Object.freeze([
     { id: 'creation', commands: CREATION_COMMANDS, validate: validateCreationInput, noClient: 'PRESENTATION_UNAVAILABLE',
         confirmed: ['creation.send'], instructions: CREATION_ASSISTANT_INSTRUCTIONS,
         preload: ['creation.list', 'creation.read', 'creation.new_text', 'creation.open'] },
+    // The spreadsheet in a text: cells, formulas, grid — the assistant limited to the text named.
+    { id: 'calc', commands: CALC_COMMANDS, validate: validateCalcInput, noClient: 'PRESENTATION_UNAVAILABLE',
+        instructions: CALC_ASSISTANT_INSTRUCTIONS, preload: ['calc.cells', 'calc.cell', 'calc.formula', 'calc.view'] },
+    { id: 'document', commands: DOCUMENT_COMMANDS, validate: validateDocumentInput, noClient: 'PRESENTATION_UNAVAILABLE',
+        instructions: DOCUMENT_ASSISTANT_INSTRUCTIONS, preload: ['document.templates', 'document.template', 'document.role'] },
+    { id: 'script', commands: SCRIPT_COMMANDS, validate: validateScriptInput, noClient: 'PRESENTATION_UNAVAILABLE',
+        confirmed: SCRIPT_CONFIRMED_COMMANDS, instructions: SCRIPT_ASSISTANT_INSTRUCTIONS, preload: ['script.list'] },
     // The camera, turned on and taken from by a command, is the user's to allow.
     { id: 'media_import', commands: MEDIA_IMPORT_COMMANDS, validate: validateMediaImportInput, noClient: 'NOT_OPEN',
         confirmed: ['media_import.camera', 'media_import.take'], instructions: MEDIA_IMPORT_ASSISTANT_INSTRUCTIONS,
@@ -127,6 +153,12 @@ export const MCP_CONTRACT_FAMILIES = Object.freeze([
     { id: 'video_train', commands: VIDEO_TRAIN_COMMANDS, validate: validateVideoTrainInput, noClient: 'AUTH_REQUIRED',
         confirmed: VIDEO_TRAIN_CONFIRMED_COMMANDS, instructions: VIDEO_TRAIN_ASSISTANT_INSTRUCTIONS,
         preload: ['video_train.share', 'video_train.thread', 'video_train.open_thread', 'video_train.reply', 'video_train.vote'] },
+    // « Envoyer mes résultats »: the choice of what leaves; Publier sends it (publish.*, confirmed there).
+    { id: 'results_send', commands: RESULTS_SEND_COMMANDS, validate: validateResultsSendInput, noClient: 'PRESENTATION_UNAVAILABLE',
+        instructions: RESULTS_SEND_ASSISTANT_INSTRUCTIONS, preload: ['results_send.open', 'results_send.read', 'results_send.pick', 'results_send.next'] },
+    // Strava (Préférences › Santé): connecting and disconnecting the person's account are the user's to confirm.
+    { id: 'strava', commands: STRAVA_COMMANDS, validate: validateStravaInput, noClient: 'AUTH_REQUIRED',
+        confirmed: ['strava.connect', 'strava.disconnect'], instructions: STRAVA_ASSISTANT_INSTRUCTIONS, preload: ['strava.get_state', 'strava.import'] },
     // Publier: a send, an update, a send now and a cancel are the user's to confirm.
     { id: 'publish', commands: PUBLISH_COMMANDS, validate: validatePublishInput, noClient: 'AUTH_REQUIRED',
         confirmed: PUBLISH_CONFIRMED_COMMANDS, instructions: PUBLISH_ASSISTANT_INSTRUCTIONS,

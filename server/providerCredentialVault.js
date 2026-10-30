@@ -6,7 +6,7 @@ import { createEncryptedTokenVault } from '../atome/src/squirrel/security/token_
 // Providers whose key lives only on the server (never readable by the browser).
 export const SERVER_VAULT_PROVIDERS = Object.freeze(['openai', 'musicgpt', 'runway', 'spotify', 'deezer']);
 // Provider sessions (OAuth tokens + provider identity) of the principal.
-export const PROVIDER_VAULT_RECORDS = Object.freeze(['social.tiktok', 'social.instagram', 'social.facebook', 'music.spotify']);
+export const PROVIDER_VAULT_RECORDS = Object.freeze(['social.tiktok', 'social.instagram', 'social.facebook', 'music.spotify', 'health.strava']);
 const assertProvider = (provider) => {
     if (!SERVER_VAULT_PROVIDERS.includes(provider)) throw new Error('provider_not_supported');
 };

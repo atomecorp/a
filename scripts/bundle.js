@@ -1,7 +1,6 @@
 // Point d'entrée du bundle CDN
 import * as Apis from '../atome/src/squirrel/apis.js';
 import Squirrel from '../atome/src/squirrel/squirrel.js';
-import ToolSlider from '../atome/src/squirrel/components/tool_slider_builder.js';
 import Badge from '../atome/src/squirrel/components/badge_builder.js';
 import Button from '../atome/src/squirrel/components/button_builder.js';
 import Draggable, { makeDraggable, makeDraggableWithDrop, makeDropZone } from '../atome/src/squirrel/components/draggable_builder.js';
@@ -16,7 +15,6 @@ import Unit from '../atome/src/squirrel/components/unit_builder.js';
 
 // Composants Squirrel exposés via le CDN
 Squirrel.components = {
-  ToolSlider,
   Badge,
   Button,
   Draggable,
@@ -57,7 +55,6 @@ if (typeof window !== 'undefined') {
   window.define = Squirrel.define;
   window.batch = Squirrel.batch;
   window.observeMutations = Squirrel.observeMutations;
-  window.Squirrel.ToolSlider = ToolSlider;
   window.Squirrel.Badge = Badge;
   window.Squirrel.Button = Button;
   window.Squirrel.Draggable = Draggable;
@@ -73,7 +70,6 @@ if (typeof window !== 'undefined') {
   window.Squirrel.Tooltip = Tooltip;
   window.Squirrel.Unit = Unit;
 
-  window.ToolSlider = window.Squirrel.ToolSlider;
   window.Badge = window.Squirrel.Badge;
   window.Button = window.Squirrel.Button;
   window.Draggable = window.Squirrel.Draggable;
@@ -115,7 +111,6 @@ export default Squirrel;
 export {
   Squirrel,
   Apis,
-  ToolSlider,
   Badge,
   Button,
   Draggable,

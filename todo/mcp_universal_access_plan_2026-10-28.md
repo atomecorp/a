@@ -1,5 +1,7 @@
 # Plan — accès universel par MCP (28 oct. 2026)
 
+> **PÉRIMÉ le 2026-10-30.** Remplacé par le cahier `todo/refonte_globale_architecture_mcp_offline_v1_2_2026-10-30.md` (registre R-104). Ce cahier choisit l'architecture hybride : l'UI locale ne passe pas par une enveloppe MCP. Il annule donc D2/D3 ci-dessous et remplace les vagues par une seule bascule. Ce fichier n'est gardé que comme historique.
+
 Source : `/Users/jean-ericgodard/Desktop/cahier-des-charges-atome-mcp-complete.md`.
 Statut : **plan validé par l'utilisateur le 28 oct. 2026, avec les 8 recommandations de la section 1**. Exécution seulement après la fin de la session « Audit atome eVe », sur le code tel qu'il sera alors. Git en lecture seule ; aucun commit.
 

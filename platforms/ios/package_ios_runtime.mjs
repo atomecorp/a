@@ -42,7 +42,12 @@ const RAW_SCRIPT_PATHS = new Set([
     'src/assets/vendor/onnxruntime-web/ort-wasm-simd-threaded.mjs',
     // Loaded by URL at runtime, never bundled: calls (visio_call_runtime) and Audio to MIDI.
     'src/assets/vendor/mediasoup-client/mediasoup_client.bundle.js',
-    'src/assets/vendor/basic-pitch/basic_pitch.bundle.js'
+    'src/assets/vendor/basic-pitch/basic_pitch.bundle.js',
+    // A document script's worker is CLASSIC (no imports): copied raw, it loads Opal by importScripts before locking
+    // its scope (eVe/domains/script/script_worker.js); Opal itself is loaded by URL, never bundled.
+    'eVe/domains/script/script_worker.js',
+    'src/js/opal.min.js',
+    'src/js/opal-parser.min.js'
 ]);
 const SKIP_RUNTIME_PATHS = new Set([
     'src/assets/videos/JeezsFire.mp4',
@@ -259,12 +264,18 @@ for (const ownerPath of singletonOwnerPaths) {
 await writeFile(
     path.join(outputRoot, 'build-manifest.json'),
     JSON.stringify({
-        version: 1,
+        version: 2,
         module_count: descriptors.size,
         critical_module_count: criticalDescriptors.length + eveCriticalDescriptors.length + EXTRA_CRITICAL_ENTRY_COUNT,
         eve_module_count: eveDescriptors.length,
         optional_module_count: optionalDescriptors.length,
-        runtime_outputs: runtimeBuild.metafile.outputs,
+        // The full input/import graph validates ownership above at build time.
+        // Both app and extension shipped megabytes of developer metadata;
+        // retain only their compact output inventory in the packaged manifest.
+        runtime_outputs: Object.fromEntries(Object.entries(runtimeBuild.metafile.outputs).map(([file, output]) => [
+            path.relative(outputRoot, path.resolve(projectRoot, file)).split(path.sep).join('/'),
+            { bytes: output.bytes }
+        ])),
         singleton_owners: singletonOwnerPaths
     }, null, 2)
 );

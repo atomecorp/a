@@ -41,6 +41,8 @@ mod instrument_tests;
 #[cfg(test)]
 mod instrument_notes_tests;
 #[cfg(test)]
+mod instrument_bank_tests;
+#[cfg(test)]
 mod port_tests;
 #[cfg(test)]
 mod routing_tests;

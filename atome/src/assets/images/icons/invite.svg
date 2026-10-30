@@ -1,0 +1,5 @@
+<svg width="128" height="128" viewBox="0 0 128 128" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+  <rect x="10" y="26" width="84" height="64" rx="10" fill="none" stroke="rgb(255, 255, 255)" stroke-width="9" stroke-linejoin="round" />
+  <path d="M 14,32 L 52,62 L 90,32" fill="none" stroke="rgb(255, 255, 255)" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M 106,74 L 106,118 M 84,96 L 128,96" fill="none" stroke="rgb(255, 255, 255)" stroke-width="10" stroke-linecap="round" transform="translate(-6, 0)" />
+</svg>

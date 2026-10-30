@@ -312,7 +312,16 @@ export const AdoleAPI = {
     thread: (threadRef) => fastifyCall({ type: 'news', action: 'thread', threadRef }, 'news_auth_unavailable'),
     vote: (newsId, on = true) => fastifyCall({ type: 'news', action: 'vote', newsId, on: on !== false }, 'news_auth_unavailable'),
     report: (newsId, reason = '') => fastifyCall({ type: 'news', action: 'report', newsId, reason }, 'news_auth_unavailable'),
-    retire: (newsId) => fastifyCall({ type: 'news', action: 'retire', newsId }, 'news_auth_unavailable')
+    retire: (newsId) => fastifyCall({ type: 'news', action: 'retire', newsId }, 'news_auth_unavailable'),
+    // Its author: replies opened or closed (« Avis »), the contribution sent again to other people (« Envoi »); a reader:
+    // the media to take into their own (« Import »); the thread's owner: its reported contributions (« Signalés »), one kept.
+    replies: (newsId, open = true) => fastifyCall({ type: 'news', action: 'replies', newsId, open: open !== false }, 'news_auth_unavailable'),
+    forward: ({ newsId, id, audience, comment = '', members = [], allowImport = false } = {}) => fastifyCall(
+      { type: 'news', action: 'forward', newsId, id, audience, comment, members, allowImport: allowImport === true }, 'news_auth_unavailable'
+    ),
+    importSource: (newsId) => fastifyCall({ type: 'news', action: 'import-source', newsId }, 'news_auth_unavailable'),
+    reported: (threadRef) => fastifyCall({ type: 'news', action: 'reported', threadRef }, 'news_auth_unavailable'),
+    dismiss: (newsId) => fastifyCall({ type: 'news', action: 'dismiss', newsId }, 'news_auth_unavailable')
   },
   // Public events (server/public_events.js): reading goes through `shows-nearby` kind `declared`; a report here.
   publicEvents: {

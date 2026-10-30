@@ -1,11 +1,13 @@
 import { PERSONAL_IMPORT_TYPES, CALENDAR_IMPORT_FIELDS } from './personal_import_types.js';
 import { GPS_TRIP_TYPE, LIVE_POSITION_TYPE } from './gps_trip_contract.js';
 import { SHOPPING_ITEM_TYPE, SHOPPING_LIST_TYPE } from './shopping_list_contract.js';
+import { CONTACT_INVITATION_TYPE } from './contact_invitation_contract.js';
 import { LIBRARY_WORK_TYPE } from './library_work_contract.js';
+import { MEDIA_LIST_TYPE } from './media_list_contract.js';
 import { COMMUNICATION_MESSAGE_TYPE } from './communication_contract.js';
 import { APPLE_MUSIC_OPERATION_TYPE } from './apple_music_operation_contract.js';
 import { MUSIC_OPERATION_TYPE } from './music_operation_contract.js';
-import { LIFE_PROFILE_TYPE, LIFE_PROFILES_PROPERTY_SCHEMA } from './life_profile_contract.js';
+import { LIFE_PROFILE_FILING_TYPE, LIFE_PROFILE_TYPE, LIFE_PROFILES_PROPERTY_SCHEMA } from './life_profile_contract.js';
 import { AUDIO_EFFECT_TYPE, AUDIO_RACK_TYPE } from './audio_fx_contract.js';
 import { INSTRUMENT_TYPE } from './instrument_contract.js';
 import { AUDIO_SLICE_TYPE, SAMPLE_EDIT_TYPE } from './sample_edit_contract.js';
@@ -15,12 +17,14 @@ import { PROGRAM_SESSION_SCHEMA, PROGRAM_SESSION_TRANSITION_SCHEMA } from './pro
 import { NUTRITION_CONSUMPTION_SCHEMA } from './program_nutrition_contract.js';
 import { HEALTH_DECLARATION_SCHEMA } from './health_declaration_contract.js';
 import { HEALTH_FEELING_SCHEMA } from './health_feeling_contract.js';
+import { ACTIVITY_IMPORT_SCHEMA } from './activity_import_contract.js';
 import { PROGRAM_ACTIVITY_RECORD_SCHEMAS } from './program_activity_contract.js';
 import { DASHBOARD_OBJECTIVE_TARGET_SCHEMA, DASHBOARD_UNLOCK_SCHEMA } from './dashboard_progression_contract.js';
 
 export const CORE_ATOME_TYPE_VERSION = 1;
 
-export const ATOME_OBJECTIVE_IDS = Object.freeze(Array.from({ length: 13 }, (_, index) => `OBJ-${String(index + 1).padStart(2, '0')}`));
+// OBJ-14 « Se faire plaisir » (decision Q21, 30 Oct. 2026): an objective of its own, outside the Dashboard's progression.
+export const ATOME_OBJECTIVE_IDS = Object.freeze(Array.from({ length: 14 }, (_, index) => `OBJ-${String(index + 1).padStart(2, '0')}`));
 
 export const ATOME_MATRIX_NAVIGATION_SCHEMA = Object.freeze({
     type: 'object', required: ['version', 'project_id', 'path', 'views'], properties: {
@@ -117,8 +121,8 @@ const defineType = (definition) => Object.freeze({
 export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
     defineType(APPLE_MUSIC_OPERATION_TYPE),
     defineType(MUSIC_OPERATION_TYPE),
-    defineType(GPS_TRIP_TYPE), defineType(LIVE_POSITION_TYPE), defineType(SHOPPING_ITEM_TYPE), defineType(SHOPPING_LIST_TYPE), defineType(LIBRARY_WORK_TYPE),
-    defineType(COMMUNICATION_MESSAGE_TYPE), defineType(LIFE_PROFILE_TYPE), defineType(AUDIO_RACK_TYPE), defineType(AUDIO_EFFECT_TYPE), defineType(INSTRUMENT_TYPE),
+    defineType(GPS_TRIP_TYPE), defineType(LIVE_POSITION_TYPE), defineType(SHOPPING_ITEM_TYPE), defineType(SHOPPING_LIST_TYPE), defineType(CONTACT_INVITATION_TYPE), defineType(LIBRARY_WORK_TYPE), defineType(MEDIA_LIST_TYPE),
+    defineType(COMMUNICATION_MESSAGE_TYPE), defineType(LIFE_PROFILE_TYPE), defineType(LIFE_PROFILE_FILING_TYPE), defineType(AUDIO_RACK_TYPE), defineType(AUDIO_EFFECT_TYPE), defineType(INSTRUMENT_TYPE),
     defineType(SAMPLE_EDIT_TYPE), defineType(AUDIO_SLICE_TYPE),
     ...PERSONAL_IMPORT_TYPES.map(defineType),
     defineType({
@@ -144,11 +148,14 @@ export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
                 objective_id: { type: 'string', enum: ATOME_OBJECTIVE_IDS },
                 status: { type: 'string', enum: ['draft'] },
                 audience: { type: 'string', enum: ['everyone', 'group'] }, target: DASHBOARD_OBJECTIVE_TARGET_SCHEMA,
-                // Its sport aim, deadline and challenge (#eVe/domains/programs/objective_followup_model.js).
-                aim: { type: 'string' }, deadline: { type: 'object' }, challenge: { type: 'object' }
+                // Its sport aim, deadline and challenge, and when it was closed (#eVe/domains/programs/objective_followup_model.js).
+                aim: { type: 'string' }, deadline: { type: 'object' }, challenge: { type: 'object' }, closed: { type: 'object' }
             }, required: ['family', 'goal'] },
             title: { type: 'string' },
-            description: { type: 'string' }
+            description: { type: 'string' },
+            // A document template's (system_template_catalog.js#documentTemplateSpec): its id and its style.
+            document_template_id: { type: 'string' },
+            document_style: { type: 'object' }
         }
     }),
     defineType({
@@ -203,6 +210,18 @@ export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
             text: { type: 'string' },
             rich_text: { type: 'object' },
             text_style: { type: 'object' },
+            // A text as a document (30 Oct. 2026): its paragraphs' attributes and roles (text_paragraphs.js), its page,
+            // its spreadsheet cells anchored in its runs (eVe/domains/calc), its scripts, its view (the text, or its
+            // cells' grid), its document template (`{ template_id, revision }`, eVe/domains/document/document_templates.js;
+            // null: none) and its own role looks over the template's (`{ [role]: look }`).
+            paragraphs: { type: 'array' },
+            page: { type: 'object' },
+            cells: { type: 'object' },
+            scripts: { type: 'array' },
+            view: { type: 'string', enum: ['text', 'grid'] },
+            template_ref: { type: 'object', properties: { template_id: { type: 'string' }, revision: { type: 'number', minimum: 1 } },
+                required: ['template_id', 'revision'] },
+            role_overrides: { type: 'object' },
             // Time a still stays on screen in playback (Line Splitter lines, prompteur).
             playback_dwell_seconds: { type: 'number', minimum: 0 },
             // A prompteur is a text carrying this property (eVe/intuition/tools/prompter).
@@ -368,15 +387,14 @@ export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
             program_session: PROGRAM_SESSION_SCHEMA,
             program_session_transition: PROGRAM_SESSION_TRANSITION_SCHEMA,
             program_nutrition_consumption: NUTRITION_CONSUMPTION_SCHEMA, health_declaration: HEALTH_DECLARATION_SCHEMA,
-            health_feeling: HEALTH_FEELING_SCHEMA,
+            health_feeling: HEALTH_FEELING_SCHEMA, activity_import: ACTIVITY_IMPORT_SCHEMA,
             // The agreement to eVe using the card's body weight and age (#eVe/domains/user/body_data_runtime.js).
             body_data_consent: { type: 'object', required: ['version', 'granted', 'date'], properties: {
                 version: { type: 'number', enum: [1] }, granted: { type: 'boolean' }, date: { type: 'string' } } },
             ...PROGRAM_ACTIVITY_RECORD_SCHEMAS,
             metadata: { type: 'object' },
             payload: { type: 'object' },
-            created_iso: { type: 'string' }, updated_iso: { type: 'string' },
-            span: { type: 'number' }
+            created_iso: { type: 'string' }, updated_iso: { type: 'string' }, span: { type: 'number' }
         }
     }),
     defineType({

@@ -6,9 +6,13 @@
 // A zone may play a composed note instead of takes (composed.rs). A zone
 // plays on one of the instrument's outputs (D-S2: a drum kit's parts, each
 // routable to its own strip); output 0 unless it says another.
+// Read from banks (SFZ): a one-shot zone plays its take to the end whatever the
+// key does; a zone with a switch sounds only while that keyswitch is the last
+// one pressed (keymap.rs); a zone's filter colours each of its voices.
 
 use crate::composed::Composed;
 use crate::segment::Segment;
+use atome_dsp::biquad::Shape;
 
 pub const MAX_PLAYERS: usize = 4;
 // Stereo outputs an instrument may expose (one per MIDI channel of a multitimbral one).
@@ -51,6 +55,30 @@ pub struct Zone {
     pub composed: Option<Composed>,
     // The instrument output its voices sound on (0..MAX_OUTPUTS).
     pub output: u8,
+    // The key let go does not stop it: its takes play to their end.
+    pub one_shot: bool,
+    // The keyswitch (a key of the keymap's switch range) this zone answers to.
+    pub switch: Option<u8>,
+    pub filter: Option<ZoneFilter>,
+}
+
+// A voice filter, fixed for the note: its cutoff follows the key (cents per key
+// from `key_center`) and the velocity (cents at full velocity).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ZoneFilter {
+    pub shape: Shape,
+    pub cutoff_hz: f32,
+    pub q: f32,
+    pub key_track_cents: f32,
+    pub key_center: u8,
+    pub velocity_track_cents: f32,
+}
+
+impl ZoneFilter {
+    pub fn cutoff_for(&self, note: u8, velocity: f32) -> f32 {
+        let cents = self.key_track_cents * (note as f32 - self.key_center as f32) + self.velocity_track_cents * velocity.clamp(0.0, 1.0);
+        self.cutoff_hz * 2f32.powf(cents / 1200.0)
+    }
 }
 
 impl Zone {
@@ -69,6 +97,9 @@ impl Zone {
             borrow_neighbours: false,
             composed: None,
             output: 0,
+            one_shot: false,
+            switch: None,
+            filter: None,
         }
     }
 

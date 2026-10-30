@@ -13,12 +13,15 @@
 // VideoTrain (server/news_thread.js): an origin carries `news_thread_ref` and goes to chosen people only; a
 // reply (`message.reply`: parent_id, anchor_ms) is told to its parent's and origin's authors, read by the thread.
 // A media leaves as a clean copy, its EXIF and GPS stripped (`cleanMedia`, server/news_media_cleaner.js).
+// « Envoi » of one's own contribution (`forward`): it is published again, a new origin of its thread, to other people.
 
 import db from '../database/adole.js';
 import { hasPrivateProgramAncestor } from './syncShareHierarchy.js';
 import { communityAudience, communityOfAudience } from '../atome/src/shared/community_contract.js';
 import { forumAudience, forumOfAudience } from '../atome/src/shared/forum_contract.js';
 import { createNewsThread } from './news_thread.js';
+import { VIDEO_TRAIN_IMPORT_PROPERTY } from '../atome/src/shared/video_train_contract.js';
+import { onlineVideoShareLink } from '../atome/src/shared/online_video_refs.js';
 
 const text = (value) => String(value == null ? '' : value).trim();
 const parseJson = (value, fallback) => { try { return value ? JSON.parse(value) : fallback; } catch { return fallback; } };
@@ -99,6 +102,25 @@ export function createNewsBroadcast({
         const clean = await cleanMedia(authorId, meta);
         return { fileAtomeId: clean.atomeId, src: `/api/uploads/${encodeURIComponent(clean.atomeId)}` };
     };
+    // A third party's video (an online service's, onlineVideoShareLink) may not be redistributed: it leaves as its link
+    // alone (`type: 'link'`, `media_link`), never as a file (R-005 Q33). Read from the author's own Atome, or the one its
+    // News media reference names (`news_media_ref`), never from what the client says.
+    const linkOnlyMember = async (authorId, member = {}) => {
+        const atomeId = text(member?.properties?.media_atome_id);
+        if (!atomeId || !await ownsAtome(authorId, atomeId)) return null;
+        if (!vaultProvider) throw new Error('news_media_state_unavailable');
+        const propsOf = async (id) => {
+            const state = await vaultProvider.request(authorId, 'state:get', { atome_id: id });
+            return state?.properties || state?.particles || {};
+        };
+        const props = await propsOf(atomeId), referenced = text(props.news_media_ref);
+        const shared = onlineVideoShareLink(props)
+            || (referenced && await ownsAtome(authorId, referenced) ? onlineVideoShareLink(await propsOf(referenced)) : null);
+        if (!shared) return null;
+        const order = Number(member.properties.hierarchy_order);
+        return { id: text(member.id) || atomeId, type: 'link', properties: { media_link: shared.link, media_provider: shared.provider,
+            ...(shared.title ? { name: shared.title } : {}), ...(Number.isFinite(order) ? { hierarchy_order: order } : {}) } };
+    };
     const subscriptionOf = async (userId) => {
         const row = await query('get', 'SELECT tags_json FROM news_subscriptions WHERE user_id = ?', [text(userId)]);
         return parseJson(row?.tags_json, []);
@@ -149,8 +171,11 @@ export function createNewsBroadcast({
         const authorName = (await findUserName(author)) || '';
         const media = [];
         const members = [];
+        let linked = 0;
         for (const member of sourceMembers) {
             if (!text(member?.properties?.media_atome_id)) { members.push(member); continue; }
+            const link = await linkOnlyMember(author, member);
+            if (link) { members.push(link); linked += 1; continue; }
             const resolved = await resolvePublishedMedia(author, member);
             if (!resolved) continue;
             media.push(resolved.fileAtomeId);
@@ -175,7 +200,9 @@ export function createNewsBroadcast({
         if (thread && !thread.root && !audience.group.length) throw new Error('news_thread_audience_private');
 
         if (!existing) await registerTags(tags);
-        return distribute({ author, postId, projectId: text(props.news_source_project_id) || null, publication, tags, audience, media, thread });
+        const sent = await distribute({ author, postId, projectId: text(props.news_source_project_id) || null, publication, tags, audience, media, thread });
+        // How many of its media left as their link alone (a third party's video), said to the caller (MCP included).
+        return linked ? { ...sent, link_only: linked } : sent;
     };
 
     // A publication stored once, then delivered to its audience (blocks and tag whitelists respected).
@@ -253,6 +280,31 @@ export function createNewsBroadcast({
             audience: circle ? circle.audience : 'all', media: parseJson(row.media_json, []) });
     };
 
+    // VideoTrain « Import »: the contribution's clean copy (server/news_thread.js#importSource) with its file's name, its
+    // extension included, so the copy stored by the reader is listed among their media like any file of its kind.
+    const importSource = async (userId, message = {}) => {
+        const source = await threads.importSource(userId, message);
+        const fileId = decodeURIComponent(source.media_src.split('?')[0].split('/').pop() || '');
+        const meta = await getFileMetadata(fileId);
+        const fileName = text(meta?.original_name || meta?.file_name);
+        if (!fileName) throw new Error('news_media_missing');
+        return { ...source, file_name: fileName };
+    };
+
+    // VideoTrain « Envoi »: one's own contribution (server/news_thread.js#forwardSource) sent to other chosen people (`audience`
+    // `{ group }`), as a new origin of its thread under `id`; the sender's words (`comment`) before its own, the media they
+    // add (`members`, their own Atomes) after its own; `allowImport`: those people may take its media into their own.
+    const forward = async (userId, message = {}) => {
+        const source = await threads.forwardSource(userId, { newsId: message.newsId });
+        const id = text(message.id);
+        if (!id) throw new Error('news_id_required');
+        const members = [...(source.news_payload?.members || []), ...(Array.isArray(message.members) ? message.members : [])];
+        return publish(userId, { audience: message.audience, tags: [], publication: { id, type: 'news_publication', properties: {
+            ...source, publication_id: id, news_id: id, news_post_id: id, created_iso: new Date().toISOString(),
+            preview: [text(message.comment), text(source.preview)].filter(Boolean).join('\n'),
+            news_payload: { ...(source.news_payload || {}), members }, ...(message.allowImport === true ? { [VIDEO_TRAIN_IMPORT_PROPERTY]: true } : {}) } } });
+    };
+
     const setSubscriptions = async (userId, tags) => {
         const slugs = normalizeTags(tags).map((tag) => tag.slug);
         await query('run',
@@ -323,6 +375,11 @@ export function createNewsBroadcast({
         if (action === 'vote') return threads.vote(userId, message);
         if (action === 'report') return threads.report(userId, message);
         if (action === 'retire') return threads.retire(userId, message);
+        if (action === 'reported') return threads.reported(userId, text(message.threadRef));
+        if (action === 'dismiss') return threads.dismiss(userId, message);
+        if (action === 'replies') return threads.setReplies(userId, message);
+        if (action === 'import-source') return importSource(userId, message);
+        if (action === 'forward') return forward(userId, message);
         throw new Error(`news_action_unsupported:${action || 'missing'}`);
     };
 

@@ -52,6 +52,21 @@ Fix: `refreshChildren(item, children, context)` checks the level on top, the con
 latest), never the first read's value. Probe `temp/media_library/library_fix.probe.mjs`
 (« Mes vidéos opens at once and lists the stored video »).
 
+## Follow-up 2026-10-30: a touch took minutes (Courses, BUG-041) — reads queued behind writes
+
+Symptom: a tap on a shopping tile, a profile change or a calendar programme left the screen frozen for
+seconds to minutes on a slow network.
+
+Cause: domain runtimes with one serial queue carrying reads and writes, each write re-reading the whole
+list, each own commit reloading (`atome:changed`) and queueing more reads; reload loops coalesced only the
+local half of `readLocalFirst`, so one network read (10 s timeout) stacked per change.
+
+Fix: `local_first_read.js#createLocalFirstReload` (latest-wins over both phases, at most one network read
+in flight; an older answer never covers a newer one) and `createLatestRead` (one read at a time). Reads leave
+the change queues (life profiles), writes patch the data held in memory (life profiles, books, effect assets),
+concurrent asks share one pass (effect assets), the home's data load is coalesced. Harness
+`temp/bugs_2026-10-30/lotI/timing.mjs` (before/after), probe `temp/bugs_2026-10-30/lotI/reads.probe.mjs`.
+
 ## Regression check
 
 - Mechanism: `node temp/offline_panels_2026-10-21/local_first.probe.mjs` (21 checks, real modules,

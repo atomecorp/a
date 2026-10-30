@@ -1,4 +1,4 @@
-# Explicit source selection; never resolve a moving "latest" system version.
+# Planning default; builds resolve the official production release once unless pinned.
 builder:
   version: 0.2.0
   freebsd: 15.1-RELEASE
@@ -16,7 +16,8 @@ targets:
     boot: UEFI
     formats: [img, qcow2]
     default_format: img
-    note: External live system; internal installation is a separate unimplemented operation.
+    modes: [live, installer]
+    note: UEFI external live boot or explicit internal installation via native bsdinstall; physical tests pending.
   pine64-a64:
     family: sbc
     arch: arm64
@@ -24,6 +25,7 @@ targets:
     boot: microSD ROM/SPL/U-Boot
     formats: [img]
     default_format: img
+    modes: [live]
     note: PINE64 A64+ 2 GB A64-DB-V1.1; not PINE64-LTS, ROCK64 or ROCKPRO64.
   mac-vm-intel:
     family: vm
@@ -32,6 +34,7 @@ targets:
     boot: UEFI
     formats: [raw, qcow2, vmdk]
     default_format: qcow2
+    modes: [live]
     note: Intel Mac guest; hypervisor and guest GPU/audio/USB require validation.
   mac-vm-apple-silicon:
     family: vm
@@ -40,6 +43,7 @@ targets:
     boot: UEFI
     formats: [raw, qcow2, vmdk]
     default_format: qcow2
+    modes: [live]
     note: FreeBSD aarch64 guest; no claim of bare-metal Mac boot or accelerated graphics.
   arm64-uefi:
     family: firmware-uefi
@@ -48,6 +52,7 @@ targets:
     boot: UEFI
     formats: [img, qcow2]
     default_format: img
+    modes: [live, installer]
     note: Candidate standard-firmware machines; each physical model needs validation.
 
 modules:

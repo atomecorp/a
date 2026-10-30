@@ -8,7 +8,8 @@ use crate::instrument_notes::{composed, ComposedSpec, MarkerBuilder, MarkerInfo,
 use atome_dsp::Processor;
 use atome_instrument::sampler::{PARAMS, POLYPHONY};
 use atome_instrument::zone::MAX_OUTPUTS;
-use atome_instrument::{Draw, Keymap, LoopMode, LoopSpec, Playback, SampleBank, SampleData, Sampler, Segment, Stack, Zone};
+use atome_dsp::biquad::Shape;
+use atome_instrument::{Draw, Keymap, LoopMode, LoopSpec, Playback, SampleBank, SampleData, Sampler, Segment, Stack, Switches, Zone, ZoneFilter};
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -26,6 +27,25 @@ pub struct InstrumentSpec {
     #[serde(default = "one")]
     pub outputs: usize,
     pub zones: Vec<ZoneSpec>,
+    // Keys that choose which switched zones sound (a bank's articulations).
+    #[serde(default)]
+    pub keyswitch: Option<KeyswitchSpec>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct KeyswitchSpec {
+    pub keys: [u8; 2],
+    pub default: u8,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct FilterSpec {
+    pub kind: String,
+    pub cutoff_hz: f32,
+    pub q: f32,
+    pub key_track_cents: f32,
+    pub key_center: u8,
+    pub velocity_track_cents: f32,
 }
 
 fn seed() -> u64 {
@@ -61,6 +81,12 @@ pub struct ZoneSpec {
     pub composed: Option<ComposedSpec>,
     #[serde(default)]
     pub output: u8,
+    #[serde(default)]
+    pub one_shot: bool,
+    #[serde(default)]
+    pub switch: Option<u8>,
+    #[serde(default)]
+    pub filter: Option<FilterSpec>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -116,6 +142,18 @@ fn segment(spec: &SegmentSpec, bank_index: &HashMap<&str, usize>, markers: &mut 
         tune_cents: spec.tune_cents, gain_db: spec.gain_db, pan: spec.pan, looping, stretch: spec.stretch, markers: span,
         playback: if spec.playback == "reverse" { Playback::Reverse } else { Playback::Forward },
     })
+}
+
+fn filter(spec: &FilterSpec) -> Result<ZoneFilter, String> {
+    let shape = match spec.kind.as_str() {
+        "lowpass" => Shape::LowPass,
+        "highpass" => Shape::HighPass,
+        "bandpass" => Shape::BandPass,
+        "notch" => Shape::Notch,
+        other => return Err(format!("zone filter {other} is unknown")),
+    };
+    Ok(ZoneFilter { shape, cutoff_hz: spec.cutoff_hz, q: spec.q, key_track_cents: spec.key_track_cents, key_center: spec.key_center,
+        velocity_track_cents: spec.velocity_track_cents })
 }
 
 fn stack(spec: &StackSpec) -> Result<Stack, String> {
@@ -195,11 +233,15 @@ pub fn build_sampler(spec: &InstrumentSpec, samples: &HashMap<String, SampleData
         built.release_decay_s = zone.release_decay_s;
         built.borrow_neighbours = zone.borrow_neighbours;
         built.output = zone.output;
+        built.one_shot = zone.one_shot;
+        built.switch = zone.switch;
+        built.filter = zone.filter.as_ref().map(filter).transpose()?;
         built.composed = zone.composed.as_ref().map(|spec| composed(spec, steps, &markers, id)).transpose()?;
         Ok(built)
     }).collect::<Result<Vec<_>, String>>()?;
     let (markers, infos) = markers.finish();
-    let keymap = Keymap::with_markers(zones, markers, &bank, spec.seed)?;
+    let switches = spec.keyswitch.as_ref().map(|range| Switches { low: range.keys[0], high: range.keys[1], default: range.default });
+    let keymap = Keymap::with_markers(zones, markers, &bank, spec.seed)?.with_switches(switches)?;
     // A streamed sample reads the heads this keymap can start from (atome-instrument residency.rs).
     bank.reside(&keymap)?;
     let values = param_values(spec)?;

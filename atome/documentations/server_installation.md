@@ -85,6 +85,38 @@ SQUIRREL_MONITORED_DIR=/opt/a/monitored
 
 > ⚠️ Important: On production servers, do not rely on untracked files inside `/opt/a` (like a manually created `.env`). They can be deleted by update operations. Use `/etc/squirrel/squirrel.env`.
 
+### Sign-up and invitations
+
+atome.one creates accounts by invitation only for now ([account_creation.md](account_creation.md) describes it from
+the user's side). The server settings:
+
+```bash
+# Sign-up by invitation only (remove the line to open sign-up to everyone)
+ATOME_SIGNUP_CLOSED=1
+# The site the invitation links point to
+ATOME_SITE_ORIGIN=https://atome.one
+# The server's own sender: the noreply mailbox of atome.one at o2switch
+ATOME_MAIL_FROM=noreply@atome.one
+ATOME_MAIL_SMTP_HOST=rousse.o2switch.net
+ATOME_MAIL_SMTP_PASSWORD=<the mailbox password>
+# Optional: ATOME_MAIL_SMTP_USER (defaults to ATOME_MAIL_FROM),
+# ATOME_MAIL_SMTP_PORT and ATOME_MAIL_SMTP_SECURITY (tls on 465 by default, or starttls on 587)
+```
+
+The mailbox is created once in o2switch's cPanel (Email Accounts → `noreply@atome.one`); atome.one's SPF, DKIM
+(`default._domainkey`) and DMARC records already cover mail sent through that server. The host is the o2switch server
+by the name on its TLS certificate, `rousse.o2switch.net` (cPanel › Connect devices shows it): `mail.atome.one` reaches
+the same machine but its certificate does not name it, and certificate checks are never relaxed. The password lives only in
+`squirrel.env` (mode 0600), never in the repository. Without the three `ATOME_MAIL_*` values every invitation is refused
+with `system_mail_unconfigured` and nothing is created. The test server takes the same lines in
+`/etc/squirrel-staging/squirrel.env`, with `ATOME_SITE_ORIGIN=https://staging.atome.one`. Restart the service after a
+change (`systemctl restart squirrel`).
+
+The mail is sent by `server/system_mailer.js` through the framework's own SMTP client
+(`atome/src/squirrel/mail/node_protocol_clients.js`); invitations live in the `auth_invites` table
+(`server/auth_invites.js`): a digest of the link's secret and a keyed index of the address, never the link or the
+address themselves.
+
 ### Lockfile (Reproducible Installs)
 
 Production installs use `npm ci`, which requires a committed lockfile.

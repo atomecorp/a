@@ -81,8 +81,14 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     }
     let edge = 1.0 - smoothstep(-0.6, 0.6, distance);
     // `size_radius.w` is the record opacity. Outside the rounded corners, or
-    // while the surface is hidden, nothing is sampled at all.
-    let alpha = edge * clamp(material.size_radius.w, 0.0, 1.0);
+    // while the surface is hidden, nothing is sampled at all. A scroll area's
+    // edge fade (clip_fade.rs) brings its mask in the vertex colour's alpha.
+#ifdef VERTEX_COLORS
+    let mask = mesh.color.a;
+#else
+    let mask = 1.0;
+#endif
+    let alpha = edge * clamp(material.size_radius.w, 0.0, 1.0) * mask;
     if alpha < 0.002 { discard; }
     let screen_uv = clamp(
         frag_coord_to_uv(mesh.position.xy, view.viewport),

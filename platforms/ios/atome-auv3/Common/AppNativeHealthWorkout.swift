@@ -11,9 +11,21 @@ import HealthKit
 //   chest strap) measure at workout rate. Collected samples are saved with the
 //   workout; the page is only told which monitor changed (no value).
 // - earlier iOS: an HKWorkoutBuilder that saves the same workout at the end.
+// - a paired Apple Watch with the eVe watch app runs its own workout for the session (watch/WatchSensorSession.swift,
+//   started through `watchLink`), so the wrist measures the heart at workout rate; each of its readings is relayed
+//   here (`watchHeartRate`) and kept in memory only while the session runs, then given to the page in the heart rate's
+//   `health_read` reply (`withWatchHeart`), never pushed: the iPhone alone gets the watch's samples only once they sync.
 // It also writes a meditation's mindful minutes (eVe/domains/programs/brick_session_runtime.js), one
 // sample once that session is saved. Writes are limited to `shareTypes` and `mindfulType`; nothing is ever deleted. One workout at a
 // time; a page load, channel close or context reset discards it.
+#if canImport(HealthKit)
+// The app target's watch bridge (application/AppWatchSensorBridge.swift); the AUv3 extension has none.
+protocol HealthWorkoutWatchLink: AnyObject {
+    func startWorkout(session: String, activity: HKWorkoutActivityType, startedAt: Date)
+    func stopWorkout(session: String)
+}
+#endif
+
 final class HealthWorkoutRecorder {
     static let commands: Set<String> = [
         "health_workout_prepare", "health_workout_start", "health_workout_pause", "health_workout_resume", "health_workout_end",
@@ -27,6 +39,10 @@ final class HealthWorkoutRecorder {
     // Monitor ids (atome/src/squirrel/health/health_catalog.js) of the collected types.
     private static let monitors: [HKSampleType: String] = [HKQuantityType(.heartRate): "heart_rate", HKQuantityType(.activeEnergyBurned): "active_energy"]
 
+    static weak var watchLink: HealthWorkoutWatchLink?
+    // A watch reading older than this no longer describes the session (the page's own freshness is 2 min).
+    private static let watchHeartFresh: TimeInterval = 120
+
     private let store: HKHealthStore
     private let changed: ([String]) -> Void
     private let queue = DispatchQueue(label: "one.atome.health.workout")
@@ -34,6 +50,9 @@ final class HealthWorkoutRecorder {
     private var builder: HKWorkoutBuilder?
     private var live: AnyObject?
     private var lastSignal = Date.distantPast
+    // The session the watch measures for, and its latest heart rate (memory only).
+    private var watchSession: String?
+    private var watchHeart: (bpm: Double, end: Date)?
 
     init(store: HKHealthStore, changed: @escaping ([String]) -> Void) {
         self.store = store
@@ -61,6 +80,7 @@ final class HealthWorkoutRecorder {
 
     func discard() {
         queue.async {
+            self.stopWatch()
             guard let builder = self.builder else { return }
             self.endLiveSession()
             builder.discardWorkout()
@@ -71,7 +91,8 @@ final class HealthWorkoutRecorder {
     // Explicit session start only. The write grant of workouts is knowable in
     // HealthKit (unlike read grants), so the reply says whether saving works.
     private func prepare(reply: @escaping ([String: Any]) -> Void, fail: @escaping (String) -> Void) {
-        let read: Set<HKObjectType> = [HKQuantityType(.heartRate)]
+        // The heart rate the card follows and the active energy its summary reads (R-005 Q38): one sheet, at the session's start.
+        let read: Set<HKObjectType> = [HKQuantityType(.heartRate), HKQuantityType(.activeEnergyBurned)]
         let writable = { reply(["writable": self.store.authorizationStatus(for: HKObjectType.workoutType()) == .sharingAuthorized]) }
         store.getRequestStatusForAuthorization(toShare: Self.shareTypes, read: read) { status, error in
             if error != nil || status == .unknown { return fail("health_authorization_status_unknown") }
@@ -124,6 +145,12 @@ final class HealthWorkoutRecorder {
     private func start(_ session: String, activity: String, at: Date, reply: @escaping ([String: Any]) -> Void, fail: @escaping (String) -> Void) {
         if sessionId == session { return reply(["started": true, "live": live != nil]) }
         guard let type = Self.activityType(activity) else { return fail("health_workout_invalid") }
+        // The wrist's heart rate follows the session even when workouts may not be written.
+        if watchSession != session {
+            stopWatch()
+            watchSession = session
+            Self.watchLink?.startWorkout(session: session, activity: type, startedAt: at)
+        }
         guard store.authorizationStatus(for: HKObjectType.workoutType()) == .sharingAuthorized else { return fail("health_workout_write_denied") }
         // A workout still open belongs to a session that was never ended: it is not this one.
         if let previous = builder { endLiveSession(); previous.discardWorkout(); clear() }
@@ -173,6 +200,7 @@ final class HealthWorkoutRecorder {
     }
 
     private func end(_ session: String, at: Date, save: Bool, reply: @escaping ([String: Any]) -> Void, fail: @escaping (String) -> Void) {
+        if watchSession == session { stopWatch() }
         guard sessionId == session, let builder else { return fail("health_workout_not_started") }
         endLiveSession()
         clear()
@@ -202,14 +230,56 @@ final class HealthWorkoutRecorder {
         live = nil
     }
 
+    private func stopWatch() {
+        if let previous = watchSession { Self.watchLink?.stopWorkout(session: previous) }
+        watchSession = nil
+        watchHeart = nil
+    }
+
+    // A heart rate measured by the watch for the running session (application/AppWatchSensorBridge.swift).
+    func watchHeartRate(_ bpm: Double, at end: Date) {
+        queue.async {
+            guard self.watchSession != nil, bpm >= 20, bpm <= 250, end <= Date().addingTimeInterval(60),
+                  end > (self.watchHeart?.end ?? .distantPast) else { return }
+            self.watchHeart = (bpm, end)
+            self.signal(["heart_rate"])
+        }
+    }
+
+    // A heart-rate read (`readLatest`, AppNativeHealthController.swift) whose samples gain the watch's latest one; any
+    // other monitor's completion is returned as it is. Called on the controller's queue, never on this one.
+    func withWatchHeart(_ spec: HealthMonitorSpec, from: Date, to: Date, _ completion: @escaping ([String: Any]) -> Void) -> ([String: Any]) -> Void {
+        guard spec.identifier == "HKQuantityTypeIdentifierHeartRate", let row = watchHeartRow(from: from, to: to) else { return completion }
+        return { result in
+            guard result["status"] as? String == "ok" else { return completion(result) }
+            var merged = result
+            merged["samples"] = [row] + (result["samples"] as? [[String: Any]] ?? [])
+            completion(merged)
+        }
+    }
+
+    // The watch's latest heart rate as one `readLatest` row, when it lies in [from, to] and is still fresh.
+    private func watchHeartRow(from: Date, to: Date) -> [String: Any]? {
+        queue.sync {
+            guard let heart = watchHeart, heart.end >= from, heart.end <= to.addingTimeInterval(60),
+                  Date().timeIntervalSince(heart.end) <= Self.watchHeartFresh else { return nil }
+            let ms = heart.end.timeIntervalSince1970 * 1000
+            return ["value": heart.bpm, "start": ms, "end": ms, "source": ["device": "watch"]]
+        }
+    }
+
     fileprivate func collected(_ types: Set<HKSampleType>) {
         queue.async {
-            guard self.builder != nil, Date().timeIntervalSince(self.lastSignal) >= 5 else { return }
-            let ids = types.compactMap { Self.monitors[$0] }
-            guard !ids.isEmpty else { return }
-            self.lastSignal = Date()
-            self.changed(ids)
+            guard self.builder != nil else { return }
+            self.signal(types.compactMap { Self.monitors[$0] })
         }
+    }
+
+    // On the queue: one invalidation every 5 s at most; the page re-reads (no value travels here).
+    private func signal(_ ids: [String]) {
+        guard !ids.isEmpty, Date().timeIntervalSince(lastSignal) >= 5 else { return }
+        lastSignal = Date()
+        changed(ids)
     }
 
     fileprivate func failed(_ error: Error) {

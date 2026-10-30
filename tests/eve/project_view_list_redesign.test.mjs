@@ -2,7 +2,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 import * as modeState from '../../eVe/domains/rendering/project_view_mode_state.js';
 import * as surfaceState from '../../eVe/domains/rendering/project_view_surface_runtime.js';
 import { createProjectViewListContent } from '../../eVe/domains/rendering/project_view_list_content.js';
-import { feedContextualRailWithRow, projectViewDashboardToolDefinition } from '../../eVe/domains/rendering/project_view_contextual_rail.js';
+import { feedContextualRailWithRow } from '../../eVe/domains/rendering/project_view_contextual_rail.js';
 import { createProjectViewSurfaceContextRuntime } from '../../eVe/domains/rendering/project_view_surface_context_runtime.js';
 import { invokeProjectViewNavigation, resetProjectViewNavigation } from '../../eVe/domains/rendering/project_view_navigation.js';
 import * as toolGateway from '../../eVe/intuition/runtime/tool_gateway.js';
@@ -62,7 +62,7 @@ test('row Play runs the project from its row through the project transport tool,
     expect(calls).toHaveLength(2);
 });
 
-test('beginner opens its canonical level rail automatically with Organizer as its sole extra', async () => {
+test('beginner opens its canonical level rail automatically, Organize staying in the band', async () => {
     vi.stubGlobal('window', profile('beginner'));
     resetProjectViewNavigation(projectId, 'Project');
     const api = { enter: vi.fn(() => ({ ok: true })), enterVirtual: vi.fn() };
@@ -72,7 +72,7 @@ test('beginner opens its canonical level rail automatically with Organizer as it
     expect(api.enterVirtual).not.toHaveBeenCalled();
     expect(api.enter.mock.calls[0][0]).toMatchObject({ atomeId: projectId, railOnly: true,
         record: { project_id: projectId, structured_context: true } });
-    expect(api.enter.mock.calls[0][0].extraDefinitions.map(definition => definition.key)).toEqual(['container_dashboard']);
+    expect(api.enter.mock.calls[0][0].extraDefinitions).toBeUndefined();
 });
 
 test.each(['beginner', 'intermediate', 'advanced'])('%s selection composes the List extras and routes Enter from the rail', async level => {
@@ -85,7 +85,7 @@ test.each(['beginner', 'intermediate', 'advanced'])('%s selection composes the L
     const input = enter.mock.calls[0][0];
     const keys = input.extraDefinitions.map(definition => definition.key);
     expect(keys).not.toContain('molecule_info');
-    if (level === 'beginner') expect(keys).toEqual(['container_dashboard']);
+    if (level === 'beginner') expect(keys).toEqual([]);
     else {
         expect(keys).toContain('molecule_enter');
         await input.extraInvoker(input.extraDefinitions.find(definition => definition.key === 'molecule_enter'));
@@ -153,7 +153,7 @@ test('first beginner List mount resolves and invokes native catalog capture tool
     expect(denied.map(definition => definition.key)).not.toContain('audio');
     expect(denied.map(definition => definition.key)).not.toContain('video');
     runtime.atomeContextualEditRuntime.enter({ atomeId: owner.id, projectId, kind: 'group', railOnly: true,
-        record: owner, extraDefinitions: [projectViewDashboardToolDefinition()] });
+        record: owner });
     expect(runtime.readAtomeContextualEditState().handedness).toBe('right');
 });
 
@@ -206,7 +206,7 @@ test.each(['beginner', 'intermediate', 'advanced'])('%s List refreshes the curre
     expect(invoke).toHaveBeenCalledTimes(2);
 });
 
-test('beginner opens its canonical level rail automatically with Organizer as its sole extra', async () => {
+test('beginner opens its canonical level rail automatically, Organize staying in the band', async () => {
     vi.stubGlobal('window', profile('beginner'));
     resetProjectViewNavigation(projectId, 'Project');
     const api = { enter: vi.fn(() => ({ ok: true })), enterVirtual: vi.fn() };
@@ -216,7 +216,7 @@ test('beginner opens its canonical level rail automatically with Organizer as it
     expect(api.enterVirtual).not.toHaveBeenCalled();
     expect(api.enter.mock.calls[0][0]).toMatchObject({ atomeId: projectId, railOnly: true,
         record: { project_id: projectId, structured_context: true } });
-    expect(api.enter.mock.calls[0][0].extraDefinitions.map(definition => definition.key)).toEqual(['container_dashboard']);
+    expect(api.enter.mock.calls[0][0].extraDefinitions).toBeUndefined();
 });
 
 test.each(['beginner', 'intermediate', 'advanced'])('%s selection composes the List extras and routes Enter from the rail', async level => {
@@ -229,7 +229,7 @@ test.each(['beginner', 'intermediate', 'advanced'])('%s selection composes the L
     const input = enter.mock.calls[0][0];
     const keys = input.extraDefinitions.map(definition => definition.key);
     expect(keys).not.toContain('molecule_info');
-    if (level === 'beginner') expect(keys).toEqual(['container_dashboard']);
+    if (level === 'beginner') expect(keys).toEqual([]);
     else {
         expect(keys).toContain('molecule_enter');
         await input.extraInvoker(input.extraDefinitions.find(definition => definition.key === 'molecule_enter'));
@@ -288,7 +288,7 @@ test('first beginner List mount resolves and invokes native catalog capture tool
     expect(denied.map(definition => definition.key)).not.toContain('audio');
     expect(denied.map(definition => definition.key)).not.toContain('video');
     runtime.atomeContextualEditRuntime.enter({ atomeId: owner.id, projectId, kind: 'group', railOnly: true,
-        record: owner, extraDefinitions: [projectViewDashboardToolDefinition()] });
+        record: owner });
     expect(runtime.readAtomeContextualEditState().handedness).toBe('right');
 });
 

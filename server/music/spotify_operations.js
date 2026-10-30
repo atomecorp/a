@@ -58,13 +58,18 @@ export async function controlSpotify(ctx, record, action, input) {
     const deviceId = input.device_id || state.device?.id;
     if (!deviceId) throw new MusicFailure('NO_ACTIVE_DEVICE');
     if (!input.device_id && state.device?.restricted) throw new MusicFailure('PERMISSION_DENIED');
-    const suffix = '?' + new URLSearchParams({ device_id: deviceId });
+    const suffix = '?' + new URLSearchParams({ ...(action === 'seek' ? { position_ms: String(Math.round(input.seconds * 1000)) } : {}), device_id: deviceId });
     const path = action === 'play' || action === 'resume' ? 'play' : action;
     const body = action === 'play' ? (target.kind === 'song' ? { uris: [songUri(target.id)] }
         : { context_uri: 'spotify:' + target.kind + ':' + target.id }) : undefined;
     await spotifyApi(ctx, record, '/me/player/' + path + suffix, { method: ['next', 'previous'].includes(action) ? 'POST' : 'PUT', body, effect: true });
     const observed = await readSpotify(ctx, record, 'get_state', {});
     const sameSong = target.kind !== 'song' || observed.current_song?.id === target.id;
+    // A seek is seen done when the song now plays within two seconds of the asked position.
+    if (action === 'seek') {
+        const reached = Number.isFinite(observed.position) && Math.abs(observed.position - input.seconds) <= 2;
+        return { ok: true, playback: reached ? observed.playback : 'opened_unconfirmed', ...(Number.isFinite(observed.position) ? { position: observed.position } : {}) };
+    }
     return { ok: true, playback: ['play', 'resume'].includes(action)
         ? observed.playback === 'playing' && sameSong ? 'playing' : 'opened_unconfirmed'
         : action === 'pause' ? observed.playback === 'paused' ? 'paused' : 'opened_unconfirmed' : 'opened_unconfirmed' };

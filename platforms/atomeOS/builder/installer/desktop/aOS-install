@@ -1,0 +1,4 @@
+#!/bin/sh
+# Installed command uses the same native installation owner as aOS.sh install.
+set -eu
+exec /usr/local/bin/node /usr/local/libexec/aos/installer/desktop/install.mjs "$@"

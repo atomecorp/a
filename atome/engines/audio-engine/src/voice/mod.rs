@@ -10,6 +10,7 @@ mod vad;
 mod wake;
 
 use atome_voice_turns::{level_db, Action, Conversation, TurnEnd, FRAME_SAMPLES};
+pub use atome_voice_turns::Take;
 use grammar::{is_unknown, Grammar, HeardWord, TurnRecognizer};
 use vad::SileroVad;
 use wake::{Classifier, WakeDetector, WAKE_FRAME_SAMPLES};
@@ -119,6 +120,10 @@ impl VoiceEngine {
 
     /// Level of the last frame, in dBFS, for the assistant disc.
     pub fn input_db(&self) -> f64 { self.input_db }
+
+    /// Test mode, off by default: every frame scored, handed over with each turn's close (`take_recording`).
+    pub fn set_recording(&mut self, on: bool) { self.conversation.set_recording(on); }
+    pub fn take_recording(&mut self) -> Option<Take> { self.conversation.take_recording() }
 
     /// 16 kHz mono samples in [-1, 1]; returns the events they complete.
     pub fn push(&mut self, samples: &[f32]) -> Result<Vec<VoiceEvent>, VoiceError> {

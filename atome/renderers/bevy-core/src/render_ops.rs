@@ -121,7 +121,8 @@ pub fn apply_transform(world: &mut World, patch: AtomeTransformPatch) -> Result<
         .ok_or_else(|| format!("bevy_transform_local_missing:{}", patch.id))? = local_transform;
     *world.get_mut::<AtomeClipRect>(entity).ok_or_else(|| format!("bevy_transform_clip_missing:{}", patch.id))? =
         AtomeClipRect(patch.clip_rect);
-    world.entity_mut(entity).insert((AtomeClipRotation(patch.clip_rotation), AtomeClipRoundedRects(patch.clip_rounded_rects)));
+    world.entity_mut(entity).insert((AtomeClipRotation(patch.clip_rotation), AtomeClipRoundedRects(patch.clip_rounded_rects),
+        AtomeClipFades(patch.clip_fades)));
     let next_transform = transform_for_rect(
         patch.logical_position[0],
         patch.logical_position[1],

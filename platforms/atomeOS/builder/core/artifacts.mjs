@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
+import { pipeline } from 'node:stream/promises';
 import os from 'node:os';
 
 export async function digest(file, bytes) {
@@ -54,7 +55,7 @@ export async function fetchVerified(plan, cacheDir) {
 
 export function readManifest(file) {
   const data = JSON.parse(fs.readFileSync(file, 'utf8'));
-  if (data.schema !== 1 || data.product !== 'atome/eVe OS' || !data.target?.id || !Array.isArray(data.artifacts) || !data.artifacts.length) throw new Error('Invalid AOS manifest');
+  if (data.schema !== 1 || data.product !== 'atome/eVe OS' || !['live', 'installer'].includes(data.mode) || !data.target?.id || !Array.isArray(data.artifacts) || !data.artifacts.length) throw new Error('Invalid AOS manifest');
   const names = new Set();
   for (const item of data.artifacts) {
     if (typeof item.file !== 'string' || !/^[a-zA-Z0-9_.-]+$/.test(item.file) || item.file.startsWith('.') || names.has(item.file)
@@ -67,7 +68,7 @@ export function readManifest(file) {
   return data;
 }
 
-async function decompressedDigest(file) {
+async function decompressedDigest(file, expectedBytes) {
   const hash = createHash('sha256');
   let bytes = 0;
   const child = spawn('xz', ['-dc', '--', file], { stdio: ['ignore', 'pipe', 'inherit'] });
@@ -75,7 +76,15 @@ async function decompressedDigest(file) {
     child.once('error', reject);
     child.once('close', code => code === 0 ? resolve() : reject(new Error('xz verification failed')));
   });
-  await Promise.all([completion, (async () => { for await (const chunk of child.stdout) { bytes += chunk.length; hash.update(chunk); } })()]);
+  try {
+    await Promise.all([completion, (async () => {
+      for await (const chunk of child.stdout) {
+        bytes += chunk.length;
+        if (bytes > expectedBytes) throw new Error('Payload checksum/length mismatch: expanded beyond the declared byte count');
+        hash.update(chunk);
+      }
+    })()]);
+  } finally { if (child.exitCode === null) child.kill('SIGTERM'); }
   return { bytes, sha256: hash.digest('hex') };
 }
 
@@ -89,7 +98,7 @@ export async function verifyManifest(file, image) {
     if (!fs.lstatSync(full).isFile()) throw new Error('Artifact must be a regular file, not a symlink');
     const actual = await digest(full);
     if (actual.bytes !== artifact.bytes || actual.sha256 !== artifact.sha256) throw new Error(`Artifact checksum/length mismatch: ${artifact.file}`);
-    const payload = artifact.compression === 'xz' ? await decompressedDigest(full) : actual;
+    const payload = artifact.compression === 'xz' ? await decompressedDigest(full, artifact.payload.bytes) : actual;
     if (payload.bytes !== artifact.payload.bytes || payload.sha256 !== artifact.payload.sha256) throw new Error(`Payload checksum/length mismatch: ${artifact.file}`);
   }
   return { manifest: data, artifacts: selected, integrity: 'verified', authenticity: 'unsigned-development-artifact' };
@@ -97,16 +106,28 @@ export async function verifyManifest(file, image) {
 
 export async function finalize(plan, raw, output, installed) {
   fs.mkdirSync(output, { recursive: false, mode: 0o700 });
-  const stem = `atome-eVe-${plan.target.id}-${plan.profile}-${plan.system.release}`;
+  const stem = `atome-eVe-${plan.target.id}-${plan.mode}-${plan.profile}-${plan.system.release}`;
   const artifacts = [];
   for (const format of plan.formats) {
     const file = path.join(output, `${stem}.${format}`);
-    if (format === 'raw' || format === 'img') fs.copyFileSync(raw, file, fs.constants.COPYFILE_EXCL);
-    else await run('qemu-img', ['convert', '-f', 'raw', '-O', format, raw, file]);
-    const payload = await digest(file);
-    if (format === 'qcow2' || format === 'vmdk') await run('qemu-img', ['compare', '-f', 'raw', '-F', format, raw, file]);
-    await run('xz', ['-T1', '-3', '--', file]);
     const compressed = `${file}.xz`;
+    let payload;
+    if (format === 'raw' || format === 'img') {
+      payload = await digest(raw);
+      const child = spawn('xz', ['-T1', '-3', '-c', '--', raw], { stdio: ['ignore', 'pipe', 'inherit'] });
+      const completion = new Promise((resolve, reject) => {
+        child.once('error', reject);
+        child.once('close', code => code === 0 ? resolve() : reject(new Error('xz compression failed')));
+      });
+      try {
+        await Promise.all([completion, pipeline(child.stdout, fs.createWriteStream(compressed, { flags: 'wx', mode: 0o600 }))]);
+      } finally { if (child.exitCode === null) child.kill('SIGTERM'); }
+    } else {
+      await run('qemu-img', ['convert', '-f', 'raw', '-O', format, raw, file]);
+      payload = await digest(file);
+      await run('qemu-img', ['compare', '-f', 'raw', '-F', format, raw, file]);
+      await run('xz', ['-T1', '-3', '--', file]);
+    }
     artifacts.push({ file: path.basename(compressed), format, compression: 'xz', ...await digest(compressed), payload });
   }
   const manifest = { ...plan, output_dir: undefined, created_at: new Date().toISOString(),

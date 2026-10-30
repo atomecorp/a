@@ -45,6 +45,7 @@ final class AppPageHost {
         // Same rule as the AUv3 factory: no native long-press link preview, the
         // product owns every context menu.
         webView.allowsLinkPreview = false
+        webView.hideKeyboardAccessoryBar()
         // Same opt-in as the AUv3 factory: inspectable only for a deliberate
         // diagnostic launch (`-AtomeWebInspector`, Debug builds).
         if #available(iOS 16.4, *) {
@@ -62,7 +63,6 @@ final class AppPageHost {
     }
 
     private func installNativeBridges() {
-        AppWatchSensorBridge.shared.activate()
         WebViewManager.setNativeInvokeHandler { command, payload, completion in
             if AppNativeCommunication.canHandle(command) {
                 AppNativeCommunication.shared.handle(command, payload: payload, completion: completion)
@@ -82,6 +82,8 @@ final class AppPageHost {
                 AppNativeBevyRendererController.shared.handle(command: command, payload: payload, completion: completion)
             } else if NativeCalendarAlarm.canHandle(command: command) {
                 NativeCalendarAlarm.shared.handle(command: command, payload: payload, completion: completion)
+            } else if WatchLinkInbox.canHandle(command: command) {
+                WatchLinkInbox.shared.handle(command: command, payload: payload, completion: completion)
             } else if AssistantRequestInbox.canHandle(command: command) {
                 AssistantRequestInbox.shared.handle(command: command, payload: payload, completion: completion)
             } else if AppWorkspaceResume.canHandle(command: command) {

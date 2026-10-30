@@ -154,6 +154,17 @@ describe('project view mode state', () => {
         expect(getProjectViewMode(projectId)).toBe('table');
     });
 
+    it('applies only the newest choice while the surface module resolves', async () => {
+        const older = setProjectViewMode('table', { projectId });
+        const newer = setProjectViewMode('natural', { projectId });
+        const results = await Promise.all([older, newer]);
+        expect(results[0]).toMatchObject({ ok: true, superseded: true, requested_mode: 'table' });
+        expect(results[1]).toMatchObject({ ok: true, mode: 'natural' });
+        expect(surface.mount).not.toHaveBeenCalled();
+        expect(surface.unmount).toHaveBeenCalledOnce();
+        expect(persistence.commitBatch).toHaveBeenCalledOnce();
+    });
+
     it('forwards the already loaded project snapshot to the restored Matrix', async () => {
         const sourceRecords = [{ id: 'shape_1', project_id: projectId }];
         persistence.getStateCurrent.mockResolvedValue({ properties: { view_mode: 'table' } });

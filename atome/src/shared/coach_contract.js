@@ -34,6 +34,9 @@ export const isCoachTimeZone = (zone) => {
     if (!zone || typeof zone !== 'string') return false;
     try { new Intl.DateTimeFormat('en-US', { timeZone: zone }); return true; } catch { return false; }
 };
+// A zone's one name on this engine: its aliases (Asia/Kolkata and Asia/Calcutta, Europe/Kyiv and Europe/Kiev) read as the name
+// the engine lists, so a zone recorded under another of its names is the same zone, never a second one.
+export const coachCanonicalZone = zone => new Intl.DateTimeFormat('en-US', { timeZone: zone }).resolvedOptions().timeZone;
 
 // A weekly range: a day and its hours (« thu 18:00–21:00 »), the end after the start.
 const normalizeRange = (range) => {
@@ -58,7 +61,7 @@ export const normalizeCoaching = (value) => {
         specialties: unique((Array.isArray(source.specialties) ? source.specialties : []).map(item => text(item, COACH_LIMITS.specialty)).filter(Boolean),
             item => item.toLowerCase()).slice(0, COACH_LIMITS.specialties),
         place: text(source.place, COACH_LIMITS.place),
-        timezone: isCoachTimeZone(source.timezone) ? source.timezone : '',
+        timezone: isCoachTimeZone(source.timezone) ? coachCanonicalZone(source.timezone) : '',
         slot_minutes: whole(source.slot_minutes, COACH_LIMITS.minMinutes, COACH_LIMITS.maxMinutes) ?? COACH_DEFAULTS.slot_minutes,
         cancel_hours: whole(source.cancel_hours, 0, COACH_LIMITS.maxCancelHours) ?? COACH_DEFAULTS.cancel_hours,
         ranges: unique((Array.isArray(source.ranges) ? source.ranges : []).map(normalizeRange), item => `${item.day}${item.start}${item.end}`)
@@ -91,6 +94,13 @@ export const coachWallToUtc = ({ year, month, day, minutes }, zone) => {
     const first = guess - offsetAt(guess, zone), second = guess - offsetAt(first, zone);
     return second;
 };
+// An instant's offset from UTC in a zone, in minutes, on the same wall arithmetic.
+export const coachZoneOffsetMinutes = (ms, zone) => Math.round(offsetAt(ms, zone) / MINUTE);
+// The zones a coach chooses among (« Mon coaching › Séance › Fuseau »), west to east at `now`, then by their own name; the zones
+// in `kept` (the device's, the one already chosen) are among them even when this engine does not list them, each zone once, by its one name.
+export const coachTimeZones = (now = Date.now(), kept = []) => [...new Set([...Intl.supportedValuesOf('timeZone'), ...kept.filter(isCoachTimeZone)].map(coachCanonicalZone))]
+    .map(zone => ({ zone, offset: coachZoneOffsetMinutes(now, zone) }))
+    .sort((a, b) => a.offset - b.offset || a.zone.localeCompare(b.zone)).map(entry => entry.zone);
 const dayText = utcDay => new Date(utcDay).toISOString().slice(0, 10);
 
 // The coach's open windows between `from` and `to` (ms): its weekly hours on each of its days, its unavailabilities taken out.

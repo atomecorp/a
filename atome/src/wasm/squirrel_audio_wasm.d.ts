@@ -1,13 +1,10 @@
 /* tslint:disable */
 /* eslint-disable */
+export function audio_stop(id: string): void;
 export function audio_set_volume(id: string, db: number): void;
-export function audio_set_playback_rate(id: string, rate: number): void;
-/**
- * A late end for a scheduled or sounding voice: `end_frame` frames after its
- * first one, fading over `release_frames`. Returns whether the voice is known.
- */
-export function audio_set_voice_end(voice_id: string, end_frame: number, release_frames: number): boolean;
-export function audio_set_pan(id: string, pan: number): void;
+export function audio_play_instance(asset_id: string, voice_id: string, start_seconds: number, duration_seconds: number | null | undefined, gain: number, pan: number, rate: number, loop_start_seconds?: number | null, loop_end_seconds?: number | null, strip_id?: string | null): number;
+export function audio_shutdown(): void;
+export function audio_stop_instance(voice_id: string): void;
 /**
  * Load an audio clip from raw bytes (WAV, MP3, OGG).
  * In WASM, we cannot read files from disk so JS must pass the bytes.
@@ -18,9 +15,29 @@ export function audio_load_clip_from_bytes(id: string, data: Uint8Array): number
  */
 export function audio_render_clock(): object;
 export function audio_init(): void;
-export function audio_destroy_clip(id: string): void;
+export function audio_set_pan(id: string, pan: number): void;
 export function audio_play(id: string): number;
-export function audio_stop_instance(voice_id: string): void;
+/**
+ * A late end for a scheduled or sounding voice: `end_frame` frames after its
+ * first one, fading over `release_frames`. Returns whether the voice is known.
+ */
+export function audio_set_voice_end(voice_id: string, end_frame: number, release_frames: number): boolean;
+/**
+ * `owner` plays on the engine's context itself (`on`) or lets it go: held,
+ * the engine never sleeps.
+ */
+export function audio_hold(owner: string, on: boolean): Promise<any> | undefined;
+/**
+ * The AudioContext playback renders into; recording opens its worklet on it.
+ */
+export function audio_shared_context(): AudioContext;
+/**
+ * A demand on the engine: asleep, it renders again; answers its context's
+ * resume then, nothing when it was awake.
+ */
+export function audio_wake(): Promise<any> | undefined;
+export function audio_destroy_clip(id: string): void;
+export function audio_set_playback_rate(id: string, rate: number): void;
 /**
  * Starts each voice exactly on its rendered frame (`ScheduledVoice` list, as
  * the native `audio_schedule_instances`): the render loop stops there, starts
@@ -28,13 +45,6 @@ export function audio_stop_instance(voice_id: string): void;
  * instead; the returned frames say which.
  */
 export function audio_schedule_voices(voices: any): Float64Array;
-/**
- * The AudioContext playback renders into; recording opens its worklet on it.
- */
-export function audio_shared_context(): AudioContext;
-export function audio_play_instance(asset_id: string, voice_id: string, start_seconds: number, duration_seconds: number | null | undefined, gain: number, pan: number, rate: number, loop_start_seconds?: number | null, loop_end_seconds?: number | null, strip_id?: string | null): number;
-export function audio_shutdown(): void;
-export function audio_stop(id: string): void;
 export function audio_mix_asset_load_impulse(asset_id: string, left: Float32Array, right: Float32Array | null | undefined, sample_rate: number): void;
 export function audio_mix_levels(): Array<any>;
 export function audio_mix_asset_load_capture(asset_id: string, json: string): void;
@@ -69,6 +79,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export interface InitOutput {
   readonly memory: WebAssembly.Memory;
   readonly audio_destroy_clip: (a: number, b: number) => [number, number];
+  readonly audio_hold: (a: number, b: number, c: number) => [number, number, number];
   readonly audio_init: () => [number, number];
   readonly audio_load_clip_from_bytes: (a: number, b: number, c: number, d: number) => [number, number, number];
   readonly audio_play: (a: number, b: number) => [number, number, number];
@@ -82,6 +93,7 @@ export interface InitOutput {
   readonly audio_shared_context: () => [number, number, number];
   readonly audio_shutdown: () => [number, number];
   readonly audio_stop: (a: number, b: number) => [number, number];
+  readonly audio_wake: () => [number, number, number];
   readonly audio_instrument: (a: any) => [number, number, number];
   readonly audio_instrument_sample_load: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
   readonly audio_mix_apply: (a: any) => [number, number, number];

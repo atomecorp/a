@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import { JSDOM } from 'jsdom';
 import { normalizeSliderOptions, resolveSliderLength, quantizeSliderValue, sliderValueCaption, isSliderValueValid } from '../../atome/src/squirrel/components/slider_contract.js';
 import { buildBevyToolSliderNode, createBevyToolSliderHandlers } from '../../eVe/intuition/shared/bevy_ui_tool_slider.js';
 import { resolveSliderPreviewGeometry, createLinearMenuLensController } from '../../eVe/intuition/ribbon/bevy_ui_linear_menu_lens.js';
@@ -7,14 +6,6 @@ import { serializeToolParams, buildToolParamsFromPayload, buildToolParamsFromEnt
 const options = { showBounds: true, lengthPx: 360, valueInsetPx: 8 };
 const valueLabels = { 1: 'Minimum', 2: 'Doux', 3: 'Régulier', 4: 'Soutenu', 5: 'Ambitieux' };
 const find = (node, id) => node.id === id ? node : (node.children || []).map(child => find(child, id)).find(Boolean);
-const withDom = async callback => {
-    const dom = new JSDOM('<!doctype html><body><button id="tool"></button></body>');
-    const globals = { window: dom.window, document: dom.window.document, Node: dom.window.Node, Element: dom.window.Element,
-        HTMLElement: dom.window.HTMLElement, HTMLInputElement: dom.window.HTMLInputElement, CustomEvent: dom.window.CustomEvent,
-        getComputedStyle: dom.window.getComputedStyle.bind(dom.window), requestAnimationFrame: () => 1, cancelAnimationFrame: () => {} };
-    const previous = Object.fromEntries(Object.keys(globals).map(key => [key, globalThis[key]])); Object.assign(globalThis, globals);
-    try { await callback(dom.window); } finally { Object.assign(globalThis, previous); dom.window.close(); }
-};
 describe('framework optional slider contract', () => {
     it('validates named values without converting captions into numbers or units', () => {
         const restored = normalizeSliderOptions(JSON.parse(JSON.stringify({ valueLabels })));
@@ -44,16 +35,6 @@ describe('framework optional slider contract', () => {
             sliderMax: 5, sliderStep: 1, sliderValue: 5, sliderOptions: { valueLabels } } });
         expect(buildToolParamsFromPayload({ factory_params: serialized }).entry.sliderOptions.valueLabels).toEqual(valueLabels);
     });
-    it.each(['horizontal', 'vertical'])('the canonical DOM ToolSlider uses the same %s captions after value changes', async orientation => withDom(async window => {
-        const { mountIntuitionXSliderToolContent } = await import('../../atome/src/squirrel/components/tool_slider_builder.js');
-        const slider = mountIntuitionXSliderToolContent({ button: window.document.getElementById('tool'), orientation, collapsedWidthPx: 60, expandedWidthPx: 180,
-            definition: { label: 'Effort', sliderMin: 1, sliderMax: 5, sliderStep: 1, sliderValue: 1, sliderOptions: { valueLabels } } });
-        slider.setExpanded(true);
-        for (const [value, caption] of Object.entries(valueLabels)) {
-            slider.input.value = value; slider.input.dispatchEvent(new window.Event('change', { bubbles: true }));
-            expect(slider.valueEl.textContent).toBe(caption); expect(Number(slider.input.value)).toBe(Number(value));
-        }
-    }));
     it('keeps the ordinary presentation opt-in and validates the shared length', () => {
         expect(normalizeSliderOptions()).toEqual({ showBounds: false, lengthPx: null, valueInsetPx: 0 });
         expect(resolveSliderLength({ lengthPx: 'fill' }, 180, 344)).toBe(344);
@@ -114,14 +95,4 @@ describe('framework optional slider contract', () => {
         const filled = buildToolParamsFromEntry({ key: 'fill', sliderOptions: { lengthPx: 'fill' } }, { availableLength: 344 });
         expect(filled.options.availableLength).toBe(344); expect(serializeToolParams(filled).options.availableLength).toBeUndefined();
     });
-    it.each(['horizontal', 'vertical'])('the canonical DOM ToolSlider exposes optional %s bounds', async orientation => withDom(async window => {
-        const { mountIntuitionXSliderToolContent } = await import('../../atome/src/squirrel/components/tool_slider_builder.js');
-        const button = window.document.getElementById('tool');
-        const slider = mountIntuitionXSliderToolContent({ button, orientation, collapsedWidthPx: 60,
-            definition: { label: 'Size', sliderMin: 1, sliderMax: 11, sliderValue: 8, sliderUnit: 'h', sliderOptions: options } });
-        expect(button.querySelector('#tool_min').hidden).toBe(true); slider.setExpanded(true);
-        expect(button.querySelector('#tool_min').textContent).toBe('1 h'); expect(button.querySelector('#tool_max').textContent).toBe('11 h');
-        expect(button.style[orientation === 'horizontal' ? 'width' : 'height']).toBe('360px');
-        slider.setExpanded(false); expect(button.querySelector('#tool_max').hidden).toBe(true);
-    }));
 });

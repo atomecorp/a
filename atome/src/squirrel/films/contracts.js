@@ -22,8 +22,9 @@ const definitions = {
     favorite: [{ entry_id: entryId, favorite: { type: 'boolean' } }, ['entry_id', 'favorite'], 'Star (favorite true) or unstar an entry.', true, 'write'],
     like: [{ entry_id: entryId, liked: { type: 'boolean' } }, ['entry_id', 'liked'], 'Mark that the user likes (liked true) or no longer likes an entry (kept private in their account).', true, 'write'],
     open: [{ list: { type: 'string', enum: ['films', 'videos'] }, view: { type: 'string', enum: ['home', 'favorites', 'history', 'platforms'] },
-        query: { type: 'string', maxLength: 120 }, service }, [],
-        'Show a list on the Dashboard (the user sees it): Films & séries (list films, the default) or Vidéos (YouTube and PeerTube together, list videos); optionally its favorites, history or platforms, a search, or one declared service alone.', false, 'read'],
+        query: { type: 'string', maxLength: 120 }, service, filter: { type: 'string', enum: ['all', 'mine', 'others'] } }, [],
+        'Show a list on the Dashboard (the user sees it): Films & séries (list films, the default) or Vidéos (list videos: the user\'s own videos and the online ones together; '
+        + 'filter mine keeps the user\'s own, others the online services and free videos, all both); optionally its favorites, history or platforms, a search, or one declared service alone.', false, 'read'],
     play: [entry, ['entry_id'], 'Play an entry on the Dashboard: an Internet Archive film plays whole; a title opens its service\'s own page inside atome where the device has one (iOS), else plays its trailer. NOTHING_TO_PLAY: no trailer, the entry names its services.', false, 'control'],
     control: [{ action: { type: 'string', enum: ['play', 'pause', 'stop', 'rewind', 'forward', 'next', 'previous', 'fullscreen', 'exit_fullscreen'] } }, ['action'],
         'Control what plays in the Dashboard\'s video list (a film, a video, a TV channel): resume, pause, stop, ten seconds back (rewind) or ahead (forward), the next or previous entry, the whole screen or back.', false, 'control']

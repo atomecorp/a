@@ -1,5 +1,4 @@
 use bevy::{
-    asset::RenderAssetUsages,
     core_pipeline::core_2d::{Transparent2d, CORE_2D_DEPTH_FORMAT},
     ecs::system::lifetimeless::{Read, SRes},
     image::Image,
@@ -16,11 +15,11 @@ use bevy::{
         render_resource::{
             BindGroup, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource,
             BindingType, BlendState, Buffer, BufferBindingType, BufferInitDescriptor, BufferUsages,
-            ColorTargetState, ColorWrites, CompareFunction, DepthBiasState, DepthStencilState, Extent3d,
+            ColorTargetState, ColorWrites, CompareFunction, DepthBiasState, DepthStencilState,
             Face, FragmentState, MultisampleState, PipelineCache, PrimitiveState,
             RenderPipelineDescriptor, Sampler, SamplerBindingType, SamplerDescriptor, ShaderStages,
             SpecializedRenderPipeline, SpecializedRenderPipelines, StencilFaceState, StencilState,
-            TextureDimension, TextureFormat, TextureSampleType, TextureViewDimension, VertexFormat,
+            TextureSampleType, TextureViewDimension, VertexFormat,
             VertexState, VertexStepMode,
         },
         renderer::RenderDevice,
@@ -109,7 +108,7 @@ pub fn build_web_external_texture_renderer(app: &mut App) {
     };
     let mask_fallback = {
         let mut images = app.world_mut().resource_mut::<Assets<Image>>();
-        images.add(mask_fallback_image())
+        images.add(crate::video_external_texture::opaque_mask_image())
     };
     if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
         render_app
@@ -198,21 +197,6 @@ fn init_video_external_texture_pipeline(
         video_layout,
         sampler,
     });
-}
-
-/// White mask keeps unmasked videos on the shared shader path.
-fn mask_fallback_image() -> Image {
-    Image::new_fill(
-        Extent3d {
-            width: 1,
-            height: 1,
-            depth_or_array_layers: 1,
-        },
-        TextureDimension::D2,
-        &[255, 255, 255, 255],
-        TextureFormat::Rgba8UnormSrgb,
-        RenderAssetUsages::default(),
-    )
 }
 
 impl SpecializedRenderPipeline for VideoExternalTexturePipeline {

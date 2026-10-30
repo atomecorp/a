@@ -4,6 +4,7 @@ pub mod backdrop_blur;
 pub mod backdrop_surface;
 pub mod background;
 pub mod clip;
+mod clip_fade;
 pub mod clip_polygon;
 pub mod components;
 pub mod plugin;

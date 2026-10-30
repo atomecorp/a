@@ -1,23 +1,12 @@
-// Opt-in performance baseline collector.
-//
-// The runtime already emits discrete `squirrel:perf` CustomEvents (boot stages,
-// project load/render, panel opens) through perf_runtime.js, but nothing records
-// them and emission is gated behind a flag. This module makes those events
-// collectable for cold/warm baselines without adding any default overhead:
-// it activates only when the operator opts in via `?perf=1`, the
-// `squirrel_perf` localStorage key, or a
-// pre-set window flag. When active it enables emission and buffers events into a
-// capped ring exposed on `window.__squirrelPerf`.
+// Opt-in, bounded performance capture. This owner keeps the captured buffer
+// while stopped, but releases every listener, heartbeat and animation frame.
 
 const PERF_EVENT_NAME = 'squirrel:perf';
-// Un silence de plus d'un cinquième de seconde entre deux marques mérite d'être
-// nommé : en dessous, c'est le fonctionnement normal d'une interface.
+// Gaps below 200 ms are ordinary interaction timing, not diagnostic stalls.
 const PERF_GAP_THRESHOLD_MS = 200;
-// Le battement doit être plus fin que le seuil, sinon un trou juste au-dessus du
-// seuil ne contiendrait aucun battement et serait qualifié à tort de blocage.
+// The heartbeat must be finer than the gap threshold to detect blocking.
 const PERF_HEARTBEAT_MS = 100;
-// Marge de tolérance : un battement en retard de moins de ça est du bruit
-// d'ordonnancement, pas un blocage.
+// Scheduling noise below this margin is not a blocked main thread.
 const PERF_HEARTBEAT_SLACK_MS = 150;
 const STORAGE_KEY = 'squirrel_perf';
 const RING_CAPACITY = 4000;
@@ -41,7 +30,7 @@ const readOptIn = (win) => {
     return null;
 };
 
-const applyFlags = (win, mode) => {
+const applyFlags = (win) => {
     win.__SQUIRREL_PERF_EVENTS__ = true;
     win.__EVE_PERF_EVENTS__ = true;
 };
@@ -91,18 +80,8 @@ const buildApi = (win) => {
     return { record, events, summary, timeline, dump, clear: () => { events.length = 0; } };
 };
 
-// L'opt-in doit être atteignable sans URL.
-//
-// `?perf=1` suppose qu'on puisse éditer l'adresse. C'est vrai en navigateur, et
-// faux partout ailleurs : sous Tauri comme sous iOS, l'application ne se charge
-// pas depuis une barre d'adresse. La clé localStorage lue par `readOptIn`
-// existait déjà et marche partout — elle était simplement inatteignable, rien ne
-// l'exposait. Résultat : `window.__squirrelPerf` restait indéfini et la mesure
-// était inapplicable sur les deux plateformes natives.
-//
-// Ces deux fonctions sont installées QUOI QU'IL ARRIVE, y compris quand la
-// mesure est éteinte : c'est justement dans cet état qu'on a besoin de
-// l'allumer.
+// Native hosts have no address bar, so explicit controls remain available even
+// when capture is disabled. The storage key enables capture on the next launch.
 const installPerfOptInControls = (win, start) => {
     if (typeof win.__squirrelPerfEnable === 'function') return;
     win.__squirrelPerfEnable = () => {
@@ -112,21 +91,12 @@ const installPerfOptInControls = (win, start) => {
         } catch (_) {
             return { ok: false, error: 'perf_optin_storage_unavailable' };
         }
-        // La clé survit aux rechargements : au chargement suivant, le collecteur
-        // démarre donc TOUT SEUL, en `events`.
         if (win.__squirrelPerf?.setMode) {
-            applyFlags(win, normalized);
+            applyFlags(win);
             win.__squirrelPerf.setMode(normalized);
             return { ok: true, mode: normalized, started: true, bootMarksRequireReload: true };
         }
-        // Le collecteur démarre TOUT DE SUITE. Exiger un rechargement était une
-        // friction inutile : ce qu'on mesure presque toujours — une bascule de
-        // vue, l'ouverture d'un panneau — se produit après le démarrage, donc
-        // la mesure est utilisable immédiatement.
-        //
-        // Seules les marques de DÉMARRAGE manquent, puisqu'elles sont émises
-        // avant que la console existe. `bootMarksRequireReload` le dit sans
-        // transformer un manque partiel en obligation.
+        // Capture starts immediately; only earlier boot marks require a reload.
         const started = start(win);
         return {
             ok: true,
@@ -141,8 +111,7 @@ const installPerfOptInControls = (win, start) => {
         } catch (_) {
             return { ok: false, error: 'perf_optin_storage_unavailable' };
         }
-        // Couper la collecte immédiatement. Le buffer reste lisible jusqu'au
-        // prochain chargement.
+        // Keep the buffer readable while releasing the capture's live work.
         win.__squirrelPerf?.setMode?.(null);
         return { ok: true, stopped: true, bufferKeptUntilReload: !!win.__squirrelPerf };
     };
@@ -156,28 +125,10 @@ export const startPerfCollector = (win = globalThis?.window) => {
     const mode = readOptIn(win);
     if (!mode) return null;
 
-    applyFlags(win, mode);
+    applyFlags(win);
     const api = buildApi(win);
-    let activeMode = 'events';
-    api.setMode = (nextMode) => {
-        activeMode = nextMode ? 'events' : null;
-        return activeMode;
-    };
-    // --- Le chien de garde des silences -------------------------------------
-    //
-    // Toutes les marques posées jusqu'ici mesurent du TRAVAIL. Aucune ne mesure
-    // une ATTENTE. Quand un ralentissement n'apparaît dans aucune marque, c'est
-    // qu'il s'écoule ENTRE deux marques — et l'instrumentation est alors
-    // structurellement aveugle à ce qu'on cherche.
-    //
-    // Deux questions, et la seconde est la plus utile :
-    //   - combien de temps s'est écoulé sans rien, et entre quelles marques ;
-    //   - pendant ce temps, le fil principal était-il BLOQUÉ ou LIBRE ?
-    //
-    // Un battement de cœur tranche la seconde sans ambiguïté. Bloqué, il ne peut
-    // pas se produire : le battement suivant arrive en retard de toute la durée
-    // du blocage. Libre, il continue à l'heure — l'attente est alors ailleurs
-    // (réseau, disque, GPU, une promesse qui tarde).
+    let activeMode = null;
+    // Correlate event gaps with heartbeat lateness and observed animation frames.
     let clockNow = () => (typeof win.performance?.now === 'function'
         ? win.performance.now()
         : Date.now());
@@ -194,30 +145,15 @@ export const startPerfCollector = (win = globalThis?.window) => {
         if (late > worstBeatLateMs) worstBeatLateMs = late;
         lastBeatAtMs = now;
     };
-    // La poignée est conservée: sans elle le battement ne pouvait plus être
-    // arrêté, et le collecteur (opt-in `?perf=1`) laissait une minuterie vivante
-    // pour toute la session.
     let heartbeatId = null;
-    if (typeof win.setInterval === 'function') heartbeatId = win.setInterval(beat, PERF_HEARTBEAT_MS);
-
-    // --- Le compteur de frames ----------------------------------------------
-    //
-    // « Fil libre » restait ambigu, et c'est la minuterie qui le rendait tel :
-    // `setInterval` continue de battre même quand l'affichage ne repeint plus.
-    // Un fil qui tourne sans rien afficher était donc décrit exactement comme un
-    // fil qui attend le réseau — deux causes opposées sous un seul mot.
-    //
-    // Compter les frames les sépare. Un silence sans la moindre frame veut dire
-    // que l'affichage est gelé : la cause est dans la présentation, pas dans le
-    // code applicatif — et aucune optimisation de ce dernier n'y changera rien.
+    let frameId = null;
     let framesSinceLastMark = 0;
-    if (typeof win.requestAnimationFrame === 'function') {
-        const onFrame = () => {
-            framesSinceLastMark += 1;
-            win.requestAnimationFrame(onFrame);
-        };
-        win.requestAnimationFrame(onFrame);
-    }
+    const onFrame = () => {
+        frameId = null;
+        if (activeMode === null) return;
+        framesSinceLastMark += 1;
+        frameId = win.requestAnimationFrame(onFrame);
+    };
 
     const reportGap = (name, atMs) => {
         if (!Number.isFinite(atMs)) return;
@@ -246,17 +182,8 @@ export const startPerfCollector = (win = globalThis?.window) => {
         });
     };
 
-    // --- La marque du GESTE ---------------------------------------------
-    //
-    // Le chien de garde mesure des silences mais ne sait pas dire lequel est
-    // « l'utilisateur réfléchit » et lequel est « le système est bloqué ». Un
-    // trou de 11 s avant `view_mode.module_import` a donc deux lectures
-    // opposées, et rien dans le journal ne permettait de choisir.
-    //
-    // Posée en phase de CAPTURE, cette marque précède tout gestionnaire
-    // applicatif : ce qui s'écoule entre elle et la marque suivante est du
-    // temps SYSTÈME, sans ambiguïté possible.
-    let lastPressAtMs = null;
+    // Capture the press before application handlers to separate user waiting
+    // from the work that follows their gesture.
     const describeTarget = (target) => {
         if (!target || typeof target !== 'object') return '';
         const id = String(target.id || '').trim();
@@ -267,12 +194,8 @@ export const startPerfCollector = (win = globalThis?.window) => {
     };
     const onPress = (event) => {
         if (activeMode === null) return;
-        lastPressAtMs = clockNow();
-        api.record({ name: 'input.press', atMs: lastPressAtMs, nodeId: describeTarget(event?.target) });
+        api.record({ name: 'input.press', atMs: clockNow(), nodeId: describeTarget(event?.target) });
     };
-    if (typeof win.addEventListener === 'function') {
-        win.addEventListener('pointerdown', onPress, { capture: true, passive: true });
-    }
 
     const recordAndReport = api.record;
     api.record = (detail) => {
@@ -282,21 +205,33 @@ export const startPerfCollector = (win = globalThis?.window) => {
         recordAndReport(detail);
     };
     const onPerfEvent = (event) => api.record(event?.detail);
-    win.addEventListener(PERF_EVENT_NAME, onPerfEvent, { passive: true });
 
-    // Un collecteur qu'on ne peut pas arrêter fausse toute mesure faite APRÈS lui.
-    api.stop = () => {
-        activeMode = null;
-        if (heartbeatId !== null && typeof win.clearInterval === 'function') {
-            win.clearInterval(heartbeatId);
-            heartbeatId = null;
+    api.setMode = (nextMode) => {
+        const next = nextMode ? 'events' : null;
+        if (next === activeMode) return activeMode;
+        activeMode = next;
+        if (next === null) {
+            if (heartbeatId !== null) win.clearInterval?.(heartbeatId);
+            if (frameId !== null) win.cancelAnimationFrame?.(frameId);
+            heartbeatId = frameId = null;
+            win.removeEventListener?.('pointerdown', onPress, { capture: true });
+            win.removeEventListener?.(PERF_EVENT_NAME, onPerfEvent);
+        } else {
+            // A disabled stretch is neither a stall nor a delayed heartbeat.
+            lastMarkAtMs = null;
+            lastMarkName = '';
+            lastBeatAtMs = clockNow();
+            worstBeatLateMs = framesSinceLastMark = 0;
+            win.addEventListener('pointerdown', onPress, { capture: true, passive: true });
+            win.addEventListener(PERF_EVENT_NAME, onPerfEvent, { passive: true });
+            if (typeof win.setInterval === 'function') heartbeatId = win.setInterval(beat, PERF_HEARTBEAT_MS);
+            if (typeof win.requestAnimationFrame === 'function') frameId = win.requestAnimationFrame(onFrame);
         }
-        if (typeof win.removeEventListener === 'function') {
-            win.removeEventListener('pointerdown', onPress, { capture: true });
-            win.removeEventListener(PERF_EVENT_NAME, onPerfEvent);
-        }
+        return activeMode;
     };
+    api.stop = () => { api.setMode(null); };
 
     win.__squirrelPerf = api;
+    api.setMode(mode);
     return api;
 };

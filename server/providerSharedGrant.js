@@ -65,7 +65,8 @@ export const createProviderSharedGrant = ({ query, environment = process.env, no
     return {
         limits,
         // Returns the platform key for an entitled principal, or null when the
-        // feature is disabled, the principal is blocked or no seat is free.
+        // feature is disabled, the principal is blocked or no seat is free. A used-up
+        // daily seat is eVe's shared credit, told apart from a principal's own key credit.
         async claim(principal, action) {
             if (!principal || !readKey()) return null;
             const current = (await seat(principal)) || await claimSeat(principal);
@@ -74,7 +75,7 @@ export const createProviderSharedGrant = ({ query, environment = process.env, no
             const usage = await query('get', 'SELECT * FROM provider_shared_usage WHERE principal_id = ? AND day = ?', [principal, day()]);
             const realtime = action === 'realtime-connect';
             if (Number(usage?.operations || 0) >= limits.operations || Number(usage?.tokens || 0) >= limits.tokens
-                || (realtime && Number(usage?.realtime || 0) >= limits.realtime)) throw new Error('insufficient_quota');
+                || (realtime && Number(usage?.realtime || 0) >= limits.realtime)) throw new Error('provider_shared_quota_exceeded');
             await addUsage(principal, { operations: 1, realtime: realtime ? 1 : 0 });
             return readKey();
         },

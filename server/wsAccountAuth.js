@@ -1,4 +1,5 @@
 import { createAccountAuth } from './auth_accounts.js';
+import { createInvites } from './auth_invites.js';
 import { BILLING_PUBLIC_ERRORS } from './billing/store_purchases.js';
 import { createApprovals } from './auth_approvals.js';
 import { createPairing } from './auth_pairing.js';
@@ -16,16 +17,17 @@ export const ACCOUNT_ACTIONS = new Set(['account-create-challenge', 'account-cre
     'pair-requester-challenge', 'pair-status', 'pair-complete', 'pair-cancel', 'not-my-account',
     'recovery-code-set', 'recovery-start-challenge', 'recovery-start', 'recovery-cancel', 'recovery-requester-challenge',
     'recovery-status', 'recovery-complete', 'devices-list', 'device-rename', 'device-revoke', 'device-class',
-    'connection-challenge', 'connection-proof', 'shared-open-challenge', 'shared-open-start']);
+    'connection-challenge', 'connection-proof', 'shared-open-challenge', 'shared-open-start', 'signup-status', 'invite-create']);
 // Actions answered only for an authenticated connection (bearer of this account).
-const AUTHENTICATED = new Set(['pair-claim', 'pair-pending', 'pair-view', 'devices-list', 'device-rename']);
+const AUTHENTICATED = new Set(['pair-claim', 'pair-pending', 'pair-view', 'devices-list', 'device-rename', 'invite-create']);
 export const ACCOUNT_PUBLIC_ERRORS = ['auth_device_class_required', 'auth_payment_method_invalid', 'auth_approve_key_required',
     'auth_user_verification_required', 'auth_webauthn_rejected', 'auth_webauthn_invalid', 'auth_webauthn_attestation_unsupported',
     'auth_webauthn_algorithm_unsupported', 'auth_webauthn_counter_regressed', 'auth_pairing_invalid', 'auth_pairing_locked',
     'auth_pair_unknown', 'auth_pair_not_approved', 'auth_recovery_unavailable', 'auth_recovery_not_ready', 'auth_handle_unavailable',
-    'auth_connection_proof_required', 'auth_signup_closed', ...BILLING_PUBLIC_ERRORS];
+    'auth_connection_proof_required', 'auth_signup_closed', 'auth_invite_invalid', 'auth_invite_email_invalid',
+    'system_mail_unconfigured', ...BILLING_PUBLIC_ERRORS];
 
-export function createWsAccountAuth({ service, database, jwtSecret, createAccount, findById, disconnectSession, billing, now = Date.now }) {
+export function createWsAccountAuth({ service, database, jwtSecret, createAccount, findById, disconnectSession, billing, mailer, origin, now = Date.now }) {
     const { proof, devices, handles, sessions } = service;
     const query = database.query, transaction = database.withTransaction;
     // Server-originated notices reach the live connections of the account;
@@ -44,7 +46,8 @@ export function createWsAccountAuth({ service, database, jwtSecret, createAccoun
         }
     };
     const approvals = createApprovals({ query, proof, webauthn: resolveWebAuthnConfig(), now });
-    const accounts = createAccountAuth({ query, transaction, proof, sessions, devices, handles, approvals, createAccount, notify, disconnectSession, now, billing });
+    const invites = createInvites({ query, transaction, proof, devices, mailer, origin, now });
+    const accounts = createAccountAuth({ query, transaction, proof, sessions, devices, handles, approvals, invites, createAccount, notify, disconnectSession, now, billing });
     const pairing = createPairing({ query, transaction, proof, sessions, devices, handles, approvals, accounts, findById, notify, disconnectSession, now });
     const recovery = createRecovery({ query, transaction, proof, sessions, devices, handles, approvals, accounts, findById, notify, now });
     // The waiting device hears about its request on the socket it asked from.
@@ -64,6 +67,8 @@ export function createWsAccountAuth({ service, database, jwtSecret, createAccoun
         const claims = AUTHENTICATED.has(message.action) || message.action === 'pair-cancel' && !message.signature
             ? await claimsOf(message, connection) : null;
         switch (message.action) {
+            case 'signup-status': return accounts.signupStatus(message, network);
+            case 'invite-create': return invites.create(claims, message);
             case 'account-create-challenge': return accounts.createChallenge(message, network);
             case 'account-create': return accounts.create(message, network);
             case 'approve-key-add-challenge': return accounts.approveKeyAddChallenge(message);

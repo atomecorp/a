@@ -1,5 +1,49 @@
 # Atom OS Audit
 
+## 2026-10-30 — Prepare/download, live versus installer, and PINE64 media audit
+
+The user requested one automated Mac preparation path, explicit external-support
+selection, and distinct PC live/installation media while retaining all previous
+targets and audio/MIDI/display composition. The manufacturer's A64/A64+ layout
+identifies bootable microSD (slot 12); its getting-started guide requires a card
+reader and says the original A64(+) lacks the LTS removable eMMC module. For the
+specified A64+ 2 GB, the evidenced path is Mac USB card reader → microSD → board,
+not a claimed autonomous USB-only boot. References:
+[board layout/storage](https://pine64.org/documentation/Pine_A64/_full/),
+[getting started](https://pine64.org/documentation/Introduction/Getting_started/).
+
+The existing builder now has `download` and `prepare`, exact-source HTTPS
+manifest/artifact retrieval with bounds/hash checks and no invented latest URL,
+plus a numbered Mac support selector with no default. `prepare` composes one
+local release/download/build with the same verified flash owner and terminal
+administrative/erasure confirmations. Image writing supplies the partition table
+and filesystems; a separate preliminary FAT/exFAT format is unnecessary.
+
+`--mode live` is direct persistent boot from the medium; `--mode installer` on
+PC/generic UEFI targets packages the real already-built system as a local
+distribution for FreeBSD's existing `bsdinstall`. Both modes can be built, and
+`--target all --mode all` expands only modes supported by each target (PINE64/Mac
+VM: live). Native installation checks architecture/UEFI/payload and GEOM disk
+identity/ancestry, refuses current boot/mounted/swap/open-pool storage, requires
+backup acknowledgement and exact erasure confirmation, then delegates to native
+partition/extraction/EFI configuration. It does not automatically back up, retry
+another disk, reboot or run internal installation on macOS. Existing framework
+state/rendering/audio/API owners are preserved; no custom HTML UI was added.
+
+Evidence: 20 focused tests passed, including HTTPS fixture responses, corruption
+and downgrade refusal, cumulative target/mode plans, explicit support selection,
+GEOM label-to-boot-disk resolution and native-install refusal on macOS. Builder
+JavaScript syntax/size and shell syntax passed. Actual Mac `aOS.sh devices`
+returned `[]`; no support was connected and none was written. M0 still stops on
+the unrelated `dashboard_training_disc.js` record-preview reuse violation.
+
+**Blocked/unverified:** no matching native FreeBSD backend, constructed atome/eVe
+OS image, real release endpoint, native installer extraction, boot or physical
+flash has been validated. The Mac currently has about 22 GiB free; the default
+34 GiB installer image cannot be staged there. WebGPU/audio/MIDI remain separate
+target acceptance. This is an implementation and host-test result, not proof
+that the appliance or installer works end to end.
+
 ## 2026-10-29 — Existing builder extension and duplicate check
 
 This is the continuing OS task record, not a second OS implementation. Scoped

@@ -5,8 +5,10 @@ export const randomHandle = () => crypto.randomBytes(32).toString('base64url');
 export const digest = (value) => crypto.createHash('sha256').update(String(value)).digest('hex');
 export const reject = (code = 'auth_proof_invalid') => { throw new Error(code); };
 // A server closes sign-up by its environment (ATOME_SIGNUP_CLOSED=1): existing
-// accounts keep opening and adding devices; no new principal is created.
-export const requireSignupOpen = () => { if (process.env.ATOME_SIGNUP_CLOSED === '1') reject('auth_signup_closed'); };
+// accounts keep opening and adding devices; no new principal is created but by
+// invitation (auth_invites.js, the account creation alone; never the SMS channel).
+export const signupClosed = () => process.env.ATOME_SIGNUP_CLOSED === '1';
+export const requireSignupOpen = () => { if (signupClosed()) reject('auth_signup_closed'); };
 export const requireHandle = (value) => {
     if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(value)) reject('auth_request_invalid');
     return value;

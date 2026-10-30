@@ -304,6 +304,7 @@ struct Args {
     speaking: bool,
     listening: String,
     verifier: Option<String>,
+    record: bool,
     sample_id: String,
     command: Value,
 }
@@ -364,7 +365,7 @@ pub fn dispatch(name: &str, args: &Value, project_root: Option<&Path>) -> Result
         #[cfg(feature = "voice")]
         "voice_set_wake_verifier" => crate::voice::session::set_wake_verifier(parsed.verifier),
         #[cfg(feature = "voice")]
-        "voice_read" => crate::voice::session::read(),
+        "voice_read" => crate::voice::session::read(parsed.record),
         other => Err(format!("audio_command_unknown:{other}")),
     }
 }

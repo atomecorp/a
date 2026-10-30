@@ -27,7 +27,7 @@ cleanup() {
 trap 'status=$?; trap - EXIT; if ! cleanup; then status=1; fi; exit "$status"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-for stage in preflight fetch_base_image mount_image install_packages install_runtime configure_boot configure_ui configure_audio configure_network; do
+for stage in preflight fetch_base_image mount_image install_packages install_runtime configure_boot configure_ui configure_audio configure_network configure_installer; do
     log_info "Stage: ${stage} (${TARGET})"
     /bin/sh "${BUILDER_ROOT}/scripts/${stage}.sh"
 done

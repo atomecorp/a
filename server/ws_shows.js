@@ -39,6 +39,9 @@ const SPORTS = 'https://www.thesportsdb.com/api/v1/json/123/eventsnextleague.php
 // Ligue 1, Ligue 2, Coupe de France, Top 14, Pro D2, LNB (basketball), LNH (handball), Ligue Magnus.
 const FRENCH_LEAGUES = Object.freeze(['4334', '4401', '4484', '4430', '5172', '4423', '4536', '4927']);
 const PAGE_SIZE = 25;
+// What each open source is credited as on every entry it gives (decision Q27, 30 Oct. 2026: each result carries its source;
+// DATAtourisme names its producer and last update itself, server/shows_tourism.js).
+const SOURCES = Object.freeze({ agenda: 'OpenAgenda', places: '© OpenStreetMap', films: 'TMDB', matches: 'TheSportsDB' });
 const MAX_OFFSET = 9900;
 const MAX_FILM_PAGES = 5;
 const FILM_TTL_MS = 12 * 60 * 60 * 1000;
@@ -136,7 +139,7 @@ const readAgenda = async (kind, spec, { fetchResource, now }) => {
         return { id: `agenda_${text(record.uid)}`, kind: 'event', title: text(record.title_fr), summary: text(record.description_fr), dateLabel: text(record.daterange_fr),
             start: when.start, end: when.end, place: text(record.location_name), address: text(record.location_address), city: text(record.location_city),
             lat: at.lat, lon: at.lon, distanceKm: distanceKm(spec, at.lat, at.lon), price: text(record.conditions_fr),
-            image: httpsUrl(record.thumbnail || record.image), url: httpsUrl(record.canonicalurl), ticketUrl: ticketUrl(record.registration) };
+            image: httpsUrl(record.thumbnail || record.image), url: httpsUrl(record.canonicalurl), ticketUrl: ticketUrl(record.registration), source: SOURCES.agenda };
     }) };
 };
 
@@ -158,7 +161,7 @@ const readPlaces = async (kind, spec, { fetchResource }) => {
         const at = geo(record.meta_geo_point);
         return { id: `${kind}_${text(record.meta_osm_id)}`, kind: kind === 'cinemas' ? 'cinema' : 'place', title: text(record.name), place: text(record.name),
             city: text(record.meta_name_com), lat: at.lat, lon: at.lon, distanceKm: distanceKm(spec, at.lat, at.lon), phone: text(record.phone),
-            url: httpsUrl(record.website) || wikipediaUrl(record.wikipedia), image: '' };
+            url: httpsUrl(record.website) || wikipediaUrl(record.wikipedia), image: '', source: SOURCES.places };
     }) };
 };
 
@@ -173,7 +176,7 @@ const readFilms = async ({ region, language }, { fetchResource, now, key }) => {
         .filter(film => film?.id && !seen.has(film.id) && seen.add(film.id))
         .sort((a, b) => (Number(b.popularity) || 0) - (Number(a.popularity) || 0))
         .map(film => ({ id: `film_${film.id}`, kind: 'film', title: text(film.title), summary: text(film.overview), start: text(film.release_date),
-            image: film.poster_path ? `${TMDB_IMAGES}${film.poster_path}` : '', url: `https://www.themoviedb.org/movie/${film.id}` }));
+            image: film.poster_path ? `${TMDB_IMAGES}${film.poster_path}` : '', url: `https://www.themoviedb.org/movie/${film.id}`, source: SOURCES.films }));
     films.set(cacheKey, { entries, at: now });
     return entries;
 };
@@ -185,7 +188,7 @@ const readMatches = async ({ fetchResource, now }) => {
         .map(event => ({ id: `match_${event.idEvent}`, kind: 'match', title: text(event.strEvent).replace(/ vs /, ' – '), league: text(event.strLeague),
             sport: text(event.strSport), start: new Date(Date.parse(`${event.strTimestamp}Z`)).toISOString(), place: text(event.strVenue),
             // TheSportsDB's pictures carry no CORS header: a page cannot draw them, the row keeps its glyph.
-            city: text(event.strCity), image: '' }))
+            city: text(event.strCity), image: '', source: SOURCES.matches }))
         .sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
     matches = { entries, at: now };
     return entries;

@@ -102,7 +102,7 @@ export async function handleMusicAction(action, input, options) {
         if (name === 'get_state') return { ok: true, provider: 'spotify', supported: true, configured: true, state: 'connected',
             capabilities: MUSIC_COMMANDS.map(command => command.action), identity: record.identity, ...await readSpotify(ctx, record, name, {}) };
         if (MUSIC_WRITES.includes(name)) return await durableWrite(ctx, name, input, record);
-        if (['play', 'resume', 'pause', 'next', 'previous'].includes(name)) return await controlSpotify(ctx, record, name, input);
+        if (['play', 'resume', 'pause', 'next', 'previous', 'seek'].includes(name)) return await controlSpotify(ctx, record, name, input);
         return { ok: true, ...await readSpotify(ctx, record, name, input) };
     } catch (error) { ctx.check(); return { ok: false, error: musicError(error) }; }
 }

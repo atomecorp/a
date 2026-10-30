@@ -2,9 +2,52 @@
 // native only — the Web hosts it in eVe/core/media_engine/direct_path_web.js)
 // and the instruments a mix strip plays (atome_mix_graph::instrument_command):
 // native engines decode a sample from its path, the Web engine takes the PCM
-// the page decoded ({ left, right, sampleRate }).
+// the page decoded ({ left, right, sampleRate }). The Web engine sleeps when it
+// has nothing to render (BUG-068): `wake` and `hold` are its demands.
 
-export const createKiraLiveMethods = ({ invoke, ensureRuntimeMode, readWasm }) => ({
+// How long a woken context may take to run its clock again.
+const WAKE_LIMIT_MS = 2000;
+
+// Settles once the context runs and its output clock has moved past `from`:
+// a clock read before that would carry the instant it froze at.
+const contextRunningPast = (context, from) => new Promise((resolve, reject) => {
+    const asked = globalThis.performance.now();
+    const check = () => {
+        if (context.state === 'running' && context.getOutputTimestamp().contextTime > from) return resolve(true);
+        if (globalThis.performance.now() - asked > WAKE_LIMIT_MS) return reject(new Error('audio_engine_wake_timeout'));
+        globalThis.setTimeout(check, 4);
+    };
+    check();
+});
+
+// The engine woken (`resumed`: its context's resume, when it slept); settles
+// once its clock runs. Native engines never sleep.
+const settleWake = (engine, resumed) => {
+    if (!engine) return Promise.resolve(true);
+    const context = engine.audio_shared_context();
+    if (!resumed && context.state === 'running') return Promise.resolve(true);
+    const from = context.currentTime;
+    return Promise.resolve(resumed).then(() => contextRunningPast(context, from));
+};
+
+// `readEngine`: the Web engine once its audio manager runs, else null.
+export const createKiraLiveMethods = ({ invoke, ensureRuntimeMode, readWasm, readEngine }) => ({
+    // A demand on the Web engine before reading its clock or playing on its context.
+    wake() {
+        const engine = readEngine();
+        return settleWake(engine, engine ? engine.audio_wake() : null);
+    },
+
+    // { owner, on }: an owner playing on the Web engine's context itself (the direct
+    // path, a live input, a recording) holds it awake until it lets go.
+    hold(arg) {
+        const owner = String((arg && arg.owner) || '');
+        if (!owner) return Promise.reject(new Error('audio_engine_hold_needs_an_owner'));
+        const wasm = readWasm();
+        const resumed = wasm ? wasm.audio_hold(owner, arg.on === true) : null;
+        return arg.on === true ? settleWake(readEngine(), resumed) : Promise.resolve(true);
+    },
+
     direct_apply(program) {
         return ensureRuntimeMode({ audioManager: true }).then(function () {
             return invoke('audio_direct_apply', { program: program }).then(function (r) { return r && r.strips; });

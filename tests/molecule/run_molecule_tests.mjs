@@ -31,7 +31,10 @@ const SUITES = [
     'tests/probes/molecule_stores.probe.mjs',
     'tests/probes/molecule_v2_structure.probe.mjs',
     'tests/probes/molecule_list_projection.probe.mjs',
-    'tests/probes/molecule_mix_projection.probe.mjs',
+    'tests/probes/molecule_mix_model.probe.mjs',
+    'tests/probes/molecule_mix_engine.probe.mjs',
+    'tests/probes/molecule_mix_midi.probe.mjs',
+    'tests/probes/molecule_mix_view.probe.mjs',
     'tests/probes/molecule_timeline_activity.probe.mjs',
     'tests/probes/molecule_track_type_registry.probe.mjs'
 ];

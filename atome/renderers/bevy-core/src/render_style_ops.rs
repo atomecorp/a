@@ -4,6 +4,7 @@ use crate::{
         sync_backdrop_surface_corner_radius, sync_backdrop_surface_opacity,
     },
     clip::apply_entity_clip,
+    media_window::{refresh_media_window_mask, AtomeMediaWindow},
     procedural_sdf::patch_procedural_sdf,
     render_math::color_from_rgba,
     selection_overlay::rebuild_selection_overlay,
@@ -26,6 +27,56 @@ fn entity_for(world: &World, id: &str) -> Result<Entity, String> {
         .copied()
         .ok_or_else(|| format!("bevy_atome_entity_missing:{id}"))
 }
+/// The silhouette an entity carries now: its variant, its live size and its
+/// resolved corner radii. The same object cuts a shape's sprite and a media
+/// window's cut-out, so both follow a resize or a rounding patch alike.
+pub(crate) fn entity_shape_silhouette(world: &World, entity: Entity) -> AtomeShapeSilhouette {
+    let size = world
+        .get::<AtomeLogicalSize>(entity)
+        .map(|value| *value)
+        .unwrap_or(AtomeLogicalSize {
+            width: 1.0,
+            height: 1.0,
+        });
+    AtomeShapeSilhouette {
+        geometry: world
+            .get::<AtomeShapeProfile>(entity)
+            .map(|value| value.0)
+            .unwrap_or_default(),
+        width: size.width.max(1.0),
+        height: size.height.max(1.0),
+        corner_radii: world
+            .get::<AtomeCornerRadius>(entity)
+            .map(|value| value.0)
+            .unwrap_or([0.0; 4]),
+    }
+}
+
+/// The alpha coverage of an unpainted silhouette cut by the Atome's resolved
+/// mask. `None` when it covers its whole box (a square without mask).
+pub(crate) fn silhouette_mask_handle(
+    world: &mut World,
+    silhouette: &AtomeShapeSilhouette,
+    mask: Option<AtomeMaskStyle>,
+    id: &str,
+) -> Result<Option<Handle<Image>>, String> {
+    if let Some(mask) = mask {
+        let texture = crate::shape_sdf::apply_spatial_mask_to_texture(
+            &crate::shape_sdf::shape_mask_texture(silhouette),
+            &mask,
+        );
+        return Ok(Some(crate::texture::image_handle_from_texture(
+            &mut world.resource_mut::<Assets<Image>>(),
+            &Some(texture),
+            id,
+        )?));
+    }
+    if silhouette.requires_mask() {
+        return Ok(Some(cached_image_handle_from_shape_mask(world, silhouette, id)?));
+    }
+    Ok(None)
+}
+
 pub(crate) fn refresh_shape_surface(
     world: &mut World,
     entity: Entity,
@@ -35,6 +86,10 @@ pub(crate) fn refresh_shape_surface(
         .get::<AtomeRenderKind>(entity)
         .map(|value| value.0.clone())
         .unwrap_or_default();
+    // A media window's cut-out takes the Atome's shape like a sprite does.
+    if kind == "media_window" {
+        return refresh_media_window_mask(world, entity, id);
+    }
     if kind != "shape" || world.get::<Sprite>(entity).is_none() {
         return Ok(());
     }
@@ -48,25 +103,7 @@ pub(crate) fn refresh_shape_surface(
     if has_source {
         return Ok(());
     }
-    let size = world
-        .get::<AtomeLogicalSize>(entity)
-        .map(|value| *value)
-        .unwrap_or(AtomeLogicalSize {
-            width: 1.0,
-            height: 1.0,
-        });
-    let silhouette = AtomeShapeSilhouette {
-        geometry: world
-            .get::<AtomeShapeProfile>(entity)
-            .map(|value| value.0)
-            .unwrap_or_default(),
-        width: size.width.max(1.0),
-        height: size.height.max(1.0),
-        corner_radii: world
-            .get::<AtomeCornerRadius>(entity)
-            .map(|value| value.0)
-            .unwrap_or([0.0; 4]),
-    };
+    let silhouette = entity_shape_silhouette(world, entity);
     let paint = world
         .get::<crate::surface_paint::AtomeSurfacePaint>(entity)
         .and_then(|v| v.0.clone());
@@ -99,23 +136,11 @@ pub(crate) fn refresh_shape_surface(
                 )?,
             )
         }
-    } else if let Some(mask) = world
-        .get::<AtomeResolvedMask>(entity)
-        .and_then(|v| v.0.clone())
-    {
-        let texture = crate::shape_sdf::apply_spatial_mask_to_texture(
-            &crate::shape_sdf::shape_mask_texture(&silhouette),
-            &mask,
-        );
-        Some(crate::texture::image_handle_from_texture(
-            &mut world.resource_mut::<Assets<Image>>(),
-            &Some(texture),
-            id,
-        )?)
-    } else if silhouette.requires_mask() {
-        Some(cached_image_handle_from_shape_mask(world, &silhouette, id)?)
     } else {
-        None
+        let mask = world
+            .get::<AtomeResolvedMask>(entity)
+            .and_then(|v| v.0.clone());
+        silhouette_mask_handle(world, &silhouette, mask, id)?
     };
     let color = world
         .get::<AtomeVisualColor>(entity)
@@ -129,7 +154,7 @@ pub(crate) fn refresh_shape_surface(
     visible[3] = visible[3].clamp(0.0, 1.0) * opacity;
     if let Some(mut sprite) = world.get_mut::<Sprite>(entity) {
         sprite.image = handle.unwrap_or_default();
-        sprite.custom_size = Some(Vec2::new(size.width.max(1.0), size.height.max(1.0)));
+        sprite.custom_size = Some(Vec2::new(silhouette.width, silhouette.height));
         sprite.color = color_from_rgba(visible);
     }
     Ok(())
@@ -185,6 +210,9 @@ pub fn apply_style(world: &mut World, patch: AtomeStylePatch) -> Result<(), Stri
         }
         if world.get::<AtomeVideoExternalTexture>(entity).is_some() {
             apply_video_mask_style(world, entity, normalized)?;
+        }
+        if world.get::<AtomeMediaWindow>(entity).is_some() {
+            refresh_media_window_mask(world, entity, &patch.id)?;
         }
         rebuild_shape_shadow_overlay(world, entity)?;
     }

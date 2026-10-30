@@ -9,7 +9,7 @@ import {
     MYSTIC_FLIP_EASE_PLATEAU, MYSTIC_FLIP_REDUCED_DURATION_MS, MYSTIC_FLIP_STAGGER_RATIO,
     MYSTIC_MAX_TILES, MYSTIC_SHADOW_PAD_PX,
     MYSTIC_CENTER_SIZE_RATIO, MYSTIC_SHADOW_FADE_MS,
-    MYSTIC_OPENING_MS, MYSTIC_SLOTS, MYSTIC_SLOT_NAMES, MYSTIC_TILE_GAP_PX, MYSTIC_TILE_ROUNDNESS,
+    MYSTIC_OPENING_MS, MYSTIC_SLOTS, MYSTIC_SLOT_NAMES, MYSTIC_TILE_GAP_PX,
     computeMysticLayout, planMysticTiles,
     resolveMysticCenterMetrics,
     resolveMysticFlipEase, resolveMysticGrid, resolveMysticLayoutMargin,
@@ -60,7 +60,7 @@ const RING_ITEMS = items(...RING_KEYS, 'ai');
 const STAR_ITEMS = items(...DESKTOP_KEYS.slice(0, 9), 'ai');
 
 const place = (count, x, y, { surface = RECT } = {}) => computeMysticLayout({
-    slots: resolveMysticSlots(count), center: { x, y }, anchor: { x, y }, surface, tileSize: TILE, roundness: 1
+    slots: resolveMysticSlots(count), center: { x, y }, anchor: { x, y }, surface, tileSize: TILE
 });
 const tileOf = (layout, slot) => layout.tiles.find((tile) => tile.slot === slot);
 const pointOf = (layout, slot) => tileOf(layout, slot)?.point;
@@ -218,7 +218,7 @@ test('outer rings retain every tool at its original size in distinct visible cel
         assert.deepEqual(edge.center, { x: 0, y: 0 });
         assert.deepEqual(edge.tiles.map(tile => tile.slot), center.tiles.map(tile => tile.slot));
         assert.equal(new Set(cells(edge)).size, count);
-        assert.ok(edge.tiles.every(tile => tile.size === TILE && tile.radius === TILE / 2));
+        assert.ok(edge.tiles.every(tile => tile.size === TILE && tile.radius === TILE / 10));
         assert.equal(insideSurface(edge), true);
     }
 });
@@ -441,8 +441,10 @@ test('a tile turns about the axis that separates it from the centre, toward the 
     assert.deepEqual([north.dy, north.axis, north.axisId, north.direction], [-1, 'x', 0, -1]);
     const south = at([600, 460], 'south');
     assert.deepEqual([south.dy, south.direction, south.axis], [1, 1, 'x']);
-    assert.equal(resolveMysticTileRadius({ roundness: 1, tileSize: TILE }), TILE / 2);
-    assert.equal(resolveMysticTileRadius({ roundness: 0, tileSize: TILE }), 0);
+    // The one radius rule (AGENTS.md rule 14): a tenth of the side, 12 px at most.
+    assert.equal(resolveMysticTileRadius({ tileSize: TILE }), 6);
+    assert.equal(resolveMysticTileRadius({ tileSize: 2 * TILE }), 12);
+    assert.equal(resolveMysticTileRadius({ tileSize: 4 * TILE }), 12);
 });
 
 test('the mystic tree carries one tile per entry and the Atom handle alone in the middle', () => {
@@ -450,8 +452,7 @@ test('the mystic tree carries one tile per entry and the Atom handle alone in th
     assert.equal(geometry.mystic, true);
     assert.equal(geometry.placements.length, 9);
     assert.deepEqual(geometry.placements.map((placement) => placement.mystic.slot), MYSTIC_SLOT_NAMES.slice(0, 9));
-    assert.equal(MYSTIC_TILE_ROUNDNESS, 0.5);
-    assert.equal(geometry.radius, TILE * MYSTIC_TILE_ROUNDNESS / 2, 'the product tiles are half-rounded');
+    assert.equal(geometry.radius, TILE / 10, 'the product tiles follow the one radius rule');
     assert.equal(geometry.contentScale, 1);
     assert.equal(geometry.centerItem.key, 'ai');
     const tree = buildBevyUiMysticTree({ geometry });
@@ -483,9 +484,8 @@ test('the Atom handle is a disc at any tile size, and never a rounded tile', () 
     assert.deepEqual(resolveMysticCenterMetrics({ tileSize: 80 }), { size: 72, radius: 36 });
     assert.ok(metrics.size < TILE, 'the handle leaves the tiles their air');
     assert.ok(resolveMysticCenterMetrics({ tileSize: 80 }).size < 80);
-    // The tile roundness never reaches the handle: asking for a square still
-    // yields a disc, which is the whole point of the centre.
-    assert.equal(resolveMysticTileRadius({ roundness: 0, tileSize: TILE }), 0);
+    // The tiles' corner rule never reaches the handle: it stays a disc, which is the whole point of the centre.
+    assert.ok(resolveMysticTileRadius({ tileSize: TILE }) < metrics.size / 2);
     assert.equal(metrics.radius, metrics.size / 2);
 });
 
@@ -1046,7 +1046,7 @@ const neighbourSeams = (layout) => {
 
 const layoutWithGap = (count, gap) => computeMysticLayout({
     slots: resolveMysticSlots(count), center: CENTER, anchor: CENTER, surface: RECT,
-    tileSize: TILE, roundness: 1, gap
+    tileSize: TILE, gap
 });
 
 test('two neighbouring plates never touch, and the seam is the gap that was asked for', () => {
@@ -1159,7 +1159,7 @@ test('a skin override moves a single element, and the record follows it', () => 
 
     const tiles = computeMysticLayout({
         slots: resolveMysticSlots(8), center: CENTER, anchor: CENTER, surface: RECT,
-        tileSize: TILE, roundness: 1
+        tileSize: TILE
     }).tiles;
     const uniforms = buildMysticSurfaceUniforms({
         tiles, width: RECT.width, height: RECT.height, holeDose: custom.hole.dose, skin: custom
@@ -1186,7 +1186,7 @@ test('a skin can never blur two plates into one another', () => {
     const uniforms = buildMysticSurfaceUniforms({
         tiles: computeMysticLayout({
             slots: resolveMysticSlots(8), center: CENTER, anchor: CENTER, surface: RECT,
-            tileSize: TILE, roundness: 1
+            tileSize: TILE
         }).tiles,
         width: RECT.width,
         height: RECT.height,

@@ -321,6 +321,8 @@ CREATE TABLE IF NOT EXISTS news_publications (
     parent_id TEXT,
     anchor_ms INTEGER,
     retired_at TEXT,
+    -- « Avis » off: its author closed its replies (the ones made stay).
+    replies_closed_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -337,6 +339,8 @@ CREATE TABLE IF NOT EXISTS news_reports (
     news_id TEXT NOT NULL,
     reporter_id TEXT NOT NULL,
     reason TEXT,
+    -- « Garder » in the thread owner's « Signalés »: the report no longer waits (its reporter still does not see it).
+    dismissed_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY(news_id, reporter_id)
 );
@@ -780,6 +784,22 @@ CREATE TABLE IF NOT EXISTS auth_recovery_requests (
     created_ms INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS auth_recovery_principal ON auth_recovery_requests(principal_id, state);
+-- An invitation lifts a closed sign-up for one account (server/auth_invites.js): only the
+-- token's digest and the invited address's keyed index are kept; one use, 21 days.
+CREATE TABLE IF NOT EXISTS auth_invites (
+    invite_id TEXT PRIMARY KEY,
+    token_hash TEXT NOT NULL UNIQUE,
+    inviter_principal TEXT NOT NULL,
+    email_index TEXT NOT NULL,
+    client_ref TEXT NOT NULL,
+    created_ms INTEGER NOT NULL,
+    expires_ms INTEGER NOT NULL,
+    consumed_ms INTEGER,
+    consumed_by TEXT,
+    revoked_ms INTEGER
+);
+CREATE UNIQUE INDEX IF NOT EXISTS auth_invites_client_ref ON auth_invites(inviter_principal, client_ref);
+CREATE INDEX IF NOT EXISTS auth_invites_email ON auth_invites(inviter_principal, email_index);
 CREATE TABLE IF NOT EXISTS auth_device_sessions (
     session_id TEXT PRIMARY KEY,
     principal_id TEXT NOT NULL,

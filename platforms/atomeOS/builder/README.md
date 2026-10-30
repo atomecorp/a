@@ -15,6 +15,19 @@ A recipe, a converted disk and a booted interactive eVe session are different re
 | `mac-vm-apple-silicon` | arm64/aarch64 | `.qcow2.xz` | FreeBSD guest, UEFI |
 | `arm64-uefi` | arm64/aarch64 | `.img.xz` | candidate standard-firmware machines |
 
+`--mode live` boots the system directly from its external support. It is a persistent
+UFS system, not a RAM-only session. `--mode installer` creates separate installation
+media for PC/generic UEFI targets; it packages the already-built system as a local
+distribution for the existing FreeBSD `bsdinstall`. Its boot console asks for a
+destination disk, backup acknowledgement and an exact erasure confirmation.
+The boot support, active/mounted/swap/open-pool disks and ambiguous disks are refused.
+No automatic reboot, in-place upgrade or automatic backup is performed.
+`--mode live,installer` builds both on a suitable target; `--target all --mode all`
+builds only the modes declared for each target. PINE64 and Mac VM targets currently
+accept live images only. Installer images default to 34 GiB and need more build,
+download/staging and media capacity. Installation code is source/unit-tested only;
+it has not been executed on FreeBSD or a physical disk.
+
 Each target has a separate disk. No image is claimed to boot all architectures.
 Mac VM targets additionally accept `raw,qcow2,vmdk`; PC/generic ARM accept `img,qcow2`.
 A disk format does not certify an hypervisor or GPU. Import the decompressed disk
@@ -42,7 +55,10 @@ From the framework root (all commands below are examples, not evidence of a buil
 ## Construct on a native FreeBSD backend
 
 Use a dedicated FreeBSD backend of the target architecture and the selected
-release (default `15.1-RELEASE`). macOS is a control/flash host, not a FreeBSD
+release. A build resolves the current official production release automatically;
+`--freebsd-version` pins an explicit version. `plan` and `preflight` without a
+version display the configured baseline, not a fresh online lookup. Each build
+records its resolved version. macOS is a control/flash host, not a FreeBSD
 chroot or a supported bare-metal Mac target. Linux qemu-user is not accepted as
 evidence of FreeBSD binary execution. Preflight never installs tools or changes
 the host's services/configuration. It checks native tooling and build capacity;
@@ -99,6 +115,41 @@ failure is nonzero. No backend or hypervisor has been provisioned or tested here
 `--offline` fails explicitly until all pkg/npm dependencies and metadata have a
 verified, complete offline closure.
 
+## Automated preparation from macOS
+
+The single `prepare` command accepts exactly one source: a local completed
+`--manifest`, a public HTTPS `--manifest-url`, or an explicit `--source-commit`
+to build using the selected FreeBSD/SSH backend. It verifies the selected image,
+then opens the external-support list (no default choice), requests administrative
+privileges through the normal terminal if needed, confirms the identity, writes,
+synchronizes, reads back and ejects. It uses the existing shared flash owner.
+
+`download` downloads an explicit release manifest and a single selected artifact,
+checks declared lengths and hashes, refuses credential-bearing/non-HTTPS URLs and
+HTTP downgrade redirects, and verifies the decompressed payload. There is no
+automatic discovery of a latest release: **no atome/eVe OS image has been published**
+and no functional public release URL is assumed. Tests use fixture responses,
+not a claim that an external release/download endpoint exists.
+
+```sh
+# Already built local image; prompts to select an external support:
+./scripts/aOS.sh prepare --manifest /path/to/result/manifest.json
+# Build on a provisioned backend, then choose and flash on the Mac:
+./scripts/aOS.sh prepare --target pine64-a64 --mode live --modules display,audio,midi \
+  --source-commit HEAD --backend arm64=build-arm64 --remote-root /path/to/a
+# Construct PC live and installation media on a matching FreeBSD backend:
+sudo ./scripts/aOS.sh build --target pc-amd64-uefi --mode live,installer --source-commit HEAD
+```
+
+A separate FAT/exFAT pre-format is unnecessary: writing the complete verified
+image installs its partition table and filesystems. No support is automatically
+chosen or erased. For the PINE64 A64+ 2 GB, use a microSD in a USB reader on the
+Mac, then insert the card in the board. The manufacturer's [board layout and
+storage specifications](https://pine64.org/documentation/Pine_A64/_full/) show the
+bootable microSD slot (12); [the official getting-started guide](https://pine64.org/documentation/Introduction/Getting_started/)
+requires a microSD reader and distinguishes A64+ from eMMC-capable LTS models.
+A plain USB-only boot chain is not established for this board.
+
 ## Verify and flash from macOS
 
 ```sh
@@ -109,7 +160,7 @@ sudo ./scripts/aOS.sh flash --manifest /path/to/result/manifest.json \
 ```
 
 Replace paths/device with an actual verified result and explicitly selected USB/SD.
-There is no automatic disk selection and no `--yes`. Discovery shows media and
+There is no automatic disk selection and no `--yes`. Omit `--device` to select from the external-support list without a preselected entry. Discovery shows media and
 volumes. Flash refuses internal/system/virtual/ambiguous disks; it requires an
 I/O Registry identity and sufficient capacity, stages the payload, asks for the
 exact device/capacity/connection identity, then rechecks before/after unmount and
@@ -117,8 +168,8 @@ before writing. It synchronizes and reads exactly the declared payload byte coun
 from offset zero, compares SHA256, and ejects only after success. Remaining bytes
 beyond the image are not compared. Disconnect/reconnect changes the registry identity.
 Interruption can leave an unusable support; reflash is required. Write/readback and
-physical media replacement remain untested on actual media. Internal installation
-is a separate unimplemented feature. Never flash qcow2/vmdk as raw media.
+physical media replacement remain untested on actual media. Internal installation is separate: an installer-mode image boots the native
+installation command described above; disk execution and recovery remain unvalidated. Never flash qcow2/vmdk as raw media.
 
 Manifests distinguish archive hash/size from decompressed payload hash/size,
 record provenance, packages and **unverified** VM/physical status. Verification
@@ -148,4 +199,4 @@ the initial manual system-update path; preserve user data separately before it.
 - Architecture: [docs/architecture.md](docs/architecture.md).
 - Target qualification and blockers: [docs/known_issues.md](docs/known_issues.md).
 - System choice: [docs/os_decision.md](docs/os_decision.md).
-- Regression command: `node --test tests/governance/aos_builder.test.mjs` from root.
+- Regression command: `node --test tests/governance/aos_builder.test.mjs tests/governance/aos_installation.test.mjs` from root.

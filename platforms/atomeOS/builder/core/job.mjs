@@ -1,10 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import { config, preflight, projectRoot } from './recipe.mjs';
-import { fetchVerified, finalize } from './artifacts.mjs';
+import { digest, fetchVerified, finalize } from './artifacts.mjs';
 import { prepareSources } from './source.mjs';
 
 async function main() {
@@ -21,11 +21,14 @@ async function main() {
     if (!check.ready) throw new Error(check.issues.join('\n'));
     const space = fs.statfsSync(work);
     const shared = fs.statSync(work).dev === fs.statSync(plan.output_dir).dev;
-    const needed = plan.image_bytes * (shared ? plan.formats.length + 2 : 2) + 3 * 1024 ** 3;
+    // Raw images are compressed directly from work.img; converted formats also
+    // need one temporary uncompressed conversion alongside completed archives.
+    const converted = plan.formats.some(format => !['img', 'raw'].includes(format));
+    const needed = plan.image_bytes * (shared ? 1 + plan.formats.length + Number(converted) : 1) + 3 * 1024 ** 3;
     if (space.bavail * space.bsize < needed) throw new Error(`Need at least ${needed} free bytes for work image, output and compression`);
     if (!shared) {
       const outputSpace = fs.statfsSync(plan.output_dir);
-      const outputNeeded = plan.image_bytes * plan.formats.length + 3 * 1024 ** 3;
+      const outputNeeded = plan.image_bytes * (plan.formats.length + Number(converted)) + 3 * 1024 ** 3;
       if (outputSpace.bavail * outputSpace.bsize < outputNeeded) throw new Error(`Artifact filesystem needs at least ${outputNeeded} free bytes`);
     }
   } else if (action === 'fetch') {
@@ -42,6 +45,18 @@ async function main() {
     fs.truncateSync(path.join(work, 'work.img'), plan.image_bytes);
   } else if (action === 'sources') {
     await prepareSources(plan, work);
+  } else if (action === 'installer-metadata') {
+    const directory = path.join(work, 'mnt/usr/local/share/aos-installer');
+    const file = path.join(directory, 'system.txz');
+    const contents = execFileSync('tar', ['-tf', file], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
+    const count = contents.trim().split('\n').length;
+    const used = Number(execFileSync('du', ['-skx', path.join(work, 'mnt')], { encoding: 'utf8' }).split(/\s+/)[0]);
+    if (!Number.isSafeInteger(used) || used < 1) throw new Error('Cannot measure the installation payload size');
+    const metadata = { schema: 1, product: 'atome/eVe OS installer', target: plan.target.id, arch: plan.target.arch,
+      release: plan.system.release, source: plan.source, modules: plan.modules, builder: plan.builder,
+      minimum_bytes: Math.max(13 * 1024 ** 3, used * 1024 + 3 * 1024 ** 3), ...await digest(file) };
+    fs.writeFileSync(path.join(directory, 'install.json'), `${JSON.stringify(metadata, null, 2)}\n`);
+    fs.writeFileSync(path.join(directory, 'MANIFEST'), `system.txz\t${metadata.sha256}\t${count}\tsystem\tatome/eVe\ton\n`);
   } else if (action === 'finalize') {
     const installed = fs.readFileSync(path.join(work, 'installed-packages.txt'), 'utf8').trim().split('\n');
     const base = JSON.parse(fs.readFileSync(path.join(work, 'base.json'), 'utf8'));

@@ -64,16 +64,19 @@ export function createPairingClient({ devices, approver, send, token, ensureSess
     }
     return {
         approveAvailable: () => approver.available(),
-        async createAccount({ deviceClass, platform = 'web', label = '', payment = { method: 'card' } } = {}) {
+        signupStatus: (invite) => request('signup-status', { invite: invite || undefined }),
+        // Mailed by the server from its own sender; `clientRef` makes a resend after a lost answer harmless.
+        createInvite: ({ email, clientRef, subject, fromName, text }) => authenticated('invite-create', { email, clientRef, subject, fromName, text }),
+        async createAccount({ deviceClass, platform = 'web', label = '', payment = { method: 'card' }, invite } = {}) {
             const scope = newScope();
             const device = await devices.forScope(scope);
             // A store sheet may stay open for minutes: buy before the 60 s challenge.
             const paid = await storePurchase.creationPayment(payment, device.keyId);
             const clientNonce = devices.randomHandle();
-            const pre = await request('account-create-challenge', { sessionKey: device.publicKey, clientNonce });
+            const pre = await request('account-create-challenge', { sessionKey: device.publicKey, clientNonce, invite });
             const signed = await device.sign(checkChallenge(pre.challenge, 'create-account', `create:${device.keyId}`));
             const approve = await registerApprove(pre.register, deviceClass, scope);
-            const result = await request('account-create', { sessionKey: device.publicKey, clientNonce, ...signed, connectionProof,
+            const result = await request('account-create', { sessionKey: device.publicKey, clientNonce, invite, ...signed, connectionProof,
                 approve: approve?.approve || null, deviceMeta: { platform, label }, deviceClass, payment: paid });
             return accept(result, scope, approve?.record, deviceClass);
         },

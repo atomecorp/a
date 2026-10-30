@@ -10,6 +10,7 @@ mod voice;
 use scheduled_backend::ScheduledContextBackend;
 use atome_mix_graph::voice::{ScheduledVoice, VoiceRequest, VoiceSound};
 use kira::sound::static_sound::{StaticSoundData, StaticSoundHandle, StaticSoundSettings};
+use kira::sound::PlaybackState;
 use kira::{AudioManager, AudioManagerSettings, Decibels, Frame, Panning, PlaybackRate, Tween};
 use std::collections::HashMap;
 use std::io::Cursor;
@@ -48,6 +49,7 @@ static ENGINE: once_cell::sync::Lazy<Mutex<Option<WasmAudioEngine>>> =
 
 fn create_audio_manager(mix: &atome_mix_graph::host::MixHost) -> Result<AudioManager<ScheduledContextBackend>, JsValue> {
     scheduled_backend::install_start_hook(start_due_voice);
+    scheduled_backend::install_sounding_hook(voices_sounding);
     scheduled_backend::install_aux_source(mix.aux_outputs());
     AudioManager::<ScheduledContextBackend>::new(AudioManagerSettings { main_track_builder: mix.main_track_builder(), ..Default::default() })
         .map_err(|e| JsValue::from_str(&format!("Failed to create AudioManager: {e}")))
@@ -261,6 +263,28 @@ pub fn audio_render_clock() -> js_sys::Object {
     scheduled_backend::render_clock()
 }
 
+/// A demand on the engine: asleep, it renders again; answers its context's
+/// resume then, nothing when it was awake.
+#[wasm_bindgen]
+pub fn audio_wake() -> Result<Option<js_sys::Promise>, JsValue> {
+    scheduled_backend::wake()
+}
+
+/// `owner` plays on the engine's context itself (`on`) or lets it go: held,
+/// the engine never sleeps.
+#[wasm_bindgen]
+pub fn audio_hold(owner: &str, on: bool) -> Result<Option<js_sys::Promise>, JsValue> {
+    scheduled_backend::hold(owner, on)
+}
+
+// Whether a started voice still plays (paused or stopped ones need no render).
+// The engine taken (a command under way) counts as playing.
+fn voices_sounding() -> bool {
+    let Ok(guard) = ENGINE.try_lock() else { return true };
+    guard.as_ref().is_some_and(|engine| engine.voices.values()
+        .any(|voice| !matches!(voice.handle.state(), PlaybackState::Stopped | PlaybackState::Paused)))
+}
+
 fn voice_sound(engine: &WasmAudioEngine, asset_id: &str, request: &VoiceRequest) -> Result<VoiceSound, JsValue> {
     let data = engine.clips.get(asset_id).map(|clip| clip.data.clone())
         .ok_or_else(|| JsValue::from_str(&format!("Clip '{asset_id}' not found")))?;
@@ -298,6 +322,7 @@ pub fn audio_play_instance(
     engine.mix.route_voice(voice_id, strip_id.as_deref());
     let sound = voice_sound(engine, asset_id, &request)?;
     scheduled_backend::cancel_scheduled(voice_id);
+    scheduled_backend::wake()?;
     start_voice(engine, voice_id, sound)?;
     // The rendered frame this voice starts on: every voice started before the
     // next render pump shares it.
@@ -321,6 +346,7 @@ pub fn audio_schedule_voices(voices: JsValue) -> Result<Vec<f64>, JsValue> {
             sounds.push(voice_sound(engine, &voice.asset_id, &voice.voice)?.controlled(&voice.voice_id));
         }
     }
+    scheduled_backend::wake()?;
     Ok(voices.iter().zip(sounds)
         .map(|(voice, sound)| scheduled_backend::schedule(&voice.voice_id, sound, voice.start_render_frame) as f64)
         .collect())

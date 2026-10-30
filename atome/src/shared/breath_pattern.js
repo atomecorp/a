@@ -13,6 +13,13 @@ export const BREATH_DEFAULT = 'coherence';
 export const BREATH_CUSTOM_DEFAULT = Object.freeze({ in: 5, hold: 2, out: 6, empty: 0 });
 export const BREATH_CUSTOM_RANGE = Object.freeze({ in: [1, 21], hold: [0, 21], out: [1, 21], empty: [0, 21] });
 export const KAPALABHATI = Object.freeze({ strokes: 30, free_s: 30 });
+// Cyclic hyperventilation can make one lose consciousness, above all in or near water (decision Q34, 30 Oct. 2026, study
+// todo/etude_sante_plaisir_thalasso_2026-10-22.md § Sécurité respiratoire): Kapalabhati stays, never proposed in a water
+// context (a Thalasso stay, a pool), its « i » saying its contraindications (pregnancy, epilepsy, heart, panic attacks).
+export const BREATH_WATER_UNSAFE = Object.freeze(['kapalabhati']);
+export const BREATH_INFO_KEYS = Object.freeze({ kapalabhati: 'eve.wellbeing.info.kapalabhati' });
+/** The breaths eVe proposes, in the roller's order: all of them, or those safe near water (`water`). */
+export const breathPatternIds = ({ water = false } = {}) => (water ? BREATH_PATTERN_IDS.filter(id => !BREATH_WATER_UNSAFE.includes(id)) : BREATH_PATTERN_IDS);
 
 export const breathCustom = (input) => {
     if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some(key => !BREATH_PHASES.includes(key))

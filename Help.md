@@ -25,3 +25,9 @@ Une entrée `{ id, context: 'project' | 'dashboard' | 'any', keywords: [...] }` 
 
 - Rediriger une question sans résultat vers l'assistant IA.
 - Compléter le catalogue au fil des fonctionnalités.
+
+## Accès depuis le dashboard
+
+Sur eVe Basic, l’outil Aide est dans le coin opposé à Atom. Quand Retour est présent, il occupe le coin et Aide se place juste à côté ; la bande est inversée pour un gaucher. Un toucher ouvre le panneau Aide et son champ de recherche. Dans les dashboards avec recherche, une saisie contenant « help » ou « aide » propose Aide en premier ; choisir ce résultat ouvre le même panneau.
+
+L’assistant et MCP peuvent consulter le même catalogue avec `help.search` ; `help.open` ouvre l’outil existant. Une consultation ne déclenche pas d’action sur les projets. Les articles dont le parcours reste à vérifier le signalent dans leur texte. L’inventaire de déclaration et ses limites figurent dans `eVe/documentations/HELP_CAPABILITY_INVENTORY.md`.

@@ -5,12 +5,18 @@ import WatchConnectivity
 import WatchKit
 import os.log
 
-// The wrist's raw motion during an eVe session, in the sensor recording format
-// (atome/documentations/sensor_recording_format.md). The iPhone (application/AppWatchSensorBridge.swift)
-// starts this app for a workout and names the session; a workout session keeps the app running and
-// unlocks the high-rate batched sensors (800 Hz accelerometer, 200 Hz device motion) where the watch has
-// them, else 100 Hz. Heart rate is the watch's own measurement (processed by the system). The workout is
-// discarded: the iPhone saves the session's workout. At the end the file is sent to the iPhone and removed here.
+// The watch's workout during an eVe session, started by the iPhone (application/AppWatchSensorBridge.swift) for two
+// uses that share it, the workout running while either asks for it:
+// - the heart rate of a training session ("workout" requests): the workout measures the heart at workout rate and
+//   each reading is sent at once to the iPhone (a live message), which shows it in the session;
+// - the wrist's raw motion ("sensors" requests), in the sensor recording format
+//   (atome/documentations/sensor_recording_format.md): the workout keeps the app running and unlocks the high-rate
+//   batched sensors (800 Hz accelerometer, 200 Hz device motion) where the watch has them, else 100 Hz; at the end
+//   the file is sent to the iPhone and removed here.
+// Heart rate is the watch's own measurement (processed by the system). The workout is discarded: the iPhone saves
+// the session's workout.
+// As the watch's one WCSession delegate it also hands the companion its model, its tiles, the iPhone's reach and the
+// assistant's voice (WatchLink.swift, WatchVoice.swift).
 final class WatchSensorSession: NSObject, WCSessionDelegate, HKWorkoutSessionDelegate, HKLiveWorkoutBuilderDelegate {
     static let shared = WatchSensorSession()
     private static let log = Logger(subsystem: "atome", category: "WatchSensors")
@@ -32,6 +38,8 @@ final class WatchSensorSession: NSObject, WCSessionDelegate, HKWorkoutSessionDel
     private var builder: HKLiveWorkoutBuilder?
     private var writer: SensorRecordingWriter?
     private var session: String?
+    // The training session the iPhone asked the heart rate for.
+    private var heartSession: String?
     private var directory = ""
     private var origin: TimeInterval = 0
     private var startedAt = Date()
@@ -50,6 +58,9 @@ final class WatchSensorSession: NSObject, WCSessionDelegate, HKWorkoutSessionDel
     // MARK: - iPhone requests
 
     private func received(_ message: [String: Any]) {
+        // The companion's screen model (WatchLink.swift).
+        if let model = message["link"] as? String { Task { @MainActor in WatchLink.shared.received(model: model) } }
+        if let request = message["workout"] as? [String: Any] { receivedWorkout(request) }
         guard let request = message["sensors"] as? [String: Any], let state = request["state"] as? String,
               let id = request["session"] as? String, !id.isEmpty, id.count <= 300 else { return }
         queue.addOperation {
@@ -63,10 +74,53 @@ final class WatchSensorSession: NSObject, WCSessionDelegate, HKWorkoutSessionDel
         }
     }
 
+    private func receivedWorkout(_ request: [String: Any]) {
+        guard let state = request["state"] as? String, let id = request["session"] as? String, !id.isEmpty, id.count <= 300 else { return }
+        queue.addOperation {
+            if state == "stop" {
+                guard id == self.heartSession else { return }
+                self.heartSession = nil
+                if self.session == nil { self.endWorkout() }
+                return
+            }
+            let at = (request["at"] as? NSNumber)?.int64Value ?? 0
+            guard state == "start", self.heartSession != id, Int64(Date().timeIntervalSince1970 * 1000) - at < Self.staleStartMs else { return }
+            self.heartSession = id
+            if self.session == nil { self.startedAt = Date() }
+            self.startWorkout()
+        }
+    }
+
     func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) { received(applicationContext) }
     func session(_ session: WCSession, didReceiveMessage message: [String: Any]) { received(message) }
     func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
         if activationState == .activated { received(session.receivedApplicationContext) }
+        let reachable = session.isReachable
+        Task { @MainActor in WatchLink.shared.reachabilityChanged(reachable) }
+    }
+
+    func sessionReachabilityDidChange(_ session: WCSession) {
+        let reachable = session.isReachable
+        Task { @MainActor in WatchLink.shared.reachabilityChanged(reachable) }
+    }
+
+    // The assistant's voice for this watch's speaker (WatchVoice.swift).
+    func session(_ session: WCSession, didReceiveMessageData messageData: Data) {
+        guard messageData.first == WatchVoice.voiceTag else { return }
+        WatchVoice.shared.play(messageData.dropFirst())
+    }
+
+    // The companion's tiles: kept before this returns (the received file is removed then), then read.
+    func session(_ session: WCSession, didReceive file: WCSessionFile) {
+        guard file.metadata?["link"] as? String == "catalog", let url = WatchLink.catalogURL else { return }
+        do {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if FileManager.default.fileExists(atPath: url.path) { try FileManager.default.removeItem(at: url) }
+            try FileManager.default.moveItem(at: file.fileURL, to: url)
+        } catch {
+            return Self.log.error("Watch catalog not kept: \(error.localizedDescription, privacy: .public)")
+        }
+        Task { @MainActor in WatchLink.shared.receivedCatalog() }
     }
 
     // The iPhone has the file: it is not kept here.
@@ -97,7 +151,7 @@ final class WatchSensorSession: NSObject, WCSessionDelegate, HKWorkoutSessionDel
 
     private func finish() {
         stopSensors()
-        endWorkout()
+        if heartSession == nil { endWorkout() }
         let writer = self.writer
         self.writer = nil
         session = nil
@@ -184,7 +238,7 @@ final class WatchSensorSession: NSObject, WCSessionDelegate, HKWorkoutSessionDel
             guard let self else { return }
             if let error { Self.log.error("Watch workout not authorized: \(error.localizedDescription, privacy: .public)") }
             self.queue.addOperation {
-                guard self.session != nil, self.workout == nil else { return }
+                guard self.session != nil || self.heartSession != nil, self.workout == nil else { return }
                 do {
                     let workout = try HKWorkoutSession(healthStore: self.store, configuration: self.configuration)
                     let builder = workout.associatedWorkoutBuilder()
@@ -218,8 +272,12 @@ final class WatchSensorSession: NSObject, WCSessionDelegate, HKWorkoutSessionDel
               let quantity = statistics.mostRecentQuantity(), let interval = statistics.mostRecentQuantityDateInterval() else { return }
         let bpm = quantity.doubleValue(for: HKUnit.count().unitDivided(by: .minute()))
         queue.addOperation {
-            let uptime = self.origin + interval.end.timeIntervalSince(self.startedAt)
-            self.write("heart_rate", uptime, [bpm])
+            if self.writer != nil { self.write("heart_rate", self.origin + interval.end.timeIntervalSince(self.startedAt), [bpm]) }
+            // Live to the iPhone while it asks for the heart rate; a reading missed while it is unreachable is not queued.
+            guard self.heartSession != nil, WCSession.default.isReachable else { return }
+            WCSession.default.sendMessage(["heart": ["bpm": bpm, "at": interval.end.timeIntervalSince1970 * 1000]], replyHandler: nil) { error in
+                Self.log.error("Watch heart rate not sent: \(error.localizedDescription, privacy: .public)")
+            }
         }
     }
 

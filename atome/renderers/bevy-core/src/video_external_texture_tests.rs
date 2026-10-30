@@ -23,7 +23,7 @@ pub(crate) fn video_node(id: &str) -> AtomeRenderNode {
         logical_position: [10.0, 20.0],
         logical_size: [160.0, 90.0],
         clip_rect: None,
-        clip_rotation: 0.0, clip_rounded_rects: vec![],
+        clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
         scale: [1.0, 1.0],
         rotation: 0.0,
         origin: [0.0, 0.0],
@@ -117,7 +117,7 @@ fn video_nodes_spawn_external_texture_mesh_without_bevy_image_copy_target() {
     assert_eq!(world.resource::<Assets<Mesh>>().len(), 1);
 }
 
-fn star_mask(width: f32, height: f32) -> AtomeMaskStyle {
+pub(crate) fn star_mask(width: f32, height: f32) -> AtomeMaskStyle {
     AtomeMaskStyle {
         source_id: "mask_star".to_string(),
         mode: "alpha".to_string(),
@@ -281,7 +281,7 @@ fn video_transform_resizes_external_texture_mesh_without_sprite_state() {
             logical_position: [30.0, 40.0],
             logical_size: [320.0, 180.0],
             clip_rect: None,
-            clip_rotation: 0.0, clip_rounded_rects: vec![],
+            clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
             scale: [1.0, 1.0],
             rotation: 0.0,
             origin: [0.0, 0.0],
@@ -309,7 +309,7 @@ fn video_translation_reuses_external_texture_mesh_asset() {
                 logical_position: [10.0 + step as f32, 20.0 + step as f32 * 2.0],
                 logical_size: [160.0, 90.0],
                 clip_rect: None,
-                clip_rotation: 0.0, clip_rounded_rects: vec![],
+                clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
                 scale: [1.0, 1.0],
                 rotation: 0.0,
                 origin: [0.0, 0.0],
@@ -343,7 +343,7 @@ fn selected_video_translation_reuses_overlay_entities_and_texture() {
             logical_position: [42.0, 57.0],
             logical_size: [160.0, 90.0],
             clip_rect: None,
-            clip_rotation: 0.0, clip_rounded_rects: vec![],
+            clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
             scale: [1.0, 1.0],
             rotation: 0.0,
             origin: [0.0, 0.0],
@@ -377,7 +377,7 @@ fn video_transform_preserves_external_texture_uv_rect() {
             logical_position: [30.0, 40.0],
             logical_size: [320.0, 180.0],
             clip_rect: None,
-            clip_rotation: 0.0, clip_rounded_rects: vec![],
+            clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
             scale: [1.0, 1.0],
             rotation: 0.0,
             origin: [0.0, 0.0],
@@ -410,7 +410,7 @@ fn video_transform_applies_scale_rotation_and_preserves_them_on_surface_resize()
             logical_position: [30.0, 40.0],
             logical_size: [320.0, 180.0],
             clip_rect: None,
-            clip_rotation: 0.0, clip_rounded_rects: vec![],
+            clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
             scale: [1.5, 0.75],
             rotation: 30.0,
             origin: [0.5, 0.5],

@@ -23,6 +23,9 @@ pub struct AtomeTransformPatch {
     pub clip_rotation: f32,
     #[serde(default)]
     pub clip_rounded_rects: Vec<[f32; 8]>,
+    /// The scroll areas' edge fades over the atom (`AtomeClipFades`).
+    #[serde(default)]
+    pub clip_fades: Vec<[f32; 7]>,
 }
 
 #[derive(Clone, Debug, Deserialize)]

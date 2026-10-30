@@ -23,6 +23,20 @@ export const LIFE_PROFILE_TYPE = Object.freeze({ type: LIFE_PROFILE_ATOME_TYPE, 
     access: { type: 'string', enum: ['private'] }, visibility: { type: 'string', enum: ['private'] }
 } });
 
+// An item the server keeps rather than an Atome (a forum, a network of Publier, R-014 of 30 Oct. 2026) is filed
+// by an Atome of the person's own, one per item, carrying its `profiles` like any other item.
+export const LIFE_PROFILE_FILING_ATOME_TYPE = 'life_profile_filing';
+export const LIFE_PROFILE_FILING_KINDS = Object.freeze(['forum', 'network']);
+export const LIFE_PROFILE_FILINGS_MAX = 1000;
+export const LIFE_PROFILE_FILING_TYPE = Object.freeze({ type: LIFE_PROFILE_FILING_ATOME_TYPE, kind: 'data_model', traits: ['data'], schema: {
+    item_kind: { type: 'string', enum: LIFE_PROFILE_FILING_KINDS },
+    // The forum's id (forum_contract.js), the network's destination id (publish_networks.js).
+    item_id: { type: 'string', minLength: 1, maxLength: 200 },
+    access: { type: 'string', enum: ['private'] }, visibility: { type: 'string', enum: ['private'] }
+} });
+// The filing's own id: one per item, the same on every device of the account.
+export const lifeProfileFilingId = (kind, itemId) => `${LIFE_PROFILE_FILING_ATOME_TYPE}_${kind}_${String(itemId).replace(/[^A-Za-z0-9_-]/g, '_')}`;
+
 // The profile ids an item carries (its `profiles` property), cleaned.
 export const lifeProfilesOf = (properties = {}) => (Array.isArray(properties?.profiles)
     ? [...new Set(properties.profiles.map(value => String(value || '').trim()).filter(Boolean))] : []);

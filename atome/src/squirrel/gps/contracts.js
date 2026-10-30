@@ -18,6 +18,7 @@ const definitions = {
     calculate_route: [{ trip_id: id, origin: GPS_POINT_SCHEMA }, ['trip_id'], 'Calculate and retain a Valhalla itinerary, without starting guidance.', true],
     set_favorite: [{ trip_id: id, favorite: { type: 'boolean' } }, ['trip_id', 'favorite'], 'Keep a private itinerary among the favourites, or take it out of them.', true],
     delete_trip: [{ trip_id: id }, ['trip_id'], 'Delete a private itinerary; the one being guided cannot be deleted (NAVIGATION_ALREADY_ACTIVE).', true],
+    duplicate_trip: [{ trip_id: id, request_id: id }, ['trip_id'], 'Copy a private itinerary into a new one: same name, places and calculated route, planned and not a favourite. Returns the copy.', true],
     preview: [{ trip_id: id }, ['trip_id'], 'Open a GPS itinerary on the current presentation surface. Does not start guidance.', false],
     new_trip: [{}, [], 'Open the itinerary creation surface without starting guidance or creating a durable trip.', false],
     start_navigation: [{ trip_id: id }, ['trip_id'], 'Start foreground/background guidance on this device, requesting location access. Refuses a second active trip.', true],
@@ -41,4 +42,4 @@ export const validateGpsInput = (action, input) => {
 };
 export const gpsError = error => GPS_ERRORS.includes(error?.code || error?.message || error)
     ? (error?.code || error?.message || error) : 'PROVIDER_UNAVAILABLE';
-export const GPS_ASSISTANT_INSTRUCTIONS = 'GPS: a request to go somewhere (« emmène-moi au 10 rue de Rivoli », « guide-moi jusqu\'à la gare de Lyon », « itinéraire pour Versailles ») calls gps.navigate_to with the destination in the user\'s words; say the returned place label, distance and duration. PLACE_NOT_FOUND or OUT_OF_COVERAGE means ask for a more precise address. NAVIGATION_ALREADY_ACTIVE means ask whether to stop the current guidance with gps.stop_navigation first, never stop it silently. « arrête le GPS », « stop le guidage » call gps.stop_navigation. Report guidance as started only when the result says ok.';
+export const GPS_ASSISTANT_INSTRUCTIONS = 'GPS: a request to go somewhere (« emmène-moi au 10 rue de Rivoli », « guide-moi jusqu\'à la gare de Lyon », « itinéraire pour Versailles ») calls gps.navigate_to with the destination in the user\'s words; say the returned place label, distance and duration. PLACE_NOT_FOUND or OUT_OF_COVERAGE means ask for a more precise address. NAVIGATION_ALREADY_ACTIVE means ask whether to stop the current guidance with gps.stop_navigation first, never stop it silently. « arrête le GPS », « stop le guidage » call gps.stop_navigation. « copie ce trajet », « duplique le trajet » call gps.duplicate_trip with the trip shown. Report guidance as started only when the result says ok.';

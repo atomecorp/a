@@ -12,6 +12,15 @@ if (location.hash.startsWith('#auth-link=')) {
     };
 }
 
+// The invitation of a closed sign-up (server/auth_invites.js), stripped the same way:
+// held in memory until the account creation of this page uses it.
+if (location.hash.startsWith('#invite=')) {
+    const match = /^#invite=([A-Za-z0-9_-]{43})$/.exec(location.hash);
+    const invite = match ? match[1] : '';
+    history.replaceState(history.state, '', location.pathname + location.search);
+    window.__ATOME_INVITE__ = function () { return invite; };
+}
+
 // Ensure global debug flag exists before any module scripts run.
 window.__CHECK_DEBUG__ = false;
 var __CHECK_DEBUG__ = window.__CHECK_DEBUG__;

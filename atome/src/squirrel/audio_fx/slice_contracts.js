@@ -46,10 +46,11 @@ const definitions = {
     edit_from_slices: [{ media_atome_id: media }, ['media_atome_id'],
         'Lay the edit as the slices, one piece each, so a slice can be removed, moved, duplicated, reversed, set apart (edit_apply with index).', true, 'write'],
     edit_apply: [{ media_atome_id: media, op: { type: 'string', enum: ['cut', 'copy', 'paste', 'silence', 'trim', 'fade_in', 'fade_out', 'reverse', 'gain', 'normalize',
-        'remove_dc', 'stretch', 'piece_remove', 'piece_move', 'piece_duplicate'] }, start: frame, end: frame, at: frame, gain_db: { type: 'number', minimum: -96, maximum: 48 },
+        'remove_dc', 'stretch', 'pitch', 'piece_remove', 'piece_move', 'piece_duplicate'] }, start: frame, end: frame, at: frame, gain_db: { type: 'number', minimum: -96, maximum: 48 },
+        semitones: { type: 'number', minimum: -24, maximum: 24 },
         target_db: { type: 'number', minimum: -60, maximum: 0 }, ratio: { type: 'number', minimum: 0.25, maximum: 4 }, index: { type: 'integer', minimum: 0 }, to: { type: 'integer', minimum: 0 } },
         ['media_atome_id', 'op'],
-        'A non-destructive edit of the sound: on the selection start..end (frames of the edit, before warp markers) cut, copy, silence, trim, fade_in, fade_out, reverse, gain (gain_db), normalize (to target_db, 0 unless given), remove_dc, stretch (ratio, pitch kept); paste at a frame; on a piece (index) piece_remove, piece_move (to), piece_duplicate. The source is never touched.', true, 'write'],
+        'A non-destructive edit of the sound: on the selection start..end (frames of the edit, before warp markers) cut, copy, silence, trim, fade_in, fade_out, reverse, gain (gain_db), normalize (to target_db, 0 unless given), remove_dc, stretch (ratio, pitch kept), pitch (semitones, length kept); paste at a frame; on a piece (index) piece_remove, piece_move (to), piece_duplicate. The source is never touched.', true, 'write'],
     edit_undo: [{ media_atome_id: media }, ['media_atome_id'], 'Undo the last change of this sound\'s slices or edit made in this session (the project\'s own undo).', true, 'write'],
     sample_analyze: [{ media_atome_id: media, what: { type: 'string', enum: ['end_silence', 'loop', 'root'] }, start: frame, end: frame, apply: { type: 'boolean' } },
         ['media_atome_id', 'what'],
@@ -72,5 +73,6 @@ export const SAMPLE_EDIT_COMMANDS = Object.freeze(Object.entries(definitions).ma
 export const SAMPLE_EDIT_ASSISTANT_INSTRUCTIONS = 'Slice tool and sample editor (any sound): « coupe cette boucle en 8 » calls audio_fx.slice_divide parts 8; '
     + '« redivise la deuxième partie en 4 » slice_divide slice 1 parts 4; « coupe aux attaques » audio_fx.slice_detect; « fais-en un kit » '
     + 'audio_fx.slices_to_keys on an instrument (audio_fx.instrument_create first if none); « dans les cellules » audio_fx.slices_to_cells with the project id; « en clip MIDI » audio_fx.slices_to_midi (the tempo first: '
-    + 'audio_fx.slice_tempo_set); « enlève le silence de la fin » audio_fx.sample_analyze what end_silence apply true; « fige-le » audio_fx.sample_freeze. '
+    + 'audio_fx.slice_tempo_set); « enlève le silence de la fin » audio_fx.sample_analyze what end_silence apply true; « fige-le » audio_fx.sample_freeze; '
+    + '« monte la sélection d\'un ton » audio_fx.edit_apply op pitch semitones 2 on its start..end; « coupe la sélection » op cut. '
     + 'Never invent a point_id or a slice index: read audio_fx.slice_read first.';

@@ -92,6 +92,7 @@ pub fn apply_resource(world: &mut World, patch: AtomeResourcePatch) -> Result<()
             clip_rect: world.get::<AtomeClipRect>(entity).and_then(|clip| clip.0),
             clip_rotation: world.get::<AtomeClipRotation>(entity).map(|value| value.0).unwrap_or(0.0),
             clip_rounded_rects: world.get::<AtomeClipRoundedRects>(entity).map(|value| value.0.clone()).unwrap_or_default(),
+            clip_fades: world.get::<AtomeClipFades>(entity).map(|value| value.0.clone()).unwrap_or_default(),
             scale: local_transform.scale,
             rotation: local_transform.rotation,
             origin: local_transform.origin,

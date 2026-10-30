@@ -82,6 +82,9 @@ const withDevice = (options = {}) => ({ ...describeThisDevice(), ...options });
 export const accountMethods = {
     approveKeyAvailable: () => pairingClient().approveAvailable(),
     createAccount: (options) => pairingClient().createAccount(withDevice(options)),
+    // A closed sign-up opens to an invitation (`#invite=` of its mail, taken at boot by early-init.js).
+    signupStatus: (invite) => pairingClient().signupStatus(invite),
+    createInvite: (fields) => pairingClient().createInvite(fields),
     // `apple` / `google` on the native iOS / Android apps, whose payment is the
     // store's in-app purchase; null where the Web payment applies.
     paymentStore: () => billingStorePurchase().store(),

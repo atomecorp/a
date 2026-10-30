@@ -1,4 +1,4 @@
-import { requestProviderService, decodeProviderBytes } from '../ai/provider_broker.js';
+import { requestProviderService, decodeProviderBytes, providerPrincipalReady } from '../ai/provider_broker.js';
 import { OPENAI_MODALITY_MODELS } from '../ai/model_catalog_registry.js';
 import { createVoiceSessionRuntime, normalizeLocalVoiceCommand } from './session_runtime.js';
 import { createVoiceOrchestrator } from './orchestrator.js';
@@ -21,6 +21,8 @@ import { resolveSpeechLocale } from './service_speech.js';
 import { resolveVoiceProviders } from './service_providers.js';
 import { startBrowserRecognition } from './service_browser_stt.js';
 import { startTauriRecognition } from './service_tauri_stt.js';
+import { startAssistantTranscription } from './service_assistant_stt.js';
+import { checkConnection } from '../apis/unified/adole_connection.js';
 import { createTtsRuntime } from './tts_runtime.js';
 import { createVoiceInputMeterRuntime } from './service_input_meter.js';
 import { createWakeRuntime } from './wake_runtime.js';
@@ -209,7 +211,10 @@ export const createVoiceService = ({
         runtimeContext,
         wake,
         startBrowserRecognition,
-        startTauriRecognition
+        startTauriRecognition,
+        startAssistantTranscription,
+        // The assistant can transcribe for this person: an account its provider accepts, and the device online.
+        transcriptionAvailable: async () => providerPrincipalReady() && await checkConnection('fastify')
     });
     // Stops whichever engine speaks for this session.
     const stopSpeech = async (sessionId, reason) => {

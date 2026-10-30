@@ -7,7 +7,9 @@ import { getTauriInvoke } from '../../application/audio_runtime/runtime_audio_ba
 const MODELS_ROOT = 'atome/src/assets/voice';
 const POLL_MS = 80;
 
-export const createNativeVoiceEngine = ({ env = globalThis, onEvent }) => {
+// `recording()`: the test mode (todo/refonte_assistant_vocal.md §18.7), sent with each read; while on,
+// each closed turn is followed by { type: 'take', pcm, cuts }, the samples the engine scored.
+export const createNativeVoiceEngine = ({ env = globalThis, onEvent, recording = () => false }) => {
     const invoke = getTauriInvoke(env);
     if (!invoke) throw new Error('voice_engine_native_unavailable');
     let timer = null, running = false, inputDb = null;
@@ -17,11 +19,12 @@ export const createNativeVoiceEngine = ({ env = globalThis, onEvent }) => {
         timer = null;
         if (!running) return;
         let read;
-        try { read = await invoke('audio_voice_read', {}); }
+        try { read = await invoke('audio_voice_read', { record: recording() }); }
         catch (error) { fail(String(error?.message || error)); return; }
         if (!running) return;
         inputDb = read?.input_db ?? null;
         for (const event of read?.events || []) onEvent(event);
+        for (const take of read?.takes || []) onEvent({ type: 'take', pcm: Float32Array.from(take.pcm), cuts: take.cuts });
         if (read?.overrun) onEvent({ type: 'error', code: 'voice_capture_overrun' });
         if (read?.active === false) { fail('voice_session_stopped'); return; }
         timer = env.setTimeout(poll, POLL_MS);

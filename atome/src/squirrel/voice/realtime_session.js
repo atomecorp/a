@@ -3,7 +3,9 @@ import { requestProviderService } from '../ai/provider_broker.js';
 import { OPENAI_MODALITY_MODELS, OPENAI_LIVE_VOICES } from '../ai/model_catalog_registry.js';
 import { getAudioPlaybackAPI } from '../../application/audio_runtime/audio_playback_api.js';
 import { openAiFailure } from '../ai/openai_stream.js';
+import { providerFailureCode } from '../ai/provider_client.js';
 import { createVoiceInputMeter } from './voice_input_meter.js';
+import { voiceRoute } from './voice_route.js';
 
 // GPT-Live accepts 8,192 tokens of starting history; tool results are dense JSON.
 const HISTORY_CHARACTERS = 20000;
@@ -29,6 +31,8 @@ export const createRealtimeSession = ({
     const outputVoice = voice ?? (OPENAI_LIVE_VOICES[language] || OPENAI_LIVE_VOICES.default);
     let peer = null, channel = null, stream = null, abort = null;
     let generation = 0, listening = false, remoteId = null;
+    // Who says her voice: this device's speaker, or the companion the conversation was opened on (voice_route.js), fixed as it starts.
+    let speaker = playback;
     let unsubscribeControl = () => {}, unsubscribeLifecycle = () => {};
     let toolSession = null, toolQueue = Promise.resolve(), pendingOpening = String(opening || ''), speakFirst = false;
     let state = { phase: 'closed', sessionId: null, error: '', connected: false };
@@ -145,7 +149,7 @@ export const createRealtimeSession = ({
         generation++; abort?.abort(); abort = null;
         unsubscribeLifecycle(); unsubscribeLifecycle = () => {};
         env.clearTimeout(idleTimer);
-        stopCapture(); stopOutputMeter(); toolSession = null; playback.stopStream({ id: state.sessionId });
+        stopCapture(); stopOutputMeter(); toolSession = null; speaker.stopStream({ id: state.sessionId });
         channel?.close(); peer?.close(); channel = null; peer = null;
         unsubscribeControl(); unsubscribeControl = () => {};
         const id = remoteId, recorded = usageSeconds; remoteId = null;
@@ -200,7 +204,7 @@ export const createRealtimeSession = ({
         const closing = close(), closedGeneration = generation;
         try { await closing; }
         catch { writeVoiceDiagnostic(env, 'voice.realtime.cleanup.failed', { error: 'realtime_cleanup_failed' }); }
-        if (closedGeneration === generation) emit({ phase: 'error', error: error.message });
+        if (closedGeneration === generation) emit({ phase: 'error', error: providerFailureCode(error) });
     };
     // Dispose the transport on text focus. A fresh generation on explicit
     // resume prevents delayed speech from submitting into a typed turn.
@@ -215,11 +219,12 @@ export const createRealtimeSession = ({
             peer.addTrack(input.track, new env.MediaStream([input.track]));
             emit({}); return true;
         }
-        const acquired = await env.navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, ...(deviceId ? { deviceId: { exact: deviceId } } : {}) } }).catch(error => {
+        const route = voiceRoute();
+        const acquired = await (route ? route.input() : env.navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, ...(deviceId ? { deviceId: { exact: deviceId } } : {}) } }).catch(error => {
             if (error.name === 'NotAllowedError') throw new Error('realtime_microphone_denied');
             if (error.name === 'NotFoundError') throw new Error('realtime_input_device_lost');
             throw error;
-        });
+        }));
         if (token !== generation || !listening) { acquired.getTracks().forEach(track => track.stop()); return false; }
         stream = acquired;
         if (announceReady) setInput(false);
@@ -286,10 +291,11 @@ export const createRealtimeSession = ({
             connection.ontrack = event => {
                 if (token !== generation) return;
                 const playbackId = state.sessionId;
-                void playback.playStream({ id: playbackId, stream: event.streams[0] })
+                speaker = voiceRoute()?.output || playback;
+                void speaker.playStream({ id: playbackId, stream: event.streams[0] })
                     .then(() => {
-                        if (token !== generation) playback.stopStream({ id: playbackId });
-                        else { playback.muteStream({ id: playbackId, muted: !listening }); meterOutput(event.streams[0], playbackId); }
+                        if (token !== generation) speaker.stopStream({ id: playbackId });
+                        else { speaker.muteStream({ id: playbackId, muted: !listening }); meterOutput(event.streams[0], playbackId); }
                     }).catch(failCurrent);
             };
             connection.onconnectionstatechange = () => {
@@ -329,9 +335,11 @@ export const createRealtimeSession = ({
             await connection.setRemoteDescription({ type: 'answer', sdp: answer.sdp });
         } catch (caught) {
             if (token !== generation) return;
-            // A 429 without a provider category (older relay) is still a known cause.
-            const error = !caught.provider_code && caught.http_status === 429
-                ? Object.assign(new Error('provider_rate_limited'), { http_status: 429 }) : caught;
+            // A 429 without a provider category (older relay) is still a known cause; the
+            // opener is told the same classified code as the session's own state.
+            const code = !caught.provider_code && caught.http_status === 429 ? 'provider_rate_limited' : providerFailureCode(caught);
+            const error = code === caught.message ? caught
+                : Object.assign(new Error(code), { http_status: caught.http_status, provider_code: caught.provider_code });
             await fail(error); throw error;
         }
     };

@@ -11,6 +11,7 @@ import { AUTH_LINK_ORIGIN, AUTH_ACCESS_TTL_SECONDS } from '../atome/src/shared/a
 import { attachWsApiClientToUser, detachWsApiClient, wsApiConnections } from './wsApiState.js';
 import { createCommunicationPush } from './communication_push.js';
 import { ACCOUNT_ACTIONS, ACCOUNT_PUBLIC_ERRORS, createWsAccountAuth } from './wsAccountAuth.js';
+import { createSystemMailer } from './system_mailer.js';
 import { getStorePurchases } from './billing/ws_billing_operations.js';
 
 const ACTIONS = new Set(['phone-link-start', 'phone-link-payment', 'phone-link-resend', 'phone-change-start', 'phone-link-challenge', 'phone-link-consume',
@@ -81,6 +82,7 @@ export function createWsPhoneLinkHandler({ projectRoot, jwtSecret, sendLink, dat
         billing: getStorePurchases()
     });
     accountAuth = createWsAccountAuth({ service, database, jwtSecret, disconnectSession, billing: getStorePurchases(),
+        mailer: createSystemMailer(), origin: process.env.ATOME_SITE_ORIGIN || 'https://atome.one',
         findById: (id) => findUserById(dataSource, id),
         // An account without phone, email or password: its first launch runs.
         createAccount: async () => {

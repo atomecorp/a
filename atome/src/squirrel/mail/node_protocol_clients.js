@@ -399,4 +399,6 @@ class NodeSmtpClient {
 }
 
 export const createNodeIcloudImapClient = async (config = {}) => new NodeImapClient(config);
-export const createNodeIcloudSmtpClient = async (config = {}) => new NodeSmtpClient(config);
+// The SMTP client is the protocol's, not iCloud's: the server's own sender uses it too (server/system_mailer.js).
+export const createNodeSmtpClient = async (config = {}) => new NodeSmtpClient(config);
+export const createNodeIcloudSmtpClient = createNodeSmtpClient;

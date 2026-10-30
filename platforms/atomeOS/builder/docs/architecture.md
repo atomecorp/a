@@ -17,10 +17,20 @@ The pre-existing audit `todo/atome OS Audit.md` remains the task record.
   conversion verification, provenance and machine-readable manifest.
 - `core/remote.mjs`: optional SSH dispatch to already-provisioned FreeBSD backends,
   recipe comparison and bounded artifact retrieval. Not a host installer.
+- `core/download.mjs`: explicit public-HTTPS manifest/artifact retrieval, bounded
+  size, redirect safety and archive/payload verification. `prepare` composes this
+  or a build/local manifest with the existing shared flash owner, including
+  interactive support selection. No release URL or published image is assumed.
 - `installer/sbc/flash.mjs`: shared macOS USB/SD discovery, confirmation, write,
   exact-length readback and ejection. Desktop boot media use this same owner.
 - `overlays/services/` and `overlays/ui/`: rc.d, unique first-boot identities,
   independently supervised real Fastify service and existing Cage/Cog candidate.
+- `scripts/configure_installer.sh`, `installer/desktop/install.mjs`: optional UEFI
+  installer-media packaging and one native installer entry point. Reuse
+  FreeBSD `bsdinstall` for destructive disk operations, preserving the same real
+  built application payload. The shared recipe records live/installer mode;
+  unsupported mode/target combinations fail explicitly. Native execution is not
+  validated by host tests.
 
 Fastify still serves atome/eVe through its canonical APIs. Bevy/WebGPU, Kira WASM,
 MIDI owners, persistence and commands remain in their existing framework owners.

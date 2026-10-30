@@ -16,9 +16,10 @@ import { VIDEO_AI_ERRORS } from './ai_video/service.js';
 import { handleSocialAction } from './social/social_operations.js';
 import { readSocialConfig } from './social/social_sessions.js';
 import { handleMusicAction, musicReceiptApi, musicCredentialProvider } from './music/music_operations.js';
+import { handleStravaAction } from './strava/strava_operations.js';
 
 const operations = new WeakMap();
-const SOCIAL_TIMEOUT_MS = Object.freeze({ models: 15000, 'music.await_connection': 11 * 60_000, 'social.connect.await': 11 * 60_000, 'social.publish': 20 * 60_000, 'social.status': 5 * 60_000 });
+const SOCIAL_TIMEOUT_MS = Object.freeze({ models: 15000, 'music.await_connection': 11 * 60_000, 'strava.await_connection': 11 * 60_000, 'social.connect.await': 11 * 60_000, 'social.publish': 20 * 60_000, 'social.status': 5 * 60_000 });
 const ROOT = 'https://api.openai.com/v1';
 const ROUTES = Object.freeze({
     models: ['GET', '/models'],
@@ -36,6 +37,7 @@ const ROUTES = Object.freeze({
     'skills.versions.content': ['GET', '/skills/:id/versions/:version/content']
 });
 
+const SHARED_CREDIT_FAILURES = new Set(['insufficient_quota', 'billing_hard_limit_reached', 'billing_not_active', 'provider_http_402']);
 const CATALOG_ACTIONS = new Set(['models', 'credential.status', 'secret.list', 'secret.read', 'secret.store', 'secret.remove']);
 const activeFor = (connection) => {
     if (!operations.has(connection)) {
@@ -199,8 +201,9 @@ export const handleWsAiProviderOperation = async (message, connection, {
             return reply(true, await vault.store(credentialProvider, candidate));
         }
         if (action === 'models') {
-            const key = credentialProvider === 'openai'
-                ? await vault.read('openai') || await sharedGrant.claim(principal, action) : message.payload?.key;
+            const ownKey = credentialProvider === 'openai' ? await vault.read('openai') : message.payload?.key;
+            entry.shared = credentialProvider === 'openai' && !ownKey;
+            const key = ownKey || (entry.shared ? await sharedGrant.claim(principal, action) : null);
             if (!key) throw new Error('no_ai_key_configured');
             const data = await listProviderModelCatalog({ provider: credentialProvider, key, fetchImpl, signal: controller.signal });
             if (resolvePrincipal(connection, message) !== principal) throw new Error('provider_principal_changed');
@@ -215,6 +218,14 @@ export const handleWsAiProviderOperation = async (message, connection, {
                 principal, vault, fetchImpl, signal: controller.signal, check,
                 idempotencyKey: String(message.payload?.idempotency_key || ''),
                 receiptApi: musicReceiptApi(connection, message.token, check) });
+            check(); return reply(true, { data });
+        }
+        if (action.startsWith('strava.')) {
+            const check = () => {
+                if (resolvePrincipal(connection, message) !== principal) throw new Error('provider_principal_changed');
+                controller.signal.throwIfAborted();
+            };
+            const data = await handleStravaAction(action, message.payload?.input || {}, { principal, vault, fetchImpl, signal: controller.signal, check });
             check(); return reply(true, { data });
         }
         if (action.startsWith('social.')) {
@@ -250,6 +261,7 @@ export const handleWsAiProviderOperation = async (message, connection, {
             return reply(true, vault.remove('openai'));
         }
         const ownKey = await vault.read('openai');
+        entry.shared = !ownKey;
         const key = ownKey || await sharedGrant.claim(principal, action);
         // Usage on the platform key is metered per seat; an own key is not.
         const recordUsage = response => (!ownKey && action === 'responses' ? sharedGrant.recordTokens(principal, response?.usage) : null);
@@ -318,8 +330,10 @@ export const handleWsAiProviderOperation = async (message, connection, {
         return reply(true, { data: hosted ? hosted.accept(data) : data });
     } catch (error) {
         const known = /^(?:provider_|social_|not_authenticated|no_ai_key_configured|invalid_api_key|insufficient_quota|rate_limit_exceeded)/;
-        const code = entry?.controller.signal.aborted ? 'provider_cancelled'
+        const failure = entry?.controller.signal.aborted ? 'provider_cancelled'
             : error.provider_code || (known.test(error.message) || AUDIO_AI_ERRORS.includes(error.message) || VIDEO_AI_ERRORS.includes(error.message) ? error.message : 'provider_operation_failed');
+        // A credit refusal on the platform key is eVe's shared credit, never the person's own key.
+        const code = entry?.shared && SHARED_CREDIT_FAILURES.has(failure) ? 'provider_shared_quota_exceeded' : failure;
         return reply(false, { error: code, http_status: error.http_status || error.httpStatus || null,
             ...(code.startsWith('social_') ? { detail: error.detail || null, provider_code: error.providerCode || null } : {}) });
     } finally {

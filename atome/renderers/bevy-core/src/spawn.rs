@@ -353,7 +353,7 @@ pub fn spawn_node_with_texture_handle(
                 .spawn((
                     node_base_components(&node, width, height, surface_width, surface_height),
                     NoAutomaticBatching,
-                    crate::media_window::AtomeMediaWindow { id: node.id.clone() },
+                    crate::media_window::AtomeMediaWindow { id: node.id.clone(), mask_texture: None },
                 ))
                 .id();
             insert_video_quad_mesh(world, entity, [width, height], [0.0, 0.0, 1.0, 1.0])?;
@@ -423,7 +423,12 @@ pub fn spawn_node_with_texture_handle(
         AtomeClipRect(node.clip_rect),
         AtomeClipRotation(node.clip_rotation),
         AtomeClipRoundedRects(node.clip_rounded_rects),
+        AtomeClipFades(node.clip_fades),
     ));
+    // The cut-out takes the Atome's shape once its radii are on the entity.
+    if node.kind == "media_window" {
+        crate::media_window::refresh_media_window_mask(world, entity, &node.id)?;
+    }
     if let Some(source_rect) = world.get::<Sprite>(entity).map(|sprite| sprite.rect) {
         world.entity_mut(entity).insert(AtomeSpriteSourceRect(source_rect));
     }

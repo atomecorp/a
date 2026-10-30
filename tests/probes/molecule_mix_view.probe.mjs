@@ -1,11 +1,16 @@
 // Mixer view on a real Molecule session (kernel + session, no browser):
 // strip projection, node contract, and every gesture's canonical operation.
 import assert from 'node:assert/strict';
-import test, { after } from 'node:test';
+import test from 'node:test';
 
 const listeners = { addEventListener() {}, removeEventListener() {}, dispatchEvent() { return true; } };
 globalThis.window = { ...listeners };
-globalThis.localStorage = globalThis.localStorage || { getItem: () => null, setItem() {}, removeItem() {} };
+globalThis.window.Atome = {
+    listStateCurrent: async (_project, options) => { assert.equal(options.atomeType, 'instrument'); return []; },
+    commit: async () => { throw new Error('unexpected_instrument_fixture_write'); }
+};
+Object.defineProperty(globalThis, 'localStorage', { configurable: true,
+    value: { getItem: () => null, setItem() {}, removeItem() {} } });
 
 const { addClip, addTrack, createTimeline, readMixStrip } = await import('../../eVe/intuition/tools/molecule/kernel/index.js');
 const { createMoleculeSession } = await import('../../eVe/intuition/tools/molecule/session/index.js');
@@ -13,8 +18,6 @@ const { SUPPORTED_KINDS, INTERACTIVE_KINDS } = await import('../../eVe/domains/r
 const { createProjectViewMoleculeMixContent } = await import('../../eVe/domains/rendering/project_view_molecule_mix_content.js');
 
 const OWNER = 'molecule_mixview';
-// The MIDI port service keeps browser-style listeners alive; the probe ends here.
-after(() => setImmediate(() => process.exit(process.exitCode || 0)));
 const flatten = (node, parent = null) => [{ ...node, parent }, ...(node?.children || []).flatMap((child) => flatten(child, node))];
 
 const fixture = () => {
@@ -107,20 +110,24 @@ test('tap, swipe, hold-move, hold-delete, + and OUT map to canonical operations'
     await send('tile.activate', { stripId: 'voice:audio', target: fx });
     const folded = flatten(build());
     assert.ok(width(folded) < openW && film(folded) < openX, 'folded, the strip narrows and its neighbour comes back');
-    // Short swipe left (no hold): bypass; right: back on.
+    // Rule 20: a short drag opens the panel; the same drag closes it.
     for (const [type, event] of [['press', at(10, 10)], ['drag', at(-40, 12)], ['release', at(-40, 12)]]) {
         await send(`tile.${type}`, { stripId: 'voice:audio', target: fx, event });
     }
-    assert.equal(strip('voice:audio').chain[2].bypass, true);
-    calls.tailState = 1;
+    assert.equal(content.readState().strips.find(strip => strip.strip_id === 'voice:audio').selection, fx);
+    assert.equal(strip('voice:audio').chain[2].bypass, false, 'opening a panel does not change the switch');
     for (const [type, event] of [['press', at(10, 10)], ['drag', at(-40, 12)], ['release', at(-40, 12)]]) {
         await send(`tile.${type}`, { stripId: 'voice:audio', target: fx, event });
     }
-    assert.deepEqual(calls.cut, [fx], 'a second left swipe during the tail cuts it');
-    for (const [type, event] of [['press', at(10, 10)], ['drag', at(50, 12)], ['release', at(50, 12)]]) {
-        await send(`tile.${type}`, { stripId: 'voice:audio', target: fx, event });
-    }
+    assert.equal(content.readState().strips.find(strip => strip.strip_id === 'voice:audio').selection, '');
+    await send('tile.activate', { stripId: 'voice:audio', target: fx });
+    assert.equal(strip('voice:audio').chain[2].bypass, true, 'a touch turns the effect off');
+    await send('tile.activate', { stripId: 'voice:audio', target: fx });
     assert.equal(strip('voice:audio').chain[2].bypass, false);
+    calls.tailState = 1;
+    await send('tile.activate', { stripId: 'voice:audio', target: fx });
+    assert.deepEqual(calls.cut, [fx], 'a touch while the tail drains cuts it');
+    calls.tailState = 0;
     // Hold then move up two rows: the effect goes first, nothing else changes.
     await send('tile.press', { stripId: 'voice:audio', target: fx, event: at(20, 20) });
     await send('tile.long_press', { stripId: 'voice:audio', target: fx, event: at(20, 20) });

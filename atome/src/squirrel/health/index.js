@@ -8,6 +8,7 @@ import { getSessionState } from '../apis/unified/adole_api/session.js';
 import { createHealthChannel, resolveNativeHealthInvoke } from './health_channel.js';
 import { createHealthOwner } from './health_owner.js';
 import { createHealthDeclarations } from './health_declarations.js';
+import { createHealthImports } from './health_imports.js';
 import { createHealthFeeling } from './health_feeling.js';
 import { createSensorConsent } from './health_sensor_consent.js';
 import { createSensorBackup } from './sensor_backup.js';
@@ -58,9 +59,11 @@ const store = {
     },
     commit: (event) => env.Atome.commit(event, { refreshState: true, realtimeBroadcast: true })
 };
-// What the person declares (a glass of water) joins what the store measured; how they feel is theirs too (#health_feeling.js);
-// the raw motion is recorded only with the person's agreement (#health_sensor_consent.js).
-const declared = createHealthDeclarations({ owner: measuredOwner, actor: getCurrentUserId, store });
+// What the person declares (a glass of water) and the activities a connected service measured (#health_imports.js, Strava)
+// join what the store measured; how they feel is theirs too (#health_feeling.js); the raw motion is recorded only with the
+// person's agreement (#health_sensor_consent.js).
+const imported = createHealthImports({ owner: measuredOwner, actor: getCurrentUserId, store });
+const declared = createHealthDeclarations({ owner: imported, actor: getCurrentUserId, store });
 // The copies go to the account vault (/ws/api file operations), encrypted with the account's backup keys.
 // Imported lazily: this module is evaluated in the boot wave, before the auth owner and the adapters.
 const backup = createSensorBackup({ sensors: measuredOwner.sensors, store, actor: getCurrentUserId,

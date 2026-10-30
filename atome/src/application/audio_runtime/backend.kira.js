@@ -189,8 +189,9 @@ import { createKiraLiveMethods } from './kira_live_methods.js';
       return prewarmWasmModule();
     },
 
+    // The touch that plays also wakes an engine asleep (BUG-068).
     unlock() {
-      return ensureRuntimeMode({ audioManager: true });
+      return ensureRuntimeMode({ audioManager: true }).then(function () { return backend.wake(); });
     },
 
     async init() {
@@ -391,14 +392,16 @@ import { createKiraLiveMethods } from './kira_live_methods.js';
     // The real inputs and outputs a strip can use. Web: the destination's
     // channels and the browser's audio inputs; native: the engine's devices.
     mix_output_devices() {
-      if (mode !== 'wasm') return invoke('audio_mix_devices', {}).then(function (r) { return (r && r.devices) || { outputs: [], inputs: [] }; });
-      var context = wasm && wasmAudioManagerReady ? wasm.audio_shared_context() : null;
-      var outputs = context ? [{ id: 'default', name: '', channels: Number(context.destination.maxChannelCount) || 2, isDefault: true }] : [];
-      var media = window.navigator && window.navigator.mediaDevices;
-      if (!media || typeof media.enumerateDevices !== 'function') return Promise.resolve({ outputs: outputs, inputs: [] });
-      return media.enumerateDevices().then(function (devices) {
-        return { outputs: outputs, inputs: devices.filter(function (device) { return device.kind === 'audioinput'; })
-          .map(function (device) { return { id: device.deviceId || 'default', name: device.label || '', channels: 2 }; }) };
+      return ensureRuntimeMode({ audioManager: false }).then(function () {
+        if (mode !== 'wasm') return invoke('audio_mix_devices', {}).then(function (r) { return (r && r.devices) || { outputs: [], inputs: [] }; });
+        var context = wasm && wasmAudioManagerReady ? wasm.audio_shared_context() : null;
+        var outputs = context ? [{ id: 'default', name: '', channels: Number(context.destination.maxChannelCount) || 2, isDefault: true }] : [];
+        var media = window.navigator && window.navigator.mediaDevices;
+        if (!media || typeof media.enumerateDevices !== 'function') return Promise.resolve({ outputs: outputs, inputs: [] });
+        return media.enumerateDevices().then(function (devices) {
+          return { outputs: outputs, inputs: devices.filter(function (device) { return device.kind === 'audioinput'; })
+            .map(function (device) { return { id: device.deviceId || 'default', name: device.label || '', channels: 2 }; }) };
+        });
       });
     },
 
@@ -467,7 +470,8 @@ import { createKiraLiveMethods } from './kira_live_methods.js';
     },
 
     ...clipMeta.methods,
-    ...createKiraLiveMethods({ invoke, ensureRuntimeMode, readWasm: () => (mode === 'wasm' ? wasm : null) }),
+    ...createKiraLiveMethods({ invoke, ensureRuntimeMode, readWasm: () => (mode === 'wasm' ? wasm : null),
+      readEngine: () => (mode === 'wasm' && wasmAudioManagerReady ? wasm : null) }),
 
     dispatch_batch(batch) {
       for (var i = 0; i < batch.length; i++) {

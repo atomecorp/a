@@ -178,7 +178,7 @@ export function createHealthOwner({
 
     // Associates this device's health store with the local principal (account
     // or guest), on this device, without syncing the association. Called when health
-    // monitors are shown (selector opened, monitor displayed).
+    // monitors are shown (selector opened, monitor displayed) or an activity session is prepared (#health_workout.js).
     const link = async () => {
         const ctx = context();
         const reply = await call('health_link', {}, ctx);
@@ -461,7 +461,7 @@ export function createHealthOwner({
         },
         subscribe,
         readHistory,
-        workout: createHealthWorkoutRecorder({ call, context, loadLinkStatus, describe }),
+        workout: createHealthWorkoutRecorder({ call, context, loadLinkStatus, describe, link }),
         mindful: createHealthMindfulRecorder({ call, context, loadLinkStatus, describe }),
         sensors: createHealthSensorRecorder({ call, context, describe }),
         refresh: (ids) => scheduleRead(ids || Array.from(consumers.keys())),

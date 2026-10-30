@@ -154,7 +154,8 @@ test('every sidebar object, activity and mastery level omits redundant actions w
    }
   }
  }
- assert.ok(keys({type:'project',level:'advanced'}, 'sidebar').includes('record_actions'));
+ // « Gestes » (`container_record`) reaches the project rail through the Natural rail, never a second sidebar key.
+ assert.ok(!keys({type:'project',level:'advanced'}, 'sidebar').includes('record_actions'));
  for (const tool of CONTEXT_MENUS.vocabulary.tools) {
   assert.deepEqual(keys({type:'tool',tool,level:'advanced'}, 'sidebar').filter(key => removed.includes(key)), []);
  }
