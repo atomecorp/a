@@ -24,8 +24,9 @@ test('TV composes shared input, ignores inherited filters, filters without reque
     runtime.state.selectedTags = ['health']; runtime.state.family = 'music';
     await runtime.applyToolContext({ owner: 'tv', scope: 'tv', query: '', lockScope: true,
         source: { load: async () => { loads++; return tvRows; }, activate: () => { activates++; return { ok: true }; }, onClose: () => closes++ } });
-    const nodes = draw(); expect(nodes.some(node => node.id === 'finder_query')).toBe(true);
-    expect(runtime.readState()).toMatchObject({ scopeChipsVisible: false, tagsVisible: false, conditionsVisible: false, canTransfer: false });
+    // R-007: the field lies in the panel's band, the tool's list alone (no scopes, no Filtre).
+    draw(); expect(runtime.surface.buildBandTools(runtime.readState(), { emit() {} }).map(item => item.key)).toEqual(['finder_query']);
+    expect(runtime.readState()).toMatchObject({ scopeChipsVisible: false, filterVisible: false, canTransfer: false });
     expect(runtime.readState().records).toHaveLength(2);
     await runtime.handleEvent({ type: 'finder.query.field.focus', key: 'query' });
     type('fr2'); expect(runtime.readState().records.map(row => row.id)).toEqual(['france2']);

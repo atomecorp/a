@@ -52,16 +52,23 @@ pub(super) fn should_enqueue_sync(sync_target: &Option<String>, sync_source: &Op
     }
 }
 
+/// Atomes kept on this device only, never sent: UI tool state (`tool.ui.` / `tool_ui.`) and the
+/// `device:` namespace of `atome/src/shared/device_scope_contract.js` (the health profile, Q70).
+pub(super) fn is_device_local_atome_id(atome_id: &str) -> bool {
+    let atome_id = atome_id.to_ascii_lowercase();
+    atome_id.starts_with("tool.ui.") || atome_id.starts_with("tool_ui.") || atome_id.starts_with("device:")
+}
+
 pub(super) fn is_syncable_event(event: &EventRecord) -> bool {
-    let atome_id = event.atome_id.as_deref().unwrap_or("").to_ascii_lowercase();
-    !atome_id.starts_with("tool.ui.") && !atome_id.starts_with("tool_ui.")
+    !is_device_local_atome_id(event.atome_id.as_deref().unwrap_or(""))
 }
 
 fn prune_local_only_queue(db: &Connection) -> Result<usize, String> {
     db.execute(
         "DELETE FROM sync_queue
          WHERE lower(COALESCE(atome_id, '')) LIKE 'tool.ui.%'
-            OR lower(COALESCE(atome_id, '')) LIKE 'tool_ui.%'",
+            OR lower(COALESCE(atome_id, '')) LIKE 'tool_ui.%'
+            OR lower(COALESCE(atome_id, '')) LIKE 'device:%'",
         [],
     )
     .map_err(|error| error.to_string())

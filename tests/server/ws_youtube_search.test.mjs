@@ -3,12 +3,17 @@ import assert from 'node:assert/strict';
 import { handleWsYoutubeSearch } from '../../server/ws_youtube_search.js';
 
 test('YouTube search requests videos only and returns bounded Finder data', async () => {
-    let requested;
+    let requested, lengths;
     const response = await handleWsYoutubeSearch({
         type: 'youtube-search', requestId: 'search-1', query: '  music  ', pageToken: 'next-page'
     }, 'finder-test-1', {
         apiKey: 'private-test-key', now: Date.parse('2026-10-01T00:00:00Z'),
         fetchResource: async (url) => {
+            // The page's lengths come from one `videos` read after the search.
+            if (new URL(url).pathname.endsWith('/videos')) {
+                lengths = new URL(url);
+                return { ok: true, json: async () => ({ items: [{ id: 'dQw4w9WgXcQ', contentDetails: { duration: 'PT3M32S' } }] }) };
+            }
             requested = new URL(url);
             return { ok: true, json: async () => ({
                 items: [{ id: { videoId: 'dQw4w9WgXcQ' }, snippet: {
@@ -23,12 +28,14 @@ test('YouTube search requests videos only and returns bounded Finder data', asyn
     assert.equal(requested.searchParams.get('videoSyndicated'), 'true');
     assert.equal(requested.searchParams.get('q'), 'music');
     assert.equal(requested.searchParams.get('pageToken'), 'next-page');
-    assert.equal(requested.searchParams.get('maxResults'), '10');
+    assert.equal(requested.searchParams.get('maxResults'), '25');
+    assert.equal(lengths.searchParams.get('id'), 'dQw4w9WgXcQ');
+    assert.equal(lengths.searchParams.get('part'), 'contentDetails');
     assert.equal(response.requestId, 'search-1');
     assert.equal(response.results.length, 1);
     assert.deepEqual(response.results[0], {
         videoId: 'dQw4w9WgXcQ', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-        title: 'Video title', thumbnail: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/mqdefault.jpg', channel: 'Channel'
+        title: 'Video title', thumbnail: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/mqdefault.jpg', channel: 'Channel', duration: 212
     });
     assert.equal(response.nextPageToken, 'after-this');
     assert.equal(JSON.stringify(response).includes('private-test-key'), false);

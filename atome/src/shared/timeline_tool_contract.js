@@ -110,5 +110,7 @@ export const TIMELINE_TOOL_SCHEMAS = Object.freeze({
     }, ['strip_id', 'module_id', 'param']),
     'history.undo': closed({ group_id: groupId }),
     'history.redo': closed({ group_id: groupId }),
-    'performance.delete': closed({ group_id: groupId })
+    'performance.delete': closed({ group_id: groupId }),
+    // « Réalig »: a project's timeline laid again in its List order (the current project when omitted).
+    realign: closed({ project_id: id })
 });

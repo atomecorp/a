@@ -14,11 +14,31 @@ struct Pcm {
 }
 struct Capture {
     stop: mpsc::Sender<()>,
-    thread: std::thread::JoinHandle<()>,
+    thread: Option<std::thread::JoinHandle<()>>,
     pcm: Arc<Mutex<Pcm>>,
+    stopping: Arc<AtomicBool>,
 }
 static FOREGROUND: AtomicBool = AtomicBool::new(true);
 static CAPTURE: Mutex<Option<Capture>> = Mutex::new(None);
+
+impl Capture {
+    fn request_stop(&self) {
+        self.stopping.store(true, Ordering::SeqCst);
+        let _ = self.stop.send(());
+    }
+}
+
+fn capture_owner() -> Result<std::sync::MutexGuard<'static, Option<Capture>>, String> {
+    let mut owner = CAPTURE.lock().map_err(|_| "wake_capture_failed")?;
+    if owner.as_ref().and_then(|capture| capture.thread.as_ref()).is_some_and(|thread| thread.is_finished()) {
+        if let Some(mut capture) = owner.take() {
+            if let Some(thread) = capture.thread.take() {
+                thread.join().map_err(|_| "wake_capture_failed")?;
+            }
+        }
+    }
+    Ok(owner)
+}
 
 fn stream<T: SizedSample + Sample + Send + 'static>(
     device: &cpal::Device, config: &StreamConfig, pcm: Arc<Mutex<Pcm>>,
@@ -50,57 +70,92 @@ where f32: FromSample<T> {
 
 pub fn set_foreground(value: bool) -> Result<(), String> {
     FOREGROUND.store(value, Ordering::SeqCst);
-    if !value { stop()?; }
+    // Native window events must never wait on device acquisition or disposal.
+    // The existing stream-owning thread closes it after this cancellation.
+    if !value {
+        if let Some(capture) = capture_owner()?.as_ref() { capture.request_stop(); }
+    }
     Ok(())
 }
 
 pub fn start(sample_rate: u32) -> Result<Value, String> {
+    start_with(sample_rate, |input| {
+        let device = cpal::default_host().default_input_device().ok_or("microphone_unavailable")?;
+        let supported = device.default_input_config().map_err(|_| "wake_capture_failed")?;
+        if supported.sample_rate().0 < 16000 { return Err("wake_sample_rate_unsupported".into()); }
+        let config: StreamConfig = supported.clone().into();
+        let capture = match supported.sample_format() {
+            SampleFormat::F32 => stream::<f32>(&device, &config, input),
+            SampleFormat::I16 => stream::<i16>(&device, &config, input),
+            SampleFormat::U16 => stream::<u16>(&device, &config, input),
+            _ => Err("wake_sample_format_unsupported".into()),
+        }?;
+        capture.play().map_err(|_| "wake_capture_failed")?;
+        Ok(capture)
+    })
+}
+
+// Acquisition belongs to the platform; reservation, cancellation and disposal
+// belong to this same capture owner, independently of the resource it opens.
+fn start_with<C: 'static>(sample_rate: u32, open: impl FnOnce(Arc<Mutex<Pcm>>) -> Result<C, String> + Send + 'static) -> Result<Value, String> {
     if sample_rate != 16000 { return Err("wake_sample_rate_unsupported".into()); }
-    let mut owner = CAPTURE.lock().map_err(|_| "wake_capture_failed")?;
+    let mut owner = capture_owner()?;
     if owner.is_some() || !FOREGROUND.load(Ordering::SeqCst) || super::recorder::has_active_sessions() { return Err("wake_capture_busy".into()); }
     let pcm = Arc::new(Mutex::new(Pcm::default()));
     let input = pcm.clone();
-    let (stop, stopped) = mpsc::channel();
+    let (stop_signal, stopped) = mpsc::channel();
     let (ready, initialized) = mpsc::channel();
+    let stopping = Arc::new(AtomicBool::new(false));
+    let cancelled = stopping.clone();
     let thread = crate::engine_thread::spawn(move || {
-        let open = || -> Result<Stream, String> {
-            let device = cpal::default_host().default_input_device().ok_or("microphone_unavailable")?;
-            let supported = device.default_input_config().map_err(|_| "wake_capture_failed")?;
-            if supported.sample_rate().0 < 16000 { return Err("wake_sample_rate_unsupported".into()); }
-            let config: StreamConfig = supported.clone().into();
-            let capture = match supported.sample_format() {
-                SampleFormat::F32 => stream::<f32>(&device, &config, input),
-                SampleFormat::I16 => stream::<i16>(&device, &config, input),
-                SampleFormat::U16 => stream::<u16>(&device, &config, input),
-                _ => Err("wake_sample_format_unsupported".into()),
-            }?;
-            capture.play().map_err(|_| "wake_capture_failed")?;
-            Ok(capture)
-        };
-        match open() {
-            Ok(capture) => { let _ = ready.send(Ok(())); let _ = stopped.recv(); drop(capture); }
+        match open(input) {
+            Ok(capture) => {
+                let _ = ready.send(Ok(()));
+                if !cancelled.load(Ordering::SeqCst) { let _ = stopped.recv(); }
+                drop(capture);
+            }
             Err(error) => { let _ = ready.send(Err(error)); }
         }
     });
-    match initialized.recv().map_err(|_| "wake_capture_failed")? {
-        Ok(()) => { *owner = Some(Capture { stop, thread, pcm }); Ok(json!({"active":true,"sample_rate":16000})) }
-        Err(error) => { let _ = thread.join(); Err(error) }
+    // Reserve the sole owner before releasing its lock; a slow driver never
+    // holds that lock, and another start cannot open a competing stream.
+    *owner = Some(Capture { stop: stop_signal, thread: Some(thread), pcm, stopping: stopping.clone() });
+    drop(owner);
+    match initialized.recv().map_err(|_| "wake_capture_failed".to_string()) {
+        Ok(Ok(())) if !stopping.load(Ordering::SeqCst) => Ok(json!({"active":true,"sample_rate":16000})),
+        result => {
+            stop_owned(Some(&stopping))?;
+            Err(match result { Ok(Err(error)) | Err(error) => error, _ => "wake_capture_busy".into() })
+        }
     }
 }
 
 pub fn stop() -> Result<Value, String> {
-    let capture = CAPTURE.lock().map_err(|_| "wake_capture_failed")?.take();
-    if let Some(capture) = capture {
-        let _ = capture.stop.send(());
-        capture.thread.join().map_err(|_| "wake_capture_failed")?;
-    }
+    stop_owned(None)
+}
+
+fn stop_owned(expected: Option<&Arc<AtomicBool>>) -> Result<Value, String> {
+    let thread = {
+        let mut owner = capture_owner()?;
+        let Some(capture) = owner.as_mut() else { return Ok(json!({"active":false})); };
+        if expected.is_some_and(|expected| !Arc::ptr_eq(expected, &capture.stopping)) {
+            return Ok(json!({"active":false}));
+        }
+        capture.request_stop();
+        capture.thread.take().ok_or("wake_capture_busy")?
+    };
+    let joined = thread.join();
+    // Keep the reservation through disposal; a concurrent start stays busy.
+    *CAPTURE.lock().map_err(|_| "wake_capture_failed")? = None;
+    joined.map_err(|_| "wake_capture_failed")?;
     Ok(json!({"active":false}))
 }
 
 /// The PCM captured since the last call and whether it overran; None when no capture runs.
 pub(crate) fn take_samples() -> Result<Option<(Vec<i16>, bool)>, String> {
-    let owner = CAPTURE.lock().map_err(|_| "wake_capture_failed")?;
+    let owner = capture_owner()?;
     let Some(capture) = owner.as_ref() else { return Ok(None) };
+    if capture.stopping.load(Ordering::SeqCst) { return Ok(None); }
     let mut pcm = capture.pcm.lock().map_err(|_| "wake_capture_failed")?;
     if pcm.failed { return Err("wake_capture_failed".into()); }
     Ok(Some((std::mem::take(&mut pcm.samples), std::mem::take(&mut pcm.overrun))))
@@ -108,7 +163,11 @@ pub(crate) fn take_samples() -> Result<Option<(Vec<i16>, bool)>, String> {
 
 pub fn read() -> Result<Value, String> {
     match take_samples()? {
-        None => Ok(json!({"active":false,"samples":[],"busy":!FOREGROUND.load(Ordering::SeqCst) || super::recorder::has_active_sessions()})),
+        None => Ok(json!({"active":false,"samples":[],"busy":!FOREGROUND.load(Ordering::SeqCst) || capture_owner()?.is_some() || super::recorder::has_active_sessions()})),
         Some((samples, overrun)) => Ok(json!({"active":true,"samples":samples,"overrun":overrun})),
     }
 }
+
+#[cfg(test)]
+#[path = "../../../../tests/native/wake_capture_lifecycle.rs"]
+mod tests;

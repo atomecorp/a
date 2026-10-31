@@ -4,7 +4,7 @@ const panels = vi.hoisted(() => ({ state: { mounted: new Map(), geometryBySurfac
 vi.mock('../../eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js', () => ({ bevyPanelRuntimeState: panels.state }));
 vi.mock('../../eVe/domains/rendering/project_view_records.js', () => ({ currentProjectId: () => 'project' }));
 vi.mock('../../eVe/domains/rendering/surface_runtime.js', () => ({ setRenderSurfaceInteractionInterceptorLayer: () => null }));
-vi.mock('../../eVe/domains/rendering/project_scene_runtime.js', () => ({ updateProjectSceneRecordByAtomeId: async () => {}, updateProjectSceneRecords: async () => {}, readProjectSceneAtomClientPlacement: () => null }));
+vi.mock('../../eVe/domains/rendering/project_scene_runtime.js', () => ({ updateProjectSceneRecordByAtomeId: async () => {}, updateProjectSceneRecords: async () => {}, readProjectSceneAtomClientPlacement: () => null, readProjectSceneMediaWindowStandIn: () => '' }));
 vi.mock('../../eVe/core/atome_commit.js', () => ({ getStateCurrent: async () => null }));
 vi.mock('../../eVe/intuition/tools/tv_catalog_client.js', () => ({ readTvChannelsById: async () => [], resolveTvYoutubeLive: async () => '' }));
 import { createTvInPlacePlayer } from '../../eVe/intuition/tools/tv_inplace_player.js';

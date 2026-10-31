@@ -294,8 +294,9 @@ tour sourd (un tour ouvert qui ne rend rien alors qu'une phrase a été dite).
   chemin actuel pendant la refonte. Leur avenir (transcription par l'assistant connecté ?) est à arbitrer
   par l'utilisateur ; tant qu'elles existent, `tauri-plugin-stt` et `SFSpeech` restent pour elles seules.
   **Arbitré le 30 oct. 2026 (R-013 Q12, « reco partout »)** : la dictée libre (`purpose: 'dictation'`) passe par la
-  transcription de l'assistant connecté quand l'appareil est en ligne (`checkConnection('fastify')`, le signal de
-  l'assistant), par la reconnaissance du système sinon ; une seule décision par dictée
+  transcription de l'assistant connecté quand il peut servir la personne (compte accepté par le fournisseur,
+  `providerPrincipalReady`, et appareil en ligne, `checkConnection('fastify')`), par la reconnaissance du système sinon
+  (hors ligne, invité) ; une seule décision par dictée
   (`service_stt_runtime.js#routeOf`, `service_assistant_stt.js`), jamais de relais de l'une à l'autre. Les deux
   reconnaissances du système restent (hors ligne, tours de l'assistant, permission micro d'Android) : rien retiré.
 - L'assistant connecté (OpenAI Realtime) et l'IA choisie dans les préférences (Anthropic…).

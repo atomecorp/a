@@ -63,10 +63,16 @@ fn tool_ui_records_are_device_local_and_pruned_from_the_remote_queue() {
         INSERT INTO sync_queue (atome_id, payload, target_server, status, attempts, max_attempts, created_at)
         VALUES ('tool_ui.home.panel', '{}', 'fastify', 'pending', 0, 5, datetime('now'));
         INSERT INTO sync_queue (atome_id, payload, target_server, status, attempts, max_attempts, created_at)
-        VALUES ('project-user', '{}', 'fastify', 'pending', 0, 5, datetime('now'));",
+        VALUES ('project-user', '{}', 'fastify', 'pending', 0, 5, datetime('now'));
+        INSERT INTO sync_queue (atome_id, payload, target_server, status, attempts, max_attempts, created_at)
+        VALUES ('device:health_profile:local-user', '{}', 'fastify', 'pending', 0, 5, datetime('now'));",
     )
     .expect("queue fixtures");
-    assert_eq!(prune_local_only_queue(&db), Ok(1));
+    assert!(!is_syncable_event(&EventRecord {
+        atome_id: Some("Device:program_preference:local-user:allergies".to_string()),
+        ..event.clone()
+    }));
+    assert_eq!(prune_local_only_queue(&db), Ok(2));
     let remaining: String = db
         .query_row("SELECT atome_id FROM sync_queue", [], |row| row.get(0))
         .expect("remaining sync item");

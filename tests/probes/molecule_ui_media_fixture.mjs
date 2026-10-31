@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { assert, awaitBevyUiNodeTarget, clickCanvasTarget, visibleMenuTool, wait, waitFor, waitForStableScene } from "./molecule_ui_acceptance_support.mjs";
+import { awaitMysticItemTarget } from './molecule_ui_mystic_target.mjs';
 
 export const FIXTURES = Object.freeze({
     video: path.resolve(process.env.MOLECULE_UI_VIDEO_FIXTURE || "tests/fixtures/media/Jeezs's fire.m4v"),
@@ -86,10 +87,10 @@ const openBackgroundMystic = async (page, projectId) => {
             const mystic = await import('/eVe/intuition/mystic/index.js');
             return { ok: mystic.isMysticMenuOpen?.() === true };
         }, null, 4000).catch(() => ({ ok: false }));
-        await wait(300);
         const ids = opened.ok ? await mysticItemTargets(page) : [];
-        const importId = ids.find((id) => /_item_import_\d+$/.test(id));
-        if (importId) return importId;
+        const importTarget = opened.ok ? await awaitMysticItemTarget(page, 'import', { timeoutMs: 4000 })
+            .catch(() => null) : null;
+        if (importTarget) return importTarget.id;
         tried.push({ point, ids });
         await page.evaluate(async () => (await import('/eVe/intuition/mystic/index.js')).closeMysticMenu?.());
     }
@@ -102,12 +103,39 @@ const openBackgroundMystic = async (page, projectId) => {
 export const importThroughMenu = async ({ page, projectId, filePath, expectedKind }) => {
     const before = new Set((await readRecords(page, projectId)).map((record) => record.id));
     await dismissMainPalette(page, projectId);
+    // Prepare the project's context, independently of the previously imported
+    // Atome's contextual rail; the import itself still uses real menu gestures.
+    await page.evaluate(async () => (await import('/eVe/intuition/runtime/selection.js')).clearAllSelection());
+    await waitFor(page, async () => {
+        const ids = (await import('/eVe/intuition/runtime/selection.js')).getCurrentSelectionIds();
+        return { ok: ids.length === 0, ids };
+    });
     const importItemId = await openBackgroundMystic(page, projectId);
     const importItem = await awaitBevyUiNodeTarget(page, { nodeId: importItemId, treeId: 'eve_bevy_ui_mystic' });
     assert(importItem, `mystic_import_item_not_actionable:${importItemId}`);
     await clickCanvasTarget(page, importItem);
-    const external = await awaitBevyUiNodeTarget(page, { nodeId: 'media_import_system', treeId: 'eve_bevy_panel_media' });
-    assert(external, 'media_panel_external_door_missing');
+    const external = await awaitBevyUiNodeTarget(page, { nodeId: 'eve_bevy_panel_media_footer_media_import_system', treeId: 'eve_bevy_panel_media' });
+    if (!external) {
+        const snapshot = await page.evaluate(async () => {
+            const trees = window.eveBevyUiRuntime?.state?.trees;
+            const ids = [];
+            const visit = node => { if (!node) return; if (/media|footer/.test(String(node.id))) ids.push(String(node.id)); (node.children || []).forEach(visit); };
+            for (const entry of trees?.values?.() || []) visit(entry.tree?.root);
+            const { readMediaPanelHost } = await import('/eVe/intuition/tools/media_panel_host.js');
+            const { bevyPanelRuntimeState } = await import('/eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js');
+            const { isPanelSurfaceOpen } = await import('/eVe/intuition/runtime/panel_api.js');
+            return { trees: [...(trees?.keys?.() || [])], ids, workspace: window.__eveWorkspaceMode,
+                dashboardMediaHostRegistered: !!readMediaPanelHost(), mountedPanels: [...bevyPanelRuntimeState.mounted.keys()],
+                panelApiOpen: isPanelSurfaceOpen('media'),
+                routing: (window.atome?.tools?.gatewayRoutingLog || []).filter(entry => entry.tool_id === 'ui.media.panel').slice(-12),
+                media: window.__eveMedia?.readState?.() };
+        });
+        const directory = path.resolve('temp/probe_reports/media_import_diagnostics');
+        fs.mkdirSync(directory, { recursive: true });
+        const screenshot = path.join(directory, `missing_external_${Date.now()}.png`);
+        await page.screenshot({ path: screenshot });
+        throw new Error(`media_panel_external_door_missing:${JSON.stringify({ ...snapshot, screenshot })}`);
+    }
     // What the import did, for the failure message: requests and console.
     const trail = [];
     const onResponse = (response) => { if (!/\.(js|mjs|css|png|svg|wasm|json)(\?|$)/.test(response.url())) trail.push(`${response.status()} ${response.request().method()} ${response.url().slice(-90)}`); };
@@ -137,11 +165,19 @@ export const importThroughMenu = async ({ page, projectId, filePath, expectedKin
             sw_registration: await navigator.serviceWorker?.getRegistration?.().then((registration) => registration ? {
                 installing: registration.installing?.state || null, waiting: registration.waiting?.state || null, active: registration.active?.state || null
             } : 'none').catch((error) => String(error)) };
-    }, { pid: projectId, known: [...before], kind: expectedKind }, 45000).catch((error) => {
-        throw new Error(`${error.message}:trail:${JSON.stringify(trail.slice(-40))}`);
+    }, { pid: projectId, known: [...before], kind: expectedKind }, 45000).catch(async (error) => {
+        const mediaState = await page.evaluate(() => window.__eveMedia?.readState?.());
+        const directory = path.resolve('temp/probe_reports/media_import_diagnostics');
+        fs.mkdirSync(directory, { recursive: true });
+        const screenshot = path.join(directory, `import_timeout_${Date.now()}.png`);
+        await page.screenshot({ path: screenshot });
+        throw new Error(`${error.message}:media:${JSON.stringify(mediaState)}:screenshot:${screenshot}:trail:${JSON.stringify(trail.slice(-40))}`);
     }).finally(() => {
         page.off('response', onResponse); page.off('requestfailed', onFailed); page.off('console', onConsole);
     });
+    await waitFor(page, async () => ({
+        ok: !(await import('/eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js')).bevyPanelRuntimeState.mounted.has('media')
+    }));
     await waitForStableScene(page, projectId);
     return imported.id;
 };

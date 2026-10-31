@@ -12,7 +12,7 @@ const scene = vi.hoisted(() => ({ reprojected: [], records: [] }));
 vi.mock('../../eVe/domains/rendering/project_scene_runtime.js', () => ({
     updateProjectSceneRecordByAtomeId: async ({ atomeId }) => { scene.reprojected.push(atomeId); },
     updateProjectSceneRecords: async (input) => { scene.records.push(input); },
-    readProjectSceneAtomClientPlacement: () => null
+    readProjectSceneAtomClientPlacement: () => null, readProjectSceneMediaWindowStandIn: () => ''
 }));
 import { isInPlaceMediaWindowOpen } from '../../eVe/domains/media/inplace_media_window.js';
 import { getSelectedProjectMediaPlayback, stopSelectedProjectMediaPlayback } from '../../eVe/domains/media/selected_project_media_playback_state.js';

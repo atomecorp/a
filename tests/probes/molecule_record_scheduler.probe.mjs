@@ -61,3 +61,43 @@ test('natural transport schedules armed regions, starts inside a region immediat
     await futureStop.callback();
     assert.deepEqual(stops, ['capture_inside', 'capture_future']);
 });
+
+test('a late capture from an old session is cancelled after the same group restarts', async () => {
+    const timers = new Set(), cancelled = [], stopped = [];
+    const scheduler = createMoleculeRecordScheduler({ schedule: fn => { timers.add(fn); return fn; },
+        cancelSchedule: fn => timers.delete(fn) });
+    const timeline = { timebase: { sample_rate: 1000 }, record_regions: [{ record_region_id: 'voice',
+        track_id: 'voice', source_kind: 'audio', start_frame: 0, duration_frames: 1000, armed: true }] };
+    let finishOld;
+    await scheduler.start({ groupId: 'same_group', timeline,
+        startCapture: () => new Promise(resolve => { finishOld = resolve; }),
+        stopCapture: async id => stopped.push(id), cancelCapture: async id => cancelled.push(id) });
+    await scheduler.stop('same_group');
+    await scheduler.start({ groupId: 'same_group', timeline,
+        startCapture: async () => ({ capture_id: 'new_capture' }),
+        stopCapture: async id => stopped.push(id), cancelCapture: async id => cancelled.push(id) });
+    await new Promise(resolve => setImmediate(resolve));
+    finishOld({ capture_id: 'old_capture' });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(cancelled, ['old_capture']);
+    assert.equal(timers.size, 1, 'only the current capture owns a stop timer');
+    await scheduler.stop('same_group');
+    assert.deepEqual(stopped, ['new_capture']);
+    assert.equal(timers.size, 0);
+});
+
+test('an already queued old launch cannot enter a replacement group session', async () => {
+    const timers = [], started = [];
+    const scheduler = createMoleculeRecordScheduler({ schedule: fn => { timers.push(fn); return fn; }, cancelSchedule() {} });
+    const region = { record_region_id: 'voice', track_id: 'voice', source_kind: 'audio', start_frame: 1000, duration_frames: 1000, armed: true };
+    const input = { groupId: 'same_group', timeline: { timebase: { sample_rate: 1000 }, record_regions: [region] },
+        startCapture: async () => { started.push('capture'); return { capture_id: 'capture' }; },
+        stopCapture: async () => {}, cancelCapture: async () => {} };
+    await scheduler.start(input);
+    const oldLaunch = timers[0];
+    await scheduler.start(input);
+    oldLaunch();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(started, []);
+    await scheduler.stop('same_group');
+});

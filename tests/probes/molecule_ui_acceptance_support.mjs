@@ -457,9 +457,9 @@ export const clickCanvasTarget = async (page, target, { double = false } = {}) =
     if (!pointStillTargetsNode
         || point.x < bounds.x || point.x > bounds.x + bounds.width
         || point.y < bounds.y || point.y > bounds.y + bounds.height) {
-        const refreshed = await findBevyUiNodeTarget(page, {
+        const refreshed = await awaitBevyUiNodeTarget(page, {
             nodeId: expectedNodeId, treeId: expectedTreeId, step: 2
-        });
+        }, { timeoutMs: 4000 });
         if (!refreshed) {
             const evidence = await page.evaluate(async ({ x, y }) => {
                 const surface = document.getElementById('eve_surface_project');

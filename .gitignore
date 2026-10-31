@@ -96,6 +96,7 @@ tests/server/*
 !tests/server/sync_event_schema.probe.mjs
 !tests/server/sync_sharing_service.probe.mjs
 !tests/server/user_vault_provider.probe.mjs
+!tests/server/user_vault_idle.probe.mjs
 !tests/server/ws_sync_replay_runtime.probe.mjs
 !tests/server/ws_sync_runtime.test.mjs
 !tests/shared/
@@ -400,6 +401,7 @@ eve/application
 !tests/native/
 tests/native/*
 !tests/native/auth_development_request.rs
+!tests/native/wake_capture_lifecycle.rs
 !tests/governance/build_cache_retention.test.mjs
 !tests/eve/workspace_surface_preference_contract.test.mjs
 

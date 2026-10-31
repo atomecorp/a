@@ -53,6 +53,7 @@ export class UserVaultProvider {
             || path.join(unixSocketBase, `atome-vault-${process.pid}`)
         );
         this.timeoutMs = Math.max(1000, Number(options.timeoutMs) || 10_000);
+        this.idleMs = Math.max(1, Number(options.idleMs) || 180_000);
         this.children = new Map();
         fs.mkdirSync(this.root, { recursive: true, mode: 0o700 });
         fs.mkdirSync(this.socketRoot, { recursive: true, mode: 0o700 });
@@ -62,7 +63,11 @@ export class UserVaultProvider {
         const id = String(principalId || '').trim();
         if (!id) throw new Error('vault_principal_required');
         const existing = this.children.get(id);
-        if (existing?.ready === true && existing.child.exitCode == null) return existing;
+        if (existing?.stopping) { await existing.stopping; return this.ensure(id); }
+        if (existing?.ready === true && existing.child.exitCode == null) {
+            this.scheduleIdle(existing);
+            return existing;
+        }
         if (existing?.startPromise && existing.child.exitCode == null) {
             await existing.startPromise;
             return existing;
@@ -98,26 +103,46 @@ export class UserVaultProvider {
         });
         await record.startPromise;
         record.startPromise = null;
+        this.scheduleIdle(record);
         return record;
+    }
+
+    scheduleIdle(record) {
+        clearTimeout(record.idleTimer);
+        if (record.requests || record.stopping) return;
+        record.idleTimer = setTimeout(() => {
+            // A new request clears this timer before opening its IPC socket.
+            if (!record.requests && this.children.get(record.principalId) === record) {
+                void this.stop(record.principalId);
+            }
+        }, this.idleMs);
+        record.idleTimer.unref();
     }
 
     async request(principalId, operation, payload = {}) {
         const record = await this.ensure(principalId);
-        return requestSocket({
+        clearTimeout(record.idleTimer);
+        record.requests = (record.requests || 0) + 1;
+        try { return await requestSocket({
             socketPath: record.socketPath,
             secret: record.secret,
             operation,
             payload,
             timeoutMs: this.timeoutMs
-        });
+        }); } finally {
+            record.requests -= 1;
+            if (this.children.get(record.principalId) === record) this.scheduleIdle(record);
+        }
     }
 
     async stop(principalId) {
         const id = String(principalId || '').trim();
         const record = this.children.get(id);
         if (!record) return;
-        this.children.delete(id);
-        if (record.child.exitCode == null) {
+        if (record.stopping) return record.stopping;
+        clearTimeout(record.idleTimer);
+        record.stopping = (async () => {
+          if (record.child.exitCode == null) {
             await new Promise((resolve) => {
                 let settled = false;
                 const finish = () => {
@@ -134,7 +159,10 @@ export class UserVaultProvider {
                 record.child.once('exit', finish);
                 record.child.kill('SIGTERM');
             });
-        }
+          }
+          if (this.children.get(id) === record) this.children.delete(id);
+        })();
+        return record.stopping;
     }
 
     async stopAll() {

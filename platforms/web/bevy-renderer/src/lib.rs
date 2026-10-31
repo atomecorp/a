@@ -236,7 +236,7 @@ fn queue_web_ops(ops: Vec<AtomeRenderOp>) {
         diagnostics.merged_style_ops += merged_ops;
         diagnostics.max_queue_depth = diagnostics.max_queue_depth.max(queue_depth);
     });
-    wake_web_renderer();
+    request_web_redraw();
 }
 
 fn queue_web_ui_ops(ops: Vec<AtomeUiOp>) {

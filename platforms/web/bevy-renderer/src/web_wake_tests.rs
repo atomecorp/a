@@ -98,6 +98,7 @@ fn web_update_systems_do_not_emit_recursive_wakes_after_export_wake() {
     assert_eq!(diagnostics.wake_calls, 1);
     assert_eq!(diagnostics.queued_ops, 2);
     assert_eq!(diagnostics.drained_ops, 2);
+    assert_eq!(diagnostics.redraw_applied, 1, "scene mutations must acknowledge their rendering update to the JS presentation waiter");
     assert_eq!(
         app.world()
             .resource::<Messages<RequestRedraw>>()
@@ -106,6 +107,8 @@ fn web_update_systems_do_not_emit_recursive_wakes_after_export_wake() {
         0,
         "a drain is rendered by the update that drains it"
     );
+    app.update();
+    assert_eq!(read_web_renderer_diagnostics().redraw_applied, 1, "an empty update must not acknowledge a second presentation");
 }
 
 #[test]

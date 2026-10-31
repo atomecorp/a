@@ -1,6 +1,7 @@
 import { extractEventPatch, eventDeletedPropertyKeys, eventExpectedPropertyVersions, assertIdempotentEventReplay } from '../../../../shared/adole_event_contract.js';
 import { personalProfileFromProperties } from '../../../../shared/profile_sharing.js';
 import { sanitizeAtomeProperties } from '../../../../shared/atome_contract.js';
+import { isDeviceAtomeId } from '../../../../shared/device_scope_contract.js';
 import { mapStateCurrentToAtome } from './atome_record_projection.js';
 // Installation-scoped browser guest persistence. This is the only local guest
 // authority and keeps append-only events separate from projected current state.
@@ -119,7 +120,7 @@ export async function commitWorkspaceEvents(ownerId, inputs, { actorType = 'user
                                 if (!patch) {
                                     if (!event.kind.startsWith('gesture_')) throw new Error('workspace_event_invalid');
                                     log.add({ ...event, key: eventKey });
-                                    tx.objectStore(STORE_QUEUE).add({ key: eventKey, owner_id: String(ownerId), operation: 'commit', payload: event, created_at: event.ts });
+                                    if (!isDeviceAtomeId(event.atome_id)) tx.objectStore(STORE_QUEUE).add({ key: eventKey, owner_id: String(ownerId), operation: 'commit', payload: event, created_at: event.ts });
                                     next(index + 1); return;
                                 }
                                 const requestedOwner = event.owner_id || patch.owner_id || patch.ownerId;
@@ -148,7 +149,8 @@ export async function commitWorkspaceEvents(ownerId, inputs, { actorType = 'user
                                 log.add({ ...event, key: eventKey });
                                 tx.objectStore(STORE_SNAPSHOTS).put({ key: eventKey, owner_id: String(ownerId), atome_id: event.atome_id,
                                     project_id: record.project_id, snapshot_data: JSON.stringify(record), actor: event.actor, created_by: String(ownerId), created_at: event.ts });
-                                tx.objectStore(STORE_QUEUE).add({ key: eventKey, owner_id: String(ownerId), operation: 'commit', payload: event, created_at: event.ts });
+                                // A `device:` atome stays on this device: it is stored and logged, never queued for the server.
+                                if (!isDeviceAtomeId(event.atome_id)) tx.objectStore(STORE_QUEUE).add({ key: eventKey, owner_id: String(ownerId), operation: 'commit', payload: event, created_at: event.ts });
                                 next(index + 1);
                             } catch (error) { failure = error; tx.abort(); }
                         };
@@ -223,7 +225,8 @@ export async function guestAdoptionPayload(ownerId, targetOwner = null) {
         listGuestFiles(ownerId)
     ]);
     const profileRecord = atomes.find(record => record.atome_id === String(ownerId));
-    const workspaceAtomes = atomes.filter(record => !['user', 'guest_workspace'].includes(record.atome_type));
+    // A `device:` atome is never adopted by the account: it stays in this browser (completeBrowserGuestAdoption rebinds it).
+    const workspaceAtomes = atomes.filter(record => !['user', 'guest_workspace'].includes(record.atome_type) && !isDeviceAtomeId(record.atome_id));
     const ids = new Set(workspaceAtomes.map(record => record.atome_id));
     return rebindGuestMedia({
         ...(profileRecord ? { profile: personalProfileFromProperties(profileRecord.properties) } : {}),

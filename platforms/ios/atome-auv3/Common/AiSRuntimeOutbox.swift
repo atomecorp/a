@@ -63,7 +63,10 @@ extension AiSRuntime {
     static func enqueueSyncEvent(_ db: OpaquePointer?, event: [String: Any]) throws {
         let id = stringValue(event["id"]), atomeId = stringValue(event["atome_id"])
         guard !id.isEmpty, !atomeId.isEmpty else { return }
-        guard !atomeId.lowercased().hasPrefix("tool.ui."), !atomeId.lowercased().hasPrefix("tool_ui.") else { return }
+        // Device-local atomes are never sent: UI tool state and the `device:` namespace
+        // (atome/src/shared/device_scope_contract.js, the health profile).
+        let localId = atomeId.lowercased()
+        guard !localId.hasPrefix("tool.ui."), !localId.hasPrefix("tool_ui."), !localId.hasPrefix("device:") else { return }
         try execute(db, """
             INSERT OR IGNORE INTO sync_queue (event_id, atome_id, operation, payload, target_server, status)
             VALUES (?, ?, 'events:commit', ?, 'fastify', 'pending')

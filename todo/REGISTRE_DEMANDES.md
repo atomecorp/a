@@ -19,8 +19,16 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 
 ## Entrées à exécuter
 
+### R-106 — Complete atome/eVe optimization campaign
+- Statut : EN COURS (2026-10-31) — current chat, campaign `temp/optimisation_2026-10-30T12-40-47-959Z/`.
+- User request and approval: optimize performance, memory retention and package size across Web, Tauri and iOS without losing functionality; continue automatically. Latest device instruction: « fais tout ce que tu peux faire sans l'ipad et des mo,n retour je le reconnecte ».
+- Validated complete lots: preservation, physical-device control and reference installation (3/8; 37% complete, 63% remaining). Implementation and partial tests do not count as accepted whole lots.
+- Verified evidence and source ownership: campaign `WORK_LOG.md`, `campaign.json`, persistent lifecycle/virtualization/package/native tests, and runtime campaign entry in `eVe/documentations/FRAMEWORK_STATE.md`. No Git write or push is authorized by this task.
+- Remaining: finish subsystem audit, optimized runtime/endurance and before/after acceptance on Web/Tauri, physical iPad acceptance after reconnect, final checks/cleanup and measured delivery report. Web endurance was interrupted after170 cycles/1,724,631ms, before final acceptance; a fresh full run is active. Latest Release Tauri builds at535.33MiB but its blank startup is under diagnosis; compilation is not acceptance.
+- Device work is explicitly deferred by the user. Earlier questions asking for USB reconnect and permission to dismiss a real alarm are unanswered; no device action or indirect dismissal while deferred. Continue independent work.
+
 ### R-001 — Calendrier : refonte du panneau Rendez-vous
-- Statut : EN COURS (2026-10-30, soir) — réponse « Oui, reco partout » : Q2 (trois calendriers au départ) ; Q1 et Q60 : état actuel gardé.
+- Statut : FAIT (2026-10-30, soir) — Q2 codée (Perso, Pro, Sport au départ, `temp/reco_small/r001_default_calendars.probe.mjs` 8/8 relancée par le registre) ; Q1 et Q60 : état actuel gardé (ta réponse « reco partout »). Restent non vérifiés : AlarmKit sur appareil, visio à l'heure, Tauri, iOS.
 - Source : ta demande du 2026-10-27, 12 h 15 (session `77572327`, « Alors, je suis allé dans rendez-vous… »).
   La session s'est arrêtée à 14 h 05 sur la question 2 sur 3, sans réponse ; rien n'a été codé.
 - Validé par toi : maquettes `temp/calendar_event_redesign/mockups/` (rouleaux sans − / +, les voisins servent
@@ -46,13 +54,19 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   `temp/r001/panel_controls.probe.mjs` 28/28, Playwright `temp/r001/panel_ui.probe.mjs` 26/27 (seul échec : l'étape
   « grille posee » du harnais), captures `temp/r001/shots/`. Non vérifié : AlarmKit sur appareil, visio à l'heure,
   listes Musique / Média / Projet à l'écran, Tauri, iOS.
+- FAIT le 2026-10-30 (reco partout) : Q2, au premier affichage de l'Agenda d'un compte, « Calendriers » montre Perso,
+  Pro, Sport ; Pro et Sport sont faits une fois par compte par `createCalendar` (pipeline canonique,
+  `eVe/intuition/tools/calendar_default_calendars.js`, ids `calendar_pro_<compte>` / `calendar_sport_<compte>`), jamais
+  refaits s'ils sont supprimés. Preuves : `temp/reco_small/r001_default_calendars.probe.mjs` 10/10 (compte neuf isolé,
+  rechargement après suppression de Sport), capture `temp/reco_small/r001/3_calendriers_depart.png`. Non vérifié : Tauri, iOS.
 
 ### R-002 — Sampler : écran complet de l'éditeur de sample
-- Statut : EN COURS (2026-10-30, soir) — réponse « Oui, reco partout » : Q3 éditeur de sample plein écran validé (maquettes E1–E4).
+- Statut : FAIT (2026-10-30, soir) — éditeur de sample plein écran (Q3, maquettes E1–E4) : `temp/reco_sampler/edit_kernel.probe.mjs` 11/11, Playwright `sample_editor_ui.probe.mjs` 42/42 (`temp/reco_sampler/ui_attempt_1.log`), captures `temp/reco_sampler/shots/`. Non vérifié : Tauri, iOS, vrai pincement WebKit, son audible.
 - Source : cahier `todo/sampler_cahier_des_charges_2026-10-29.md` §8 ; mémoire du 2026-10-29 « Bloqué : pas de
   maquette validée (règle 16) ; voix et MCP seulement ».
 - Reste : maquette aux vrais jetons, ta validation, puis le code et la sonde.
 - Question posée : questions posées le 2026-10-30 (session d'exécution du registre), texte complet dans `todo/questions_registre_2026-10-30.md`, n° 3 : « Valides-tu l'éditeur de sample plein écran (maquettes `temp/synth/mockups/e1_editeur_repos.png` à `e4_editeur_repere.png`, outils en 4 familles Écoute, Éditer, Forme, Repère) ? »
+- FAIT le 2026-10-30 (reco partout) : éditeur de sample plein écran codé selon E1–E4 (`eVe/domains/dashboard/dashboard_sample_editor.js` + `_view.js`, ouvert par l'outil « Éditer » au pied d'une zone) : vue d'ensemble, vue de travail (deux canaux, zoom, défilement, bulles), familles Écoute / Éditer (Couper, Copier, Coller, Muet, Rogner, Figer) / Forme (Entrée, Sortie, Envers, Gain, Norme, Centre, Étirer, Ton) / Repère (Slice, Boucle, Marque, Aimant), chaque outil par la commande canonique (`audio_fx.edit_apply`, nouvelle op `pitch`). Écart accepté : retour par le Retour `fold` du pied (règle 13) au lieu du ✕. Preuves : `temp/reco_sampler/edit_kernel.probe.mjs` 11/11 sur PCM réel, `temp/reco_sampler/view_build.probe.mjs` PASS, Playwright `temp/reco_sampler/sample_editor_ui.probe.mjs` ALL PASS (rapport `temp/probe_reports/dashboard_enhancement/reco_sampler_editor/`, captures `temp/reco_sampler/shots/`). Non vérifié : Tauri, iOS, pincement réel à deux doigts, écoute audible ; le moteur lit encore la source, pas le rendu en cache (cahier §8.4).
 
 ### R-003 — Sampler : correspondances SFZ manquantes
 - Statut : FAIT (2026-10-30)
@@ -67,7 +81,7 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 - Preuve : `COMM_SERVER_ROOT=temp/r004/tree node temp/r004/auto_sample_instrument.probe.mjs` → 10/10 sur la vraie page (rapport `temp/probe_reports/dashboard_enhancement/r004_auto_sample_instrument/report.json`).
 
 ### R-005 — Activités : cahier des charges jamais coché
-- Statut : EN COURS (2026-10-30, soir) — Q33 et Q38 FAITES (lot « reco partout » ci-dessous) ; maquette Q37 prête, question 65 à envoyer avec les autres maquettes du lot.
+- Statut : FAIT (2026-10-31) — Q33, Q38 et Q65 (message discret dans la bande du bas : `temp/reco_activites/quiet_message.probe.mjs` 17/17, `loisirs_cut.probe.mjs` 9/9) ; Q32 laissée ouverte à ton nom (relecture par des spécialistes, hors code) ; Q39 pas maintenant ; Q64 pas de fil public, étude des faux comptes après le lancement des invitations.
 - Source : `todo/cahier_des_charges_activites_atome_eVe.md`.
 - Rapproché le 2026-10-30 (contrôle dans le code, script `temp/cahier_reconcile/apply.mjs`) : 96 cases cochées avec
   leur preuve, 40 partielles (« partiel : … ; manque : … »), 2 non commencées ; l'en-tête dit l'état réel.
@@ -140,9 +154,21 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   messages discrets (Forme, Coachs, Boutique, Émissions, Web, Vidéo) ? Reco : oui. » Cause du silence : `teleport_feedback.js#paint`
   passe un projet vide à `updateProjectSceneRecords`, qui ne dessine rien et rend `Promise.resolve(null)` ; `paint` ne lit pas cette
   réponse et dit `true` (Playwright `temp/reco_activites/forme_capture.probe.mjs` : `painted: true, project: '', inScene: false`).
+- FAIT le 2026-10-31 (reco partout, Q65 validée) : le message discret du Dashboard s'écrit dans le champ de la bande du bas à la
+  place de son indication, sans loupe, sur le verre du champ comme l'annonce de Loisirs ; un toucher l'efface (le reste de ce
+  toucher ne tape pas, n'ouvre pas Loisirs) et l'indication revient. Un seul propriétaire : `eVe/domains/dashboard/dashboard_quiet_message.js`
+  (la ligne), posée par `dashboard_communication_input.js#noticeField` (la brique de l'annonce Loisirs, `onTouch`) ;
+  `teleport_feedback.js#showTeleportToast` (async) l'y envoie quand le Dashboard est à l'écran, sinon dessine sur le projet
+  ouvert et répond ce qui a été fait (`paint` n'écrit que sur le projet à l'écran, lit la réponse de la scène : plus de `true`
+  sans dessin). Tous les appelants (Forme, Coachs, Boutique, Émissions, Web, Vidéo, Loisirs, effets) passent par là.
+  L'annonce Loisirs coupée « Loisirs : les so… » l'est par la règle de la brique (`fitSingleLineText`, « … »), aucun outil
+  ne la recouvre (Send est la partie du verre après le champ). Preuves : Playwright `temp/reco_activites/quiet_message.probe.mjs`
+  17/17 (vraie écriture Forme → « Séries 4–8 ramenées à 18 kg » dans le champ, toucher, « Rechercher » + loupe revenus, sans
+  caret ; `false` sans endroit où dessiner ; projet ouvert : dessiné dans sa scène puis retiré), `temp/reco_activites/loisirs_cut.probe.mjs`
+  9/9 ; captures `temp/reco_activites/capture/quiet/`, `capture/loisirs_cut/`.
 
 ### R-006 — Tâche urgente du 22 oct. : designs et questions restés en attente
-- Statut : EN COURS (2026-10-30, soir) — réponse « Oui, reco partout » : Q13 à Q29 et Q34 avec leurs recos ; Q18 maquette d'abord.
+- Statut : EN COURS (2026-10-31) — réponse « Oui, reco partout » : Q66 à Q68 (Sport) et Q70 à Q73 (Santé) en codage.
 - Source : `todo/urgent_task_suivi_2026-10-22.md` ; études `todo/etude_sante_plaisir_thalasso_2026-10-22.md` §7,
   `todo/etude_activites_sport_objectifs_2026-10-27.md`.
 - Rapproché le 2026-10-30 :
@@ -163,8 +189,16 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
     Question n° 34 ajoutée.
 
 - Questions posées le 2026-10-30 : n° 13 à 29 et 34 de `todo/questions_registre_2026-10-30.md`. Tout ce qui reste de l'entrée dépend de ces réponses.
+- FAIT le 2026-10-30 (reco partout) : Q13 (une nouvelle heure d'objectif déplace les séances à venir, garde les séances vécues, faites aujourd'hui ou déplacées à la main ; CAL-01 aussi pour les actions de programme), Q14 (« Clore » au maintien à côté de « Fait », commande `dashboard.objective.close`, programme en pause, historique gardé), Q15 (repos fixe 90 s / 120 s), Q16 (visée Force : 3 à 5 rép., charge plus lourde), Q17 (poly-articulaires d'abord) codés. Preuves : `temp/reco_sport/sport_reco.probe.mjs` 31/31, `temp/reco_sport/cal_close.probe.mjs` 17/17 (TZ=Europe/Paris), `until_expand.probe.mjs` PASS, `temp/cal_02/routine_pause.probe.mjs` 4/4, app réelle `temp/reco_sport/capture.probe.mjs` (« repos 120 s », ordre de « Mon programme »). Non vu dans l'app réelle : la ligne « Clore » (la case Objectifs est invisible sur l'accueil Pro du téléphone ; `close_ui.probe.mjs` n'a pas pu ouvrir la rubrique). Pas de réouverture d'un objectif clos.
+  - Posées puis validées le 2026-10-31 (« Oui, reco partout », questions n° 66 à 68) : Q18 échauffement (`q18a`-`q18d`) et programmes prêts (`q18e`, `q18f`) ; Q19 ligne « Duo » au maintien (« Côte à côte » dépasse les 6 lettres de la règle 11) et zones l'une sur l'autre (`q19a`-`q19c`) ; Q20 plaque, prise guidée et comparaison « Beauté » (`q20a`-`q20c`). Maquettes et questions : `temp/reco_sport/mockups/` et `temp/reco_sport/mockups/questions.md`.
+  - FAIT le 2026-10-31 (Q66 = Q18) : échauffement par défaut sur les exercices chargés à la barre ou à la machine (8 × 50 % puis 5 × 75 % de la charge, 60 s de repos après chacune ; pas `warmup` de `program_session_contract.js`, jamais compté comme une série), « + 2 échauf. » sur la carte et durée qui le compte (5:21 → 8:00 au développé couché 40 kg), ligne « Échauffement » du Détail, « 1/2 » sur « échauf. » en orange pendant la séance, rouleau « Échauf. » de Perso (Aucune / 1 série / 2 séries ; `training.set_profile` `warmup_sets`). Programmes prêts : outil « Prêts » dans la bande de « Mon programme », panneau « Programmes prêts » (accordéons Débutant, Force, Haut / Bas à 5 séances, Remise en forme ; `atome/src/shared/training_ready_programs.js`), disque « Prendre ce programme » : il remplace « Mon programme » (la séance du jour, en alternance), ses jours vont à l'agenda en séries hebdomadaires, un programme pris avant quitte l'agenda à partir du jour même ; les séances faites restent au Suivi. Commandes `training.list_ready_programs`, `training.take_ready_program` (confirmée), `training.open_program` `panel: ready`. Preuves : `temp/reco_sport/warmup.probe.mjs` 18/18, `ready.probe.mjs` 21/21, `ready_runtime.probe.mjs` PASS, `q66_q68_ui.probe.mjs` (vraie page) 26/26, captures `temp/reco_sport/shots/q66*.png`.
+  - FAIT le 2026-10-31 (Q68 = Q20) : module « Beauté » : plaque dans Activité › Bien-être à côté de Sieste ; prise guidée (caméra en haut, dernière photo de la même pose en transparence, rouleaux « Pose » et « Zone », disque orange « Prendre la photo », bande ✕ / Suivi / Rappel) ; la photo passe par le seul chemin de prise (`bevy_panel_media_capture.js`, médias de la personne) puis rejoint les photos Beauté ; « Suivi » montre deux dates de la même pose côte à côte, chacune sur son rouleau ; « Rappel » met ou retire un rappel hebdomadaire dans l'agenda. Famille MCP `beauty` : `open`, `list_photos`, `shoot` (confirmée), `add_photo`, `read_reminder`, `set_reminder`. Preuves : `temp/reco_sport/beauty.probe.mjs` 13/13, `q66_q68_ui.probe.mjs` (caméra factice de Chromium) 26/26, captures `temp/reco_sport/shots/q68*.png`. Q67 (« Duo », Q19) confiée à un autre agent, rien codé ici. Non vérifié : iOS, Tauri, vraie caméra.
+- FAIT le 2026-10-30 (reco partout) : Q21 objectif « Plaisir » (OBJ-14, phrases vocales comprises), Q22 hors progression, Q23 suggestion du jour dans la bulle d'eVe Basic (une par jour, jamais sous un panneau de préparation, jamais la respiration en séjour Thalasso ; « ne me propose plus rien » à la voix, `brick_session.suggestions`), Q24 le Ressenti en fin de séance de brique (motif Sport M5b) et après un soin Thalasso fait, Q26 séjour Thalasso côté données et voix (`thalasso.*`), Q27 source de chaque entrée de Loisirs (la découverte locale existait), Q28 `health_profile.read` demande l'accord à chaque fois, Q34 « i » du Kapalabhati (eau, grossesse, épilepsie, cœur, panique) et jamais en contexte d'eau. Preuves : `node temp/reco_sante/pure.probe.mjs` 25/25 ; `PROBE_ISOLATED=1 node temp/reco_sante/ui.probe.mjs` 27/28 (seul échec : l'étape « grille posee » du harnais), rapport `temp/reco_sante/ui.probe.report.json`, captures `temp/reco_sante/shots/`.
+  - BLOQUÉ Q29 : aucun stockage « appareil seulement » n'existe (Web → Fastify, Tauri → synchro Axum, iOS → synchro Swift) ; les allergies et intolérances d'aujourd'hui (`program_preference`, portée globale) sont synchronisées, contrairement à la décision. Il faut créer ce mécanisme (décision d'architecture) ; tant qu'il manque, les nouveaux sujets du profil (grossesse, cœur, articulations, respiration, peau, thyroïde/diabète, épilepsie, panique) ne sont pas enregistrés (Q25).
+  - À valider par l'utilisateur (maquettes, écrans non codés) : Q25 lignes à case du profil santé (`temp/reco_sante/out/m1_profil_sante.png`), Q26 écran du séjour et ajout d'un soin (`m2_sejour_thalasso.png`, et où le ranger), Q23 geste « Ne plus proposer » au maintien sur la phrase (`m3_ne_plus_proposer.png`). Questions dans chaque PNG.
+  - Non fait : la molette des souffles n'est pas filtrée par un contexte d'eau (la carte n'en a pas) ; eVe Pro n'a pas de bulle sur son accueil (pas de suggestion).
 ### R-007 — Finder du projet : maquette à six états jamais validée
-- Statut : EN COURS (2026-10-30, soir) — réponse « Oui, reco partout » : maquette A–F validée, Suppr. gardé, tri dans Filtre, recherche dans la bande (Q4–7).
+- Statut : FAIT (2026-10-31) — Finder A–F (`temp/reco_finder/r007.probe.mjs` 46 OK, `r007_ef.probe.mjs` 30/30) et Q75 cœur blanc sans fond partout (Finder, Contacts : `heart_contacts.probe.mjs`). Seul échec : l'étape « grille posee » du harnais. Non vérifié : PeerTube, clavier iOS, cœur du Train vidéo.
 - Source : session `e9cfee6f` du 2026-10-27, arrêtée sur « Valides-tu la maquette du Finder ? » (liste, Choix,
   Filtre, Lieux, TV, vidéos en ligne). Aucune réponse trouvée dans les transcripts (rapprochement du 2026-10-30).
 - Maquettes : `temp/finder_charter/mockups/finder_charter.png` (états A–F) et `finder_today_project.png` (l'actuel).
@@ -175,6 +209,7 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   le champ de recherche dans la bande), puis coder A–F et les deux défauts vus en route (triangle orange de
   `bevy_panel_accordion.js`, écart de 4 px au lieu de 5 entre pastilles).
 - Question posée : questions posées le 2026-10-30 (session d'exécution du registre), texte complet dans `todo/questions_registre_2026-10-30.md`, n° 4 à 7 : validation de la maquette A–F (remise aux règles du 30 oct. : rayons au dixième, plus de chevrons, 3 px entre lignes ; l'ancienne version est gardée dans `finder_charter_2026-10-27.html`), Suppr. dans Choix, tri dans Filtre, champ de recherche dans la bande.
+- FAIT le 2026-10-30 (reco partout) : A–D codés selon la maquette (liste, Choix par appui long avec Tout / Suppr. demandé dans la bande / Import / Nom, Filtre avec tris Récents / A → Z / Type au pied et conditions, Lieux en lignes nom / adresse sous la carte) ; le champ dans la bande du panneau, Trouver allumé tant qu'il est ouvert ; en-tête triable, « n résultats », bouton Tags et triangle orange retirés ; 5 px entre pastilles ; chaque geste a son action MCP `ui.find.panel`. E (TV) et F (vidéos en ligne) vérifiés ensuite : bande ✕ + champ seuls, ni portées ni Filtre ; TV : logo, nom, catégorie · source, un cœur par chaîne, le champ filtre, un toucher joue la chaîne sur le projet et ferme le Finder, glyphe sur Pays / Favoris, glyphe vidéo pour une chaîne sans logo ; vidéos : l'image mène la ligne, titre, chaîne · durée (durée YouTube ajoutée côté serveur), la page suivante se lit seule près de la fin (elle ne se déclenchait jamais : corrigé), chaque vidéo une fois ; champ vide = l'historique, rien sans historique (texte « Saisir une recherche puis appuyer sur Entrée » retiré). Preuves : `PROBE_ISOLATED=1 node temp/reco_finder/r007.probe.mjs` → 46 OK, 1 FAIL (« grille posee », harnais) ; `PROBE_ISOLATED=1 node temp/reco_finder/r007_ef.probe.mjs` → ALL OK (30 ; catalogue TV, flux et recherche YouTube réels, 25 → 47 lignes, cœur contour au repos et plein pour un favori) ; captures `temp/probe_reports/dashboard_enhancement/reco_finder_r007/` (1_repos … 7_lieux) et `reco_finder_r007_ef/` (8_tv … 13_youtube_page_suivante). Cœur (question 75, réponse « Oui, reco partout » du 2026-10-31) : blanc et sans fond partout, contour au repos, plein pour un favori, cible de toucher gardée — fait à la brique `buildFavoriteHeartButtonNode` (Finder, contacts, Train vidéo). Preuves : `r007_ef.probe.mjs` → ALL OK (30) ; `temp/reco_finder/heart_contacts.probe.mjs` → le toucher sur le cœur nu bascule le favori, plein et blanc ensuite (seul échec : « grille posee », harnais) ; captures `reco_finder_r007_ef/8_tv.png`, `8b_tv_pays.png`, `reco_finder_heart_contacts/1_contacts_avant.png`, `2_contacts_apres.png`. Train vidéo non capturé (même brique). Non vérifiés : PeerTube (même chemin), logos refusés au Chromium sans tête (imgur 403), clavier iOS.
 
 ### R-008 — Action d'alarme : restes
 - Statut : FAIT (2026-10-30)
@@ -192,7 +227,7 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 - Preuve : `PROBE_ISOLATED=1 COMM_SERVER_ROOT=temp/r004/tree node temp/sequencer_build/cal_mode.probe.mjs` (vraie page, compte neuf) : la ligne « Mode » montre Lancer / Ouvrir sur le rouleau canonique ; par défaut Lancer (`ui.timeline.transport.play`), un pas du rouleau → Ouvrir (rien n'est joué). Sortie gardée : `temp/sequencer_build/cal_mode_2026-10-30.log`.
 
 ### R-010 — Timeline et vidéo : restes ouverts
-- Statut : EN COURS (2026-10-30, soir) — réponse « Oui, reco partout » : Q9 maquette de l'outil « Réalig. » ; Q8 et Q10 : état actuel gardé.
+- Statut : FAIT (2026-10-31) — Q74 outil « Réalig » en Liste (`temp/reco_small/r010_realign.probe.mjs` 15/15, `r010_realign_run2.log`) ; Q8 et Q10 : état actuel gardé (ta réponse « reco partout »). Non vérifié : iOS, Tauri.
 - Source : mémoire « Audio et Timeline » ; `todo/audio_to_finalize.md`.
 - Fait : filtres de couleur de luminance du shader vidéo, corrigés le 2026-10-15
   (`atome/renderers/bevy-core/assets/shaders/video_external.wgsl#apply_color_filters` borne l'entrée à [0, 1] ;
@@ -204,8 +239,18 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   des tranches du mixeur pour un gaucher (`molecule_mix_layout.js#layoutMixRow` garde l'ordre des pistes).
 
 - Questions posées le 2026-10-30 : n° 8 (seuil de synchro), 9 (outil « Réalig. ») et 10 (ordre des tranches pour un gaucher) de `todo/questions_registre_2026-10-30.md`. Rien d'autre à coder dans cette entrée.
+- Maquette du 2026-10-30 (reco partout, Q9) : `temp/reco_small/mockups/r010_maquette_realig.png` (zoom
+  `r010_maquette_realig_zoom.png`, état actuel `r010_liste_actuelle.png`) : l'outil « Réalig » (glyphe d'alignement
+  `para_left`) dans la bande du bas d'un projet en Liste, posé par le vrai ruban. Rien de codé. Question à poser :
+  valides-tu cet outil, à cette place (premier outil de la bande, à gauche) et avec ce glyphe ? Q8 et Q10 : état actuel
+  gardé, rien à coder.
+- FAIT le 2026-10-31 (Q74 validée, « Oui, reco partout ») : « Réalig » codé. En Liste, premier outil de la bande, à
+  gauche (`menu_work_context.js`, `main_menu_view_zoom_content.js`) ; un toucher remet la timeline dans l'ordre de la
+  Liste en un seul lot annulable (`project_view_timeline_owner.js#realignProjectTimelineToList`) ; commande MCP
+  `ui.timeline.realign`. Preuve : `temp/reco_small/r010_realign.probe.mjs` (A-B-C → C-A-B au toucher, une annulation
+  rend A-B-C, MCP, état durable relu ; captures `temp/reco_small/r010/`). Non vérifié : iOS, Tauri.
 ### R-011 — TV et YouTube : restes ouverts
-- Statut : EN COURS (2026-10-30, soir) — réponse « Oui, reco partout » : Q11 la ligne joue dans sa vignette.
+- Statut : FAIT (2026-10-30, soir) — coins de la découpe et Q11 (la ligne de la Liste joue dans sa vignette, `temp/reco_small/r011_list_row_window.probe.mjs` 11/11). Non vérifié : vraie iframe YouTube, flux TV réel, iOS, Tauri.
 - Source : mémoire « TV, YouTube, fenêtres média ».
 - Fait : la « page hôte du lecteur » est codée et en ligne depuis le 2026-10-07 (`atome/src/eve_youtube_player.html`,
   `eVe/intuition/tools/youtube_player_host.js` ; FRAMEWORK_STATE 2026-10-07 ; https://atome.one/eve_youtube_player.html
@@ -223,6 +268,16 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   (sur le wasm de HEAD, les deux contrôles de coins échouent), captures `temp/r011/shipped_wasm_home/`. Non vérifié :
   iOS et Tauri, iframe YouTube réelle, canevas d'un projet (l'ouverture d'un projet en sonde échoue aussi sur HEAD).
 - Vu, hors de cette entrée : une vidéo qui joue (`video_external`) ignore son propre `corner_radius` côté Rust.
+- FAIT le 2026-10-30 (reco partout) : Q11, mode liste. Une ligne de la Liste dont la TV / la vidéo en ligne joue sur
+  place devient une seule image sur tout son bloc de film, sa découpe (`media_window_of`,
+  `bevy_panel_record_timeline_preview.js#filmFrames`), et le lecteur se pose dessous
+  (`project_scene_query_runtime.js#readProjectSceneMediaWindowStandIn`, `inplace_media_overlay.js`) ; aucune autre
+  copie n'est découpée (`render_atom.js`) ; au repos le film est inchangé. Preuves :
+  `temp/reco_small/r011_list_row_window.probe.mjs` 11/11 contrôles propres (l'étape « grille posee » du harnais échoue
+  parfois), captures `temp/reco_small/r011/2_liste_lecture.png`, `3_liste_apres.png`, `4_naturel_lecture.png` ; tests
+  `tests/eve/youtube_player_lifecycle`, `peertube_player`, `tv_inplace_player` passent (le dernier échoue 1 fois sur 6
+  au premier lancement à froid). Non vérifié : vraie iframe YouTube / vrai flux TV, iOS, Tauri ; les commandes
+  posées sur le média (`project_media_controls.js`) lisent encore la place de l'Atome, pas celle de la ligne.
 
 ### R-012 — Musique en cours : recherche de position Spotify
 - Statut : FAIT (2026-10-30)
@@ -231,7 +286,8 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 - Preuve : `node temp/r012/spotify_seek.probe.mjs` → 10/10 (vrai contrat, vraie opération serveur, vraie source ; seule l’API HTTP de Spotify est simulée). Essai sur un vrai compte Premium : R-102.
 
 ### R-013 — Moteur vocal : restes ouverts
-- Statut : EN COURS (2026-10-30, soir) — réponse « Oui, reco partout » : Q12 système hors connexion, assistant connecté sinon ; Q61 mode d'essai à coder, puis tes 10 prises.
+- Statut : ATTENTE UTILISATEUR (2026-10-30, soir) — Q12 et Q61 FAITES (ci-dessous) ; reste tes 10 « répète » sur l'iPad
+  « Jeezs's Tab » avec le mode d'essai (étapes ci-dessous, envoyées le 2026-10-30), puis leur rejeu au banc.
 - Source : mémoire « Refonte du moteur vocal » du 2026-10-23 ; `todo/refonte_assistant_vocal.md` §17, §18.7.
 - Rapprochement du 2026-10-30 : rien n'a bougé depuis le 2026-10-23 (FRAMEWORK_STATE, 2026-10-23, liste encore les
   trois défauts).
@@ -248,14 +304,15 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   réel du Mac sont des tours `too_long` (bruit de la pièce), un seul « hors grammaire » sur 36.
 - Reste (après Q61) : enregistrer sur l'iPad le PCM poussé au moteur pour ≥ 10 « répète » dits par une personne,
   le rejouer au banc ; démarrage sourd et mode avion (R-102).
-- FAIT le 2026-10-30 (reco partout) : Q12 — la dictée libre passe par la transcription de l'assistant connecté en ligne
-  (`checkConnection('fastify')`), par la reconnaissance du système hors ligne ; une seule décision par dictée
+- FAIT le 2026-10-30 (reco partout) : Q12 — la dictée libre passe par la transcription de l'assistant connecté quand il
+  peut servir la personne (compte authentifié accepté par le fournisseur, `provider_broker.js#providerPrincipalReady`, et
+  appareil en ligne, `checkConnection('fastify')`), par la reconnaissance du système sinon (hors ligne, ou invité en ligne) ; une seule décision par dictée
   (`atome/src/squirrel/voice/service_stt_runtime.js#routeOf`, `service_assistant_stt.js`), erreur explicite sans relais ;
   la capture du Dashboard n'écrit rien et signale l'erreur si la dictée échoue. Aucun des deux plugins ne devient mort
   (hors ligne, tours de l'assistant, permission micro d'Android) : rien retiré. Q61 — mode d'essai du moteur codé
   (`atome/engines/voice-turns` `Take`, `session::read(record)`, WASM `setRecording`/`takeRecording`, commande de
   développeur `window.eveVoiceTestTakes`, `eVe/voice/conversation/conversation_test_takes.js`), banc `temp/r013/bench.mjs`
-  set `device`, pilote iPad `temp/reco_voice/ipad_takes.mjs`. Preuves : `temp/reco_voice/dictation_route.probe.mjs` 9/9
+  set `device`, pilote iPad `temp/reco_voice/ipad_takes.mjs`. Preuves : `temp/reco_voice/dictation_route.probe.mjs` 11/11 (dont l'invité en ligne → système)
   (fournisseur simulé sur le socket : la qualité réelle de la transcription n'est pas vérifiée),
   `temp/reco_voice/takes_web.probe.mjs` 7/7 (3 tours Web rejoués au banc natif, même résultat 3/3). Le WASM audio de
   `atome/src/wasm` n'est pas reconstruit (travail non construit d'une autre session dans audio-wasm) : sur le Web le mode
@@ -274,7 +331,7 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   guide n'a aucune phrase pour lui (et `temp/r013/phrases.mjs` échoue sur `goals`).
 
 ### R-014 — Publication programmée : contacts par profil (Q7)
-- Statut : EN COURS (2026-10-30, soir) — réponse « Oui, reco partout » : Q35 appui long sur la tuile du réseau dans Publier, ligne « Profils ».
+- Statut : FAIT (2026-10-30, soir) — Q35 : appui long sur la tuile d'un réseau dans Publier → « Profils » (`temp/reco_small/r014_network_hold.probe.mjs` 13/13).
 - Source : mémoire « Publication programmée » du 2026-10-28.
 - Réponse trouvée : « A » le 2026-10-28 à 17 h 48 (session `6e947365`) : dans Publier, les destinataires suivent le
   profil actif ; le Répertoire reste non filtré.
@@ -286,9 +343,15 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   `item_kind` + `item_id`) ; maintien d'une tuile forum dans Contacts → ligne « Profils ». Preuve :
   `temp/r014/forum_profiles.probe.mjs`, 21/21 (`temp/r014/run/report.json`). Non vérifié : Tauri, iOS, synchro.
 - Manque (après réponse à Q35) : ranger un réseau depuis l'écran (aujourd'hui par l'assistant seulement).
+- FAIT le 2026-10-30 (reco partout) : Q35, appui long sur une tuile réseau de Publier (TikTok, Instagram, Page
+  Facebook) → maintien commun avec la ligne « Profils » ; cocher range le réseau (`life_profile_filing`,
+  item_kind network) par `window.Atome.commit` (`publish_surface.js#holdNetwork`, `bevy_panel_disc_tiles.js`
+  `holdable`, `hostHold` du stage). Preuves : `temp/reco_small/r014_network_hold.probe.mjs` 13/13 (vrais appuis :
+  appui long TikTok → Profils → Sport ; sous Pro TikTok absent, sous Sport présent), captures `temp/reco_small/r014/`.
+  Vu : une fois Profils déplié, la dalle agrandie couvre la tuile tenue (comportement de la brique commune).
 
 ### R-015 — Curseurs : derniers curseurs hors du curseur unique
-- Statut : EN COURS (2026-10-30, soir) — réponse « Oui, reco partout » : Q36 B : l'outil lâché rejoint la bande du bas du projet.
+- Statut : FAIT (2026-10-30, soir) — Q36 B : l'outil lâché rejoint la bande du bas, curseur DOM retiré (`temp/reco_small/r015_band_tool.probe.mjs` 13/16 : les 3 échecs sont la réouverture d'un projet en sonde, défaut antérieur prouvé par `r015_reopen_baseline.probe.mjs`, une erreur AudioContext non attribuée et l'étape du harnais ; la persistance est relue après rechargement, 9b/9c).
 - Vérifié le 2026-10-30 : vivant, Trouver › Outils › « Taille » lâché sur un projet monte ce curseur (bornes fausses
   0–100 au lieu de 8–420) ; preuve `temp/r015/live_slider.probe.mjs` (2/2), capture `temp/r015/live_dom_slider.png`.
   Aucun code changé : toute suite dépend de la réponse.
@@ -299,9 +362,24 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   `project_drop_projection_slider_runtime.js`), gardé exprès « jusqu'au passage de cette boîte à outils en Bevy »
   (FRAMEWORK_STATE 2026-10-26). Tous les autres sont sur la jauge ou le curseur d'outil.
 - Reste : passer ce curseur sur le curseur d'outil Bevy (`bevy_ui_tool_slider.js#buildBevyToolSliderNode`).
+- FAIT le 2026-10-30 (reco partout) : Q36 B, l'outil lâché depuis Trouver › Outils rejoint la bande du bas du projet
+  (`eVe/intuition/menu/project_band_tools.js`, Atome projet `band_tools`, gardé une fois, relu à l'ouverture) ;
+  « Taille » y est le curseur d'outil Bevy 8–420 ; MCP `projects.band_tool`. Le chemin du curseur DOM est supprimé
+  (7 fichiers, `ToolSlider` retiré de `spark.js` et `scripts/bundle.js`, 3 cas de test DOM retirés). Preuves :
+  `temp/reco_small/r015_band_tool.probe.mjs` (journal `temp/reco_small/r015.log`, 21:42) : contrôles 1–8, 10, 9b, 9c
+  passent (dépôt réel, aucun bouton DOM ni `<input type=range>`, `band_tools` = [size], jauge « 233 px » au geste, MCP,
+  après rechargement `band_tools` relu = [size] et la bande du projet bâtie de lui pose Taille 8–420) ; échouent :
+  9 (réouverture du projet après rechargement : `bevy_renderer_diff_present_timeout`, défaut connu des sondes, le même
+  sans aucun `band_tools` et avec le menu d'avant ce lot : `temp/reco_small/r015_baseline_{1,2,pristine,gesture_1,gesture_2}.log`)
+  et 11 (« The AudioContext encountered an error from the audio device » de Chromium après rechargement, vu seulement
+  dans les passes qui font glisser le curseur, 3 fois sur 4 ; jamais sans ce glissement ni dans les bases ; non attribué,
+  aucun code audio sur ce chemin) ; l'étape « grille posee » du harnais échoue aussi. Captures `temp/reco_small/r015/`,
+  `tests/eve/slider_options_contract.test.mjs` 12/12. Non prouvé : Taille vue dans la bande d'un projet rouvert à l'écran. Hors périmètre : le reste de la boîte à outils de projection DOM (`project_drop_toolbox_*`, runtimes palette /
+  déplacement / hôte, `window.eveProjectDropApi.mountToolProjectionInstance`) n'a plus d'appelant (code mort à retirer
+  sur accord).
 
 ### R-016 — Résultats : lots après le lot A
-- Statut : EN COURS (2026-10-30, soir) — réponse « Oui, reco partout » : Q31 Strava d'abord, Q41, Q54, Q55, Q56, Q58, Q62 A ; Q40 maquette d'abord ; Q42, Q53, Q57, Q59 : état actuel gardé.
+- Statut : ATTENTE UTILISATEUR (2026-10-31) — tout est codé (lots B à F, Q40/Q69 « Mon nom » et image fidèle de l'aperçu : `temp/reco_resultats/results.probe.mjs` ALL OK, `run14.log`) ; reste ton geste pour Strava : accord développeur, création de l'application, clés `STRAVA_CLIENT_ID` / `STRAVA_CLIENT_SECRET` dans `/etc/squirrel/squirrel.env` (étapes dans la puce « lot F » ci-dessous, envoyées le 2026-10-30).
 - Source : mémoire « Panneau Résultats » du 2026-10-28 (session `67c374b0`) ; plan validé (« Ordre de
   réalisation »), maquettes `temp/results_panel/mockups/` M1–M12.
 - Fait : lot A, données du ressenti (`atome/src/shared/health_feeling_contract.js`,
@@ -333,9 +411,71 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   `temp/r016c/feeling.probe.mjs` ALL OK (`temp/r016c/run8.log`), `temp/r016c/block.node.mjs`, captures
   `temp/r016c/*.png`. En cours : la phrase du matin en Basic, vérifiée au navigateur par l'agent. Non fait : rangées
   de ressenti sur les cartes cardio (autre vue). Questions 53 (teinte d'une case cochée), 54 (séance toute passée).
+- FAIT le 2026-10-30 (reco partout) : lot F, Strava d'abord (Q31). Connexion par la page de Strava (OAuth serveur,
+  jetons dans le coffre `health.strava`, renouvellement, déconnexion révoquée), import des 30 derniers jours dans les
+  séances (un enregistrement par jour `activity_import`, source « instrumented » / strava, réimport sans doublon),
+  vu par Résultats (séances Sport, anneau) ; MCP `strava.*` ; Préférences › Santé (brique « Santé » de Réglages),
+  bloc pareil aux comptes des réseaux. Sans application Strava sur le serveur : « Non disponible sur ce serveur
+  atome », erreur `NOT_CONFIGURED`. Preuves : `temp/reco_strava/strava_server.probe.mjs` 35/35,
+  `temp/reco_strava/strava_import.probe.mjs` 25/25, `temp/reco_strava/ui_settings.probe.mjs` ALL OK sans et avec clés
+  (`ui_not_configured.log`, `ui_configured.log`), captures `temp/probe_reports/dashboard_enhancement/reco_strava_*/`.
+  Reste de ton côté : accord développeur Strava, création de l'application, clés `STRAVA_CLIENT_ID` /
+  `STRAVA_CLIENT_SECRET` dans `/etc/squirrel/squirrel.env`, redirection
+  `https://atome.one/api/social/oauth/callback/strava`. Non vérifié : un vrai compte Strava, iOS, Tauri. Whoop, Oura :
+  non commencés (Q31 = Strava d'abord).
+- FAIT le 2026-10-30 (reco partout) : Q41 l'envoi joint l'image de l'aperçu (découpée dans l'image que le moteur
+  dessine, `eVe/domains/rendering/bevy_ui_node_capture.js`, rangée dans tes médias « Mes résultats.png ») en plus des
+  lignes ; Q54 une séance toute passée finit « Arrêté », sans ligne d'objectif, enregistrée arrêtée et pas comptée,
+  Passer et Enreg. en sortent ; Q55 toucher une carte sans glisser rend la journée entière ; Q56 depuis « Tout », un
+  toucher garde l'activité seule, ensuite chaque toucher ajoute ou retire (filtre des médias inchangé) ; Q58 la plaque
+  « Résultats » du Moniteur est une plaque entière, son nom entier ; Q62 A Forme et Force en tête de la zone des valeurs
+  de la carte cardio avant Lancer. Q42, Q53, Q57, Q59 : état actuel gardé. Preuves : `temp/reco_resultats/results.probe.mjs`
+  ALL OK (`run9.log`), `temp/reco_resultats/training.probe.mjs` ALL OK (`training_run2.log`),
+  `temp/reco_resultats/split_import.probe.mjs` ALL OK, captures `temp/reco_resultats/out/`.
+- Q40 (« Mon nom » dans l'aperçu) : maquette faite, pas codée, en attente de ta validation :
+  `temp/reco_resultats/mockups/q40_maquette_nom_coche.png` (une ligne « Résultats de Jean-Eric » en haut de l'aperçu,
+  en gras, un demi-outil de haut), `q40_maquette_nom_decoche.png` (ligne absente), écran actuel `q40_actuel.png`.
+  Question : « Quand " Mon nom " est coché, on montre " Résultats de Jean-Eric " en première ligne de l'aperçu, comme
+  sur la maquette ? Reco : oui. »
+- FAIT le 2026-10-31 : Q40 (question 69 validée) codée, remplace la ligne « maquette faite, pas codée » ci-dessus :
+  « Mon nom » coché, l'aperçu commence par « Résultats de <ton nom> » en gras, un demi-outil de haut ; décoché, la ligne
+  disparaît ; l'image jointe à l'envoi la porte en tête. Une personne sans nom : pas de ligne.
+  `eVe/domains/results_send/results_send_panel.js`. Preuves : `temp/reco_resultats/results.probe.mjs` ALL OK (`run11.log`),
+  captures `temp/reco_resultats/out/q40_nom_coche.png`, `q40_nom_decoche.png`, `q40_sans_nom.png`, `q41_image_envoyee.png`.
+- FAIT le 2026-10-31 (relecture du coordinateur) : l'image jointe est fidèle à l'aperçu : le fond du panneau tel qu'il est
+  peint entre les cartes (plus de bandes blanches), la marge du panneau tout autour, l'espace des cartes comme à l'écran,
+  « Résultats de … » à la marge, comme sur la maquette validée ; plus de barre de défilement sur l'image (un défilement
+  par le code la laisse maintenant s'éteindre). `eVe/domains/rendering/bevy_ui_node_capture.js`,
+  `eVe/domains/rendering/bevy_ui_scroll_runtime.js`. Preuves : `temp/reco_resultats/results.probe.mjs` ALL OK (`run14.log`),
+  image `temp/reco_resultats/out/q41_image_envoyee.png`.
 
 ### R-104 — Refonte globale atome/eVe : cartographie, MCP universel en accès, offline sans IA
-- Statut : ATTENTE UTILISATEUR (ton ordre de démarrage ; tu as demandé le 2026-10-29 puis le 2026-10-30 de ne rien commencer avant de le donner)
+- Statut : EN COURS (signal de départ donné le 2026-10-30 au soir, session `41da0099`). Fait au départ : commit eVe
+  `402f9924` puis parent `e3f1d0849`, push des deux `main` (vérifié sur GitHub). TestFlight : une publication 1.41 (40)
+  de la session montre tournait déjà sur le même état ; pas de doublon lancé (le script refuse deux publications).
+  Choix de branche (§1.2 bis, toi, 2026-10-30) : **branche dédiée à part**, `refonte-r104` (parent et eVe) dans le
+  worktree `.claude/worktrees/refonte-r104`, partie de `e3f1d0849` / `402f9924` ; les autres sessions restent sur
+  `main` ; une seule fusion à la fin. Exception à « jamais de worktree », limitée à cette tâche. Git redevient en
+  lecture seule hors de cette branche.
+- Phases A et B faites (30 oct., soir) : inventaires `temp/r104/baseline/` et conception
+  `eVe/documentations/global_registry_architecture.md` (dans le worktree). Phase C : maquettes faites, 37 écrans en
+  téléphone et bureau (MA, MB, MC, MD) dans `temp/r104/mockups/` du worktree. Phase C CLOSE (30 oct., soir) : 6
+  questions posées et répondues, toutes sur la recommandation : S0–S5 = alertes, briques R0–R2 ; catalogue
+  Compl'Alim + Open Food Facts ; modèle partagé par lien, chaque version proposée ; import et Modèles dans le Carnet
+  (Traitements, outil « Modèl. ») ; partage du carnet rien coché ; liste B prise en bloc. Réponses consignées dans
+  `temp/r104/mockups/QUESTIONS_PHASE_C.md` (worktree). Phase D (code) en cours.
+  - Phase D, lot D4 fait le 2026-10-30 (moteurs Santé sans interface) : import de protocole (forme du modèle, texte
+  original gardé tel quel, `.txt` reconnu), index des ingrédients, règles S0–S5 (toutes « proposées, inactives »),
+  planificateur sans IA, revue proposé → revu → actif, modèles partagés par partage lié avec versions proposées,
+  catalogue Compl'Alim hors ligne, produits Open Food Facts vus gardés sur l'appareil, familles MCP
+  `health_protocol` / `health_products` fermées à l'IA. Preuve : `temp/r104/probes/d4_*.probe.mjs` (6 sondes,
+  138 PASS, 0 FAIL), détail dans `temp/r104/PHASE_D_LOG.md` § D4.
+  - À te soumettre en fin de tâche (D4, non bloquant) : les règles SEC-01..10 et les sorties A–I ne sont définies que dans ton document 2
+  (personnel, jamais lu). D4 les a calées sur les dix familles de tests B.6 et l'ordre B.1–B.3 du cahier 01 :
+  comparer avec ton document 2 et dire ce qui diffère. Tes modèles réels de `tests/health_protocols/` n'ont jamais
+  été lus : lance `node temp/r104/probes/d4_import.probe.mjs tests/health_protocols` (n'affiche que des comptes).
+  Non fait : interface (maquettes MA/MB de la phase C), i18n des libellés.
+  - Lot D8 (2026-10-31) : MD1 (Programmes dans Mon matériel, familles, « Retir. », droits gardés en atomes privés), MD2 (demande annoncée par eVe, panneau Refus / Oui, assistant sans JSON) et MD3 (Relier, Visib., carte, Signal / Bannir / Fin du lien, « Réseau des objectifs » dans Confidentialité) codés. Preuves : `temp/r104/probes/d8_access.probe.mjs`, `d8_social.probe.mjs` 21/21, `d8_network_unit.mjs` 15/15, captures `temp/r104/probes/out/d8_*`. Reste (fait par l'orchestrateur après le lot D5) (fichiers Mystic interdits au lot) : brancher l'entrée du niveau « Relier » dans la grille, la scène de la carte, les lignes Signaler / Bloquer / Fin du lien de l'appui d'un contact, et les annotations du registre (`mcp_access`, `objective_network`) ; détail dans `temp/r104/PHASE_D_LOG.md` § D8 « Placements to add after D5 ». Bloqué (nommé) : essai P022–P025 avec de vrais comptes d'autres personnes.
 - Source : la session « Cahier MCP » du 2026-10-28 au 2026-10-30. Le cahier en vigueur est
   `todo/refonte_globale_architecture_mcp_offline_v1_2_2026-10-30.md` (V1.2, copié de ton dossier Téléchargements).
   Il remplace le cahier MCP du 28 oct. et le plan `todo/mcp_universal_access_plan_2026-10-28.md` (périmé).
@@ -352,7 +492,11 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   tâches partent ensemble, dans une nouvelle session bâtie sur les deux plans ; les deux anciennes sessions ne
   sont archivées ou supprimées qu'avec ton accord.
 - Questions Santé (§6 du plan Santé) toutes réglées le 2026-10-30 : 1 la charte l’emporte partout ; 2 Santé partagée en trois (objectifs sous Projets, briques sous Activité, carnet en rubrique propre) ; 3 mise en relation = outil de la bande ; 4 D1 déjà validée le 28 oct. ; 5 thermalisme tranché par le cahier (`THERM-CAND-*`) ; 6 Ciqual embarqué + produits Open Food Facts déjà vus gardés sur l’appareil ; 7 ton document 2 sert de base et d’exemple, c’est un modèle (template) et d’autres viendront : l’import suit la forme du modèle, chaque document déposé dans `tests/health_protocols/` (ignoré par Git, jamais poussé, `atomecorp/a` est public) est importé et testé sans changer le code ; certains modèles sont partageables : privés par défaut, partagés par leur auteur entre comptes eVe (partages liés D8–D10, jamais GitHub), le receveur repasse par l’import et la sécurité S0–S5 sur son propre profil ; les proposer et les partager dans eVe = maquettes en phase C.
-- Reste à faire : tout (refonte P0 à P6 + Santé P001 à P080). Rien n'a été codé.
+- Tuile « Carnet de santé » de l'accueil : question posée avec maquettes le 2026-10-31 (« à côté de Moniteur »
+  impossible en Pro), réponse **A — sous Projets** (rangée du bas, à gauche de Capture ; Basic inchangé, carnet par
+  la recherche et la voix). Maquettes `temp/r104/mockups/carnet_tile/` (worktree). Placement confié au lot D14.
+- Lots D1 à D15 codés dans le worktree (détail et preuves : `temp/r104/PHASE_D_LOG.md`). Reste : tuile Carnet (D14,
+  en cours), reliquats de phase D (`temp/r104/REMAINING.md`), phase E (recette), phase F (fusion après ton accord).
 - Références externes citées par le cahier : `~/Desktop/taxonomie.md` ;
   `~/Downloads/01_CAHIER_COMPLET_SANTE_ACTIVITES_OBJECTIFS_atome_eVe.md` (le nom
   `CAHIER_DES_CHARGES_SANTE_ATOME_EVE_2026-10-30.md` cité par le cahier est introuvable ; c'est le fichier le plus proche).

@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from "playwright";
 
-import { APP_URL, ensureProject, enterProvisionedWorkspace, installCanonicalFixture } from "./molecule_ui_workspace_support.mjs";
+import { APP_URL, ensureProject, enterProvisionedWorkspace, importPlaybackFixtureMedia, installCanonicalFixture } from "./molecule_ui_workspace_support.mjs";
 import { runMoleculeDropAcceptance } from "./molecule_ui_drop_acceptance_scenarios.mjs";
 import { assert, clickCanvasTarget, findBevyUiNodeTarget, runSetupStep, wait, waitFor } from "./molecule_ui_acceptance_support.mjs";
 
@@ -219,7 +219,9 @@ const main = async () => {
         const project = await runSetupStep('project', () => ensureProject(page, `Molecule UI ${REPORT_TAG}`), 90000);
         assert(project?.ok === true, `project_setup_failed:${JSON.stringify(project)}`);
         report.project = project;
-        const fixture = await runSetupStep('canonical_fixture', () => installCanonicalFixture(page, project.id), 90000);
+        const mediaAtomeIds = ENDURANCE_MS > 0
+            ? await runSetupStep('playback_media', () => importPlaybackFixtureMedia(page, project.id), 180000) : {};
+        const fixture = await runSetupStep('canonical_fixture', () => installCanonicalFixture(page, project.id, mediaAtomeIds), 90000);
         report.fixture = fixture;
 
         await wait(1200);

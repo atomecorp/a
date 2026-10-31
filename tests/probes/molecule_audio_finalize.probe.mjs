@@ -157,7 +157,7 @@ test('mute/solo: the graph mutes the strip live; the transport keeps the track (
 
 test('Input on Tauri: the panel lists the engine\'s own (cpal) inputs, so the chosen name is one cpal knows (§1.3)', async () => {
     const previous = globalThis.window;
-    globalThis.window = { Squirrel: { av: { audio: {
+    globalThis.window = { __TAURI_INTERNALS__: { invoke: async () => ({}) }, Squirrel: { av: { audio: {
         get_runtime: () => ({ playback: 'tauri_native_kira' }),
         mix_output_devices: async () => ({ outputs: [], inputs: [{ id: 'MacBook Pro Microphone', name: 'MacBook Pro Microphone', channels: 1 }] })
     } } } };

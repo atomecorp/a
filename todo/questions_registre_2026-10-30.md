@@ -342,7 +342,13 @@ Maquettes des éléments nouveaux (règle 16), sur de vraies captures du 30 oct.
     alors, qu'est-ce qu'un moins de 15 ans y voit) ? Et veux-tu une étude des faux comptes (signes, seuils, ce qu'eVe
     fait) avant tout code ? Reco : pas de fil public pour l'instant ; l'étude après le lancement des invitations.
 
-## Maquettes demandées par « reco partout » (2026-10-30, soir)
+## Maquettes demandées par « reco partout » (2026-10-30, soir) — 11 questions ouvertes : 65 à 75
+
+> **Réponse du 2026-10-31 (session du registre)** : « Oui, reco partout » → 65 oui ; 66 oui aux deux, Haut / Bas à 5
+> séances, le programme pris remplace « Mon programme » (l'ancien reste dans le Suivi) ; 67 « Duo », zones l'une sur
+> l'autre sur téléphone, choix à la main, dernière zone proposée en premier ; 68 oui aux trois, photo d'avant en
+> transparence ; 69 oui ; 70 A (rangement « cet appareil seulement », tout le profil santé, allergies comprises) ;
+> 71 A ; 72 Santé › Thalasso ; 73 A ; 74 oui ; 75 blanc sans fond partout.
 
 65. **Suite de la 37 : le message discret dans la bande du bas** (maquettes
     `temp/reco_activites/mockups/q37_message_dans_la_bande.png` et `q37_loisirs_et_message.png`, à côté de l'annonce
@@ -350,3 +356,105 @@ Maquettes des éléments nouveaux (règle 16), sur de vraies captures du 30 oct.
     18 kg. Le message s'écrit dans le champ de la bande du bas, à la place de « Rechercher », sans loupe, comme
     l'annonce de Loisirs ; il s'efface au toucher. Je le code ainsi pour tous les messages discrets (Forme, Coachs,
     Boutique, Émissions, Web, Vidéo) ? Reco : oui.
+
+66. **(suite de la 18) Échauffement et programmes prêts.**
+    - (a) **Séries d'échauffement.** Aujourd'hui, un exercice lourd commence directement par sa première vraie série.
+      Proposition : eVe ajoute d'office 2 séries légères avant, sur les exercices chargés à la barre ou à la machine
+      (pas au poids du corps). La première fait 8 répétitions à la moitié de la charge, la seconde 5 répétitions aux
+      trois quarts, avec 60 s de repos après chacune. Ce sont des nombres d'or (règle 19).
+      Exemple : développé couché à 40 kg, 3 × 9. Avant le départ, la fiche dit « + 2 échauf. » sous « repos 120 s »,
+      et la durée passe de 5 min 21 à 8 min 00. Détail ajoute une ligne « Échauffement · 8 × 20 kg · 5 × 30 kg ».
+      Pendant la séance, la série en cours s'écrit « 1/2 échauf. » en orange, à 8 rép. et 20 kg. Dans Perso, un rouleau
+      « Échauf. » (Aucune, 1 série, 2 séries) le règle.
+      Maquettes : `temp/reco_sport/mockups/q18a_echauffement_carte.png`, `q18b_echauffement_detail.png`,
+      `q18c_echauffement_seance.png`, `q18d_echauffement_perso.png`.
+      Reco : oui, d'office sur les exercices chargés, réglable dans Perso.
+    - (b) **Programmes prêts.** Aujourd'hui, « Mon programme » ne contient que ce que tu y as ajouté.
+      Proposition : un outil « Prêts » à droite de sa bande du bas. Il ouvre le panneau « Programmes prêts », une liste
+      de programmes en accordéons :
+      - Débutant · 3 séances / sem. ;
+      - Force · 3 séances / sem. ;
+      - Haut / Bas · 5 séances / sem. ;
+      - Remise en forme · 2 séances / sem.
+      Ouvert, un programme montre ses séances au-dessus de son titre. Exemple : Débutant a une séance A (squat,
+      développé couché, tirage vertical, planche) et une séance B (soulevé de terre roumain, développé épaules, rowing,
+      crunch), le lundi, le mercredi et le vendredi. Le disque orange « Prendre ce programme » le met dans « Mon
+      programme » et dans l'agenda. La sortie est le ✕ à gauche du pied du panneau.
+      Maquettes : `temp/reco_sport/mockups/q18e_programmes_prets_outil.png`, `q18f_programmes_prets_panneau.png`.
+      Reco : oui. Questions liées : le Haut / Bas à 5 séances (et non 4, règle 19) te va-t-il ? Le programme pris
+      remplace-t-il « Mon programme » ? Reco : il le remplace, l'ancien reste dans le Suivi.
+
+67. **(suite de la 19) Deux outils à la fois (Split View).** Aujourd'hui, rien ne permet d'avoir deux outils ensemble à l'écran
+    (le `split` de la Timeline est autre chose). Aucune maquette n'existait.
+    - (a) **L'accès.** Tu as choisi « au maintien d'une tuile ». Mais une ligne du maintien porte le nom d'un outil :
+      6 lettres au plus (règle 11). « Côte à côte » serait coupé. Proposition : la ligne s'appelle « Duo », avec
+      l'icône à deux zones, sous « Favori » et « Progr. ». Le panneau grandit vers le haut, et la tuile monte avec lui.
+      Maquette : `temp/reco_sport/mockups/q19a_duo_maintien.png`.
+      Reco : « Duo ».
+    - (b) **Le choix de la seconde zone.** Sur un téléphone, les deux zones sont l'une au-dessus de l'autre. L'outil
+      tenu reste en bas, sa bande du bas inchangée. Au-dessus, les tuiles de l'accueil s'offrent, et un toucher
+      choisit (Média, Projets, Capture…). Sur une tablette ou un ordinateur, les deux zones seraient côte à côte.
+      Exemple : en pleine série de développé couché, tu tiens la tuile, tu touches « Duo », puis « Média ». La vidéo
+      joue au-dessus à sa proportion, la séance continue en dessous. Le « Duo » allumé, au maintien, ferme la zone du
+      haut.
+      Maquettes : `temp/reco_sport/mockups/q19b_duo_choix.png`, `q19c_duo_media_et_seance.png`.
+      Reco : choix à la main parmi les tuiles, la dernière zone utilisée proposée en premier. Pas de proposition
+      automatique de l'assistant pour commencer.
+
+68. **(suite de la 20) Photos de suivi, module « Beauté ».** Aujourd'hui, ce module n'existe pas : « beauté » n'est qu'un rayon de la
+    Boutique. Le nom est réglé (« Beauté », ta reco). Voici ses écrans.
+    - (a) **Sa place.** Une plaque « Beauté » dans Activité › Bien-être, à côté de Sieste.
+      Maquette : `temp/reco_sport/mockups/q20a_beaute_plaque.png`.
+    - (b) **La prise guidée.** La caméra est en haut. La pose de la dernière photo y apparaît en transparence, pour
+      la reprendre à l'identique. En dessous, deux rouleaux : « Pose » (Face, 3/4, Profil G, Profil D) et « Zone »
+      (Visage, Corps…). Puis le disque orange « Prendre la photo ». La bande du bas a ✕, « Suivi » et « Rappel » (un
+      rappel régulier dans l'agenda, par exemple chaque semaine). La photo va dans tes médias, comme toute prise.
+      Maquette : `temp/reco_sport/mockups/q20b_beaute_prise_guidee.png`.
+    - (c) **La comparaison.** « Suivi » montre deux photos de même pose côte à côte, chacune avec son rouleau de
+      dates. Exemple : 2 oct. et 30 oct.
+      Maquette : `temp/reco_sport/mockups/q20c_beaute_deux_dates.png`.
+    Reco : oui aux trois. Question liée : la pose d'avant en transparence te convient-elle, ou préfères-tu la caméra
+    seule, sans repère ? Reco : la photo d'avant en transparence.
+
+69. **(suite de la 40) « Mon nom » dans l'aperçu de l'envoi** (maquettes `temp/reco_resultats/mockups/q40_maquette_nom_coche.png`,
+    `q40_maquette_nom_decoche.png`, l'actuel `q40_actuel.png`). Quand « Mon nom » est coché, on montre « Résultats de
+    Jean-Eric » en première ligne de l'aperçu, en gras, une ligne d'un demi-outil ; décoché, la ligne disparaît.
+    Exemple : tu décoches « Mon nom », l'aperçu perd sa première ligne, comme il perd la carte Cardio quand tu
+    décoches Cardio. Reco : oui.
+
+70. **(suite de la 29) Garder le profil santé sur l'appareil seulement : il n'existe aucun moyen de le faire.** Tout
+    ce qu'eVe enregistre part au serveur et se synchronise (Web vers le serveur, Mac et iPad par la synchro). Même
+    tes allergies d'aujourd'hui sont déjà synchronisées. Pour tenir ta réponse, il faut créer un rangement « cet
+    appareil seulement » : l'enregistrement passe par le même chemin, mais n'est jamais envoyé ni synchronisé. Sur le
+    Web, « l'appareil » serait le navigateur : vider ses données effacerait le profil. Exemple : tu déclares
+    « grossesse » sur l'iPad ; ton Mac ne le sait pas, et l'assistant ne le lit qu'avec ton accord. A) je crée ce
+    rangement et j'y mets tout le profil santé, allergies comprises ; B) le profil reste synchronisé comme les
+    allergies aujourd'hui, en attendant l'avis juridique. Reco : A.
+
+71. **(suite de la 25) Première déclaration du profil santé** (maquette `temp/reco_sante/out/m1_profil_sante.png`).
+    A) les lignes à case standard d'eVe (case à gauche), « Rien à déclarer » en tête ; B) les pastilles de l'étude,
+    qui seraient un nouvel aspect. Exemple : tu coches « Articulations » puis « Cœur » ; « Rien à déclarer » se
+    décoche. Reco : A (aucun aspect nouveau).
+
+72. **(suite de la 26) Écran du séjour Thalasso** (maquette `temp/reco_sante/out/m2_sejour_thalasso.png`). En haut,
+    le lieu et les dates sur leurs rouleaux ; dessous, un jour par carte avec ses soins ; l'ajout d'un soin comme
+    sur la variante B de la maquette. Où le ranger : Santé › Thalasso, ou Activité ? Exemple : séjour à Quiberon du
+    3 au 8 mars, tu ajoutes « enveloppement d'algues » au mardi. Reco : Santé › Thalasso.
+
+73. **(suite de la 23) Dire « Ne plus proposer » à l'écran** (maquette `temp/reco_sante/out/m3_ne_plus_proposer.png`).
+    A) tu maintiens le doigt sur la phrase d'eVe, une seule ligne « Ne plus proposer » paraît dessous ; B) pas de
+    geste, seulement la voix (« ne me propose plus rien », déjà codé) et un réglage. Exemple : eVe dit « Et si tu
+    faisais une petite sieste ? », tu la tiens, tu touches « Ne plus proposer ». Reco : A.
+
+74. **(suite de la 9) L'outil « Réalig. » de la Liste** (maquette `temp/reco_small/mockups/r010_maquette_realig.png`,
+    zoom `r010_maquette_realig_zoom.png`, l'actuel `r010_liste_actuelle.png`). En Liste, « Réalig » (glyphe
+    d'alignement) est le premier outil de la bande du bas, à gauche. Un toucher recale la timeline sur l'ordre de la
+    Liste, et s'annule comme toute action. Exemple : Liste C-A-B, timeline A-B-C → la timeline devient C-A-B.
+    Valides-tu l'outil, sa place et son glyphe ? Reco : oui.
+
+75. **La couleur du cœur d'un favori** (captures `temp/reco_finder/heart_question/maquette_E_coeurs.png`,
+    `reel_favoris_rouge.png`, `reel_repos_contour.png`). La maquette du Finder (état E, TV) dessine le cœur blanc et
+    sans fond : contour au repos, plein pour un favori. L'app dessine partout (contacts, Train vidéo, Finder) un cœur
+    blanc au repos et rouge plein pour un favori, posé sur un carré d'outil. Exemple : tu mets BFM TV en favori ; son
+    cœur devient rouge plein. Le cœur d'un favori reste-t-il rouge, comme aujourd'hui partout, ou devient-il blanc et
+    sans fond, comme sur la maquette, partout ? Reco : blanc sans fond partout (la maquette validée, un seul aspect).

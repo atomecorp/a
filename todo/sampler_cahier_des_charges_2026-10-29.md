@@ -231,6 +231,13 @@ La carte forme d'onde **grandit en plein écran** (un élément s'ouvre en grand
 jusqu'à l'échantillon, glisser pour défiler), **outils** dans la bande du bas (règle 13), ✕ à gauche. Stéréo :
 deux canaux superposés ou séparés.
 
+- [x] **FAIT le 2026-10-30** (maquettes E1–E4 validées, « reco partout ») : `eVe/domains/dashboard/dashboard_sample_editor.js`
+  + `dashboard_sample_editor_view.js`, ouvert par l'outil « Éditer » au pied d'une zone. Vue d'ensemble (fenêtre en
+  voile), vue de travail (pincer / molette = zoom, glisser = défiler), deux canaux superposés, bulles de sélection,
+  4 familles d'outils au pied (Écoute, Éditer, Forme, Repère), la famille ouverte en carte au-dessus. Écart validé :
+  le retour (✕ de la maquette) est le Retour `fold` du pied du Dashboard (règle 13). Sonde
+  `temp/reco_sampler/sample_editor_ui.probe.mjs`.
+
 ### 8.2 Outils
 
 Sélection (bulles de début / fin, accroche : passage par zéro, attaques, grille, marqueurs), écoute de la
@@ -238,6 +245,12 @@ sélection, **couper, copier, coller, silence, rogner**, fondu entrant / sortant
 supprimer la composante continue, découper (§6), boucle (§4.1), marqueurs (§7), étirer / changer la hauteur de la
 sélection, **Figer**. Valeurs tapées (toucher deux fois). Les outils trop nombreux pour la bande se rangent selon la
 règle de la bande (maquette).
+
+- [x] **FAIT le 2026-10-30** : Couper, Copier, Coller, Muet, Rogner, Figer ; Entrée, Sortie, Envers, Gain, Norme,
+  Centre, Étirer, Ton (nouvelle opération `pitch`, `semitones` −24…24, Rubber Band) ; Slice, Boucle, Marque, Aimant
+  (accroche au passage par zéro ou à un point). Chaque outil passe par la commande canonique (`audio_fx.edit_apply`,
+  `slice_point_add`, `instrument.take_set`, `marker_add`, `sample_play`). Gain, Étirer, Ton sont l'outil slider
+  (toucher deux fois = tapé). Reste : accroche aux attaques et à la grille.
 
 ### 8.3 Outils d'analyse et d'automatisation
 
@@ -255,6 +268,10 @@ Le sample édité est une **petite Molécule** (une piste de morceaux de la sour
 couper, joindre, rogner, faire des fondus, étirer (`kernel/clip_join.js`, `clip_fades.js`, `stretch.js`) ; à
 ajouter : inverser, gain par morceau, silence. Le moteur lit le **rendu en cache** (recalculé à chaque édition, hors
 du fil audio) ; Figer en fait un sample.
+
+- [x] Inverser, gain par morceau, silence, hauteur par morceau (`pitch`) : faits dans `eVe/domains/sample_edit/`
+  (sonde PCM `temp/reco_sampler/edit_kernel.probe.mjs`, 11/11). [ ] Le moteur lit encore la source, pas le rendu en
+  cache.
 
 ---
 
@@ -435,5 +452,5 @@ téléversé la transaction répond `history_source_transaction_not_found`, et l
 le retour du serveur (convergence 0,5 à 0,8 s, plus sous charge). Propriétaire : `eVe/core/atome_commit.js#executeHistoryCommand`
 et `adole_api/browser_workspace.js` — à corriger à part (touche toute annulation Web).
 
-**Reste bloqué** : l'écran complet de l'éditeur de sample (§8, au-delà des maquettes ponctuelles S3d0a/b) n'a pas de
-maquette validée (règle 16) ; ses opérations sont disponibles à la voix et par MCP.
+**Débloqué et fait le 2026-10-30** : l'écran complet de l'éditeur de sample (§8) suit les maquettes E1–E4 validées
+(« reco partout ») ; voir §8.1 et §8.2.

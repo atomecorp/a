@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { analyzePngSignal, assert, awaitBevyUiNodeTarget, clickCanvasTarget, diffPng, findBevyUiNodeTarget, findBevyUiNodeTargets, readBevyUiHit, visibleMenuTool, wait, waitFor, waitForStableScene } from "./molecule_ui_acceptance_support.mjs";
+import { awaitMysticItemTarget } from './molecule_ui_mystic_target.mjs';
 const clickMenuTarget = clickCanvasTarget;
 
 // The List orders loose Atomes before Molecules: the fixture's Molecule row is
@@ -12,13 +13,6 @@ const moleculeRowIndex = (page, ownerId) => page.evaluate(async (id) => {
 // Opens the Mystic menu of the selected subject: in a structured view Mystic is
 // blocked on the BevyUI rows and opens on the subject's visual preview
 // (`context_target.js#readProjectViewVisualPoint`); resolves with its item keys.
-const mysticItemIds = (page) => page.evaluate(() => {
-    const tree = window.eveBevyUiRuntime?.state?.trees?.get?.('eve_bevy_ui_mystic')?.tree || null;
-    const ids = [];
-    const visit = (node) => { if (!node || typeof node !== 'object') return; ids.push(String(node.id || '')); (node.children || []).forEach(visit); };
-    visit(tree?.root);
-    return ids;
-});
 const openRowMystic = async (page) => {
     const visual = await awaitBevyUiNodeTarget(page, { nodeId: 'project_view_visual_preview', treeId: 'eve_bevy_ui_project_view' });
     assert(visual, 'project_view_visual_preview_missing');
@@ -38,10 +32,7 @@ const openRowMystic = async (page) => {
     });
     return projected.items;
 };
-const mysticItemTarget = async (page, key) => {
-    const nodeId = (await mysticItemIds(page)).find((id) => new RegExp(`_item_${key}_\\d+$`).test(id));
-    return nodeId ? findBevyUiNodeTarget(page, { nodeId, treeId: 'eve_bevy_ui_mystic', step: 2 }) : null;
-};
+const mysticItemTarget = awaitMysticItemTarget;
 
 // The ids the contextual rail projects now (diagnostic of a missing tool).
 const railNodeIds = (page) => page.evaluate(async () => {

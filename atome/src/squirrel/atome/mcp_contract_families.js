@@ -7,6 +7,7 @@ import { MUSIC_ASSISTANT_INSTRUCTIONS, MUSIC_COMMANDS, validateMusicInput } from
 import { GPS_ASSISTANT_INSTRUCTIONS, GPS_COMMANDS, validateGpsInput } from '../gps/contracts.js';
 import { TRAINING_ASSISTANT_INSTRUCTIONS, TRAINING_COMMANDS, validateTrainingInput } from '../training/contracts.js';
 import { BRICK_SESSION_ASSISTANT_INSTRUCTIONS, BRICK_SESSION_COMMANDS, validateBrickSessionInput } from '../brick_sessions/contracts.js';
+import { BEAUTY_ASSISTANT_INSTRUCTIONS, BEAUTY_COMMANDS, validateBeautyInput } from '../beauty/contracts.js';
 import { HEALTH_FEELING_ASSISTANT_INSTRUCTIONS, HEALTH_FEELING_COMMANDS, validateHealthFeelingInput } from '../health/feeling_contracts.js';
 import { HEALTH_PROFILE_ASSISTANT_INSTRUCTIONS, HEALTH_PROFILE_COMMANDS, HEALTH_PROFILE_CONFIRMED_COMMANDS, validateHealthProfileInput } from '../health/profile_contracts.js';
 import { THALASSO_ASSISTANT_INSTRUCTIONS, THALASSO_COMMANDS, THALASSO_CONFIRMED_COMMANDS, validateThalassoInput } from '../thalasso/contracts.js';
@@ -59,10 +60,13 @@ export const MCP_CONTRACT_FAMILIES = Object.freeze([
     { id: 'gps', commands: GPS_COMMANDS, validate: validateGpsInput, noClient: 'HOST_UNSUPPORTED',
         instructions: GPS_ASSISTANT_INSTRUCTIONS, preload: ['gps.navigate_to', 'gps.stop_navigation'] },
     { id: 'training', commands: TRAINING_COMMANDS, validate: validateTrainingInput, noClient: 'AUTH_REQUIRED',
-        confirmed: ['training.schedule_week'], instructions: TRAINING_ASSISTANT_INSTRUCTIONS,
+        confirmed: ['training.schedule_week', 'training.take_ready_program'], instructions: TRAINING_ASSISTANT_INSTRUCTIONS,
         preload: ['training.prepare_session', 'training.session_transition', 'training.get_session'] },
     { id: 'brick_session', commands: BRICK_SESSION_COMMANDS, validate: validateBrickSessionInput, noClient: 'AUTH_REQUIRED',
         instructions: BRICK_SESSION_ASSISTANT_INSTRUCTIONS, preload: ['brick_session.prepare', 'brick_session.transition', 'brick_session.get'] },
+    // Bien-être › Beauté (R-006 Q68): a photo turns the camera on, the user's to allow.
+    { id: 'beauty', commands: BEAUTY_COMMANDS, validate: validateBeautyInput, noClient: 'PRESENTATION_UNAVAILABLE',
+        confirmed: ['beauty.shoot'], instructions: BEAUTY_ASSISTANT_INSTRUCTIONS, preload: ['beauty.open', 'beauty.shoot', 'beauty.set_reminder'] },
     { id: 'health_declaration', commands: HEALTH_DECLARATION_COMMANDS, validate: validateHealthDeclarationInput, noClient: 'AUTH_REQUIRED',
         instructions: HEALTH_DECLARATION_ASSISTANT_INSTRUCTIONS, preload: ['health_declaration.add', 'health_declaration.withdraw'] },
     { id: 'health_feeling', commands: HEALTH_FEELING_COMMANDS, validate: validateHealthFeelingInput, noClient: 'AUTH_REQUIRED',

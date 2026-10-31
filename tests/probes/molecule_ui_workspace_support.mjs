@@ -1,6 +1,7 @@
 // Canonical browser workspace and Molecule fixtures, shared by acceptance and focused diagnostics.
 import { createRichMoleculeFixture } from "../fixtures/molecule/canonical_v2_fixtures.mjs";
 import { waitFor } from "./molecule_ui_acceptance_support.mjs";
+import { FIXTURES, importThroughMenu } from './molecule_ui_media_fixture.mjs';
 export const APP_URL = process.env.ADOLE_TEST_URL || 'http://127.0.0.1:3001';
 
 export const ensureProject = (page, projectName) => page.evaluate(async (name) => {
@@ -105,7 +106,26 @@ export const enterProvisionedWorkspace = async (page) => {
     }, null, 180000);
 };
 
-export const installCanonicalFixture = (page, projectId) => page.evaluate(async ({ pid, fixtureTimeline }) => {
+// Endurance needs actual playable media; structural fixture Atomes alone cannot prove playback.
+export const importPlaybackFixtureMedia = async (page, projectId) => {
+    await waitFor(page, async () => {
+        const menu = (await import('/eVe/intuition/ribbon/bevy_ui_product_registry.js')).getMainMenuRuntime()?.measure?.();
+        return { ok: menu?.active === true && menu.treeMounted === true };
+    });
+    const sources = {};
+    for (const kind of ['audio', 'video', 'image']) {
+        console.log(`  import ${kind} fixture`);
+        sources[kind] = await importThroughMenu({ page, projectId, filePath: FIXTURES[kind], expectedKind: kind });
+        console.log(`  imported ${kind}: ${sources[kind]}`);
+    }
+    return sources;
+};
+
+export const installCanonicalFixture = (page, projectId, mediaAtomeIds = {}) => page.evaluate(async ({ pid, fixtureTimeline, mediaAtomeIds }) => {
+    // Creation canonically parents into the current selection. Imported media
+    // are selected, but the fixture owner must be a project root before its
+    // sources are moved into it (otherwise image ↔ owner forms a cycle).
+    (await import('/eVe/intuition/runtime/selection.js')).clearAllSelection();
     const timeline = fixtureTimeline;
     const sources = [
         ['audio', 'audio'], ['video', 'video'], ['image', 'image'], ['text', 'text'],
@@ -114,6 +134,10 @@ export const installCanonicalFixture = (page, projectId) => page.evaluate(async 
     const sourceIds = new Map();
     for (let index = 0; index < sources.length; index += 1) {
         const [key, kind] = sources[index];
+        if (mediaAtomeIds[key]) {
+            sourceIds.set(`fixture_atome_${key}`, mediaAtomeIds[key]);
+            continue;
+        }
         const created = await window.eveToolBase.createAtome({
             kind, type: kind, name: `Fixture ${key}`, projectId: pid,
             text: kind === 'text' ? `Fixture ${key}` : undefined,
@@ -161,5 +185,5 @@ export const installCanonicalFixture = (page, projectId) => page.evaluate(async 
     const workspaceMode = await import('/eVe/domains/dashboard/dashboard_workspace_mode.js');
     workspaceMode.markProjectWorkspaceMode?.(pid);
     return { ok: true, ownerId, timelineId: timeline.timeline_id, clipId: timeline.clips[0].clip_id };
-}, { pid: projectId, fixtureTimeline: createRichMoleculeFixture() });
+}, { pid: projectId, fixtureTimeline: createRichMoleculeFixture(), mediaAtomeIds });
 

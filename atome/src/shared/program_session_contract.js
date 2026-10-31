@@ -5,7 +5,8 @@ const measurement = { type: 'object', additionalProperties: false, required: ['v
 // `elapse` records that a step's own timer ended (never inferred at replay);
 // `measure` records a heart rate in bpm, typed or read from the health store.
 export const PROGRAM_SESSION_ACTIONS = Object.freeze(['start', 'pause', 'resume', 'confirm', 'elapse', 'measure', 'skip', 'correct', 'undo', 'finish', 'stop']);
-export const PROGRAM_SESSION_STEP_KINDS = Object.freeze(['work', 'rest']);
+// `warmup`: a light set before the first work set (Sport, Q66): run like a set, never counted as one.
+export const PROGRAM_SESSION_STEP_KINDS = Object.freeze(['work', 'rest', 'warmup']);
 export const PROGRAM_SESSION_TIMED_UNITS = Object.freeze(['s', 'min']);
 const measurements = { type: 'array', minItems: 1, maxItems: 4, items: measurement };
 export const PROGRAM_SESSION_SCHEMA = { type: 'object', additionalProperties: false,

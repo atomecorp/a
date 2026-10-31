@@ -32,7 +32,7 @@ const fixture = () => {
     return { ...timeline, tracks: timeline.tracks.map((track) => ({ ...track, name: track.track_id })) };
 };
 
-const setup = async () => {
+const setup = async (extraRecords = []) => {
     const session = createMoleculeSession({ timeline: fixture(), eventSink: { append: async () => {} } });
     const calls = { preview: [], cut: [] };
     const api = {
@@ -54,12 +54,24 @@ const setup = async () => {
     } });
     content = content_;
     await content.load({ projectId: OWNER, readList: async () => ({ records: [{ id: OWNER, atome_id: OWNER, project_id: OWNER,
-        properties: { name: 'Molécule' } }], totalCount: 1 }) });
+        properties: { name: 'Molécule' } }, ...extraRecords], totalCount: 1 + extraRecords.length }) });
     content.build({ width: 900, height: 520, emit: () => {} });
     const build = () => content.build({ width: 900, height: 520, emit: () => {} })[0];
     const send = (type, extra = {}) => content.handleEvent({ type: `project_view.mix.${type}`, ...extra });
     return { session, content, build, send, calls, strip: (id) => readMixStrip(session.getState(), id), refreshes: () => refreshes };
 };
+
+test('Mix gives the shared level transport its durable members rather than an empty level', async () => {
+    const { content } = await setup([{ id: 'playable', type: 'audio', parent_id: OWNER,
+        properties: { kind: 'audio', duration_seconds: 3 } }]);
+    const loaded = await content.transportRecords();
+    assert.equal(loaded.ok, true);
+    const { compileProjectViewTransportPlan } = await import('../../eVe/domains/rendering/project_view_transport_plan.js');
+    const root = { id: OWNER, type: 'group', properties: { group_type: 'media', playback_mode: 'simultaneous' } };
+    const plan = compileProjectViewTransportPlan({ rootId: OWNER, records: [root, ...loaded.records.filter(r => r.id !== OWNER)] });
+    assert.equal(plan.durationSeconds, 3);
+    assert.deepEqual(plan.leaves.map(leaf => leaf.id), ['playable']);
+});
 
 test('strips, tiles and the node contract (only interactive kinds carry handlers)', async () => {
     const { build, content } = await setup();

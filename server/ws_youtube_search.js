@@ -32,6 +32,22 @@ const logFailure = (log, requestId, error, data) => log('warn', {
   component: 'youtube_search', request_id: requestId, message: error, data
 });
 
+// A video's length (`contentDetails.duration`, ISO 8601 such as PT1H4M5S) in seconds; a live stream has none (0).
+const isoSeconds = (value) => {
+  const match = /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/.exec(String(value || ''));
+  return match ? (((Number(match[1] || 0) * 24 + Number(match[2] || 0)) * 60 + Number(match[3] || 0)) * 60) + Number(match[4] || 0) : 0;
+};
+
+// A search result carries no length: one `videos` read (one quota unit for the whole page) gives each its own.
+const readDurations = async (ids, { apiKey, fetchResource }) => {
+  if (!ids.length) return new Map();
+  const params = new URLSearchParams({ part: 'contentDetails', id: ids.join(','), maxResults: PAGE_SIZE, key: apiKey });
+  const response = await fetchResource(`${YOUTUBE_VIDEOS_ENDPOINT}?${params}`, { signal: AbortSignal.timeout(8000) });
+  if (!response.ok) throw new Error(`youtube_durations_status_${response.status}`);
+  const payload = await response.json();
+  return new Map((Array.isArray(payload.items) ? payload.items : []).map((item) => [String(item?.id || ''), isoSeconds(item?.contentDetails?.duration)]));
+};
+
 export const handleWsYoutubeSearch = async (message, address, {
   apiKey = process.env.YOUTUBE_DATA_API_KEY,
   fetchResource = fetch,
@@ -70,7 +86,7 @@ export const handleWsYoutubeSearch = async (message, address, {
     }
   }
   const params = new URLSearchParams(popular
-    ? { part: 'snippet,status', chart: 'mostPopular', regionCode: region, maxResults: PAGE_SIZE, key: apiKey }
+    ? { part: 'snippet,status,contentDetails', chart: 'mostPopular', regionCode: region, maxResults: PAGE_SIZE, key: apiKey }
     : { part: 'snippet', type: 'video', videoEmbeddable: 'true', videoSyndicated: 'true', q: query, maxResults: PAGE_SIZE, key: apiKey });
   if (pageToken) params.set('pageToken', pageToken);
   try {
@@ -98,9 +114,14 @@ export const handleWsYoutubeSearch = async (message, address, {
         url: `https://www.youtube.com/watch?v=${videoId}`,
         title: plainText(item?.snippet?.title),
         thumbnail: String(item?.snippet?.thumbnails?.medium?.url || item?.snippet?.thumbnails?.default?.url || ''),
-        channel: plainText(item?.snippet?.channelTitle)
+        channel: plainText(item?.snippet?.channelTitle),
+        duration: popular ? isoSeconds(item?.contentDetails?.duration) : 0
       }];
     });
+    if (!popular) {
+      const durations = await readDurations(results.map((result) => result.videoId), { apiKey, fetchResource });
+      results.forEach((result) => { result.duration = durations.get(result.videoId) || 0; });
+    }
     return reply(requestId, { ok: true, results,
       nextPageToken: String(payload.nextPageToken || '') });
   } catch (error) {

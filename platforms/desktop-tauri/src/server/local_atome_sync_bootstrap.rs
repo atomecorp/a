@@ -46,8 +46,7 @@ pub(crate) fn enqueue_current_user_state_sync(
 
     let mut enqueued = 0;
     for (atome_id, project_id, properties_json, updated_at, version, parent_id) in states {
-        let normalized_id = atome_id.to_ascii_lowercase();
-        if normalized_id.starts_with("tool.ui.") || normalized_id.starts_with("tool_ui.") {
+        if super::local_atome_sync_worker::is_device_local_atome_id(&atome_id) {
             continue;
         }
         let properties: JsonValue =

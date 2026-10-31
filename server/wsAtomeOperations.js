@@ -15,6 +15,7 @@ import { createServerConditionAuthority } from './conditionsQueryAuthority.js';
 import { handleAtomeHistoryCommand } from './atomeHistoryCommands.js';
 import { afterCommitted } from './ws_api_commit_effects.js';
 import { wsResponse as response, wsErrorResponse as errorResponse, requestIdOf } from './wsResponse.js';
+import { isDeviceAtomeId } from '../atome/src/shared/device_scope_contract.js';
 const MUTATING_ACTIONS = new Set([
     'events:commit',
     'events:commit-batch',
@@ -156,6 +157,12 @@ async function handleDirectory(message, connection, userId) {
 async function handleEvents(message, connection, userId) {
     const action = actionOf(message);
     const vaultRouter = connection?._wsApiVaultRouter || null;
+    // A `device:` atome belongs to the device that wrote it (#shared/device_scope_contract.js): the server never keeps one.
+    const sent = action === 'commit' ? [message.event || message.body || message.payload]
+        : action === 'commit-batch' && Array.isArray(message.events) ? message.events : [];
+    if (sent.some(event => isDeviceAtomeId(event?.atome_id || event?.atomeId || event?.id))) {
+        return errorResponse('events', message, 'device_only_atome');
+    }
     if (action === 'commit') {
         const event = message.event || message.body || message.payload || null;
         const result = vaultRouter

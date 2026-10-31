@@ -25,6 +25,16 @@ export const formatTimecode = (seconds, { fps = 0, signed = false } = {}) => {
 };
 
 /**
+ * A length as people read it on a list: `3:12`, `1:04:05` from one hour (whole seconds, no fraction).
+ */
+export const formatClockDuration = (seconds) => {
+    const whole = Math.max(0, Math.round(finite(seconds)));
+    const hours = Math.floor(whole / 3600);
+    const minutes = Math.floor((whole % 3600) / 60);
+    return hours ? `${hours}:${pad(minutes)}:${pad(whole % 60)}` : `${minutes}:${pad(whole % 60)}`;
+};
+
+/**
  * Reads what a user types: `75`, `75.5`, `1:15.5`, `0:01:15.50`, `-0:02`.
  * Returns seconds, or null when the text is not a timecode.
  */

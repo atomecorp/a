@@ -1,5 +1,6 @@
 /** Typed Programme preferences and purpose permissions; values stay in Atomes. */
 import { FOOD_ALLERGEN_KEYS } from './food_allergen_contract.js';
+import { deviceAtomeId } from './device_scope_contract.js';
 
 export const PROGRAM_PREFERENCE_KEYS = Object.freeze(['starting_state', 'allergies', 'equipment', 'intolerances', 'food_preferences', 'food_access', 'food_budget']);
 export const PROGRAM_PREFERENCE_SCHEMA = Object.freeze({ type: 'object', additionalProperties: false,
@@ -17,7 +18,12 @@ export const PROGRAM_DATA_PERMISSION_SCHEMA = Object.freeze({ type: 'object', ad
         source: { type: 'string', enum: ['preferences', 'journal'] }, allowed: { type: 'boolean' }, date: { type: 'string' },
         answer_state: { type: 'string', enum: ['unknown', 'later'] }
     } });
-export const programPreferenceId = (actor, key) => 'program_preference:' + encodeURIComponent(actor) + ':' + key;
+/** The health part of the preferences stays on this device only (decision Q70, 31 Oct. 2026; #device_scope_contract.js). */
+export const PROGRAM_PREFERENCE_DEVICE_KEYS = Object.freeze(['allergies', 'intolerances']);
+/** Where a preference was kept before Q70, synced with the account: read once by the move to the device, then deleted. */
+export const syncedProgramPreferenceId = (actor, key) => 'program_preference:' + encodeURIComponent(actor) + ':' + key;
+export const programPreferenceId = (actor, key) => PROGRAM_PREFERENCE_DEVICE_KEYS.includes(key)
+    ? deviceAtomeId('program_preference', String(actor), key) : syncedProgramPreferenceId(actor, key);
 export const programDataPermissionId = (actor, purpose, source) =>
     'program_data_permission:' + encodeURIComponent(actor) + ':' + encodeURIComponent(purpose) + ':' + source;
 export const collectionInstant = value => typeof value === 'string' && /(?:Z|[+-]\d\d:\d\d)$/.test(value) ? Date.parse(value) : NaN;

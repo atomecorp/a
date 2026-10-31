@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.squirrel.desktop",
   "build": {
-    "frontendDist": "../../atome/src"
+    "frontendDist": "http://127.0.0.1:3000/"
   },
   "app": {
     "withGlobalTauri": true,

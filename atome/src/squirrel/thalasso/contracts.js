@@ -5,7 +5,7 @@ import { THALASSO_CARE_IDS, THALASSO_STAY_MAX_DAYS } from '../../shared/thalasso
 // its dates and place said once, each care added to one of its days (eVe/domains/programs/thalasso_stay_runtime.js).
 // Ending a stay (its cares with it) is the user's to confirm.
 export const THALASSO_ERRORS = Object.freeze(['INVALID_ARGUMENT', 'AUTH_REQUIRED', 'THALASSO_STAY_INVALID', 'THALASSO_STAY_NOT_FOUND',
-    'THALASSO_CARE_NOT_FOUND', 'THALASSO_CARES_OUTSIDE_STAY', 'THALASSO_STAY_WRITE_FAILED']);
+    'THALASSO_CARE_NOT_FOUND', 'THALASSO_CARES_OUTSIDE_STAY', 'THALASSO_STAY_WRITE_FAILED', 'THALASSO_SCREEN_UNAVAILABLE']);
 export const THALASSO_CONFIRMED_COMMANDS = Object.freeze(['thalasso.stay_clear']);
 const day = { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' };
 const entry = { type: 'string', minLength: 1, maxLength: 80 };
@@ -13,6 +13,7 @@ const care_id = { type: 'string', enum: THALASSO_CARE_IDS };
 const CARES = 'sea_bath (heated sea water bath or pool), jet_bath (hydromassage bath, jet shower), seaweed_wrap (seaweed or marine mud wrap), aqua_gym (exercise in a pool), marine_relaxation, slow_breathing (cardiac coherence, out of the water) or nap';
 const definitions = {
     catalog: [{}, [], `List the cares a stay can hold: ${CARES}; each with water (in or beside water) and the health profile categories its precautions name. Wellness practices, never treatments: never promise a benefit.`, false],
+    open: [{}, [], 'Show the user\'s Thalasso stay screen on the Dashboard (Santé › Thalasso): its place and dates, one card per day with its cares.', false],
     stay_read: [{}, [], 'Read the user\'s Thalasso stay: its first and last day, its place, and each day with its cares (id, care_id, time, done_at); today says whether today lies in it.', false],
     stay_set: [{ start_day: day, end_day: day, place_label: { type: 'string', minLength: 1, maxLength: 120 },
         lat: { type: 'number', minimum: -90, maximum: 90 }, lon: { type: 'number', minimum: -180, maximum: 180 } }, ['start_day', 'end_day', 'place_label'],
@@ -27,7 +28,7 @@ export const THALASSO_COMMANDS = Object.freeze(Object.entries(definitions).map((
     name: `thalasso.${action}`, action, description, persistent, capability: persistent ? 'thalasso.write' : 'thalasso.read',
     input_schema: { type: 'object', additionalProperties: false, properties, required },
     output_schema: { type: 'object', required: ['ok'], properties: { ok: { type: 'boolean' }, error: { type: 'string', enum: THALASSO_ERRORS },
-        cares: { type: 'array' }, stay: { type: ['object', 'null'] }, days: { type: 'array' }, today: { type: 'object' }, care_entry_id: { type: 'string' },
+        cares: { type: 'array' }, shown: { type: 'boolean' }, stay: { type: ['object', 'null'] }, days: { type: 'array' }, today: { type: 'object' }, care_entry_id: { type: 'string' },
         feeling_opened: { type: 'boolean' } } }
 })));
 export const validateThalassoInput = (action, input) => {

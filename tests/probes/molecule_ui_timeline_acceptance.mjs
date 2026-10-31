@@ -1,4 +1,5 @@
 import path from 'node:path';
+import fs from 'node:fs';
 import { assert, awaitBevyUiNodeTarget, clickCanvasTarget, findBevyUiNodeTarget, playwrightPointForClientTarget, readBevyUiHit, recordCenter, visibleMenuTool, wait, waitFor, waitForStableScene } from "./molecule_ui_acceptance_support.mjs";
 const clickMenuTarget = clickCanvasTarget;
 import { exerciseMixerLassoBlock, exerciseTimelineEditingGestures } from "./molecule_ui_timeline_gestures.mjs";
@@ -143,44 +144,47 @@ export const runMoleculeTimelineAcceptance = async ({ page, project, fixture, re
         report.screenshots.push(timelineShot);
         if (ENDURANCE_MS > 0) {
             await check('the real Molecule UI remains stable through the configured playback and Record endurance', async () => {
-                const openActivity = async () => {
-                    const activePalette = await page.evaluate(async () => {
-                        const registry = await import('/eVe/intuition/ribbon/bevy_ui_product_registry.js');
-                        return String(registry.getMainMenuRuntime()?.measure?.()?.activePaletteKey || '');
-                    });
-                    if (activePalette === 'view') return;
-                    const activity = await findBevyUiNodeTarget(page, {
-                        nodeId: 'atome_contextual_tool_activity',
-                        treeId: 'eve_bevy_panel_atome_contextual_edit'
-                    });
-                    assert(activity, 'molecule_activity_not_actionable');
-                    await clickCanvasTarget(page, activity);
-                    await wait(500);
+                const openView = async mode => {
+                    const rail = 'eve_bevy_panel_atome_contextual_edit';
+                    const current = await page.evaluate(async () => (await import('/eVe/domains/rendering/project_view_mode_state.js')).getProjectViewMode());
+                    if (current === 'timeline') {
+                        // A selected clip has its own rail. Its track header restores the level's view tools.
+                        const header = await awaitBevyUiNodeTarget(page, { nodePrefix: 'project_view_timeline_header_', treeId: 'eve_bevy_ui_project_view' });
+                        assert(header, 'endurance_track_header_missing');
+                        await clickCanvasTarget(page, header);
+                    }
+                    if (mode === 'list') {
+                        await clickMenuTarget(page, await visibleMenuTool(page, project.id, 'view'));
+                        await clickMenuTarget(page, await visibleMenuTool(page, project.id, 'view_list'));
+                    } else {
+                        const multitrack = await awaitBevyUiNodeTarget(page, { nodeId: 'atome_contextual_tool_container_multitrack', treeId: rail });
+                        assert(multitrack, 'endurance_multitrack_missing');
+                        await clickCanvasTarget(page, multitrack);
+                        const choice = await awaitBevyUiNodeTarget(page, {
+                            nodeId: `atome_contextual_tool_container_multitrack_multitrack_${mode}`, treeId: rail
+                        });
+                        assert(choice, `endurance_view_choice_missing:${mode}`);
+                        await clickCanvasTarget(page, choice);
+                    }
+                    await waitFor(page, async expected => ({ ok: (await import('/eVe/domains/rendering/project_view_mode_state.js')).getProjectViewMode() === expected }), mode);
                 };
-                const selectMolecule = async () => {
-                    await openActivity();
-                    const list = await visibleMenuTool(page, project.id, 'molecule_activity_list');
-                    await clickMenuTarget(page, list);
-                    await waitFor(page, async (pid) => {
-                        const records = window.eveToolBase?.getProjectSceneState?.(pid)?.records || [];
-                        return {
-                            ok: records.some((record) => String(record.id || '').includes('project_view_list_entry_0')),
-                            records: records.length
-                        };
-                    }, project.id);
-                    const row = await page.evaluate(async (id) => ((await import('/eVe/domains/rendering/project_view_surface_runtime.js'))
-                        .readProjectViewSurfaceState().content?.entries || []).findIndex((entry) => entry.id === id), fixture.ownerId);
-                    const moleculeName = await projectViewNode(page, project.id, `project_view_list_entry_${Math.max(0, row)}_name`);
-                    await clickCanvasTarget(page, moleculeName);
-                    await wait(350);
-                };
-                const togglePlayback = async () => {
-                    const play = await findBevyUiNodeTarget(page, {
-                        nodeId: 'atome_contextual_tool_molecule_play',
+                const togglePlayback = async playing => {
+                    const play = await awaitBevyUiNodeTarget(page, {
+                        nodeId: 'atome_contextual_tool_container_play',
                         treeId: 'eve_bevy_panel_atome_contextual_edit'
                     });
                     assert(play, 'molecule_play_not_actionable');
                     await clickCanvasTarget(page, play);
+                    return waitFor(page, async ({ owner, playing }) => {
+                        const view = (await import('/eVe/domains/rendering/project_view_surface_runtime.js')).readProjectViewSurfaceState();
+                        // Timeline plays its clock; List/Mix play the current
+                        // level through the shared recursive project transport.
+                        const transport = view.mode === 'timeline'
+                            ? window.eveMoleculeTimelineApi.readGroupTimelineTransport({ group_id: owner })
+                            : (await import('/eVe/domains/rendering/project_view_transport_runtime.js')).projectViewTransport.read();
+                        return { ok: transport?.ok !== false && transport.playing === playing, transport,
+                            view: { mode: view.mode, ownerId: view.content?.ownerId, playing: view.content?.playing } };
+                    }, { owner: fixture.ownerId, playing }, 30000);
                 };
                 const readRuntimeSample = () => page.evaluate(async ({ pid, owner }) => {
                     const ownerState = await window.Atome.getStateCurrent(owner);
@@ -204,12 +208,21 @@ export const runMoleculeTimelineAcceptance = async ({ page, project, fixture, re
                 }, { pid: project.id, owner: fixture.ownerId });
 
                 await cdp.send('HeapProfiler.enable'); await cdp.send('HeapProfiler.collectGarbage');
-                await selectMolecule();
+                const container = await page.evaluate(async () => (await import('/eVe/domains/rendering/project_view_navigation.js')).currentContainerId());
+                assert(container === fixture.ownerId, `endurance_wrong_molecule:${container}`);
                 const beforeRecord = await readRuntimeSample();
-                await togglePlayback();
-                await wait(13000);
-                await togglePlayback();
-                await wait(700);
+                await togglePlayback(true);
+                // Native/browser capture finalization is asynchronous. A wall-clock
+                // sleep cannot prove both armed regions completed on a loaded host.
+                await waitFor(page, async owner => {
+                    const state = await window.Atome.getStateCurrent(owner);
+                    const timeline = state?.molecule_timeline || state?.props?.molecule_timeline || state?.properties?.molecule_timeline;
+                    const armed = timeline?.record_regions?.filter(region => region.armed === true) || [];
+                    return { ok: armed.length === 0, armed, transport: timeline?.transport };
+                }, fixture.ownerId, 60000);
+                const stillPlaying = await page.evaluate(owner => window.eveMoleculeTimelineApi
+                    .readGroupTimelineTransport({ group_id: owner })?.playing === true, fixture.ownerId);
+                if (stillPlaying) await togglePlayback(false);
                 const afterRecord = await readRuntimeSample();
                 assert(
                     afterRecord.armed_record_regions < beforeRecord.armed_record_regions
@@ -222,15 +235,13 @@ export const runMoleculeTimelineAcceptance = async ({ page, project, fixture, re
                 const startedAt = Date.now();
                 const deadline = startedAt + ENDURANCE_MS;
                 const samples = [baseline];
-                const activities = ['molecule_activity_list', 'molecule_activity_mix', 'molecule_activity_timeline'];
+                const activities = ['list', 'mix', 'timeline'];
                 let cycles = 0;
                 while (Date.now() < deadline || cycles < ENDURANCE_MIN_CYCLES) {
-                    await togglePlayback();
+                    await togglePlayback(true);
                     await wait(1800);
-                    await togglePlayback();
-                    await openActivity();
-                    const child = await visibleMenuTool(page, project.id, activities[cycles % activities.length]);
-                    await clickMenuTarget(page, child);
+                    await togglePlayback(false);
+                    await openView(activities[cycles % activities.length]);
                     await wait(350);
                     cycles += 1;
                     if (cycles % 10 === 0 || Date.now() >= deadline) {
@@ -239,6 +250,11 @@ export const runMoleculeTimelineAcceptance = async ({ page, project, fixture, re
                         assert(sample.authoritative_dom_count === 0, `endurance_authoritative_dom:${sample.authoritative_dom_count}`);
                         assert(!sample.overlay_error, `endurance_overlay_error:${sample.overlay_error}`);
                         samples.push(sample);
+                        fs.writeFileSync(path.join(OUT_DIR, 'endurance_progress.json'), JSON.stringify({
+                            status: 'running', requested_ms: ENDURANCE_MS, elapsed_ms: Date.now() - startedAt,
+                            completed_cycles: cycles, record: { before: beforeRecord, after: afterRecord }, samples
+                        }, null, 2));
+                        console.log(`  endurance ${cycles} cycles, ${Math.round((Date.now() - startedAt) / 1000)}s`);
                     }
                     const remaining = deadline - Date.now();
                     if (remaining > 0) await wait(Math.min(5000, remaining));
