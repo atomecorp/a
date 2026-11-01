@@ -191,7 +191,8 @@ export async function handleWsApiAtomeRequest({ data, connection, safeSend }) {
         fromOwnerId,
         toOwnerId,
         includeCreator,
-        operationId: data.operation_id || data.operationId || null
+        operationId: data.operation_id || data.operationId || null,
+        actorId: requesterId
       });
 
       safeSend({

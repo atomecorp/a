@@ -113,8 +113,8 @@ export async function commitAtomeEvent({
             return decision;
         });
     } catch (error) {
-        if (['property_version_conflict', 'event_id_conflict'].includes(error?.code || error?.message)) {
-            return { ok: false, error: error.code || error.message };
+        if (['property_version_conflict', 'event_id_conflict', 'atome_type_unknown', 'atome_property_unknown'].includes(error?.code || error?.message)) {
+            return { ok: false, error: error.code || error.message, ...(error.details ? { details: error.details } : {}) };
         }
         throw error;
     }
@@ -159,8 +159,8 @@ export async function commitAtomeEvents({
             return decision;
         });
     } catch (error) {
-        if (['property_version_conflict', 'event_id_conflict'].includes(error?.code || error?.message)) {
-            return { ok: false, error: error.code || error.message };
+        if (['property_version_conflict', 'event_id_conflict', 'atome_type_unknown', 'atome_property_unknown'].includes(error?.code || error?.message)) {
+            return { ok: false, error: error.code || error.message, ...(error.details ? { details: error.details } : {}) };
         }
         throw error;
     }

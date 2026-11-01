@@ -4,7 +4,8 @@ vi.mock('../../eVe/domains/dashboard/dashboard_mystic_sources.js', () => ({ dash
 import { MUSIC_COMMANDS, MUSIC_ERRORS, validateMusicInput } from '../../atome/src/squirrel/music/contracts.js';
 import { createMusicRuntime } from '../../eVe/domains/music/music_runtime.js';
 import { createMusicSource, resolveMusicProvider } from '../../eVe/domains/music/music_source.js';
-import { buildServiceCommandDefs, serviceCommandHandlers } from '../../eVe/intuition/tools/core/tool_runtime_service_commands.js';
+import { buildServiceCommandDefs } from '../../eVe/intuition/tools/core/tool_runtime_service_command_defs.js';
+import { serviceCommandHandlers } from '../../eVe/intuition/tools/core/tool_runtime_service_commands.js';
 import { createMcpContractHandlers } from '../../atome/src/squirrel/atome/mcp_handlers_contracts.js';
 import { resolveAccessPolicy } from '../../atome/src/squirrel/atome/mcp_security_policy.js';
 import { hasActorCapability, resolveActorProfile } from '../../atome/src/squirrel/atome/mcp_security.js';

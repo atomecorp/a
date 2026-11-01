@@ -45,6 +45,7 @@ export function registerWsApiRoute(server, {
   communities,
   forums,
   publicEvents,
+  objectiveNetwork,
   shop,
   coaches,
   scheduledSends,
@@ -75,6 +76,7 @@ export function registerWsApiRoute(server, {
       connection._wsApiSyncRuntime = wsSyncRuntime;
       connection._wsApiDirectoryService = directoryPublicService;
       connection._wsApiPublicEvents = publicEvents;
+      connection._wsApiObjectiveNetwork = objectiveNetwork;
       connection._wsApiShop = shop;
       connection._wsApiCoaches = coaches;
       connection._wsApiScheduledSends = scheduledSends;

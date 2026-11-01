@@ -41,6 +41,8 @@ macro_rules! eprintln {
 mod history;
 #[path = "local_atome_containment.rs"]
 mod containment;
+#[path = "local_atome_type_gate.rs"]
+mod type_gate;
 pub use history::handle_history_command;
 #[cfg(test)]
 #[path = "../../../../tests/tauri/local_atome_history.rs"]
@@ -1088,6 +1090,8 @@ async fn handle_create(
             return error_response(request_id, "Access denied");
         }
     }
+    // A direct write passes the same type gate as an event commit (`local_atome_type_gate.rs`).
+    if let Err(code) = type_gate::check_write(&db, &atome_id, Some(atome_type), data.as_object().unwrap_or(&JsonMap::new())) { return error_response(request_id, &code); }
 
     let fingerprint = create_fingerprint(&atome_id, atome_type, parent_id, owner_id, &data);
     if let Ok(mut cache) = state.recent_fingerprints.lock() {
@@ -1249,10 +1253,7 @@ async fn handle_create(
         }
     }
 
-    let patch = match data.as_object() {
-        Some(obj) => obj.clone(),
-        None => JsonMap::new(),
-    };
+    let patch = data.as_object().cloned().unwrap_or_default();
     if let Err(err) =
         upsert_state_current_from_patch(&db, &atome_id, atome_type, parent_id, patch, &now)
     {
@@ -1592,6 +1593,7 @@ async fn handle_update(
     if !can_write(&db, atome_id, user_id) {
         return error_response(request_id, "Access denied");
     }
+    if let Err(code) = type_gate::check_write(&db, atome_id, None, data.as_object().unwrap_or(&JsonMap::new())) { return error_response(request_id, &code); }
 
     // Update atome timestamp
     let _ = db.execute(
@@ -1626,10 +1628,7 @@ async fn handle_update(
         Ok(Some((meta_type, meta_parent))) => (meta_type, meta_parent),
         _ => ("generic".to_string(), None),
     };
-    let patch = match data.as_object() {
-        Some(obj) => obj.clone(),
-        None => JsonMap::new(),
-    };
+    let patch = data.as_object().cloned().unwrap_or_default();
     if let Err(err) = upsert_state_current_from_patch(
         &db,
         atome_id,
@@ -1769,6 +1768,7 @@ async fn handle_alter(
     if !can_write(&db, atome_id, user_id) {
         return error_response(request_id, "Access denied");
     }
+    if let Err(code) = type_gate::check_write(&db, atome_id, None, particles.as_object().unwrap_or(&JsonMap::new())) { return error_response(request_id, &code); }
 
     // Update timestamp
     let _ = db.execute(
@@ -1853,10 +1853,7 @@ async fn handle_alter(
         Ok(Some((meta_type, meta_parent))) => (meta_type, meta_parent),
         _ => ("generic".to_string(), None),
     };
-    let patch = match particles.as_object() {
-        Some(obj) => obj.clone(),
-        None => JsonMap::new(),
-    };
+    let patch = particles.as_object().cloned().unwrap_or_default();
     if let Err(err) = upsert_state_current_from_patch(
         &db,
         atome_id,
@@ -1971,10 +1968,7 @@ async fn handle_event_commit(
         None => return error_response(request_id, "Missing event payload"),
     };
 
-    let mut normalized = match normalize_event_input(event, user_id, None) {
-        Ok(v) => v,
-        Err(e) => return error_response(request_id, &e),
-    };
+    let mut normalized = match normalize_event_input(event, user_id, None) { Ok(v) => v, Err(e) => return error_response(request_id, &e) };
 
     let db = match state.db.lock() {
         Ok(d) => d,
@@ -1986,6 +1980,7 @@ async fn handle_event_commit(
         if !decision.allowed {
             return Err(format!("{}:{}", decision.reason, decision.denied_keys.join(",")));
         }
+        type_gate::check_event(conn, &normalized, &mut HashMap::new())?;
         normalized.project_id = containment::resolve_event_project_id(conn, &normalized)?;
         if !history::capture_before(conn, &mut normalized)? {
             return Ok(());
@@ -2046,11 +2041,7 @@ async fn handle_event_commit_batch(
 
     let mut normalized_events = Vec::with_capacity(events.len());
     for evt in events.iter() {
-        let normalized = match normalize_event_input(evt, user_id, tx_id.clone()) {
-            Ok(v) => v,
-            Err(e) => return error_response(request_id, &e),
-        };
-        normalized_events.push(normalized);
+        match normalize_event_input(evt, user_id, tx_id.clone()) { Ok(v) => normalized_events.push(v), Err(e) => return error_response(request_id, &e) }
     }
 
     let db = match state.db.lock() {
@@ -2060,11 +2051,13 @@ async fn handle_event_commit_batch(
 
     let result = with_transaction(&db, |conn| {
         let create_ids = super::local_atome_security::batch_create_ids(conn, &normalized_events, user_id);
+        let mut batch_types = HashMap::new();
         for evt in normalized_events.iter() {
             let decision = super::local_atome_security::authorize_event(conn, evt, user_id, Some(&create_ids));
             if !decision.allowed {
                 return Err(format!("{}:{}", decision.reason, decision.denied_keys.join(",")));
             }
+            type_gate::check_event(conn, evt, &mut batch_types)?;
         }
         for evt in normalized_events.iter_mut() {
             evt.project_id = containment::resolve_event_project_id(conn, evt)?;
@@ -3256,11 +3249,11 @@ mod property_commit_security_tests {
             ).expect("atome fixture");
         }
         db.execute(
-            "INSERT INTO state_current (atome_id, owner_id, properties, version) VALUES ('secure', 'owner', '{\"content\":\"before\",\"secret\":\"sealed\"}', 1)",
+            "INSERT INTO state_current (atome_id, owner_id, properties, version) VALUES ('secure', 'owner', '{\"color\":\"before\",\"name\":\"sealed\"}', 1)",
             [],
         ).expect("state fixture");
         db.execute(
-            "INSERT INTO permissions (atome_id, particle_key, principal_id, can_read, can_write) VALUES ('secure', 'content', 'member', 1, 1)",
+            "INSERT INTO permissions (atome_id, particle_key, principal_id, can_read, can_write) VALUES ('secure', 'color', 'member', 1, 1)",
             [],
         ).expect("permission fixture");
         LocalAtomeState {
@@ -3373,7 +3366,7 @@ mod property_commit_security_tests {
     async fn denied_mixed_commit_has_no_event_state_or_queue_side_effect() {
         let state = state();
         let allowed = handle_events_message(
-            commit_message("allowed-event", json!({"content":"after"})),
+            commit_message("allowed-event", json!({"color":"after"})),
             "member",
             &state,
         ).await;
@@ -3385,20 +3378,20 @@ mod property_commit_security_tests {
         );
 
         let denied = handle_events_message(
-            commit_message("denied-event", json!({"content":"partial","secret":"leak"})),
+            commit_message("denied-event", json!({"color":"partial","name":"leak"})),
             "member",
             &state,
         ).await;
         assert!(!denied.success);
-        assert!(denied.error.as_deref().unwrap_or_default().starts_with("property_write_denied:secret"));
+        assert!(denied.error.as_deref().unwrap_or_default().starts_with("property_write_denied:name"));
 
         let db = state.db.lock().unwrap();
         let properties: String = db.query_row(
             "SELECT properties FROM state_current WHERE atome_id = 'secure'", [], |row| row.get(0)
         ).unwrap();
         let properties = serde_json::from_str::<JsonValue>(&properties).unwrap();
-        assert_eq!(properties.get("content"), Some(&json!("after")));
-        assert_eq!(properties.get("secret"), Some(&json!("sealed")));
+        assert_eq!(properties.get("color"), Some(&json!("after")));
+        assert_eq!(properties.get("name"), Some(&json!("sealed")));
         let denied_events: i64 = db.query_row(
             "SELECT COUNT(*) FROM events WHERE id = 'denied-event'", [], |row| row.get(0)
         ).unwrap();

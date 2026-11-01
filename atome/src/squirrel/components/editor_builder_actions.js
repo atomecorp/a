@@ -1,7 +1,7 @@
 // Extracted from editor_builder.js createEditor: saveContent (local autosave to localStorage)
-// and validateContent (persist to adole cloud, or localStorage when unauthenticated).
-// Status/dirty cross-calls + callbacks injected via `deps`.
-import { loadAdoleApi, isAdoleAuthenticated, adoleOperationSucceeded, extractCreatedAtomeId } from './editor_builder_adole.js';
+// and validateContent (a `code_file` atome committed through window.Atome.commit, or
+// localStorage when unauthenticated). Status/dirty cross-calls + callbacks injected via `deps`.
+import { loadAdoleApi, isAdoleAuthenticated } from './editor_builder_adole.js';
 
 export function makeEditorActions(deps) {
     const { state, editorId, onSave, onValidate, onError, updateStatus, updateDirtyIndicator } = deps;
@@ -80,31 +80,34 @@ export function makeEditorActions(deps) {
                 return;
             }
 
-            // Authenticated - save to server with ADOLE-compliant format
-            const atomeData = {
+            // Authenticated: one `code_file` atome per file, written through the canonical
+            // pipeline (events, history, sync); a file opened from the list keeps its atome.
+            const atomeId = state.fileId || globalThis.crypto.randomUUID();
+            const result = await window.Atome.commit({
+                kind: 'set',
                 type: 'code_file',
-                properties: {
-                    fileName: state.fileName,
-                    language: state.language,
-                    content: content,
-                    lastModified: new Date().toISOString(),
-                    size: content.length,
-                    fileId: state.fileId || null
+                atome_id: atomeId,
+                scope: 'global',
+                payload: {
+                    props: {
+                        fileName: state.fileName,
+                        language: state.language,
+                        content,
+                        lastModified: new Date().toISOString(),
+                        size: content.length
+                    }
                 }
-            };
+            });
 
-            const result = await adoleApi.atomes.create(atomeData);
-
-            if (adoleOperationSucceeded(result)) {
-                state.fileId = extractCreatedAtomeId(result) || state.fileId;
+            if (result?.ok === true) {
+                state.fileId = atomeId;
                 state.lastValidatedContent = content;
                 state.isDirty = false;
                 updateDirtyIndicator(false);
                 updateStatus('✓ Saved');
                 onValidate?.({ editorId, fileName: state.fileName, fileId: state.fileId, content });
             } else {
-                const error = result?.tauri?.error || result?.fastify?.error || result?.error || 'Unknown error';
-                updateStatus('✗ Save failed: ' + error);
+                updateStatus('✗ Save failed: ' + (result?.error || 'atome_commit_failed'));
             }
 
         } catch (error) {

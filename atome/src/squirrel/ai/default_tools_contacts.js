@@ -2,7 +2,7 @@ import { PERSONAL_IMPORT_TOOLS, personalImportInputSchema, personalImportToolRes
 export const registerContactsDefaultTools = ({ Agent, safeString, prepareContactsApi, requireContactsApi }) => {
     for (const tool of PERSONAL_IMPORT_TOOLS.filter(tool => tool.name.startsWith('contacts.'))) Agent.registerTool({
         name: tool.name, description: tool.description, capabilities: [tool.write ? 'contacts.write' : 'contacts.read'],
-        risk_tier: tool.write ? 'MEDIUM' : 'LOW', parameters: personalImportInputSchema(tool),
+        risk_tier: tool.write ? 'moderate' : 'low', parameters: personalImportInputSchema(tool),
         handler: async ({ params = {} }) => { const api = await requireContactsApi(); return personalImportToolResult(tool,
             await (tool.param ? api[tool.method](params[tool.param], params) : api[tool.method](params))); }
     });
@@ -10,7 +10,7 @@ export const registerContactsDefaultTools = ({ Agent, safeString, prepareContact
         name: 'contacts.sources',
         description: 'List contact sources currently bridged into eVe.',
         capabilities: ['contacts.read'],
-        risk_tier: 'LOW',
+        risk_tier: 'low',
         parameters: { type: 'object', additionalProperties: false, properties: {} },
         handler: async () => {
             const api = await prepareContactsApi();
@@ -23,7 +23,7 @@ export const registerContactsDefaultTools = ({ Agent, safeString, prepareContact
         name: 'contacts.list',
         description: 'List synchronized contacts available in eVe.',
         capabilities: ['contacts.read'],
-        risk_tier: 'LOW',
+        risk_tier: 'low',
         parameters: {
             properties: {
                 limit: { type: 'number' },
@@ -41,7 +41,7 @@ export const registerContactsDefaultTools = ({ Agent, safeString, prepareContact
         name: 'contacts.search',
         description: 'Search synchronized contacts by name, email or phone.',
         capabilities: ['contacts.read'],
-        risk_tier: 'LOW',
+        risk_tier: 'low',
         parameters: {
             required: ['query'],
             properties: {
@@ -63,7 +63,7 @@ export const registerContactsDefaultTools = ({ Agent, safeString, prepareContact
         name: 'contacts.read',
         description: 'Read one synchronized contact by contact id or source contact id.',
         capabilities: ['contacts.read'],
-        risk_tier: 'LOW',
+        risk_tier: 'low',
         parameters: {
             required: ['contact_id'],
             properties: {
@@ -83,7 +83,7 @@ export const registerContactsDefaultTools = ({ Agent, safeString, prepareContact
         name: 'contacts.create',
         description: 'Create one local eVe contact.',
         capabilities: ['contacts.write'],
-        risk_tier: 'LOW',
+        risk_tier: 'low',
         parameters: {
             properties: {
                 contact: { type: 'object' },
@@ -112,7 +112,7 @@ export const registerContactsDefaultTools = ({ Agent, safeString, prepareContact
         name: 'contacts.update',
         description: 'Update one local eVe contact.',
         capabilities: ['contacts.write'],
-        risk_tier: 'LOW',
+        risk_tier: 'low',
         parameters: {
             required: ['contact_id'],
             properties: {
@@ -146,7 +146,7 @@ export const registerContactsDefaultTools = ({ Agent, safeString, prepareContact
         name: 'contacts.delete',
         description: 'Delete one local eVe contact.',
         capabilities: ['contacts.write'],
-        risk_tier: 'LOW',
+        risk_tier: 'low',
         parameters: {
             required: ['contact_id'],
             properties: {
@@ -169,7 +169,7 @@ export const registerContactsDefaultTools = ({ Agent, safeString, prepareContact
         name: 'contacts.import_icloud',
         description: 'Import contacts from iCloud CardDAV into private canonical contacts.',
         capabilities: ['contacts.write'],
-        risk_tier: 'LOW',
+        risk_tier: 'low',
         parameters: { type: 'object', properties: {
             source_id: { type: 'string' }, source_key: { type: 'string' }, auth_ref: { type: 'string', description: 'Credential vault reference.' },
             addressbook_url: { type: 'string' }
@@ -188,7 +188,7 @@ export const registerContactsDefaultTools = ({ Agent, safeString, prepareContact
         name: 'contacts.push_icloud',
         description: 'Push one eVe contact to iCloud Contacts after explicit confirmation.',
         capabilities: ['contacts.write'],
-        risk_tier: 'HIGH',
+        risk_tier: 'high',
         parameters: {
             properties: {
                 contact_id: { type: 'string' },
@@ -210,7 +210,7 @@ export const registerContactsDefaultTools = ({ Agent, safeString, prepareContact
         name: 'contacts.open_panel',
         description: 'Open the existing eVe contact panel.',
         capabilities: ['contacts.read'],
-        risk_tier: 'LOW',
+        risk_tier: 'low',
         parameters: { type: 'object', additionalProperties: false, properties: {} },
         handler: async () => {
             const api = await prepareContactsApi();

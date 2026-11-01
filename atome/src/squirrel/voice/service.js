@@ -19,7 +19,7 @@ import {
 } from './service_support.js';
 import { resolveSpeechLocale } from './service_speech.js';
 import { resolveVoiceProviders } from './service_providers.js';
-import { startBrowserRecognition } from './service_browser_stt.js';
+import { requireOnDeviceRecognition, startBrowserRecognition } from './service_browser_stt.js';
 import { startTauriRecognition } from './service_tauri_stt.js';
 import { startAssistantTranscription } from './service_assistant_stt.js';
 import { checkConnection } from '../apis/unified/adole_connection.js';
@@ -212,7 +212,8 @@ export const createVoiceService = ({
         wake,
         startBrowserRecognition,
         startTauriRecognition,
-        startAssistantTranscription,
+        startAssistantTranscription, requireOnDeviceRecognition,
+        deviceOnline: () => checkConnection('fastify'),
         // The assistant can transcribe for this person: an account its provider accepts, and the device online.
         transcriptionAvailable: async () => providerPrincipalReady() && await checkConnection('fastify')
     });

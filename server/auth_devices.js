@@ -6,19 +6,25 @@ import { randomHandle, reject } from './auth_link_security.js';
 export const APPROVE_ASSURANCE = 'hardware_uv';
 export const PROBATION_MS = 72 * 3600000;
 const ASSURANCES = new Set(['hardware_uv', 'hardware', 'software']);
-const PLATFORMS = new Set(['ios', 'ipados', 'android', 'macos', 'windows', 'linux', 'freebsd', 'chromeos', 'web']);
+// `mcp_program`: an MCP client's seat (scripts/mcp/atome_mcp_stdio.mjs), its key paired like a device's.
+export const PROGRAM_PLATFORM = 'mcp_program';
+const PLATFORMS = new Set(['ios', 'ipados', 'android', 'macos', 'windows', 'linux', 'freebsd', 'chromeos', 'web', PROGRAM_PLATFORM]);
 const ALWAYS_PERSONAL = new Set(['ios', 'ipados', 'android']);
 // `enrolled_by` of a device opened by a recovery (code or SMS link).
 const RECOVERY_CHANNELS = new Set(['recovery_code', 'phone_recovery']);
 
-export function normalizeDeviceMeta(meta = {}) {
-    const platform = PLATFORMS.has(meta?.platform) ? meta.platform : 'web';
-    const label = String(meta?.label || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 64);
-    return { platform, label };
+// `program`: only a pairing may enroll a program's key (never an account creation, a recovery or a rename).
+export function normalizeDeviceMeta(meta = {}, { program = false } = {}) {
+    const platform = PLATFORMS.has(meta?.platform) && (program || meta.platform !== PROGRAM_PLATFORM) ? meta.platform : 'web';
+    const clean = value => String(value || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 64);
+    // A program names the machine it runs on (« Mac de Léa »), shown beside its name in Mon matériel.
+    return { platform, label: clean(meta?.label), ...(platform === PROGRAM_PLATFORM ? { host: clean(meta?.host) } : {}) };
 }
 
-// Phones and tablets are personal; a computer or a browser says it once.
+// Phones and tablets are personal; a computer or a browser says it once. A program's key is a program's,
+// whatever it asks: it never approves, never holds the backup keys and is never offered a pairing.
 export function resolveDeviceClass(platform, requested) {
+    if (platform === PROGRAM_PLATFORM) return requested === undefined || requested === 'program' ? 'program' : reject('auth_request_invalid');
     if (ALWAYS_PERSONAL.has(platform)) return 'personal';
     if (requested === 'personal' || requested === 'shared') return requested;
     return reject('auth_device_class_required');

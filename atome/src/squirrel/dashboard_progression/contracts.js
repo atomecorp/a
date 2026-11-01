@@ -42,7 +42,7 @@ const definitions = {
         + 'include "catalog" adds every tier, its rule and its bricks.',
         { tier: { type: 'number' }, bricks: { type: 'array', items: brick }, next: { type: 'object', properties: { brick_id: { type: 'string' },
             tier: { type: 'number' }, rule_id: { type: 'string' }, objective_id: { type: 'string' }, progress } },
-            visible_refs: { type: 'array', items: { type: 'string' } }, activity_keys: { type: 'array', items: { type: 'string' } }, health: { type: 'string', enum: ['counted', 'denied_for_actor', 'unavailable'] },
+            activity_keys: { type: 'array', items: { type: 'string' } }, health: { type: 'string', enum: ['counted', 'denied_for_actor', 'unavailable'] },
             catalog: { type: 'object' } }],
     'progression.evaluate': [{ preview: { type: 'boolean' } }, [], true,
         'Check the user\'s health objectives against the tier rules and record the bricks newly earned (an earned brick is never '

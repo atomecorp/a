@@ -9,6 +9,10 @@ import { TRAINING_ASSISTANT_INSTRUCTIONS, TRAINING_COMMANDS, validateTrainingInp
 import { BRICK_SESSION_ASSISTANT_INSTRUCTIONS, BRICK_SESSION_COMMANDS, validateBrickSessionInput } from '../brick_sessions/contracts.js';
 import { HEALTH_FEELING_ASSISTANT_INSTRUCTIONS, HEALTH_FEELING_COMMANDS, validateHealthFeelingInput } from '../health/feeling_contracts.js';
 import { HEALTH_PROFILE_ASSISTANT_INSTRUCTIONS, HEALTH_PROFILE_COMMANDS, HEALTH_PROFILE_CONFIRMED_COMMANDS, validateHealthProfileInput } from '../health/profile_contracts.js';
+import { HEALTH_PROTOCOL_ASSISTANT_INSTRUCTIONS, HEALTH_PROTOCOL_COMMANDS, HEALTH_PROTOCOL_CONFIRMED_COMMANDS, HEALTH_PRODUCTS_COMMANDS, validateHealthProductsInput,
+    validateHealthProtocolInput, HEALTH_PRODUCTS_CONFIRMED_COMMANDS } from '../health/protocol_contracts.js';
+import { OBJECTIVE_PROGRAM_ASSISTANT_INSTRUCTIONS, OBJECTIVE_PROGRAM_COMMANDS, OBJECTIVE_PROGRAM_CONFIRMED_COMMANDS, validateObjectiveProgramInput } from '../objective_program/contracts.js';
+import { HEALTH_RECORD_ASSISTANT_INSTRUCTIONS, HEALTH_RECORD_COMMANDS, HEALTH_RECORD_CONFIRMED_COMMANDS, validateHealthRecordInput } from '../health/health_record_contracts.js';
 import { THALASSO_ASSISTANT_INSTRUCTIONS, THALASSO_COMMANDS, THALASSO_CONFIRMED_COMMANDS, validateThalassoInput } from '../thalasso/contracts.js';
 import { HEALTH_DECLARATION_ASSISTANT_INSTRUCTIONS, HEALTH_DECLARATION_COMMANDS, validateHealthDeclarationInput } from '../health/declaration_contracts.js';
 import { SHOPPING_ASSISTANT_INSTRUCTIONS, SHOPPING_COMMANDS, validateShoppingInput } from '../shopping/contracts.js';
@@ -42,6 +46,8 @@ import { FORUM_ASSISTANT_INSTRUCTIONS, FORUM_COMMANDS, FORUM_CONFIRMED_COMMANDS,
 import { VIDEO_TRAIN_ASSISTANT_INSTRUCTIONS, VIDEO_TRAIN_COMMANDS, VIDEO_TRAIN_CONFIRMED_COMMANDS, validateVideoTrainInput } from '../video_train/contracts.js';
 import { RESULTS_SEND_ASSISTANT_INSTRUCTIONS, RESULTS_SEND_COMMANDS, validateResultsSendInput } from '../results_send/contracts.js';
 import { STRAVA_ASSISTANT_INSTRUCTIONS, STRAVA_COMMANDS, validateStravaInput } from '../strava/contracts.js';
+import { MCP_ACCESS_ASSISTANT_INSTRUCTIONS, MCP_ACCESS_COMMANDS, MCP_ACCESS_CONFIRMED_COMMANDS, validateMcpAccessInput } from '../mcp_access/contracts.js';
+import { OBJECTIVE_NETWORK_ASSISTANT_INSTRUCTIONS, OBJECTIVE_NETWORK_COMMANDS, OBJECTIVE_NETWORK_CONFIRMED_COMMANDS, validateObjectiveNetworkInput } from '../objective_network/contracts.js';
 
 // The one list of the domain command families. Direct MCP handlers, the access policy, the
 // default actor's capabilities, the eVe runtime tools and the assistant's instructions and
@@ -70,6 +76,20 @@ export const MCP_CONTRACT_FAMILIES = Object.freeze([
     // The health profile read by the assistant or MCP: the user agrees at each question that needs it (decision Q28).
     { id: 'health_profile', commands: HEALTH_PROFILE_COMMANDS, validate: validateHealthProfileInput, noClient: 'AUTH_REQUIRED',
         confirmed: HEALTH_PROFILE_CONFIRMED_COMMANDS, instructions: HEALTH_PROFILE_ASSISTANT_INSTRUCTIONS },
+    // Health protocols and declared products: closed to the assistant and MCP (the executor answers only the person in
+    // the app, health_protocol_commands.js); activating a plan, sharing and accepting a template are confirmed.
+    { id: 'health_protocol', commands: HEALTH_PROTOCOL_COMMANDS, validate: validateHealthProtocolInput, noClient: 'AUTH_REQUIRED',
+        confirmed: HEALTH_PROTOCOL_CONFIRMED_COMMANDS, instructions: HEALTH_PROTOCOL_ASSISTANT_INSTRUCTIONS },
+    { id: 'health_products', commands: HEALTH_PRODUCTS_COMMANDS, validate: validateHealthProductsInput, noClient: 'AUTH_REQUIRED',
+        confirmed: HEALTH_PRODUCTS_CONFIRMED_COMMANDS },
+    // The Health record (R-104 D10): closed to the assistant and MCP but for showing its screens; removing an entry and saving a
+    // file out are confirmed.
+    { id: 'health_record', commands: HEALTH_RECORD_COMMANDS, validate: validateHealthRecordInput, noClient: 'AUTH_REQUIRED',
+        confirmed: HEALTH_RECORD_CONFIRMED_COMMANDS, instructions: HEALTH_RECORD_ASSISTANT_INSTRUCTIONS },
+    // An objective composed brick by brick, its programme previewed, planned and launched (R-104 D7): health data, closed
+    // to the assistant and MCP but for the library, the sheets, the scenarios and the screens; writing the calendar is confirmed.
+    { id: 'objective_program', commands: OBJECTIVE_PROGRAM_COMMANDS, validate: validateObjectiveProgramInput, noClient: 'AUTH_REQUIRED',
+        confirmed: OBJECTIVE_PROGRAM_CONFIRMED_COMMANDS, instructions: OBJECTIVE_PROGRAM_ASSISTANT_INSTRUCTIONS },
     // A Thalasso stay and its cares (decision Q26); ending a stay is the user's to confirm.
     { id: 'thalasso', commands: THALASSO_COMMANDS, validate: validateThalassoInput, noClient: 'AUTH_REQUIRED',
         confirmed: THALASSO_CONFIRMED_COMMANDS, instructions: THALASSO_ASSISTANT_INSTRUCTIONS,
@@ -166,7 +186,14 @@ export const MCP_CONTRACT_FAMILIES = Object.freeze([
     // Forums: making one, inviting, answering an invitation, leaving and writing are the user's to confirm.
     { id: 'forum', commands: FORUM_COMMANDS, validate: validateForumInput, noClient: 'AUTH_REQUIRED',
         confirmed: FORUM_CONFIRMED_COMMANDS, instructions: FORUM_ASSISTANT_INSTRUCTIONS,
-        preload: ['forum.list', 'forum.create', 'forum.post', 'forum.members', 'forum.open'] }
+        preload: ['forum.list', 'forum.create', 'forum.post', 'forum.members', 'forum.open'] },
+    // Programs and held requests (R-104 D8): a grant, a withdrawal and a yes are the person's alone, in the app.
+    { id: 'mcp_access', commands: MCP_ACCESS_COMMANDS, validate: validateMcpAccessInput, noClient: 'NOT_LOCAL',
+        confirmed: MCP_ACCESS_CONFIRMED_COMMANDS, instructions: MCP_ACCESS_ASSISTANT_INSTRUCTIONS, preload: ['mcp_access.programs', 'mcp_access.confirmations'] },
+    // The objectives network (R-104 D8): being findable, a report, a block, the end of a link and leaving are the user's to confirm.
+    { id: 'objective_network', commands: OBJECTIVE_NETWORK_COMMANDS, validate: validateObjectiveNetworkInput, noClient: 'AUTH_REQUIRED',
+        confirmed: OBJECTIVE_NETWORK_CONFIRMED_COMMANDS, instructions: OBJECTIVE_NETWORK_ASSISTANT_INSTRUCTIONS,
+        preload: ['objective_network.people_open', 'objective_network.visibility_set', 'objective_network.network_set'] }
 ].map(family => Object.freeze({ confirmed: [], preload: [], instructions: '', ...family, layer: `atome_mcp_${family.id}` })));
 
 export const MCP_CONTRACT_COMMANDS = Object.freeze(MCP_CONTRACT_FAMILIES.flatMap(family => family.commands));

@@ -77,7 +77,8 @@ const projectStoredAtome = ({ row, properties = {}, kind = null } = {}) => {
         },
         properties: normalizeStoredProperties(properties)
     }, {
-        universal: true
+        universal: true,
+        storedTruth: true
     }).atome;
 };
 
@@ -100,7 +101,8 @@ const projectStoredStateCurrent = (row = {}) => {
         },
         properties
     }, {
-        universal: true
+        universal: true,
+        storedTruth: true
     }).atome;
 };
 

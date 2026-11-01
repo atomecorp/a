@@ -280,8 +280,11 @@ const normalizeCanonicalAtome = (record = {}, options = {}) => {
     const typeDefinition = readTypeDefinition(type, options.typeDefinitions);
     const dropped = [];
     const quarantined = {};
-    const schema = hasObjectShape(typeDefinition?.schema) ? typeDefinition.schema : null;
-    const allowUnknownProperties = typeDefinition
+    // Stored truth (a read projection, a stored atome relayed by sync) is projected as it was
+    // committed: the type schema validates what is about to be written, never what already is.
+    const validated = options.storedTruth !== true;
+    const schema = validated && hasObjectShape(typeDefinition?.schema) ? typeDefinition.schema : null;
+    const allowUnknownProperties = validated && typeDefinition
         ? typeDefinition.allow_unknown_properties !== false && typeDefinition.allowUnknownProperties !== false
         : true;
     const envelope = sanitizeAtomeEnvelope(record, { boundaryAdapter, universal });
@@ -328,7 +331,8 @@ const formatCanonicalAtome = (record = {}, options = {}) => {
             boundaryAdapter: true,
             universal: options.universal === true,
             typeDefinitions: options.typeDefinitions,
-            unknownPropertyMode: options.unknownPropertyMode
+            unknownPropertyMode: options.unknownPropertyMode,
+            storedTruth: options.storedTruth === true
         });
         return normalized?.atome || null;
     } catch (_) {
@@ -383,6 +387,7 @@ export {
     listAtomeTypes,
     normalizeCanonicalAtome,
     registerAtomeType,
+    RESERVED_PROPERTY_KEYS,
     resolveCanonicalProperties,
     sanitizeAtomeEnvelope,
     sanitizeAtomeProperties,

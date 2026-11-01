@@ -1,9 +1,16 @@
-export const registerAdoleDefaultTools = ({ Agent, requireGlobal, safeString, getAdoleAPI }) => {
+// Writes go through the one mutation pipeline (window.Atome.commit), never a direct store write.
+const requireAtomeCommit = (requireGlobal) => {
+    const atome = requireGlobal('Atome', globalThis.window?.Atome);
+    if (typeof atome.commit !== 'function') throw new Error('Atome.commit is not available');
+    return atome;
+};
+
+export const registerAdoleDefaultTools = ({ Agent, requireGlobal, safeString, getAdoleAPI, invokeRuntimeDefaultTool }) => {
     Agent.registerTool({
         name: 'adole.auth.current',
         description: 'Return current authenticated user info (tauri/fastify).',
         capabilities: ['auth.read'],
-        risk_tier: 'LOW',
+        risk_tier: 'low',
         parameters: { type: 'object', additionalProperties: false, properties: {} },
         handler: async () => {
             const api = requireGlobal('AdoleAPI', getAdoleAPI());
@@ -18,7 +25,7 @@ export const registerAdoleDefaultTools = ({ Agent, requireGlobal, safeString, ge
         name: 'adole.atomes.get',
         description: 'Get one atome by id.',
         capabilities: ['atome.read'],
-        risk_tier: 'LOW',
+        risk_tier: 'low',
         parameters: {
             required: ['id'],
             properties: {
@@ -40,7 +47,7 @@ export const registerAdoleDefaultTools = ({ Agent, requireGlobal, safeString, ge
         name: 'adole.atomes.list',
         description: 'List a bounded metadata index of atomes (id, name, type and hierarchy). No text, image or project contents are returned. Use atomes.get with a known id for an explicitly needed object; prefer get when verifying a created object.',
         capabilities: ['atome.read'],
-        risk_tier: 'LOW',
+        risk_tier: 'low',
         parameters: {
             properties: {
                 type: { type: 'string' },
@@ -81,36 +88,37 @@ export const registerAdoleDefaultTools = ({ Agent, requireGlobal, safeString, ge
 
     Agent.registerTool({
         name: 'adole.atomes.create',
-        description: 'Create a nonvisual storage record (type/properties/parentId/ownerId). For visible drawings, SVG, text, images or project objects use the eVe runtime creation tools instead; this storage operation alone does not render a project object.',
+        description: 'Create a nonvisual storage record (type/properties/parentId). For visible drawings, SVG, text, images or project objects use the eVe runtime creation tools instead; this storage operation alone does not render a project object.',
         capabilities: ['atome.write'],
-        risk_tier: 'MEDIUM',
+        risk_tier: 'moderate',
         parameters: {
+            required: ['type'],
             properties: {
                 id: { type: 'string' },
                 type: { type: 'string' },
                 parentId: { type: 'string' },
-                ownerId: { type: 'string' },
                 color: { type: 'string' },
                 properties: { type: 'object' },
                 particles: { type: 'object' }
             }
         },
         handler: async ({ params }) => {
-            const api = requireGlobal('AdoleAPI', getAdoleAPI());
-            const fn = api?.atomes?.create;
-            if (typeof fn !== 'function') throw new Error('AdoleAPI.atomes.create is not available');
-
-            const payload = {
-                ...(params?.id ? { id: String(params.id) } : {}),
-                ...(params?.type ? { type: String(params.type) } : {}),
-                ...(params?.color ? { color: String(params.color) } : {}),
-                ...(params?.parentId ? { projectId: String(params.parentId) } : {}),
-                ...(params?.ownerId ? { ownerId: String(params.ownerId) } : {}),
-                ...(params?.properties && typeof params.properties === 'object' ? { properties: params.properties } : {}),
-                ...(params?.particles && typeof params.particles === 'object' && !params?.properties ? { particles: params.particles } : {})
+            const atome = requireAtomeCommit(requireGlobal);
+            const type = safeString(params?.type);
+            if (!type) throw new Error('Missing atome type');
+            const props = {
+                ...(params?.properties && typeof params.properties === 'object' ? params.properties
+                    : (params?.particles && typeof params.particles === 'object' ? params.particles : {})),
+                ...(params?.color ? { color: String(params.color) } : {})
             };
-
-            return fn(payload);
+            // The owner is the authenticated session's, never a parameter.
+            return atome.commit({
+                kind: 'set',
+                atome_id: safeString(params?.id) || globalThis.crypto.randomUUID(),
+                type,
+                ...(params?.parentId ? { project_id: String(params.parentId) } : {}),
+                props
+            });
         },
         summary: () => 'Create atome'
     });
@@ -119,7 +127,7 @@ export const registerAdoleDefaultTools = ({ Agent, requireGlobal, safeString, ge
         name: 'adole.atomes.alter',
         description: 'Alter/patch atome properties by id.',
         capabilities: ['atome.write'],
-        risk_tier: 'MEDIUM',
+        risk_tier: 'moderate',
         parameters: {
             required: ['id'],
             properties: {
@@ -129,16 +137,14 @@ export const registerAdoleDefaultTools = ({ Agent, requireGlobal, safeString, ge
             }
         },
         handler: async ({ params }) => {
-            const api = requireGlobal('AdoleAPI', getAdoleAPI());
-            const fn = api?.atomes?.alter;
-            if (typeof fn !== 'function') throw new Error('AdoleAPI.atomes.alter is not available');
+            const atome = requireAtomeCommit(requireGlobal);
             const id = safeString(params?.id);
             if (!id) throw new Error('Missing atome id');
             const payload = params?.properties || params?.particles;
-            if (!payload || typeof payload !== 'object') {
+            if (!payload || typeof payload !== 'object' || !Object.keys(payload).length) {
                 throw new Error('Missing properties payload');
             }
-            return fn(id, payload);
+            return atome.commit({ kind: 'set', atome_id: id, props: payload });
         },
         summary: (params) => `Alter atome ${params?.id || ''}`
     });
@@ -147,7 +153,7 @@ export const registerAdoleDefaultTools = ({ Agent, requireGlobal, safeString, ge
         name: 'eve.mtrack.clip.move',
         description: 'Move one or more MTrack clips (time and/or track) through the mtrack tool action pipeline.',
         capabilities: ['timeline.write', 'ui.write'],
-        risk_tier: 'MEDIUM',
+        risk_tier: 'moderate',
         parameters: {
             properties: {
                 clip_ids: { type: 'array' },
@@ -179,7 +185,7 @@ export const registerAdoleDefaultTools = ({ Agent, requireGlobal, safeString, ge
         name: 'eve.mtrack.clip.crop',
         description: 'Crop one or more MTrack clips (trim in/out) through the mtrack tool action pipeline.',
         capabilities: ['timeline.write', 'ui.write'],
-        risk_tier: 'MEDIUM',
+        risk_tier: 'moderate',
         parameters: {
             properties: {
                 clip_ids: { type: 'array' },

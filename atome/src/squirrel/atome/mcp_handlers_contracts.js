@@ -4,8 +4,17 @@ import { buildRuntimeInvocationPayload, projectRuntimeMcpResult } from './mcp_ru
 
 // Direct MCP calls of a contract family (TV, social sharing) go through the
 // same runtime tools as the eVe interface: one contract, one owner, one audit.
-// The confirmation of a confirmed command (mcp_security.js#validateConfirmation) is the envelope's too, never the command's input.
-const ENVELOPE_KEYS = new Set(['actor', 'source', 'trace_id', 'intent_id', 'idempotency_key', 'meta', '__mcp', 'dry_run', 'confirmed', 'confirmation_id', 'confirmationId']);
+// The confirmation of a confirmed command (mcp_confirmation_gate.js) is the envelope's too, never the command's input.
+const ENVELOPE_KEYS = new Set(['trace_id', 'intent_id', 'idempotency_key', 'meta', '__mcp', 'dry_run', 'confirmed', 'confirmation_id', 'defer']);
+const FAMILY_BY_COMMAND = new Map(MCP_CONTRACT_FAMILIES.flatMap(family => family.commands.map(command => [command.name, { family, command }])));
+
+/** The family's own validation of a contract command's input, whatever the door that reaches it
+ *  (its direct method or runtime.tools.call). `null` when valid or when `toolId` is no contract command. */
+export function validateContractCommandInput(toolId, input = {}) {
+    const entry = FAMILY_BY_COMMAND.get(String(toolId || '').trim());
+    return entry ? entry.family.validate(entry.command.action, input) || null : null;
+}
+
 const createContractHandlers = ({ commands, validate, layer, noClient }) => Object.fromEntries(commands.map((command) => [command.name, async (params = {}) => {
     const input = Object.fromEntries(Object.entries(params).filter(([key]) => !ENVELOPE_KEYS.has(key)));
     const error = validate(command.action, input);

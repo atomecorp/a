@@ -47,11 +47,13 @@ const PUSH_EVENTS = {
     'remote-control-command': message => ({
         commandId: message.command_id || null,
         toolId: message.tool_id || null,
+        mcp: message.mcp || null,
         toolAction: message.tool_action || null,
         input: message.input || {},
         confirmed: message.confirmed === true,
         fromSurfaceId: message.from_surface_id || null,
         fromUserId: message.from_user_id || null,
+        fromProgramId: message.from_program_id || null,
         fromLabel: message.from_label || null,
         timestamp: message.timestamp || null
     })

@@ -74,8 +74,8 @@ export function createWsPhoneLinkHandler({ projectRoot, jwtSecret, sendLink, dat
             return { ...account, first_launch_version: 1 };
         },
         sendLink: deliverLink,
-        issueAccess: ({ principalId, keyId, sessionId, pop = false }) => jwt.sign(
-            { sub: principalId, userId: principalId, sid: sessionId, cnf: { kid: keyId, ...(pop ? { pop: true } : {}) }, auth_version: 1 },
+        issueAccess: ({ principalId, keyId, sessionId, pop = false, program = null }) => jwt.sign(
+            { sub: principalId, userId: principalId, sid: sessionId, cnf: { kid: keyId, ...(pop ? { pop: true } : {}) }, ...(program ? { prg: program } : {}), auth_version: 1 },
             jwtSecret(), { algorithm: 'HS256', issuer: AUTH_LINK_ORIGIN, audience: 'atome-ws', expiresIn: AUTH_ACCESS_TTL_SECONDS }),
         disconnectSession,
         notify,

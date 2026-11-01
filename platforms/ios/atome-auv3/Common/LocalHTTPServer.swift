@@ -529,7 +529,7 @@ final class LocalHTTPServer {
                 "clientId": clientId,
                 "server": "ais",
                 "version": "1.0.0",
-                "capabilities": ["auth", "atome", "events", "state-current", "snapshot-create"],
+                "capabilities": ["auth", "atome", "events", "state-current", "snapshot"],
                 "timestamp": ISO8601DateFormatter().string(from: Date())
             ]
             sendWebSocketJson(welcome, on: connection)
@@ -593,7 +593,12 @@ final class LocalHTTPServer {
         }
 
         if type == "snapshot" {
-            answerFromStore(on: connection) { AiSRuntime.handleSnapshotMessage(payload) }
+            answerFromStore(on: connection, {
+                // A restore's events leave through the outbox like any commit's.
+                let response = AiSRuntime.handleSnapshotMessage(payload)
+                FastifySyncClient.shared.pushCommittedResponse(response)
+                return response
+            })
             return
         }
 
@@ -1889,26 +1894,6 @@ enum AiSRuntime {
         }
     }
 
-    static func handleSnapshotMessage(_ message: [String: Any]) -> [String: Any] {
-        queue.sync {
-            let requestId = stringValue(message["requestId"])
-            let action = stringValue(message["action"])
-            do {
-                let db = try openDatabase()
-                let response: [String: Any]
-                switch action {
-                case "create":
-                    response = try handleSnapshotCreate(message, db: db, requestId: requestId)
-                default:
-                    response = snapshotResponse(requestId: requestId, success: false, error: "Unknown action: \(action)")
-                }
-                return response
-            } catch {
-                return snapshotResponse(requestId: requestId, success: false, error: error.localizedDescription)
-            }
-        }
-    }
-
     static func resolveAuthenticatedUserId(token: String?, userIdHint: String?, phoneHint: String?) -> String? {
         queue.sync {
             guard let token, !token.isEmpty, let claims = try? verifyToken(token),
@@ -1929,22 +1914,28 @@ enum AiSRuntime {
         if userId.isEmpty {
             return atomeResponse(requestId: requestId, success: false, error: "Missing owner_id or token")
         }
-        let atomeType = stringValue(message["atome_type"] ?? message["type"])
+        // `type` is the message's own ("atome"), never the atome's.
+        let atomeType = stringValue(message["atome_type"])
         let parentId = normalizedOptionalString(message["parent_id"] ?? message["parentId"])
         let now = isoNow()
 
-        // If atome already exists (idempotent), update instead
-        if let existing = try findAnyAtomeMeta(db, atomeId: atomeId) {
-            if existing.ownerId == userId || existing.creatorId == userId {
-                let particles = message["particles"] as? [String: Any] ?? message["properties"] as? [String: Any] ?? [:]
-                try execute(db, "UPDATE atomes SET deleted_at = NULL, updated_at = ?, sync_status = 'local' WHERE atome_id = ?", [.text(now), .text(atomeId)])
-                for (key, value) in particles {
-                    try upsertParticle(db, atomeId: atomeId, key: key, value: value, changedBy: userId, now: now)
-                }
-                try upsertStateCurrent(db, atomeId: atomeId, ownerId: userId, properties: try loadParticles(db, atomeId: atomeId), now: now)
-                return atomeResponse(requestId: requestId, success: true, data: try serializeAtome(db, atomeId: atomeId))
-            }
+        let particles = message["particles"] as? [String: Any] ?? message["properties"] as? [String: Any] ?? [:]
+        let existing = try findAnyAtomeMeta(db, atomeId: atomeId)
+        if let existing, existing.ownerId != userId, existing.creatorId != userId {
             return atomeResponse(requestId: requestId, success: false, error: "Atome already exists")
+        }
+        // A direct write passes the same type gate as an event commit (`AiSRuntimeTypeGate.swift`).
+        do { try assertKnownAtomeDirectWrite(atomeId: atomeId, declaredType: existing == nil ? (atomeType.isEmpty ? "raw" : atomeType) : nil, properties: particles, db: db) }
+        catch { return atomeResponse(requestId: requestId, success: false, error: error.localizedDescription) }
+
+        // If atome already exists (idempotent), update instead
+        if existing != nil {
+            try execute(db, "UPDATE atomes SET deleted_at = NULL, updated_at = ?, sync_status = 'local' WHERE atome_id = ?", [.text(now), .text(atomeId)])
+            for (key, value) in particles {
+                try upsertParticle(db, atomeId: atomeId, key: key, value: value, changedBy: userId, now: now)
+            }
+            try upsertStateCurrent(db, atomeId: atomeId, ownerId: userId, properties: try loadParticles(db, atomeId: atomeId), now: now)
+            return atomeResponse(requestId: requestId, success: true, data: try serializeAtome(db, atomeId: atomeId))
         }
 
         // Insert new atome
@@ -1962,7 +1953,6 @@ enum AiSRuntime {
             ])
 
         // Insert particles/properties
-        let particles = message["particles"] as? [String: Any] ?? message["properties"] as? [String: Any] ?? [:]
         for (key, value) in particles {
             try upsertParticle(db, atomeId: atomeId, key: key, value: value, changedBy: userId, now: now)
         }
@@ -2050,6 +2040,8 @@ enum AiSRuntime {
             return atomeResponse(requestId: requestId, success: false, error: "Access denied")
         }
         let particles = message["particles"] as? [String: Any] ?? [:]
+        do { try assertKnownAtomeDirectWrite(atomeId: atomeId, declaredType: nil, properties: particles, db: db) }
+        catch { return atomeResponse(requestId: requestId, success: false, error: error.localizedDescription) }
         let now = isoNow()
         try execute(db, "UPDATE atomes SET updated_at = ?, sync_status = 'pending' WHERE atome_id = ?", [.text(now), .text(atomeId)])
         for (key, value) in particles {
@@ -2197,33 +2189,6 @@ enum AiSRuntime {
             return resolveActorId(event["actor"]) == userId
         }
         return eventsResponse(requestId: requestId, success: true, events: events)
-    }
-
-    private static func handleSnapshotCreate(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
-        let token = stringValue(message["token"])
-        guard let claims = try verifyToken(token) else {
-            return snapshotResponse(requestId: requestId, success: false, error: "Access denied")
-        }
-        let projectId = normalizedOptionalString(message["project_id"] ?? message["projectId"])
-        let atomeId = normalizedOptionalString(message["atome_id"] ?? message["atomeId"])
-        if projectId == nil && atomeId == nil {
-            return snapshotResponse(requestId: requestId, success: false, error: "Missing project_id or atome_id")
-        }
-        let actor = (message["actor"] as? [String: Any]) ?? [
-            "type": "user",
-            "id": stringValue(claims["sub"])
-        ]
-        let snapshotId = try createStateSnapshot(
-            db,
-            projectId: projectId,
-            atomeId: atomeId,
-            label: normalizedOptionalString(message["label"]),
-            actor: actor,
-            state: message["state"] ?? message["state_blob"] ?? message["stateBlob"],
-            snapshotType: normalizedOptionalString(message["snapshot_type"] ?? message["snapshotType"]) ?? "manual",
-            createdBy: stringValue(claims["sub"])
-        )
-        return snapshotResponse(requestId: requestId, success: true, snapshotId: snapshotId)
     }
 
     private static func serializeAtome(
@@ -2391,39 +2356,6 @@ enum AiSRuntime {
         }
     }
 
-    private static func createStateSnapshot(_ db: OpaquePointer?, projectId: String?, atomeId: String?, label: String?, actor: [String: Any], state: Any?, snapshotType: String, createdBy: String) throws -> Int64 {
-        let snapshotAtomeId = firstNonEmptyString([atomeId, projectId]) ?? ""
-        let now = isoNow()
-        let actorString = try jsonString(actor)
-        let statePayload: Any
-        if let state {
-            statePayload = state
-        } else if let projectId, !projectId.isEmpty {
-            statePayload = try listStateCurrent(db, projectId: projectId, ownerId: createdBy, limit: 5000, offset: 0)
-        } else if let atomeId, !atomeId.isEmpty {
-            statePayload = try getStateCurrent(db, atomeId: atomeId) ?? [:]
-        } else {
-            statePayload = [:]
-        }
-        let blob = try jsonString(statePayload)
-        try execute(db, """
-            INSERT INTO snapshots (atome_id, project_id, snapshot_data, state_blob, label, snapshot_type, actor, created_by, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, [
-            .text(snapshotAtomeId),
-            projectId.map(SQLiteBinding.text) ?? .null,
-            .text(blob),
-            .text(blob),
-            label.map(SQLiteBinding.text) ?? .null,
-            .text(snapshotType),
-            .text(actorString),
-            .text(createdBy),
-            .text(now)
-        ])
-        let rows = try query(db, "SELECT snapshot_id FROM snapshots WHERE atome_id = ? ORDER BY created_at DESC LIMIT 1", [.text(snapshotAtomeId)])
-        return rows.first?["snapshot_id"] as? Int64 ?? 0
-    }
-
     static func execute(_ db: OpaquePointer?, _ sql: String, _ bindings: [SQLiteBinding] = []) throws {
         #if DEBUG
         try DiskWriteProbe.measure(sql) { try executeStatement(db, sql, bindings) } // TEMPORARY diagnostic
@@ -2529,17 +2461,6 @@ enum AiSRuntime {
         if let error { response["error"] = error }
         if let event { response["event"] = event }
         if let events { response["events"] = events }
-        return response
-    }
-
-    private static func snapshotResponse(requestId: String?, success: Bool, error: String? = nil, snapshotId: Int64? = nil) -> [String: Any] {
-        var response: [String: Any] = [
-            "type": "snapshot-response",
-            "success": success
-        ]
-        if let requestId { response["request_id"] = requestId }
-        if let error { response["error"] = error }
-        if let snapshotId { response["snapshot_id"] = snapshotId }
         return response
     }
 

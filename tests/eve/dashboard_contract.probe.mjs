@@ -60,10 +60,7 @@ test('dashboard category and tool labels exist in both locales', async () => {
     const categories = normalizeDashboardCategories(readDashboardDefaults(JSON.parse(raw)).categories);
     const keys = categories.map((category) => category.label_key).concat([
         'eve.dashboard.editor.generic.title',
-        'eve.tool.dashboard_news.label',
-        'eve.tool.dashboard_monitor.label',
-        'eve.tool.dashboard_goals.label',
-        'eve.tool.dashboard_store.label'
+        'eve.tool.dashboard_monitor.label'
     ]);
     for (const key of keys) {
         assert.equal(typeof EVE_EN_CORE_MESSAGES[key], 'string', `missing en key ${key}`);
@@ -71,7 +68,8 @@ test('dashboard category and tool labels exist in both locales', async () => {
     }
 });
 
-test('dashboard News Monitor Goals and Store tools are registered in bootstrap defs', () => {
+// News, Goals and Store had no executor: retired as registry aliases of their owners (R-104 D5); Monitor stays.
+test('dashboard Monitor tool is registered in bootstrap defs, the retired category tools are not', () => {
     const defs = buildBootstrapDefsB(
         buildDefaultToolDef,
         buildRegisteredToggleToolDef,
@@ -79,10 +77,8 @@ test('dashboard News Monitor Goals and Store tools are registered in bootstrap d
         'registered_mode'
     );
     const ids = new Set(defs.map((def) => def.id));
-    assert.ok(ids.has('tool.dashboard.news'));
     assert.ok(ids.has('tool.dashboard.monitor'));
-    assert.ok(ids.has('tool.dashboard.goals'));
-    assert.ok(ids.has('tool.dashboard.store'));
+    for (const retired of ['tool.dashboard.news', 'tool.dashboard.goals', 'tool.dashboard.store']) assert.ok(!ids.has(retired), retired);
 });
 
 test('main home tool stays on the user panel and the Atom handle owns dashboard toggling', async () => {

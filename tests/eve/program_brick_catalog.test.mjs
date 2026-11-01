@@ -27,7 +27,7 @@ describe('health brick library', () => {
         expect(healthBrick('BR-ACT-03')).toBe(healthBrick('BR-25'));
         expect(healthBrick('BR-SYS-01')).toBeNull();
         expect(HEALTH_BRICKS.filter(brick => brick.activity).every(brick => PROGRAM_BRICKS[brick.activity])).toBe(true);
-        expect(HEALTH_BRICKS.filter(brick => brick.risks.length === 1 && brick.risks[0] === 'S2').every(brick => brick.status === 'review_required')).toBe(true);
+        expect(HEALTH_BRICKS.filter(brick => brick.risks.length === 1 && brick.risks[0] === 'R2').every(brick => brick.status === 'review_required')).toBe(true);
     });
     it('composes the thirteen official objectives without letting an unreviewed or absent brick become an activity', () => {
         expect(Object.keys(HEALTH_OBJECTIVE_BRICKS).sort()).toEqual(DASHBOARD_OBJECTIVES.map(entry => entry.goal).sort());

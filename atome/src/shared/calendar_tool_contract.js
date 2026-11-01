@@ -17,7 +17,7 @@ const event = {
 const launch = { type: 'object', required: ['kind'], description: 'kind music|media|project|tool|visio; a visio carries guests [{ id, name, phone }].',
     properties: { kind: { type: 'string', enum: ['music', 'media', 'project', 'tool', 'visio'] }, guests: { type: 'array', items: { type: 'object' } } } };
 const contract = (name, description, write, properties = {}, required = [], extra = {}) => ({
-    name: 'calendar.' + name, description, write, risk: write ? 'MEDIUM' : 'LOW',
+    name: 'calendar.' + name, description, write, risk: write ? 'moderate' : 'low',
     capabilities: [write ? 'calendar.write' : 'calendar.read'], ...extra,
     input_schema: { type: 'object', additionalProperties: false, properties, ...(required.length ? { required } : {}) }
 });
@@ -47,15 +47,15 @@ export const CALENDAR_AGENDA_TOOLS = [
         { eventId: id, changes: { type: 'object', additionalProperties: false, properties: event } }, ['eventId', 'changes']),
     contract('delete_event', 'Delete a calendar event.', true, { eventId: id }, ['eventId']),
     contract('ensure_calendar', 'Ensure a calendar exists (creates the default one when calendarId is omitted); name names a calendar made now.', true,
-        { calendarId: id, name: { type: 'string', minLength: 1 } }, [], { risk: 'LOW' }),
+        { calendarId: id, name: { type: 'string', minLength: 1 } }, [], { risk: 'low' }),
     contract('calendars', 'List the account\'s calendars (Perso first, then its own: a life profile\'s, « Publications »…), each with shown: false when the person hid it from the Agenda.', false),
     contract('calendar_show', 'Show (shown true) or hide (shown false) a calendar\'s events in the Agenda; the calendar and its events stay. Its id comes from calendar.calendars.', true,
-        { calendarId: id, shown: { type: 'boolean' } }, ['calendarId', 'shown'], { risk: 'LOW' }),
+        { calendarId: id, shown: { type: 'boolean' } }, ['calendarId', 'shown'], { risk: 'low' }),
     contract('share', 'Share a calendar with another user by phone.', true, {
         phone: { type: 'string', minLength: 1 }, calendarId: id, shareType: { type: 'string' },
         permissions: { type: 'object', additionalProperties: false, properties: {
             read: { type: 'boolean' }, alter: { type: 'boolean' }, delete: { type: 'boolean' }, create: { type: 'boolean' } } }
-    }, ['phone'], { risk: 'HIGH', capabilities: ['calendar.write', 'share.write'] }),
+    }, ['phone'], { risk: 'high', capabilities: ['calendar.write', 'share.write'] }),
     contract('export_webcal', 'Export calendar events as an ICS feed and optional webcal URL.', false,
         { calendarId: id, baseUrl: { type: 'string' }, name: { type: 'string' }, timeZone: { type: 'string' } })
 ];

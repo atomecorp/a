@@ -14,10 +14,13 @@ import { loadModulesConcurrently, loadModulesSequentially } from '../utils/modul
 import { exposeSparkGlobals } from '../utils/spark_exposure_runtime.js';
 import { startPerfCollector } from '../utils/perf_collector_runtime.js';
 import { reportRuntimeError } from './runtime_errors.js';
+import { registerCoreAtomeTypes } from '../shared/core_atome_types.js';
 
 // Enable and buffer perf events only when the operator opts in (?perf=1). Must run
 // before the first emitPerfEvent call so boot stages are captured on window.__squirrelPerf.
 startPerfCollector();
+// The atome types every later module projects and commits (#shared/core_atome_types.js).
+registerCoreAtomeTypes();
 
 const loadSparkServerConfig = async (loadServerConfigOnce) => {
   const start = perfNowMs();

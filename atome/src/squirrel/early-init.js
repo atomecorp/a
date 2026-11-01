@@ -29,13 +29,19 @@ var __CHECK_DEBUG__ = window.__CHECK_DEBUG__;
 // application cache independently of persistent project data.
 if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator
     && window.isSecureContext && !window.__TAURI_INTERNALS__ && !window.__ATOME_IOS_NATIVE_INVOKE) {
+    var OFFLINE_MESSAGES = ['atome:offline-app-ready', 'atome:offline-app-error', 'atome:offline-local-ready', 'atome:offline-local-error'];
     navigator.serviceWorker.addEventListener('message', function (event) {
-        if (event.data?.type === 'atome:offline-app-ready' || event.data?.type === 'atome:offline-app-error') {
+        if (OFFLINE_MESSAGES.indexOf(event.data?.type) >= 0) {
             window.dispatchEvent(new CustomEvent(event.data.type.replace('atome:', 'squirrel:'), { detail: { code: event.data.code } }));
         }
     });
+    // The worker in charge stores the local media and models still missing (sw.js fillLocal).
+    var askLocalFill = function () {
+        if (navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage({ type: 'atome:offline-local-fill' });
+    };
+    navigator.serviceWorker.addEventListener('controllerchange', askLocalFill);
     window.addEventListener('load', function () {
-        navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(function () {
+        navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then(askLocalFill).catch(function () {
             window.dispatchEvent(new CustomEvent('squirrel:offline-app-error', { detail: { code: 'offline_app_registration_failed' } }));
         });
     });

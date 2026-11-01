@@ -360,7 +360,7 @@ extension AiSRuntime {
         return !rows.isEmpty
     }
 
-    private static func canReadState(_ db: OpaquePointer?, state: [String: Any], userId: String) -> Bool {
+    static func canReadState(_ db: OpaquePointer?, state: [String: Any], userId: String) -> Bool {
         ownsState(state, userId: userId) || sharedWithLocalUser(db, atomeId: stringValue(state["atome_id"] ?? state["id"]), userId: userId)
     }
 

@@ -19,7 +19,7 @@ import {
     touchWsApiSurface,
     wsSendJsonToUserExcept
 } from './wsApiState.js';
-import { isWsApiPrincipalProvisioned, resolveWsApiPrincipal } from './wsApiIdentity.js';
+import { isWsApiPrincipalProvisioned, resolveWsApiPrincipal, resolveWsApiProgramSeat } from './wsApiIdentity.js';
 import { handleTeleportSurfaceReconnect } from './wsTeleportOperations.js';
 import { wsResponse, wsErrorResponse, actionOf } from './wsResponse.js';
 
@@ -49,11 +49,15 @@ async function handleAnnounce(message, connection, userId) {
     const surfaceId = normalizeSurfaceId(message?.surface_id ?? message?.surfaceId);
     if (!surfaceId) return errorResponse(message, 'surface_id_invalid');
 
+    // A program is told by its key (its token's seat), never by the platform it announces.
+    const programId = resolveWsApiProgramSeat(connection, message);
+    if (!programId && String(message?.platform || '').trim() === 'mcp_program') return errorResponse(message, 'surface_program_key_required');
     const surface = attachWsApiSurface(connection, userId, {
         surfaceId,
         label: message?.label,
-        platform: message?.platform,
-        capabilities: message?.capabilities
+        platform: programId ? 'mcp_program' : message?.platform,
+        capabilities: message?.capabilities,
+        programId
     });
     if (!surface) return errorResponse(message, 'surface_announce_failed');
 

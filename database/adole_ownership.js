@@ -5,6 +5,8 @@
 // targets exist, and transfers ownership (including guest workspace adoption).
 
 import { query, safeParseJson, withTransaction } from './adole_db_core.js';
+import { appendEvents } from './adole_event_log.js';
+import { OWNER_TRANSFER_EVENT_KIND } from './adole_state_projection.js';
 
 /**
  * Resolve pending owner_id references after sync
@@ -98,10 +100,11 @@ export async function isGuestWorkspacePrincipal(userId) {
     return record?.status === 'active';
 }
 
-export async function transferOwner({ fromOwnerId, toOwnerId, includeCreator = true, operationId = null } = {}) {
+export async function transferOwner({ fromOwnerId, toOwnerId, includeCreator = true, operationId = null, actorId = null } = {}) {
     if (!fromOwnerId || !toOwnerId) {
         throw new Error('Missing fromOwnerId or toOwnerId');
     }
+    if (!actorId) throw new Error('transfer_owner_actor_required');
     if (String(fromOwnerId) === String(toOwnerId)) {
         return { updated: 0 };
     }
@@ -146,27 +149,17 @@ export async function transferOwner({ fromOwnerId, toOwnerId, includeCreator = t
     }
 
     const now = new Date().toISOString();
-    const placeholders = ids.map(() => '?').join(', ');
+    // One append-only event per atome moved: the log keeps who owned what, and the
+    // projection (adole_state_projection.js#applyOwnerTransferEvent) applies it.
+    await appendEvents(ids.map(atomeId => ({
+        atome_id: atomeId,
+        kind: OWNER_TRANSFER_EVENT_KIND,
+        ts: now,
+        payload: { from_owner_id: String(fromOwnerId), to_owner_id: String(toOwnerId), include_creator: includeCreator !== false },
+        actor: { id: String(actorId) }
+    })), { source: OWNER_TRANSFER_EVENT_KIND });
 
     await withTransaction(async () => {
-        await query(
-            'run',
-            `UPDATE atomes SET owner_id = ?, creator_id = CASE WHEN ? THEN ? ELSE creator_id END,
-             updated_at = ?, sync_status = 'pending' WHERE atome_id IN (${placeholders})`,
-            [toOwnerId, includeCreator ? 1 : 0, toOwnerId, now, ...ids]
-        );
-
-        await query(
-            'run',
-            `UPDATE state_current SET owner_id = ?, updated_at = ? WHERE atome_id IN (${placeholders})`,
-            [toOwnerId, now, ...ids]
-        );
-
-        await query(
-            'run',
-            `DELETE FROM particles WHERE particle_key = '_pending_owner_id' AND atome_id IN (${placeholders})`,
-            ids
-        );
         if (guestWorkspace) {
             await query('run', `UPDATE permissions SET principal_id = ? WHERE principal_id = ?`, [toOwnerId, fromOwnerId]);
             await query('run', `UPDATE permissions SET granted_by = ? WHERE granted_by = ?`, [toOwnerId, fromOwnerId]);

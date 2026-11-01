@@ -41,6 +41,7 @@ import { registerIosOtaRoutes } from './http_ios_ota_routes.js';
 
 // Database imports - Using SQLite/libSQL (ADOLE data layer)
 import db from '../database/adole.js';
+import { registerCoreAtomeTypes } from '../atome/src/shared/core_atome_types.js';
 
 // Load environment variables from .env files
 const __filename_env = fileURLToPath(import.meta.url);
@@ -49,6 +50,8 @@ const projectRoot_env = path.resolve(__dirname_env, '..');
 
 // Runs after every imported module has been evaluated, as the inline loader did.
 loadServerEnvFiles(projectRoot_env);
+// The atome types the server projects and accepts (#shared/atome_type_gate.js).
+registerCoreAtomeTypes();
 
 const {
   userVaultRouter,
@@ -63,6 +66,7 @@ const {
   forums,
   directoryPublicService,
   publicEvents,
+  objectiveNetwork,
   shop,
   coaches,
   scheduledSends,
@@ -335,6 +339,7 @@ async function startServer() {
       communities,
       forums,
       publicEvents,
+      objectiveNetwork,
       shop,
       coaches,
       scheduledSends,

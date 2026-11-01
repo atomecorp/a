@@ -26,8 +26,24 @@ const IDENTIFIER_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/;
 const MAX_INPUT_BYTES = 64 * 1024;
 const MAX_RESULT_BYTES = 256 * 1024;
 
+// A program's standard MCP request (scripts/mcp/atome_mcp_stdio.mjs) travels as `mcp` instead of
+// `tool_id`: the target answers it through its own MCP layer (atome/mcp_relay_target.js). Only the
+// methods a program may relay pass: discovery, a tool call, its cancellation and the bridge's two waits.
+const RELAYABLE_MCP_METHODS = new Set(['initialize', 'ping', 'tools/list', 'tools/call', 'resources/list',
+    'resources/read', 'resources/templates/list', 'prompts/list', 'prompts/get', 'notifications/cancelled',
+    'atome/confirmation/await', 'atome/notifications/await']);
+
 // commandId -> pending command
 const pending = new Map();
+
+function readMcpMessage(message) {
+    const mcp = message?.mcp;
+    if (mcp === undefined) return { mcp: null };
+    if (!isPlainObject(mcp) || mcp.jsonrpc !== '2.0' || !RELAYABLE_MCP_METHODS.has(mcp.method)) return { error: 'remote_command_mcp_invalid' };
+    if (mcp.params !== undefined && !isPlainObject(mcp.params)) return { error: 'remote_command_mcp_invalid' };
+    if (byteLength(mcp) > MAX_INPUT_BYTES) return { error: 'remote_command_input_too_large' };
+    return { mcp };
+}
 
 const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const byteLength = (value) => Buffer.byteLength(JSON.stringify(value ?? null), 'utf8');
@@ -50,9 +66,14 @@ export async function relayRemoteCommand(message, connection, userId) {
     if (!targetSurfaceId) return { error: 'remote_command_target_required' };
     if (targetSurfaceId === callerSurfaceId) return { error: 'remote_command_target_is_caller' };
 
+    const { mcp, error: mcpError } = readMcpMessage(message);
+    if (mcpError) return { error: mcpError };
+    // Only a program's own seat (its paired key, never an announced platform) speaks MCP to a device.
+    const programId = mcp ? getWsApiSurface(String(userId), callerSurfaceId)?.program_id || null : null;
+    if (mcp && !programId) return { error: 'remote_command_mcp_not_program' };
     const toolId = String(message?.tool_id || '').trim();
     const toolAction = String(message?.tool_action || '').trim();
-    if (!IDENTIFIER_PATTERN.test(toolId)) return { error: 'remote_command_tool_invalid' };
+    if (!mcp && !IDENTIFIER_PATTERN.test(toolId)) return { error: 'remote_command_tool_invalid' };
     if (toolAction && !IDENTIFIER_PATTERN.test(toolAction)) return { error: 'remote_command_action_invalid' };
     const input = message?.input === undefined ? {} : message.input;
     if (!isPlainObject(input)) return { error: 'remote_command_input_invalid' };
@@ -60,6 +81,8 @@ export async function relayRemoteCommand(message, connection, userId) {
 
     const callerUserId = String(userId);
     const targetUserId = String(message?.target_user_id || message?.targetUserId || callerUserId);
+    // A program reaches its own account's devices alone.
+    if (mcp && targetUserId !== callerUserId) return { error: 'remote_command_mcp_not_program' };
     const target = getWsApiSurface(targetUserId, targetSurfaceId);
     if (!target) return { error: 'remote_command_target_offline' };
 
@@ -93,12 +116,13 @@ export async function relayRemoteCommand(message, connection, userId) {
     const delivery = wsSendJsonToSurface(targetUserId, targetSurfaceId, {
         type: 'remote-control-command',
         command_id: commandId,
-        tool_id: toolId,
+        ...(mcp ? { mcp } : { tool_id: toolId }),
         tool_action: toolAction || null,
         input,
         confirmed: message?.confirmed === true,
         from_surface_id: callerSurfaceId,
         from_user_id: callerUserId,
+        ...(programId ? { from_program_id: programId } : {}),
         // So the target can say where the order came from (§11.1: visible, not silent).
         from_label: getWsApiSurface(callerUserId, callerSurfaceId)?.label || null,
         timestamp: new Date().toISOString()

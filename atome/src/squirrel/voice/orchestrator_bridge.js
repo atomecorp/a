@@ -43,7 +43,13 @@ const summarizeMcpResult = (method, result = null) => {
 const createMcpBridge = (env) => {
     const asyncHandler = readEnv(env, 'handleAtomeMCPRequestAsync');
     if (typeof asyncHandler !== 'function') return null;
-    const callMcp = async (method, params = {}, id = method) => {
+    // A spoken request reaches the single MCP entry with the voice transport: who asks is the
+    // transport's, never a field of the params (atome/mcp_transport.js).
+    const voiceTransport = (actor, source) => ({
+        source: { type: 'voice', layer: String(source?.layer || 'voice_orchestrator') },
+        actor: actor && typeof actor === 'object' ? { ...actor } : {}
+    });
+    const callMcp = async (method, { actor, source, ...params } = {}, id = method) => {
         const startedAt = Date.now();
         const traceId = params?.trace_id || params?.meta?.trace_id || null;
         const intentId = params?.intent_id || params?.meta?.intent_id || null;
@@ -55,7 +61,7 @@ const createMcpBridge = (env) => {
             ...summarizeMcpRequest(method, params)
         });
         try {
-            const response = await asyncHandler({ jsonrpc: '2.0', id, method, params });
+            const response = await asyncHandler({ jsonrpc: '2.0', id, method, params }, voiceTransport(actor, source));
             if (response?.error) throw new Error(response.error.message || `MCP ${method} failed`);
             writeVoiceDiagnostic(env, 'voice.mcp.response', {
                 id,
@@ -98,9 +104,7 @@ const createMcpBridge = (env) => {
         },
         async executeAiToolchain({ steps = [], confirmation = null, ...context } = {}) {
             const shared = {
-                actor: context.actor || {},
                 signals: context.signals || {},
-                source: context.source || {},
                 trace_id: context.trace_id || null,
                 intent_id: context.intent_id || null,
                 idempotency_key: context.idempotency_key || null
@@ -111,6 +115,8 @@ const createMcpBridge = (env) => {
                     params: { ...shared, tool_name: step.tool_name, params: step.params || {} }
                 })),
                 ...shared,
+                actor: context.actor,
+                source: context.source,
                 ...(confirmation ? {
                     confirmed: true,
                     confirmation_id: confirmation.confirmation_id

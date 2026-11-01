@@ -20,6 +20,7 @@ import {
 import { applyDebugConfig } from './loadServerConfigDebug.js';
 import { buildDefaultServerConfig } from './loadServerConfigDefaults.js';
 import { buildFastifyWsUrl } from './loadServerConfigWs.js';
+import { readBootJson } from './boot_reads.js';
 
 // Both predicates now come from apis/serverUrls.js; the bodies were duplicated
 // verbatim in loader.js.
@@ -461,16 +462,14 @@ export async function loadServerConfigOnce() {
             applyFastifyGlobalsFromHttpBase(resolveTauriProdFastifyHttpBase(), window.__SQUIRREL_SERVER_CONFIG__ || null);
         }
 
+        // Bounded: a server that does not answer in time gives its last configuration kept here.
         const configUrl = resolveConfigUrl();
-
         try {
-            const res = await fetch(configUrl, { cache: 'no-store' });
-            if (!res || !res.ok) {
+            const { value: config } = await readBootJson(configUrl, `server-config:${configUrl}`);
+            if (!config) {
                 applyFallbackBase();
                 return null;
             }
-
-            const config = await res.json();
             window.__SQUIRREL_SERVER_CONFIG__ = config;
             applyDebugConfig(config, { isDesktopTauriRuntime });
 

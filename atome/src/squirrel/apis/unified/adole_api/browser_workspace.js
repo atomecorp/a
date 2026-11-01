@@ -3,10 +3,11 @@
 import { getSessionState } from './session.js';
 import { isTauriRuntime } from './runtime.js';
 import { getFastifyHttpBaseUrl } from '../adole_backend.js';
-import { commitWorkspaceEvents, getGuestAtome, listGuestAtomes, listWorkspaceEvents,
+import { commitWorkspaceEvents, createWorkspaceSnapshot, getGuestAtome, listGuestAtomes, listWorkspaceEvents,
     oldestPendingWorkspaceEvent, acknowledgeWorkspaceEvent, parkRefusedWorkspaceEvent, requeueRefusedWorkspaceEvents, importWorkspaceStates, listGuestFiles, acknowledgeWorkspaceFile } from './guest_workspace_store.js';
 
-const owns = message => ['events', 'state-current', 'atome'].includes(message?.type);
+const owns = message => ['events', 'state-current', 'atome'].includes(message?.type)
+    || (message?.type === 'snapshot' && message.action === 'create');
 export function ownsBrowserWorkspaceMessage(message) { return !isTauriRuntime() && owns(message); }
 
 // Realtime frames invalidate the local projection; the existing recovery pass
@@ -51,6 +52,9 @@ export async function browserWorkspaceRequest(message) {
     if (message.type === 'events' && ['commit', 'commit-batch'].includes(message.action)) {
         result = await commitWorkspaceEvents(owner, message.action === 'commit' ? [message.event] : message.events,
             { actorType: session.mode === 'anonymous' ? 'guest' : 'user' });
+        globalThis.window?.dispatchEvent(new CustomEvent('squirrel:workspace-outbox-ready'));
+    } else if (message.type === 'snapshot') {
+        result = await createWorkspaceSnapshot(owner, message, { actorType: session.mode === 'anonymous' ? 'guest' : 'user' });
         globalThis.window?.dispatchEvent(new CustomEvent('squirrel:workspace-outbox-ready'));
     } else if (message.type === 'events' && message.action === 'list') {
         result = { events: await listWorkspaceEvents(owner, message) };
@@ -149,7 +153,10 @@ async function synchronizeBrowserWorkspaceOnce({ send, ensureSession, uploadFile
         previousKey = entry.key, entry = await oldestPendingWorkspaceEvent(owner)) {
         if (entry.key === previousKey) throw new Error('workspace_sync_acknowledgement_failed');
         stillAuthorized();
-        const response = await send({ type: 'events', action: 'commit', event: entry.payload });
+        // A snapshot row asks the server for its own snapshot; `event_id` makes a resend harmless.
+        const response = await send(entry.operation === 'snapshot'
+            ? { type: 'snapshot', action: 'create', ...entry.payload.request, event_id: entry.payload.id, ts: entry.payload.ts }
+            : { type: 'events', action: 'commit', event: entry.payload });
         if (response?.ok) {
             await acknowledgeWorkspaceEvent(owner, entry.payload.id);
             continue;

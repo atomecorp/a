@@ -335,7 +335,7 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   de ressenti sur les cartes cardio (autre vue). Questions 53 (teinte d'une case cochée), 54 (séance toute passée).
 
 ### R-104 — Refonte globale atome/eVe : cartographie, MCP universel en accès, offline sans IA
-- Statut : ATTENTE UTILISATEUR (ton ordre de démarrage ; tu as demandé le 2026-10-29 puis le 2026-10-30 de ne rien commencer avant de le donner)
+- Statut : EN COURS — phases A à E faites dans le worktree `refonte-r104` (branche `refonte-r104`, rien fusionné dans `main`, aucun commit) ; phase F attend ton signal.
 - Source : la session « Cahier MCP » du 2026-10-28 au 2026-10-30. Le cahier en vigueur est
   `todo/refonte_globale_architecture_mcp_offline_v1_2_2026-10-30.md` (V1.2, copié de ton dossier Téléchargements).
   Il remplace le cahier MCP du 28 oct. et le plan `todo/mcp_universal_access_plan_2026-10-28.md` (périmé).
@@ -352,7 +352,14 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   tâches partent ensemble, dans une nouvelle session bâtie sur les deux plans ; les deux anciennes sessions ne
   sont archivées ou supprimées qu'avec ton accord.
 - Questions Santé (§6 du plan Santé) toutes réglées le 2026-10-30 : 1 la charte l’emporte partout ; 2 Santé partagée en trois (objectifs sous Projets, briques sous Activité, carnet en rubrique propre) ; 3 mise en relation = outil de la bande ; 4 D1 déjà validée le 28 oct. ; 5 thermalisme tranché par le cahier (`THERM-CAND-*`) ; 6 Ciqual embarqué + produits Open Food Facts déjà vus gardés sur l’appareil ; 7 ton document 2 sert de base et d’exemple, c’est un modèle (template) et d’autres viendront : l’import suit la forme du modèle, chaque document déposé dans `tests/health_protocols/` (ignoré par Git, jamais poussé, `atomecorp/a` est public) est importé et testé sans changer le code ; certains modèles sont partageables : privés par défaut, partagés par leur auteur entre comptes eVe (partages liés D8–D10, jamais GitHub), le receveur repasse par l’import et la sécurité S0–S5 sur son propre profil ; les proposer et les partager dans eVe = maquettes en phase C.
-- Reste à faire : tout (refonte P0 à P6 + Santé P001 à P080). Rien n'a été codé.
+- Fait (worktree `refonte-r104`) : lots D1 à D16 codés et vérifiés (preuves `temp/r104/PHASE_D_LOG.md`) ; phase E
+  terminée le 2026-10-31 (vérifications, deux corrections : recherche du Carnet en Pro et Basic, tuiles de l'accueil
+  nommées pour les lecteurs d'écran ; preuves section « Phase E » du même journal, suivi `temp/r104/REMAINING.md`).
+- Reste à faire (phase F, après ton signal) : commit de la correction du moteur de rendu de `main` d'abord, puis fusion
+  de `refonte-r104` dans `main`, copie de `local_atome_history.rs`, FRAMEWORK_STATE, cartes et cahiers cochés.
+- Attend de ton côté : jalons visuels V01–V03 de P075, P076, P077 ; essais sur appareil (iPad, montre, CarPlay,
+  lecteur d'écran et clavier réels) ; P030, P078, P022–P025 avec de vrais comptes ; suppression éventuelle de la copie
+  `temp/r104/bisect/wt_mainwasm` (13 Go, suppression refusée par les permissions de la session).
 - Références externes citées par le cahier : `~/Desktop/taxonomie.md` ;
   `~/Downloads/01_CAHIER_COMPLET_SANTE_ACTIVITES_OBJECTIFS_atome_eVe.md` (le nom
   `CAHIER_DES_CHARGES_SANTE_ATOME_EVE_2026-10-30.md` cité par le cahier est introuvable ; c'est le fichier le plus proche).

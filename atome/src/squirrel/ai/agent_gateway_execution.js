@@ -26,8 +26,8 @@ const shouldConfirmForTool = ({ tool, signals, confirmed }) => {
   if (!tool) return false;
   if (tool.confirmation_policy === 'always') return true;
   if (tool.confirmation_policy === 'never') return false;
-  if (tool.risk_tier === 'high' || tool.risk_tier === 'irreversible') return true;
-  if (tool._risk_source === 'spec' && tool.risk_tier === 'moderate') return true;
+  // Every write tier (moderate and above) is confirmed by the person.
+  if (RISK_TIER_ORDER[tool.risk_tier] >= RISK_TIER_ORDER.moderate) return true;
   const confidence = signals?.overall_confidence;
   if (typeof confidence === 'number' && confidence < DEFAULT_CONFIDENCE_THRESHOLD) {
     return true;
@@ -254,8 +254,8 @@ const normalizeToolchainStep = (step = {}) => {
 };
 
 const compareRiskTiers = (left, right) => {
-  const leftRank = RISK_TIER_ORDER[normalizeRiskTier(left)] ?? 0;
-  const rightRank = RISK_TIER_ORDER[normalizeRiskTier(right)] ?? 0;
+  const leftRank = RISK_TIER_ORDER[normalizeRiskTier(left)];
+  const rightRank = RISK_TIER_ORDER[normalizeRiskTier(right)];
   if (leftRank === rightRank) return 0;
   return leftRank > rightRank ? 1 : -1;
 };
@@ -359,12 +359,15 @@ const validateToolchain = (steps = [], options = {}) => {
   };
 };
 
+// A call confirmed upstream (the MCP human gate, mcp_confirmation_gate.js, or an approved proposal) carries
+// `confirmation: { confirmation_id }` with an actor (`actor_id` or `user_id`) and an idempotency key; it then runs
+// without a second proposal.
 const normalizeExecutionConfirmation = (request = {}) => {
   const confirmation = request.confirmation && typeof request.confirmation === 'object'
     ? request.confirmation
     : {};
   const confirmation_id = String(confirmation.confirmation_id || confirmation.confirmationId || '').trim();
-  const actor_id = String(confirmation.actor_id || confirmation.actorId || request.actor?.user_id || '').trim();
+  const actor_id = String(confirmation.actor_id || confirmation.actorId || request.actor?.actor_id || request.actor?.user_id || '').trim();
   const idempotency_key = String(
     request.idempotency_key
     || request.idempotencyKey

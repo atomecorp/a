@@ -81,7 +81,8 @@ export function createPairingClient({ devices, approver, send, token, ensureSess
             return accept(result, scope, approve?.record, deviceClass);
         },
         // New device: a request code and a match number to show and to speak.
-        async startPairing({ handle = '', phone = '', deviceClass, platform = 'web', label = '' } = {}) {
+        // `host`: a program's seat (platform `mcp_program`) names the machine it runs on.
+        async startPairing({ handle = '', phone = '', deviceClass, platform = 'web', label = '', host = '' } = {}) {
             const scope = newScope();
             const device = await devices.forScope(scope);
             const pre = await request('pair-start-challenge', { sessionKey: device.publicKey });
@@ -90,7 +91,7 @@ export function createPairingClient({ devices, approver, send, token, ensureSess
             const backupPair = await keyring.pairKey();
             const result = await request('pair-start', { sessionKey: device.publicKey, handle: String(handle || '').trim() || undefined,
                 phone: String(phone || '').trim() || undefined, connectionProof, backupKey: await keyring.publicJwk(backupPair),
-                approve: approve?.approve || null, deviceMeta: { platform, label }, deviceClass });
+                approve: approve?.approve || null, deviceMeta: { platform, label, ...(host ? { host } : {}) }, deviceClass });
             const attempt = { scope, pairId: result.pairId, code: result.code, matchNumber: result.matchNumber,
                 expiresAt: result.expiresAt, approve: approve?.record || null, deviceClass, backupKey: backupPair.privateKey };
             await devices.put('pair-attempt', attempt);

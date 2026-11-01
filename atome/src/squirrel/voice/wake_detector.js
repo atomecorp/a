@@ -1,6 +1,8 @@
 import { createGlobalSecurityApi } from '../security/bootstrap.js';
 import { loadRuntimeUserProfile } from '../ai/profile_loader.js';
 import { createWakeCapture, wakeCaptureAvailable } from './wake_capture.js';
+import { checkConnection } from '../apis/unified/adole_connection.js';
+import { writeVoiceDiagnostic } from './telemetry.js';
 
 const verifierEntry = userId => 'voice.wake.verifier.' + encodeURIComponent(userId);
 
@@ -11,7 +13,8 @@ const verifierEntry = userId => 'voice.wake.verifier.' + encodeURIComponent(user
 export const createWakeDetectorBackend = ({ env = globalThis,
     workerFactory = () => new env.Worker('/src/squirrel/voice/wake_detector_worker.js', { type: 'module' }),
     loadProfile = () => loadRuntimeUserProfile({ env }),
-    security = createGlobalSecurityApi({ env })
+    security = createGlobalSecurityApi({ env }),
+    isOnline = () => checkConnection('fastify')
 } = {}) => {
     const principal = async () => {
         const profile = await loadProfile();
@@ -27,6 +30,12 @@ export const createWakeDetectorBackend = ({ env = globalThis,
     const readVerifier = async () => {
         const profile = await loadProfile();
         if (!profile?.ok || !profile.userId || security.vaultStatus().configured !== true) return null;
+        // The vault is on the account's server: out of reach, detection runs here on the base
+        // model alone and says so; the verifier comes back with the server.
+        if (!await isOnline()) {
+            writeVoiceDiagnostic(env, 'voice.wake.verifier_unreachable', { reason: 'server_unreachable' });
+            return null;
+        }
         const stored = await security.readToken(verifierEntry(profile.userId));
         return stored?.ok ? stored.value : null;
     };

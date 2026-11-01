@@ -203,6 +203,32 @@ export function createCommunicationRelations({
         return { ok: true, status: (await contactStatus(ownerId, peerId)) || 'none' };
     };
 
+    // « Fin du lien » (validated MD3e): the contact leaves both books and the shares between them stop for what
+    // comes; what was already sent stays where it is. A block stands apart and is kept.
+    const end = async (ownerId, peerId) => {
+        const owner = id(ownerId), peer = id(peerId);
+        if (!owner || !peer || owner === peer) throw new Error('contact_target_invalid');
+        await query('run', `DELETE FROM communication_contacts WHERE (owner_id = ? AND peer_id = ?) OR (owner_id = ? AND peer_id = ?)`,
+            [owner, peer, peer, owner]);
+        await query('run', `UPDATE sync_share_policies SET revoked_at = datetime('now'), updated_at = datetime('now')
+             WHERE ((owner_id = ? AND peer_id = ?) OR (owner_id = ? AND peer_id = ?)) AND policy != 'block' AND revoked_at IS NULL`,
+            [owner, peer, peer, owner]);
+        return { ok: true, status: 'none' };
+    };
+
+    // Leaving the objectives network (Réglages › Confidentialité, MD-Q16): the requests this account sent and nobody
+    // answered are taken back, as if never sent.
+    const withdrawRequests = async (ownerId) => {
+        const owner = id(ownerId);
+        const rows = await query('all', `SELECT owner_id FROM communication_contacts WHERE peer_id = ? AND status = 'pending' AND requested_by = ?`,
+            [owner, owner]) || [];
+        for (const row of rows) {
+            await query('run', `DELETE FROM communication_contacts WHERE owner_id = ? AND peer_id = ? AND status = 'pending'`, [row.owner_id, owner]);
+            await query('run', 'DELETE FROM communication_contacts WHERE owner_id = ? AND peer_id = ?', [owner, row.owner_id]);
+        }
+        return { ok: true, withdrawn: rows.length };
+    };
+
     const list = async (ownerId) => {
         const owner = id(ownerId);
         const rows = await query('all',
@@ -260,8 +286,10 @@ export function createCommunicationRelations({
         if (action === 'block') return block(userId, peer);
         if (action === 'unblock') return unblock(userId, peer);
         if (action === 'list') return list(userId);
+        if (action === 'end') return end(userId, peer);
+        if (action === 'withdraw-requests') return withdrawRequests(userId);
         throw new Error(`contact_action_unsupported:${action || 'missing'}`);
     };
 
-    return { canCommunicate, blockedEitherWay, hasBlocked, request, respond, block, unblock, list, handle };
+    return { canCommunicate, blockedEitherWay, hasBlocked, request, respond, block, unblock, end, withdrawRequests, list, handle };
 }

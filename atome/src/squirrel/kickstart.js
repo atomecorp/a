@@ -1,3 +1,5 @@
+import { BOOT_READ_TIMEOUT_MS, readBootJson } from './apis/boot_reads.js';
+
 // === 🎉 INDEPENDENT KICKSTART ===
 // Create the view and dispatch 'squirrel:ready' when everything is ready
 
@@ -125,7 +127,7 @@ function emitRuntimeVersionConsoleReport(versions, options = {}) {
 async function fetchTextVersion(endpoint) {
   if (!endpoint) return '';
   try {
-    const response = await fetch(endpoint, { cache: 'no-store' });
+    const response = await fetch(endpoint, { cache: 'no-store', signal: AbortSignal.timeout(BOOT_READ_TIMEOUT_MS) });
     if (!response || !response.ok) return '';
     const text = await response.text();
     return normalizeRuntimeVersion(text, '');
@@ -160,12 +162,8 @@ async function resolveEveVersion() {
 async function resolveServerVersions(apiBases) {
   for (const base of apiBases) {
     const endpoint = base ? `${base}/api/server-info` : '/api/server-info';
-
-    const res = await fetch(endpoint, { cache: 'no-store' });
-    if (!res || !res.ok) {
-      continue;
-    }
-    const data = await res.json();
+    // Bounded: a server that does not answer in time gives its last answer kept here.
+    const { value: data } = await readBootJson(endpoint, `server-info:${base}`);
     if (data && data.success) {
       return {
         atome: normalizeRuntimeVersion(data.atomeVersion || data.version || 'unknown'),

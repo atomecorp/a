@@ -1,4 +1,3 @@
-import { PERSONAL_IMPORT_TOOLS } from '#shared/personal_import_tools.js';
 import { resolveAtomeRuntimeInvocation } from './runtime_tool_resolution.js';
 import {
     ATOME_MCP_PROTOCOL,
@@ -10,13 +9,8 @@ import {
 } from './mcp_core.js';
 import { listUnifiedMcpTools } from './mcp_discovery.js';
 import { readMcpResource, listMcpPromptEntries, listMcpResourceEntries, renderPrompt } from './mcp_resources.js';
-import {
-    listConfirmations,
-    listProposals,
-    listSecurityJournal,
-    readConfirmation,
-    readProposal
-} from './mcp_security.js';
+import { listProposals, listSecurityJournal, readProposal } from './mcp_security.js';
+import { listConfirmations, readConfirmation } from './mcp_confirmation_gate.js';
 import { listAclRules, listRateLimitRules } from './mcp_security_policy.js';
 import { buildRuntimeInvocationPayload } from './mcp_runtime.js';
 import { ensureRuntimeToolApi } from './mcp_bridges.js';
@@ -34,7 +28,6 @@ export const createMcpPlatformHandlers = (getHandlers) => ({
             tool_id: invocation.tool_id,
             action: invocation.action,
             input: invocation.input,
-            actor: params?.actor,
             meta: params?.meta,
             trace_id: params?.trace_id,
             intent_id: params?.intent_id,
@@ -59,7 +52,6 @@ export const createMcpPlatformHandlers = (getHandlers) => ({
             tool_id: invocation.tool_id,
             action: invocation.action,
             input: invocation.input,
-            actor: params?.actor,
             meta: params?.meta,
             trace_id: params?.trace_id,
             intent_id: params?.intent_id,
@@ -72,79 +64,14 @@ export const createMcpPlatformHandlers = (getHandlers) => ({
             layer: 'atome_mcp_box'
         }));
     },
+    // Every method goes through the one async entry (mcp.js); there is no synchronous subset to list.
     'atome.describe'() {
-        return {
-            protocol: ATOME_MCP_PROTOCOL,
-            methods: Object.keys(getHandlers()),
-            async_methods: [
-                'ai.tools.call',
-                'mcp.tools.list',
-                'mcp.resources.list',
-                'mcp.resources.read',
-                'mcp.prompts.list',
-                'mcp.prompts.get',
-                'mcp.acl.list',
-                'mcp.proposals.list',
-                'mcp.proposals.read',
-                'mcp.confirmations.list',
-                'mcp.confirmations.read',
-                'mcp.rate_limits.list',
-                'mcp.security.journal.list',
-                'mcp.toolchains.execute',
-                'mcp.operations.list',
-                'mcp.operations.read',
-                'mcp.operations.cancel',
-                'mcp.events.list',
-                'mail.list',
-                'mail.read',
-                'mail.search',
-                'mail.next_unread',
-                'mail.summarize',
-                'mail.reply_draft',
-                'mail.mark_read',
-                'mail.mark_unread',
-                'mail.archive',
-                'mail.delete',
-                'mail.send',
-                ...PERSONAL_IMPORT_TOOLS.map(tool => tool.name),
-                'contacts.sources',
-                'contacts.list',
-                'contacts.search',
-                'contacts.read',
-                'contacts.import_icloud',
-                'contacts.push_icloud',
-                'contacts.create',
-                'contacts.update',
-                'contacts.delete',
-                'calendar.sources',
-                'calendar.search',
-                'calendar.today',
-                'calendar.next',
-                'calendar.create',
-                'calendar.update',
-                'calendar.delete',
-                'calendar.share',
-                'calendar.export_webcal',
-                'bank.accounts',
-                'bank.balance',
-                'bank.transactions',
-                'bank.summary',
-                'bank.search_transactions',
-                'bank.find_payer',
-                'bank.spending_by_period',
-                'bank.top_merchants',
-                'bank.recurring_payments',
-                'runtime.tools.list',
-                'runtime.tools.call',
-                'runtime.tools.batch_call',
-                'runtime.audit.list'
-            ]
-        };
+        return { protocol: ATOME_MCP_PROTOCOL, methods: Object.keys(getHandlers()) };
     },
-    async 'mcp.tools.list'() {
+    async 'mcp.tools.list'(params = {}) {
         return {
             protocol: ATOME_MCP_PROTOCOL,
-            tools: await listUnifiedMcpTools()
+            tools: await listUnifiedMcpTools(params.__mcp.actor, getHandlers())
         };
     },
     'mcp.resources.list'() {
@@ -154,7 +81,7 @@ export const createMcpPlatformHandlers = (getHandlers) => ({
         };
     },
     async 'mcp.resources.read'(params = {}) {
-        const uri = params?.uri || params?.resource || params?.resource_uri;
+        const uri = params?.uri;
         return {
             protocol: ATOME_MCP_PROTOCOL,
             uri: String(uri || '').trim() || null,
@@ -168,8 +95,7 @@ export const createMcpPlatformHandlers = (getHandlers) => ({
         };
     },
     'mcp.prompts.get'(params = {}) {
-        const name = params?.name || params?.prompt || params?.prompt_name;
-        return renderPrompt(name, params);
+        return renderPrompt(params?.name, params);
     },
     'mcp.acl.list'() {
         return {
@@ -232,72 +158,34 @@ export const createMcpPlatformHandlers = (getHandlers) => ({
             items
         };
     },
+    // Each step is a request of its own through the single entry (mcp.js `__mcp.dispatch`), with its own
+    // policy and confirmation: a chain never carries a step past the person's yes. A held step stops the
+    // chain; the caller re-sends it from `resume_index` with that step's `confirmed` and `confirmation_id`.
     async 'mcp.toolchains.execute'(params = {}) {
         const steps = Array.isArray(params?.steps) ? params.steps : [];
-        if (!steps.length) {
-            throw new Error('Missing toolchain steps');
-        }
-        const reportProgress = typeof params?.__mcp?.reportProgress === 'function'
-            ? params.__mcp.reportProgress
-            : () => {};
-
-        if (steps.every((step) => String(step?.method || '').trim() === 'runtime.tools.call')) {
-            reportProgress({
-                ratio: 0.25,
-                phase: 'toolchain.batch'
-            });
-            const result = await getHandlers()['runtime.tools.batch_call']({
-                events: steps.map((step) => ({
-                    ...(step?.params && typeof step.params === 'object' ? step.params : {})
-                })),
-                __mcp: params.__mcp
-            });
-            reportProgress({
-                ratio: 1,
-                phase: 'toolchain.completed'
-            });
-            return {
-                ok: true,
-                mode: 'runtime_batch',
-                count: steps.length,
-                result
-            };
-        }
-
-        const results = [];
-        for (let index = 0; index < steps.length; index += 1) {
-            const step = steps[index];
+        if (!steps.length) throw new Error('Missing toolchain steps');
+        const start = params.start_index === undefined ? 0 : Number(params.start_index);
+        if (!Number.isInteger(start) || start < 0 || start >= steps.length) throw new Error('toolchain_start_index_invalid');
+        steps.forEach((step) => {
             const method = String(step?.method || '').trim();
             if (!method || !hasOwn.call(getHandlers(), method) || method === 'mcp.toolchains.execute') {
                 throw new Error(`Invalid toolchain step: ${method || '<empty>'}`);
             }
-            const stepParams = step?.params && typeof step.params === 'object'
-                ? { ...step.params }
-                : {};
-            if (params?.__mcp) {
-                stepParams.__mcp = params.__mcp;
+        });
+        const results = [];
+        for (let index = start; index < steps.length; index += 1) {
+            const method = String(steps[index].method).trim();
+            const stepParams = steps[index].params && typeof steps[index].params === 'object' ? steps[index].params : {};
+            const response = await params.__mcp.dispatch(method, stepParams);
+            if (response.error) return { ok: false, mode: 'sequential', failed_index: index, error: response.error, steps: results };
+            const gate = response.result;
+            if (gate?.confirmation_required === true || /^mcp_(confirmation|rate_limited)/.test(String(gate?.error || ''))) {
+                return { ok: false, mode: 'sequential', status: 'held', resume_index: index, gate, steps: results };
             }
-            const result = await getHandlers()[method](stepParams);
-            results.push({
-                index,
-                method,
-                result
-            });
-            reportProgress({
-                ratio: (index + 1) / steps.length,
-                phase: 'toolchain.step',
-                detail: {
-                    index,
-                    method
-                }
-            });
+            results.push({ index, method, result: gate });
+            params.__mcp.reportProgress({ ratio: (index + 1) / steps.length, phase: 'toolchain.step', detail: { index, method } });
         }
-        return {
-            ok: true,
-            mode: 'sequential',
-            count: results.length,
-            steps: results
-        };
+        return { ok: true, mode: 'sequential', count: results.length, steps: results };
     },
     'mcp.operations.list'(params = {}) {
         const status = params?.status ? String(params.status) : null;

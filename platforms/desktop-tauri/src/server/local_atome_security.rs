@@ -20,7 +20,7 @@ struct PermissionRow {
     conditions: Option<String>,
 }
 
-fn event_patch(event: &EventRecord) -> Option<&JsonMap<String, JsonValue>> {
+pub(super) fn event_patch(event: &EventRecord) -> Option<&JsonMap<String, JsonValue>> {
     event
         .payload
         .as_ref()?

@@ -228,6 +228,8 @@ export const buildAtomeApi = ({ getWs, tokenKey }) => {
                     action: 'restore',
                     token,
                     snapshot_id: data?.snapshot_id || data?.snapshotId || data?.id || id,
+                    // Its object routes a shared project's snapshot to the owner's vault; an id alone names one of the asker's own.
+                    project_id: data?.project_id || data?.projectId || null,
                     tx_id: data?.tx_id || data?.txId || null
                 });
             },
@@ -308,13 +310,14 @@ export const buildAtomeApi = ({ getWs, tokenKey }) => {
                     offset: params.offset
                 });
             },
-            async getSnapshot(id) {
+            async getSnapshot(id, params = {}) {
                 const token = getToken(tokenKey);
                 return send({
                     type: 'snapshot',
                     action: 'get',
                     token,
-                    snapshot_id: id
+                    snapshot_id: id,
+                    project_id: params.project_id || params.projectId || null
                 });
             }
 });

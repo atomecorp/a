@@ -6,7 +6,7 @@
 
 import { query, safeParseJson, serializeJson } from './adole_db_core.js';
 import { buildStateSnapshotRestoreEvents } from './state_snapshot_restore.js';
-import { listStateCurrent } from './adole_event_state_reads.js';
+import { listStateCurrent, getEvent } from './adole_event_state_reads.js';
 import { appendEvents } from './adole_event_log.js';
 
 export async function createStateSnapshot(options = {}) {
@@ -60,6 +60,23 @@ export async function createStateSnapshot(options = {}) {
     return inserted?.snapshot_id;
 }
 
+// A snapshot asked once: its record and its `snapshot` event. A device's outbox may send it
+// again (its answer lost); the event id names it once, so the resend gets the same snapshot.
+// `commitEvent` is the caller's canonical event commit (the server's or the vault's).
+export async function createStateSnapshotOnce(request, actor, commitEvent) {
+    const known = request.event_id ? await getEvent(request.event_id) : null;
+    if (known) {
+        if (known.kind !== 'snapshot' || String(known.actor?.id) !== String(actor.id)) throw new Error('event_id_conflict');
+        return { snapshot_id: known.payload?.snapshot_id ?? null };
+    }
+    const snapshotId = await createStateSnapshot({ projectId: request.project_id, atomeId: request.atome_id, label: request.label,
+        actor, state: request.state, snapshotType: request.snapshot_type });
+    await commitEvent({ ...(request.event_id ? { id: request.event_id } : {}), ...(request.ts ? { ts: request.ts } : {}),
+        kind: 'snapshot', atome_id: request.atome_id || request.project_id, project_id: request.project_id, actor,
+        payload: { snapshot_id: snapshotId, label: request.label } });
+    return { snapshot_id: snapshotId };
+}
+
 export async function listStateSnapshots(projectId, options = {}) {
     if (!projectId) return [];
     const limit = Number(options.limit) || 20;
@@ -95,5 +112,6 @@ export async function restoreStateSnapshot(snapshotId, options = {}) {
     const txId = options.tx_id || options.txId || `snapshot_restore_${snapshotId}`;
     const events = buildStateSnapshotRestoreEvents(snapshot, options);
     if (!events.length) return [];
-    return appendEvents(events, { txId });
+    // A restore writes back stored truth: history, never re-validated (adole_event_log.js#assertEventProperties).
+    return appendEvents(events, { txId, storedTruth: true });
 }
