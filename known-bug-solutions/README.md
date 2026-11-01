@@ -30,6 +30,7 @@ the established solution before attempting a new implementation.
 | iOS guest back on the access screen after relaunch; « Mieux dormir » / « Dashboard eVe » duplicated at each « Commencer » | [guest-session-erased-by-preview-frame](guest-session-erased-by-preview-frame/README.md) |
 | A media preview (Médiathèque Lecture, contact takes) shows Pause but is silent | [preview-playback-silent-null-duration](preview-playback-silent-null-duration/README.md) |
 | Tauri: project opening 10–25 s; return to the home stuck grey in `transition` | [home-return-stuck-in-transition](home-return-stuck-in-transition/README.md) |
+| iOS: opening a project or creating an empty one returns at once to the Dashboard; the native console repeats `QuotaExceededError … persistScope` | [localstorage-quota-project-open](localstorage-quota-project-open/README.md) |
 | iOS: opening a project shows a grey page for seconds; the List view jumps in later; the home reopens the assistant on return | [project-opening-grey-and-slow](project-opening-grey-and-slow/README.md) |
 | Home/projects repeatedly reload after restart or suspension; interrupted iOS reconstruction restarts at zero | [durable-startup-sync](durable-startup-sync/README.md) |
 | Home opens another Dashboard than chosen; false « liaison avec le serveur a échoué »; lift on a channel does nothing; TV sound without picture | [home-wrong-dashboard-and-false-link-errors](home-wrong-dashboard-and-false-link-errors/README.md) |

@@ -319,6 +319,10 @@ Registre des **anomalies** (BUG), **régressions confirmées** (REG) et **évolu
 - **Causes probables :** les échecs côté téléphone n'atteignent jamais la montre (`watch_link.js:102`) — `PRESENTATION_UNAVAILABLE` si le Dashboard n'est pas monté (`training_runtime.js:254`), `start()` renvoie ok avant la fin de `session.start` (`dashboard_training_card.js:245-250`) ; l'écran de consentement n'a pas de bande (impasse, `WatchScreens.swift:18-19`) ; une session en cours masque la carte touchée (`watch_link.js:43`) ; requêtes perdues en silence quand l'iPhone est hors de portée.
 - **Correctifs proposés (non appliqués : Swift non compilable ici sans build, disque 12 Gio) :** voir protocole et rapport.
 
+### Résultat 2026-11-01 soir (Claude)
+
+- **Correction E4 (commune à BUG-008) :** `platforms/ios/atome-auv3/watch/WatchSensorSession.swift` — une séance HealthKit terminée par le système (`.ended`) ou en échec est relâchée (`releaseWorkout`) ; avant, `startWorkout` ignorait tout départ suivant tant qu'elle restait tenue. Compilation `xcodebuild -target atomeWatch -sdk watchos` : BUILD SUCCEEDED. **Montre non testée.** Autres causes (échecs côté iPhone non renvoyés à la montre, écran de consentement sans bande) : ouvertes.
+
 ## BUG-008 — Activité impossible à arrêter sur la montre et interface bloquée
 
 - **Priorité :** Critique — aucun moyen d'arrêt accessible selon le signalement.
@@ -344,6 +348,10 @@ Registre des **anomalies** (BUG), **régressions confirmées** (REG) et **évolu
 - **Statut :** REVUE DE CODE — causes identifiées, correctifs à appliquer avec une build et un test montre.
 - **Causes :** (E1) séance montre orpheline si l'app iPhone est tuée (`AppNativeHealthWorkout.swift:53` en mémoire seulement ; `WatchSensorSession.swift:80-90` rejoue le départ jusqu'à 6 h) ; (E2) iPhone hors de portée : écran remplacé, arrêt perdu en silence mais vibration « arrêt » (`WatchCardScreen.swift:111`) ; (E3) le curseur d'arrêt lutte avec le défilement horizontal (`:207` / `:26-36`) ; (E4) séance terminée/échouée jamais remise à zéro (`WatchSensorSession.swift:285-288`), tout départ suivant ignoré (`:241`).
 - **Protocole :** `temp/r104merge/agents/watch/protocole_montre.md` (11 étapes, journaux à collecter).
+
+### Résultat 2026-11-01 soir (Claude)
+
+- **E4 corrigé en code** (voir BUG-007). **E1–E3 ouverts** : E2 demande une file d'arrêts horodatés jusqu'à l'iPhone (contrat `watch_link.js` à étendre) et un retour à décider quand l'iPhone est hors de portée ; E3 (curseur d'arrêt contre défilement) est un geste à valider ; E1 (séance orpheline) demande un essai montre + iPhone tué. Statut : CORRIGÉ-CODE partiel, montre non testée.
 
 ## TÂCHE-002 — Revoir l'indicateur de session sportive active dans le dashboard
 
@@ -502,6 +510,11 @@ Registre des **anomalies** (BUG), **régressions confirmées** (REG) et **évolu
 ### Résultat 2026-11-01 (fusion R-104 → main, Claude)
 
 - **Statut :** FONCTION NOUVELLE. `server/ws_youtube_search.js` ne remonte ni `publishedAt` ni `order` ; option `sort` déjà dans `dashboard_stage_list.js`.
+
+### Résultat 2026-11-01 soir (Claude)
+
+- **Partie serveur faite :** `server/ws_youtube_search.js` — recherche triée par date de mise en ligne par défaut (`order: 'date'`, `relevance` sur demande, toute autre valeur refusée) ; chaque résultat porte `publishedAt` (ISO, date de mise en ligne YouTube, `null` si absente, jamais inventée). `node --test tests/server/ws_youtube_search.test.mjs` 5/5.
+- **Reste :** afficher la date sur la fiche/ligne et offrir récent/ancien/A→Z dans le tri existant = nouvel élément visible → maquette à valider (règle 16) ; liste « populaires » (chart) sans tri par date côté API ; production : effet seulement après déploiement autorisé du serveur.
 
 ## TÂCHE-008 — Framework : tri par date et ordre alphabétique réutilisable dans les recherches
 
@@ -737,6 +750,14 @@ Registre des **anomalies** (BUG), **régressions confirmées** (REG) et **évolu
 - **Cause :** la build 1.45 (43) embarque le moteur de rendu `cb26d7cb7ccc980b` (md5 756941e5…) : `platforms/web/bevy-renderer/src/lib.rs#queue_web_ops` réveille le rendu sans lever `WEB_REDRAW_PENDING` → `redraw_applied` reste figé → `waitForBevyDiffPresentation` lève `bevy_renderer_diff_present_timeout` → `project_workspace_activation_runtime.js` remet le Dashboard. main l'avait corrigé (05e58963d, `request_web_redraw()`, paire `56e875eee68a1239`, md5 b64dea1c…) ; la build 42 l'avait, la 43 (faite depuis la base R-104) non. La fusion garde le correctif (renderer identique à 515a50b05).
 - **Preuves :** D11 sur l'arbre R-104 : échec après rechargement (`diff_present_timeout`, file 107/107) ; main fusionné 6/6 ; `temp/r104merge/probes/project_open_real.probe.mjs` (création, forme, rechargement, deux réouvertures par touchers) 0 échec.
 
+### Résultat 2026-11-01 soir — build 1.46 (44) sur iPhone physique (Claude)
+
+- **Statut :** CAUSE ÉTABLIE SUR L'APPAREIL ET CORRIGÉE SUR main (atome) ; **essai iOS du correctif NON FAIT** (installation à autoriser).
+- **Reproduction :** iPhone 17 Pro USB, touchers WDA réels : Projets › « Projet 2026-11… » → fond ~2,5 s → Dashboard (`temp/ios_build44_2026-11-01/o1_strip.png`, `console_run1.log`).
+- **Cause :** `localStorage` plein (copie lecture seule : 10 485 108 o, dont `squirrel_sync_cursors_v1` + `squirrel_sync_streams_v1` = 66 295 flux) → `setCurrentProjectCache` (`adole_api/session.js`, appelé par `runProjectActivation`) lève `QuotaExceededError` → retour Dashboard. L'hypothèse « moteur de rendu de la 43 » du bloc précédent n'est pas la cause sur la 44.
+- **Correction :** `atome/src/squirrel/apis/unified/sync_scope_store.js` (IndexedDB, déplacement unique des périmètres puis libération des deux clés) + `sync_engine.js` (chargement asynchrone, aucune écriture avant le périmètre stocké).
+- **Preuves :** `tests/eve/sync_engine.test.mjs` 12/12 (dont « 70 000 flux hors du quota ») ; `temp/ios_build44_2026-11-01/headcheck/quota_probe.mjs` HEAD `QuotaExceededError` / corrigé ok. Rapport : `todo/rapport_incident_ios_build44.md`.
+
 ## BUG-013 — Création d'un projet vide impossible
 
 - **Priorité :** Critique — création bloquée.
@@ -752,6 +773,10 @@ Registre des **anomalies** (BUG), **régressions confirmées** (REG) et **évolu
 
 - **Statut :** MÊME CAUSE que BUG-012 (création = `ui.project.open` puis activation) ; corrigé sur main (Web), à vérifier sur appareil.
 - **Preuves :** `project_open_real.probe.mjs` 1a–1d (Créer › Projet vide par touchers → projet créé, enregistré, ouvert, sans retour au Dashboard).
+
+### Résultat 2026-11-01 soir — build 1.46 (44) (Claude)
+
+- **Statut :** MÊME CAUSE établie par le code (`ui.new_project` crée puis ouvre par `runProjectActivation` → `setCurrent` → quota) ; corrigé avec BUG-012 ; **non rejoué sur l'iPhone** (créerait des projets réels : 5 projets `TEST-B44-n` à autoriser). Les tuiles « Projet 2026-11… » de la grille sont probablement des créations dont l'ouverture a échoué (à vérifier).
 
 ## BUG-014 — Sport : le décompte d'un exercice ne démarre plus
 
@@ -770,6 +795,10 @@ Registre des **anomalies** (BUG), **régressions confirmées** (REG) et **évolu
 - **Essais :** `temp/r104merge/probes/sport_countdown_real.probe.mjs` (Pompes, Développé couché, Gainage chronométré 0:21→0:14 ; 3-2-1, repos, pause, arrêt, une seule session) : 0 échec sur main et sur R-104. Code de lancement identique base / R-104 / main ; moteur à horodatages inchangé.
 - **Hypothèses iOS :** le même moteur de rendu de la build 43 (BUG-012 : l'anneau du disque est un enregistrement de surcouche) ; `workout().prepare()` (autorisation HealthKit) qui ne rend pas la main ; `beeps.ready()` natif ; refus de la porte de types Swift sur d'anciennes données. Une build > 43 tranche la première.
 
+### Résultat 2026-11-01 soir — build 1.46 (44) sur iPhone physique (Claude)
+
+- **Statut :** le décompte démarre sur la 44 (constat utilisateur) ; la séance reprise par toucher réel fait avancer le compteur 5 → 6 → 8, puis reste sur « 8 sur 8 » — voulu (une série se termine par `confirm`, « Série terminée »). L'irrégularité de cadence est suivie en **BUG-016**. Bips programmés dans Kira (console : 3 × `audio_schedule_instances` ok).
+
 ## BUG-015 — Outils dans un projet : audit d'exécution et d'interaction après la réouverture
 
 - **Priorité :** Haute — complément transversal de BUG-012 et BUG-013.
@@ -787,5 +816,18 @@ Registre des **anomalies** (BUG), **régressions confirmées** (REG) et **évolu
 - **Sonde :** `temp/r104merge/probes/project_tools_real.probe.mjs` 18/18 (bureau 1280) : Créer › Forme + glisser → forme ; un toucher sur Créer éteint l'outil verrouillé (la racine porte l'outil actif, voulu) ; Créer › Texte + toucher + frappe → texte enregistré après un toucher ailleurs (Échap annule, voulu) ; toucher la forme → sélectionnée, outils contextuels (Annuler, Taille, Forme, Plan, Arrondi, Ombre, Masque, Téléport, Liaison, Fond) ; Arrondi → rayon 60 enregistré ; Vue → Naturel / Tableau / Liste ; Trouver → Finder listé ; Organiser → Dashboard ; réouverture et rechargement : forme et texte présents, Forme crée encore. `project_shape_color.probe.mjs` : Couleur change la forme (stockée et rendue).
 - **Observation non corrigée :** une forme naît bleue (`genesis.js` preset `color #3b7bff`) alors que `shape_creation_runtime.js` voulait le blanc (`background`) — pas une régression (depuis le 30 sept.), pas bloquant.
 - **Non couvert :** Basic vs Pro (niveau) ; appareil iOS.
+
+### Résultat 2026-11-01 soir — build 1.46 (44) (Claude)
+
+- **Statut :** BLOQUÉ sur iOS — aucun projet ne s'ouvre sur la 44 (BUG-012). À faire après installation du correctif : forme/texte par le vrai outil, sélection, propriété, Liste/Finder, outils contextuels, réouverture.
+
+## BUG-016 — Sport : cadence irrégulière du décompte et des bips (iOS 1.46 build 44)
+
+- **Famille :** BUG (nouveau, observé par l'utilisateur sur la build 44 ; BUG-014 conservé).
+- **Demande :** bips regroupés, intervalles trop courts ou trop longs, compteur irrégulier pendant les séries et les décomptes.
+- **Cause trouvée (code) :** `eVe/domains/training/training_sound.js` datait la trame jouée native (`played_frame_now`) à l'arrivée de la réponse du pont : chaque lot de bips était décalé d'une latence variable (fil principal chargé).
+- **Correction :** eVe 552e2855 — lecture datée au milieu de l'aller-retour mesuré, ancrage de l'aller-retour le plus court gardé pour la séance (renouvelé après 60 s).
+- **Preuves :** sonde de logique `temp/ios_build44_2026-11-01/headcheck/beep_jitter_probe.mjs` (vraie `createTrainingBeeps`, pont 10–460 ms) : intervalles HEAD 1 823–2 246 ms → corrigé 1 994–2 048 ms.
+- **Non mesuré :** cadence audible sur l'iPhone (aucune tonalité 1 320/880 Hz captée par le micro du Mac, `sport2/rec.wav`). Contribution réelle de cette cause sur l'appareil à mesurer après installation (volume monté, téléphone près du micro). **Statut : corrigé en code, non vérifié sur appareil.**
 
 <!-- Ajouter ici les prochaines entrées BUG-016, REG-003, TÂCHE-015, etc., sans effacer les précédentes. -->

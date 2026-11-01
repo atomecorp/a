@@ -523,6 +523,19 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   `temp/r016c/basic_cardio.probe.mjs` ALL OK (`temp/r016c/basic_run6.log`), captures `temp/r016c/b0*.png`,
   `c0*.png`. Bloqué : lignes avant Lancer sur une carte cardio (question 62).
 
+### R-108 — Incident iOS 1.46 (44) : projets, Sport, registre R-104, design V5 (2026-11-01 soir)
+- Statut : ATTENTE UTILISATEUR (2026-11-01) — question posée en fin de session.
+- Source : mission « MISSION COMPLÈTE — incident iOS build 44, registre R-104 intégral et design V5 » (2026-11-01), dossier
+  `~/Desktop/R104_MAIN_PACKAGE_2026-11-01/`. Rapports : `todo/rapport_incident_ios_build44.md`,
+  `todo/rapport_global_post_R104_MAIN_2026-11-01.md` ; registre de débogage annoté (« Résultat 2026-11-01 soir », BUG-016).
+- Fait (code, tests Node, non poussé) : BUG-012/013 cause établie sur l'iPhone (`localStorage` saturé par 66 295 flux de
+  sync) → flux/curseurs en IndexedDB ; BUG-016 ancrage horloge audio des bips ; montre E4 ; TÂCHE-007 serveur.
+- Bloqué, à décider par toi : (1) installer le paquet de test `temp/ios_build44_2026-11-01/pkg/work/atome.app` sur l'iPhone
+  (1.46 (44) + JS corrigé ; données conservées ; retour par l'IPA 44) ; (2) créer 5 projets `TEST-B44-n` pour BUG-013 ;
+  (3) monter le volume de l'iPhone, posé près du micro du Mac, pour mesurer les bips.
+- Toujours ouvert : décisions R-107 et V5 D1–D6 ; affichage de la date des vidéos (maquette) ; montre E1–E3 ; push,
+  build 1.46 (45) et déploiement serveur sur accord explicite.
+
 ### R-107 — Fusion R-104 → main (2026-11-01) : décisions et essais restés ouverts
 - Statut : ATTENTE UTILISATEUR (2026-11-01) — questions posées dans le compte rendu final de la session de fusion,
   rapport `todo/rapport_fusion_r104_main_2026-11-01.md` ; registre de débogage annoté
