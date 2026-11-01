@@ -34,17 +34,33 @@ export const MEETING_MINIMUM_AGE = 18;
 const OLDEST_AGE = 120;
 
 // A birth date, as typed: day/month/year (`12/03/1990`, `12.03.1990`, `12-03-1990`)
-// or year-month-day (`1990-03-12`, an ISO timestamp too). The age in whole years
-// at `now`, or null when the date is not a real one.
-export const ageFromBirth = (birth, now = new Date()) => {
+// or year-month-day (`1990-03-12`, an ISO timestamp too): its numbers, or null when
+// the date is not a real one.
+const birthParts = (birth) => {
     const parts = text(birth).split('T')[0].split(/[/.-]/);
     if (parts.length !== 3 || parts.some(part => !part || !/^\d+$/.test(part))) return null;
     const [year, month, day] = (parts[0].length === 4 ? parts : [...parts].reverse()).map(Number);
     if (String(year).length !== 4) return null;
     const date = new Date(year, month - 1, day);
-    if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day || date > now) return null;
+    return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day ? { year, month, day, date } : null;
+};
+
+// The age in whole years at `now`, or null when the date is not a real, past one.
+export const ageFromBirth = (birth, now = new Date()) => {
+    const parts = birthParts(birth);
+    if (!parts || parts.date > now) return null;
+    const { year, month, day } = parts;
     const age = now.getFullYear() - year - (now < new Date(now.getFullYear(), month - 1, day) ? 1 : 0);
     return age <= OLDEST_AGE ? age : null;
+};
+
+// A birth date as the card keeps it, `YYYY-MM-DD` (read the same in every time zone); a text that is
+// not a real date stays as it was, never erased.
+export const normalizeBirthDate = (birth) => {
+    const parts = birthParts(birth);
+    if (!parts) return text(birth);
+    const pad = value => String(value).padStart(2, '0');
+    return `${parts.year}-${pad(parts.month)}-${pad(parts.day)}`;
 };
 
 // May the owner of this birth date see, declare for and appear in Rencontre?
