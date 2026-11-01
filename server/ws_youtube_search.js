@@ -48,6 +48,9 @@ const readDurations = async (ids, { apiKey, fetchResource }) => {
   return new Map((Array.isArray(payload.items) ? payload.items : []).map((item) => [String(item?.id || ''), isoSeconds(item?.contentDetails?.duration)]));
 };
 
+const SEARCH_ORDERS = new Set(['date', 'relevance']);
+const publishedAt = (value) => (Number.isFinite(Date.parse(value)) ? new Date(Date.parse(value)).toISOString() : null);
+
 export const handleWsYoutubeSearch = async (message, address, {
   apiKey = process.env.YOUTUBE_DATA_API_KEY,
   fetchResource = fetch,
@@ -60,7 +63,9 @@ export const handleWsYoutubeSearch = async (message, address, {
   const pageToken = String(message.pageToken || '').trim();
   const popular = message.chart === 'popular';
   const region = String(message.region || '').trim().toUpperCase();
-  if ((popular ? !/^[A-Z]{2}$/.test(region) : !query || query.length > 120) || pageToken.length > 256) {
+  // A search lists the most recently published videos first unless relevance is asked (TÂCHE-007).
+  const order = String(message.order || 'date');
+  if ((popular ? !/^[A-Z]{2}$/.test(region) : !query || query.length > 120) || pageToken.length > 256 || !SEARCH_ORDERS.has(order)) {
     return reply(requestId, { ok: false, error: 'youtube_search_invalid_query' });
   }
   if (!apiKey) {
@@ -87,7 +92,7 @@ export const handleWsYoutubeSearch = async (message, address, {
   }
   const params = new URLSearchParams(popular
     ? { part: 'snippet,status,contentDetails', chart: 'mostPopular', regionCode: region, maxResults: PAGE_SIZE, key: apiKey }
-    : { part: 'snippet', type: 'video', videoEmbeddable: 'true', videoSyndicated: 'true', q: query, maxResults: PAGE_SIZE, key: apiKey });
+    : { part: 'snippet', type: 'video', videoEmbeddable: 'true', videoSyndicated: 'true', q: query, order, maxResults: PAGE_SIZE, key: apiKey });
   if (pageToken) params.set('pageToken', pageToken);
   try {
     const response = await fetchResource(`${popular ? YOUTUBE_VIDEOS_ENDPOINT : YOUTUBE_SEARCH_ENDPOINT}?${params}`, {
@@ -115,6 +120,8 @@ export const handleWsYoutubeSearch = async (message, address, {
         title: plainText(item?.snippet?.title),
         thumbnail: String(item?.snippet?.thumbnails?.medium?.url || item?.snippet?.thumbnails?.default?.url || ''),
         channel: plainText(item?.snippet?.channelTitle),
+        // YouTube's upload date (`snippet.publishedAt`), never the video's own creation date; null when absent.
+        publishedAt: publishedAt(item?.snippet?.publishedAt),
         duration: popular ? isoSeconds(item?.contentDetails?.duration) : 0
       }];
     });

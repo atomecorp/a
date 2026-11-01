@@ -17,7 +17,8 @@ test('YouTube search requests videos only and returns bounded Finder data', asyn
             requested = new URL(url);
             return { ok: true, json: async () => ({
                 items: [{ id: { videoId: 'dQw4w9WgXcQ' }, snippet: {
-                    title: 'Video title', channelTitle: 'Channel', thumbnails: { medium: { url: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/mqdefault.jpg' } }
+                    title: 'Video title', channelTitle: 'Channel', thumbnails: { medium: { url: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/mqdefault.jpg' } },
+                    publishedAt: '2026-09-28T17:05:00Z'
                 } }, { id: { videoId: '../invalid' } }],
                 nextPageToken: 'after-this'
             }) };
@@ -29,13 +30,16 @@ test('YouTube search requests videos only and returns bounded Finder data', asyn
     assert.equal(requested.searchParams.get('q'), 'music');
     assert.equal(requested.searchParams.get('pageToken'), 'next-page');
     assert.equal(requested.searchParams.get('maxResults'), '25');
+    // The most recently published first by default (TÂCHE-007).
+    assert.equal(requested.searchParams.get('order'), 'date');
     assert.equal(lengths.searchParams.get('id'), 'dQw4w9WgXcQ');
     assert.equal(lengths.searchParams.get('part'), 'contentDetails');
     assert.equal(response.requestId, 'search-1');
     assert.equal(response.results.length, 1);
     assert.deepEqual(response.results[0], {
         videoId: 'dQw4w9WgXcQ', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-        title: 'Video title', thumbnail: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/mqdefault.jpg', channel: 'Channel', duration: 212
+        title: 'Video title', thumbnail: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/mqdefault.jpg', channel: 'Channel',
+        publishedAt: '2026-09-28T17:05:00.000Z', duration: 212
     });
     assert.equal(response.nextPageToken, 'after-this');
     assert.equal(JSON.stringify(response).includes('private-test-key'), false);
@@ -78,4 +82,19 @@ test('YouTube search returns plain-text titles and logs provider refusals withou
     assert.equal(logs.length, 1);
     assert.equal(logs[0].data.reason, 'accessNotConfigured');
     assert.equal(JSON.stringify(logs).includes('private-test-key'), false);
+});
+
+test('YouTube search orders by relevance on request, refuses an unknown order and never invents a date', async () => {
+    let requested;
+    const fetchResource = async (url) => {
+        if (new URL(url).pathname.endsWith('/videos')) return { ok: true, json: async () => ({ items: [] }) };
+        requested = new URL(url);
+        return { ok: true, json: async () => ({ items: [{ id: { videoId: 'dQw4w9WgXcQ' }, snippet: { title: 'No date' } }] }) };
+    };
+    const options = { apiKey: 'private-test-key', now: Date.parse('2026-10-01T00:00:00Z'), fetchResource };
+    const relevant = await handleWsYoutubeSearch({ type: 'youtube-search', requestId: 'order-1', query: 'music', order: 'relevance' }, 'order-test-1', options);
+    assert.equal(requested.searchParams.get('order'), 'relevance');
+    assert.equal(relevant.results[0].publishedAt, null);
+    const refused = await handleWsYoutubeSearch({ type: 'youtube-search', requestId: 'order-2', query: 'music', order: 'viewCount' }, 'order-test-2', options);
+    assert.equal(refused.error, 'youtube_search_invalid_query');
 });
