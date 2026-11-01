@@ -1,6 +1,7 @@
 import { socketHealthMixin } from './websocket_health.js';
 import { CONFIG } from './adole_backend.js';
 import { getToken } from './adole_connection.js';
+import { createSyncScopeStore } from './sync_scope_store.js';
 
 // A key-bound token (`cnf.pop`) is accepted only after this connection signs a
 // fresh challenge with the session key; the account owner registers the signer.
@@ -11,26 +12,11 @@ const boundToKey = (token) => {
 };
 
 const DEVICE_KEY = 'squirrel_sync_device_id_v1';
-const STREAMS_KEY = 'squirrel_sync_streams_v1';
-const CURSORS_KEY = 'squirrel_sync_cursors_v1';
 const PERSIST_DELAY_MS = 250;
 // Streams announced within this window go out in one `subscribe`.
 const SUBSCRIBE_COALESCE_MS = 50;
 // Server limit for one `subscribe` carrying many cursors (`subscribe-batch` capability).
 const SUBSCRIBE_BATCH_SIZE = 500;
-
-const readJson = (storage, key, fallback) => {
-    try {
-        const value = JSON.parse(storage?.getItem?.(key) || 'null');
-        return value && typeof value === 'object' ? value : fallback;
-    } catch (_) {
-        return fallback;
-    }
-};
-
-const writeJson = (storage, key, value) => {
-    storage?.setItem?.(key, JSON.stringify(value));
-};
 
 const syncUrl = (env) => {
     const explicit = String(env?.__SQUIRREL_FASTIFY_WS_SYNC_URL__ || '').trim();
@@ -86,6 +72,8 @@ export class SyncEngine {
         this.installed = false;
         this.persistTimer = null;
         this.loadedScopeKey = '';
+        this.scopeLoadedKey = '';
+        this.scopeStore = options.scopeStore || createSyncScopeStore(this.env);
         this.boundLogin = () => this.retry();
         this.boundLogout = () => this.disconnect();
         this.boundOnline = () => this.retry();
@@ -93,7 +81,6 @@ export class SyncEngine {
         this.boundPageHide = () => this.flushPersist();
         this.source = this.loadDeviceSource();
         this.loadScope();
-        this.streams.add('directory.public');
     }
 
     scopeKey() {
@@ -112,30 +99,42 @@ export class SyncEngine {
         return source;
     }
 
+    // The stored scope (sync_scope_store.js) arrives asynchronously: streams observed
+    // meanwhile are kept beside it. `scopeLoad` resolves true once it has arrived.
     loadScope() {
         const key = this.scopeKey();
         this.loadedScopeKey = key;
-        const streamScopes = readJson(this.env?.localStorage, STREAMS_KEY, {});
-        const cursorScopes = readJson(this.env?.localStorage, CURSORS_KEY, {});
-        this.streams = new Set(Array.isArray(streamScopes[key]) ? streamScopes[key] : []);
-        this.streams.add('directory.public');
-        this.cursors = cursorScopes[key] && typeof cursorScopes[key] === 'object'
-            ? { ...cursorScopes[key] }
-            : {};
+        this.scopeLoadedKey = '';
+        this.streams = new Set(['directory.public']);
+        this.cursors = {};
+        this.scopeLoad = this.scopeStore.load(key).then((stored) => {
+            if (this.loadedScopeKey !== key) return false;
+            stored.streams.forEach((stream) => this.streams.add(String(stream)));
+            for (const [stream, cursor] of Object.entries(stored.cursors)) {
+                if ((Number(cursor) || 0) > (Number(this.cursors[stream]) || 0)) this.cursors[stream] = Number(cursor);
+            }
+            this.scopeLoadedKey = key;
+            return true;
+        }, (error) => this.reportScopeError('load', error));
+        return this.scopeLoad;
+    }
+
+    reportScopeError(stage, error) {
+        this.error = `sync_scope_${stage}_failed:${error?.message || error}`;
+        this.publishStatus();
+        return false;
     }
 
     // The streams and cursors in memory belong to the scope they were loaded from: they are
     // never written under another account's key (a commit observed before this account's
-    // scope was loaded erased its 9 831 streams, iPhone 2026-10-13).
+    // scope was loaded erased its 9 831 streams, iPhone 2026-10-13), nor before the stored
+    // scope has arrived (the write would replace it with the few streams seen meanwhile).
     persistScope() {
         const key = this.loadedScopeKey;
-        const storage = this.env?.localStorage;
-        const streamScopes = readJson(storage, STREAMS_KEY, {});
-        const cursorScopes = readJson(storage, CURSORS_KEY, {});
-        streamScopes[key] = Array.from(this.streams);
-        cursorScopes[key] = { ...this.cursors };
-        writeJson(storage, STREAMS_KEY, streamScopes);
-        writeJson(storage, CURSORS_KEY, cursorScopes);
+        const write = () => this.scopeStore.save(key, { streams: Array.from(this.streams), cursors: { ...this.cursors } })
+            .then(() => true, (error) => this.reportScopeError('save', error));
+        if (this.scopeLoadedKey === key) return write();
+        return this.scopeLoad.then(() => (this.scopeLoadedKey === key && this.loadedScopeKey === key ? write() : false));
     }
 
     // A (re)connection delivers one message per stream, thousands of them: the scope is
@@ -146,10 +145,10 @@ export class SyncEngine {
     }
 
     flushPersist() {
-        if (!this.persistTimer) return;
+        if (!this.persistTimer) return Promise.resolve(false);
         clearTimeout(this.persistTimer);
         this.persistTimer = null;
-        this.persistScope();
+        return this.persistScope();
     }
 
     install() {
@@ -190,8 +189,13 @@ export class SyncEngine {
         if (!url || !authToken || !principalId(this.env) || !this.WebSocketClass) return false;
         if (this.socket && [0, this.WebSocketClass.OPEN].includes(this.socket.readyState)) return true;
         this.disconnect({ reconnect: false });
-        this.flushPersist();
-        this.loadScope();
+        if (this.scopeKey() !== this.loadedScopeKey) {
+            this.flushPersist();
+            this.loadScope();
+        }
+        // The streams to resubscribe are the stored ones: the socket opens once they are read.
+        await this.scopeLoad;
+        if (this.socket && [0, this.WebSocketClass.OPEN].includes(this.socket.readyState)) return true;
         const socket = new this.WebSocketClass(url);
         this.socket = socket;
         socket.onopen = () => {

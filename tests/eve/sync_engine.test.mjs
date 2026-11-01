@@ -1,13 +1,20 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import { IDBFactory } from 'fake-indexeddb';
 import { SyncEngine } from '../../atome/src/squirrel/apis/unified/sync_engine.js';
+import { createSyncScopeStore } from '../../atome/src/squirrel/apis/unified/sync_scope_store.js';
 import { messageHandlerMixin } from '../../atome/src/squirrel/apis/unified/adole_websocket_message.js';
 
 class MemoryStorage {
     constructor() { this.values = new Map(); }
     getItem(key) { return this.values.has(key) ? this.values.get(key) : null; }
     setItem(key, value) { this.values.set(key, String(value)); }
+    removeItem(key) { this.values.delete(key); }
 }
+
+// IndexedDB completes on later tasks: wait for the stored scope and the writes in flight.
+const settle = () => new Promise(resolve => setTimeout(resolve, 20));
+const storedScope = (env, key = 'ws://127.0.0.1:3011/ws/sync|user-a') => createSyncScopeStore(env).load(key);
 
 test('native projection completion only invalidates consumers and never carries business state', () => {
     const previousWindow = globalThis.window, previousEvent = globalThis.CustomEvent;
@@ -46,6 +53,7 @@ const createEnv = () => {
         __SQUIRREL_FASTIFY_WS_SYNC_URL__: 'ws://127.0.0.1:3011/ws/sync',
         __currentUser: { id: 'user-a' },
         localStorage: new MemoryStorage(),
+        indexedDB: new IDBFactory(),
         crypto: { randomUUID: () => 'device-a' },
         CustomEvent: class { constructor(type, options) { this.type = type; this.detail = options.detail; } },
         addEventListener(type, handler) {
@@ -109,8 +117,9 @@ test('SyncEngine authenticates, subscribes, projects winners and persists its cu
     assert.equal(env.dispatched.filter(event => event.type.startsWith('squirrel:atome-')).length, 2);
 
     // The scope is written once per burst of messages, not once per message.
-    engine.flushPersist();
+    await engine.flushPersist();
     const restored = new SyncEngine({ env, WebSocketClass: FakeSocket, token: () => 'signed-token' });
+    assert.equal(await restored.scopeLoad, true);
     assert.equal(restored.getState().cursors['stream-a'], 2);
     assert.deepEqual(new Set(restored.getState().streams), new Set(['stream-a', 'directory.public']));
 });
@@ -177,12 +186,12 @@ test('SyncEngine writes its scope once per burst and only when a cursor advances
     FakeSocket.instances.length = 0;
     const env = createEnv();
     let writes = 0;
-    const setItem = env.localStorage.setItem.bind(env.localStorage);
-    env.localStorage.setItem = (key, value) => { writes += 1; setItem(key, value); };
-    const engine = new SyncEngine({ env, WebSocketClass: FakeSocket, token: () => 'signed-token' }).install();
+    const store = createSyncScopeStore(env);
+    const scopeStore = { load: store.load, save: (key, scope) => { writes += 1; return store.save(key, scope); } };
+    const engine = new SyncEngine({ env, WebSocketClass: FakeSocket, token: () => 'signed-token', scopeStore }).install();
+    await settle();
     const socket = FakeSocket.instances[0];
     socket.open();
-    writes = 0; // the device id written at construction
     socket.receive({ type: 'welcome' });
     const streams = Array.from({ length: 200 }, (_, index) => `stream-${index}`);
     socket.receive({ type: 'registered', streams });
@@ -190,12 +199,13 @@ test('SyncEngine writes its scope once per burst and only when a cursor advances
     assert.equal(writes, 0);
     // Leaving the page writes what the burst collected.
     env.dispatchEvent(new env.CustomEvent('pagehide', {}));
-    assert.equal(writes, 2);
-    assert.equal(new SyncEngine({ env, WebSocketClass: FakeSocket, token: () => 'signed-token' }).getState().cursors['stream-7'], 4);
+    assert.equal(writes, 1);
+    await settle();
+    assert.equal((await storedScope(env)).cursors['stream-7'], 4);
     // A reconnection that brings nothing new writes nothing.
     streams.forEach(stream => socket.receive({ type: 'replay-complete', stream, cursor: 4 }));
-    engine.flushPersist();
-    assert.equal(writes, 2);
+    await engine.flushPersist();
+    assert.equal(writes, 1);
 });
 
 test('SyncEngine subscribes in batches when the server accepts them and prunes denied streams', async () => {
@@ -227,6 +237,7 @@ test('SyncEngine keeps backing off until every subscription of a connection is a
     FakeSocket.instances.length = 0;
     const env = createEnv();
     const engine = new SyncEngine({ env, WebSocketClass: FakeSocket, token: () => 'signed-token' }).install();
+    await settle();
     const open = () => {
         const socket = FakeSocket.instances.at(-1);
         socket.open();
@@ -248,7 +259,7 @@ test('SyncEngine keeps backing off until every subscription of a connection is a
     engine.disconnect();
 });
 
-test('SyncEngine never writes a scope it did not load under another account key', async () => {
+test('SyncEngine moves the localStorage scopes to IndexedDB once and never writes a scope it did not load under another account key', async () => {
     const env = createEnv();
     const key = 'ws://127.0.0.1:3011/ws/sync|user-a';
     env.localStorage.setItem('squirrel_sync_streams_v1', JSON.stringify({ [key]: ['stream-a', 'stream-b', 'directory.public'] }));
@@ -260,10 +271,36 @@ test('SyncEngine never writes a scope it did not load under another account key'
     env.__currentUser = signedIn;
     // A local commit observed before any connection.
     engine.observeEvents([{ stream_id: 'stream-c' }]);
-    engine.flushPersist();
-    const stored = JSON.parse(env.localStorage.getItem('squirrel_sync_streams_v1'))[key];
-    assert.deepEqual(new Set(stored), new Set(['stream-a', 'stream-b', 'stream-c', 'directory.public']));
-    assert.equal(JSON.parse(env.localStorage.getItem('squirrel_sync_cursors_v1'))[key]['stream-a'], 7);
+    assert.equal(await engine.flushPersist(), true);
+    const stored = await storedScope(env, key);
+    assert.deepEqual(new Set(stored.streams), new Set(['stream-a', 'stream-b', 'stream-c', 'directory.public']));
+    assert.equal(stored.cursors['stream-a'], 7);
+    // The moved keys are freed: localStorage no longer carries the sync scope.
+    assert.equal(env.localStorage.getItem('squirrel_sync_streams_v1'), null);
+    assert.equal(env.localStorage.getItem('squirrel_sync_cursors_v1'), null);
+});
+
+// iPhone build 44 (2026-11-01): 66 295 streams and their cursors filled the ~5 M characters
+// of localStorage, so the current-project write of every project opening threw.
+test('SyncEngine keeps tens of thousands of streams out of a localStorage quota', async () => {
+    const env = createEnv();
+    const QUOTA = 5_000_000;
+    const setItem = env.localStorage.setItem.bind(env.localStorage);
+    env.localStorage.setItem = (key, value) => {
+        const used = Array.from(env.localStorage.values).reduce((sum, [k, v]) => sum + (k === key ? 0 : k.length + v.length), 0);
+        if (used + key.length + String(value).length > QUOTA) throw new Error('QuotaExceededError: The quota has been exceeded.');
+        setItem(key, value);
+    };
+    const engine = new SyncEngine({ env, WebSocketClass: FakeSocket, token: () => 'signed-token' });
+    await engine.scopeLoad;
+    const streams = Array.from({ length: 70_000 }, (_, index) => `0000${index}-8577-49cd-8e06-765ce28cf839`);
+    engine.observeEvents(streams.map(stream_id => ({ stream_id })));
+    streams.forEach((stream, index) => engine.persistCursor(stream, index + 1));
+    assert.equal(await engine.flushPersist(), true);
+    assert.equal((await storedScope(env)).streams.length, 70_001);
+    // The app's own small writes (here the current project) still fit.
+    env.localStorage.setItem('squirrel_current_project_v2', JSON.stringify({ id: 'project-a', name: 'Projet', userId: 'user-a' }));
+    assert.equal(engine.error, '');
 });
 
 test('negotiated batch receipts settle once and include streams already caught up', async () => {
