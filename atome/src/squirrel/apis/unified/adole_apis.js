@@ -294,7 +294,16 @@ export const AdoleAPI = {
     respond: (userId, decision) => fastifyCall({ type: 'contact', action: 'respond', userId, decision }, 'contacts_auth_unavailable'),
     block: (userId) => fastifyCall({ type: 'contact', action: 'block', userId }, 'contacts_auth_unavailable'),
     unblock: (userId) => fastifyCall({ type: 'contact', action: 'unblock', userId }, 'contacts_auth_unavailable'),
-    list: () => fastifyCall({ type: 'contact', action: 'list' }, 'contacts_auth_unavailable')
+    list: () => fastifyCall({ type: 'contact', action: 'list' }, 'contacts_auth_unavailable'),
+    // « Fin du lien »: the contact leaves both books, future shares stop (server/communication_relations.js).
+    end: (userId) => fastifyCall({ type: 'contact', action: 'end', userId }, 'contacts_auth_unavailable'),
+    // The requests this account sent and nobody answered, taken back (leaving the objectives network).
+    withdrawRequests: () => fastifyCall({ type: 'contact', action: 'withdraw-requests' }, 'contacts_auth_unavailable')
+  },
+  // The objectives network (server/objective_network.js): the people found for an objective, a report.
+  objectiveNetwork: {
+    people: (objectiveKey) => fastifyCall({ type: 'objective-network', action: 'people', objectiveKey }, 'objective_network_auth_unavailable'),
+    report: (userId, reason) => fastifyCall({ type: 'objective-network', action: 'report', userId, reason }, 'objective_network_auth_unavailable')
   },
   // News diffusees par le serveur : publication unique, abonnements par tags, registre de tags.
   news: {

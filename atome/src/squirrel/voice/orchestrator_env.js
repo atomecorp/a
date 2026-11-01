@@ -10,7 +10,6 @@ export const resolveHostEnv = (env = null) => {
         && typeof env === 'object'
         && (
             typeof env.handleAtomeMCPRequestAsync === 'function'
-            || typeof env.handleAtomeMCPRequest === 'function'
         )
     ) {
         return env;

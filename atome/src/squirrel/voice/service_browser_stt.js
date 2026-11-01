@@ -1,6 +1,16 @@
 import { collectSpeechHints, applyHintedSpeechCorrections, resolveSpeechLocale, selectBestSpeechCandidate } from './service_speech.js';
 import { DEFAULT_LANG, DEFAULT_STT_MAX_ALTERNATIVES, createDeferred, createSegment, getSpeechRecognitionCtor, normalizeErrorMessage } from './service_support.js';
 
+// Offline, the browser's recognizer has to listen on this device (`processLocally`, Chrome's
+// on-device speech): a browser with no on-device recognizer for the language says so.
+export const requireOnDeviceRecognition = async (env, lang) => {
+    const RecognitionCtor = getSpeechRecognitionCtor(env);
+    const status = typeof RecognitionCtor?.available === 'function'
+        ? await RecognitionCtor.available({ langs: [resolveSpeechLocale(lang || DEFAULT_LANG)], processLocally: true })
+        : 'unavailable';
+    if (status !== 'available') throw new Error('stt_offline_unavailable');
+};
+
 export const startBrowserRecognition = (context, sessionId, options = {}, {
         provider = 'browser_web_speech'
     } = {}) => {
@@ -59,6 +69,7 @@ export const startBrowserRecognition = (context, sessionId, options = {}, {
         recognition.interimResults = options.partial !== false;
         recognition.continuous = options.continuous === true;
         recognition.maxAlternatives = maxAlternatives;
+        if (options.processLocally === true) recognition.processLocally = true;
 
         recognition.onstart = () => {
             context.sessionRuntime.startListening(sessionId, {

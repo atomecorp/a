@@ -3,7 +3,7 @@ import { CALENDAR_AGENDA_TOOLS } from '#shared/calendar_tool_contract.js';
 export const registerCalendarDefaultTools = ({ Agent, safeString, requireCalendarServiceApi, invokeRuntimeDefaultTool }) => {
     for (const tool of PERSONAL_IMPORT_TOOLS.filter(tool => tool.name.startsWith('calendar.'))) Agent.registerTool({
         name: tool.name, description: tool.description, capabilities: [tool.write ? 'calendar.write' : 'calendar.read'],
-        risk_tier: tool.write ? 'MEDIUM' : 'LOW', parameters: personalImportInputSchema(tool),
+        risk_tier: tool.write ? 'moderate' : 'low', parameters: personalImportInputSchema(tool),
         handler: async ({ params = {} }) => { const api = await requireCalendarServiceApi(); return personalImportToolResult(tool,
             await (tool.param ? api[tool.method](params[tool.param], params) : api[tool.method](params))); }
     });
@@ -20,7 +20,7 @@ export const registerCalendarDefaultTools = ({ Agent, safeString, requireCalenda
         name: 'calendar.sources',
         description: 'List unified calendar sources and their roles.',
         capabilities: ['calendar.read'],
-        risk_tier: 'LOW',
+        risk_tier: 'low',
         parameters: { type: 'object', additionalProperties: false, properties: {} },
         handler: async () => {
             const api = await requireCalendarServiceApi();
@@ -33,7 +33,7 @@ export const registerCalendarDefaultTools = ({ Agent, safeString, requireCalenda
         name: 'calendar.search',
         description: 'Search the unified calendar view.',
         capabilities: ['calendar.read'],
-        risk_tier: 'LOW',
+        risk_tier: 'low',
         parameters: {
             type: 'object',
             required: ['query'],
@@ -56,7 +56,7 @@ export const registerCalendarDefaultTools = ({ Agent, safeString, requireCalenda
         name: 'calendar.today',
         description: 'List today calendar events from the unified multi-source calendar view.',
         capabilities: ['calendar.read'],
-        risk_tier: 'LOW',
+        risk_tier: 'low',
         parameters: {
             type: 'object',
             properties: {
@@ -75,7 +75,7 @@ export const registerCalendarDefaultTools = ({ Agent, safeString, requireCalenda
         name: 'calendar.next',
         description: 'List upcoming calendar events from the unified multi-source calendar view.',
         capabilities: ['calendar.read'],
-        risk_tier: 'LOW',
+        risk_tier: 'low',
         parameters: {
             type: 'object',
             properties: {
@@ -95,7 +95,7 @@ export const registerCalendarDefaultTools = ({ Agent, safeString, requireCalenda
         name: 'calendar.create',
         description: 'Create a calendar event through the unified calendar service.',
         capabilities: ['calendar.write'],
-        risk_tier: 'MEDIUM',
+        risk_tier: 'moderate',
         parameters: {
             type: 'object',
             properties: {
@@ -121,7 +121,7 @@ export const registerCalendarDefaultTools = ({ Agent, safeString, requireCalenda
         name: 'calendar.update',
         description: 'Update a calendar event through the unified calendar service.',
         capabilities: ['calendar.write'],
-        risk_tier: 'MEDIUM',
+        risk_tier: 'moderate',
         parameters: {
             type: 'object',
             required: ['event_id'],
@@ -151,7 +151,7 @@ export const registerCalendarDefaultTools = ({ Agent, safeString, requireCalenda
         name: 'calendar.delete',
         description: 'Delete a calendar event through the unified calendar service.',
         capabilities: ['calendar.write'],
-        risk_tier: 'MEDIUM',
+        risk_tier: 'moderate',
         parameters: {
             type: 'object',
             required: ['event_id'],

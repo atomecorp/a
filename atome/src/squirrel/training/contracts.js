@@ -1,4 +1,5 @@
 import { validateParams } from '../ai/agent_gateway_normalize.js';
+import { TRAINING_EQUIPMENT_COMMANDS } from './equipment_contracts.js';
 import { TRAINING_CARDIO_EFFORTS, TRAINING_CARDIO_GOALS, TRAINING_CARDIO_LIMITS, TRAINING_CARDIO_SHOW, TRAINING_CUSTOM_LEVEL, TRAINING_LOAD_STEP_LIMITS, TRAINING_LOAD_CEILING_KG, TRAINING_LOG_METRICS, TRAINING_RECORD_LEVEL, TRAINING_EXERCISE_IDS, TRAINING_GOALS, TRAINING_KINDS, TRAINING_LEVELS, TRAINING_TARGETS, TRAINING_TEMPO_LIMITS, TRAINING_SIGNALS, TRAINING_CUSTOM_LIMITS } from '../../shared/training_catalog.js';
 import { TRAINING_READY_IDS } from '../../shared/training_ready_programs.js';
 
@@ -6,7 +7,7 @@ import { TRAINING_READY_IDS } from '../../shared/training_ready_programs.js';
 // feature of the Dashboard runs through these commands, the interface included.
 export const TRAINING_ERRORS = Object.freeze(['INVALID_ARGUMENT', 'AUTH_REQUIRED', 'TRAINING_EXERCISE_UNKNOWN',
     'TRAINING_PROFILE_REQUIRED', 'TRAINING_SESSION_NOT_FOUND', 'TRAINING_SESSION_INVALID', 'TRAINING_REVISION_CHANGED',
-    'TRAINING_GOAL_REQUIRED', 'TRAINING_OBJECTIVES_UNAVAILABLE', 'PRESENTATION_UNAVAILABLE', 'CALENDAR_UNAVAILABLE', 'health_access_denied_for_actor', 'CONTEXT_CHANGED', 'TRAINING_WRITE_FAILED', 'TRAINING_FORM_INVALID', 'TRAINING_SERIES_NOT_FOUND', 'TRAINING_MEDIA_NOT_FOUND', 'TRAINING_SESSION_NOT_RUNNING', 'TRAINING_CAPTURE_FAILED', 'TRAINING_CARD_CLOSED', 'TRAINING_CARD_ACTION_FAILED']);
+    'TRAINING_GOAL_REQUIRED', 'TRAINING_OBJECTIVES_UNAVAILABLE', 'PRESENTATION_UNAVAILABLE', 'CALENDAR_UNAVAILABLE', 'health_access_denied_for_actor', 'CONTEXT_CHANGED', 'TRAINING_WRITE_FAILED', 'TRAINING_FORM_INVALID', 'TRAINING_SERIES_NOT_FOUND', 'TRAINING_MACHINE_NOT_FOUND', 'TRAINING_MACHINE_NOT_FOR_EXERCISE', 'TRAINING_MACHINE_FIGURE_INVALID', 'TRAINING_MEDIA_NOT_FOUND', 'TRAINING_SESSION_NOT_RUNNING', 'TRAINING_CAPTURE_FAILED', 'TRAINING_CARD_CLOSED', 'TRAINING_CARD_ACTION_FAILED']);
 // What the Sport card's own disc and tools do, asked from elsewhere (the watch, MCP): training.card_action.
 export const TRAINING_CARD_ACTIONS = Object.freeze(['open', 'start', 'done', 'pause', 'skip', 'stop', 'finish', 'back', 'level', 'set']);
 const id = { type: 'string', minLength: 1, maxLength: 200 };
@@ -65,8 +66,8 @@ const definitions = {
         'Put the planned week (training.plan_week) in the user\'s personal calendar, one event per session from week_start (a Monday) at hour (18 by default). Sessions already placed for that week keep their time (never doubled), take the new plan\'s exercises, and the future ones the plan no longer has are removed.', true],
     open_journal: [{ exercise_id, metric: { type: 'string', enum: TRAINING_LOG_METRICS } }, [], 'Show the training log card on the Dashboard surface (one exercise, or every one), its histogram of the last sessions in minutes (default), volume, heaviest load or repetitions (metric). Writes nothing.', false],
     open_week: [{}, [], 'Show the week card on the Dashboard surface: the planned sessions within the weekly time. Writes nothing.', false],
-    prepare_session: [{ request_id: id, exercise_id, level, load_kg: kg }, ['request_id', 'exercise_id'],
-        'Prepare an immutable timed session (numbered work sets and rest periods) of an exercise at the user\'s level. Does not start it.', true],
+    prepare_session: [{ request_id: id, exercise_id, level, load_kg: kg, machine_id: id, figure: { type: 'number', minimum: 0, maximum: 1100 } }, ['request_id', 'exercise_id'],
+        'Prepare an immutable timed session (numbered work sets and rest periods) of an exercise at the user\'s level. Does not start it. machine_id: a personal machine serving the exercise (training.list_machines movements): each set keeps the machine and its figure in the machine\'s own unit (kg, lb or level; figure on its step and range, never converted), load_kg then unused.', true],
     session_transition: [{ session_id: id, base_revision: { type: 'integer', minimum: 0 }, request_id: id,
         action: { type: 'string', enum: ['start', 'pause', 'resume', 'confirm', 'elapse', 'measure', 'skip', 'correct', 'undo', 'finish', 'stop'] },
         recorded_at: date, step_id: id, actual: measure, actual_measures: { type: 'array', minItems: 1, maxItems: 4, items: measure },
@@ -105,7 +106,7 @@ const definitions = {
         'Film (kind video, the default), photograph (image) or record the sound (audio) of the Sport session under way on its card: active true starts it (a photo: the camera shows on the card), false ends it (a photo: takes it). Each take joins the exercise\'s takes linked to the session, so its replay shows the count and the values of each moment. Returns film {kind, active}.', true],
     card_action: [{ action: { type: 'string', enum: TRAINING_CARD_ACTIONS }, exercise_id, level: { enum: [...TRAINING_LEVELS, TRAINING_CUSTOM_LEVEL] },
         field: { type: 'string', minLength: 1, maxLength: 40 }, value: { type: 'number', minimum: 0 } }, ['action'],
-        'Do on the exercise\'s card what its own disc and tools do (the watch, MCP), its card opened on exercise_id first when no session is under way: open (only show it), start (Lancer, then the 3-2-1), done (the disc: Départ during the 3-2-1, Série terminée, Étape validée, Reprendre maintenant), pause (pause, or resume when paused), skip, stop, finish (Enregistrer la séance), back (the plan again), level (1 to 3 or custom = « Perso »), set (field: a « Perso » value key such as sets, reps, rest, or load in kg; during a session reps or kg of the set under way; to value). Returns card: the card as other surfaces show it (its exercise, level, plan, « Perso » values, session).', true],
+        'Do on the exercise\'s card what its own disc and tools do (the watch, MCP), its card opened on exercise_id first when no session is under way: open (only show it), start (Lancer, then the 3-2-1), done (the disc: Départ during the 3-2-1, Série terminée, Étape validée, Reprendre maintenant), pause (pause, or resume when paused), skip, stop, finish (Enregistrer la séance), back (the plan again), level (1 to 3 or custom = « Perso »), set (field: a « Perso » value key such as sets, reps, rest, or load in kg — on a personal machine serving the exercise, its figure in the machine\'s unit; during a session reps or kg of the set under way; to value). Returns card: the card as other surfaces show it (its exercise, level, plan, « Perso » values, session).', true],
     // « Mesure » (user, V2 of 2026-10-30): one set at the person's own rhythm, timed on the card, kept as Perso's « Rythme ».
     measure_rhythm: [{ exercise_id, action: { type: 'string', enum: ['start', 'done', 'redo', 'keep', 'cancel'] } }, ['action'],
         'Measure a strength exercise\'s rhythm on its card (Perso\'s « Mesure »): start counts 3, 2, 1 and times one set of Perso\'s repetitions (the card opens on Perso\'s settings first when it is not shown; exercise_id says which), done ends it at the last repetition (« j\'ai fini »), redo starts it again, keep makes the measured seconds per repetition Perso\'s rhythm (the beeps and the total time follow it), cancel leaves it. Returns measure {phase, reps, seconds, rhythm_s}.', true],
@@ -114,14 +115,15 @@ const definitions = {
         scope: { type: 'string', maxLength: 40 }, title: { type: 'string', minLength: 1, maxLength: 200 } } }, resume: { type: 'boolean' } }, ['exercise_id'],
         'Keep a music for an exercise (« mets ma liste Course pour les pompes »: the id, kind, scope and title returned by apple_music.search or music.search, with its provider; null forgets it) and whether its sessions resume it where it stopped (resume, true by default when a music is given). The title shows under the exercise\'s name during its sessions.', true],
 };
-export const TRAINING_COMMANDS = Object.freeze(Object.entries(definitions).map(([action, [properties, required, description, persistent]]) => Object.freeze({
+// The Sport commands, then the machines, disciplines and practices of R-104 D6 (#equipment_contracts.js).
+export const TRAINING_COMMANDS = Object.freeze([...Object.entries(definitions).map(([action, [properties, required, description, persistent]]) => Object.freeze({
     name: `training.${action}`, action, description, persistent, capability: persistent ? 'training.write' : 'training.read',
     input_schema: { type: 'object', additionalProperties: false, properties, required },
     output_schema: { type: 'object', required: ['ok'], properties: { ok: { type: 'boolean' }, error: { type: 'string', enum: TRAINING_ERRORS },
         exercises: { type: 'array' }, exercise: { type: 'object' }, zones: { type: ['object', 'null'] }, events: { type: 'array' }, profile: { type: ['object', 'null'] }, suggestion: { type: 'object' },
         plan: { type: 'object' }, session_id: { type: 'string' }, state: { type: 'object' }, transitions: { type: 'array' }, film: { type: 'object' }, measure: { type: 'object' }, sessions: { type: 'array' }, favorites: { type: 'array' },
         program: { type: 'array' }, programs: { type: 'array' }, ready: { type: ['object', 'null'] }, days: { type: 'array' }, energy: { type: ['object', 'null'] }, completed_ends: { type: 'array' }, series: { type: ['object', 'array'] }, record: { type: ['object', 'null'] }, challenge: { type: ['object', 'null'] }, media: { type: 'object' }, card: { type: ['object', 'null'] } } }
-})));
+})), ...TRAINING_EQUIPMENT_COMMANDS]);
 export const validateTrainingInput = (action, input) => {
     const contract = TRAINING_COMMANDS.find(command => command.action === action);
     return contract && validateParams(contract.input_schema, input).ok ? null : 'INVALID_ARGUMENT';

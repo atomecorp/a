@@ -28,7 +28,8 @@ export function createPairing({ query, transaction, proof, sessions, devices, ha
         if (row.expires_ms <= now() && ['pending', 'approved'].includes(row.state)) reject('auth_attempt_expired');
         return row;
     };
-    const describe = (row) => ({ pairId: row.request_id, kind: row.kind, ...JSON.parse(row.device_meta),
+    // `deviceId`: the requester's device once enrolled (the approver records a program's grants under it).
+    const describe = (row) => ({ pairId: row.request_id, kind: row.kind, deviceId: row.requester_device_id, ...JSON.parse(row.device_meta),
         deviceClass: row.device_class, createdAt: row.created_ms, expiresAt: row.expires_ms, choices: JSON.parse(row.choices),
         ...(row.requester_backup_key ? { backupKey: JSON.parse(row.requester_backup_key) } : {}) });
     async function startChallenge({ sessionKey }, network) {
@@ -39,7 +40,7 @@ export function createPairing({ query, transaction, proof, sessions, devices, ha
     }
     async function start(input, network) {
         const { keyId, jwk } = publicDeviceKey(input.sessionKey);
-        const meta = normalizeDeviceMeta(input.deviceMeta);
+        const meta = normalizeDeviceMeta(input.deviceMeta, { program: true });
         const deviceClass = resolveDeviceClass(meta.platform, input.deviceClass);
         // The new device's key for the backup keys (a personal device only: a shared one never holds them).
         const backupKey = input.backupKey && deviceClass === 'personal' ? publicDeviceKey(input.backupKey).jwk : null;

@@ -133,12 +133,15 @@ export const runRemoteCommand = async ({ surfaceId, userId = null, toolId, input
 // Target
 // ---------------------------------------------------------------------------
 
-const remoteActor = ({ fromUserId, fromSurfaceId }) => ({
-    actor_id: `remote_surface:${fromUserId || 'unknown'}:${fromSurfaceId || 'unknown'}`,
-    role: 'remote_surface',
-    source: 'remote_command',
-    capabilities: [...REMOTE_ACTOR_CAPABILITIES],
-    sandbox_profiles: [REMOTE_SANDBOX_PROFILE]
+// The transport of a command from another seat: the relay authenticated both surfaces, so who
+// asks is the relay's, never the command's (atome/mcp_transport.js).
+const remoteTransport = ({ fromUserId, fromSurfaceId }) => ({
+    source: { type: 'remote', layer: 'surface_remote_command', from_surface_id: fromSurfaceId || null },
+    actor: {
+        actor_id: `remote_surface:${fromUserId || 'unknown'}:${fromSurfaceId || 'unknown'}`,
+        capabilities: [...REMOTE_ACTOR_CAPABILITIES],
+        sandbox_profiles: [REMOTE_SANDBOX_PROFILE]
+    }
 });
 
 // JSON is the wire: functions, cycles and DOM handles in a local result do not travel.
@@ -154,6 +157,13 @@ const wireResult = (value) => {
 /** Run one received command through this device's own gateway. Exported for tests;
  *  the lifecycle below is its only production caller. */
 export const executeRemoteCommand = async (detail = {}) => {
+    // A program's standard MCP request (scripts/mcp/atome_mcp_stdio.mjs): answered by this device's MCP layer,
+    // for a program seat the relay named (its paired key), never for another surface.
+    if (isPlainObject(detail.mcp)) {
+        if (!detail.fromProgramId) return { ok: false, error: 'remote_command_mcp_not_program' };
+        const { answerRelayedMcpRequest } = await import('../atome/mcp_relay_target.js');
+        return answerRelayedMcpRequest(detail);
+    }
     const toolId = String(detail.toolId || '').trim();
     if (!toolId || NON_RELAYABLE_PATTERN.test(toolId)) return { ok: false, error: 'remote_command_tool_not_relayable' };
     if (CONFIRM_TOOL_PATTERN.test(toolId) && !toolId.endsWith('.panel') && detail.confirmed !== true) {
@@ -169,12 +179,10 @@ export const executeRemoteCommand = async (detail = {}) => {
             tool_id: toolId,
             input: isPlainObject(detail.input) ? detail.input : {},
             action: detail.toolAction || 'pointer.click',
-            actor: remoteActor(detail),
-            source: { type: 'remote_command', layer: 'surface_remote_command', from_surface_id: detail.fromSurfaceId || null },
             trace_id: detail.commandId || null,
             idempotency_key: detail.commandId ? `remote_command:${detail.commandId}` : null
         }
-    });
+    }, remoteTransport(detail));
     if (response?.error) return { ok: false, error: response.error.message || 'remote_command_failed' };
     const result = response?.result;
     // A local confirmation gate cannot be answered from another room: the action has

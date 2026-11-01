@@ -42,12 +42,15 @@ export function normalizeRuntimeToolEntry(tool = {}) {
     };
 }
 
+// The runtime payload of one MCP request: the actor and the source are the transport's
+// (mcp.js puts them in `__mcp`), so every executor reads who really asked.
 export function buildRuntimeInvocationPayload(params = {}, defaults = {}) {
     const toolId = normalizeRuntimeToolIdentifier(params);
     if (!toolId) {
         throw new Error('Missing runtime tool identifier');
     }
-    const mcpContext = params?.__mcp && typeof params.__mcp === 'object' ? params.__mcp : null;
+    const mcpContext = params?.__mcp;
+    if (!mcpContext?.actor || !mcpContext?.source) throw new Error('mcp_runtime_transport_missing');
     const input = params?.input && typeof params.input === 'object'
         ? { ...params.input }
         : ((params?.params && typeof params.params === 'object') ? { ...params.params } : {});
@@ -63,7 +66,7 @@ export function buildRuntimeInvocationPayload(params = {}, defaults = {}) {
     if (params?.idempotency_key && !meta.idempotency_key) {
         meta.idempotency_key = params.idempotency_key;
     }
-    if (mcpContext?.operation_id && !meta.operation_id) {
+    if (mcpContext.operation_id && !meta.operation_id) {
         meta.operation_id = String(mcpContext.operation_id);
     }
     return {
@@ -72,12 +75,10 @@ export function buildRuntimeInvocationPayload(params = {}, defaults = {}) {
         ...(params.event ? { event: params.event } : {}),
         input,
         presentation: params.presentation || defaults.presentation || 'mcp',
-        source: (params?.source && typeof params.source === 'object')
-            ? params.source
-            : { type: 'mcp', layer: defaults.layer || 'atome_mcp' },
-        ...(params?.actor && typeof params.actor === 'object' ? { actor: params.actor } : {}),
+        source: { ...mcpContext.source, ...(defaults.layer ? { mcp_layer: defaults.layer } : {}) },
+        actor: { ...mcpContext.actor },
         meta,
-        ...(mcpContext?.signal ? { signal: mcpContext.signal } : {}),
+        ...(mcpContext.signal ? { signal: mcpContext.signal } : {}),
         ...(params?.dry_run === true ? { dry_run: true } : {}),
         ...(params?.idempotency_key ? { idempotency_key: params.idempotency_key } : {})
     };

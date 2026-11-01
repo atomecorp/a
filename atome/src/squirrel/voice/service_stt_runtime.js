@@ -10,8 +10,8 @@ export const createVoiceSttRuntime = ({
     runtimeContext,
     startBrowserRecognition,
     startTauriRecognition,
-    startAssistantTranscription,
-    transcriptionAvailable
+    startAssistantTranscription, requireOnDeviceRecognition,
+    transcriptionAvailable, deviceOnline
 } = {}) => {
     // Free dictation (`purpose: 'dictation'`, R-013 Q12): the connected assistant transcribes it when it
     // can serve this person — an account its provider accepts (`providerPrincipalReady`, never a guest)
@@ -49,6 +49,9 @@ export const createVoiceSttRuntime = ({
         async start(options = {}) {
             const selectedProvider = await routeOf(options);
             if (selectedProvider !== 'assistant_transcription') ensureSupported('stt', selectedProvider);
+            // Offline, the system recognizer listens on this device or reports that it cannot (R-104 §7).
+            const processLocally = selectedProvider === 'browser_web_speech' && !await deviceOnline();
+            if (processLocally) await requireOnDeviceRecognition(runtimeContext.env, options.lang || options.locale);
             await wake?.suspend('stt');
             let session;
             try {
@@ -63,7 +66,7 @@ export const createVoiceSttRuntime = ({
                 const started = selectedProvider === 'tauri_plugin_stt'
                     ? await startTauriRecognition(runtimeContext, session.session_id, options, { provider: selectedProvider })
                     : selectedProvider === 'browser_web_speech'
-                        ? await startBrowserRecognition(runtimeContext, session.session_id, options, { provider: selectedProvider })
+                        ? await startBrowserRecognition(runtimeContext, session.session_id, { ...options, processLocally }, { provider: selectedProvider })
                         : selectedProvider === 'assistant_transcription'
                             ? await startAssistantTranscription(runtimeContext, session.session_id, options, { provider: selectedProvider })
                             : (() => { throw new Error(`Unsupported STT provider bridge: ${selectedProvider}`); })();

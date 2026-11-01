@@ -7,15 +7,16 @@ export function createDeviceSessions({ query, transaction, proof, now, issueAcce
     const read = async (id) => {
         requireHandle(id);
         const row = await query('get', `SELECT s.*, k.public_key, k.revoked_ms AS key_revoked_ms,
-            k.restricted_until_ms, k.connection_proof, k.device_class FROM auth_device_sessions s
+            k.restricted_until_ms, k.connection_proof, k.device_class, k.device_id FROM auth_device_sessions s
             JOIN auth_device_keys k ON k.key_id = s.key_id WHERE session_id = ?`, [id]);
         if (!row || row.revoked_ms !== null || row.key_revoked_ms !== null
             || row.idle_expires_ms <= now() || row.expires_ms <= now()) reject('auth_session_invalid');
         return row;
     };
     const result = async (row, account) => ({
+        // A program's token names its seat (`prg`): the relay answers MCP only for it (server/remoteCommandRelay.js).
         ok: true, token: await issueAccess({ principalId: row.principal_id, keyId: row.key_id, sessionId: row.session_id,
-            pop: row.connection_proof === 1 }),
+            pop: row.connection_proof === 1, program: row.device_class === 'program' ? row.device_id || row.key_id : null }),
         session: { id: row.session_id, generation: row.generation, keyId: row.key_id,
             expiresAt: row.expires_ms, idleExpiresAt: row.idle_expires_ms },
         user: { id: account.user_id, user_id: account.user_id, username: account.username, phone: account.phone || null,
@@ -25,8 +26,9 @@ export function createDeviceSessions({ query, transaction, proof, now, issueAcce
     });
     const idleFor = (deviceClass) => (deviceClass === 'shared' ? AUTH_SHARED_SESSION_IDLE_MS : AUTH_SESSION_IDLE_MS);
     async function create(account, keyId) {
-        const key = await query('get', 'SELECT connection_proof, device_class FROM auth_device_keys WHERE key_id = ?', [keyId]);
+        const key = await query('get', 'SELECT connection_proof, device_class, device_id FROM auth_device_keys WHERE key_id = ?', [keyId]);
         const row = { session_id: randomHandle(), principal_id: account.user_id, key_id: keyId, connection_proof: key?.connection_proof || 0,
+            device_class: key?.device_class, device_id: key?.device_id,
             generation: 0, created_ms: now(), idle_expires_ms: now() + idleFor(key?.device_class),
             expires_ms: now() + (key?.device_class === 'shared' ? AUTH_SHARED_SESSION_MAX_MS : AUTH_SESSION_MAX_MS) };
         await query('run', `INSERT INTO auth_device_sessions VALUES (?, ?, ?, 0, ?, ?, ?, NULL)`,

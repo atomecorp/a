@@ -454,7 +454,11 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   image `temp/reco_resultats/out/q41_image_envoyee.png`.
 
 ### R-104 — Refonte globale atome/eVe : cartographie, MCP universel en accès, offline sans IA
-- Statut : EN COURS (signal de départ donné le 2026-10-30 au soir, session `41da0099`). Fait au départ : commit eVe
+- Statut : EN COURS — phases A à E faites dans le worktree `refonte-r104` ; phase F (fusion dans les deux `main`)
+  faite le 2026-11-01 (session de fusion, merges sans force, branches `refonte-r104` publiées comme points de
+  restauration, sauvegardes `backup/main-pre-r104-20261101-140505`) ; régressions iOS 1.45 (43) suivies en BUG-012 à
+  BUG-015 du registre de débogage.
+- Historique : signal de départ donné le 2026-10-30 au soir, session `41da0099`. Fait au départ : commit eVe
   `402f9924` puis parent `e3f1d0849`, push des deux `main` (vérifié sur GitHub). TestFlight : une publication 1.41 (40)
   de la session montre tournait déjà sur le même état ; pas de doublon lancé (le script refuse deux publications).
   Choix de branche (§1.2 bis, toi, 2026-10-30) : **branche dédiée à part**, `refonte-r104` (parent et eVe) dans le
@@ -499,8 +503,14 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 - Tuile « Carnet de santé » de l'accueil : question posée avec maquettes le 2026-10-31 (« à côté de Moniteur »
   impossible en Pro), réponse **A — sous Projets** (rangée du bas, à gauche de Capture ; Basic inchangé, carnet par
   la recherche et la voix). Maquettes `temp/r104/mockups/carnet_tile/` (worktree). Placement confié au lot D14.
-- Lots D1 à D15 codés dans le worktree (détail et preuves : `temp/r104/PHASE_D_LOG.md`). Reste : tuile Carnet (D14,
-  en cours), reliquats de phase D (`temp/r104/REMAINING.md`), phase E (recette), phase F (fusion après ton accord).
+- Fait (worktree `refonte-r104`) : lots D1 à D16 codés et vérifiés (preuves `temp/r104/PHASE_D_LOG.md`) ; phase E
+  terminée le 2026-10-31 (vérifications, deux corrections : recherche du Carnet en Pro et Basic, tuiles de l'accueil
+  nommées pour les lecteurs d'écran ; preuves section « Phase E » du même journal, suivi `temp/r104/REMAINING.md`).
+- Phase F (2026-11-01) : la correction du moteur de rendu de `main` (commit `05e58963d`) précède la fusion ;
+  `refonte-r104` fusionné dans `main` (eVe puis atome).
+- Attend de ton côté : jalons visuels V01–V03 de P075, P076, P077 ; essais sur appareil (iPad, montre, CarPlay,
+  lecteur d'écran et clavier réels) ; P030, P078, P022–P025 avec de vrais comptes ; suppression éventuelle de la copie
+  `temp/r104/bisect/wt_mainwasm` (13 Go, suppression refusée par les permissions de la session).
 - Références externes citées par le cahier : `~/Desktop/taxonomie.md` ;
   `~/Downloads/01_CAHIER_COMPLET_SANTE_ACTIVITES_OBJECTIFS_atome_eVe.md` (le nom
   `CAHIER_DES_CHARGES_SANTE_ATOME_EVE_2026-10-30.md` cité par le cahier est introuvable ; c'est le fichier le plus proche).

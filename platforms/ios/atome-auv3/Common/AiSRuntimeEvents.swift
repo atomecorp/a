@@ -61,6 +61,9 @@ extension AiSRuntime {
         do { authorized = try authorizedWebViewEvent(rawEvent, db: db, actorId: actorId) }
         catch { return eventsResponse(requestId: requestId, success: false, error: error.localizedDescription) }
         let event = try normalizeEventInput(authorized, defaultActorId: actorId)
+        var batchTypes = [String: String]()
+        do { try assertKnownAtomeWrite(event, db: db, batchTypes: &batchTypes) }
+        catch { return eventsResponse(requestId: requestId, success: false, error: error.localizedDescription) }
         try appendEvent(db, event: event, enqueueRemote: true)
         return eventsResponse(requestId: requestId, success: true, event: event)
     }
@@ -75,6 +78,7 @@ extension AiSRuntime {
         }
         // Un parent cree plus tot dans le meme lot est autorise (contrat Axum `batch_create_ids`).
         var createdInBatch = Set<String>()
+        var batchTypes = [String: String]()
         let events: [[String: Any]]
         do {
             events = try rawEvents.map { raw -> [String: Any] in
@@ -84,7 +88,9 @@ extension AiSRuntime {
                 if !txId.isEmpty, event["tx_id"] == nil, event["txId"] == nil {
                     event["tx_id"] = txId
                 }
-                return try normalizeEventInput(event, defaultActorId: defaultActorId)
+                let normalized = try normalizeEventInput(event, defaultActorId: defaultActorId)
+                try assertKnownAtomeWrite(normalized, db: db, batchTypes: &batchTypes)
+                return normalized
             }
         } catch {
             return eventsResponse(requestId: requestId, success: false, error: error.localizedDescription)

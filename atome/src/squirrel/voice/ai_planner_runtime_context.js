@@ -15,6 +15,8 @@ export const isEnglishLocale = (locale) => toText(locale).toLowerCase().startsWi
 
 export const localizeAiFailure = (code, locale) => {
     const english = isEnglishLocale(locale);
+    // The sentence eVe's offline line says (eve.voice.assistant.error.offline).
+    if (code === 'offline') return english ? 'I am not available: we are offline.' : 'Je ne suis pas disponible : nous sommes hors ligne.';
     if (code === 'voice_realtime_required') return english
         ? 'Reopen the assistant to start the OpenAI voice session.'
         : 'Rouvre l’assistant pour démarrer la session vocale OpenAI.';

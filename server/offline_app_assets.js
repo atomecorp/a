@@ -2,9 +2,14 @@ import { watch } from 'node:fs';
 import { lstat, readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { OFFLINE_LOCAL_RESOURCES, resolveOfflineLocalFiles } from './offline_local_resources.js';
 
 // Only public application assets enter this manifest. Account databases, media,
 // authentication handoffs and private configuration never belong to this cache.
+// Two parts: the shell (code, styles, images: installed before a version activates)
+// and the local resources (media and models of `offline_local_resources.js`, 130 MB:
+// stored after activation under their own version, so a code change never downloads
+// them again).
 // The manifest follows the files: a watch on each root reads again what changed, so
 // the service worker installs the files actually served. A manifest frozen at the
 // server's start failed every later install and kept open tabs on the old code.
@@ -34,13 +39,26 @@ export async function registerOfflineAppAssets(server, { staticRoot, eveStaticRo
             for (const key of [...digests.keys()]) if (key === url || key.startsWith(`${url}/`)) digests.delete(key);
         }
     };
+    // The local resources, read again whole when one of them or an index naming them changes.
+    const localDigests = new Map();
+    const indexes = new Set(OFFLINE_LOCAL_RESOURCES.filter(entry => entry.index).map(entry => entry.index));
+    const refreshLocal = async () => {
+        const files = await resolveOfflineLocalFiles(staticRoot);
+        localDigests.clear();
+        for (const relative of files) localDigests.set(`/${relative}`, createHash('sha256').update(await readFile(path.join(staticRoot, relative))).digest('hex'));
+    };
+    const touchesLocal = relative => !relative || indexes.has(relative)
+        || [...localDigests.keys()].some(url => url === `/${relative}` || url.startsWith(`/${relative}/`));
+    const listed = map => [...map].map(([url, digest]) => ({ url, digest })).sort((a, b) => a.url.localeCompare(b.url));
+    const versionOf = assets => createHash('sha256').update(JSON.stringify(assets)).digest('hex');
     let source = '';
     const publish = () => {
-        const assets = [...digests].map(([url, digest]) => ({ url, digest })).sort((a, b) => a.url.localeCompare(b.url));
-        const version = createHash('sha256').update(JSON.stringify(assets)).digest('hex');
-        source = `self.__ATOME_OFFLINE_ASSETS__=${JSON.stringify({ version, assets })};`;
+        const assets = listed(digests), localAssets = listed(localDigests);
+        source = `self.__ATOME_OFFLINE_ASSETS__=${JSON.stringify({ version: versionOf(assets), assets,
+            local: { version: versionOf(localAssets), assets: localAssets } })};`;
     };
     for (const [root, prefix] of roots) await refresh(root, prefix, '');
+    await refreshLocal();
     publish();
 
     const changed = new Map();
@@ -51,6 +69,7 @@ export async function registerOfflineAppAssets(server, { staticRoot, eveStaticRo
         changed.clear();
         reading = reading.then(async () => {
             for (const [root, prefix, relative] of batch) await refresh(root, prefix, relative);
+            if (batch.some(([root, , relative]) => root === staticRoot && touchesLocal(relative))) await refreshLocal();
             publish();
         }).catch(failed);
     };

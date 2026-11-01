@@ -35,25 +35,6 @@ const extractAdoleAtome = (result) => (
     || null
 );
 
-const extractCreatedAtomeId = (result) => (
-    result?.tauri?.data?.atome_id
-    || result?.tauri?.data?.id
-    || result?.tauri?.data?.data?.atome_id
-    || result?.tauri?.data?.data?.id
-    || result?.fastify?.data?.atome_id
-    || result?.fastify?.data?.id
-    || result?.fastify?.data?.data?.atome_id
-    || result?.fastify?.data?.data?.id
-    || null
-);
-
-const adoleOperationSucceeded = (result) => !!(
-    result?.ok
-    || result?.success
-    || result?.tauri?.success
-    || result?.fastify?.success
-);
-
 const listCodeFileAtomes = async (api, options = {}) => {
     const { kind, ...rest } = options;
     return collectAdoleAtomes(await api.atomes.list({ ...rest, type: kind || options.type || 'code_file' }));
@@ -64,7 +45,5 @@ export {
     isAdoleAuthenticated,
     collectAdoleAtomes,
     extractAdoleAtome,
-    extractCreatedAtomeId,
-    adoleOperationSucceeded,
     listCodeFileAtomes
 };

@@ -14,7 +14,8 @@ function sanitizeBoundaryAtomeProperties(record = {}) {
         particles: source.particles,
         data: source.data
     }, {
-        boundaryAdapter: true
+        boundaryAdapter: true,
+        storedTruth: true
     }).atome.properties;
 }
 
@@ -46,7 +47,8 @@ function formatAtome(obj) {
         traits: Array.isArray(obj.traits) ? obj.traits : [],
         properties
     }, {
-        universal: true
+        universal: true,
+        storedTruth: true
     });
 }
 

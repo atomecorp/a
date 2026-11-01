@@ -49,8 +49,6 @@ import {
     isAdoleAuthenticated,
     collectAdoleAtomes,
     extractAdoleAtome,
-    extractCreatedAtomeId,
-    adoleOperationSucceeded,
     listCodeFileAtomes
 } from './editor_builder_adole.js';
 import { runEditorCode } from './editor_builder_run.js';

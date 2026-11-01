@@ -63,7 +63,7 @@ import {
     completePrincipalFileMigration, failPrincipalFileMigration
 } from './adole_event_maintenance.js';
 import {
-    createStateSnapshot, listStateSnapshots, getStateSnapshot, restoreStateSnapshot
+    createStateSnapshot, createStateSnapshotOnce, listStateSnapshots, getStateSnapshot, restoreStateSnapshot
 } from './adole_state_snapshots.js';
 import { getDataSourceAdapter, getTableNames, getTableCounts } from './adole_datasource_debug.js';
 
@@ -96,7 +96,7 @@ export {
     listEvents, getEvent, getStateCurrent, listStateCurrent, countStateCurrent,
     repairGlobalStateCurrentScopes, preparePrincipalFileMigration,
     completePrincipalFileMigration, failPrincipalFileMigration,
-    createStateSnapshot, listStateSnapshots, getStateSnapshot, restoreStateSnapshot,
+    createStateSnapshot, createStateSnapshotOnce, listStateSnapshots, getStateSnapshot, restoreStateSnapshot,
     getDataSourceAdapter, getTableNames, getTableCounts
 };
 
@@ -235,6 +235,7 @@ export default {
     getSnapshots,
     restoreSnapshot,
     createStateSnapshot,
+    createStateSnapshotOnce,
     listStateSnapshots,
     getStateSnapshot,
     restoreStateSnapshot,

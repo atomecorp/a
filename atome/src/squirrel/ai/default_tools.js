@@ -176,13 +176,13 @@ const invokeRuntimeDefaultTool = async ({
 const registerDefaultTools = () => {
     const getAdoleAPI = () => globalThis.AdoleAPI;
 
-    registerAdoleDefaultTools({ Agent, requireGlobal, safeString, getAdoleAPI });
+    registerAdoleDefaultTools({ Agent, requireGlobal, safeString, getAdoleAPI, invokeRuntimeDefaultTool });
     registerCalendarDefaultTools({ Agent, safeString, requireCalendarServiceApi, invokeRuntimeDefaultTool });
     registerMailDefaultTools({ Agent, safeString, prepareMailApi });
     registerContactsDefaultTools({ Agent, safeString, prepareContactsApi, requireContactsApi });
     registerBankDefaultTools({ Agent, safeString, requireBankApi });
     registerShareDefaultTools({ Agent, requireGlobal, safeString, getAdoleAPI });
-    registerTimelineDefaultTools({ Agent });
+    registerTimelineDefaultTools({ Agent, invokeRuntimeDefaultTool });
     for (const service of OPENAI_SERVICE_TOOLS) Agent.registerTool({
         name: 'openai.' + service.action, domain: 'openai', description: service.description,
         parameters: service.parameters, risk_tier: service.risk, capabilities: ['ai.execute'],

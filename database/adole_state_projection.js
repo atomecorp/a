@@ -9,6 +9,7 @@ import { sanitizeAtomeProperties } from '../atome/src/shared/atome_contract.js';
 import {
     eventDeletedPropertyKeys,
     extractEventPatch,
+    parseEventPayload,
     stripEventMetaPatch
 } from '../atome/src/shared/adole_event_contract.js';
 import { upsertAtomeFromEvent } from './adole_event_atome_upsert.js';
@@ -93,9 +94,27 @@ export async function upsertStateCurrentFromMutation({
     });
 }
 
+export const OWNER_TRANSFER_EVENT_KIND = 'transfer-owner';
+
+// An ownership transfer (adole_ownership.js#transferOwner) is an event like any change:
+// the projection moves the atome to its new owner, and a rebuild from the log moves it again.
+async function applyOwnerTransferEvent(event) {
+    const payload = parseEventPayload(event.payload) || {};
+    const toOwnerId = payload.to_owner_id;
+    if (!toOwnerId) throw new Error('transfer_owner_event_invalid');
+    const ts = event.ts || new Date().toISOString();
+    await query('run', `UPDATE atomes SET owner_id = ?, creator_id = CASE WHEN ? THEN ? ELSE creator_id END,
+        updated_at = ?, sync_status = 'pending' WHERE atome_id = ?`,
+    [toOwnerId, payload.include_creator === false ? 0 : 1, toOwnerId, ts, event.atome_id]);
+    await query('run', 'UPDATE state_current SET owner_id = ?, updated_at = ? WHERE atome_id = ?', [toOwnerId, ts, event.atome_id]);
+    await query('run', "DELETE FROM particles WHERE particle_key = '_pending_owner_id' AND atome_id = ?", [event.atome_id]);
+    return { atome_id: event.atome_id, owner_id: toOwnerId, transferred_from: payload.from_owner_id || null, updated_at: ts };
+}
+
 export async function applyEventToStateCurrent(event, options = {}) {
     const atomeId = event.atome_id;
     if (!atomeId) return null;
+    if (String(event.kind || '').toLowerCase() === OWNER_TRANSFER_EVENT_KIND) return applyOwnerTransferEvent(event);
 
     const ts = event.ts || new Date().toISOString();
     const sourcePatch = extractEventPatch(event.kind, event.payload, ts);

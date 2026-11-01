@@ -7,6 +7,33 @@ import {
     getOptionalVoiceApi
 } from './mcp_bridges.js';
 
+// The navigation tree of eVe as the registry places it (architecture §4-§5): `eve://navigation/{style}/{level}/{platform}`.
+const NAVIGATION_URI = /^eve:\/\/navigation\/(eve|eve_basic)\/(beginner|intermediate|advanced)\/([a-z_]+)$/;
+const NAVIGATION_ROOT = 'taxonomy_node:dashboard.dashboard_eve';
+const NAVIGATION_DEPTH = 8;
+
+async function readNavigationTree(uri) {
+    const [, style, level, platform] = NAVIGATION_URI.exec(uri);
+    const { registry } = await import('../../../../eVe/registry/registry_runtime.js');
+    const context = { scope: 'dashboard', level, style, platform, facts: [] };
+    const seen = new Set([NAVIGATION_ROOT]);
+    const walk = (parentId, depth) => (depth >= NAVIGATION_DEPTH ? [] : registry.children(parentId, context)
+        .filter(child => !seen.has(child.id) && seen.add(child.id))
+        .map(child => ({ id: child.id, key: child.key, label: registry.labelOf(registry.get(child.placement)),
+            children: walk(child.id, depth + 1) })));
+    return { root: NAVIGATION_ROOT, context, children: walk(NAVIGATION_ROOT, 0) };
+}
+
+export const MCP_RESOURCE_TEMPLATES = Object.freeze([{
+    uriTemplate: 'eve://navigation/{style}/{level}/{platform}',
+    name: 'eVe navigation tree',
+    description: 'The rubrics, levels and leaves the person reaches from the home, for a style (eve, eve_basic) and a level (beginner, intermediate, advanced).',
+    mimeType: 'application/json'
+}]);
+
+/** Whether a uri names a readable resource: a listed one, or an instance of a template. */
+export const isMcpResourceUri = uri => NAVIGATION_URI.test(String(uri || '')) || listMcpResourceEntries().some(entry => entry.uri === uri);
+
 export function listMcpResourceEntries() {
     const resources = [{
         uri: 'security://journal/recent',
@@ -14,6 +41,12 @@ export function listMcpResourceEntries() {
         description: 'Recent sensitive-flow security decisions, confirmations, and idempotency hits.',
         mime_type: 'application/json',
         source: 'mcp'
+    }, {
+        uri: 'eve://navigation/eve/advanced/web',
+        name: 'eVe navigation tree',
+        description: 'The navigation of eVe Pro at the advanced level on the Web, as the registry places it.',
+        mime_type: 'application/json',
+        source: 'registry'
     }];
     try {
         ensureRuntimeCommandBus();
@@ -121,6 +154,7 @@ export async function readMcpResource(uri, params = {}, handlers = {}) {
     if (!normalizedUri) {
         throw new Error('Missing resource uri');
     }
+    if (NAVIGATION_URI.test(normalizedUri)) return readNavigationTree(normalizedUri);
     if (normalizedUri === 'security://journal/recent') {
         return handlers['mcp.security.journal.list']({
             limit: Number.isFinite(Number(params?.limit)) ? Number(params.limit) : 50
@@ -270,7 +304,7 @@ export function renderPrompt(name, params = {}) {
         };
     }
     if (promptName === 'contacts_import_summary') {
-        const source = String(params?.source || params?.provider || 'la source contacts').trim();
+        const source = String(params?.provider || 'la source contacts').trim();
         return {
             ok: true,
             name: promptName,

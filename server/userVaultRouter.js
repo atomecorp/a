@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import db from '../database/adole.js';
 import { createUserVaultProvider } from './userVaultProvider.js';
-import { parseJson } from './syncShareHierarchy.js';
+import { buildStateSnapshotRestoreEvents } from '../database/state_snapshot_restore.js';
 import { normalizeRights } from '../atome/src/shared/share_rights.js';
 import {
     ACTIVE_LINKED_SHARE_SQL,
@@ -12,77 +12,12 @@ import {
     stateParentId,
     statesWithinSharedRoot
 } from './syncShareHierarchy.js';
+import { allowedProperties, filterProperties, matchesListScope, projectSharedState, writableProperties } from './userVaultShareProjection.js';
 
 const vaultKey = (principalId) => crypto
     .createHash('sha256')
     .update(String(principalId))
     .digest('hex');
-
-// Deux listes distinctes (D8) : ce que le destinataire VOIT et ce qu'il peut MODIFIER.
-// `allowed_properties_json` (historique) sert de repli aux deux.
-const propertySet = (share, column) => {
-    const value = parseJson(share?.[column], null) ?? parseJson(share?.allowed_properties_json, null);
-    return Array.isArray(value) && value.length ? new Set(value.map(String)) : null;
-};
-const allowedProperties = (share) => propertySet(share, 'readable_properties_json');
-const writableProperties = (share) => propertySet(share, 'writable_properties_json');
-
-// A media URL written by its owner may carry the owner's session capability
-// (`media_token`). A recipient never receives it: its client signs the same file route
-// with its own session, and the file read resolvers decide what it may read.
-const OWNER_CREDENTIAL_PARAMS = ['media_token', 'token', 'access_token'];
-const withoutOwnerCredentials = (value) => {
-    if (typeof value !== 'string' || !OWNER_CREDENTIAL_PARAMS.some((name) => value.includes(`${name}=`))) return value;
-    try {
-        const relative = value.startsWith('/');
-        const url = new URL(value, 'http://relative.invalid');
-        OWNER_CREDENTIAL_PARAMS.forEach((name) => url.searchParams.delete(name));
-        return relative ? `${url.pathname}${url.search}${url.hash}` : url.toString();
-    } catch (_) { return value; }
-};
-
-const filterProperties = (properties, share) => {
-    const allowed = allowedProperties(share);
-    return Object.fromEntries(Object.entries(properties || {})
-        .filter(([key]) => !allowed || allowed.has(key))
-        .map(([key, value]) => [key, withoutOwnerCredentials(value)]));
-};
-
-const SYSTEM_STATE_TYPES = new Set(['project', 'user', 'blackhole', 'tool', 'tool_macro', 'toolbox', 'tool_block', 'panel', 'system']);
-const stateType = (state) => String(state?.type || state?.atome_type || state?.properties?.type || state?.properties?.kind || '').toLowerCase();
-const stateProjectId = (state) => state?.meta?.project_id || state?.project_id || state?.properties?.project_id || null;
-
-// Memes criteres que `listStateCurrent` (database/adole.js) cote proprietaire.
-const matchesListScope = (state, options = {}) => {
-    const projectId = options.project_id || options.projectId || null;
-    if (projectId && String(stateProjectId(state) || '') !== String(projectId)) return false;
-    const atomeType = String(options.atome_type || options.atomeType || '').trim().toLowerCase();
-    if (atomeType && stateType(state) !== atomeType && String(state?.kind || '').toLowerCase() !== atomeType) return false;
-    if (options.exclude_system === true || options.excludeSystem === true) {
-        const id = String(stateAtomeId(state) || '').toLowerCase();
-        if (SYSTEM_STATE_TYPES.has(stateType(state)) || id.startsWith('tool.ui.') || id.startsWith('tool_ui.')) return false;
-    }
-    return true;
-};
-
-// Etat d'un autre coffre vu au travers d'un partage actif : proprietes lisibles seulement,
-// et capacites = celles du partage (et non celles de l'ancien modele de permissions central).
-const projectSharedState = (state, share) => {
-    const rights = normalizeRights(sharePermissions(share));
-    return {
-        ...state,
-        properties: filterProperties(state.properties, share),
-        vault_principal_id: share.owner_id,
-        sync_share_id: share.share_id,
-        capabilities: {
-            read: rights.read,
-            write: rights.write,
-            create: rights.create,
-            delete: rights.delete,
-            share: rights.reshare
-        }
-    };
-};
 
 export class UserVaultRouter {
     constructor(options = {}) {
@@ -482,6 +417,34 @@ export class UserVaultRouter {
         const touched = [...Object.keys(payload.props || {}), ...(payload.delete_keys || payload.deleteKeys || [])];
         if (touched.some((key) => !allowed.has(String(key)))) throw new Error('property_write_denied');
         return true;
+    }
+
+    // A snapshot lies in the vault of the object it keeps: each action (create, list, get, restore) runs there.
+    // A snapshot id without its object names one of the asker's own vault. A sharer needs the right to write
+    // the object; to read a whole copy, a share hiding none of its properties; to restore it, one barring none.
+    async snapshot(principalId, action, request) {
+        const targetId = request.project_id || request.atome_id || null;
+        const ownerId = targetId ? await this.vaultPrincipalForAtome(targetId, null) : (action === 'create' ? null : String(principalId));
+        if (!ownerId) throw new Error('Access denied');
+        if (String(ownerId) !== String(principalId)) {
+            await this.authorizeSharedWrite(principalId, { kind: 'snapshot', atome_id: targetId }, ownerId);
+            const share = await this.shareForAtome(principalId, targetId, ownerId);
+            if (action !== 'create' && (allowedProperties(share) || (action === 'restore' && writableProperties(share)))) throw new Error('Access denied');
+        }
+        const payload = { request, authorized_actor_id: String(principalId) };
+        if (action === 'restore') {
+            // Restored records join the vault's objects only: one held by another vault is refused before any write.
+            const { snapshot } = await this.provider.request(ownerId, 'snapshot:get', payload);
+            for (const { atome_id: atomeId } of buildStateSnapshotRestoreEvents(snapshot)) {
+                if (String(await this.vaultPrincipalForAtome(atomeId, ownerId)) !== String(ownerId)) throw new Error(`Access denied for ${atomeId}`);
+            }
+        }
+        const result = await this.provider.request(ownerId, `snapshot:${action}`, payload);
+        for (const event of action === 'restore' ? result.events : []) {
+            await this.registerAtome(event.atome_id, ownerId);
+            await this.registerStream(event, ownerId);
+        }
+        return result;
     }
 
     async stopAll() {

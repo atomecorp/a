@@ -133,7 +133,8 @@ export function wsSendJsonToUserExcept(userId, payload, excludeConnection, meta 
 export const wsApiSurfacesByUserId = new Map();
 
 const SURFACE_LABEL_MAX = 120;
-const SURFACE_PLATFORMS = new Set(['browser', 'tauri', 'ios', 'android', 'unknown']);
+// `mcp_program`: an MCP client behind the stdio bridge (scripts/mcp/atome_mcp_stdio.mjs), a seat that renders nothing.
+const SURFACE_PLATFORMS = new Set(['browser', 'tauri', 'ios', 'android', 'mcp_program', 'unknown']);
 const SURFACE_CAPABILITY_KEYS = Object.freeze([
     'render',
     'pointer_input',
@@ -175,6 +176,8 @@ function publicSurfaceDescriptor(descriptor) {
         capabilities: { ...descriptor.capabilities },
         announced_at: descriptor.announcedAt,
         last_seen_at: descriptor.lastSeenAt,
+        // A program's seat (its paired key's device id), null for a device.
+        program_id: descriptor.programId,
         online: true
     };
 }
@@ -209,6 +212,7 @@ export function attachWsApiSurface(connection, userId, descriptor = {}) {
         label: normalizeSurfaceLabel(descriptor.label) || previous?.label || '',
         platform: normalizeSurfacePlatform(descriptor.platform),
         capabilities: normalizeSurfaceCapabilities(descriptor.capabilities),
+        programId: descriptor.programId || null,
         announcedAt: previous?.announcedAt || nowIso,
         lastSeenAt: nowIso
     };

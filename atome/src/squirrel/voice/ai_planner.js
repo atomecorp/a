@@ -8,6 +8,7 @@ import { compactPlannerAtomeAiTools, compactPlannerRuntimeTools } from './ai_pla
 import { buildProviderRequestDiagnostic, buildProviderResponseDiagnostic } from './ai_planner_diagnostics.js';
 import { resolveDeterministicPlannerIntent } from './ai_planner_deterministic.js';
 import { cloneStructured as cloneValue, toText } from '../shared/scalars.js';
+import { checkConnection } from '../apis/unified/adole_connection.js';
 const BUSINESS_CONNECTOR_DOMAINS = new Set(['mail', 'contacts', 'calendar']);
 const buildConversationHistorySection = (context, english) => {
     const turns = Array.isArray(context?.conversation_history) ? context.conversation_history : [];
@@ -310,7 +311,8 @@ export const createVoiceAiPlanner = ({
     env = globalThis,
     loadProfile,
     fetchImpl,
-    quotaTracker = null
+    quotaTracker = null,
+    isOnline = () => checkConnection('fastify')
 } = {}) => ({
     async planUtterance(utterance, options = {}) {
         const locale = resolveLocale(options.locale || options.lang);
@@ -319,10 +321,9 @@ export const createVoiceAiPlanner = ({
         const usageTracker = quotaTracker && typeof quotaTracker.getSummary === 'function'
             ? quotaTracker
             : createAiQuotaTracker({ env });
-        const providerConfig = await resolveActiveAiProviderConfig({
-            ...(typeof loadProfile === 'function' ? { loadProfile } : {}),
-            env
-        });
+        // Offline only the model call stops (R-104 §7): the deterministic intent above already ran.
+        const providerConfig = !await isOnline() ? { ok: false, error: 'offline' } : await resolveActiveAiProviderConfig({
+            ...(typeof loadProfile === 'function' ? { loadProfile } : {}), env });
 
         if (providerConfig?.providerId === 'openai') Object.assign(providerConfig, { ok: false, error: 'voice_realtime_required' });
         if (providerConfig?.ok !== true) {

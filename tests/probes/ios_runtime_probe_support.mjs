@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, rmSync, mkdirSync, copyFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
@@ -14,7 +14,11 @@ export function buildAiSFixture(fixturePath, { client = false, authentication = 
     const main = resolve(directory, 'main.swift');
     const authRuntime = authentication ? '\n' + auth + '\n' + readFileSync(common + 'AiSRuntimeAuthChallenges.swift', 'utf8') : authSeam;
     writeFileSync(main, 'import Foundation\nimport CryptoKit\nimport SQLite3\n' + owner + authRuntime + readFileSync(fixturePath, 'utf8'));
-    const files = ['AiSRuntimeDatabase.swift', 'AiSRuntimeSchema.swift', 'AiSRuntimeStateCurrent.swift', 'AiSRuntimeEvents.swift', 'AiSRuntimeContainment.swift', 'AiSRuntimeSync.swift', 'AiSRuntimeOutbox.swift', 'AiSRuntimeSyncRequest.swift'];
+    const files = ['AiSRuntimeDatabase.swift', 'AiSRuntimeSchema.swift', 'AiSRuntimeStateCurrent.swift', 'AiSRuntimeEvents.swift', 'AiSRuntimeTypeGate.swift', 'AiSRuntimeContainment.swift', 'AiSRuntimeSync.swift', 'AiSRuntimeOutbox.swift', 'AiSRuntimeSyncRequest.swift'];
+    // The type gate reads the generated types where the runtime bundle has them, next to the binary (Bundle.main).
+    const types = resolve(directory, 'atome_runtime/eVe/registry/generated');
+    mkdirSync(types, { recursive: true });
+    copyFileSync('eVe/registry/generated/atome_types.json', resolve(types, 'atome_types.json'));
     if (authentication) files.push('AiSRuntimeAuthAccounts.swift');
     if (client) files.push('FastifySyncClient.swift', 'FastifySyncSubscriptions.swift', 'FastifySyncProgress.swift', 'FastifySyncHealth.swift', 'FastifySyncOutbox.swift', 'FastifySyncPublicRelay.swift', 'FastifySyncInbound.swift');
     const binary = resolve(directory, 'probe');

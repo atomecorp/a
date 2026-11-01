@@ -126,6 +126,15 @@ function resetConnectionState() {
     _connectionState.fastify = { online: null, lastCheck: 0, failCount: 0 };
 }
 
+// A remote session just established proves the server reachable: the cached answer of an
+// earlier failed ping (kept up to a minute) would otherwise hold the offline paths (deferred
+// alarm notices, the assistant's local session) after the server came back.
+if (typeof window !== 'undefined') {
+    window.addEventListener('squirrel:remote-session-ready', () => {
+        _connectionState.fastify = { online: true, lastCheck: Date.now(), failCount: 0 };
+    });
+}
+
 /**
  * Get current connection state (synchronous, uses cache)
  * @returns {{tauri: boolean|null, fastify: boolean|null}}

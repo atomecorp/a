@@ -6,6 +6,7 @@ import { handleWsAiProviderOperation } from './wsAiProviderOperations.js';
 import { handleWsSurfaceGrantOperation } from './wsSurfaceGrantOperations.js';
 import { handleWsBillingOperation } from './billing/ws_billing_operations.js';
 import { handleWsPublicEvents } from './ws_public_events.js';
+import { handleWsObjectiveNetwork } from './ws_objective_network.js';
 import { handleWsScheduledSends } from './ws_scheduled_sends.js';
 import { handleWsSite } from './ws_site.js';
 
@@ -16,6 +17,7 @@ const FAMILIES = Object.freeze([
     (data, connection) => handleWsAiProviderOperation(data, connection),
     (data, connection) => handleWsBillingOperation(data, connection),
     (data, connection) => handleWsPublicEvents(data, connection),
+    (data, connection) => handleWsObjectiveNetwork(data, connection),
     (data, connection) => handleWsScheduledSends(data, connection),
     (data, connection) => handleWsSite(data, connection),
     (data, connection) => handleWsAtomeOperation(data, connection),

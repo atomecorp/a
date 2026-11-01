@@ -3,7 +3,7 @@ export const registerShareDefaultTools = ({ Agent, requireGlobal, safeString, ge
         name: 'adole.share.atomes',
         description: 'Share one or more atomes with a user (by phone number).',
         capabilities: ['share.write'],
-        risk_tier: 'HIGH',
+        risk_tier: 'high',
         parameters: {
             required: ['phoneNumber', 'atomeIds', 'permissions'],
             properties: {
@@ -39,7 +39,7 @@ export const registerShareDefaultTools = ({ Agent, requireGlobal, safeString, ge
         name: 'adole.share.grant_permission',
         description: 'Grant share permissions (Fastify) without creating share_request atomes.',
         capabilities: ['share.write'],
-        risk_tier: 'HIGH',
+        risk_tier: 'high',
         parameters: {
             required: ['atomeId', 'principalId', 'permissions'],
             properties: {
@@ -75,7 +75,7 @@ export const registerShareDefaultTools = ({ Agent, requireGlobal, safeString, ge
         name: 'adole.share.publish',
         description: 'Publish/share payload via Fastify share.publish.',
         capabilities: ['share.write'],
-        risk_tier: 'HIGH',
+        risk_tier: 'high',
         parameters: {
             properties: {
                 payload: { type: 'object' }

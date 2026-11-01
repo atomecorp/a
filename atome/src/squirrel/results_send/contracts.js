@@ -5,7 +5,7 @@ import { validateParams } from '../ai/agent_gateway_normalize.js';
 // runtime V2, AI discovery, voice and direct MCP calls; every action of the screen runs through it
 // (eVe/domains/results_send/results_send_runtime.js). It sends nothing itself: Publier sends (publish.*).
 export const RESULTS_SEND_ERRORS = Object.freeze(['INVALID_ARGUMENT', 'PRESENTATION_UNAVAILABLE', 'RESULTS_SEND_SOURCE_MISSING', 'RESULTS_SEND_NOT_OPEN',
-    'RESULTS_SEND_NOTHING', 'RESULTS_SEND_KEY_UNKNOWN']);
+    'RESULTS_SEND_NOTHING', 'RESULTS_SEND_KEY_UNKNOWN', 'health_access_denied_for_actor']);
 // A row: a card of the monitor (its key, e.g. rings, glucose, cardio, feeling) or `__name__`, « Mon nom ».
 const key = { type: 'string', minLength: 1, maxLength: 80, description: 'A row\'s key as results_send.read lists it; « Mon nom » is __name__.' };
 const definitions = {

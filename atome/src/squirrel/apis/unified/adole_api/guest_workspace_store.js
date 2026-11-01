@@ -163,6 +163,36 @@ export async function commitWorkspaceEvents(ownerId, inputs, { actorType = 'user
     return { ok: true, success: true, events, event: events[0] };
 }
 
+// An explicit snapshot (window.Atome.snapshot) is taken here first, like a commit: in one
+// transaction, what the project holds now, its `snapshot` event in the log and an outbox
+// row asking the server for the same snapshot once it is reachable (browser_workspace.js).
+// The row keeps its place among the commits, so the server's snapshot sees the same state.
+export async function createWorkspaceSnapshot(ownerId, request = {}, { actorType = 'user' } = {}) {
+    const projectId = request.project_id || null, targetId = request.atome_id || projectId;
+    if (!ownerId || !targetId) throw new Error('workspace_snapshot_invalid');
+    const id = globalThis.crypto?.randomUUID?.();
+    if (!id) throw new Error('secure_random_unavailable');
+    const ts = new Date().toISOString(), actor = { type: actorType, id: String(ownerId) };
+    const label = request.label || null, snapshotType = request.snapshot_type || 'manual';
+    const event = { id, kind: 'snapshot', atome_id: targetId, project_id: projectId, ts, actor, payload: { snapshot_id: id, label, snapshot_type: snapshotType } };
+    const replay = { project_id: projectId, atome_id: request.atome_id || null, label, snapshot_type: snapshotType, state: request.state || null };
+    try {
+        await transact([STORE_RECORDS, STORE_EVENTS, STORE_SNAPSHOTS, STORE_QUEUE], 'readwrite', tx => {
+            const records = tx.objectStore(STORE_RECORDS).getAll(ownerKeyRange(ownerId));
+            records.onsuccess = () => {
+                const held = records.result.filter(record => record.owner_id === String(ownerId) && (projectId
+                    ? record.project_id === projectId || record.atome_id === projectId : record.atome_id === targetId));
+                const blob = JSON.stringify(request.state || held.map(({ key: _key, ...record }) => record));
+                tx.objectStore(STORE_SNAPSHOTS).put({ key: key(ownerId, id), owner_id: String(ownerId), atome_id: targetId, project_id: projectId,
+                    snapshot_data: blob, state_blob: blob, label, snapshot_type: snapshotType, actor, created_by: String(ownerId), created_at: ts });
+                tx.objectStore(STORE_EVENTS).add({ ...event, key: key(ownerId, id) });
+                tx.objectStore(STORE_QUEUE).add({ key: key(ownerId, id), owner_id: String(ownerId), operation: 'snapshot', payload: { ...event, request: replay }, created_at: ts });
+            };
+        });
+    } catch (error) { throw new Error(storageError(error)); }
+    return { ok: true, success: true, snapshot_id: id, event };
+}
+
 export async function commitGuestAtome(ownerId, payload = {}) {
     try {
         return await commitWorkspaceEvents(ownerId, [{ ...payload, atome_id: payload.atome_id || payload.id,

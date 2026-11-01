@@ -265,85 +265,60 @@ async function handleStateCurrent(message, userId, connection) {
     }
     return errorResponse('state-current', message, `Unknown state-current action: ${action || 'missing'}`);
 }
-async function requireSnapshotAccess(snapshot, userId, mode) {
-    const targetId = snapshot?.project_id || snapshot?.atome_id || null;
-    return mode === 'write'
-        ? canWriteTarget(userId, targetId)
-        : canReadTarget(userId, targetId);
-}
-async function handleSnapshot(message, userId) {
+async function handleSnapshot(message, userId, connection) {
     const action = actionOf(message);
+    if (!['create', 'list', 'get', 'restore'].includes(action)) {
+        return errorResponse('snapshot', message, `Unknown snapshot action: ${action || 'missing'}`);
+    }
+    const projectId = message.project_id || message.projectId || null;
+    const atomeId = message.atome_id || message.atomeId || null;
+    const targetId = projectId || atomeId;
+    if (action === 'create' && !targetId) return errorResponse('snapshot', message, 'Missing project_id or atome_id');
+    if (action === 'list' && !projectId) return errorResponse('snapshot', message, 'Missing project_id');
+    const request = { event_id: message.event_id || null, ts: message.ts || null, project_id: projectId, atome_id: atomeId,
+        label: message.label || null, state: message.state || message.state_blob || null,
+        snapshot_type: message.snapshot_type || message.snapshotType || 'manual',
+        snapshot_id: message.snapshot_id || message.snapshotId || message.id || null,
+        limit: message.limit, offset: message.offset, tx_id: message.tx_id || message.txId || null };
+    // A vault's object is snapshotted, listed, read and restored in its vault, which authorizes the asker.
+    const vaultRouter = connection?._wsApiVaultRouter || null;
+    if (vaultRouter) {
+        const result = await vaultRouter.snapshot(userId, action, request);
+        if (action === 'restore') await afterCommitted(connection, userId, result.events.filter((event) => event.inserted === true));
+        return response('snapshot', message, true, result);
+    }
     if (action === 'create') {
-        const projectId = message.project_id || message.projectId || null;
-        const atomeId = message.atome_id || message.atomeId || null;
-        const targetId = projectId || atomeId;
-        if (!targetId) return errorResponse('snapshot', message, 'Missing project_id or atome_id');
-        if (!await canWriteTarget(userId, targetId)) {
-            return errorResponse('snapshot', message, 'Access denied');
-        }
-        const actor = { type: 'user', id: userId };
-        const snapshotId = await db.createStateSnapshot({
-            projectId,
-            atomeId,
-            label: message.label || null,
-            actor,
-            state: message.state || message.state_blob || null,
-            snapshotType: message.snapshot_type || message.snapshotType || 'manual'
+        if (!await canWriteTarget(userId, targetId)) return errorResponse('snapshot', message, 'Access denied');
+        const created = await db.createStateSnapshotOnce(request, { type: 'user', id: userId }, async (event) => {
+            const committed = await commitAtomeEvent({ authenticatedUserId: userId, event });
+            if (!committed.ok) throw new Error(committed.error);
         });
-        const committed = await commitAtomeEvent({
-            authenticatedUserId: userId,
-            event: {
-                kind: 'snapshot',
-                atome_id: atomeId || projectId,
-                project_id: projectId,
-                actor,
-                payload: { snapshot_id: snapshotId, label: message.label || null }
-            }
-        });
-        if (!committed.ok) return errorResponse('snapshot', message, committed.error);
-        return response('snapshot', message, true, { snapshot_id: snapshotId });
+        return response('snapshot', message, true, created);
     }
     if (action === 'list') {
-        const projectId = message.project_id || message.projectId || null;
-        if (!projectId) return errorResponse('snapshot', message, 'Missing project_id');
-        if (!await canReadTarget(userId, projectId)) {
-            return errorResponse('snapshot', message, 'Access denied');
-        }
-        const snapshots = await db.listStateSnapshots(projectId, {
-            limit: message.limit,
-            offset: message.offset
-        });
+        if (!await canReadTarget(userId, projectId)) return errorResponse('snapshot', message, 'Access denied');
+        const snapshots = await db.listStateSnapshots(projectId, { limit: request.limit, offset: request.offset });
         return response('snapshot', message, true, { snapshots });
     }
-    if (action === 'get' || action === 'restore') {
-        const snapshotId = message.snapshot_id || message.snapshotId || message.id || null;
-        const snapshot = await db.getStateSnapshot(snapshotId);
-        if (!snapshot) return errorResponse('snapshot', message, 'Snapshot not found');
-        const mode = action === 'restore' ? 'write' : 'read';
-        if (!await requireSnapshotAccess(snapshot, userId, mode)) {
-            return errorResponse('snapshot', message, 'Access denied');
-        }
-        if (action === 'get') return response('snapshot', message, true, { snapshot });
-        const actor = { type: 'user', id: userId };
-        const events = buildStateSnapshotRestoreEvents(snapshot, { actor });
-        for (const event of events) {
-            if (!await canWriteTarget(userId, event.atome_id)) {
-                return errorResponse('snapshot', message, `Access denied for ${event.atome_id}`);
-            }
-        }
-        const committed = await commitAtomeEvents({
-            events,
-            authenticatedUserId: userId,
-            actor,
-            txId: message.tx_id || message.txId || `snapshot_restore_${snapshotId}`
-        });
-        if (!committed.ok) return errorResponse('snapshot', message, committed.error);
-        return response('snapshot', message, true, {
-            snapshot_id: snapshotId,
-            events: committed.events
-        });
+    const snapshot = await db.getStateSnapshot(request.snapshot_id);
+    if (!snapshot) return errorResponse('snapshot', message, 'Snapshot not found');
+    const snapshotTarget = snapshot.project_id || snapshot.atome_id;
+    if (!await (action === 'restore' ? canWriteTarget : canReadTarget)(userId, snapshotTarget)) {
+        return errorResponse('snapshot', message, 'Access denied');
     }
-    return errorResponse('snapshot', message, `Unknown snapshot action: ${action || 'missing'}`);
+    if (action === 'get') return response('snapshot', message, true, { snapshot });
+    const actor = { type: 'user', id: userId };
+    const events = buildStateSnapshotRestoreEvents(snapshot, { actor });
+    for (const event of events) {
+        if (!await canWriteTarget(userId, event.atome_id)) {
+            return errorResponse('snapshot', message, `Access denied for ${event.atome_id}`);
+        }
+    }
+    const committed = await commitAtomeEvents({ events, authenticatedUserId: userId, actor,
+        txId: request.tx_id || `snapshot_restore_${request.snapshot_id}` });
+    if (!committed.ok) return errorResponse('snapshot', message, committed.error);
+    await afterCommitted(connection, userId, committed.events.filter((event) => db.wasEventInserted(event)));
+    return response('snapshot', message, true, { snapshot_id: request.snapshot_id, events: committed.events });
 }
 async function handleAtomeHistory(message, userId) {
     const atomeId = message.atome_id || message.atomeId || message.id || null;
@@ -474,7 +449,7 @@ export async function handleWsAtomeOperation(message, connection) {
         let result;
         if (type === 'events') result = await handleEvents(message, connection, auth.userId);
         else if (type === 'state-current') result = await handleStateCurrent(message, auth.userId, connection);
-        else if (type === 'snapshot') result = await handleSnapshot(message, auth.userId);
+        else if (type === 'snapshot') result = await handleSnapshot(message, auth.userId, connection);
         else if (type === 'user-data') result = await handleUserData(message, auth.userId);
         else if (type === 'sync') result = await handleSync(message, auth.userId, connection);
         else if (type === 'conditions') result = await handleConditions(message, auth.userId);

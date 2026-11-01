@@ -48,6 +48,14 @@ export function resolveWsApiPrincipal(connection, message = {}, options = {}) {
     return null;
 }
 
+// The program seat a request comes from: the `prg` claim its own key's session token carries
+// (server/auth_sessions.js), never a field of the payload. null for a device.
+export function resolveWsApiProgramSeat(connection, message = {}) {
+    const token = typeof message?.token === 'string' ? message.token.trim() : '';
+    const claims = token ? jwt.verify(token, requiredJwtSecret()) : connection?._wsApiDeviceClaims;
+    return typeof claims?.prg === 'string' && claims.prg ? claims.prg : null;
+}
+
 export async function isWsApiPrincipalProvisioned(principalId) {
     if (!principalId) return false;
     const record = await db.getAtomeById(String(principalId));

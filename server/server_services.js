@@ -26,6 +26,7 @@ import { wsBroadcastJson } from './wsSend.js';
 import { createPublicEventsStore } from './public_events_store.js';
 import { createPublicEventGuard } from './public_events_guard.js';
 import { createPublicEvents } from './public_events.js';
+import { createObjectiveNetwork } from './objective_network.js';
 import { createShop } from './shop.js';
 import { createCoaches } from './coaches.js';
 import { createScheduledSends } from './scheduled_sends.js';
@@ -140,6 +141,9 @@ export function createServerServices({ projectRoot_env }) {
     findUserName: async (id) => (await directoryPublicService.sourceProfile(id).catch(() => null))?.display_name || '',
     broadcast: (cells) => wsBroadcastJson(wsApiConnections, { type: 'public-events-changed', cells }, { scope: 'ws/api', op: 'public-events-changed' })
   });
+  // The objectives network (R-104 D8): who may be found for an objective, projected from their own Atomes.
+  const objectiveNetwork = createObjectiveNetwork({ query: db.query.bind(db), vaultRouter: userVaultRouter, relations: communicationRelations,
+    profileOf: (id) => directoryPublicService.sourceProfile(id).catch(() => null) });
   const shop = createShop({ query: db.query.bind(db), vaultRouter: userVaultRouter, syncRuntime: wsSyncRuntime, relations: communicationRelations,
     findUserName: async (id) => (await directoryPublicService.sourceProfile(id).catch(() => null))?.display_name || '',
     notify: (targetId, senderId, notification) => deliverCommNotification(targetId, senderId, notification),
@@ -160,6 +164,7 @@ export function createServerServices({ projectRoot_env }) {
   const site = createSiteServices({ query: db.query.bind(db), vaultRouter: userVaultRouter, syncRuntime: wsSyncRuntime, projectRoot: projectRoot_env });
   return {
     publicEvents,
+    objectiveNetwork,
     shop,
     coaches,
     scheduledSends,

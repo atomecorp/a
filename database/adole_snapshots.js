@@ -120,7 +120,7 @@ export function createAdoleSnapshotsApi({ getAtome, appendEvent }) {
             payload: {
                 props: patch
             }
-        }, { txId });
+        }, { txId, storedTruth: true });
 
         return data;
     }

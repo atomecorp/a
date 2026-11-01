@@ -6,7 +6,8 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { query, safeParseJson, serializeJson, withTransaction } from './adole_db_core.js';
-import { resolveEventPayload } from '../atome/src/shared/adole_event_contract.js';
+import { eventPropertyPatch, resolveEventPayload } from '../atome/src/shared/adole_event_contract.js';
+import { assertKnownAtomeProperties, assertKnownAtomeType, ATOME_UNGATED_EVENT_KINDS } from '../atome/src/shared/atome_type_gate.js';
 import { eventMutations, eventConflicts, enqueueSyncOperation } from './adole_api_instances.js';
 import { applyEventToStateCurrent, resolveActorId } from './adole_state_projection.js';
 import { isProjectAtome, resolveEventProjectId } from './adole_event_containment.js';
@@ -22,6 +23,24 @@ export function wasEventInserted(event) {
 // ============================================================================
 // EVENT LOG + STATE CURRENT (Projection)
 // ============================================================================
+
+// The type an event declares (its patch's, else its envelope's) becomes the atome's stored type.
+function declaredEventType(event) {
+    const patch = eventPropertyPatch(event);
+    return patch?.type ?? patch?.atome_type ?? event.atome_type ?? event.type ?? null;
+}
+
+// A new property is checked against the atome's type: the one the event declares, else the stored one
+// (a kind-only creation or an atome of an undeclared legacy type has none to check against). Restored
+// stored truth (`storedTruth`: a snapshot restore) is history, never validated again.
+async function assertEventProperties(rawEvent, event, options) {
+    if (options.storedTruth === true || ATOME_UNGATED_EVENT_KINDS.includes(String(event.kind).toLowerCase())) return;
+    const patch = eventPropertyPatch(event);
+    if (!patch) return;
+    const type = declaredEventType(rawEvent)
+        ?? (await query('get', 'SELECT atome_type FROM atomes WHERE atome_id = ?', [event.atome_id]))?.atome_type;
+    if (type) assertKnownAtomeProperties(type, patch);
+}
 
 function normalizeEventInput(event, options = {}) {
     if (!event || typeof event !== 'object') {
@@ -57,6 +76,9 @@ function normalizeEventInput(event, options = {}) {
     const txId = event.tx_id || event.txId || options.txId || null;
     const gestureId = event.gesture_id || event.gestureId || null;
     const source = event.source || event.source_id || event.sourceId || options.source || null;
+    // Only a declared type may become an atome's stored type.
+    const declaredType = declaredEventType(event);
+    if (declaredType != null) assertKnownAtomeType(declaredType);
 
     return {
         id,
@@ -153,6 +175,7 @@ export async function appendEvent(event, options = {}) {
             };
             return;
         }
+        await assertEventProperties(event, normalized, options);
         normalized = await eventMutations.prepare(normalized, {
             skipExpectedVersions: conflictMode === 'offline-lww'
         });
@@ -244,6 +267,7 @@ export async function appendEvents(events, options = {}) {
                 continue;
             }
 
+            await assertEventProperties(evt, normalized, options);
             normalized = await eventMutations.prepare(normalized, {
                 skipExpectedVersions: conflictMode === 'offline-lww'
             });

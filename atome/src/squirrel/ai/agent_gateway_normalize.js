@@ -80,12 +80,10 @@ const normalizeRollbackStrategy = (value) => {
   return 'none';
 };
 
+// One closed set (agent_gateway_state.js#RISK_TIERS): a tool declares its tier exactly, or it is refused.
 const normalizeRiskTier = (value) => {
-  const raw = String(value || '').trim();
-  if (!raw) return 'read';
-  const normalized = raw.toLowerCase();
-  if (RISK_TIERS.includes(normalized)) return normalized;
-  return 'read';
+  if (RISK_TIERS.includes(value)) return value;
+  throw new Error(`ai_tool_risk_tier_invalid: ${String(value)}`);
 };
 
 const inferSideEffects = ({ name = '', domain = '', riskTier = 'read', explicit = null }) => {
@@ -231,7 +229,6 @@ const normalizeToolDefinition = (tool) => {
   const name = String(tool?.name || '').trim();
   const domain = normalizeDomain(tool?.domain, name);
   const riskTier = normalizeRiskTier(tool?.risk_tier);
-  const riskSource = tool?.risk_tier ? 'spec' : 'default';
   const parameters = normalizeSchema(tool?.parameters);
   const outputSchema = normalizeSchema(tool?.output_schema || tool?.outputSchema || DEFAULT_OUTPUT_SCHEMA);
 
@@ -275,8 +272,7 @@ const normalizeToolDefinition = (tool) => {
     postcondition_check: typeof tool.postcondition_check === 'function' ? tool.postcondition_check : null,
     rollback: typeof tool.rollback === 'function' ? tool.rollback : null,
     confirmation_policy: String(tool.confirmation_policy || '').trim().toLowerCase()
-      || (riskSource === 'spec' && ['moderate', 'high', 'irreversible'].includes(riskTier) ? 'always' : 'auto'),
-    _risk_source: riskSource
+      || (['moderate', 'high', 'irreversible'].includes(riskTier) ? 'always' : 'auto')
   };
 };
 

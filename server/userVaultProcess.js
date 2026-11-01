@@ -17,6 +17,7 @@ process.env.SQLITE_PATH = path.join(vaultRoot, 'vault.db');
 process.env.SQUIRREL_SYNC_REMOTE = '0';
 
 const db = await import('../database/adole.js');
+(await import('../atome/src/shared/core_atome_types.js')).registerCoreAtomeTypes();
 await db.initDatabase();
 await db.resolvePendingOwners();
 
@@ -65,6 +66,24 @@ const handleOperation = async (operation, payload = {}) => {
             conflictMode: payload.conflictMode || null
         });
         return committed.map((event) => ({ ...event, inserted: db.wasEventInserted(event) }));
+    }
+    if (operation === 'snapshot:create') {
+        const actor = { type: 'user', id: String(payload.authorized_actor_id || principalId) };
+        return db.createStateSnapshotOnce(payload.request || {}, actor, (event) => db.appendEvent(assertActor(event, actor.id), { source: 'snapshot' }));
+    }
+    if (operation === 'snapshot:list') {
+        const request = payload.request || {};
+        return { snapshots: await db.listStateSnapshots(request.project_id, { limit: request.limit, offset: request.offset }) };
+    }
+    // A snapshot named with its object must be that object's: the router authorized the object, not the id.
+    if (operation === 'snapshot:get' || operation === 'snapshot:restore') {
+        const request = payload.request || {}, targetId = request.project_id || request.atome_id;
+        const snapshot = await db.getStateSnapshot(request.snapshot_id);
+        if (!snapshot || (targetId && ![snapshot.project_id, snapshot.atome_id].includes(targetId))) throw new Error('Snapshot not found');
+        if (operation === 'snapshot:get') return { snapshot };
+        const actor = { type: 'user', id: String(payload.authorized_actor_id || principalId) };
+        const events = await db.restoreStateSnapshot(snapshot.snapshot_id, { actor, tx_id: request.tx_id });
+        return { snapshot_id: snapshot.snapshot_id, events: events.map((event) => ({ ...event, inserted: db.wasEventInserted(event) })) };
     }
     if (operation === 'event:get') return db.getEvent(payload.event_id || payload.eventId);
     if (operation === 'history:apply') {

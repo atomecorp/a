@@ -3,7 +3,7 @@ export const registerMailDefaultTools = ({ Agent, safeString, prepareMailApi }) 
         name: 'mail.list',
         description: 'List locally indexed mail items.',
         capabilities: ['mail.read'],
-        risk_tier: 'LOW',
+        risk_tier: 'low',
         parameters: {
             properties: {
                 mailbox: { type: 'string' },
@@ -23,7 +23,7 @@ export const registerMailDefaultTools = ({ Agent, safeString, prepareMailApi }) 
         name: 'mail.read',
         description: 'Read one locally indexed mail item by message id.',
         capabilities: ['mail.read'],
-        risk_tier: 'LOW',
+        risk_tier: 'low',
         parameters: {
             required: ['message_id'],
             properties: {
@@ -43,7 +43,7 @@ export const registerMailDefaultTools = ({ Agent, safeString, prepareMailApi }) 
         name: 'mail.search',
         description: 'Search the local mail index.',
         capabilities: ['mail.read'],
-        risk_tier: 'LOW',
+        risk_tier: 'low',
         parameters: {
             required: ['query'],
             properties: {
@@ -66,7 +66,7 @@ export const registerMailDefaultTools = ({ Agent, safeString, prepareMailApi }) 
         name: 'mail.next_unread',
         description: 'Return the next unread mail from the local index.',
         capabilities: ['mail.read'],
-        risk_tier: 'LOW',
+        risk_tier: 'low',
         parameters: {
             properties: {
                 mailbox: { type: 'string' },
@@ -84,7 +84,7 @@ export const registerMailDefaultTools = ({ Agent, safeString, prepareMailApi }) 
         name: 'mail.summarize',
         description: 'Summarize the local mail index.',
         capabilities: ['mail.read'],
-        risk_tier: 'LOW',
+        risk_tier: 'low',
         parameters: {
             properties: {
                 mailbox: { type: 'string' },
@@ -103,7 +103,7 @@ export const registerMailDefaultTools = ({ Agent, safeString, prepareMailApi }) 
         name: 'mail.reply_draft',
         description: 'Create a local reply draft for a mail item.',
         capabilities: ['mail.write'],
-        risk_tier: 'MEDIUM',
+        risk_tier: 'moderate',
         parameters: {
             required: ['message_id'],
             properties: {
@@ -128,7 +128,7 @@ export const registerMailDefaultTools = ({ Agent, safeString, prepareMailApi }) 
         name: 'mail.mark_read',
         description: 'Mark one mail item as read.',
         capabilities: ['mail.write'],
-        risk_tier: 'LOW',
+        risk_tier: 'low',
         parameters: {
             required: ['message_id'],
             properties: {
@@ -148,7 +148,7 @@ export const registerMailDefaultTools = ({ Agent, safeString, prepareMailApi }) 
         name: 'mail.mark_unread',
         description: 'Mark one mail item as unread.',
         capabilities: ['mail.write'],
-        risk_tier: 'LOW',
+        risk_tier: 'low',
         parameters: {
             required: ['message_id'],
             properties: {
@@ -168,7 +168,7 @@ export const registerMailDefaultTools = ({ Agent, safeString, prepareMailApi }) 
         name: 'mail.archive',
         description: 'Archive one mail item.',
         capabilities: ['mail.write'],
-        risk_tier: 'MEDIUM',
+        risk_tier: 'moderate',
         parameters: {
             required: ['message_id'],
             properties: {
@@ -188,7 +188,7 @@ export const registerMailDefaultTools = ({ Agent, safeString, prepareMailApi }) 
         name: 'mail.delete',
         description: 'Delete one mail item.',
         capabilities: ['mail.write'],
-        risk_tier: 'MEDIUM',
+        risk_tier: 'moderate',
         parameters: {
             required: ['message_id'],
             properties: {
@@ -208,7 +208,7 @@ export const registerMailDefaultTools = ({ Agent, safeString, prepareMailApi }) 
         name: 'mail.send',
         description: 'Queue a locally prepared draft for send after explicit confirmation.',
         capabilities: ['mail.send'],
-        risk_tier: 'HIGH',
+        risk_tier: 'high',
         parameters: {
             required: ['draft_id'],
             properties: {

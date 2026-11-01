@@ -671,7 +671,7 @@
 					"$(BUILT_PRODUCTS_DIR)",
 					"$(TARGET_TEMP_DIR)",
 				);
-				MARKETING_VERSION = 1.44;
+				MARKETING_VERSION = 1.45;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-latome_ios_bevy_renderer",
@@ -722,7 +722,7 @@
 					"$(BUILT_PRODUCTS_DIR)",
 					"$(TARGET_TEMP_DIR)",
 				);
-				MARKETING_VERSION = 1.44;
+				MARKETING_VERSION = 1.45;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-latome_ios_bevy_renderer",
@@ -769,7 +769,7 @@
 					"$(BUILT_PRODUCTS_DIR)",
 					"$(TARGET_TEMP_DIR)",
 				);
-				MARKETING_VERSION = 1.44;
+				MARKETING_VERSION = 1.45;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-latome_ios_bevy_renderer",
@@ -812,7 +812,7 @@
 					"$(BUILT_PRODUCTS_DIR)",
 					"$(TARGET_TEMP_DIR)",
 				);
-				MARKETING_VERSION = 1.44;
+				MARKETING_VERSION = 1.45;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-latome_ios_bevy_renderer",
@@ -875,7 +875,7 @@
 			baseConfigurationReference = 6BWTCH000000000000000017 /* atomeWatch.xcconfig */;
 			buildSettings = {
 				CURRENT_PROJECT_VERSION = 43;
-				MARKETING_VERSION = 1.44;
+				MARKETING_VERSION = 1.45;
 			};
 			name = Debug;
 		};
@@ -884,7 +884,7 @@
 			baseConfigurationReference = 6BWTCH000000000000000017 /* atomeWatch.xcconfig */;
 			buildSettings = {
 				CURRENT_PROJECT_VERSION = 43;
-				MARKETING_VERSION = 1.44;
+				MARKETING_VERSION = 1.45;
 			};
 			name = Release;
 		};

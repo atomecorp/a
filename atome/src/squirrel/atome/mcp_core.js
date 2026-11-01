@@ -1,5 +1,21 @@
 export const hasOwn = Object.prototype.hasOwnProperty;
 
+// JSON-RPC error codes of the single entry (mcp.js) and the standard MCP layer (mcp_protocol.js).
+// ACCESS_DENIED is a server-defined code (-32000..-32099): the policy refused the request before any effect.
+export const MCP_ERROR = Object.freeze({
+    INVALID_REQUEST: -32600,
+    METHOD_NOT_FOUND: -32601,
+    INVALID_PARAMS: -32602,
+    INTERNAL: -32603,
+    ACCESS_DENIED: -32001
+});
+
+export function mcpError(code, message) {
+    const error = new Error(message);
+    error.code = code;
+    return error;
+}
+
 export const ATOME_MCP_PROTOCOL = '1.0.0';
 export const MCP_EVENT_NAME = 'squirrel:mcp';
 export const MCP_UI_EVENT_NAME = 'squirrel:mcp:ui';
