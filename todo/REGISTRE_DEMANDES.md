@@ -457,7 +457,7 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 - Statut : EN COURS — phases A à E faites dans le worktree `refonte-r104` ; phase F (fusion dans les deux `main`)
   faite le 2026-11-01 (session de fusion, merges sans force, branches `refonte-r104` publiées comme points de
   restauration, sauvegardes `backup/main-pre-r104-20261101-140505`) ; régressions iOS 1.45 (43) suivies en BUG-012 à
-  BUG-015 du registre de débogage.
+  BUG-015 du registre de débogage ; suite de la fusion (décisions, push, essais) en R-107.
 - Historique : signal de départ donné le 2026-10-30 au soir, session `41da0099`. Fait au départ : commit eVe
   `402f9924` puis parent `e3f1d0849`, push des deux `main` (vérifié sur GitHub). TestFlight : une publication 1.41 (40)
   de la session montre tournait déjà sur le même état ; pas de doublon lancé (le script refuse deux publications).
@@ -522,6 +522,34 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   elle ouvre « Ressenti » ; lignes du ressenti pendant les récups cardio et au bilan cardio. Preuve :
   `temp/r016c/basic_cardio.probe.mjs` ALL OK (`temp/r016c/basic_run6.log`), captures `temp/r016c/b0*.png`,
   `c0*.png`. Bloqué : lignes avant Lancer sur une carte cardio (question 62).
+
+### R-107 — Fusion R-104 → main (2026-11-01) : décisions et essais restés ouverts
+- Statut : ATTENTE UTILISATEUR (2026-11-01) — questions posées dans le compte rendu final de la session de fusion,
+  rapport `todo/rapport_fusion_r104_main_2026-11-01.md` ; registre de débogage annoté
+  `todo/registre_debug_r104_2026-11-01.md` (bloc « Résultat 2026-11-01 » par entrée).
+- Source : mission « sauvegarde, fusion R-104, débogage puis design V5 » du 2026-11-01
+  (`~/Desktop/R104_MAIN_PACKAGE_2026-11-01/mission/`, journal
+  `~/Documents/Sauvegarde-Claude-2026-10-31/r104-main-merge-20261101-140505/PLAN_ET_JOURNAL_CLAUDE.md`).
+- Fait et prouvé (Web) : fusion eVe et atome (`090dab6e` / `c02dcb734`), BUG-001 (caméra arrière au scan, eVe
+  `83556da1`), BUG-006 causes 3 et 4 (eVe `70c845cf`), BUG-003 (rouleaux de date, âge Sport, contrôle Rencontre ;
+  eVe `fb5aa1f0`, atome `668f7ead7`), BUG-012/013/015 vérifiés sur main ; sondes `temp/r104merge/probes/`.
+- **Push de main : non fait.** Attend ton feu vert, après l'essai sur appareil d'une build > 43 (BUG-012, BUG-013,
+  BUG-014 ne se tranchent que sur l'iPhone/iPad).
+- Décisions de design à prendre (règle 16, rien codé) :
+  - Design V5 D1–D6 : `temp/r104merge/design_v5/AUDIT_DESIGN_V5.md`, maquette `mockups/m1_tuiles_v5.png`.
+  - BUG-005 : (a) Stop dans le pied de « En direct » ou (b) l'outil ▶ ouvre la fiche quand une seule activité tourne.
+  - BUG-006 cause 2 : l'outil ▶ recouvert par un panneau ouvert sur téléphone (garder la case libre ?).
+  - BUG-010 : six outils impossibles à 402/393 pt ; options (1) bande hors pied, (2) bord à bord, (3) 3+3.
+  - BUG-011 : Retouche ouvre l'import avec Médias déplié et Images allumé (modifie la règle 18) ?
+  - BUG-004 : poids/taille en rouleaux (la règle 14 dit ligne-curseur) ?
+  - REG-002 : case « Photo » aussi dans les catégories et la recherche de Prod. ?
+  - BUG-002 : sélection multiple + suppression groupée (nouvelle fonction, maquette) ; appui long en vue Liste ;
+    Santé › Compléments sans appui long.
+  - REG-001 : quelle valeur est « le numéro de série » (jamais affiché dans l'historique) ?
+  - BUG-009 : refus d'encadrement (contrôle serveur ou autre moteur) ; page de départ = TÂCHE-004.
+  - TÂCHE-002, 003, 009, 010–014 : maquettes à produire puis valider.
+- Reste à coder une fois une build possible : montre E1–E4 / S1–S3 (Swift, `temp/r104merge/agents/watch/protocole_montre.md`).
+- Non vérifié : appareil iOS (build > 43), montre, Tauri, Android.
 
 ## Attentes de ton côté (aucune session ne peut les faire seule)
 
