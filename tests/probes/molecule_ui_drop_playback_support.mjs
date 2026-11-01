@@ -216,7 +216,33 @@ export const selectListRow = async (page, id) => {
         };
     }, id);
     const index = located.index;
-    const target = await listNode(page, `project_view_list_entry_${index}_name`);
+    const nodeId = `project_view_list_entry_${index}_name`;
+    let target = await listNode(page, nodeId);
+    // Canonical entries include rows outside the scroll viewport. Reveal the
+    // row with a real wheel gesture before asking the hit test for a click.
+    for (let attempt = 0; !target && attempt < 12; attempt += 1) {
+        const plan = await page.evaluate(async ({ nodeId, index }) => {
+            const { locateBevyUiNode } = await import('/eVe/domains/rendering/bevy_ui_scroll_runtime.js');
+            const { readProjectViewSurfaceState } = await import('/eVe/domains/rendering/project_view_surface_runtime.js');
+            const runtime = window.eveBevyUiRuntime;
+            const root = runtime?.state?.trees?.get('eve_bevy_ui_project_view')?.tree?.root;
+            const pane = locateBevyUiNode({ node: root, nodeId: 'project_view_list_virtual_list' });
+            if (!pane) return null;
+            const row = locateBevyUiNode({ node: root, nodeId });
+            const start = readProjectViewSurfaceState().content?.windowState?.visibleStart || 0;
+            const direction = row ? Math.sign(row.box.y + row.box.height / 2 - (pane.box.y + pane.box.height / 2)) : (index < start ? -1 : 1);
+            const rect = document.getElementById('eve_surface_project').getBoundingClientRect();
+            return { x: rect.left + pane.box.x + pane.box.width / 2,
+                y: rect.top + pane.box.y + pane.box.height / 2,
+                deltaY: (direction || -1) * Math.max(30, pane.box.height / 2) };
+        }, { nodeId, index });
+        if (!plan) break;
+        const point = await playwrightPointForClientTarget(page, plan);
+        await page.mouse.move(point.x, point.y);
+        await page.mouse.wheel(0, plan.deltaY);
+        await wait(350);
+        target = await listNode(page, nodeId);
+    }
     assert(target, `list_select_target_missing:${id}`);
     const before = await page.evaluate(async (expected) => {
         const [{ getAtomeContextualEditApi }, selection] = await Promise.all([

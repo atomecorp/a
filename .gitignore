@@ -402,6 +402,7 @@ eve/application
 tests/native/*
 !tests/native/auth_development_request.rs
 !tests/native/wake_capture_lifecycle.rs
+!tests/native/tauri_static_asset_cache.rs
 !tests/governance/build_cache_retention.test.mjs
 !tests/eve/workspace_surface_preference_contract.test.mjs
 

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'vitest';
+import { clearToken, getToken, setToken } from '../../atome/src/squirrel/apis/unified/adole_connection.js';
 
 import {
     applySyncEnvironment,
@@ -17,6 +18,7 @@ class MemoryStorage {
 
 const previousWindow = globalThis.window;
 afterEach(() => {
+    clearToken('cloud_auth_token', globalThis.window?.localStorage, globalThis.window?.sessionStorage);
     if (previousWindow === undefined) delete globalThis.window;
     else globalThis.window = previousWindow;
 });
@@ -60,7 +62,7 @@ const createNativeEnv = () => {
 test('Home environment switches local to production to local without mixing scoped tokens', async () => {
     const { env, calls } = createNativeEnv();
     globalThis.window = env;
-    env.localStorage.setItem('cloud_auth_token', 'local-token');
+    setToken('cloud_auth_token', 'local-token', env.localStorage, env.sessionStorage);
 
     const production = await applySyncEnvironment({ mode: 'production' }, env);
     assert.equal(production.ok, true);
@@ -68,18 +70,20 @@ test('Home environment switches local to production to local without mixing scop
     assert.equal(env.localStorage.getItem('cloud_auth_token'), null);
     assert.deepEqual(calls.find((entry) => entry[0] === 'clear'), ['clear']);
 
-    env.localStorage.setItem('cloud_auth_token', 'production-token');
+    setToken('cloud_auth_token', 'production-token', env.localStorage, env.sessionStorage);
     const local = await applySyncEnvironment({ mode: 'local' }, env);
     assert.equal(local.ok, true);
     assert.equal(local.base, 'http://localhost:3001');
-    assert.equal(env.localStorage.getItem('cloud_auth_token'), 'local-token');
+    assert.equal(getToken('cloud_auth_token'), 'local-token');
+    assert.equal(env.localStorage.getItem('cloud_auth_token'), null);
     assert.equal(calls.at(-5)[0], 'configure');
     assert.equal(calls.at(-5)[1].environment_fingerprint,
         environmentFingerprint({ base: 'http://localhost:3001', principal: 'user-a' }));
 
     const productionAgain = await applySyncEnvironment({ mode: 'production' }, env);
     assert.equal(productionAgain.ok, true);
-    assert.equal(env.localStorage.getItem('cloud_auth_token'), 'production-token');
+    assert.equal(getToken('cloud_auth_token'), 'production-token');
+    assert.equal(env.localStorage.getItem('cloud_auth_token'), null);
     assert.equal(readSyncEnvironment(env).mode, 'production');
 });
 

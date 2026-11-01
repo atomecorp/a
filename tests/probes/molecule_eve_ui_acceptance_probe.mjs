@@ -94,7 +94,24 @@ const main = async () => {
             console.log(`  ok   ${name}`);
             return details;
         } catch (error) {
-            report.checks.push({ name, ok: false, duration_ms: performance.now() - startedAt, error: error?.message || String(error) });
+            const failure = { name, ok: false, duration_ms: performance.now() - startedAt, error: error?.message || String(error) };
+            if (page && !page.isClosed()) {
+                const shot = path.join(OUT_DIR, `failed_check_${report.checks.length}.png`);
+                await page.screenshot({ path: shot }).then(() => report.screenshots.push(shot))
+                    .catch(shotError => { failure.screenshotError = shotError.message; });
+                failure.runtime = await page.evaluate(async () => {
+                    const surface = (await import('/eVe/domains/rendering/project_view_surface_runtime.js')).readProjectViewSurfaceState();
+                    const navigation = await import('/eVe/domains/rendering/project_view_navigation.js');
+                    const mode = (await import('/eVe/domains/rendering/project_view_mode_state.js')).getProjectViewMode();
+                    return { mode, surfaceMode: surface.mode, projectId: surface.projectId,
+                        currentProjectId: window.__currentProject?.id || '',
+                        explicitProjectMode: (await import('/eVe/domains/rendering/project_view_mode_state.js')).getProjectViewMode(surface.projectId),
+                        recentGestureTrace: window.__moleculeEnduranceTrace || [],
+                        containerId: navigation.currentContainerId(), content: surface.content,
+                        overlayError: window.eveBevyUiRuntime?.readOverlayDiagnostics?.()?.lastOverlayError || null };
+                }).catch(readError => ({ error: readError.message }));
+            }
+            report.checks.push(failure);
             console.log(`  FAIL ${name} -> ${error?.message || error}`);
             return null;
         }

@@ -4,7 +4,8 @@ import test from 'node:test';
 import {
     addClip,
     addTrack,
-    createTimeline
+    createTimeline,
+    moveClip
 } from '../../eVe/intuition/tools/molecule/kernel/index.js';
 import { createMoleculeSession } from '../../eVe/intuition/tools/molecule/session/index.js';
 import { createMoleculePersistenceController } from '../../eVe/intuition/tools/molecule/persistence/index.js';
@@ -242,4 +243,40 @@ test('Molecule session timeline verbs expose clipboard edits through one undo po
         'molecule.batch'
     ]);
     assert.equal(session.getHistory().undo.length, 3);
+});
+
+
+test('all history steps survive external snapshot mutations and committed-state adoption', async () => {
+    const session = createMoleculeSession({ timeline: createFixtureTimeline(), eventSink: createEventSink() });
+    const unsubscribe = session.subscribe(snapshot => { snapshot.clips[0].timeline.start_seconds = 999; });
+    for (let i = 1; i <= 144; i += 1) {
+        const result = i % 2
+            ? await session.apply('molecule.clip.move', { clip_id: 'clip_video', start_seconds: i })
+            : (await session.applyBatch([{ operation: 'molecule.clip.move', command: { clip_id: 'clip_video', start_seconds: i } }])).state;
+        result.clips[0].timeline.start_seconds = 999;
+        const read = session.getState();
+        assert.equal(read.clips[0].timeline.start_seconds, i);
+        read.clips[0].timeline.start_seconds = 999;
+    }
+    unsubscribe();
+    assert.equal(session.getHistory().undo.length, 144);
+    for (let i = 143; i >= 0; i -= 1) {
+        const result = await session.undo();
+        assert.equal(result.state.clips[0].timeline.start_seconds, i);
+        result.state.clips[0].timeline.start_seconds = 999;
+    }
+    for (let i = 1; i <= 144; i += 1) {
+        const result = await session.redo();
+        assert.equal(result.state.clips[0].timeline.start_seconds, i);
+        result.state.clips[0].timeline.start_seconds = 999;
+    }
+    const adopted = moveClip(session.getState(), { clip_id: 'clip_video', start_seconds: 233 });
+    session.adoptCommittedState(adopted);
+    adopted.clips[0].timeline.start_seconds = 999;
+    await session.apply('molecule.clip.move', { clip_id: 'clip_video', start_seconds: 377 });
+    await session.undo();
+    assert.equal(session.getState().clips[0].timeline.start_seconds, 233);
+    await session.undo();
+    assert.equal(session.getState().clips[0].timeline.start_seconds, 143);
+    session.dispose();
 });

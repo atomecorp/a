@@ -19,18 +19,21 @@ export const validateMatrixMoleculeDrop = async ({ page, project, fixture, repor
         nodeId: `project_view_matrix_tile_${index}`, treeId: 'eve_bevy_ui_project_view', step: 2
     });
     const tileForRecord = async (recordId) => {
-        const resolved = await waitFor(page, (expectedId) => {
+        const resolved = await waitFor(page, async (expectedId) => {
             const surface = (window.eveBevyUiRuntime?.readOverlayDiagnostics?.()?.trees || [])
                 .find((entry) => entry.id === 'eve_bevy_ui_project_view');
-            const projectId = window.__currentProject?.id || window.__currentProject?.atome_id || '';
-            const records = window.eveToolBase?.getProjectSceneState?.(projectId)?.records || [];
-            const record = records.find((entry) => String(entry?.id || entry?.atome_id || '') === expectedId);
-            const label = String(record?.properties?.name || record?.name || expectedId);
+            const { readProjectViewSurfaceState } = await import('/eVe/domains/rendering/project_view_surface_runtime.js');
+            const { loadProjectViewRecordsForPlayback } = await import('/eVe/domains/rendering/project_view_records.js');
+            const { recordName } = await import('/eVe/domains/rendering/project_view_record_fields.js');
+            const loaded = await loadProjectViewRecordsForPlayback({ projectId: readProjectViewSurfaceState().projectId });
+            if (!loaded.ok) throw new Error(loaded.error || 'matrix_record_read_failed');
+            const record = loaded.records.find((entry) => String(entry?.id || entry?.atome_id || '') === expectedId);
+            const label = record ? recordName(record) : '';
             const nodeId = String((surface?.interactiveNodes || []).find((entry) => (
                 /^project_view_matrix_tile_\d+$/.test(String(entry?.id || ''))
                 && String(entry?.accessibility?.label || '') === label
             ))?.id || '');
-            return { ok: Boolean(nodeId), nodeId };
+            return { ok: Boolean(nodeId), nodeId, expectedId, label, recordFound: Boolean(record) };
         }, String(recordId));
         return findBevyUiNodeTarget(page, {
             nodeId: resolved.nodeId, treeId: 'eve_bevy_ui_project_view', step: 2
@@ -144,8 +147,10 @@ export const validateMatrixMoleculeDrop = async ({ page, project, fixture, repor
             import('/eVe/domains/rendering/project_view_navigation.js')
         ]);
         const projectId = readProjectViewSurfaceState().projectId;
-        const allRecords = window.eveToolBase?.getProjectSceneState?.(projectId)?.records || [];
-        const records = navigation.containerChildren(allRecords);
+        const { loadProjectViewRecordsForPlayback } = await import('/eVe/domains/rendering/project_view_records.js');
+        const loaded = await loadProjectViewRecordsForPlayback({ projectId });
+        if (!loaded.ok) throw new Error(loaded.error || 'matrix_members_read_failed');
+        const records = navigation.containerChildren(loaded.records);
         return {
             ids: records.map((record) => String(record.id || '')),
             entities: records.map((record) => String(record.properties?.molecule_entity || '')),

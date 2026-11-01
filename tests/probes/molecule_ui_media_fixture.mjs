@@ -290,9 +290,11 @@ export const reloadBrowserProject = async (page, project) => {
         };
     }, null, 15000);
     await waitFor(page, async (projectId) => {
-        const [{ getRenderSurfaceState }, projectScenes] = await Promise.all([
+        const [{ getRenderSurfaceState }, projectScenes, { readProjectViewSurfaceState }, { bevyUiOverlayRecordId }] = await Promise.all([
             import('/eVe/domains/rendering/surface_runtime.js'),
-            import('/eVe/domains/rendering/project_scene_state.js')
+            import('/eVe/domains/rendering/project_scene_state.js'),
+            import('/eVe/domains/rendering/project_view_surface_runtime.js'),
+            import('/eVe/domains/rendering/bevy_ui_overlay_record_projection.js')
         ]);
         const records = window.eveToolBase?.getProjectSceneState?.(projectId)?.records || [];
         const canonicalIds = records.map((record) => String(record.id || record.atome_id || ''))
@@ -302,6 +304,16 @@ export const reloadBrowserProject = async (page, project) => {
             ...(Array.isArray(scene?.atoms) ? scene.atoms : []),
             ...(Array.isArray(scene?.nodes) ? scene.nodes : [])
         ].map((entry) => String(entry?.id || '')));
+        // Restored List rows project indexed Bevy nodes, rather than Natural Atome IDs.
+        const view = readProjectViewSurfaceState();
+        const rows = (window.eveBevyUiRuntime?.readOverlayDiagnostics?.()?.trees || [])
+            .find((tree) => tree.id === 'eve_bevy_ui_project_view')?.overlayRecordIds || [];
+        if (view.mode === 'list' && view.mounted && view.projectId === projectId) {
+            (view.content?.entries || []).forEach((entry, index) => {
+                const prefix = bevyUiOverlayRecordId({ treeId: 'eve_bevy_ui_project_view', nodeId: `project_view_list_entry_${index}_` });
+                if (rows.some((id) => String(id).startsWith(prefix))) projectedIds.add(String(entry.id));
+            });
+        }
         const projectedCanonicalIds = canonicalIds.filter((id) => scene?.byId?.has?.(id) || projectedIds.has(id));
         const runtime = projectScenes.PROJECT_SCENES.get(String(projectId)) || null;
         return {

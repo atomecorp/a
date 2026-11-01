@@ -17,15 +17,15 @@ const compiled = await build({ entryPoints: ['eVe/domains/dashboard/dashboard_li
 
 const setup = () => {
     const active = new Set(), timers = new Map();
-    let serial = 0, thumbnail = async () => new Blob(['thumbnail']);
+    let serial = 0, time = 0, thumbnail = async () => new Blob(['thumbnail']);
     const probe = { list: async () => [{ id: `image_${serial}`, title: 'Fixture', has_thumb: true }], thumbnail: () => thumbnail() };
-    const context = { probe, console, Blob, URL: {
+    const context = { probe, console, Blob, Date: { now: () => time }, URL: {
         createObjectURL: () => { const url = `blob:fixture-${++serial}`; active.add(url); return url; },
         revokeObjectURL: url => { assert(active.delete(url), `releasing an unowned URL: ${url}`); }
     }, setTimeout: fn => { const id = ++serial; timers.set(id, fn); return id; }, clearTimeout: id => timers.delete(id) };
     new Script(compiled.outputFiles[0].text).runInNewContext(context);
     const feed = context.feedModule.createLibraryOnlineFeed({ kind: 'image', stored: file => file });
-    return { feed, active, timers, defer: fn => { thumbnail = fn; } };
+    return { feed, active, timers, advance: ms => { time += ms; }, defer: fn => { thumbnail = fn; } };
 };
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
@@ -71,6 +71,34 @@ test('releasing a pending search prevents its late results from retaining entrie
     assert.equal(run.entries.length, 0);
     assert.equal(active.size, 0);
     assert.equal(timers.size, 0);
+});
+
+test('100 expired discovery refreshes retain only the current unused discovery', async () => {
+    const { feed, active, timers, advance } = setup();
+    for (let cycle = 0; cycle < 100; cycle++) {
+        const run = feed.discover();
+        await run.ready; await settle();
+        assert.equal(active.size, 1, `discovery retention at cycle ${cycle}`);
+        assert.equal(timers.size, 1);
+        advance(11 * 60_000);
+    }
+    feed.release();
+    assert.equal(active.size, 0);
+    assert.equal(timers.size, 0);
+});
+
+test('refreshing discovery never revokes a session still presenting its media', async () => {
+    const { feed, active, advance } = setup();
+    const discovery = feed.discover();
+    feed.watch(discovery, () => {});
+    await discovery.ready; await settle();
+    advance(11 * 60_000);
+    assert.equal(feed.discover(), discovery);
+    assert.equal(active.size, 1);
+    feed.release();
+    assert.notEqual(feed.discover(), discovery);
+    await settle();
+    feed.release();
 });
 
 const filmBundle = await build({ entryPoints: ['eVe/domains/dashboard/dashboard_film_sources.js'],
