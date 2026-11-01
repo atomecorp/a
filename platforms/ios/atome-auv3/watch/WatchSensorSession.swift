@@ -282,9 +282,23 @@ final class WatchSensorSession: NSObject, WCSessionDelegate, HKWorkoutSessionDel
     }
 
     func workoutBuilderDidCollectEvent(_ workoutBuilder: HKLiveWorkoutBuilder) {}
-    func workoutSession(_ workoutSession: HKWorkoutSession, didChangeTo toState: HKWorkoutSessionState, from fromState: HKWorkoutSessionState, date: Date) {}
+    func workoutSession(_ workoutSession: HKWorkoutSession, didChangeTo toState: HKWorkoutSessionState, from fromState: HKWorkoutSessionState, date: Date) {
+        if toState == .ended { releaseWorkout(workoutSession) }
+    }
     func workoutSession(_ workoutSession: HKWorkoutSession, didFailWithError error: Error) {
         Self.log.error("Watch workout failed: \(error.localizedDescription, privacy: .public)")
+        releaseWorkout(workoutSession)
+    }
+
+    // A workout the system ended, or one that failed, is let go: `startWorkout` ignores every start while one is
+    // held, so a session ended or failed this way left every later activity without its workout (BUG-007/008 E4).
+    private func releaseWorkout(_ ended: HKWorkoutSession) {
+        queue.addOperation {
+            guard self.workout === ended, let builder = self.builder else { return }
+            self.workout = nil
+            self.builder = nil
+            builder.endCollection(withEnd: Date()) { _, _ in builder.discardWorkout() }
+        }
     }
 
     // MARK: - Storage
