@@ -575,6 +575,8 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   couverture 8/8, parité 9/12 à 11/11. **Reste ouvert** : annulation envoyée juste après une modification
   (`history_source_transaction_not_found`, interface et MCP), côté processus du coffre. Détail
   `todo/audit_mcp_r109_2026-11-02.md` § 6–7.
+- **Annulation immédiate corrigée (2026-11-02)** : l'annulation partait au serveur avant que la file d'envoi du
+  navigateur lui ait remis l'écriture ; elle vide d'abord cette file (`flushWorkspace`). Parité 12/12, trois fois.
 
 ### R-107 — Fusion R-104 → main (2026-11-01) : décisions et essais restés ouverts
 - Statut : ATTENTE UTILISATEUR (2026-11-01) — questions posées dans le compte rendu final de la session de fusion,
