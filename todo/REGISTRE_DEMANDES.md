@@ -532,8 +532,8 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   (actions de carte de la montre mises en file, jamais perdues ; syntaxe seulement), clone propre (setup Vitest suivi,
   `logs/` créé). Web réel sans défaut : BUG-015 13/13, Sport 11/11 (BUG-005 : Stop sur la carte ; « En direct » sans
   Stop = décision). Aucun essai appareil : scénarios au § 5 du suivi.
-- Reste à faire par l'agent (2026-11-02, non résolu) : maquettes aux vrais jetons des options BUG-005 (a/b), BUG-006
-  (1/2/3), BUG-010 (1/2/3), BUG-011, BUG-004 et des TÂCHE-001…014 de design (seule la planche V5 `m1_tuiles_v5` existe) ;
+- Reste à faire par l'agent (2026-11-02, non résolu) : BUG-005 (a) maquetté par l'app réelle (page des questions) ; maquettes
+  aux vrais jetons encore à faire pour BUG-006 (1/2/3 ; capture du défaut faite), BUG-010 (1/2/3), BUG-011, BUG-004 et des TÂCHE-001…014 de design (seule la planche V5 `m1_tuiles_v5` existe) ;
   (BUG-008 E1 et E3 corrigés en code le 2026-11-02, essai montre requis.)
   Page des questions : https://claude.ai/artifact/A64AyZo1pEgeidZJm8qJmC.
 - Re-signalement utilisateur,2026-11-02 (chat optimisation) : « en cliquant sur un projet sur iOS [...] directement à la racine du Dashboard », demande d'explication du correctif et de couverture du dossier R104. Audit en lecture seule : les31 entrées du paquet sont présentes au registre, plus BUG-016 ; le rapport global déclare8 entrées touchées et0 correction validée sur appareil. L'iPhone joignable porte toujours1.46(44), mais le paquet de test porte lui aussi44 : ce numéro seul ne prouve pas la présence du runtime corrigé. iPad Atomic indisponible à la lecture CoreDevice. Source c95afeb43 présente,12/12 tests sync relancés avec succès ; ce n'est pas une preuve d'ouverture réelle. Aucune installation, création de projet, modification du volume, écriture Git ou publication faite par cet audit. À établir : installation effective et identité du runtime, puis les5 ouvertures/5 créations/BUG-015/mesure sonore déjà prévus ; ne pas déclarer l'incident résolu.

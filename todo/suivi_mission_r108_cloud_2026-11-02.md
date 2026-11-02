@@ -78,7 +78,7 @@ seulement : `.gitmodules` inchangé) ; tous les tests ci-dessous chargent eVe à
 
 ## 4 bis. Non résolu, à faire par l'agent
 
-- Maquettes aux vrais jetons pour chaque décision du § 3 (BUG-005, BUG-006, BUG-010, BUG-011, BUG-004, TÂCHE de design).
+- Maquettes aux vrais jetons : BUG-005 (a) faite (rendue par l'app réelle, page des décisions) ; restent BUG-006 (capture du défaut faite), BUG-010, BUG-011, BUG-004 et les TÂCHE de design.
 - (BUG-008 E1 et E3 corrigés en code le 2026-11-02 ; essai montre requis.)
 
 ## 5. Essais appareil à faire (scénario et preuve attendue)
