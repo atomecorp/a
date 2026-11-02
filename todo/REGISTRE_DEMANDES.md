@@ -564,6 +564,11 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 - Manque : le classement `UI_only / runtime_only / MCP_exposed / blocked_by_policy / needs_adapter` du § 5.3 n'existe pas
   dans le registre (`eVe/registry/generated/full-map.json` : aucun champ d'exposition) ; inventaire des autres chemins UI
   qui contournent le runtime à faire ; client MCP externe sans IA par le relais (`server/remoteCommandRelay.js`) non testé.
+- **Audit du 2026-11-02 (feu vert utilisateur)** : compte rendu `todo/audit_mcp_r109_2026-11-02.md`. Client MCP
+  officiel sans IA (SDK 1.32.2, stdio → `/ws/api` → page) : 11/11 (`tests/probes/r109_mcp_external_client_web.probe.mjs`),
+  écriture refusée avant octroi, `tools/list_changed` reçu, 189 → 962 outils avec « Modifier ». Classement : 985/994
+  outils d'interface exposés ; 9 invisibles tant que leur panneau n'est pas ouvert (enregistrement paresseux). 28 fichiers
+  écrivent par `Atome.commit` hors du bus (gestes, créations) : tri à faire. Corrections en attente de décision.
 
 ### R-107 — Fusion R-104 → main (2026-11-01) : décisions et essais restés ouverts
 - Statut : ATTENTE UTILISATEUR (2026-11-01) — questions posées dans le compte rendu final de la session de fusion,
