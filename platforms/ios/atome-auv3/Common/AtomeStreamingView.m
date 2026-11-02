@@ -139,7 +139,7 @@ static NSDictionary *failure(NSString *error) { return @{@"ok": @NO, @"error": e
     if (!self.host.superview) return failure(@"streaming_view_host_missing");
     NSString *service = payload[@"service"];
     NSURL *url = [payload[@"url"] isKindOfClass:NSString.class] ? [NSURL URLWithString:payload[@"url"]] : nil;
-    CGRect frame;
+    CGRect frame = CGRectZero;
     if (![service isKindOfClass:NSString.class] || !service.length || ![url.scheme isEqualToString:@"https"]
         || ![self frame:&frame of:payload]) return failure(@"streaming_view_request_invalid");
     if (@available(iOS 17.0, macOS 14.0, *)) {
@@ -166,7 +166,7 @@ static NSDictionary *failure(NSString *error) { return @{@"ok": @NO, @"error": e
     if (!self.view) return failure(@"streaming_view_closed");
     if (![payload[@"visible"] isKindOfClass:NSNumber.class]) return failure(@"streaming_view_request_invalid");
     BOOL visible = [payload[@"visible"] boolValue];
-    CGRect frame;
+    CGRect frame = CGRectZero;
     if (visible && ![self frame:&frame of:payload]) return failure(@"streaming_view_request_invalid");
     if (visible) self.view.frame = frame;
     self.view.hidden = !visible;
