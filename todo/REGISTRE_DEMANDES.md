@@ -20,6 +20,7 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 ## Entrées à exécuter
 
 ### R-106 — Complete atome/eVe optimization campaign
+- Preuve récupérée2026-11-02 : endurance médias QA sur iPad1.42 terminée le2026-11-01 à11:42UTC,102cycles/1808316ms, résultat vert (`ipad_qa_media_endurance.json`). Ne valide ni les projets réels de l'iPhone1.46(44), ni R-108. Le dernier test Web1.42 conserve un échec de cible de ligne ; l'adaptation du test au défilement reste à valider, les autres acceptations restent ouvertes. Dernière priorité utilisateur : audit du nouvel échec R-108 et des points R104 ; aucune réinstallation ancienne à effectuer.
 - Statut : EN COURS (2026-10-31) — current chat, campaign `temp/optimisation_2026-10-30T12-40-47-959Z/`.
 - User request and approval: optimize performance, memory retention and package size across Web, Tauri and iOS without losing functionality; continue automatically. Latest device instruction: « fais tout ce que tu peux faire sans l'ipad et des mo,n retour je le reconnecte ».
 - Validated complete lots: preservation, physical-device control and reference installation (3/8; 37% complete, 63% remaining). Implementation and partial tests do not count as accepted whole lots.
@@ -524,6 +525,7 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   `c0*.png`. Bloqué : lignes avant Lancer sur une carte cardio (question 62).
 
 ### R-108 — Incident iOS 1.46 (44) : projets, Sport, registre R-104, design V5 (2026-11-01 soir)
+- Re-signalement utilisateur,2026-11-02 (chat optimisation) : « en cliquant sur un projet sur iOS [...] directement à la racine du Dashboard », demande d'explication du correctif et de couverture du dossier R104. Audit en lecture seule : les31 entrées du paquet sont présentes au registre, plus BUG-016 ; le rapport global déclare8 entrées touchées et0 correction validée sur appareil. L'iPhone joignable porte toujours1.46(44), mais le paquet de test porte lui aussi44 : ce numéro seul ne prouve pas la présence du runtime corrigé. iPad Atomic indisponible à la lecture CoreDevice. Source c95afeb43 présente,12/12 tests sync relancés avec succès ; ce n'est pas une preuve d'ouverture réelle. Aucune installation, création de projet, modification du volume, écriture Git ou publication faite par cet audit. À établir : installation effective et identité du runtime, puis les5 ouvertures/5 créations/BUG-015/mesure sonore déjà prévus ; ne pas déclarer l'incident résolu.
 - Statut : ATTENTE UTILISATEUR (2026-11-01) — question posée en fin de session.
 - Source : mission « MISSION COMPLÈTE — incident iOS build 44, registre R-104 intégral et design V5 » (2026-11-01), dossier
   `~/Desktop/R104_MAIN_PACKAGE_2026-11-01/`. Rapports : `todo/rapport_incident_ios_build44.md`,
