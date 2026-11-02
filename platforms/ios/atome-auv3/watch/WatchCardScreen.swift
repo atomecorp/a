@@ -204,7 +204,9 @@ struct WatchStopSlider: View {
                     .background(Circle().fill(theme.color("disc")))
                     .shadow(color: .black.opacity(0.5), radius: 8, y: 6)
                     .offset(x: travel)
-                    .gesture(DragGesture()
+                    // A drag that starts on the disc is the slider's, never the pages' (BUG-008 E3): inside the horizontal
+                    // paging scroll view a plain gesture lost it, and sliding to ■ turned the page instead of stopping.
+                    .highPriorityGesture(DragGesture(minimumDistance: 2)
                         .onChanged { drag in travel = min(course, max(0, drag.translation.width)) }
                         .onEnded { _ in
                             if travel >= course - 4 { stop() }
