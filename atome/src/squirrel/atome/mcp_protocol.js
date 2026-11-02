@@ -8,8 +8,8 @@
 // decided (the relay does this round trip for a program, teleport/remote_command.js).
 import { handleAtomeMCPRequestAsync } from './mcp.js';
 import { atomeMCPHandlers } from './mcp_handlers.js';
-import { cancelOperationRecord, hasOwn, MCP_ERROR, mcpError, mcpOperations } from './mcp_core.js';
-import { ensureRuntimeToolApi, loadAIAgent } from './mcp_bridges.js';
+import { cancelOperationRecord, hasOwn, MCP_ERROR, mcpError, mcpOperations, readMcpToolsGeneration } from './mcp_core.js';
+import { ensureRuntimeToolApi, loadAIAgent, loadMcpToolModules } from './mcp_bridges.js';
 import { MCP_RESOURCE_TEMPLATES } from './mcp_resources.js';
 
 // Newest first: a client asking for one of these gets it, any other gets the newest.
@@ -37,6 +37,7 @@ async function entry(method, params, transport, requestId) {
 // A tool name is a business method first, then a Runtime V2 tool, then an assistant tool (as tools/list orders them).
 async function toolRequest(name, args) {
     if (hasOwn.call(atomeMCPHandlers, name) && !INFRASTRUCTURE_METHOD.test(name)) return { method: name, params: { ...args } };
+    await loadMcpToolModules();
     if (await ensureRuntimeToolApi().resolveTool(name)) return { method: 'runtime.tools.call', params: { tool_id: name, input: { ...args } } };
     if ((await loadAIAgent()).getTool(name)) return { method: 'ai.tools.call', params: { tool_name: name, params: { ...args } } };
     throw mcpError(MCP_ERROR.INVALID_PARAMS, `mcp_tool_unknown:${name}`);
@@ -72,6 +73,23 @@ export function cancelMcpRequest(requestId) {
     return operation ? cancelOperationRecord(operation.operation_id) : { ok: false, error: 'mcp_operation_not_found' };
 }
 
+// One client's list, built for its first page and kept for the next ones until the catalog or its grant changes
+// (`mcp.tools.list_changed`) or a minute passes: the pages of one listing are slices of one list, and a
+// listing costs one build instead of one per page.
+const LISTING_TTL_MS = 60 * 1000;
+const listings = new Map();
+const listingKey = transport => JSON.stringify([transport?.source?.type || '', transport?.source?.from_program_id || '',
+    transport?.actor?.actor_id || transport?.actor?.user_id || '']);
+async function listedTools(params, transport, requestId) {
+    const key = listingKey(transport);
+    const kept = listings.get(key);
+    const generation = readMcpToolsGeneration();
+    if (params.cursor !== undefined && kept && kept.generation === generation && Date.now() - kept.at < LISTING_TTL_MS) return kept.tools;
+    const tools = (await entry('mcp.tools.list', {}, transport, requestId)).tools;
+    listings.set(key, { tools, generation, at: Date.now() });
+    return tools;
+}
+
 const METHODS = {
     initialize: async (params) => ({
         protocolVersion: MCP_PROTOCOL_VERSIONS.includes(params.protocolVersion) ? params.protocolVersion : MCP_PROTOCOL_VERSIONS[0],
@@ -80,7 +98,7 @@ const METHODS = {
     }),
     ping: async () => ({}),
     'tools/list': async (params, transport, requestId) => {
-        const tools = (await entry('mcp.tools.list', {}, transport, requestId)).tools;
+        const tools = await listedTools(params, transport, requestId);
         const offset = params.cursor === undefined ? 0 : Number(params.cursor);
         if (!Number.isInteger(offset) || offset < 0 || offset > tools.length) throw mcpError(MCP_ERROR.INVALID_PARAMS, 'mcp_cursor_invalid');
         const next = offset + TOOLS_PAGE_SIZE;

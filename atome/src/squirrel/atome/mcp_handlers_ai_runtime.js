@@ -1,5 +1,5 @@
 import { ATOME_MCP_PROTOCOL } from './mcp_core.js';
-import { ensureRuntimeCommandBus, ensureRuntimeToolApi, loadAIAgent } from './mcp_bridges.js';
+import { ensureRuntimeCommandBus, ensureRuntimeToolApi, loadAIAgent, loadMcpToolModules } from './mcp_bridges.js';
 import { buildRuntimeInvocationPayload, normalizeRuntimeToolEntry, normalizeRuntimeToolIdentifier, projectRuntimeMcpResult } from './mcp_runtime.js';
 import { validateContractCommandInput } from './mcp_handlers_contracts.js';
 
@@ -52,6 +52,7 @@ export const createMcpAiRuntimeHandlers = () => ({
         if (typeof runtime.listTools !== 'function') {
             throw new Error('Runtime V2 listTools is not available');
         }
+        await loadMcpToolModules();
         const tools = await runtime.listTools({
             includeDisabled: params?.includeDisabled === true
         });
@@ -64,6 +65,7 @@ export const createMcpAiRuntimeHandlers = () => ({
         const invalid = contractInputError(params);
         if (invalid) return { ok: false, error: invalid };
         const runtime = ensureRuntimeToolApi();
+        await loadMcpToolModules();
         const payload = buildRuntimeInvocationPayload(params, {
             action: 'pointer.click',
             presentation: 'mcp',
@@ -73,6 +75,7 @@ export const createMcpAiRuntimeHandlers = () => ({
     },
     async 'runtime.tools.batch_call'(params = {}) {
         const runtime = ensureRuntimeToolApi();
+        await loadMcpToolModules();
         if (typeof runtime.invokeBatch !== 'function') {
             throw new Error('Runtime V2 invokeBatch is not available');
         }

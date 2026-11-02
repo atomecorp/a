@@ -1,4 +1,4 @@
-From ad8b5cc37e64b2f1b5002a38d98ca400452cb503 Mon Sep 17 00:00:00 2001
+From 9887aedec27076f28e41e1e3e532f7ee5e8528ea Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Mon, 2 Nov 2026 17:26:20 +0000
 Subject: [PATCH] =?UTF-8?q?Dashboard=20swipe-up=20navigation,=20menu=20swi?=
@@ -15,7 +15,7 @@ dashboard_ongoing_tool.js: the orange disc above the assistant on every view, st
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01Mnbqjvj1Z7YsAuXpENLdNj
 ---
- documentations/FRAMEWORK_STATE.md             |  15 +++
+ documentations/FRAMEWORK_STATE.md             |  14 +++
  .../dashboard/dashboard_brick_session_card.js |   2 +-
  .../dashboard_communication_input.js          | 114 +++++++++++-------
  .../dashboard/dashboard_footer_navigation.js  |  27 +++--
@@ -45,14 +45,14 @@ Claude-Session: https://claude.ai/code/session_01Mnbqjvj1Z7YsAuXpENLdNj
  .../bevy_panel/bevy_panel_editable_text.js    |  24 ++++
  .../bevy_panel/bevy_panel_tile_gesture.js     |   7 +-
  ...tome_contextual_edit_projection_runtime.js |   7 +-
- 30 files changed, 430 insertions(+), 135 deletions(-)
+ 30 files changed, 429 insertions(+), 135 deletions(-)
  create mode 100644 domains/dashboard/dashboard_ongoing_tool.js
 
 diff --git a/documentations/FRAMEWORK_STATE.md b/documentations/FRAMEWORK_STATE.md
-index fef4a6a..639d890 100644
+index e4595f2..fb1bfcf 100644
 --- a/documentations/FRAMEWORK_STATE.md
 +++ b/documentations/FRAMEWORK_STATE.md
-@@ -1590,6 +1590,21 @@ No defect absence is asserted by this initial governance task.
+@@ -1590,6 +1590,20 @@ No defect absence is asserted by this initial governance task.
  
  ## 5. Recent task record
  
@@ -70,10 +70,9 @@ index fef4a6a..639d890 100644
 +- Tests: new `tests/eve/dashboard_swipe_navigation.test.mjs` 5/5 (red on the previous code: the bricks did not exist). Real Web app (Chromium WebGPU under Xvfb, real CDP touches, temp probe `temp/swipe_r110/swipe.probe.mjs`): 13/13 on the new code, 7/13 on the previous code (the new gestures failing as expected). Back tap under a rubric 4/4 in isolation (one full-run miss traced to a tile tap withdrawn by an assistant proposal, existing behaviour). Console: three « Ignored attempt to cancel a touchstart » browser interventions, identical on the previous code. Pre-existing Vitest failures unchanged (`dashboard_eve_interactions` 4, `mystic_release_dwell_fling` 6, `bevy_ui_main_menu_contract` missing helper). Guardrails: syntax 3411 files, component reuse, no-fallbacks, DOM projection, mutation ownership, browser contract imports, empty-catch 357.
 +- Kept: the Dashboard tool (`dashboard_root`) and the project's Organize handle — a swipe is not discoverable and not available to everyone (switch control, VoiceOver); removing them is a user decision.
 +- **To verify**: on an iPhone and an iPad (real fingers, keyboard open, safe areas), eVe Basic, a left hand; the grown field's look (an existing glass grown, no new element) for the user's validation; the Messages tool's swipe was verified by unit routing only (no pending message in the test account).
-+
- ### 2026-11-02 — R-108 cloud mission: quota release edge cases, beep anchor, watch queue, real Web runs
+ ### 2026-11-02 — Android 1.46 in-place upgrade and production server refresh
  
- - BUG-012/013 (atome `sync_scope_store.js`, `sync_engine.js`, `spark.js`): reproduced against the real engine and `session.js#setCurrentProjectCache` under a simulated 5 M-character quota. Fixed: a missing device id was written in the engine's constructor and threw (no release ever ran) — now written after the release; the boot awaits `releaseLegacySyncScopes` right after its boot wave; an unreadable legacy key is kept verbatim in IndexedDB (`unreadable_legacy:<key>`), freed and reported (`sync_scope_legacy_unreadable`); a failed IndexedDB move frees nothing, is reported and retried by the next load. `tests/eve/sync_scope_quota.test.mjs` 7/7 (4 red before). Real Web app (Chromium headful under Xvfb, WebGPU SwiftShader, isolated test Fastify): quota filled with the legacy scopes, reload, 5 creations by `ui.new_project` and 5 openings by `ui.project.open` all stay in their project (26/26); main's own `c95afeb4` also passes that central scenario.
+ - The real Samsung SM-A236B / Android 14 upgrade exposed a native SQLite failure: build 12 installed in place but ADOLE initialization panicked on missing `news_publications.thread_ref` before the canonical index. Build 12 was withheld from Firebase. No application storage was cleared.
 diff --git a/domains/dashboard/dashboard_brick_session_card.js b/domains/dashboard/dashboard_brick_session_card.js
 index 84a392f..a12a420 100644
 --- a/domains/dashboard/dashboard_brick_session_card.js

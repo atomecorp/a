@@ -4,7 +4,7 @@
 // the transport actor's: a tool its capabilities or sandbox refuse is not offered. Input schemas are the live
 // owners' (contracts, runtime records, gateway parameters); words and risk tiers are the registry's.
 import { MCP_ERROR, cloneValue, mcpError } from './mcp_core.js';
-import { ensureRuntimeToolApi, loadAIAgent } from './mcp_bridges.js';
+import { ensureRuntimeToolApi, loadAIAgent, loadMcpToolModules } from './mcp_bridges.js';
 import { resolveAccessPolicy } from './mcp_security_policy.js';
 import { hasActorCapability, hasSandboxProfile } from './mcp_security.js';
 import { findContractCommand } from './mcp_contract_families.js';
@@ -46,6 +46,7 @@ export async function listUnifiedMcpTools(actor, handlers) {
         add({ name, inputSchema: methodSchema(name), source: 'method', policy: resolveAccessPolicy(name, {}) });
     });
     const runtime = ensureRuntimeToolApi();
+    await loadMcpToolModules();
     for (const entry of await runtime.listTools({ includeDisabled: false })) {
         const name = String(entry?.id || '').trim();
         add({ name, inputSchema: cloneValue(entry?.input_schema || OPEN_SCHEMA), ...(entry?.output_schema ? { outputSchema: cloneValue(entry.output_schema) } : {}),

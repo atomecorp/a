@@ -578,6 +578,14 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   écriture refusée avant octroi, `tools/list_changed` reçu, 189 → 962 outils avec « Modifier ». Classement : 985/994
   outils d'interface exposés ; 9 invisibles tant que leur panneau n'est pas ouvert (enregistrement paresseux). 28 fichiers
   écrivent par `Atome.commit` hors du bus (gestes, créations) : tri à faire. Corrections en attente de décision.
+- **Corrections du 2026-11-02 (1, 2, 3 validés par l'utilisateur)** : outils paresseux chargés au premier appel MCP,
+  `tools/list_changed` à l'apparition d'un outil, liste paginée gardée ; chaque écriture tracée sur le bus après la
+  trame (1–7 µs côté geste) ; trois bugs d'annulation corrigés (scène, état relu, écritures en vol). Sondes : externe 11/11,
+  couverture 8/8, parité 9/12 à 11/11. **Reste ouvert** : annulation envoyée juste après une modification
+  (`history_source_transaction_not_found`, interface et MCP), côté processus du coffre. Détail
+  `todo/audit_mcp_r109_2026-11-02.md` § 6–7.
+- **Annulation immédiate corrigée (2026-11-02)** : l'annulation partait au serveur avant que la file d'envoi du
+  navigateur lui ait remis l'écriture ; elle vide d'abord cette file (`flushWorkspace`). Parité 12/12, trois fois.
 
 ### R-107 — Fusion R-104 → main (2026-11-01) : décisions et essais restés ouverts
 - Statut : ATTENTE UTILISATEUR (2026-11-01) — questions posées dans le compte rendu final de la session de fusion,
@@ -606,6 +614,16 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   - TÂCHE-002, 003, 009, 010–014 : maquettes à produire puis valider.
 - Reste à coder une fois une build possible : montre E1–E4 / S1–S3 (Swift, `temp/r104merge/agents/watch/protocole_montre.md`).
 - Non vérifié : appareil iOS (build > 43), montre, Tauri, Android.
+
+### R-110 — Android local test, tester distribution and server update (2026-11-02)
+- Statut : FAIT (delivery verified 2026-11-02) — Android 1.46.0 (13) installed/tested/distributed, Firebase notifications confirmed, production atome/eVe 1.46 verified. Cache-maintenance limitation is recorded below.
+- Source: local Codex chat, 2026-11-02: « Tu vas lancer le script qui installe l'application sur Android. le telephone est connecté […] tu testes juste […] locale, après t'envoies une nouvelle version […] tu avertis les gens […] mettre le serveur à jour à la dernière version de Atom ».
+- Authorized: local Android installation/test, then Firebase distribution to the existing configured testers with e-mail notification, and production server update. The user accepted USB debugging and asked to authorize this computer permanently. No Git publication was requested or performed during the initial delivery; the user subsequently requested synchronization of the result to GitHub.
+- Done: server atome/eVe 1.46, atome source `a3dbe8b96`, eVe `ccdcf1ab`; data/source backups validated, environment unchanged, active service, database/public HTTPS/identity checks pass. Exact evidence in `temp/android_delivery_2026-11-02/REPORT.md` and its server logs.
+- Local acceptance found a real upgrade failure: build 12 installs without clearing data but ADOLE initialization panics on `news_publications.thread_ref`. It was not uploaded or distributed. Canonical native pre-schema preparation extracted to `platforms/desktop-tauri/src/server/local_atome_schema.rs` and completed for News; regression reproduced the exact error, then all four native SQLite tests pass. M0 passes.
+- Physical acceptance done: build 13 installs in place, renders Home, opens Contacts/Objectives by real touches, returns through the footer, resumes the same view/process and passes another cold launch. Native logs have no fatal/database/terminal-renderer failure in the tested window. Firebase confirms release `2jrio4vva3eq8` and notification of the configured group/addresses; the distributed immutable APK matches the tested SHA-256. Proof: `temp/android-release-uqQWga/report.json`. No unanswered permission request remains. Temporary dispatcher: `temp/android_delivery_2026-11-02/dispatch.mjs`; active acceptance directory: `temp/android_delivery_2026-11-02/attempt13/`.
+
+- Operational limitation: required cache cleanup was run, but macOS refuses CoreDevice `AppInstallationBinaryDeltas` (EPERM), including the preview with process access. Cleanup cannot complete without external OS access; no permission setting was changed. Logs: `temp/android_delivery_2026-11-02/cleanup.log` / `cleanup-preview.log`. This does not leave any installation/publication/server step pending. The native repair and tests were initially left local under the Git policy. The subsequent user request authorizes synchronization of this result to GitHub; fetched main updates are integrated, with 53 JavaScript/release checks, four native SQLite tests and M0 passing. Xcode window state is excluded.
 
 ## Attentes de ton côté (aucune session ne peut les faire seule)
 
