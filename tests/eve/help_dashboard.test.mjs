@@ -23,7 +23,9 @@ describe('Dashboard Help', () => {
         const result = await source({ query: 'aide', scopes: ['activities'] });
         expect(result.map(entry => entry.key)).toEqual(['help', 'activity']);
     });
-    it.each([['right', false, 0], ['right', true, 90], ['left', false, 270], ['left', true, 180]])
+    // The band laid for a right hand (V6.1, validated 2 Nov. 2026): the glass, Help right after it, Back's box at the far
+    // end whether Back shows or not (330 − 90 = 240; the glass 240 − 5 − 65 = 170, Help at 175); mirrored for a left hand.
+    it.each([['right', false, 175], ['right', true, 175], ['left', false, 95], ['left', true, 95]])
     ('places Help for %s hand, Back present=%s', (hand, hasBack, expected) => {
         const env = { __EVE_HANDEDNESS__: hand, __eveProfilePreferences: { visual: { dashboardStyle: 'eve_basic' } } };
         vi.stubGlobal('window', env);

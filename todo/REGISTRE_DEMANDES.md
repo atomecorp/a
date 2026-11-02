@@ -549,14 +549,67 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 - Toujours ouvert : décisions R-107 et V5 D1–D6 ; affichage de la date des vidéos (maquette) ; montre E1–E3 ; push,
   build 1.46 (45) et déploiement serveur sur accord explicite.
 
-### R-110 — Trois tâches du 2026-11-02 : balayages, menus + « en cours », normes design V6.1
-- Statut : ATTENTE UTILISATEUR (2026-11-02) — tâches 1 et 2 FAITES (preuves ci-dessous) ; tâche 3 : arbitrages posés dans le compte rendu final de la session cloud du 2026-11-02 (branche de session `claude/friendly-babbage-rvncjs`), rien codé.
+### R-111 — Trois tâches du 2026-11-02 : balayages, menus + « en cours », normes design V6.1
+- Statut : ATTENTE UTILISATEUR (2026-11-02) — tâches 1, 2 et 3 FAITES (preuves ci-dessous) ; un point ouvert : l'outil « tâche de fond » (inexistant dans le code).
 - Source : chat cloud du 2026-11-02, « Thread, c'est trois tâches… tu feras cette tâche [V6.1] en dernier, de façon à ce que je vérifie avant » ; prompts joints `Prompt_atome_eVe_gestes_swipe_navigation.md`, `PROMPT_CLAUDE_CORRECTIONS_GESTES_MENUS_ACTIVITE_ATOME.md`, `PROMPT_NORMES_DASHBOARD_atome_eVe_V6_1.md`, maquette `temp/v61_audit/src/v61.html`.
 - Tâche 1 FAIT : balayage vers le haut depuis le sol de l'accueil / d'une rubrique, Retour, Suivant ou le ✕ → racine ; assistant → en grand (geste natif) ; outil Messages → toutes les communications ; champ → agrandi 3 outils (texte, focus, curseur gardés), replié par balayage vers le bas ou vide et sans focus. Preuves : `tests/eve/dashboard_swipe_navigation.test.mjs` 5/5, sonde réelle `temp/swipe_r110/swipe.probe.mjs` 13/13 (7/13 sur l'ancien code). Icône Dashboard gardée (règle 9 du prompt). Non vérifié : balayage de l'outil Messages avec un message en attente ; iPhone/iPad.
 - Tâche 2 FAIT : 3 menus (rail, ruban projet, ruban principal) — balayage rapide = défilement sans rien lancer, exploration lente = loupe sans rien lancer, tap = une fois, tap qui arrête l'inertie = rien, loupe entière au bord ; bouton « en cours » = disque orange au-dessus de l'assistant (accueil, rubrique, projet ; s'efface sur la bande d'un panneau), toucher → la séance. Preuves : `tests/eve/menu_swipe_explore_tap.test.mjs` 6/6, `tests/eve/ongoing_tool.test.mjs` 2/2, sondes `temp/swipe_r110/{menu 7/7, rail 12/12, rail_ongoing 15/15, ongoing 8/8}.probe.mjs`, `tests/probes/r108_sport_session_web.probe.mjs` 11/11.
 - Décidé par ta demande, à reporter dans AGENTS.md règle 13 (son texte dit encore « ▶ ») : le disque orange ; le toucher ouvre la séance quand une seule tourne (R-107 BUG-005 option b). Reste ouvert (R-107 BUG-006 cause 2) : garder la case du bouton libre dans les panneaux.
 - Tâche 3, questions posées (V6.1 contre la charte AGENTS.md 11–16) : (1) arrondi 3 px partout ou règle 14 (1/10 du petit côté, 12 px max) ; (2) bande du bas droitier : Assistant à gauche / Retour à droite (V6.1) ou Retour à gauche / Assistant à droite (règle 13) ; (3) Précédent/Suivant dans une rangée au-dessus de Retour (V6.1) ou dans la bande (règle 13) ; (4) échelle adaptée à l'écran (V6.1) ou tailles fixes (règle 12) ; (5) libellés 9 caractères (V6.1) ou 6 lettres pour un outil de 60 (règle 11) ; (6) verre 33 % / flou 9 px et typographie 12 / 15,6 px appliqués tels quels ? ; (7) « iPhone Duo déplié » : aucun appareil pliable pris en charge dans le code (le « Duo » existant est deux outils à l'écran) — à confirmer. Planche : `temp/v61_audit/out/sheet_v61_vs_current.png`.
 - Manque dans le code : tout la tâche 3 (rien codé). Git : poussé sur `main` à ta demande (« met tout sur main », 2026-11-02) — eVe `94de6f1`, atome `main` (pointeur du sous-module mis à jour).
+
+- Réponses aux 7 questions (2026-11-02, session cloud, outil de questions) : (1) arrondi 3 px partout (règle 14 à réécrire) ;
+  (2) bande du bas droitier : Assistant tout à gauche, Retour tout à droite, miroir pour un gaucher (règle 13 à réécrire) ;
+  (3) Précédent / Suivant dans une rangée juste au-dessus de Retour, dans la grille (règle 13) ; (4) unité FIXE : 60 / 120 pt
+  partout, plus de colonnes sur grand écran, défilement sur petit (règle 12 inchangée ; la grille 6×8 / 8×6 de la V6.1 n'est
+  donc pas mise à l'échelle) ; (5) libellés 9 caractères puis « ... » partout, tuiles et outils (règle 11 à réécrire) ;
+  (6) verre 33 % / flou 9 px, police 12 px et ratio 1,3 partout, heure-date-météo comprises, et : l'heure et la météo
+  deviennent des tuiles ; la loupe des barres garde la taille des caractères et montre plus de caractères quand l'outil
+  grandit ; (7) appliquer la disposition Duo (Preview 4:3 + outils) au Duo existant ; l'utilisateur met Xcode à jour pour
+  le support du pliable.
+- Corrections de l'utilisateur sur la maquette (2026-11-02) : le Carnet de santé quitte l'accueil pour la rubrique Moniteur ;
+  Heure et Météo = deux tuiles de 3 × 1 unités (180 × 60), sans libellé, au sommet ; en dessous l'Agenda = 6 × 1, son libellé
+  et son icône masqués dès qu'un rendez-vous s'affiche ; la tuile Contacts n'affiche plus le dernier contact, elle garde
+  toujours son libellé et son icône. Maquette refaite avec ces corrections (mêmes fichiers, + `m7_moniteur.png`).
+- Correction suivante (2026-11-02) : en paysage, le logo au centre de l'espace vide entre le sommet et les tuiles du bas ;
+  l'ensemble des tuiles en 4:3 dans les deux orientations. Fait dans la maquette : portrait 6 × 8 unités (360 × 480),
+  paysage 12 × 9 (720 × 540) sur un iPad (`temp/v61_audit/mockup/planche_4_3.png`). Question posée : sur un iPhone en
+  paysage (402 pt de haut) le bloc de 540 + la bande ne tient pas à unité fixe — défilement, unité réduite en paysage
+  téléphone, ou autre disposition ?
+- Corrections suivantes (2026-11-02) : la tuile Capture au centre (portrait : colonnes 3-4 ; paysage : 4e des six, le plus
+  au centre possible) ; mode « 07 Finder » de la V6.1 appliqué à la bande du bas : dès que le champ ne peut pas être affiché
+  entièrement, seule sa loupe se voit ; un toucher lui donne toute la place disponible, les autres outils de la bande se
+  compriment en traits de 4 px dans une case, l'assistant reste fixe, ✕ à la place de Retour (animation 0,68 s
+  cubic-bezier(.24,.8,.19,1), champ en fondu après 0,2 s). Maquette : `temp/v61_audit/mockup/bande_traits_etapes.png`,
+  `bande_traits.gif`, `planche_4_3.png`.
+- Correction (2026-11-02) : l'outil Atome (l'assistant) et le « V » au centre du Dashboard n'ont aucun socle : leur dessin seul,
+  sur le fond (maquette refaite avec les SVG réels `atome_curve.svg` + `atome_dot.svg`).
+- **Maquette VALIDÉE par l'utilisateur (« validé », 2026-11-02)**, avec les deux points ouverts tranchés par la maquette validée :
+  iPhone en paysage = unité réduite pour que le bloc 4:3 et la bande tiennent sans défilement (recommandation) ; libellés des
+  tuiles de 60 = police 12 px gardée, texte raccourci à la largeur (« Conta… »). Codage en cours.
+- Maquette de ces choix (2026-11-02), pastilles, couleurs et fond réels de l'app : `temp/v61_audit/mockup/planche_portrait.png`
+  (droitier, gaucher, rubrique paginée, Duo) et `planche_paysage_loupe.png` (paysage, loupe) ; sources `temp/v61_audit/mockup/build.py`.
+  Montrée à l'utilisateur, en attente de ses corrections ou de sa validation ; ensuite le code et la mise à jour d'AGENTS.md
+  (règles 11, 12, 13, 14) par lui.
+- Demandes ajoutées pendant le codage (2026-11-02) : optimiser au max les performances graphiques ; supprimer l'obsolète,
+  l'inutile et le redondant ; zone de preview 4:3 au-dessus des outils ; garder la place en bas pour l'outil Communication,
+  le disque « en cours » et un outil « tâche de fond » ; ne rien changer au fonctionnel ; la même charte en mode projet
+  (ruban principal, menu latéral) en gardant clic, loupe, glisser-défiler ; le Mystic garde son rangement mais ses dalles
+  prennent le nouveau design et les nouvelles couleurs ; coin replié en haut à droite des tuiles à plusieurs items
+  (Mystic et Dashboard).
+- Tâche 3 CODÉE (2026-11-02) — preuves :
+  - jetons servis par l'app réelle : arrondi 3, verre 33 % / 9 px, libellés 15,6 / 12 px, coupe 9 caractères, la loupe
+    montre le nom entier à police égale (`temp/swipe_r110/tokens.probe.mjs` 11/11, captures `temp/swipe_r110/out_tokens/`) ;
+  - accueil sur la matrice (portrait, iPad paysage, téléphone paysage, iPad portrait), rubrique avec plaques et coin replié,
+    rangée Précédent / Suivant libre au-dessus de Retour (mêmes captures) ; gaucher en miroir et eVe Basic
+    (`temp/swipe_r110/styles.probe.mjs` 4/4, `out_styles/`) ; bande « Finder » loupe → champ plein → ✕
+    (`temp/swipe_r110/finder.probe.mjs` 5/5, `out_finder/`) ;
+  - tests : `tests/eve` sans nouvel échec par rapport à la base (la base a 307 échecs préexistants, sans lien avec ce travail).
+  - AGENTS.md règles 11–14 réécrites, `maps/DESIGN_MAP.md`, `maps/CODEMAP.md`, `eVe/documentations/FRAMEWORK_STATE.md` à jour.
+- Point ouvert à poser à l'utilisateur : l'« outil tâche de fond » demandé n'existe pas dans le code (seuls existent l'outil
+  Messages et le disque « en cours ») ; leur place est gardée (le disque au-dessus de l'assistant, Messages dans la bande).
+  À préciser par l'utilisateur : ce que cet outil doit signaler.
+- Git : rien n'est commité ni poussé (aucune demande d'écriture Git pour la tâche 3).
 
 ### R-109 — Vérification MCP « universel en accès » (cahier V1.2/V1.23) sur l'app réelle (2026-11-02)
 - Statut : OUVERT (2026-11-02) — vérification partielle faite, écart démontré, audit complet et correction à faire.

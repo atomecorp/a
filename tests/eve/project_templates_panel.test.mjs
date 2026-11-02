@@ -117,7 +117,7 @@ test('programme templates paint standard square glass cards and retain each cano
             expect(left).toBe(tokens.metrics.margin + index * (width + tokens.metrics.gap));
             expect(corner_radius).toBe(tokens.metrics.contentRadius);
             expect(background.props.color).toBe('rgba(0,0,0,0)');
-            expect(material.backdrop.blurPx).toBe(16);
+            expect(material.backdrop.blurPx).toBe(9);
             const payload = mapVirtualSceneNodeToBevyPayload(normalizeAtomeRenderNode({
                 id: refs.get(background.ref), type: background.type, properties: background.props
             }));

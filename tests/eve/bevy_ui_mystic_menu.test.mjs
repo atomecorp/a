@@ -218,7 +218,7 @@ test('outer rings retain every tool at its original size in distinct visible cel
         assert.deepEqual(edge.center, { x: 0, y: 0 });
         assert.deepEqual(edge.tiles.map(tile => tile.slot), center.tiles.map(tile => tile.slot));
         assert.equal(new Set(cells(edge)).size, count);
-        assert.ok(edge.tiles.every(tile => tile.size === TILE && tile.radius === TILE / 10));
+        assert.ok(edge.tiles.every(tile => tile.size === TILE && tile.radius === 3));
         assert.equal(insideSurface(edge), true);
     }
 });
@@ -441,10 +441,10 @@ test('a tile turns about the axis that separates it from the centre, toward the 
     assert.deepEqual([north.dy, north.axis, north.axisId, north.direction], [-1, 'x', 0, -1]);
     const south = at([600, 460], 'south');
     assert.deepEqual([south.dy, south.direction, south.axis], [1, 1, 'x']);
-    // The one radius rule (AGENTS.md rule 14): a tenth of the side, 12 px at most.
-    assert.equal(resolveMysticTileRadius({ tileSize: TILE }), 6);
-    assert.equal(resolveMysticTileRadius({ tileSize: 2 * TILE }), 12);
-    assert.equal(resolveMysticTileRadius({ tileSize: 4 * TILE }), 12);
+    // The one radius rule (AGENTS.md rule 14, V6.1 validated 2 Nov. 2026): 3 px whatever the side.
+    assert.equal(resolveMysticTileRadius({ tileSize: TILE }), 3);
+    assert.equal(resolveMysticTileRadius({ tileSize: 2 * TILE }), 3);
+    assert.equal(resolveMysticTileRadius({ tileSize: 4 * TILE }), 3);
 });
 
 test('the mystic tree carries one tile per entry and the Atom handle alone in the middle', () => {
@@ -452,7 +452,7 @@ test('the mystic tree carries one tile per entry and the Atom handle alone in th
     assert.equal(geometry.mystic, true);
     assert.equal(geometry.placements.length, 9);
     assert.deepEqual(geometry.placements.map((placement) => placement.mystic.slot), MYSTIC_SLOT_NAMES.slice(0, 9));
-    assert.equal(geometry.radius, TILE / 10, 'the product tiles follow the one radius rule');
+    assert.equal(geometry.radius, 3, 'the product tiles follow the one radius rule');
     assert.equal(geometry.contentScale, 1);
     assert.equal(geometry.centerItem.key, 'ai');
     const tree = buildBevyUiMysticTree({ geometry });
@@ -670,8 +670,9 @@ test('Mystic plates carry common glass with no second family tint', () => {
     const layout=place(8,600,400);
     const uniforms=buildMysticSurfaceUniforms({tiles:layout.tiles,width:RECT.width,height:RECT.height});
     assert.deepEqual(uniforms.assistant_background_tint,[...MYSTIC_GLASS_TINT]);
-    assert.equal(uniforms.assistant_background_tint[3],.69);
-    assert.equal(uniforms.background_blur_px,16);
+    // The tools' glass (V6.1, validated 2 Nov. 2026): 33 %, blurred 9 px.
+    assert.equal(uniforms.assistant_background_tint[3],.33);
+    assert.equal(uniforms.background_blur_px,9);
     for(const family of ['cross','orange','blue']) assert.deepEqual(resolveMysticFamilyColor(family),[0,0,0,0]);
 });
 
@@ -1107,10 +1108,10 @@ test('a tight seam keeps the anti-aliasing inside the gap', () => {
 // -----------------------------------------------------------------------------
 
 test('every Mystic element is skinned from the shared Atome tokens', () => {
-    // The plate IS the system surface, its shadow IS that surface's contact
+    // The plate IS the tools' glass (V6.1), its shadow IS that glass's drop
     // shadow, its centre IS the product mark: nothing in the Mystic menu picks a
     // colour of its own.
-    const surface = EVE_COMMON_SKIN_TOKENS.bevy.systemSurface;
+    const surface = EVE_COMMON_SKIN_TOKENS.bevy.toolSurface;
     assert.equal(EVE_MYSTIC_SKIN_TOKENS.plate.background, surface.background);
     assert.equal(EVE_MYSTIC_SKIN_TOKENS.plate.backdropBlurPx, surface.backdrop.blurPx);
     assert.equal(EVE_MYSTIC_SKIN_TOKENS.plate.backdropTint, surface.backdrop.tint);
