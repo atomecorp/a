@@ -7,20 +7,29 @@
 const DATABASE = 'squirrel_sync_scope';
 const STORE = 'scopes';
 // The localStorage keys this store replaces: the scopes they hold are moved here once,
-// then the keys are freed.
-const MOVED_STREAMS_KEY = 'squirrel_sync_streams_v1';
-const MOVED_CURSORS_KEY = 'squirrel_sync_cursors_v1';
+// then the keys are freed (`release`).
+const LEGACY_KEYS = ['squirrel_sync_streams_v1', 'squirrel_sync_cursors_v1'];
+// A legacy key whose text is not a JSON object is kept here verbatim, under this prefix and
+// its key name (scope keys start with the server environment, never with this prefix).
+const UNREADABLE_PREFIX = 'unreadable_legacy:';
 
 const asObject = (value) => (value && typeof value === 'object' && !Array.isArray(value) ? value : {});
-const parseObject = (raw) => (raw ? asObject(JSON.parse(raw)) : {});
 const toScope = (record) => ({
     streams: Array.isArray(record?.streams) ? record.streams : [],
     cursors: asObject(record?.cursors)
 });
+const parseLegacy = (raw) => {
+    try {
+        const value = JSON.parse(raw);
+        return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+    } catch (_) {
+        return null; // the caller keeps the text and reports it
+    }
+};
 
 export const createSyncScopeStore = (env) => {
     let database = null;
-    let moved = null;
+    let released = null;
     const open = () => {
         const factory = env?.indexedDB;
         if (!factory) return Promise.reject(new Error('sync_scope_store_unavailable'));
@@ -31,6 +40,8 @@ export const createSyncScopeStore = (env) => {
             request.onerror = () => reject(request.error || new Error('sync_scope_store_open_failed'));
             request.onblocked = () => reject(new Error('sync_scope_store_blocked'));
         });
+        // A failed opening is not kept: the next call opens again.
+        database.catch(() => { database = null; });
         return database;
     };
     // `action(objectStore, done)`: `done(value)` is what the transaction resolves to once complete.
@@ -45,23 +56,34 @@ export const createSyncScopeStore = (env) => {
             tx.onabort = () => reject(tx.error || new Error('sync_scope_store_transaction_aborted'));
         });
     };
-    const moveLocalStorageScopes = async () => {
+    // Moves the legacy scopes into IndexedDB in one transaction, then frees their keys: until
+    // then the quota stays full and no other localStorage write of the app can succeed. A key
+    // whose text cannot be read is stored verbatim beside the scopes and freed too: nothing is
+    // dropped, and its name is returned in `unreadable` for the caller to report. Nothing is
+    // freed when the transaction fails; that release rejects and the next call tries again.
+    const moveLegacyScopes = async () => {
         const storage = env?.localStorage;
-        const rawStreams = storage?.getItem?.(MOVED_STREAMS_KEY);
-        const rawCursors = storage?.getItem?.(MOVED_CURSORS_KEY);
-        if (!rawStreams && !rawCursors) return;
-        const streams = parseObject(rawStreams);
-        const cursors = parseObject(rawCursors);
-        const keys = new Set([...Object.keys(streams), ...Object.keys(cursors)]);
+        const legacy = LEGACY_KEYS.map((key) => ({ key, raw: storage?.getItem?.(key) ?? null }))
+            .filter(({ raw }) => raw !== null);
+        if (!legacy.length) return { unreadable: [] };
+        const parsed = legacy.map((entry) => ({ ...entry, value: parseLegacy(entry.raw) }));
+        const [streams, cursors] = LEGACY_KEYS.map((key) => asObject(parsed.find((entry) => entry.key === key)?.value));
+        const scopeKeys = new Set([...Object.keys(streams), ...Object.keys(cursors)]);
+        const unreadable = parsed.filter(({ value }) => value === null);
         await transact('readwrite', (objectStore) => {
-            for (const key of keys) objectStore.put(toScope({ streams: streams[key], cursors: cursors[key] }), key);
+            for (const key of scopeKeys) objectStore.put(toScope({ streams: streams[key], cursors: cursors[key] }), key);
+            for (const { key, raw } of unreadable) objectStore.put({ key, raw }, `${UNREADABLE_PREFIX}${key}`);
         });
-        storage.removeItem(MOVED_STREAMS_KEY);
-        storage.removeItem(MOVED_CURSORS_KEY);
+        legacy.forEach(({ key }) => storage.removeItem(key));
+        return { unreadable: unreadable.map(({ key }) => key) };
+    };
+    const release = () => {
+        released ||= moveLegacyScopes();
+        released.catch(() => { released = null; });
+        return released;
     };
     const load = async (key) => {
-        moved ||= moveLocalStorageScopes();
-        await moved;
+        await release();
         return toScope(await transact('readonly', (objectStore, done) => {
             const request = objectStore.get(String(key));
             request.onsuccess = () => done(request.result);
@@ -70,5 +92,23 @@ export const createSyncScopeStore = (env) => {
     const save = (key, scope) => transact('readwrite', (objectStore) => {
         objectStore.put(toScope(scope), String(key));
     });
-    return { load, save };
+    // The legacy texts kept because they could not be read: `[{ key, raw }]`.
+    const readUnreadable = () => transact('readonly', (objectStore, done) => {
+        const kept = [];
+        const keys = objectStore.getAllKeys();
+        keys.onsuccess = () => keys.result.filter((key) => String(key).startsWith(UNREADABLE_PREFIX)).forEach((key) => {
+            const request = objectStore.get(key);
+            request.onsuccess = () => { kept.push(request.result); done(kept); };
+        });
+        done(kept);
+    });
+    return { release, load, save, readUnreadable };
+};
+
+// One store per window: the boot releases the legacy scopes through it before the app's first
+// write (spark.js), and the sync engine then reads, saves and reports through the same one.
+const stores = new WeakMap();
+export const getSyncScopeStore = (env) => {
+    if (!stores.has(env)) stores.set(env, createSyncScopeStore(env));
+    return stores.get(env);
 };

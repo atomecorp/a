@@ -346,6 +346,7 @@
   "tests/eve/svg_vector_editing.test.mjs",
   "tests/eve/sync_engine.test.mjs",
   "tests/eve/sync_environment.test.mjs",
+  "tests/eve/sync_scope_quota.test.mjs",
   "tests/eve/sync_status.test.mjs",
   "tests/eve/system_clipboard_contents.test.mjs",
   "tests/eve/system_ui_base_resize_contract.test.mjs",

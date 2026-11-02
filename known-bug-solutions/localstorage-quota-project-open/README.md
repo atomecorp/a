@@ -26,10 +26,19 @@ the scopes still in `localStorage` are moved once, then both keys are removed. `
 asynchronously, merges streams observed meanwhile, never writes before the stored scope arrived, and opens the socket
 once it is read. No catch was added around `setCurrent`.
 
+Follow-up, 2026-11-02 (cloud, reproduced with the real engine and `session.js#setCurrentProjectCache` under a
+simulated 5 M-character quota): (1) the engine wrote a missing device id in its constructor and threw, so no release
+ever ran; it now writes it after the release. (2) The release ran only when the engine was created, after the boot's
+first writes; `spark.js` now awaits `releaseLegacySyncScopes` right after the boot wave. (3) An unreadable legacy key
+rejected the move for the whole session and kept the quota full; it is now stored verbatim in IndexedDB
+(`unreadable_legacy:<key>`), freed and reported (`sync_scope_legacy_unreadable`). (4) A failed IndexedDB move frees
+nothing, is reported (`sync_scope_release_failed`) and is retried by the next load.
+
 ## Regression
 
 `tests/eve/sync_engine.test.mjs` « SyncEngine keeps tens of thousands of streams out of a localStorage quota » and
-« moves the localStorage scopes to IndexedDB once… ».
+« moves the localStorage scopes to IndexedDB once… »;
+`tests/eve/sync_scope_quota.test.mjs` (device state, release, device id, unreadable key, failed move, boot order).
 
 ## Acceptance
 

@@ -282,7 +282,10 @@ const bootstrapSpark = async () => {
 
   const { AdoleAPI } = loadedModules['apis.adole_apis'];
   const { loadServerConfigOnce } = loadedModules['apis.loadServerConfig'];
-  const { installSyncEngine } = loadedModules['apis.sync_engine'];
+  const { installSyncEngine, releaseLegacySyncScopes } = loadedModules['apis.sync_engine'];
+  // BUG-012/013: legacy sync scopes could fill the whole localStorage quota; they move to
+  // IndexedDB before any later write of the boot or the app. A failure is reported by the engine.
+  await Promise.allSettled([releaseLegacySyncScopes(globalThis?.window || globalThis)]);
   const { $, define, observeMutations } = loadedModules['squirrel.core'];
 
   const squirrelComponentRegistry = buildComponentRegistry(loadedModules);

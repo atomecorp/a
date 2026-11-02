@@ -187,7 +187,7 @@ test('SyncEngine writes its scope once per burst and only when a cursor advances
     const env = createEnv();
     let writes = 0;
     const store = createSyncScopeStore(env);
-    const scopeStore = { load: store.load, save: (key, scope) => { writes += 1; return store.save(key, scope); } };
+    const scopeStore = { ...store, save: (key, scope) => { writes += 1; return store.save(key, scope); } };
     const engine = new SyncEngine({ env, WebSocketClass: FakeSocket, token: () => 'signed-token', scopeStore }).install();
     await settle();
     const socket = FakeSocket.instances[0];

@@ -1,7 +1,7 @@
 import { socketHealthMixin } from './websocket_health.js';
 import { CONFIG } from './adole_backend.js';
 import { getToken } from './adole_connection.js';
-import { createSyncScopeStore } from './sync_scope_store.js';
+import { getSyncScopeStore } from './sync_scope_store.js';
 
 // A key-bound token (`cnf.pop`) is accepted only after this connection signs a
 // fresh challenge with the session key; the account owner registers the signer.
@@ -73,14 +73,14 @@ export class SyncEngine {
         this.persistTimer = null;
         this.loadedScopeKey = '';
         this.scopeLoadedKey = '';
-        this.scopeStore = options.scopeStore || createSyncScopeStore(this.env);
+        this.scopeStore = options.scopeStore || getSyncScopeStore(this.env);
         this.boundLogin = () => this.retry();
         this.boundLogout = () => this.disconnect();
         this.boundOnline = () => this.retry();
         this.boundForeground = () => { if (this.env?.document?.visibilityState !== 'hidden') void this.verifyConnection(); };
         this.boundPageHide = () => this.flushPersist();
-        this.source = this.loadDeviceSource();
         this.loadScope();
+        this.source = this.loadDeviceSource();
     }
 
     scopeKey() {
@@ -89,13 +89,14 @@ export class SyncEngine {
         return `${environment}|${principalId(this.env) || 'anonymous'}`;
     }
 
+    // A new device id is written once the legacy scopes freed the quota: before, it threw (BUG-012/013).
     loadDeviceSource() {
         const storage = this.env?.localStorage;
-        let source = String(storage?.getItem?.(DEVICE_KEY) || '').trim();
-        if (!source) {
-            source = randomId(this.env);
-            storage?.setItem?.(DEVICE_KEY, source);
-        }
+        const stored = String(storage?.getItem?.(DEVICE_KEY) || '').trim();
+        if (stored) return stored;
+        const source = randomId(this.env);
+        this.devicePersisted = this.legacyRelease.then(() => { storage?.setItem?.(DEVICE_KEY, source); return true; })
+            .catch((error) => this.reportScopeError('device_source', error));
         return source;
     }
 
@@ -107,8 +108,13 @@ export class SyncEngine {
         this.scopeLoadedKey = '';
         this.streams = new Set(['directory.public']);
         this.cursors = {};
-        this.scopeLoad = this.scopeStore.load(key).then((stored) => {
-            if (this.loadedScopeKey !== key) return false;
+        // Legacy localStorage scopes are released first (again after a failure); an unreadable key is kept by the store, reported here.
+        this.legacyRelease = this.scopeStore.release().then((released) => {
+            if (released.unreadable.length) this.reportScopeError('legacy_unreadable', released.unreadable.join(','), '');
+            return released;
+        }, (error) => (this.reportScopeError('release', error), null));
+        this.scopeLoad = this.legacyRelease.then((released) => released && this.scopeStore.load(key)).then((stored) => {
+            if (!stored || this.loadedScopeKey !== key) return false;
             stored.streams.forEach((stream) => this.streams.add(String(stream)));
             for (const [stream, cursor] of Object.entries(stored.cursors)) {
                 if ((Number(cursor) || 0) > (Number(this.cursors[stream]) || 0)) this.cursors[stream] = Number(cursor);
@@ -119,8 +125,8 @@ export class SyncEngine {
         return this.scopeLoad;
     }
 
-    reportScopeError(stage, error) {
-        this.error = `sync_scope_${stage}_failed:${error?.message || error}`;
+    reportScopeError(stage, error, outcome = '_failed') {
+        this.error = `sync_scope_${stage}${outcome}:${error?.message || error}`;
         this.publishStatus();
         return false;
     }
@@ -478,6 +484,9 @@ export class SyncEngine {
 Object.assign(SyncEngine.prototype, socketHealthMixin);
 
 let singleton = null;
+
+// Frees the localStorage quota held by the legacy sync scopes (BUG-012/013); the engine reports the outcome.
+export const releaseLegacySyncScopes = (env = globalThis.window || globalThis) => getSyncScopeStore(env).release();
 
 export const installSyncEngine = (env = globalThis.window || globalThis) => {
     if (!singleton || singleton.env !== env) singleton = new SyncEngine({ env });
