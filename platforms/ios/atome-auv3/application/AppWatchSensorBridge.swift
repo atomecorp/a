@@ -145,7 +145,19 @@ final class AppWatchSensorBridge: NSObject, HealthSensorWatchLink, HealthWorkout
         catch { Self.log.error("Watch recording not kept: \(error.localizedDescription, privacy: .public)") }
     }
 
-    func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {}
+    // This process holds no workout and no recording at its start: the watch is told so, and ends one a killed run of the
+    // app left it (BUG-008 E1: nothing could stop it, and its start was replayed from the context for hours). A session the
+    // page takes up again sends its start anew. A request already made by this run is never overwritten.
+    func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
+        guard activationState == .activated, WCSession.default.isPaired else { return }
+        contextQueue.async {
+            let idle = ["workout", "sensors"].filter { self.context[$0] == nil }
+            guard !idle.isEmpty else { return }
+            idle.forEach { self.context[$0] = ["state": "none"] }
+            do { try WCSession.default.updateApplicationContext(self.context) }
+            catch { Self.log.error("Watch context not sent: \(error.localizedDescription, privacy: .public)") }
+        }
+    }
     func sessionDidBecomeInactive(_ session: WCSession) {}
     func sessionDidDeactivate(_ session: WCSession) { WCSession.default.activate() }
 }

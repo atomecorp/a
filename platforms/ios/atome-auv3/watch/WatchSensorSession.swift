@@ -61,6 +61,10 @@ final class WatchSensorSession: NSObject, WCSessionDelegate, HKWorkoutSessionDel
         // The companion's screen model (WatchLink.swift).
         if let model = message["link"] as? String { Task { @MainActor in WatchLink.shared.received(model: model) } }
         if let request = message["workout"] as? [String: Any] { receivedWorkout(request) }
+        // « none »: the iPhone app started afresh with no recording (AppWatchSensorBridge.swift): one held here is ended.
+        if (message["sensors"] as? [String: Any])?["state"] as? String == "none" {
+            return queue.addOperation { if self.session != nil { self.finish() } }
+        }
         guard let request = message["sensors"] as? [String: Any], let state = request["state"] as? String,
               let id = request["session"] as? String, !id.isEmpty, id.count <= 300 else { return }
         queue.addOperation {
@@ -75,6 +79,14 @@ final class WatchSensorSession: NSObject, WCSessionDelegate, HKWorkoutSessionDel
     }
 
     private func receivedWorkout(_ request: [String: Any]) {
+        // « none »: the iPhone app started afresh with no workout: the heart measured for a killed run's session stops.
+        if request["state"] as? String == "none" {
+            return queue.addOperation {
+                guard self.heartSession != nil else { return }
+                self.heartSession = nil
+                if self.session == nil { self.endWorkout() }
+            }
+        }
         guard let state = request["state"] as? String, let id = request["session"] as? String, !id.isEmpty, id.count <= 300 else { return }
         queue.addOperation {
             if state == "stop" {
