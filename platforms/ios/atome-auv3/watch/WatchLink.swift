@@ -70,10 +70,22 @@ final class WatchLink: ObservableObject {
         send(["kind": "assistant", "action": "open"])
     }
 
+    // A card's action (start, pause, stop, a value) is never lost: sent at once when the iPhone is reachable, else — or when
+    // that send fails — queued by WatchConnectivity, which delivers it in order once the iPhone is back, even to an app not
+    // running (AppWatchSensorBridge.swift#didReceiveUserInfo). Dropped before, the stop was lost while the watch vibrated
+    // « arrêt » (BUG-008 E2). A live request (film, assistant) only means something now: it is dropped then, and logged.
     private func send(_ request: [String: Any]) {
-        guard WCSession.default.activationState == .activated, WCSession.default.isReachable else { return }
+        guard WCSession.default.activationState == .activated else {
+            return Self.log.error("Watch request not sent: the session is not activated")
+        }
+        let kept = request["kind"] as? String == "card"
+        guard WCSession.default.isReachable else {
+            if kept { WCSession.default.transferUserInfo(["link": request]) } else { Self.log.error("Watch request dropped: the iPhone is not reachable") }
+            return
+        }
         WCSession.default.sendMessage(["link": request], replyHandler: nil) { error in
             Self.log.error("Watch request not sent: \(error.localizedDescription, privacy: .public)")
+            if kept { WCSession.default.transferUserInfo(["link": request]) }
         }
     }
 

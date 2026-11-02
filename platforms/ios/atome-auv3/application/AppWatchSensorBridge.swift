@@ -129,6 +129,12 @@ final class AppWatchSensorBridge: NSObject, HealthSensorWatchLink, HealthWorkout
         AppNativeHealthController.shared.watchHeartRate(bpm: bpm, at: Date(timeIntervalSince1970: at / 1000))
     }
 
+    // A card's action the watch queued while this iPhone was out of its reach (WatchLink.swift#send): taken as a message.
+    func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
+        guard let request = userInfo["link"] as? [String: Any] else { return }
+        WatchLinkInbox.shared.received(request)
+    }
+
     // The received file is removed when this returns: it is moved first.
     func session(_ session: WCSession, didReceive file: WCSessionFile) {
         guard let name = file.metadata?["file"] as? String,
