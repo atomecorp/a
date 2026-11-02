@@ -230,7 +230,7 @@ test('closing during connection cancels startup and remains reopenable', async (
     assert.equal(conversation.saved, false);
     assert.deepEqual(closedState, {
         active: false, acting: false, connected: false, surface: 'screen',
-        navigationGeneration: 1,
+        navigationGeneration: 1, said: '',
         microphoneActive: false,
         error: '',
         phase: 'closed',

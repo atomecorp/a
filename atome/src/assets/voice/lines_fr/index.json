@@ -75,6 +75,12 @@
    "phonemes": "^atɑ̃ , ʒə pʁepaʁ te dokymɑ̃ .$",
    "sha256": "e42801b63253133747632b26680a40f999846f79c51c7b0ae7d483a63014b870"
   },
+  "Encore un instant, je me connecte.": {
+   "file": "e142691ac388d9ef.wav",
+   "samples": 51456,
+   "phonemes": "^ɑ̃koʁ œ̃ ɛ̃stɑ̃ , ʒə mə konɛkt .$",
+   "sha256": "f90c5e9032f5c0418f50697f1b8b83f9c400832f58c6c3ee3c034d18e31b74af"
+  },
   "C’est bon, je suis prête. Je reste à l’écoute : pour m’arrêter, touche-moi. Pour travailler ou me demander quelque chose, parle-moi.": {
    "file": "29f76a95a979a011.wav",
    "samples": 180480,
@@ -92,6 +98,12 @@
    "samples": 86784,
    "phonemes": "^lə pʁofil də sɛt diskysjɔ̃ ɛ ɛ̃kɔ̃patibl avɛk lə ʁəʒistʁ aktyɛl .$",
    "sha256": "5c48a4dbf6234d65997eb9126b475c03586ca912707953a9b4d3b8cf0429ca9f"
+  },
+  "Je n’arrive pas à me connecter. Réessaie dans un moment, ou écris-moi.": {
+   "file": "970a71ba6419902a.wav",
+   "samples": 84736,
+   "phonemes": "^ʒə naʁiv pa a mə konɛkte . ʁeesɛ dɑ̃ œ̃ momɑ̃ , u ekʁimwa .$",
+   "sha256": "bc9575ceda3c654400d79a63cad09928add62c39aeba4e1c4286fd79afcbe378"
   },
   "L'assistant vocal est indisponible.": {
    "file": "a49bbcde624f0bd9.wav",

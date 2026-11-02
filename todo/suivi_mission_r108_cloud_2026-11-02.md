@@ -134,3 +134,24 @@ Ces échecs ne prouvent pas le bon fonctionnement : l'acceptation des correctifs
 les sondes Web réelles ; l'acceptation iOS reste à faire (§ 5).
 
 Page des décisions (captures de l'app réelle, maquette V5) : https://claude.ai/artifact/A64AyZo1pEgeidZJm8qJmC (privée).
+
+## 8. Retours iPhone du 2 nov. 2026 (après la build de main)
+
+- **Assistante muette pendant son ouverture (« Attends, je prépare tes documents », puis plus rien)** — journal Xcode :
+  la phrase est jouée, aucune session de conversation ne se connecte, aucune erreur n'est remontée. L'ouverture n'avait
+  aucun délai maximal. Correctif (eVe `voice/assistant/assistant_runtime.js`, `assistant_voice_announcer.js`,
+  `domains/dashboard/dashboard_eve_atom.js`) :
+  - toujours pas connectée à 8 s : elle dit « Encore un instant, je me connecte. » ;
+  - à 25 s : l'ouverture échoue, dit et affiché (« Je n'arrive pas à me connecter. Réessaie dans un moment, ou
+    écris-moi. »), cette ouverture est abandonnée (une connexion tardive est ignorée), et l'accueil se ferme de
+    lui-même : le disque part dans son coin, les tuiles arrivent ;
+  - pendant l'ouverture, sa phrase en cours s'affiche dans ses sous-titres existants (aucun nouvel élément d'interface) ;
+  - une connexion réussie la range déjà d'elle-même dans son coin (inchangé).
+  Tests : `tests/eve/assistant_startup.test.mjs` (2 nouveaux cas). Deux répliques Siwis rendues (`lines_fr/`).
+  La **barre de progression** demandée est un nouvel élément d'interface : maquette à valider avant (règle 16).
+  La cause de la connexion qui n'aboutit pas reste à trouver avec le journal `voice.assistant.open.timeout`.
+- **Micro coupé pour écrire à l'assistante : le champ passe en recherche** — le champ ne s'adressait à elle que dans son
+  coin (`engaged = present && isDocked()`) ; au centre il restait la recherche. Correctif : avec elle présente, le champ
+  lui écrit, au centre comme dans son coin (`dashboard_eve_atom.js#engaged`).
+- Ni l'un ni l'autre n'est validé sur appareil.
+- Audit MCP (R-109) : en attente du feu vert explicite de l'utilisateur, après ces corrections et leur vérification.

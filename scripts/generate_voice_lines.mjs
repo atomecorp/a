@@ -31,7 +31,7 @@ const spokenTexts = () => {
         eveT('eve.voice.assistant.callback.unreachable'),
         ...eveTList('eve.voice.assistant.ready_lines.after_wait'),
         ...eveTList('eve.voice.assistant.ready_lines.direct'),
-        eveT('eve.voice.assistant.arrival.preparing'), ...eveTList('eve.voice.assistant.arrival.ready_first'), ...eveTList('eve.voice.assistant.arrival.ready'),
+        eveT('eve.voice.assistant.arrival.preparing'), eveT('eve.voice.assistant.opening.still'), ...eveTList('eve.voice.assistant.arrival.ready_first'), ...eveTList('eve.voice.assistant.arrival.ready'),
         ...byPrefix('eve.voice.assistant.error.'),
         ...byPrefix('eve.voice.wake.error.'),
         ...byPrefix('eve.first_launch.voice.'), eveT('eve.auth.pair_request_said'),

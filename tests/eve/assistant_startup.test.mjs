@@ -1,7 +1,7 @@
 import { test, expect, vi } from 'vitest';
 import { createEveAssistantRuntime } from '../../eVe/voice/assistant/assistant_runtime.js';
 import { getSessionState, setSessionState } from '../../atome/src/squirrel/apis/unified/adole_api/session.js';
-import { eveTList } from '../../eVe/i18n/i18n.js';
+import { eveT, eveTList } from '../../eVe/i18n/i18n.js';
 
 const binding = vi.hoisted(() => ({ create: null }));
 vi.mock('../../atome/src/squirrel/voice/assistant_session_controller.js', () => ({
@@ -273,4 +273,34 @@ test('a rejected old voice retry cannot corrupt a replacement session', async ()
         resumed.reject(new Error('obsolete_realtime_failure')); await retry;
         expect(h.api.getState()).toMatchObject({ active: true, connected: true, error: '', phase: 'listening' });
     } finally { await h.dispose(); }
+});
+
+// R-108 (2 Nov. 2026): an opening that never connects is never a silent tunnel.
+test('an opening that does not connect says she is still at it at 8 s, then fails, said and shown, at 25 s', async () => {
+    vi.useFakeTimers(); const provider = deferred();
+    const h = harness(() => provider.promise);
+    try {
+        const opening = h.api.open(); await h.flush();
+        await vi.advanceTimersByTimeAsync(1200);
+        expect(h.changes.map(state => state.said)).toContain('eve.voice.assistant.startup_line');
+        await vi.advanceTimersByTimeAsync(6800);
+        expect(h.voiceLines.say).toHaveBeenLastCalledWith('eve.voice.assistant.opening.still');
+        await vi.advanceTimersByTimeAsync(17000);
+        expect(h.api.getState()).toMatchObject({ active: true, connected: false, phase: 'error', error: 'assistant_connect_timeout' });
+        expect(h.voiceLines.say).toHaveBeenLastCalledWith(eveT('eve.voice.assistant.error.assistant_connect_timeout'));
+        provider.resolve({ ok: true, providerId: 'openai' }); await opening; await h.flush();
+        expect(h.api.getState()).toMatchObject({ connected: false, error: 'assistant_connect_timeout' });
+    } finally { provider.resolve({ ok: true, providerId: 'openai' }); await h.dispose(); vi.useRealTimers(); }
+});
+
+test('a connection in time says nothing more and never fails afterwards', async () => {
+    vi.useFakeTimers();
+    const h = harness();
+    try {
+        await h.api.open(); await h.flush();
+        expect(h.api.getState().connected).toBe(true);
+        await vi.advanceTimersByTimeAsync(30000);
+        expect(h.voiceLines.say).not.toHaveBeenCalledWith('eve.voice.assistant.opening.still');
+        expect(h.api.getState()).toMatchObject({ connected: true, error: '' });
+    } finally { await h.dispose(); vi.useRealTimers(); }
 });
