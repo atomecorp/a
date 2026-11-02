@@ -48,6 +48,7 @@ tests
 
 tests/*
 !tests/
+!tests/vitest.setup.mjs
 !tests/tv/
 !tests/tv/*.test.mjs
 !tests/apple_music/
@@ -110,6 +111,7 @@ tests/shared/*
 !tests/shared/semantic_rename_contract.test.mjs
 !tests/eve/
 tests/eve/*
+!tests/eve/bevy_panel_home_lifecycle.test.mjs
 !tests/eve/workspace_bootstrap_nonblocking.test.mjs
 !tests/eve/sync_status.test.mjs
 !tests/eve/websocket_recovery.test.mjs

@@ -25,7 +25,9 @@ test('Tauri uses ws/api sync:push outbound and a persistent ws/sync inbound stre
 });
 
 test('iOS authenticates and subscribes before relaying canonical sync events', () => {
-    const source = read('platforms/ios/atome-auv3/Common/FastifySyncClient.swift');
+    // The client and its subscription extension (FastifySyncSubscriptions.swift) form one owner.
+    const source = ['FastifySyncClient.swift', 'FastifySyncSubscriptions.swift']
+        .map(name => read(`platforms/ios/atome-auv3/Common/${name}`)).join('\n');
     assert.match(source, /"type"\s*:\s*"auth"/);
     assert.match(source, /"type"\s*:\s*"subscribe"/);
     assert.doesNotMatch(source, /func send\(text: String\)/);

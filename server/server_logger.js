@@ -15,7 +15,7 @@ export const MINIMAL_LOGS =
   && process.env.SQUIRREL_MINIMAL_LOGS !== 'false';
 const logStreams = pino.multistream([
   { stream: process.stdout },
-  { stream: pino.destination({ dest: FASTIFY_LOG_FILE, sync: false }) }
+  { stream: pino.destination({ dest: FASTIFY_LOG_FILE, mkdir: true, sync: false }) }
 ]);
 
 export const logger = pino(
