@@ -155,3 +155,13 @@ Page des décisions (captures de l'app réelle, maquette V5) : https://claude.ai
   lui écrit, au centre comme dans son coin (`dashboard_eve_atom.js#engaged`).
 - Ni l'un ni l'autre n'est validé sur appareil.
 - Audit MCP (R-109) : en attente du feu vert explicite de l'utilisateur, après ces corrections et leur vérification.
+- **Toujours aucune voix (journal du 2 nov., 11 h 12)** — la phrase est chargée, jouée (`audio_play_instance`, commande
+  volontairement absente du journal) puis libérée sans erreur : le moteur natif la croit jouée, le son se perd en sortie.
+  Juste avant, WebKit ouvre le micro (getUserMedia de l'entrée anticipée) ; aussitôt `audio_init` réapplique le plan
+  natif « lecture seule » sur la session partagée, et WebKit signale `AudioSession::beginInterruption` : les deux
+  propriétaires se disputent la session pendant la phrase. Correctif (`AppNativeAudioSessionCoordinator.swift`) : un
+  plan de lecture ne rétrograde plus une session d'enregistrement que ce contrôleur n'a pas posée lui-même ; il la
+  garde, sortie maintenue hors de l'écouteur. Le même interrupteur `ATOME_APP_AUDIO_DIAGNOSTICS=1` allume désormais
+  aussi les traces vocales de la page (`[voice-trace]`, `AppPageHost.swift`). Non validé sur appareil.
+- Sonde périmée constatée : `tests/probes/ios_app_native_audio_recording_contract.probe.mjs` lit
+  `AppNativeAudioPlayback.swift`, absent du dépôt (préexistant).

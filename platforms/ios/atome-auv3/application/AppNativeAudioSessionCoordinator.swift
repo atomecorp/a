@@ -56,12 +56,24 @@ extension AppNativeAudioController {
                                        transition: String) throws {
         let session = AVAudioSession.sharedInstance()
         let before = audioSessionDiagnosticSnapshot(session: session)
+        // Someone else records (WebKit opened the microphone for the assistant, R-108): playing a sound
+        // must not cut that recording by switching the session back to playback. The session is kept as
+        // that recorder set it, its output held off the receiver; the plan applies once it has stopped.
+        if !plan.category.recordsAudio, session.category.recordsAudio, appliedAudioSessionCategory != session.category {
+            if !systemOwnsAudioActivation { try session.setActive(true) }
+            keepOutputOffReceiver()
+            AppNativeAudioDiagnostics.log(
+                "session \(transition) reason=\(plan.reason) kept_foreign_recording session=\(before)"
+            )
+            return
+        }
         let needsConfiguration = session.category != plan.category
             || session.mode != plan.mode
             || session.categoryOptions != plan.options
         if needsConfiguration {
             try session.setCategory(plan.category, mode: plan.mode, options: plan.options)
         }
+        appliedAudioSessionCategory = plan.category
         // Activation is idempotent and also recovers a session the system
         // deactivated through an interruption.
         if !systemOwnsAudioActivation { try session.setActive(true) }
@@ -114,4 +126,9 @@ extension AppNativeAudioController {
         }
         return names.isEmpty ? "none" : names.joined(separator: ",")
     }
+}
+
+extension AVAudioSession.Category {
+    /// A category with an input route: the session is recording or ready to.
+    var recordsAudio: Bool { self == .playAndRecord || self == .record || self == .multiRoute }
 }

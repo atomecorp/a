@@ -39,6 +39,13 @@ final class AppPageHost {
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true
         ))
+        if AppNativeAudioDiagnostics.enabled {
+            config.userContentController.addUserScript(WKUserScript(
+                source: "window.__EVE_VOICE_DIAGNOSTICS__ = true;",
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            ))
+        }
         config.setValue(false, forKey: "drawsBackground")
         let webView = WKWebView(frame: UIScreen.main.bounds, configuration: config)
         WebViewManager.markBootMilestone("webview_created")

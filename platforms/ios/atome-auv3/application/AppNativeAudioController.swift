@@ -13,6 +13,10 @@ final class AppNativeAudioController: NSObject, @unchecked Sendable {
 
     var audioSessionConsumers = AppNativeAudioConsumerRegistry()
     var systemOwnsAudioActivation = false
+    /// The category this controller last set on the shared session; nil before its first plan. A recording
+    /// category found on the session that this controller did not set belongs to someone else (WebKit's
+    /// microphone for the assistant): the playback plan leaves it as it is (AppNativeAudioSessionCoordinator).
+    var appliedAudioSessionCategory: AVAudioSession.Category?
     var captureGate = AppNativeAudioCaptureGate()
     var audioRecordingConsumerSequence: UInt64 = 0
     var activeRecordingConsumerId: String?
@@ -181,7 +185,7 @@ final class AppNativeAudioController: NSObject, @unchecked Sendable {
     /// the shared session into play-and-record without `.defaultToSpeaker`, unseen by the consumers above:
     /// the output then fell on the receiver, eVe's sentence cut in the middle and nothing was heard after.
     /// The output goes back to the loudspeaker; the capture under way is left as it is.
-    private func keepOutputOffReceiver() {
+    func keepOutputOffReceiver() {
         let session = AVAudioSession.sharedInstance()
         guard session.category == .playAndRecord,
               session.currentRoute.outputs.contains(where: { $0.portType == .builtInReceiver }) else { return }

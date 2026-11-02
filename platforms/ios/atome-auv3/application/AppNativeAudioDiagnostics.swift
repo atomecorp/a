@@ -4,12 +4,13 @@ import Foundation
 ///
 /// Disabled by default; set `ATOME_APP_AUDIO_DIAGNOSTICS=1` in a debug build to
 /// receive the session category, mode, options, routes, negotiated formats and
-/// active microphone consumers on stderr.
+/// active microphone consumers on stderr. The same switch turns on the page's voice traces
+/// (`[voice-trace]`, `window.__EVE_VOICE_DIAGNOSTICS__`, AppPageHost), so one launch shows the assistant end to end.
 enum AppNativeAudioDiagnostics {
 #if DEBUG
-    private static let enabled = ProcessInfo.processInfo.environment["ATOME_APP_AUDIO_DIAGNOSTICS"] == "1"
+    static let enabled = ProcessInfo.processInfo.environment["ATOME_APP_AUDIO_DIAGNOSTICS"] == "1"
 #else
-    private static let enabled = false
+    static let enabled = false
 #endif
 
     static func log(_ message: @autoclosure () -> String) {
