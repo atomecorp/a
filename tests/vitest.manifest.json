@@ -365,6 +365,7 @@
   "tests/eve/tool_runtime_home_lazy_load.test.mjs",
   "tests/eve/tool_runtime_move_relative.test.mjs",
   "tests/eve/tool_runtime_native_bootstrap_fast_path.test.mjs",
+  "tests/eve/training_beep_clock.test.mjs",
   "tests/eve/tv_favorites_defaults.test.mjs",
   "tests/eve/tv_inplace_player.test.mjs",
   "tests/eve/unified_rendering_contract.test.mjs",

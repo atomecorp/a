@@ -111,6 +111,7 @@ tests/shared/*
 !tests/shared/semantic_rename_contract.test.mjs
 !tests/eve/
 tests/eve/*
+!tests/eve/training_beep_clock.test.mjs
 !tests/eve/sync_scope_quota.test.mjs
 !tests/eve/bevy_panel_home_lifecycle.test.mjs
 !tests/eve/workspace_bootstrap_nonblocking.test.mjs
