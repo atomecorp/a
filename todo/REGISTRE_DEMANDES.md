@@ -549,6 +549,22 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 - Toujours ouvert : décisions R-107 et V5 D1–D6 ; affichage de la date des vidéos (maquette) ; montre E1–E3 ; push,
   build 1.46 (45) et déploiement serveur sur accord explicite.
 
+### R-109 — Vérification MCP « universel en accès » (cahier V1.2/V1.23) sur l'app réelle (2026-11-02)
+- Statut : OUVERT (2026-11-02) — vérification partielle faite, écart démontré, audit complet et correction à faire.
+- Demande : « dis-moi si on a bien intégré ce nouveau concept : quasiment toutes les actions passent par MCP, même quand ce
+  n'est pas une IA » (chat cloud 2026-11-02). Cahier : `todo/refonte_globale_architecture_mcp_offline_v1_2_2026-10-30.md`
+  (identique au V1.23 fourni, même SHA-256) : MCP universel en accès, UI / voix / script / MCP sur les mêmes contrats
+  d'outils (ToolRuntime V2, command bus), pas de transport MCP pour les événements bruts.
+- Vérifié (Web réel, `tests/probes/r108_mcp_coverage_web.probe.mjs` 8/8) : serveur MCP de la page (protocole 2025-06-18),
+  `tools/list` = 1 197 outils ; `tools/call ui.couleur.apply` (transport `ai`) a le même effet que l'UI et passe par le
+  même `commandBusV2` ; la sélection au toucher passe par le bus (`ui.select`), outil listé par MCP.
+- **Écart démontré** : Créer › Forme › Cercle + toucher (création au geste) ne passe ni par le runtime d'outils ni par le
+  bus : `shape_creation_runtime.js#createAt` écrit par `eveToolBase.createAtome` + `Atome.commit` (pipeline de mutation
+  canonique gardé, contrat d'outil contourné). MCP crée une forme par `atome.create`, un autre contrat que l'UI.
+- Manque : le classement `UI_only / runtime_only / MCP_exposed / blocked_by_policy / needs_adapter` du § 5.3 n'existe pas
+  dans le registre (`eVe/registry/generated/full-map.json` : aucun champ d'exposition) ; inventaire des autres chemins UI
+  qui contournent le runtime à faire ; client MCP externe sans IA par le relais (`server/remoteCommandRelay.js`) non testé.
+
 ### R-107 — Fusion R-104 → main (2026-11-01) : décisions et essais restés ouverts
 - Statut : ATTENTE UTILISATEUR (2026-11-01) — questions posées dans le compte rendu final de la session de fusion,
   rapport `todo/rapport_fusion_r104_main_2026-11-01.md` ; registre de débogage annoté
