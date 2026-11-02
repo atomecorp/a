@@ -1,3 +1,4 @@
+import { BEVY_MENU_TOKENS } from '../../eVe/intuition/ribbon/bevy_ui_menu_surface.js';
 import { CONTEXT_MENUS } from '../../eVe/intuition/menu/context_menus_loader.js';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
@@ -460,7 +461,8 @@ test('the mystic tree carries one tile per entry and the Atom handle alone in th
     assert.ok(centre, 'the Atom handle is mounted');
     // The handle is a disc, smaller than a tile, and its shadow is mounted
     // invisible: the runtime is the only writer of that alpha.
-    assert.equal(geometry.centerSize, Math.round(TILE * MYSTIC_CENTER_SIZE_RATIO));
+    // The menus' tool (55 px drawn in a 60 px cell of the one screen grid, V6.1) gives the handle its size.
+    assert.equal(geometry.centerSize, Math.round(BEVY_MENU_TOKENS.toolSizePx * MYSTIC_CENTER_SIZE_RATIO));
     assert.equal(geometry.centerRadius, geometry.centerSize / 2);
     assert.ok(geometry.centerSize < TILE, 'the handle keeps its distance from the tiles');
     assert.deepEqual(centre.style.size, [geometry.centerSize, geometry.centerSize]);

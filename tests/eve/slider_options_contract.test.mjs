@@ -47,7 +47,8 @@ describe('framework optional slider contract', () => {
         const ordinary = buildBevyToolSliderNode({ id: 's', orientation, expanded: true });
         expect(find(ordinary, 's_min')).toBeUndefined();
         const configured = buildBevyToolSliderNode({ id: 's', orientation, expanded: true, min: 1, max: 11, unit: 'h', sliderOptions: options });
-        expect(configured.style.size).toEqual(orientation === 'horizontal' ? [360, 60] : [60, 360]);
+        // The slider's thickness is a menu tool's (55 px drawn in its 60 px cell, V6.1 « un seul tableau »).
+        expect(configured.style.size).toEqual(orientation === 'horizontal' ? [360, 55] : [55, 360]);
         expect(find(configured, 's_min').text).toBe('1 h'); expect(find(configured, 's_max').text).toBe('11 h');
         // One look whatever the options: the same pressed-in ground and the same raised slab.
         for (const part of ['gauge', 'fill']) {

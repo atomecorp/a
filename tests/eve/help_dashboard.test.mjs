@@ -23,9 +23,9 @@ describe('Dashboard Help', () => {
         const result = await source({ query: 'aide', scopes: ['activities'] });
         expect(result.map(entry => entry.key)).toEqual(['help', 'activity']);
     });
-    // The band laid for a right hand (V6.1, validated 2 Nov. 2026): the glass, Help right after it, Back's box at the far
-    // end whether Back shows or not (330 − 90 = 240; the glass 240 − 5 − 65 = 170, Help at 175); mirrored for a left hand.
-    it.each([['right', false, 175], ['right', true, 175], ['left', false, 95], ['left', true, 95]])
+    // The band in whole cells of the screen grid (V6.1, « un seul tableau »): five 60 px cells, the glass in the first three,
+    // Help in the fourth (drawn at 3 × 60 + 2.5), Back's cell the last whether Back shows or not; mirrored for a left hand.
+    it.each([['right', false, 182.5], ['right', true, 182.5], ['left', false, 62.5], ['left', true, 62.5]])
     ('places Help for %s hand, Back present=%s', (hand, hasBack, expected) => {
         const env = { __EVE_HANDEDNESS__: hand, __eveProfilePreferences: { visual: { dashboardStyle: 'eve_basic' } } };
         vi.stubGlobal('window', env);
@@ -33,12 +33,12 @@ describe('Dashboard Help', () => {
             node: ({ fieldId, x }) => ({ id: fieldId + '_back', style: { position: [x, 0] } }) };
         const projection = createDashboardCommunicationInput({ treeId: 'home', readDraft: () => '', openMessages() {}, refresh() {},
             navigation: nav, fieldShown: () => false, atomRect: () => ({ x: 330, y: 400, width: 60, height: 60 }),
-            bandRect: () => ({ x: 0, y: 400, width: 330, height: 60 }), env });
+            bandRect: () => ({ x: 0, y: 400, width: 300, height: 60 }), env });
         try {
-            const tree = projection.build({ kind: 'text', value_key: 'search' }, { box: { width: 330, height: 60 },
+            const tree = projection.build({ kind: 'text', value_key: 'search' }, { box: { width: 300, height: 60 },
                 editing: { registerField() {}, fieldView: () => ({ focused: false }) }, emit() {} }, 'field');
             const help = tree.children.find(child => child.id === 'field_help');
-            expect(help?.style.position).toEqual([expected, 0]);
+            expect(help?.style.position).toEqual([expected, 2.5]);
             const underRubric = projection.touchAt(id => id === 'field_help');
             expect(typeof underRubric).toBe('function');
         } finally { projection.destroy(); }

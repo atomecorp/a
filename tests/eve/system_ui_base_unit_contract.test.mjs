@@ -47,9 +47,11 @@ describe('System UI base unit contract', () => {
     });
 
     it('makes one square tool the base unit everywhere a tool is drawn', () => {
-        expect(EVE_TOOL_SKIN_TOKENS.bevyMenu.toolSizePx).toBe(UNIT);
+        // A menu tool lies in one cell of the screen grid, drawn inside it by half the joint (V6.1, « un seul tableau »):
+        // 55 px in a 60 px cell, its neighbour 5 px away — the same pitch as the Dashboard's tiles and band.
+        expect(EVE_TOOL_SKIN_TOKENS.bevyMenu.toolSizePx + EVE_TOOL_SKIN_TOKENS.bevyMenu.toolGapPx).toBe(UNIT);
         expect(EVE_TOOL_SKIN_TOKENS.metrics.toolboxSquareSizePx).toBe(UNIT);
-        expect(resolveBevyMainMenuItemSize()).toBe(UNIT);
+        expect(resolveBevyMainMenuItemSize()).toBe(EVE_TOOL_SKIN_TOKENS.bevyMenu.toolSizePx);
         // The footer is the one declared pixel exception: the ½ disc plus
         // 2 × 3 px of air, kept as a chrome contract rather than a row.
         expect(SYSTEM_UI_PANEL_CHROME_METRICS.heightPx).toBe(HALF + 2 * 3);

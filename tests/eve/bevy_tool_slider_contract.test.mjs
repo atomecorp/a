@@ -26,19 +26,20 @@ test('shared vertical tool slider renders an upward compact anchor and clamps it
     assert.equal(closeBevyToolSliderSession(raised, { cancelled: true }).value, 50);
 
     const collapsed = buildBevyToolSliderNode({ id: 'slider', label: 'Size', value: 50 });
-    assert.deepEqual(collapsed.style.size, [60, 60]);
+    // A tool in its grid cell: 55 px drawn in 60 (V6.1, « un seul tableau »).
+    assert.deepEqual(collapsed.style.size, [55, 55]);
     assert.equal(collapsed.accessibility.label, 'Size');
     assert.equal(findNode(collapsed, 'slider_gauge'), null);
 
     const expanded = buildBevyToolSliderNode({
         id: 'slider', label: 'Size', value: 50, unit: '%', expanded: true
     });
-    assert.deepEqual(expanded.style.size, [60, 180]);
+    assert.deepEqual(expanded.style.size, [55, 175]);
     assert.deepEqual(findNode(expanded, 'slider_background').style.position, [0, 0]);
-    assert.deepEqual(findNode(expanded, 'slider_background').style.size, [60, 180]);
+    assert.deepEqual(findNode(expanded, 'slider_background').style.size, [55, 175]);
     assert.equal(findNode(expanded, 'slider_value').text, '50 %');
     // The one look: a pressed-in gauge and its raised slab, above the tool square at its foot.
-    assert.deepEqual(findNode(expanded, 'slider_gauge').style.size, [60, 120]);
+    assert.deepEqual(findNode(expanded, 'slider_gauge').style.size, [55, 120]);
     assert.ok(findNode(expanded, 'slider_gauge').style.surfacePaint.insetShadows.length);
     assert.ok(findNode(expanded, 'slider_fill').style.surfacePaint.gradient);
     assert.equal(findNode(expanded, 'slider_thumb'), null);
@@ -101,9 +102,10 @@ test('a tool slider owns its vertical drag instead of starting panel scroll', ()
 
 test('shared horizontal slider is its gauge and its value, without a compact icon', () => {
     const slider = buildBevyToolSliderNode({ id: 'mix', label: 'Strength', orientation: 'horizontal', value: 50, expanded: true });
-    assert.deepEqual(slider.style.size, [180,60]);
+    // Three grid cells, their joints included: 3 × 60 − 5.
+    assert.deepEqual(slider.style.size, [175, 55]);
     assert.equal(findNode(slider, 'mix_icon'), null);
-    assert.deepEqual(findNode(slider, 'mix_gauge').style.size, [180, 60]);
+    assert.deepEqual(findNode(slider, 'mix_gauge').style.size, [175, 55]);
 });
 
 test('shared horizontal slider retains its native square until expanded and formats the retained value', () => {
