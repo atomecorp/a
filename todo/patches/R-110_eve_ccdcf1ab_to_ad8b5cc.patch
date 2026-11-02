@@ -1,0 +1,1481 @@
+From ad8b5cc37e64b2f1b5002a38d98ca400452cb503 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 2 Nov 2026 17:26:20 +0000
+Subject: [PATCH] =?UTF-8?q?Dashboard=20swipe-up=20navigation,=20menu=20swi?=
+ =?UTF-8?q?pe/explore/tap=20and=20lens=20fixes,=20=C2=AB=20en=20cours=20?=
+ =?UTF-8?q?=C2=BB=20tool=20owner?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Swipe up from the ground, Back/Next, the Messages tool or the field (grown, words wrapped); one pointer route for the
+rail and ribbons (speed-decided swipe vs exploration, no run after a travel, glide catch, lens kept in view);
+dashboard_ongoing_tool.js: the orange disc above the assistant on every view, straight back to the session.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Mnbqjvj1Z7YsAuXpENLdNj
+---
+ documentations/FRAMEWORK_STATE.md             |  15 +++
+ .../dashboard/dashboard_brick_session_card.js |   2 +-
+ .../dashboard_communication_input.js          | 114 +++++++++++-------
+ .../dashboard/dashboard_footer_navigation.js  |  27 +++--
+ domains/dashboard/dashboard_mystic_cells.js   |   4 +-
+ .../dashboard/dashboard_mystic_geometry.js    |  10 +-
+ domains/dashboard/dashboard_mystic_grid.js    |   8 +-
+ domains/dashboard/dashboard_mystic_runtime.js |  40 ++++--
+ domains/dashboard/dashboard_ongoing_entry.js  |   2 +
+ domains/dashboard/dashboard_ongoing_scene.js  |   8 +-
+ domains/dashboard/dashboard_ongoing_tool.js   | 101 ++++++++++++++++
+ domains/dashboard/dashboard_training_card.js  |   2 +-
+ domains/dashboard/dashboard_training_disc.js  |  12 +-
+ .../dashboard/dashboard_training_session.js   |   6 +-
+ domains/matrix/matrix_template_runtime.js     |   6 +-
+ .../bevy_ui_pointer_reveal_runtime.js         |  45 ++++++-
+ domains/rendering/bevy_ui_pointer_runtime.js  |  37 ++----
+ domains/rendering/bevy_ui_scroll_runtime.js   |   4 +-
+ .../bevy_ui_linear_menu_lens_controller.js    |   4 +-
+ .../bevy_ui_linear_menu_lens_geometry.js      |  10 +-
+ .../bevy_ui_linear_menu_lens_painter.js       |   7 +-
+ .../ribbon/bevy_ui_main_menu_atom_voice.js    |  17 ++-
+ .../ribbon/bevy_ui_main_menu_interactions.js  |   5 +-
+ .../bevy_ui_main_menu_scroll_runtime.js       |   5 +
+ .../ribbon/bevy_ui_mystic_grid_filter.js      |  14 ++-
+ .../ribbon/bevy_ui_mystic_grid_runtime.js     |  11 +-
+ .../ribbon/bevy_ui_mystic_item_handlers.js    |  11 +-
+ .../bevy_panel/bevy_panel_editable_text.js    |  24 ++++
+ .../bevy_panel/bevy_panel_tile_gesture.js     |   7 +-
+ ...tome_contextual_edit_projection_runtime.js |   7 +-
+ 30 files changed, 430 insertions(+), 135 deletions(-)
+ create mode 100644 domains/dashboard/dashboard_ongoing_tool.js
+
+diff --git a/documentations/FRAMEWORK_STATE.md b/documentations/FRAMEWORK_STATE.md
+index fef4a6a..639d890 100644
+--- a/documentations/FRAMEWORK_STATE.md
++++ b/documentations/FRAMEWORK_STATE.md
+@@ -1590,6 +1590,21 @@ No defect absence is asserted by this initial governance task.
+ 
+ ## 5. Recent task record
+ 
++### 2026-11-02 — Menus (swipe, slow exploration, tap, lens) and the « en cours » tool (task 2 of 3)
++
++- Menus (contextual rail, project ribbon, main ribbon — one pointer route): a quick swipe along a bar that scrolls scrolls it and runs nothing at its release or after; a slow exploration grows the tool under the finger and its release runs nothing; a short tap runs its tool once; a press that stops a glide is no tap; the ribbon's swipe no longer swallows the next tap; the grown tool stays whole at the bar's edge (the ribbon's Organize and Atome stay in place); a lift taken by the Mystic rests the lens. Speed threshold 0.35 px/ms at the hold tolerance (18 px touch). Reproduced on the previous code (real touches): a quick swipe opened the Créer palette at its release and did not scroll; a slow exploration scrolled instead of growing; the grown tool was cut by the Organize block.
++- « En cours »: one owner (`dashboard_ongoing_tool.js`), the orange disc of the activity (its live ring) right above the assistant on the home, over a rubric (cell kept free), in a project (the rail rises by one tool); painted above panels; it steps aside while a panel's slab or band lies on its place (the Sport card's own Stop stays touchable); one activity → its card (the same session, from a project through the Dashboard), several → « En direct »; gone when the activity ends. Found and fixed on the way: the previous ▶ was drawn under panels while its touch lay above them (an invisible target over the card's Stop); a card closed while its `start` was written lost its session id.
++- Tests: `tests/eve/menu_swipe_explore_tap.test.mjs` 6/6 (5 red on the previous code), `tests/eve/ongoing_tool.test.mjs` 2/2. Real Web app (temp probes, real CDP touches): ribbon 7/7 (3 red on the previous code), rail 12/12, rail during a session 15/15 (rail rises above the tool, exploration ending on the tool runs nothing), « en cours » 8/8, `tests/probes/r108_sport_session_web.probe.mjs` 11/11. Same pre-existing Vitest failures before and after (16 in the menu/pointer set). Guardrails green; syntax 3414 files.
++- Decisions taken from the user's explicit request (2 Nov. 2026), to confirm in AGENTS.md rule 13 (its text still says « ▶ »): the tool's look is the orange disc; its touch opens the activity's card when one runs (R-107 BUG-005 option b). Left open: keeping the tool's cell free inside panels (BUG-006 cause 2, R-107).
++- **To verify**: real fingers on an iPhone/iPad (speed threshold feel, inertia catch), left hand, eVe Basic, Tauri; the Messages-tool swipe (task 1) with a pending message.
++
++### 2026-11-02 — Dashboard swipe-up navigation (task 1 of 3)
++
++- Swipe up, read from where it starts: the home's ground or an open rubric's ground (around the plates, an empty cell), Back, Next or the ✕ in Back's place → the Dashboard's root (`leaveForHome`, a held element's tools dismissed first); the assistant → large (her existing `slideAtom`/`toCentre`); the band's Messages tool → every communication (`notifications` rubric); the field → grown three tools upward, words wrapped, same editing session (text, focus and caret kept, Return still submits), folded by a swipe down or once empty and unfocused. Taps, holds, sideways page turns and a home that scrolls keep their own routes. Owners in `maps/CODEMAP.md` (2026-11-02 entry).
++- Tests: new `tests/eve/dashboard_swipe_navigation.test.mjs` 5/5 (red on the previous code: the bricks did not exist). Real Web app (Chromium WebGPU under Xvfb, real CDP touches, temp probe `temp/swipe_r110/swipe.probe.mjs`): 13/13 on the new code, 7/13 on the previous code (the new gestures failing as expected). Back tap under a rubric 4/4 in isolation (one full-run miss traced to a tile tap withdrawn by an assistant proposal, existing behaviour). Console: three « Ignored attempt to cancel a touchstart » browser interventions, identical on the previous code. Pre-existing Vitest failures unchanged (`dashboard_eve_interactions` 4, `mystic_release_dwell_fling` 6, `bevy_ui_main_menu_contract` missing helper). Guardrails: syntax 3411 files, component reuse, no-fallbacks, DOM projection, mutation ownership, browser contract imports, empty-catch 357.
++- Kept: the Dashboard tool (`dashboard_root`) and the project's Organize handle — a swipe is not discoverable and not available to everyone (switch control, VoiceOver); removing them is a user decision.
++- **To verify**: on an iPhone and an iPad (real fingers, keyboard open, safe areas), eVe Basic, a left hand; the grown field's look (an existing glass grown, no new element) for the user's validation; the Messages tool's swipe was verified by unit routing only (no pending message in the test account).
++
+ ### 2026-11-02 — R-108 cloud mission: quota release edge cases, beep anchor, watch queue, real Web runs
+ 
+ - BUG-012/013 (atome `sync_scope_store.js`, `sync_engine.js`, `spark.js`): reproduced against the real engine and `session.js#setCurrentProjectCache` under a simulated 5 M-character quota. Fixed: a missing device id was written in the engine's constructor and threw (no release ever ran) — now written after the release; the boot awaits `releaseLegacySyncScopes` right after its boot wave; an unreadable legacy key is kept verbatim in IndexedDB (`unreadable_legacy:<key>`), freed and reported (`sync_scope_legacy_unreadable`); a failed IndexedDB move frees nothing, is reported and retried by the next load. `tests/eve/sync_scope_quota.test.mjs` 7/7 (4 red before). Real Web app (Chromium headful under Xvfb, WebGPU SwiftShader, isolated test Fastify): quota filled with the legacy scopes, reload, 5 creations by `ui.new_project` and 5 openings by `ui.project.open` all stay in their project (26/26); main's own `c95afeb4` also passes that central scenario.
+diff --git a/domains/dashboard/dashboard_brick_session_card.js b/domains/dashboard/dashboard_brick_session_card.js
+index 84a392f..a12a420 100644
+--- a/domains/dashboard/dashboard_brick_session_card.js
++++ b/domains/dashboard/dashboard_brick_session_card.js
+@@ -185,7 +185,7 @@ registerBevyPanelSurface({
+     onClose: () => {
+         shown = false;
+         activityCardChanged();
+-        if (session.active() && !session.done()) return;
++        if (session.starting() || (session.active() && !session.done())) return;
+         if (session.counting()) session.cancel();
+         if (session.active()) void session.stop();
+         session.release(); sliders.reset();
+diff --git a/domains/dashboard/dashboard_communication_input.js b/domains/dashboard/dashboard_communication_input.js
+index d6d38d8..555f732 100644
+--- a/domains/dashboard/dashboard_communication_input.js
++++ b/domains/dashboard/dashboard_communication_input.js
+@@ -7,10 +7,13 @@ import { createLitToolGlowPulse } from '../../intuition/ribbon/bevy_ui_main_menu
+ import { BEVY_MYSTIC_FILTER_ID } from '../../intuition/ribbon/bevy_ui_mystic_grid_filter.js';
+ import { subscribePanelTextFocus } from '../../intuition/runtime/bevy_panel/bevy_panel_text_editing.js';
+ import { commFieldNode } from '../../intuition/runtime/bevy_panel/bevy_panel_comm_compose_view.js';
+-import { searchFieldLeadPx, searchFieldNode } from '../../intuition/runtime/bevy_panel/bevy_panel_editable_text.js';
++import { panelTextFieldSwipe, searchFieldLeadPx, searchFieldNode } from '../../intuition/runtime/bevy_panel/bevy_panel_editable_text.js';
+ import { createCommunicationToolUnreadRuntime, unreadNotifications } from '../../intuition/tools/communication_tool_unread_runtime.js';
+ import { readCommNotifications, commData } from '../../intuition/runtime/bevy_panel/bevy_panel_comm_data.js';
+ import { dashboardContentGlassStyle } from './dashboard_glass_material.js';
++import { frameRecord } from './dashboard_bevy_ui_tree.js';
++import { rectRecord } from './dashboard_record_primitives.js';
++import { DASHBOARD_VISUAL_TOKENS } from './dashboard_tokens.js';
+ import { EVE_COMMON_SKIN_TOKENS, EVE_SEMANTIC_COLOR_FAMILIES } from '../../elements/skin/tokens.js';
+ import { readSurfaceBackgroundRgba } from '../rendering/surface_background_defaults.js';
+ import { getVoiceLinePlayer } from '#squirrel/voice/voice_lines.js';
+@@ -22,8 +25,7 @@ import { answerPairRequest, attachPairRequestHost, pendingPairRequestId, readPai
+ import { attachConfirmationHost, openOldestMcpConfirmation, pendingMcpConfirmations, subscribeMcpConfirmations } from '../user/mcp_confirmation_prompt.js';
+ import { leisureNewsText, openLeisureNews, readLeisureNews, subscribeLeisureNews } from '../public_events/leisure_news.js';
+ import { clearDashboardQuietMessage, readDashboardQuietMessage, subscribeDashboardQuietMessage } from './dashboard_quiet_message.js';
+-import { observeOngoingActivities, ongoingActivities } from '../programs/activity_ongoing.js';
+-import { ongoingSceneShown } from './dashboard_ongoing_scene.js';
++import { anchorOngoingTool, relayoutOngoingTool } from './dashboard_ongoing_tool.js';
+ import { resumeOngoingActivities } from './dashboard_ongoing_resume.js';
+ import { dashboardMysticTool } from './dashboard_mystic_sources.js';
+ import { unwrapToolGatewayResult } from '../../intuition/runtime/eve_intuition/tool_key_runtime.js';
+@@ -38,8 +40,9 @@ export const dashboardSendButton = ({ id, left, size, onSend }) => buildToolsBan
+     item: { key: 'send', label: eveT('eve.dashboard.mystic.send'), icon: 'send', bare: true, ground: false, onSelect: () => onSend() } });
+ // The Messages tool: a band tool beside the field, bare like the footer's Back and Atom, its
+ // badge the count of what waits — eVe's orange, red while something urgent waits.
+-const messagesToolNode = ({ id, left, size, waiting, urgent, onSelect }) => buildToolsBandToolNode({ id, position: [left, 0], size,
+-    item: { key: 'messages', label: eveT('eve.dashboard.mystic.notifications', 'Messages'), icon: 'email', family: 'communication', bare: true, onSelect,
++// Slid up (`on`, the footer's swipe), it deploys every communication, the waiting first.
++const messagesToolNode = ({ id, left, size, waiting, urgent, onSelect, on }) => buildToolsBandToolNode({ id, position: [left, 0], size,
++    item: { key: 'messages', label: eveT('eve.dashboard.mystic.notifications', 'Messages'), icon: 'email', family: 'communication', bare: true, onSelect, on,
+         badge: { count: waiting.length, color: BEVY_PANEL_TOKENS.colors.text, background: waiting.some(urgent)
+             ? BEVY_PANEL_TOKENS.actionButton.destructiveBackground : readSurfaceBackgroundRgba(EVE_SEMANTIC_COLOR_FAMILIES.orange.accent) } } });
+ // Her microphone (user request 25 Oct. 2026): a bare band tool left of the assistant (and of the next page,
+@@ -48,17 +51,13 @@ const messagesToolNode = ({ id, left, size, waiting, urgent, onSelect }) => buil
+ const microphoneNode = ({ id, left, size, on, onSelect, litOpacity }) => buildToolsBandToolNode({ id, position: [left, 0], size, litOpacity,
+     item: { key: 'microphone', label: eveT(on ? 'eve.voice.assistant.microphone_off' : 'eve.voice.assistant.microphone_on'),
+         icon: on ? 'microphone' : 'microphone_off', family: 'system', bare: true, lit: on, onSelect } });
+-// An activity under way (L3, validated 28 Oct. 2026): a bare tool right above the assistant, out of the band (user's
+-// choice A of 29 Oct. 2026: the band keeps its tools, what is contextual lies there; a rubric's grid keeps that cell
+-// free, #dashboard_mystic_grid.js), its glyph in the active look (AGENTS.md rule 15); a touch shows them « En direct »
+-// (dashboard.ongoing.open, #dashboard_ongoing_scene.js), whose foot then carries it. Absent while nothing is under way.
++// An activity under way (L3, validated 28 Oct. 2026): « En direct » lists them (dashboard.ongoing.open, #dashboard_ongoing_scene.js);
++// the « en cours » tool itself is #dashboard_ongoing_tool.js, anchored here right above the assistant.
+ const openOngoing = async () => {
+     const result = unwrapToolGatewayResult(await dashboardMysticTool('dashboard.ongoing.open')).payload;
+     if (result?.ok === false) reportRuntimeError(new Error(String(result.error || 'dashboard_ongoing_open_failed')), 'dashboard:ongoing');
+     return result;
+ };
+-const ongoingNode = ({ id, position, size, litOpacity }) => buildToolsBandToolNode({ id, position, size, litOpacity,
+-    item: { key: 'ongoing', label: eveT('eve.dashboard.mystic.ongoing'), icon: 'play2', family: 'system', bare: true, lit: true, onSelect: openOngoing } });
+ // A notice in the field's place: Loisirs' (`leisure_news.js`), or the Dashboard's discreet message (`dashboard_quiet_message.js`,
+ // Q37 validated 2026-10-31): the field's glass reading it as a waiting message reads, no magnifier; its touch (press or
+ // focus) does `onTouch` (shows what is new, clears the message) instead of typing.
+@@ -71,6 +70,13 @@ const RED_GLASS_ALPHA = 0.85;
+ const TOUCH_MS = 700;
+ // The field's room, in tools: under the first, the field folds to its magnifier; under the second, in use, it covers the band.
+ const FOLDED_FIELD_TOOLS = 2, SHORT_FIELD_TOOLS = 5;
++// The field slid up grows upward from the band (its glass, its width) to this many tools, its words wrapped: a longer text is
++// typed or read whole; slid down, or left empty, it folds back to its line (the same field: its words, focus and caret stay).
++const GROWN_FIELD_TOOLS = 3;
++// Grown, the field lies over the home's tiles it rises past: the depth of a record over their text (as her words' field does,
++// dashboard_eve_captions.js), its words above its glass.
++const GROWN_FIELD_Z = frameRecord(rectRecord('z', { x: 0, y: 0, width: 1, height: 1 }, 'rgba(0,0,0,0)', DASHBOARD_VISUAL_TOKENS.layers.text + 2),
++    { x: 0, y: 0, width: 1, height: 1, zIndex: 0 }).properties.renderLayer;
+ 
+ // One editable field, bare on its band behind a small magnifier; a pending
+ // message is its idle placeholder, and touching it then opens the messages (once:
+@@ -95,7 +101,7 @@ const FOLDED_FIELD_TOOLS = 2, SHORT_FIELD_TOOLS = 5;
+ // `endFilter()`: ends the search or the filter under way (the narrow band's Close folds the field and ends it too);
+ // `searching()`: the live search shows in the field's place (its field in use, never folded); `relayout()`: the band and
+ // what lies in the field's place (a rubric's filter) laid again, once the field folds or widens.
+-export const createDashboardCommunicationInput = ({ treeId, readDraft, openMessages, onMessagesChanged = () => {}, refresh,
++export const createDashboardCommunicationInput = ({ treeId, readDraft, openMessages, openCommunications = openMessages, onMessagesChanged = () => {}, refresh,
+     fieldHidden = () => false, confirmation = () => null, placeholder = () => '', send = () => null, announce = () => {}, navigation = null, fieldShown = () => true,
+     microphone = () => null, toggleMicrophone = () => null, atomRect = () => null, bandRect = () => null, homeGap = 0, endFilter = () => null, searching = () => false, relayout = refresh,
+     hold = null, env = globalThis.window }) => {
+@@ -103,6 +109,8 @@ export const createDashboardCommunicationInput = ({ treeId, readDraft, openMessa
+     // `widened`: the field opened from its magnifier; `focusedNow`: it types (the band read at its last build), or a rubric's
+     // filter in its place does (`filterFocused`); `fieldEmit`: its intents.
+     let widened = false, focusedNow = false, filterFocused = false, fieldEmit = null, focusPending = false;
++    // `grown`: the field slid up, laid over GROWN_FIELD_TOOLS (its filter too, in its place).
++    let grown = false;
+     const openHelp = () => dashboardMysticTool('help.open');
+     const helpSurfaceChanged = event => { if (event?.detail?.surface_key === 'help' && !destroyed) refresh(); };
+     env?.addEventListener?.('eve:surface-state', helpSurfaceChanged);
+@@ -116,14 +124,13 @@ export const createDashboardCommunicationInput = ({ treeId, readDraft, openMessa
+     const releaseFilterFocus = subscribePanelTextFocus((nodeId) => {
+         const now = nodeId === BEVY_MYSTIC_FILTER_ID;
+         if (now !== filterFocused && !destroyed) { filterFocused = now; refresh(); }
++        if (!nodeId && grown && !focusPending && !String(readDraft() || '') && !searching() && !destroyed) grow(false);
+     });
+-    // Something is under way (#programs/activity_ongoing.js): the band is laid again only when that changes.
+-    let ongoing = ongoingActivities().length > 0;
+-    // Where the « en cours » tool lies (surface px): right above the assistant, a band tool's side; null while nothing is
+-    // under way or « En direct » shows (its foot carries it). A rubric's grid keeps that place free.
+-    const ongoingBox = () => {
++    // Where the « en cours » tool lies on the home (surface px): right above the assistant docked in the band's corner, a band
++    // tool's side (#dashboard_ongoing_tool.js decides whether it shows: something under way, « En direct » not shown).
++    const ongoingPlace = () => {
+         const band = bandRect(), atomBox = atomRect();
+-        if (!ongoing || ongoingSceneShown() || !band || !atomBox) return null;
++        if (!band || !atomBox || Math.abs(atomBox.y + atomBox.height - band.y - band.height) >= band.height / 2) return null;
+         return { x: atomBox.x + (atomBox.width - band.height) / 2, y: band.y - band.height - homeGap, width: band.height, height: band.height };
+     };
+     // The morning's question (Résultats lot C, M9): Pro's field asks it, Basic's assistant says it (#dashboard_feeling_morning.js).
+@@ -159,7 +166,7 @@ export const createDashboardCommunicationInput = ({ treeId, readDraft, openMessa
+         const spec = navigation?.spec() || {}, arrow = navigation ? navigation.width(size) : 0, gap = BEVY_PANEL_TOKENS.gapPx;
+         // The Messages tool lies on the home's band alone (user, 27 Oct. 2026).
+         const sending = send(), mirrored = readHandedness() === 'left', at = (x, part) => (mirrored ? width - x - part : x);
+-        const parts = (nav, { waiting, mic, root, wide, fold, live = false, showHelp = true }) => {
++        const parts = (nav, { waiting, mic, root, wide, fold, showHelp = true }) => {
+             // Back's box is the band's own (AGENTS.md rule 13, user 2026-10-30): the field never starts before it, and
+             // without Back (or the narrow band's Close) it stays empty and inert, so one Back too many touches nothing.
+             const atom = atomRect(), band = bandRect();
+@@ -173,16 +180,16 @@ export const createDashboardCommunicationInput = ({ treeId, readDraft, openMessa
+             // After the glass: Global, the Messages tool, the microphone, then the Dashboard tool (right before the next page).
+             const wideLeft = lead + glassWidth + gap, messagesLeft = wideLeft + wide, micLeft = messagesLeft + (waiting.length ? size + gap : 0);
+             const rootLeft = micLeft + (mic ? size + gap : 0);
+-            return { nav, arrow, gap, lead, glassWidth, waiting, sending, mic, root, wide, fold, live, help, helpLeft, wideLeft, messagesLeft, micLeft, rootLeft, at,
++            return { nav, arrow, gap, lead, glassWidth, waiting, sending, mic, root, wide, fold, help, helpLeft, wideLeft, messagesLeft, micLeft, rootLeft, at,
+                 fieldWidth: glassWidth - (sending ? size : 0) };
+         };
+         const full = parts(spec, { waiting: navigation && !spec.home ? [] : [...pending(), ...pendingMcpConfirmations()], mic: microphone(), root: spec.root,
+-            wide: spec.everywhere ? size + gap : 0, fold: false, live: !!navigation && ongoing });
++            wide: spec.everywhere ? size + gap : 0, fold: false });
+         // Writing to someone shown on the stage (a contact's conversation, a reply) where room lacks, the field takes the
+         // whole row, the assistant alone beside it (user, 27 Oct. 2026): no Global, microphone or Dashboard tool. With
+         // room it opens between them and hides none (BUG-051, user 30 Oct. 2026).
+         const alone = !!sending && navigation && !spec.home && full.glassWidth < SHORT_FIELD_TOOLS * size;
+-        const laid = alone ? parts(spec, { waiting: [], mic: null, root: null, wide: 0, fold: false, live: false, showHelp: false }) : full;
++        const laid = alone ? parts(spec, { waiting: [], mic: null, root: null, wide: 0, fold: false, showHelp: false }) : full;
+         if (!fieldShown() || laid.glassWidth >= SHORT_FIELD_TOOLS * size || !(widened || focusedNow || filterFocused || searching())) {
+             // No room for a field to be read (user requests of 27 and 30 Oct. 2026): the magnifier alone, a tool, a rubric's
+             // filter in the field's place included (never « R… »); touched, the field widens.
+@@ -201,6 +208,16 @@ export const createDashboardCommunicationInput = ({ treeId, readDraft, openMessa
+         relayout();
+         return { ok: true, widened };
+     };
++    // Grown, it folds back by a swipe down, or once nothing types any more and it holds no words (a search ended, a text sent):
++    // the keyboard closed over words keeps them in sight, whole.
++    const grow = (open) => {
++        if (grown === open) return { ok: true, grown };
++        grown = open; focusPending = open && !focusedNow;
++        relayout();
++        return { ok: true, grown };
++    };
++    // The field's own swipe (and its filter's, in its place): up it grows, down it folds back; the travel selects nothing.
++    const swiped = direction => grow(direction === 'up');
+     // The narrow band's Close: the field folds back to its magnifier, and the search under way ends (BUG-046).
+     const foldField = () => { void Promise.resolve(endFilter()).catch(error => reportRuntimeError(error, 'dashboard:search_end')); return widen(false); };
+     const say = (text) => {
+@@ -220,13 +237,9 @@ export const createDashboardCommunicationInput = ({ treeId, readDraft, openMessa
+                     present: () => { say(eveT('eve.auth.pair_request_said')); refresh(); return { ok: true }; } }),
+                 attachConfirmationHost({ visible: () => !destroyed && env?.__eveWorkspaceMode?.mode === 'dashboard', say }),
+                 subscribeMcpConfirmations(() => { if (!destroyed) refresh(); }),
+-                // Observed before any wait: a session started or ended during the import below was missed until the next change.
+-                observeOngoingActivities(() => {
+-                    const now = ongoingActivities().length > 0;
+-                    if (now !== ongoing && !destroyed) { ongoing = now; refresh(); }
+-                })];
+-            // A change between the band's building and this start is taken now.
+-            if ((ongoingActivities().length > 0) !== ongoing) { ongoing = !ongoing; refresh(); }
++                // The « en cours » tool, while the home is the view shown (#dashboard_ongoing_tool.js): « En direct » lists several.
++                anchorOngoingTool({ box: ongoingPlace, openAll: openOngoing,
++                    visible: () => !destroyed && env?.__eveWorkspaceMode?.mode === 'dashboard' && !!ongoingPlace() })];
+             const comm = await import('../../intuition/tools/communication.js');
+             if (destroyed) return;
+             release = comm.subscribeCommNotifications(update); update(); morning.start();
+@@ -251,8 +264,9 @@ export const createDashboardCommunicationInput = ({ treeId, readDraft, openMessa
+             }
+             const focused = editing.fieldView('search').focused === true, draft = String(readDraft() || '');
+             focusedNow = focused; fieldEmit = emit;
+-            const size = box.height, { nav, arrow, lead, glassWidth, waiting, sending, mic, root, wide, fold, folded, live, help, helpLeft, wideLeft, messagesLeft, micLeft, rootLeft, at, fieldWidth } = bandLayout(box.width, size);
+-            const place = live ? ongoingBox() : null, band = place && bandRect(), above = place && band ? [place.x - band.x, place.y - band.y] : null;
++            const size = box.height, { nav, arrow, lead, glassWidth, waiting, sending, mic, root, wide, fold, folded, help, helpLeft, wideLeft, messagesLeft, micLeft, rootLeft, at, fieldWidth } = bandLayout(box.width, size);
++            // The band laid again (a rotation, the keyboard, the assistant docking): the « en cours » tool follows it.
++            queueMicrotask(() => { if (!destroyed) void relayoutOngoingTool(); });
+             // A field doing something else (filtering, writing to someone, searching) shows no pending message:
+             // its touch types, it never opens the messages.
+             const role = readPairRequestPrompt() || placeholder();
+@@ -269,8 +283,10 @@ export const createDashboardCommunicationInput = ({ treeId, readDraft, openMessa
+             // The field takes the band's whole height: a touch anywhere on it types.
+             const height = box.height;
+             // Writing to someone, the field drops the magnifier: it no longer searches.
+-            const bare = (width) => commFieldNode({ id, key: 'search', namespace: treeId, value: draft,
+-                placeholder: role || preview || eveT(control.label_key), bare: true, width, height, editing, emit: opening });
++            // Grown (slid up), the field is bare too, its words wrapped over its whole glass (`multiline: 'wrap'`: Return still submits).
++            const bare = (width, tall = 0) => commFieldNode({ id, key: 'search', namespace: treeId, value: draft,
++                placeholder: role || preview || eveT(control.label_key), bare: true, width, height: tall || height, editing, emit: panelTextFieldSwipe(opening, swiped),
++                ...(tall ? { multiline: 'wrap' } : {}) });
+             // The discreet message takes the field while it is idle (never over a question, a word typed or a filter, but over a « write to » hint); its touch
+             // clears it, the rest of that touch landing on the field laid again without typing.
+             const quiet = !readPairRequestPrompt() && !focused && !draft && !fieldHidden() ? readDashboardQuietMessage() : '';
+@@ -283,19 +299,25 @@ export const createDashboardCommunicationInput = ({ treeId, readDraft, openMessa
+             morning.say({ home: spoken, busy: !!readPairRequestPrompt() }, announce);
+             suggestion.say({ home: spoken, busy: !!readPairRequestPrompt() || morning.asking() }, announce);
+             const morningAsked = !news && home && fieldShown() && !role && !preview && !focused && !draft && !sending && !fieldHidden() && morning.asking();
++            // The field grows only as itself (never a notice, the morning's question, a filter in its place, its magnifier alone).
++            if (grown && (news || morningAsked || !fieldShown() || folded)) grown = false;
++            const tall = grown ? GROWN_FIELD_TOOLS * size : 0;
+             const field = news ? noticeField({ id, treeId, news, width: fieldWidth, height, editing, emit, onTouch: noticeTouch })
+                 : morningAsked ? morning.field({ id, treeId, width: fieldWidth, height, editing, emit })
+-                : fieldHidden() ? node(id, 'panel', { size: [fieldWidth, height] })
+-                : sending ? bare(fieldWidth) : searchFieldNode({ id, width: fieldWidth, height, field: bare(fieldWidth - searchFieldLeadPx(height)) });
+-            // Send right after the field, for every hand: the band's corner stays the Atom's (24 Oct. 2026).
++                : fieldHidden() ? node(id, 'panel', { size: [fieldWidth, tall || height] })
++                : sending || tall ? bare(fieldWidth, tall) : searchFieldNode({ id, width: fieldWidth, height, field: bare(fieldWidth - searchFieldLeadPx(height)) });
++            // Send right after the field, for every hand: the band's corner stays the Atom's (24 Oct. 2026); grown, at the field's foot.
+             field.style.position = [0, 0];
+             const children = [field];
+             if (sending) children.push(dashboardSendButton({ id: id + '_send', left: fieldWidth, size, onSend: sending }));
++            if (sending && tall) children.at(-1).style = { ...children.at(-1).style, position: [fieldWidth, tall - size] };
++            if (tall) children.forEach(child => { child.style = { ...child.style, z_index: GROWN_FIELD_Z + 1 }; });
+             // Widened from its magnifier: the field, once laid, takes the focus (a rubric's filter in its place is touched to type).
+             if (focusPending && !folded) { focusPending = false; if (!fieldHidden()) queueMicrotask(() => emit({ type: `${treeId}.field.focus`, key: 'search' })); }
+             // eVe Basic without its field (`fieldShown()` false): the arrows alone, no glass, or Loisirs' notice on it; no room: the magnifier alone.
+             const glass = !fieldShown() && !news ? null : folded ? buildToolsBandToolNode({ id: id + '_unfold', position: [at(lead, size), 0], size,
+-                item: { key: 'search_unfold', label: eveT('eve.dashboard.mystic.media_search'), icon: 'search', bare: true, onSelect: () => widen(true) } }) : node(id + '_glass', 'panel', { position: [at(lead, glassWidth), 0], size: [glassWidth, box.height], radius: EVE_COMMON_SKIN_TOKENS.radius.sm,
++                item: { key: 'search_unfold', label: eveT('eve.dashboard.mystic.media_search'), icon: 'search', bare: true, onSelect: () => widen(true) } }) : node(id + '_glass', 'panel', { position: [at(lead, glassWidth), tall ? box.height - tall : 0], size: [glassWidth, tall || box.height], radius: EVE_COMMON_SKIN_TOKENS.radius.sm,
++                ...(tall ? { z_index: GROWN_FIELD_Z } : {}),
+                 ...dashboardContentGlassStyle().material }, children);
+             return node(id + '_band', 'panel', { size: [box.width, box.height] }, [...(glass ? [glass] : []),
+                 ...(help ? [buildToolsBandToolNode({ id: id + '_help', position: [at(helpLeft, size), 0], size,
+@@ -303,8 +325,8 @@ export const createDashboardCommunicationInput = ({ treeId, readDraft, openMessa
+                 ...(fold ? [buildToolsBandToolNode({ id: id + '_fold', position: [at((arrow - size) / 2, size), 0], size,
+                     item: { key: 'search_fold', label: eveT('eve.dashboard.mystic.close'), icon: 'close', bare: true, onSelect: foldField } })] : []),
+                 ...(wide ? [navigation.everywhereNode({ fieldId: id, x: at(wideLeft, size), size, entry: nav.everywhere })] : []),
+-                ...(waiting.length ? [messagesToolNode({ id: id + '_messages', left: at(messagesLeft, size), size, waiting, urgent, onSelect: openWaiting })] : []),
+-                ...(above ? [ongoingNode({ id: id + '_ongoing', position: above, size, litOpacity: breathe(id + '_ongoing') })] : []),
++                ...(waiting.length ? [messagesToolNode({ id: id + '_messages', left: at(messagesLeft, size), size, waiting, urgent, onSelect: openWaiting,
++                    on: navigation?.swipeUp?.(openCommunications) })] : []),
+                 ...(mic ? [microphoneNode({ id: id + '_microphone', left: at(micLeft, size), size, on: mic.on, onSelect: () => toggleMicrophone(),
+                     litOpacity: mic.on ? breathe(id + '_microphone') : 1 })] : []),
+                 ...(root ? [navigation.rootNode({ fieldId: id, x: at(rootLeft, size), size, entry: root })] : []),
+@@ -313,19 +335,25 @@ export const createDashboardCommunicationInput = ({ treeId, readDraft, openMessa
+         },
+         // The band's own tools under an open rubric (the footer hands it their touch): the magnifier, its Close.
+         touchAt: (box) => box(`${fieldId}_help`) ? openHelp
+-            : [[`${fieldId}_unfold`, () => widen(true)], [`${fieldId}_fold`, foldField], [`${fieldId}_ongoing`, openOngoing]]
++            : [[`${fieldId}_unfold`, () => widen(true)], [`${fieldId}_fold`, foldField]]
+                 .find(([nodeId]) => box(nodeId))?.[1] || null,
+         // Where the field lies in the footer band `band` (surface px): a rubric's filter takes that place
+         // (`folded`: the band shows the magnifier alone, the filter waits for it to widen).
+         fieldIn: (band) => {
+             const { lead, glassWidth, at, fieldWidth, folded } = bandLayout(band.width, band.height);
+-            return { ...band, x: band.x + at(lead, glassWidth), width: fieldWidth, folded: folded === true };
++            const tall = grown && !folded ? GROWN_FIELD_TOOLS * band.height : 0;
++            return { ...band, x: band.x + at(lead, glassWidth), width: fieldWidth, folded: folded === true,
++                ...(tall ? { y: band.y + band.height - tall, height: tall, wrap: true } : {}) };
+         },
+-        ongoingBox,
++        ongoingPlace,
++        // The field's (or its filter's) swipe: `grow(true)` lays it over GROWN_FIELD_TOOLS, `grow(false)` back on its line.
++        grow, swiped,
++        // How far (px) the grown field rises above its band (0 on its line): what lies above the footer lies above it.
++        rise: () => { const band = bandRect(); return grown && band ? (GROWN_FIELD_TOOLS - 1) * band.height : 0; },
+         // The field stays shown while it reads the question or its outcome; Return answers only the question.
+         asking: () => Boolean(readPairRequestPrompt()),
+         answer: draft => (pendingPairRequestId() ? answerPairRequest(draft) : { ok: true }),
+-        inspect: () => ({ selectedId, fieldId, pending: pending().length, prompt: readPairRequestPrompt(), quiet: readDashboardQuietMessage() }),
++        inspect: () => ({ selectedId, fieldId, pending: pending().length, prompt: readPairRequestPrompt(), quiet: readDashboardQuietMessage(), grown }),
+         destroy: () => { say(''); destroyed = true; release?.(); morning.destroy(); releasePair.forEach(stop => stop()); releasePair = []; cycle.destroy(); glow.clear(); releaseFilterFocus();
+             env?.removeEventListener?.('eve:surface-state', helpSurfaceChanged); }
+     };
+diff --git a/domains/dashboard/dashboard_footer_navigation.js b/domains/dashboard/dashboard_footer_navigation.js
+index 8e9c8e8..e8512b4 100644
+--- a/domains/dashboard/dashboard_footer_navigation.js
++++ b/domains/dashboard/dashboard_footer_navigation.js
+@@ -24,6 +24,7 @@
+  */
+ import { buildNavigationArrowButtonNode } from '../../intuition/ribbon/bevy_ui_navigation_arrow.js';
+ import { buildToolsBandToolNode } from '../../intuition/ribbon/bevy_ui_tools_band.js';
++import { bevyPanelSwipeHandlers, createBevyPanelTileGesture } from '../../intuition/runtime/bevy_panel/bevy_panel_tile_gesture.js';
+ import { locateBevyUiNode } from '../rendering/bevy_ui_scroll_runtime.js';
+ import { imageRecord, rectRecord } from './dashboard_record_primitives.js';
+ import { dashboardMysticIconContent, dashboardMysticTool } from './dashboard_mystic_sources.js';
+@@ -35,11 +36,13 @@ const arrowId = (fieldId, direction) => `${fieldId}_${direction === 'back' ? 'ba
+ const rootId = fieldId => `${fieldId}_root`;
+ const everywhereId = fieldId => `${fieldId}_everywhere`;
+ const inside = (box, x, y) => !!box && x >= box.x && x <= box.x + box.width && y >= box.y && y <= box.y + box.height;
++// A slide whose first travel goes up (`{ dx, dy }` from where it started): the swipe up of the band's tools.
++export const slidesUp = ({ dx = 0, dy = 0 } = {}) => -dy > Math.abs(dx);
+ 
+ // `isRubricShown()` / `isStageShown()`: what the home shows; `navigate(direction)`: the
+ // open Mystic grid's own Back / next; `stageBack`: the stage's way out, read from its tools.
+-export const createDashboardFooterNavigation = ({ tokens, readTree, fieldId, isRubricShown, isStageShown, navigate, closeStage, goHome,
+-    refresh, openMessages, toggleMicrophone, atomRect, atomTouch, everywhere = () => null, fieldTouch = () => null, filtering = () => false, endFilter = () => null }) => {
++export const createDashboardFooterNavigation = ({ tokens, readTree, fieldId, isRubricShown, isStageShown, navigate, closeStage, goHome, swipeHome = goHome,
++    refresh, openMessages, openCommunications = openMessages, toggleMicrophone, atomRect, atomTouch, everywhere = () => null, fieldTouch = () => null, filtering = () => false, endFilter = () => null, ongoing = null }) => {
+     const { boxUnits, holdMs } = tokens.footerNavigation;
+     let paging = { page: 0, pages: 1, depth: 0 }, stageBack = null, stageNext = null, stageClose = false;
+     // A search or a filter under way ends by the Close in Back's place, unless a panel's own ✕ ends it.
+@@ -61,6 +64,9 @@ export const createDashboardFooterNavigation = ({ tokens, readTree, fieldId, isR
+         const deep = isStageShown() ? stageBack?.fold === true || isRubricShown() : isRubricShown() && (paging.depth > 0 || paging.page > 0);
+         return deep ? { onActivate: () => dashboardMysticTool('ui.matrix.view') } : null;
+     };
++    // A band tool's swipe (its press and its lift, the drag kept on the tool so no scroll takes it): up, `onUp()`. A tap stays its touch.
++    const gesture = createBevyPanelTileGesture();
++    const swipeUp = onUp => ({ ...bevyPanelSwipeHandlers(gesture, 'footer', direction => (direction === 'up' ? onUp() : null), { vertical: true }), drag: () => {} });
+     const boxOf = (id) => { const tree = readTree(); return tree ? locateBevyUiNode({ node: tree.root, nodeId: id })?.box : null; };
+     return {
+         // The Mystic grid laid a page or a level: the next page's arrow and the Dashboard tool come (or leave)
+@@ -70,6 +76,8 @@ export const createDashboardFooterNavigation = ({ tokens, readTree, fieldId, isR
+             if (had !== `${!!next()}:${!!root()}`) refresh();
+         },
+         reset: () => { paging = { page: 0, pages: 1, depth: 0 }; },
++        // A band tool's own swipe up (`on` handlers): the Messages tool deploys every communication.
++        swipeUp,
+         // The stage's tools: a step back (`navigation: 'back'`, `fold`) and its next (`navigation: 'next'`) leave the
+         // band for the footer's two ends (AGENTS.md rule 13: Back leftmost, Next beside the assistant); a panel's way out
+         // stays in its band, leftmost, as its Close (✕) — one is given to a band that has none, and to a panel's slab
+@@ -100,12 +108,12 @@ export const createDashboardFooterNavigation = ({ tokens, readTree, fieldId, isR
+             if (direction === 'back' && entry.close) {
+                 const tool = buildToolsBandToolNode({ id: arrowId(id, 'back'), position: [x + (width - height) / 2, 0], size: height,
+                     item: { key: 'close', label: eveT('eve.dashboard.mystic.close'), navigation: 'back', close: true, onSelect: () => entry.onActivate(),
+-                        on: { long_press: () => entry.onLongPress() } } });
++                        on: { long_press: () => entry.onLongPress(), ...swipeUp(swipeHome) } } });
+                 return { ...tool, hold_delay_ms: holdMs };
+             }
+             const button = buildNavigationArrowButtonNode({ id: arrowId(id, direction), direction, sizePx: height,
+                 label: direction === 'back' ? eveT('eve.menu.back', 'Back') : eveT('eve.menu.next', 'next'),
+-                on: { activate: () => entry.onActivate(), ...(entry.onLongPress ? { long_press: () => entry.onLongPress() } : {}) } });
++                on: { activate: () => entry.onActivate(), ...(entry.onLongPress ? { long_press: () => entry.onLongPress() } : {}), ...swipeUp(swipeHome) } });
+             return { ...button, ...(entry.onLongPress ? { hold_delay_ms: holdMs } : {}), style: { ...button.style, position: [x, 0], size: [width, height] } };
+         },
+         // The Dashboard tool at `x` in the footer band, bare like the Messages tool, its glyph untinted as the Organize handle's.
+@@ -117,15 +125,20 @@ export const createDashboardFooterNavigation = ({ tokens, readTree, fieldId, isR
+         // A touch on the footer under an open rubric (client px): Back, next, the Dashboard tool, Global, the Messages tool, her microphone or the Atom.
+         touchAt: (x, y) => {
+             const id = fieldId(), shown = id ? back() : null, ahead = id ? next() : null, home = id ? root() : null, wide = id ? everywhere() : null;
++            // Back and Next slid up go home (the Mystic's persistent press: `onSlide` on the first travel, the tap kept).
++            const upHome = delta => (slidesUp(delta) ? swipeHome() : null);
+             if (shown && inside(boxOf(arrowId(id, 'back')), x, y)) return { key: 'dashboard_back', type: 'tool', navigation: true,
+-                onSelect: shown.onActivate, onLongPress: shown.onLongPress, holdMs };
+-            if (ahead && inside(boxOf(arrowId(id, 'next')), x, y)) return { key: 'dashboard_next', type: 'tool', navigation: true, onSelect: ahead.onActivate };
++                onSelect: shown.onActivate, onLongPress: shown.onLongPress, onSlide: upHome, holdMs };
++            if (ahead && inside(boxOf(arrowId(id, 'next')), x, y)) return { key: 'dashboard_next', type: 'tool', navigation: true, onSelect: ahead.onActivate, onSlide: upHome };
+             if (home && inside(boxOf(rootId(id)), x, y)) return { key: 'dashboard_root', type: 'tool', onSelect: home.onActivate };
+             if (wide && inside(boxOf(everywhereId(id)), x, y)) return { key: 'search_global', type: 'tool', onSelect: wide.onActivate };
+-            if (id && inside(boxOf(id + '_messages'), x, y)) return { key: 'dashboard_messages', type: 'tool', onSelect: openMessages };
++            if (id && inside(boxOf(id + '_messages'), x, y)) return { key: 'dashboard_messages', type: 'tool', onSelect: openMessages,
++                onSlide: delta => (slidesUp(delta) ? openCommunications() : null) };
+             if (id && inside(boxOf(id + '_microphone'), x, y)) return { key: 'dashboard_microphone', type: 'tool', onSelect: toggleMicrophone };
+             const folding = id ? fieldTouch(nodeId => inside(boxOf(nodeId), x, y)) : null;
+             if (folding) return { key: 'dashboard_field_fold', type: 'tool', onSelect: folding };
++            // The « en cours » tool above the assistant (#dashboard_ongoing_tool.js): its touch, the grid laid over it.
++            if (ongoing?.at(x, y)) return { key: 'dashboard_ongoing', type: 'tool', onSelect: ongoing.open };
+             return inside(atomRect(), x, y) ? { key: 'dashboard_atom', type: 'tool', ...atomTouch } : null;
+         },
+         // In the footer the assistant is her glyph alone, with no support behind it (AGENTS.md rule 13, user 2026-10-30): the cell
+diff --git a/domains/dashboard/dashboard_mystic_cells.js b/domains/dashboard/dashboard_mystic_cells.js
+index faad088..ff8466f 100644
+--- a/domains/dashboard/dashboard_mystic_cells.js
++++ b/domains/dashboard/dashboard_mystic_cells.js
+@@ -27,7 +27,7 @@ import { eveT } from '../../i18n/i18n.js';
+ const SESSION_GLYPH = DASHBOARD_PROFILE_MARK_TINT;
+ 
+ export const createDashboardMysticCells = ({ tokens, layout, t, stage, footer, atom, itemActions, choices, profileRow, communicationInput, weather, category,
+-    basic, basicHides, cellShown, monitorItems, monitorSlotOf, docked, onLine, read }) => {
++    basic, basicHides, cellShown, monitorItems, monitorSlotOf, docked, onLine, read, fieldOver = () => false }) => {
+     // A resting tile: the Dashboard card, tinted with its rubric over the glass.
+     // Lit from the top right (a barely perceptible relief).
+     const tinted = (records, base, box, rubric, selected = false) => dashboardMysticTintedRecords({ records, base, box, rubric, tokens, selected });
+@@ -86,6 +86,8 @@ export const createDashboardMysticCells = ({ tokens, layout, t, stage, footer, a
+         // place, or it would show in the joints between their plates.
+         const ref = dashboardMysticCellRef(control);
+         if (read().shownRubric && layout().tileRefs.includes(ref) && !layout().cellRefs.includes(ref)) return [];
++        // The bottom field grown by a swipe up (`fieldOver(ref)`): no plate lies on the cells it meets, nor the tile beneath.
++        if (read().shownRubric && layout().tileRefs.includes(ref) && fieldOver(ref)) return [];
+         // Hidden under the stage, a tile keeps a clear surface: it takes the tap on
+         // the picture (a card id: only cards carry the tap).
+         if (hiddenByStage(control) && !staged) return [rectRecord(`__eve_dashboard_card_mystic_hole_${base}`, box, 'rgba(0,0,0,0)', tokens.layers.card)];
+diff --git a/domains/dashboard/dashboard_mystic_geometry.js b/domains/dashboard/dashboard_mystic_geometry.js
+index 06e93b2..e214a36 100644
+--- a/domains/dashboard/dashboard_mystic_geometry.js
++++ b/domains/dashboard/dashboard_mystic_geometry.js
+@@ -24,7 +24,9 @@ const SEARCH_KEY = DASHBOARD_HOME_SEARCH_KEY;
+ 
+ // `onLaid()`: the home was laid again (the keyboard, a rotation, a resized window) and that paint shows: what the
+ // surface hosts follows it — the iOS keyboard only shrinks the visual viewport, never the window.
+-export const createDashboardMysticGeometry = ({ options, readRecords, readAtom, isBasic, isDocked, isTitled = () => false, onLaid = () => {}, fieldIn = null }) => {
++// `fieldRise()`: how far (px) the bottom field rises above its band, slid up (dashboard_communication_input.js#grow): what lies
++// right above the footer (a rubric's plates, the stage and its tools) lies above the field grown.
++export const createDashboardMysticGeometry = ({ options, readRecords, readAtom, isBasic, isDocked, isTitled = () => false, onLaid = () => {}, fieldIn = null, fieldRise = () => 0 }) => {
+     // Geometry (dashboard_mystic_grid.js#dashboardHomeShape): fifteen cells, the tile only as small as the room needs, the search a
+     // tool high (AGENTS.md rule 12: never shrunk). The band sits at the top under the safe area, the search at the
+     // bottom above it, the tiles centred between them around the disc; on a line (a phone held sideways) the band
+@@ -245,7 +247,7 @@ export const createDashboardMysticGeometry = ({ options, readRecords, readAtom,
+         const root = readRecords().find(record => propsOf(record).matrix_template);
+         if (!root) throw new Error('dashboard_home_root_missing');
+         const bounds = options.readBounds(), frame = layoutFrame(propsOf(root).matrix_grid, bounds);
+-        return bounds.y + frame.top + frame.footerTop;
++        return bounds.y + frame.top + frame.footerTop - fieldRise();
+     };
+     // A rubric's filter lies on the search field itself while the tiles are turned
+     // (its look kept, the home draws it meanwhile): the footer band as laid now, narrowed by
+@@ -270,14 +272,14 @@ export const createDashboardMysticGeometry = ({ options, readRecords, readAtom,
+         const bounds = options.readBounds(), frame = layoutFrame(propsOf(root).matrix_grid, bounds);
+         const x = bounds.x + frame.left, y = bounds.y + frame.top, tool = frame.unit, gap = frame.gap, tile = frame.size;
+         const roomX = bounds.x + frame.roomLeft, roomWidth = frame.roomWidth;
+-        const toolsTop = frame.footerTop - gap - tool, top = Math.max(frame.contentTop, frame.roomTop - frame.top);
++        const raisedTop = frame.footerTop - fieldRise(), toolsTop = raisedTop - gap - tool, top = Math.max(frame.contentTop, frame.roomTop - frame.top);
+         // `tall`: the same surface from the first visible line (the header steps aside, as under the keyboard) —
+         // a creation with a style card under its text (dashboard_create_surface.js).
+         const roomTop = Math.min(top, frame.roomTop - frame.top);
+         // An edit (dashboard_create_surface.js, user choices of 26 Oct. 2026): the same surface and band, its tools
+         // at a tool's own size (AGENTS.md rule 12, never the tiles' share) and the charter's gap between them
+         // (rule 14): six tools on a 402 pt phone.
+-        const editTool = SYSTEM_UI_METRICS.unitPx, editTop = frame.footerTop - gap - editTool;
++        const editTool = SYSTEM_UI_METRICS.unitPx, editTop = raisedTop - gap - editTool;
+         return { surface: { x: roomX, y: y + top, width: roomWidth, height: Math.max(1, toolsTop - gap - top), tile },
+             tall: { x: roomX, y: y + roomTop, width: roomWidth, height: Math.max(1, toolsTop - gap - roomTop), tile },
+             tools: { x: roomX, y: y + toolsTop, width: roomWidth, height: tool },
+diff --git a/domains/dashboard/dashboard_mystic_grid.js b/domains/dashboard/dashboard_mystic_grid.js
+index f289fa8..a2533aa 100644
+--- a/domains/dashboard/dashboard_mystic_grid.js
++++ b/domains/dashboard/dashboard_mystic_grid.js
+@@ -179,7 +179,8 @@ export const dashboardMysticCellAt = ({ point, rectOf, layout = DASHBOARD_HOME_L
+ // `room`: more tile cells around the home's block where the screen has room (dashboard_mystic_geometry.js#roomCells,
+ // an iPad: user, 27 Oct. 2026), content cells filled after the home's own in the same order; the tools take the whole grid.
+ // `keepFree`: the « en cours » tool's place above the assistant (dashboard_communication_input.js, user's choice A of
+-// 29 Oct. 2026): no plate or level tool lies on a cell it touches, the content shifting by one (a full page's last to the next).
++// 29 Oct. 2026): no plate or level tool lies on a cell it touches, the content shifting by one (a full page's last to the next);
++// a list of rects keeps each free (the bottom field grown by a swipe up too, dashboard_communication_input.js#grow).
+ export const dashboardMysticGrid = ({ anchorRef, rectOf, floor, fromBottom = false, handedness = 'right', layout = DASHBOARD_HOME_LAYOUT, room = [],
+     keepFree = null, zone = null }) => {
+     const anchor = rectOf(anchorRef);
+@@ -200,8 +201,9 @@ export const dashboardMysticGrid = ({ anchorRef, rectOf, floor, fromBottom = fal
+     const ring = cell => Math.max(left - cell.x, cell.x + cell.width - right, top - cell.y, cell.y + cell.height - bottom, 0);
+     const spare = [...room].sort((a, b) => ring(a) - ring(b) || (fromBottom ? b.y - a.y : a.y - b.y) || a.x - b.x);
+     const cells = [...home.map(cell => ({ ...cell, role: 'content' })), ...spare.map(cell => ({ ...cell, role: 'content', spare: true }))];
+-    const free = cell => !keepFree || !(cell.x < keepFree.x + keepFree.width && keepFree.x < cell.x + cell.width
+-        && cell.y < keepFree.y + keepFree.height && keepFree.y < cell.y + cell.height);
++    const kept = [keepFree].flat().filter(Boolean);
++    const free = cell => kept.every(box => !(cell.x < box.x + box.width && box.x < cell.x + cell.width
++        && cell.y < box.y + box.height && box.y < cell.y + cell.height));
+     const laid = [...cells, ...toolCells({ rects: [...layout.cellRefs.map(rect), ...room], floor, handedness })].filter(free);
+     return { anchor, navigation: 'caller', cells: underWideTiles(laid, layout, rectOf), cutRefs };
+ };
+diff --git a/domains/dashboard/dashboard_mystic_runtime.js b/domains/dashboard/dashboard_mystic_runtime.js
+index 5dc7551..d42354b 100644
+--- a/domains/dashboard/dashboard_mystic_runtime.js
++++ b/domains/dashboard/dashboard_mystic_runtime.js
+@@ -43,6 +43,7 @@ import { createDashboardMysticStage } from './dashboard_mystic_stage.js';
+ import { createDashboardTileGestures } from './dashboard_tile_gestures.js';
+ import { createDashboardStageHost } from './dashboard_stage_host.js';
+ import { createDashboardSurfaceTools, dashboardBandGap, dashboardPanelFootHeight, dashboardPanelFootRect, layDashboardBandRows, dashboardStageBandItems } from './dashboard_surface_tools.js';
++import { observeOngoingTool, ongoingToolAt, ongoingToolRect, openOngoingTool, relayoutOngoingTool } from './dashboard_ongoing_tool.js';
+ import { DASHBOARD_SESSION_REF, dashboardHomeLayout, dashboardBasicMonitorAt, dashboardEveHomeCellVisible, dashboardMysticCellAt, dashboardMysticCellRef, dashboardMysticGrid } from './dashboard_mystic_grid.js';
+ import { createDashboardEveAssistantChoices } from './dashboard_eve_assistant_choices.js';
+ import { createDashboardLifeProfilesRow } from './dashboard_life_profiles_row.js';
+@@ -101,7 +102,7 @@ export const createMysticDashboardRuntime = options => {
+     // A list's bare fullscreen (a video, a take) is the picture alone on black: no title, no profiles' mark (bandShown).
+     const title = createDashboardEveTitle({ readRecords: () => records, isShown: () => atom.mode() === 'grid' && !atom.captions.inTitle() && !stage.snapshot().fullscreen, tokens });
+     const geometry = createDashboardMysticGeometry({ options, readRecords: () => records, readAtom: () => atom,
+-        isBasic: basic, isDocked: () => docked(), isTitled: () => !basicHides('clock') && !!title.text(), onLaid: () => followHome(), fieldIn: band => communicationInput.fieldIn(band) }); // titled while a title shows (none at the root), never without the band (eVe Basic)
++        isBasic: basic, isDocked: () => docked(), isTitled: () => !basicHides('clock') && !!title.text(), onLaid: () => followHome(), fieldIn: band => communicationInput.fieldIn(band), fieldRise: () => communicationInput.rise() }); // titled while a title shows (none at the root), never without the band (eVe Basic)
+     const { layoutFrame, layoutCell, rectOf, filterRect, surfaceRects, searchNodeId, painted } = geometry;
+ 
+     // The projects of the list but the home (dashboard_work_projects.js): captures land in the last one left.
+@@ -204,9 +205,9 @@ export const createMysticDashboardRuntime = options => {
+         const placeholder = eveT(propsOf(records.find(record => propsOf(record).template_control?.value_key === SEARCH_KEY) || {}).template_control?.label_key || '');
+         // The live search keeps typing there: its words, its hint over the scopes, Return to the Finder.
+         if (rubric === 'search') return { rect: filterRect(), placeholder: t('search_in'), searchPlaceholder: t('search_in'),
+-            keepPlaceholder: true, persistent: true, bare: true, autoFocus: true, value: liveQuery,
++            keepPlaceholder: true, persistent: true, bare: true, autoFocus: true, value: liveQuery, onSwipe: direction => communicationInput.swiped(direction),
+             onInput: text => { liveQuery = text; search.input(text); }, onSubmit: text => search.submit(text) };
+-        return { rect: filterRect(), placeholder, searchPlaceholder: placeholder, persistent: true, bare: true, onText: text => search.rubricText(text), shown: () => filterRect()?.folded !== true, // folded: the band's magnifier alone
++        return { rect: filterRect(), placeholder, searchPlaceholder: placeholder, persistent: true, bare: true, onSwipe: direction => communicationInput.swiped(direction), onText: text => search.rubricText(text), shown: () => filterRect()?.folded !== true, // folded: the band's magnifier alone
+             elsewhere: (query, { update }) => sources.itemsFor('search', { query, update }) }; // after the rubric's own finds, the rest of eVe (BUG-059)
+     };
+     // `place`: where it was left (dashboard_stage_host.js); `bare`: its plates alone, no title, tool or way back (dashboard_monitor_peek.js).
+@@ -233,12 +234,12 @@ export const createMysticDashboardRuntime = options => {
+             const retitled = sequence === openSequence && title.level(level);
+             if ((ref !== returnRef || retitled) && sequence === openSequence) { returnRef = ref; queueMicrotask(refresh); }
+             return { ...geometry.keepCut(dashboardMysticGrid({ rectOf, zone: geometry.tilesZone(), handedness: readHandedness(), layout: layout(), anchorRef: ref, room: geometry.roomCells(), floor: geometry.footerTop(),
+-                fromBottom: rubric === 'search' || geometry.overKeyboard(), keepFree: communicationInput.ongoingBox() }), refresh), filterRect: filterRect(), ...dashboardMysticRubricPlates(rubric) };
++                fromBottom: rubric === 'search' || geometry.overKeyboard(), keepFree: [ongoingToolRect(), filterRect()?.wrap ? filterRect() : null] }), refresh), filterRect: filterRect(), ...dashboardMysticRubricPlates(rubric) };
+         };
+         // The live search types in the home's own field. A plate chosen names what it opens (the title) and ends the search that
+         // found it (BUG-046). Under the rubric the footer keeps its touches (Back, next, the Messages tool, the Atom), next per page.
+         if (!bare) title.rubric(rubric, anchorRef);
+-        const grid = { ...readCells(), readCells, persistentAt: (x, y) => footer.touchAt(x, y) || profileRow.touchAt(x, y), onPaging: footer.paged, onHold: item => stage.duo.hold(item), onChoice: (item, pending) => { stage.choose(item?.label, pending); if (search.typed()) search.endFilter().catch(error => reportRuntimeError(error, 'dashboard:search_end')); },
++        const grid = { ...readCells(), readCells, persistentAt: (x, y) => footer.touchAt(x, y) || profileRow.touchAt(x, y), onPaging: footer.paged, home: () => swipeHome(), onHold: item => stage.duo.hold(item), onChoice: (item, pending) => { stage.choose(item?.label, pending); if (search.typed()) search.endFilter().catch(error => reportRuntimeError(error, 'dashboard:search_end')); },
+             ...(rubric === 'notifications' ? {} : { filter: filterOf(rubric) }) };
+         const shown = rubric === 'search' ? [] : rubricReads.cached(rubric) || [];
+         if (!current()) return { ok: true, cancelled: true };
+@@ -297,7 +298,7 @@ export const createMysticDashboardRuntime = options => {
+     const { renderSlot, hiddenByStage, heldRecords } = createDashboardMysticCells({ tokens, layout, t, stage, footer: () => footer, atom: () => atom,
+         itemActions: () => itemActions, choices: () => choices, profileRow: () => profileRow, communicationInput: () => communicationInput, weather, category,
+         basic, basicHides, cellShown, monitorItems, monitorSlotOf, docked: () => docked(), onLine: () => geometry.shape().line,
+-        read: () => ({ events, agendaEvent: agenda.shown() || null, lastCalled, shownRubric }) });
++        read: () => ({ events, agendaEvent: agenda.shown() || null, lastCalled, shownRubric }), fieldOver: ref => fieldGrownOver(ref) });
+     const nextEvent = createDashboardNextEventWatch({ changed: () => void load() });
+     // The appointments to come, however far ahead; eVe Pro's Agenda leafed through by a slide sideways.
+     const upcoming = limit => adapters.list(category('calendar'), { projectId: null, horizonMs: null, limit });
+@@ -311,7 +312,9 @@ export const createMysticDashboardRuntime = options => {
+         if (view.kind === 'panel') return stage.panelTools();
+         return [{ key: 'stage_back', label: t('band_cancel'), icon: 'previous', navigation: 'back', onSelect: () => stage.close() }];
+     };
+-    const syncStageTools = () => surfaceTools.show(footer.stageTools(active ? stageTools() : [], { panel: active && !!stage.panelSlab() }), active ? stage.panelProgress() : null, active ? stage.panelName() : '');
++    // The stage's band laid (or gone): the « en cours » tool steps aside from it, or comes back (#dashboard_ongoing_tool.js).
++    const syncStageTools = () => Promise.resolve(surfaceTools.show(footer.stageTools(active ? stageTools() : [], { panel: active && !!stage.panelSlab() }), active ? stage.panelProgress() : null, active ? stage.panelName() : ''))
++        .finally(() => { void relayoutOngoingTool(); });
+     // A rotation, the keyboard, a resized window: once the home moved its cells on screen, an open
+     // rubric's plates, the stage's surface and its tools follow it at once.
+     const followHome = () => {
+@@ -330,6 +333,15 @@ export const createMysticDashboardRuntime = options => {
+         openRubric, openTile, holdTile, openWeather, openLastCreatedProject, openAssistantDiscussion, leaveForHome: () => leaveForHome(), tool: dashboardMysticTool });
+     // The home itself, asked for: the stage and the rubric close, and nothing comes back under them.
+     const leaveForHome = async () => { stageHost.forget(); await stage.close(); await closeRubric(shownRubric); };
++    // The bottom field grown (its rect, `wrap`) over the cell `ref`: that cell stays free of plates and of its tile.
++    const fieldGrownOver = (ref) => {
++        const field = filterRect(), cell = rectOf(ref);
++        return !!field?.wrap && !!cell && cell.x < field.x + field.width && field.x < cell.x + cell.width && cell.y < field.y + field.height && field.y < cell.y + cell.height;
++    };
++    // A swipe up from the ground (the home's, a rubric's) or from Back / Next: the Dashboard's root, a held element's tools dismissed first.
++    // The band's Messages tool slid up: every communication (the messages' rubric, the waiting first).
++    const openCommunications = () => openRubric({ rubric: 'notifications', anchorRef: DASHBOARD_SESSION_REF });
++    const swipeHome = async () => { if (itemActions.held()) await itemActions.dismiss(); return leaveForHome(); };
+     // The bottom field: Return, keystrokes, emptied (dashboard_mystic_field.js).
+     const { commitValue, onSubmit, writeDraft, clearField, sendDraft, writeToAssistant } = createDashboardMysticField({ options, stage, refresh, search: () => search,
+         atom: () => atom, communicationInput: () => communicationInput, writing: () => writing() });
+@@ -353,16 +365,16 @@ export const createMysticDashboardRuntime = options => {
+     // Back and the next page at the footer's two ends, the docked Atom in its corner (dashboard_footer_navigation.js).
+     const footer = createDashboardFooterNavigation({ tokens, readTree: () => (options.uiRuntime || window.eveBevyUiRuntime)?.state?.trees?.get(options.treeId)?.tree,
+         fieldId: () => communicationInput.inspect().fieldId, isRubricShown: () => (!!shownRubric && !bareRubric) || !!itemActions.held(), isStageShown: () => stage.snapshot().active && !stage.snapshot().fullscreen,
+-        navigate: direction => getMysticRuntime()?.navigateGrid?.(direction), closeStage: () => stage.closeHeld(), goHome: leaveForHome,
+-        refresh, everywhere: () => search.everywhere(), filtering: () => search.filtering(), endFilter: requestDashboardSearchEnd, fieldTouch: box => communicationInput.touchAt(box), openMessages: () => communicationInput.open(), toggleMicrophone: () => atom.toggleMicrophone(), atomRect: () => rectOf('atom'), atomTouch: { onSelect: () => atom?.activate(), onLongPress: () => openAssistantDiscussion({ atom }), onSlide: () => slideAtom(), holdMs: tokens.footerNavigation.holdMs } });
++        navigate: direction => getMysticRuntime()?.navigateGrid?.(direction), closeStage: () => stage.closeHeld(), goHome: leaveForHome, swipeHome: () => swipeHome(),
++        refresh, everywhere: () => search.everywhere(), filtering: () => search.filtering(), endFilter: requestDashboardSearchEnd, fieldTouch: box => communicationInput.touchAt(box), ongoing: { at: ongoingToolAt, open: openOngoingTool }, openMessages: () => communicationInput.open(), openCommunications: () => openCommunications(), toggleMicrophone: () => atom.toggleMicrophone(), atomRect: () => rectOf('atom'), atomTouch: { onSelect: () => atom?.activate(), onLongPress: () => openAssistantDiscussion({ atom }), onSlide: () => slideAtom(), holdMs: tokens.footerNavigation.holdMs } });
+     const communicationInput = createDashboardCommunicationInput({ treeId: options.treeId, readDraft: () => options.readValues?.()[SEARCH_KEY], refresh, navigation: footer, fieldShown: () => !basicHides(SEARCH_KEY),
+         microphone: () => (atom?.present() ? { on: atom.microphoneOn() } : null), toggleMicrophone: () => atom.toggleMicrophone(), atomRect: () => geometry.laidRect('atom'), bandRect: () => geometry.laidRect(SEARCH_KEY), homeGap: tokens.metrics.gap, endFilter: requestDashboardSearchEnd, searching: () => shownRubric === 'search', relayout: () => { refresh(); void getMysticRuntime()?.relayoutGrid?.(); },
+         // A message, a contact accepted, a request or a News received: what shows them is read again in place.
+-        openMessages: () => pendingMessages.open(), onMessagesChanged: () => { stage.refreshNotification(); void pendingMessages.refresh(); ['notifications', 'contacts', 'projects'].forEach(rubric => void refreshRubric(rubric)); },
++        openMessages: () => pendingMessages.open(), openCommunications: () => openCommunications(), onMessagesChanged: () => { stage.refreshNotification(); void pendingMessages.refresh(); ['notifications', 'contacts', 'projects'].forEach(rubric => void refreshRubric(rubric)); },
+         fieldHidden: filtered, placeholder: () => (writing() ? t('write_to_eve') : stage.snapshot().composing ? stage.composePlaceholder() : stage.snapshot().filtering ? stage.filterPlaceholder() || t('filter') : ''), send: () => (writing() ? writeToAssistant : stage.snapshot().composing ? sendDraft : null),
+         // Disconnect asked by the assistant: the field is its red confirmation.
+         confirmation: () => (choices.confirming() ? { label: t('logout'), onConfirm: () => choices.confirm() } : null), announce: (text, touch, held) => atom?.announce(text, touch, held), hold: spec => itemActions.open(spec) });
+-    presentation = createMatrixTemplateRuntime({ ...options, activate, resolveLongPress, resolveDragStart, resolveDragFollow, resolveHoldFollow: control => (peeks(control) ? peek.follow : null), holdRevealsChoices: true, holdDelayMs: TILE_HOLD_MS, renderSlot, commitValue, onSubmit, writeDraft, onFailure, frameNodes: (frame, field) => [...title.nodes(frame), ...(frame.zone ? [] : profileRow.topNodes(frame)), ...atom.captionNodes(frame, field)], overFrameNodes: frame => [...title.besideNodes(frame), ...(frame.zone ? geometry.overHead(frame, profileRow.topNodes(frame)) : [])], onBackgroundTap: () => atom.closeBeside('background'),
++    presentation = createMatrixTemplateRuntime({ ...options, activate, resolveLongPress, resolveDragStart, resolveDragFollow, resolveHoldFollow: control => (peeks(control) ? peek.follow : null), holdRevealsChoices: true, holdDelayMs: TILE_HOLD_MS, renderSlot, commitValue, onSubmit, writeDraft, onFailure, frameNodes: (frame, field) => [...title.nodes(frame), ...(frame.zone ? [] : profileRow.topNodes(frame)), ...atom.captionNodes(frame, field)], overFrameNodes: frame => [...title.besideNodes(frame), ...(frame.zone ? geometry.overHead(frame, profileRow.topNodes(frame)) : [])], onBackgroundTap: () => atom.closeBeside('background'), onBackgroundSwipe: direction => (direction === 'up' ? swipeHome() : null),
+         renderNativeSlot: (...args) => communicationInput.build(...args),
+         layer: 'project', layoutFrame, layoutCell, onPainted: painted });
+     const nodeIdOf = ref => idOf(records.find(entry => propsOf(entry).template_control && dashboardMysticCellRef(propsOf(entry).template_control) === ref) || {});
+@@ -405,10 +417,10 @@ export const createMysticDashboardRuntime = options => {
+     });
+     const reload = () => { refresh(); void load(); void refreshRubric(); };
+     const closed = () => { forgetDashboardEveEntry(principal); void destroy(); };
+-    let releaseFocus = null;
++    let releaseFocus = null, releaseOngoingTool = null;
+     const destroy = async () => {
+         active = false; generation++; events = []; monitors = []; lastCalled = null; rubricReads.clear();
+-        choices.destroy(); profileRow.destroy(); weather.destroy(); health.destroy(); nextEvent.stop(); agenda.stop(); progression.stop(); await atom?.destroy(); communicationInput.destroy(); await stage.destroy(); sources.destroy(); search.stop(); releaseFocus?.(); releaseFocus = null; releasePeopleOpener();
++        choices.destroy(); profileRow.destroy(); weather.destroy(); health.destroy(); nextEvent.stop(); agenda.stop(); progression.stop(); await atom?.destroy(); communicationInput.destroy(); await stage.destroy(); sources.destroy(); search.stop(); releaseFocus?.(); releaseFocus = null; releaseOngoingTool?.(); releaseOngoingTool = null; releasePeopleOpener();
+         await surfaceTools.destroy();
+         window.removeEventListener('eve:profile-preferences-updated', reload); window.removeEventListener(LIFE_PROFILES_CHANGED_EVENT, reload); window.removeEventListener('squirrel:user-logged-out', closed);
+         await presentation.destroy();
+@@ -431,6 +443,8 @@ export const createMysticDashboardRuntime = options => {
+                 await ensureDashboardFontsReady();
+                 active = true;
+                 window.addEventListener('eve:profile-preferences-updated', reload); window.addEventListener(LIFE_PROFILES_CHANGED_EVENT, reload); // the lists under the profiles chosen
++                // The « en cours » tool come, gone or moved while a rubric shows: its grid keeps its cell free again.
++                releaseOngoingTool = observeOngoingTool(() => { if (shownRubric) void getMysticRuntime()?.relayoutGrid?.(); });
+                 // A field taking or leaving the focus may lay the home over the keyboard.
+                 // The home's own search field focused, empty, over the tiles: its scopes.
+                 releaseFocus = subscribePanelTextFocus((nodeId) => {
+diff --git a/domains/dashboard/dashboard_ongoing_entry.js b/domains/dashboard/dashboard_ongoing_entry.js
+index 6f446e6..f7ddf37 100644
+--- a/domains/dashboard/dashboard_ongoing_entry.js
++++ b/domains/dashboard/dashboard_ongoing_entry.js
+@@ -31,6 +31,8 @@ export const ongoingSessionEntry = ({ key, glyph, name, session, stepName, open
+         active: () => session.active() && !session.done(),
+         line: () => [session.current() ? stepName(session.state.session.steps, session.current()) : '', ...(paused() ? [t('paused')] : [])].filter(Boolean).join(' · '),
+         clock: () => disc().clock,
++        // Its disc's ring (the step under way, `{ progress, rate, at_ms }`), null while nothing counts: the « en cours » tool's.
++        ring: () => disc().ring ?? null,
+         foot: ({ height, inner }) => {
+             const own = disc();
+             return trainingSessionFoot({ session, height, inner, name: stepName, content: own.content, caption: '', onActivate: open, ring: own.ring ?? null });
+diff --git a/domains/dashboard/dashboard_ongoing_scene.js b/domains/dashboard/dashboard_ongoing_scene.js
+index 2b4c7b5..59269a8 100644
+--- a/domains/dashboard/dashboard_ongoing_scene.js
++++ b/domains/dashboard/dashboard_ongoing_scene.js
+@@ -63,7 +63,11 @@ const rowNode = ({ entry, box, id, pick, chosen }) => {
+ 
+ // `dashboard.ongoing.open` reaches the home shown through this presentation (#dashboard_mystic_item_actions.js).
+ let presentation = null, scenes = 0;
++const sceneListeners = new Set();
+ export const ongoingSceneShown = () => scenes > 0;
++// Told when « En direct » shows or leaves (the « en cours » tool leaves while its foot carries the toggle).
++export const observeOngoingScene = listener => { sceneListeners.add(listener); return () => sceneListeners.delete(listener); };
++const sceneChanged = () => sceneListeners.forEach(listener => listener());
+ export const registerOngoingPresentation = handler => { presentation = handler; return () => { if (presentation === handler) presentation = null; }; };
+ export const presentOngoing = (input = {}) => (presentation ? presentation(input) : { ok: false, error: 'dashboard_ongoing_home_required' });
+ 
+@@ -92,8 +96,8 @@ export const createDashboardOngoingScene = ({ show, redraw, closeStage, isLive }
+         if (session) { await redraw(); return shown; }
+         const own = session = { keys: keysOf(list), stop: () => {} };
+         own.stop = observeOngoingActivities(() => void follow(own));
+-        scenes += 1;
+-        const end = () => { if (session !== own) return; own.stop(); session = null; scenes -= 1; };
++        scenes += 1; sceneChanged();
++        const end = () => { if (session !== own) return; own.stop(); session = null; scenes -= 1; sceneChanged(); };
+         const actions = list.map(entry => ({ key: `ongoing_${entry.key}`, label: entry.name(), stay: true, onSelect: () => { chosen = entry.key; },
+             row: ({ box, id, chosen: pick }) => rowNode({ entry, box, id, pick, chosen: entry.key === chosen }) }));
+         const toggle = { key: 'ongoing_toggle', label: '', icon: 'play2', family: 'system', onSelect: () => current()?.toggle() };
+diff --git a/domains/dashboard/dashboard_ongoing_tool.js b/domains/dashboard/dashboard_ongoing_tool.js
+new file mode 100644
+index 0000000..4562efc
+--- /dev/null
++++ b/domains/dashboard/dashboard_ongoing_tool.js
+@@ -0,0 +1,101 @@
++/**
++ * The « en cours » tool (AGENTS.md rule 13; L3 validated 2026-10-28; user request of 2 Nov. 2026): while an activity is
++ * under way (#programs/activity_ongoing.js, the one source of truth), a tool-sized orange disc — the activity's own disc
++ * (#dashboard_training_disc.js), its ring the step under way — lies right above the assistant, on every view where she
++ * stays: the home, a rubric (its grid keeps that cell free), a panel on the stage, a project (the ribbon's Atome handle;
++ * the contextual rail rises by one tool). Its own tree on the main menu's layer, over every panel: never covered, never
++ * dropped by a state of the band. A touch goes straight back to the activity, the same session (its card); several
++ * under way, « En direct » lists them (#dashboard_ongoing_scene.js), whose foot then carries the toggle (the tool leaves).
++ * It goes when the activity really ends; leaving its screen ends nothing.
++ *
++ * Anchors (`anchorOngoingTool({ box, visible, openAll, reach? })`): the views that lay an assistant. `box()`: the tool's place
++ * (surface px) or null; `visible()`: that view is the one shown; `openAll()`: « En direct »; `reach()`: the Dashboard, from a
++ * view that is not it (a project). The first visible wins.
++ */
++import { eveT } from '../../i18n/i18n.js';
++import { installEveBevyUiRuntime } from '../rendering/bevy_ui_runtime.js';
++import { decorateWorkspaceBevyUiTree } from '../rendering/workspace_scene_layers.js';
++import { reportRuntimeError } from '#squirrel/runtime_errors.js';
++import { observeOngoingActivities, ongoingActivities } from '../programs/activity_ongoing.js';
++import { observeOngoingScene, ongoingSceneShown } from './dashboard_ongoing_scene.js';
++import { trainingActionDisc } from './dashboard_training_disc.js';
++import { panelBodyLayer } from '../../intuition/runtime/bevy_panel/bevy_panel_tree.js';
++
++export const ONGOING_TOOL_TREE_ID = 'eve_dashboard_ongoing_tool';
++// Painted above every panel (stacked from 1250) and the stage's band (3000): what is touched there is what is drawn.
++const ONGOING_TOOL_DEPTH = 3001;
++const anchors = new Set(), listeners = new Set();
++let laid = null, laying = '', painting = null, again = false, started = false;
++const ui = () => installEveBevyUiRuntime();
++const anchor = () => [...anchors].find(entry => entry.visible()) || null;
++
++// Where the tool lies now (surface px), null while it is not shown: a rubric's grid keeps it free, the rail rises over it,
++// a touch under an open rubric reaches it (#dashboard_footer_navigation.js#touchAt).
++export const ongoingToolRect = () => laid;
++export const ongoingToolAt = (x, y) => !!laid && x >= laid.x && x <= laid.x + laid.width && y >= laid.y && y <= laid.y + laid.height;
++// Told whenever the tool comes, goes or moves.
++export const observeOngoingTool = listener => { listeners.add(listener); return () => listeners.delete(listener); };
++
++// Straight back to the activity (its card, the same session); several, « En direct » where the tool lies.
++export const openOngoingTool = async () => {
++    const shown = anchor(), list = ongoingActivities();
++    if (!shown) return { ok: false, error: 'dashboard_ongoing_view_missing' };
++    if (list.length !== 1) return shown.openAll();
++    // An activity's card lies on the Dashboard: a view elsewhere (a project) goes there first (`reach()`).
++    await shown.reach?.();
++    return list[0].open();
++};
++
++// A panel's slab or its tools band lying on the tool's place (a phone's panel spans the width at the foot, its band's last tool
++// right above the assistant): the tool steps aside meanwhile, never over the panel's own tools (whether that place should be kept
++// free in a panel is the user's open decision, BUG-006 cause 2, R-107). Read from the panel trees on screen (their root, or
++// their first nodes: the slab).
++const meets = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
++const boxOf = style => (Array.isArray(style?.position) && Array.isArray(style?.size)
++    ? { x: Number(style.position[0]), y: Number(style.position[1]), width: Number(style.size[0]), height: Number(style.size[1]) } : null);
++const covered = (box) => [...ui().state.trees.entries()].some(([id, entry]) => id !== ONGOING_TOOL_TREE_ID && entry.tree?.root?.layer === 'panel'
++    && !ui().state.suspendedTrees?.has?.(id)
++    && (boxOf(entry.tree.root.style) ? [boxOf(entry.tree.root.style)] : (entry.tree.root.children || []).map(child => boxOf(child.style)).filter(Boolean))
++        .some(other => meets(other, box)));
++
++const build = (box, entry) => {
++    const disc = trainingActionDisc({ id: `${ONGOING_TOOL_TREE_ID}_disc`, x: 0, y: 0, width: box.width, size: box.width * 5 / 6,
++        ringBand: box.width / 12, screen: true, content: null, ring: entry.ring?.() ?? null, label: eveT('eve.dashboard.mystic.ongoing'),
++        onActivate: () => { void Promise.resolve(openOngoingTool()).catch(error => reportRuntimeError(error, 'dashboard:ongoing_tool')); } });
++    const tree = decorateWorkspaceBevyUiTree({ layer: 'mainMenu', tree: { id: ONGOING_TOOL_TREE_ID, root: {
++        id: `${ONGOING_TOOL_TREE_ID}_root`, kind: 'root', style: { position: [box.x, box.y], size: [box.width, box.height] }, children: [disc] } } });
++    return { ...tree, root: panelBodyLayer(tree.root, ONGOING_TOOL_DEPTH, true) };
++};
++
++const paintOnce = async () => {
++    const list = ongoingActivities(), shown = anchor();
++    const place = list.length && shown && !ongoingSceneShown() ? shown.box() : null;
++    const box = place && !covered(place) ? place : null;
++    const ring = box ? JSON.stringify(list[0].ring?.() ?? null) : '';
++    const key = box ? `${Math.round(box.x)}:${Math.round(box.y)}:${Math.round(box.width)}:${list.length}:${ring}` : '';
++    const moved = key.split(':').slice(0, 3).join(':') !== laying.split(':').slice(0, 3).join(':');
++    if (key === laying && (!box || ui().state.trees.has(ONGOING_TOOL_TREE_ID))) return;
++    laying = key;
++    laid = box ? { x: box.x, y: box.y, width: box.width, height: box.height } : null;
++    if (box) await ui().mountTree({ id: ONGOING_TOOL_TREE_ID, surface: globalThis.document?.getElementById('eve_surface_project'), tree: build(box, list[0]) });
++    else if (ui().state.trees.has(ONGOING_TOOL_TREE_ID)) await ui().unmountTree({ id: ONGOING_TOOL_TREE_ID });
++    if (moved) listeners.forEach(listener => listener(laid));
++};
++// One paint at a time, of the latest state.
++export const relayoutOngoingTool = () => {
++    if (painting) { again = true; return painting; }
++    painting = (async () => { do { again = false; await paintOnce(); } while (again); })()
++        .catch(error => reportRuntimeError(error, 'dashboard:ongoing_tool')).finally(() => { painting = null; });
++    return painting;
++};
++
++export const anchorOngoingTool = (entry) => {
++    anchors.add(entry);
++    if (!started) {
++        started = true; observeOngoingActivities(relayoutOngoingTool); observeOngoingScene(relayoutOngoingTool);
++        // A panel opened or closed (bevy_panel_runtime.js announces it): the tool steps aside or comes back.
++        globalThis.window?.addEventListener?.('eve:surface-state', () => { void relayoutOngoingTool(); });
++    }
++    void relayoutOngoingTool();
++    return () => { anchors.delete(entry); void relayoutOngoingTool(); };
++};
+diff --git a/domains/dashboard/dashboard_training_card.js b/domains/dashboard/dashboard_training_card.js
+index cb59578..5325617 100644
+--- a/domains/dashboard/dashboard_training_card.js
++++ b/domains/dashboard/dashboard_training_card.js
+@@ -377,7 +377,7 @@ registerBevyPanelSurface({
+         measure.release();
+         // The camera lives in the card: a take running ends with it, kept.
+         void film.release();
+-        if (state.sharing || (session.active() && !session.done())) return;
++        if (state.sharing || session.starting() || (session.active() && !session.done())) return;
+         if (session.counting()) session.cancel();
+         if (session.active()) { void music(false); void session.stop(); }
+         session.release(); cardio.follow(); values.clear(); sliders.reset(); rollers.reset();
+diff --git a/domains/dashboard/dashboard_training_disc.js b/domains/dashboard/dashboard_training_disc.js
+index 3e4d834..1397f33 100644
+--- a/domains/dashboard/dashboard_training_disc.js
++++ b/domains/dashboard/dashboard_training_disc.js
+@@ -42,7 +42,10 @@ const TRACK = Object.freeze({ progress: 0, rate: 0 });
+ 
+ // The Sport screen's figures (the mockup's 50 px over 14 px, a 54 px start glyph in a 150 px disc); the other cards' keep theirs.
+ const SCREEN = Object.freeze({ figure: px(50), word: px(14), weight: 500, glyph: px(54) });
+-const inside = (id, { count = null, word: named = '', glyph = '' }, disc, screen) => {
++const inside = (id, content, disc, screen) => {
++    // No content: the disc alone, its ring telling the step (the « en cours » tool, #dashboard_ongoing_tool.js).
++    if (!content) return [];
++    const { count = null, word: named = '', glyph = '' } = content;
+     if (glyph) {
+         const size = screen ? SCREEN.glyph * disc / TRAINING_SCREEN_DISC.size : disc * 58 / FIGURE_DISC;
+         return [node(`${id}_glyph`, 'image', { position: [(disc - size) / 2, (disc - size) / 2], size: [size, size] }, [],
+@@ -75,9 +78,10 @@ const ringNode = (id, left, top, outer, ring) => {
+ // `x, y, width`: the card column the disc is centred in, `y` its top; `content`: { count, word } or { glyph: start | done }.
+ // `size`: the disc's diameter (the card's by default); its figures follow it. `caption`: the words above it, none on the
+ // Sport screen (`screen`: its footprint alone, its figures the mockup's; `label` then names it for accessibility). Without
+-// `onActivate` it only shows (a measured rhythm).
+-export const trainingActionDisc = ({ id, x, y, width, content, caption = '', label = caption, disabled = false, size = DISC.size, ring = null, screen = false, onActivate }) => {
+-    const band = screen ? TRAINING_SCREEN_DISC.ring : DISC.ring, outer = trainingDiscFootprint(size, band), left = (width - outer) / 2, top = screen ? 0 : DISC.caption + DISC.gap;
++// `onActivate` it only shows (a measured rhythm). `ringBand`: its contour's band when the footprint is another (a tool's).
++export const trainingActionDisc = ({ id, x, y, width, content, caption = '', label = caption, disabled = false, size = DISC.size, ring = null, screen = false,
++    ringBand = null, onActivate }) => {
++    const band = ringBand ?? (screen ? TRAINING_SCREEN_DISC.ring : DISC.ring), outer = trainingDiscFootprint(size, band), left = (width - outer) / 2, top = screen ? 0 : DISC.caption + DISC.gap;
+     return node(`${id}_area`, 'panel', { position: [x, y], size: [width, screen ? outer : trainingActionDiscHeight(size)], background: tokens.colors.transparent,
+         opacity: disabled ? DISC.disabledOpacity : 1 }, [
+         ...(screen ? [] : [textNode(`${id}_caption`, caption, { position: [0, 0], size: [width, DISC.caption], font_size: px(17),
+diff --git a/domains/dashboard/dashboard_training_session.js b/domains/dashboard/dashboard_training_session.js
+index 03d463a..869b55b 100644
+--- a/domains/dashboard/dashboard_training_session.js
++++ b/domains/dashboard/dashboard_training_session.js
+@@ -255,8 +255,10 @@ export const createTrainingSession = ({ run, changed, sound = () => true, onStep
+         releaseObserver = observe((sessionId, next) => { if (sessionId === state.id) { adopt(next); changed(); } });
+     };
+     // The prepared session started at the 3-2-1's end (`at`), its clock ticking on while `start` is written.
++    // `state.starting` while `start` is written: the session is under way though not yet `running` (a card closed meanwhile keeps it).
+     const begin = async at => {
+-        const started = await record('start', {}, { at });
++        state.starting = true;
++        const started = await record('start', {}, { at }).finally(() => { state.starting = false; });
+         if (started?.ok !== true) { stopClock(); return started; }
+         follow();
+         // The first step is announced like every next one (`adopt` only says a change of step).
+@@ -319,6 +321,8 @@ export const createTrainingSession = ({ run, changed, sound = () => true, onStep
+         // A touch on the disc during the 3-2-1: the start comes forward, its long beep placed just ahead.
+         goNow: () => { if (state.countdown?.until) { state.countdown.until = Math.min(state.countdown.until, now() + COUNTDOWN_LEAD_MS); syncBeeps(); } },
+         counting: () => Boolean(state.countdown),
++        // Its `start` being written, at the 3-2-1's end (a card's close must not release it: its id would be lost).
++        starting: () => state.starting === true,
+         confirm: actual => { const step = current().id; return record('confirm', { step_id: step, ...(actual ? { actual_measures: actual } : {}) }, { at: now(), step }).then(withHeart); },
+         // A timed step (a rest, a hold, a cardio step) ended by the user before its time: the time really done.
+         confirmTimed: () => {
+diff --git a/domains/matrix/matrix_template_runtime.js b/domains/matrix/matrix_template_runtime.js
+index 15b2a89..817e619 100644
+--- a/domains/matrix/matrix_template_runtime.js
++++ b/domains/matrix/matrix_template_runtime.js
+@@ -8,6 +8,7 @@ import { eveT, onEveLocaleChange } from '../../i18n/i18n.js';
+ import { node, textNode, buttonNode, panelIconButtonNode, dividerNode, panelBodyLayer } from '../../intuition/runtime/bevy_panel/bevy_panel_tree.js';
+ import { textInputNode, panelTextFieldHandlers } from '../../intuition/runtime/bevy_panel/bevy_panel_editable_text.js';
+ import { createPanelTextEditingRuntime } from '../../intuition/runtime/bevy_panel/bevy_panel_text_editing.js';
++import { bevyPanelSwipeHandlers, createBevyPanelTileGesture } from '../../intuition/runtime/bevy_panel/bevy_panel_tile_gesture.js';
+ import { BEVY_PANEL_TOKENS } from '../../intuition/runtime/bevy_panel/bevy_panel_tokens.js';
+ import { bevyToolSliderCarried, buildBevyToolSliderNode, createBevyToolSliderHandlers, closeBevyToolSliderSession } from '../../intuition/shared/bevy_ui_tool_slider.js';
+ import { TOOL_SLIDER_SHAPES } from '#squirrel/components/tool_slider_shape.js';
+@@ -40,8 +41,9 @@ const matrixPointOf = event => ({ x: Number(event?.client_x ?? event?.x) || 0, y
+ 
+ export const createMatrixTemplateRuntime = ({ projectId, treeId, records, readBounds, readValues = () => ({}), writeDraft,
+     activate, resolveLongPress = null, resolveDragStart = null, resolveDragFollow = null, resolveHoldFollow = null, holdRevealsChoices = false, holdDelayMs = 0, commitValue = null, onSubmit = null, onFailure = null, renderSlot = null, renderNativeSlot = null,
+-    releaseNativeSlots = null, onScroll = null, onBackgroundTap = null, layoutFrame = null, layoutCell = null, frameNodes = null, overFrameNodes = null, onPainted = null, interactive = () => true, layer = 'panel', uiRuntime = installEveBevyUiRuntime() } = {}) => {
++    releaseNativeSlots = null, onScroll = null, onBackgroundTap = null, onBackgroundSwipe = null, layoutFrame = null, layoutCell = null, frameNodes = null, overFrameNodes = null, onPainted = null, interactive = () => true, layer = 'panel', uiRuntime = installEveBevyUiRuntime() } = {}) => {
+     let root = records.find(record => record.properties?.matrix_template);
++    const backgroundSwipe = onBackgroundSwipe ? bevyPanelSwipeHandlers(createBevyPanelTileGesture(), 'background', onBackgroundSwipe, { vertical: true }) : null; // a lift on the ground no scroll took
+     // A slide in progress per node id (its press, whether it started, where it is).
+     const slides = new Map();
+     // A hold that fired per node id (where the finger was then, whether it slid since): it starts no slide.
+@@ -413,7 +415,7 @@ export const createMatrixTemplateRuntime = ({ projectId, treeId, records, readBo
+                 overflow: 'scroll_y', background: [0, 0, 0, 0] }, [node(idOf(root) + '_content', 'panel', {
+                     size: [frame.width, frame.height + (notice ? frame.unit : 0)] }, children)],
+             // `frame.edgeMask`: a frame whose hidden edges fade (the eVe home) shows no thumb, the fade tells it scrolls.
+-            { scrollMotion: BEVY_PANEL_TOKENS.scrollMotion, ...(frame.edgeMask ? { edgeMask: frame.edgeMask } : { scrollbar: BEVY_PANEL_TOKENS.scrollbar }), ...(onScroll || onBackgroundTap ? { on: { ...(onScroll ? { scroll: onScroll } : {}), ...(onBackgroundTap ? { activate: onBackgroundTap } : {}) } } : {}) }), ...floatingSlots, ...(overFrameNodes?.(frame) || []), ...(light ? light.nodes() : []) ]) };
++            { scrollMotion: BEVY_PANEL_TOKENS.scrollMotion, ...(frame.edgeMask ? { edgeMask: frame.edgeMask } : { scrollbar: BEVY_PANEL_TOKENS.scrollbar }), ...(onScroll || onBackgroundTap || onBackgroundSwipe ? { on: { ...(onScroll ? { scroll: onScroll } : {}), ...(onBackgroundTap ? { activate: onBackgroundTap } : {}), ...(onBackgroundSwipe ? backgroundSwipe : {}) } } : {}) }), ...floatingSlots, ...(overFrameNodes?.(frame) || []), ...(light ? light.nodes() : []) ]) };
+         if (embeddedProjection) {
+             projectedRoot = description.root;
+             embeddedProjection.refresh?.(); onPainted?.();
+diff --git a/domains/rendering/bevy_ui_pointer_reveal_runtime.js b/domains/rendering/bevy_ui_pointer_reveal_runtime.js
+index 9c84bf0..1059326 100644
+--- a/domains/rendering/bevy_ui_pointer_reveal_runtime.js
++++ b/domains/rendering/bevy_ui_pointer_reveal_runtime.js
+@@ -46,6 +46,10 @@ export const decoratePaletteHover = (tree, treeId, hover) => {
+ 
+ // Revealing options and browsing their controls share the captured gesture.
+ // `paletteHoverChanged(next, previous)`: the choice under the held finger changed (its trees repaint).
++// How fast (px per ms, from the press) a first travel along a bar that scrolls must be to be a swipe: a slower one browses.
++// Measured on 2 Nov. 2026 (real touches, temp/menu_r110): a flick reaches the hold tolerance at 0.5 px/ms and more, a slow
++// exploration at 0.05–0.2.
++export const LENS_FLING_PX_PER_MS = 0.35;
+ export const createBevyUiPointerRevealRuntime = ({ state, hitTestTrees, localEventForTarget, emitUiEvents,
+     scrollRuntime, cancelSchedule, now, holdDelayMs, holdMoveTolerancePx, sameTarget, hasHandler, paletteHoverChanged } = {}) => {
+     // While a gesture that opened a palette is held, the child under the finger
+@@ -100,7 +104,7 @@ export const createBevyUiPointerRevealRuntime = ({ state, hitTestTrees, localEve
+     //   and no tool runs until the release;
+     //   a sideways travel toward the inside, on the grown tool, hands the gesture
+     //   to that tool's own palette slide (same handler, same direction rule);
+-    // - the release runs the grown tool like a tap; a cancel only rests the bar.
++    // - the release after a travel runs nothing (the grown tool was only seen); a cancel only rests the bar.
+     const callLens = (target, phase, point) => {
+         const handler = target?.lens?.handler;
+         if (typeof handler !== 'function') return null;
+@@ -163,9 +167,11 @@ export const createBevyUiPointerRevealRuntime = ({ state, hitTestTrees, localEve
+         // A still long touch keeps its rule: it never runs the tool on release.
+         const stillLongTouch = target.moved !== true && elapsed >= Math.max(1, Number(holdDelayMs) || 400);
+         const chosen = answer.activate;
+-        // A slider tool opens its slider on a release on it, even after a still
+-        // long touch (that is a direct press on it): it never changes a value.
+-        if (chosen?.nodeId && (!stillLongTouch || chosen.slider === true) && target.hold?.active !== true) {
++        // A release after a real travel (an exploration, a swipe that browsed) runs nothing: the tool under the finger
++        // only grew to be seen; a tap runs it (user request of 2 Nov. 2026). A slider tool still opens its slider on a
++        // release after a still long touch on it (a direct press: it never changes a value).
++        if (chosen?.nodeId && target.travelled !== true && target.caughtGlide !== true && (!stillLongTouch || chosen.slider === true)
++            && target.hold?.active !== true) {
+             const chosenTarget = lensTargetFor(target, chosen.nodeId, chosen.box);
+             const eventName = hasHandler(chosenTarget, state.handlers, 'activate') ? 'activate'
+                 : (hasHandler(chosenTarget, state.handlers, 'click') ? 'click' : '');
+@@ -173,5 +179,34 @@ export const createBevyUiPointerRevealRuntime = ({ state, hitTestTrees, localEve
+         }
+         return events;
+     };
+-    return { setPaletteHover, trackPaletteHover, callLens, clearLensTimer, engageLens, moveLens, releaseLens };
++    // A lens not yet engaged, under a moving finger: true while the move is the lens's own (nothing else gets it).
++    // Until the finger passes the hold tolerance the gesture is undecided: the bar neither scrolls nor browses yet, so a
++    // browse starts on the geometry the press grew. The FIRST travel past it then decides once: along a bar, a quick one
++    // (LENS_FLING_PX_PER_MS from the press) on a bar that scrolls is a swipe — the lens folds and the bar scrolls, its
++    // generic scroll begun here if the press did not begin it — a slow one browses (the tool under the finger grows,
++    // none runs); sideways from a slider trigger it enters the slider; anything else (a palette slide) leaves the lens.
++    const decideLens = (canvas, current, point, { movedPastHoldTolerance, clearHold }) => {
++        const lens = current.lens;
++        if (lens.timer && movedPastHoldTolerance(current, point)) clearLensTimer(current);
++        if (lens.decided === true || current.paletteRevealed === true) return false;
++        if (!movedPastHoldTolerance(current, point)) return lens.armed === true;
++        lens.decided = true;
++        const dx = point.x - finite(current.downPoint?.x, point.x), dy = point.y - finite(current.downPoint?.y, point.y);
++        const alongBar = lens.axis === 'y' ? Math.abs(dy) > Math.abs(dx) : Math.abs(dx) > Math.abs(dy);
++        const speed = Math.hypot(dx, dy) / Math.max(1, Number(now()) - Number(current.startedAt || 0));
++        const swipe = alongBar && lens.scrolls === true && speed >= LENS_FLING_PX_PER_MS;
++        const browses = alongBar && lens.armed === true && !swipe;
++        const entersSlider = !alongBar && lens.slider === true;
++        lens.armed = false;
++        if ((browses || entersSlider) && engageLens(current, point)) {
++            if (current.hold && !current.hold.active) { clearHold(current); current.hold.cancelled = true; }
++            moveLens(canvas, current, point);
++            return true;
++        }
++        clearLensTimer(current);
++        callLens(current, 'end', point);
++        if (swipe && current.dragOwned !== true) scrollRuntime.begin(current, current.downPoint);
++        return false;
++    };
++    return { setPaletteHover, trackPaletteHover, callLens, clearLensTimer, engageLens, moveLens, releaseLens, decideLens };
+ };
+diff --git a/domains/rendering/bevy_ui_pointer_runtime.js b/domains/rendering/bevy_ui_pointer_runtime.js
+index 667be9d..5681f4e 100644
+--- a/domains/rendering/bevy_ui_pointer_runtime.js
++++ b/domains/rendering/bevy_ui_pointer_runtime.js
+@@ -61,7 +61,7 @@ const createBevyUiPointerRuntime = ({
+     now = () => Date.now(),
+     paletteHoverChanged = null
+ } = {}) => {
+-    const { setPaletteHover, trackPaletteHover, callLens, clearLensTimer, engageLens, moveLens, releaseLens }
++    const { setPaletteHover, trackPaletteHover, callLens, clearLensTimer, engageLens, moveLens, releaseLens, decideLens }
+         = createBevyUiPointerRevealRuntime({ state, hitTestTrees, localEventForTarget, emitUiEvents, scrollRuntime,
+             cancelSchedule, now, holdDelayMs, holdMoveTolerancePx, sameTarget, hasHandler, paletteHoverChanged });
+     const cancelPointerGesture = () => {
+@@ -117,6 +117,8 @@ const createBevyUiPointerRuntime = ({
+             && isMysticPointerInteractionActive(event?.pointerId)) {
+             const target = state.pointerTarget;
+             if (target?.canvas === canvas) state.pointerTarget = null;
++            // A lens grown under that finger rests (never a preview left grown).
++            if (target?.canvas === canvas && target.lens) { clearLensTimer(target); callLens(target, 'cancel', target.point); }
+             releasePointer(canvas, target?.pointerId);
+             if (phase === 'pointercancel') state.hoverTarget = null;
+             return target?.canvas === canvas ? { handled: true } : false;
+@@ -169,6 +171,8 @@ const createBevyUiPointerRuntime = ({
+                 state.handlers?.get?.(`${target.treeId}:${target.nodeId}:palette_slide_open`)?.paletteSlideDirection || ''
+             );
+             pointerTarget.dragOwned = ownsDrag(target, state.handlers);
++            // A press on a list still gliding (its inertia, its bounce) stops it and is no tap (user request of 2 Nov. 2026).
++            pointerTarget.caughtGlide = scrollRuntime.catchGlide?.(target) === true;
+             const sweepWaits = touchSweepWaits(target, event);
+             if (sweepWaits) touchSweep.arm(pointerTarget);
+             capturePointerHandlers(state, target);
+@@ -181,6 +185,8 @@ const createBevyUiPointerRuntime = ({
+                 };
+                 const pressAnswer = callLens(pointerTarget, 'press', point) || {};
+                 pointerTarget.lens.armed = pressAnswer.armed === true;
++                // A bar that scrolls: a quick first travel along it is a swipe, never a browse (decideLens).
++                pointerTarget.lens.scrolls = pressAnswer.scrolls === true;
+                 // A slider trigger: its first sideways travel goes to its slider.
+                 pointerTarget.lens.slider = pressAnswer.slider === true;
+                 // An armed bar grows the tool under the finger at once, as the Mystic
+@@ -245,6 +251,8 @@ const createBevyUiPointerRuntime = ({
+                     Number(point.x || 0) - Number(current.downPoint?.x || 0),
+                     Number(point.y || 0) - Number(current.downPoint?.y || 0)
+                 ) > TAP_MOVE_TOLERANCE_PX) current.moved = true;
++                // A travel past the hold tolerance is a real one (an exploration, a swipe): its release is never a tap.
++                if (movedPastHoldTolerance(current, point)) current.travelled = true;
+                 holdRuntime.follow(current, point);
+                 // The slide is the tool's own quick route: the options appear
+                 // without a lift, the hover announces the choice under the
+@@ -274,30 +282,7 @@ const createBevyUiPointerRuntime = ({
+                     if (current.lens.active) {
+                         moveLens(canvas, current, point);
+                         if (current.lens.active) return handled(true);
+-                    } else {
+-                        if (current.lens.timer && movedPastHoldTolerance(current, point)) clearLensTimer(current);
+-                        // The FIRST travel decides once: along an unscrollable bar
+-                        // it browses, sideways from a slider trigger it enters the
+-                        // slider; anything else (a scroll, a palette slide) leaves
+-                        // the lens, and a preview shown on the press folds away.
+-                        if (current.lens.decided !== true && current.paletteRevealed !== true
+-                            && movedPastHoldTolerance(current, point)) {
+-                            current.lens.decided = true;
+-                            const dx = point.x - finite(current.downPoint?.x, point.x);
+-                            const dy = point.y - finite(current.downPoint?.y, point.y);
+-                            const alongBar = current.lens.axis === 'y' ? Math.abs(dy) > Math.abs(dx) : Math.abs(dx) > Math.abs(dy);
+-                            const browses = alongBar && current.lens.armed === true;
+-                            const entersSlider = !alongBar && current.lens.slider === true;
+-                            current.lens.armed = false;
+-                            if ((browses || entersSlider) && engageLens(current, point)) {
+-                                if (current.hold && !current.hold.active) { clearHold(current); current.hold.cancelled = true; }
+-                                moveLens(canvas, current, point);
+-                                return handled(true);
+-                            }
+-                            clearLensTimer(current);
+-                            callLens(current, 'end', point);
+-                        }
+-                    }
++                    } else if (decideLens(canvas, current, point, { movedPastHoldTolerance, clearHold })) return handled(true);
+                 }
+                 // Once movement has cancelled the long press, the same gesture
+                 // must immediately become a drag. Keeping this branch active
+@@ -369,7 +354,7 @@ const createBevyUiPointerRuntime = ({
+             const events = [localEventForTarget(target, 'release', point, null, canvas)];
+             if (paletteChoice) events.push(localEventForTarget(releaseTarget, 'palette_choose', point, null, canvas));
+             if (!target.paletteOpened && !(target.paletteSlideDirection && target.moved) && sameTarget(releaseTarget, target)
+-                && target.moved !== true
++                && target.moved !== true && target.caughtGlide !== true
+                 && target.hold?.active !== true && target.hold?.cancelled !== true
+                 && !completedLongTouch) {
+                 if (target.deferredTextFocus === true) {
+diff --git a/domains/rendering/bevy_ui_scroll_runtime.js b/domains/rendering/bevy_ui_scroll_runtime.js
+index d2b6222..afdbd5d 100644
+--- a/domains/rendering/bevy_ui_scroll_runtime.js
++++ b/domains/rendering/bevy_ui_scroll_runtime.js
+@@ -369,6 +369,8 @@ export const createBevyUiScrollRuntime = ({
+         scheduleRefresh(gesture.hit.treeId);
+         return true;
+     };
++    // A press on a list still gliding (inertia or bounce): true, the inertia stopped where it shows (a bounce ends by itself).
++    const catchGlide = (hit) => { const glide = nearestEntry(hit)?.entry; if (glide?.inertiaFrame == null) return false; if (!glide.stretchY) cancelInertia(glide, true); return true; };
+     const drag = (point) => {
+         if (!gesture) return false;
+         const dx = (Number(point?.x) || 0) - gesture.startX;
+@@ -494,5 +496,5 @@ export const createBevyUiScrollRuntime = ({
+     // A list of the tree drawn stretched past an end: its hit tree is then laid apart, at rest.
+     const stretching = treeId => [...entries].some(([key, entry]) => entry.stretchY && key.startsWith(toKey(treeId, '')));
+     return { announceAnchor, announcePreparedScroll, applyTree, prepareTree, captureState, userRevision, stretching,
+-        begin, captureNodeAnchor, clearTree, drag, end, hover, revealNode, wheel };
++        begin, captureNodeAnchor, catchGlide, clearTree, drag, end, hover, revealNode, wheel };
+ };
+diff --git a/intuition/ribbon/bevy_ui_linear_menu_lens_controller.js b/intuition/ribbon/bevy_ui_linear_menu_lens_controller.js
+index c4ff5ab..d6e7cda 100644
+--- a/intuition/ribbon/bevy_ui_linear_menu_lens_controller.js
++++ b/intuition/ribbon/bevy_ui_linear_menu_lens_controller.js
+@@ -323,7 +323,9 @@ export const createLinearMenuLensController = ({
+                 return {
+                     armed: browseEnabled() !== false
+                         && !!session.layout?.tiles?.some((tile) => tile.nodeId === nodeId),
+-                    slider: session.pressedSlider
++                    slider: session.pressedSlider,
++                    // A bar that scrolls: a quick travel along it scrolls it (bevy_ui_pointer_reveal_runtime.js#decideLens).
++                    scrolls: Array.isArray(session.layout?.scrollViewport)
+                 };
+             }
+             if (phase === 'engage') return { engaged: engage(point) };
+diff --git a/intuition/ribbon/bevy_ui_linear_menu_lens_geometry.js b/intuition/ribbon/bevy_ui_linear_menu_lens_geometry.js
+index 2171c92..62b6589 100644
+--- a/intuition/ribbon/bevy_ui_linear_menu_lens_geometry.js
++++ b/intuition/ribbon/bevy_ui_linear_menu_lens_geometry.js
+@@ -1,7 +1,9 @@
+ /** Pure geometry shared by the existing menu lens painter and controller. */
+ import { resolveSliderLength } from '#squirrel/components/slider_contract.js';
+ const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
+-export const solveLinearLensLayout = ({ tiles = [], sizes = [], axis = 'x', inward = -1, gap = 0, bounds = null } = {}) => {
++// `viewport` ([min, max] along the bar): the visible span of a bar that scrolls; the grown tile (the pivot) is kept whole
++// inside it, the row shifting with it — never cut by the bar's clip at a screen or block edge (user request of 2 Nov. 2026).
++export const solveLinearLensLayout = ({ tiles = [], sizes = [], axis = 'x', inward = -1, gap = 0, bounds = null, viewport = null } = {}) => {
+     const along = axis === 'y' ? 'y' : 'x';
+     const across = along === 'x' ? 'y' : 'x';
+     const spans = tiles.map((tile, index) => {
+@@ -32,6 +34,12 @@ export const solveLinearLensLayout = ({ tiles = [], sizes = [], axis = 'x', inwa
+             spans[index].start -= shift; spans[index].end -= shift;
+         }
+     }
++    if (Array.isArray(viewport) && spans[pivot].z > spans[pivot].restSize) {
++        const [min, max] = viewport.map((value) => finite(value));
++        const grown = spans[pivot];
++        const shift = grown.end > max ? max - grown.end : (grown.start < min ? min - grown.start : 0);
++        if (shift) spans.forEach((span) => { span.start += shift; span.end += shift; });
++    }
+     if (Array.isArray(bounds)) {
+         const [min, max] = bounds.map((value) => finite(value));
+         const overflowEnd = spans.at(-1).end - max;
+diff --git a/intuition/ribbon/bevy_ui_linear_menu_lens_painter.js b/intuition/ribbon/bevy_ui_linear_menu_lens_painter.js
+index 98a4271..d7a48b6 100644
+--- a/intuition/ribbon/bevy_ui_linear_menu_lens_painter.js
++++ b/intuition/ribbon/bevy_ui_linear_menu_lens_painter.js
+@@ -55,7 +55,7 @@ export const createLinearMenuLens = ({
+         frame: 0, previousAt: null, generation: 0, pending: null, draining: null, displayed: null, frames: 0, labels: new Map() };
+     const geometry = (sizes) => solveLinearLensLayout({
+         tiles: lens.rest.tiles, sizes, axis: lens.rest.axis, inward: lens.rest.inward,
+-        gap: lens.rest.gap, bounds: lens.rest.bounds
++        gap: lens.rest.gap, bounds: lens.rest.bounds, viewport: lens.rest.viewport
+     });
+     const restSizes = () => lens.rest.tiles.map((tile) => tile.rest.size);
+     const stopLoop = () => { if (lens.frame) cancelFrame(lens.frame); lens.frame = 0; lens.previousAt = null; };
+@@ -159,7 +159,8 @@ export const createLinearMenuLens = ({
+         else lens.previousAt = null;
+     };
+     const ensureLoop = () => { if (!lens.frame && lens.rest) lens.frame = requestFrame(tick); };
+-    const attach = ({ tiles = [], axis = 'x', inward = -1, gap = 0, bounds = null } = {}) => {
++    // `scrollViewport`: the visible span of a bar that scrolls, where the grown tile stays whole (#solveLinearLensLayout).
++    const attach = ({ tiles = [], axis = 'x', inward = -1, gap = 0, bounds = null, scrollViewport = null } = {}) => {
+         stopLoop();
+         lens.generation += 1;
+         lens.pending = null;
+@@ -172,7 +173,7 @@ export const createLinearMenuLens = ({
+         });
+         lens.labels = new Map();
+         if (!prepared.length) { lens.rest = null; return false; }
+-        lens.rest = { tiles: prepared, axis, inward, gap, bounds };
++        lens.rest = { tiles: prepared, axis, inward, gap, bounds, viewport: scrollViewport };
+         lens.hovered = null;
+         const rest = restSizes();
+         lens.target = rest;
+diff --git a/intuition/ribbon/bevy_ui_main_menu_atom_voice.js b/intuition/ribbon/bevy_ui_main_menu_atom_voice.js
+index ce48c5b..4a20c67 100644
+--- a/intuition/ribbon/bevy_ui_main_menu_atom_voice.js
++++ b/intuition/ribbon/bevy_ui_main_menu_atom_voice.js
+@@ -12,6 +12,8 @@ import { DASHBOARD_EVE_ATOM_TOKENS as T, eveAtomPoses, stepEveAtomVoice } from '
+ import { scheduleAnimationFrameWithFallback } from '../../domains/rendering/animation_frame_runtime.js';
+ import { locateBevyUiNode } from '../../domains/rendering/bevy_ui_scroll_runtime.js';
+ import { reportRuntimeError } from '#squirrel/runtime_errors.js';
++import { anchorOngoingTool, relayoutOngoingTool } from '../../domains/dashboard/dashboard_ongoing_tool.js';
++import { BEVY_MENU_TOKENS } from './bevy_ui_menu_surface.js';
+ 
+ // Laid at rest in the handle's square: the disc keeps its tile share (the eVe grid size).
+ const posesIn = (itemSize, motion = {}) => eveAtomPoses({ box: { width: itemSize, height: itemSize },
+@@ -83,6 +85,18 @@ export const createMainMenuAtomVoice = ({ state, nodeId, treeId, runtimeResolver
+         releaseSignal = assistant.subscribeSignal((signal) => { speechRms = signal.speechRms; inputRms = signal.inputRms; });
+     };
+     const visibility = () => { lastAt = 0; wake(); };
++    // In a project, the « en cours » tool lies right above the handle (#dashboard_ongoing_tool.js); several activities under
++    // way, « En direct » is the Dashboard's: it opens there.
++    const handleBox = () => state.lastTree?.itemBoxes?.find(box => box?.item?.id === nodeId) || null;
++    const releaseOngoing = anchorOngoingTool({
++        visible: () => env?.__eveWorkspaceMode?.mode === 'project' && state.active === true && state.treeMounted === true && !!handleBox(),
++        box: () => { const own = handleBox(), size = Number(own?.width) || 0;
++            return own ? { x: Number(own.x), y: Number(own.y) - size - BEVY_MENU_TOKENS.toolGapPx, width: size, height: size } : null; },
++        reach: async () => (await import('../tools/user_workspace_surface_runtime.js')).openWorkspaceDashboardAndMainMenu({ source: 'ongoing_tool' }),
++        openAll: async () => {
++            await (await import('../tools/user_workspace_surface_runtime.js')).openWorkspaceDashboardAndMainMenu({ source: 'ongoing_tool' });
++            return (await import('../../domains/dashboard/dashboard_mystic_sources.js')).dashboardMysticTool('dashboard.ongoing.open');
++        } });
+     const release = () => {
+         env?.document?.removeEventListener?.('visibilitychange', visibility);
+         releaseHost?.(); releaseWatch?.(); releaseState?.(); releaseSignal?.();
+@@ -101,7 +115,8 @@ export const createMainMenuAtomVoice = ({ state, nodeId, treeId, runtimeResolver
+                 env?.document?.addEventListener?.('visibilitychange', visibility);
+                 void connect().catch((error) => { release(); reportRuntimeError(error, 'main_menu:atom_voice'); });
+             } else if (!wanted && host) release();
++            void relayoutOngoingTool();
+         },
+-        destroy: release
++        destroy: () => { releaseOngoing(); release(); }
+     };
+ };
+diff --git a/intuition/ribbon/bevy_ui_main_menu_interactions.js b/intuition/ribbon/bevy_ui_main_menu_interactions.js
+index 934604f..d461d26 100644
+--- a/intuition/ribbon/bevy_ui_main_menu_interactions.js
++++ b/intuition/ribbon/bevy_ui_main_menu_interactions.js
+@@ -271,7 +271,10 @@ export const createBevyMainMenuInteractions = ({ state, inlineSearch, scroll, ho
+                 rest: { x: Number(box.x), y: Number(box.y), size },
+                 slider: box.item.entry?.toolType === 'slider'
+             };
+-        }).filter(Boolean).sort((a, b) => a.rest.x - b.rest.x);
++        }).filter(Boolean)
++            // A band that scrolls browses alone: the fixed block beside it (Organize) never moves, as the Atome never does.
++            .filter((tile) => !(state.scrollMaxPx > 0 && band) || tile.parentClip)
++            .sort((a, b) => a.rest.x - b.rest.x);
+         const width = Number(tree.layout?.surfaceWidth || 0);
+         const gap = BEVY_MENU_TOKENS.toolGapPx;
+         const anchorX = Number(anchor?.x);
+diff --git a/intuition/ribbon/bevy_ui_main_menu_scroll_runtime.js b/intuition/ribbon/bevy_ui_main_menu_scroll_runtime.js
+index 3a799f9..806f278 100644
+--- a/intuition/ribbon/bevy_ui_main_menu_scroll_runtime.js
++++ b/intuition/ribbon/bevy_ui_main_menu_scroll_runtime.js
+@@ -115,6 +115,11 @@ export const createBevyMainMenuScrollRuntime = ({ state, render, onScroll = null
+         }, SNAP_DELAY_MS);
+     };
+     const press = (nodeId = '', event = {}) => {
++        // A new press is a new gesture: a swipe's suppression never outlives it (its release emitted no activation, so
++        // the next real tap on that tool was swallowed); a press while the bar still snaps stops it there and is no tap.
++        const gliding = !!state.scrollSnapTimer || !!state.scrollAnimationFrame;
++        suppressActivateNodeId = gliding ? toKey(nodeId) : '';
++        if (gliding) { clearTimeout(state.scrollSnapTimer); state.scrollSnapTimer = 0; cancelAnimation(); void snap({ animate: false }); }
+         if (maxScroll() <= 0) return null;
+         pointer = {
+             nodeId: toKey(nodeId),
+diff --git a/intuition/ribbon/bevy_ui_mystic_grid_filter.js b/intuition/ribbon/bevy_ui_mystic_grid_filter.js
+index 133f902..60bcb9d 100644
+--- a/intuition/ribbon/bevy_ui_mystic_grid_filter.js
++++ b/intuition/ribbon/bevy_ui_mystic_grid_filter.js
+@@ -23,7 +23,7 @@
+ // later (results arriving one by one) while that level is still the one on screen.
+ // The Create item and the page turns stay. `shown()` false: the caller's bar folded to its magnifier, the field
+ // waits off screen. `clear()` ends the narrowing: no words, the level whole again (a search's Close).
+-import { textInputNode, panelTextFieldHandlers, searchFieldLeadPx, searchFieldNode } from '../runtime/bevy_panel/bevy_panel_editable_text.js';
++import { textInputNode, panelTextFieldHandlers, panelTextFieldSwipe, searchFieldLeadPx, searchFieldNode } from '../runtime/bevy_panel/bevy_panel_editable_text.js';
+ import { createPanelTextEditingRuntime } from '../runtime/bevy_panel/bevy_panel_text_editing.js';
+ import { node as panelNode } from '../runtime/bevy_panel/bevy_panel_tree.js';
+ import { reportRuntimeError } from '#squirrel/runtime_errors.js';
+@@ -118,7 +118,9 @@ export const createMysticGridFilter = ({ filter = {}, refresh = () => {}, readLe
+             if (levelKey === current.key) void writeItems(landed || (Array.isArray(found) ? found : base));
+         }
+     });
+-    const emit = (intent) => editing.handle(intent, { refresh });
++    // `onSwipe('up' | 'down')`: the caller's field swiped (the home's grows or folds back); `rect.wrap`: laid grown, its words wrapped.
++    const edit = (intent) => editing.handle(intent, { refresh });
++    const emit = typeof filter.onSwipe === 'function' ? panelTextFieldSwipe(edit, filter.onSwipe) : edit;
+     // No long press: the copy/paste Mystic would close this one.
+     const { onLongPress: _longPress, ...handlers } = panelTextFieldHandlers('mystic_filter', FIELD_KEY, emit);
+     return {
+@@ -140,15 +142,15 @@ export const createMysticGridFilter = ({ filter = {}, refresh = () => {}, readLe
+         },
+         node: (rect) => {
+             const searching = typeof level().parent?.search === 'function';
+-            const width = filter.bare ? rect.width - searchFieldLeadPx(rect.height) : rect.width;
+-            editing.registerField(FIELD_KEY, { nodeId: BEVY_MYSTIC_FILTER_ID, width, height: rect.height });
+-            const input = textInputNode({ id: BEVY_MYSTIC_FILTER_ID, width, height: rect.height, bare: filter.bare === true,
++            const wrap = rect.wrap === true, width = filter.bare && !wrap ? rect.width - searchFieldLeadPx(rect.height) : rect.width;
++            editing.registerField(FIELD_KEY, { nodeId: BEVY_MYSTIC_FILTER_ID, width, height: rect.height, multiline: wrap ? 'wrap' : false });
++            const input = textInputNode({ id: BEVY_MYSTIC_FILTER_ID, width, height: rect.height, bare: filter.bare === true, ...(wrap ? { multiline: 'wrap' } : {}),
+                 keepPlaceholder: filter.keepPlaceholder === true,
+                 placeholder: (searching ? filter.searchPlaceholder : filter.placeholder) || '', value,
+                 ...editing.fieldView(FIELD_KEY), ...handlers });
+             if (!focusAsked) { focusAsked = true; queueMicrotask(() => emit({ type: 'mystic_filter.field.focus', key: FIELD_KEY,
+                 event: { x: Number.MAX_SAFE_INTEGER, y: 0 } })); }
+-            const field = filter.bare ? searchFieldNode({ id: BEVY_MYSTIC_FILTER_ID, width: rect.width, height: rect.height, field: input }) : input;
++            const field = filter.bare && !wrap ? searchFieldNode({ id: BEVY_MYSTIC_FILTER_ID, width: rect.width, height: rect.height, field: input }) : input;
+             if (!filter.color) return { ...field, style: { ...field.style, position: [rect.x, rect.y] } };
+             return panelNode(`${BEVY_MYSTIC_FILTER_ID}_plate`, 'panel', { position: [rect.x, rect.y], size: [rect.width, rect.height],
+                 background: filter.color, radius: Number(filter.radius) || 0 }, [{ ...field, style: { ...field.style, position: [0, 0] } }]);
+diff --git a/intuition/ribbon/bevy_ui_mystic_grid_runtime.js b/intuition/ribbon/bevy_ui_mystic_grid_runtime.js
+index c57d29d..67e2091 100644
+--- a/intuition/ribbon/bevy_ui_mystic_grid_runtime.js
++++ b/intuition/ribbon/bevy_ui_mystic_grid_runtime.js
+@@ -31,6 +31,9 @@ import { RIBBON_TOKENS } from './tokens.js';
+ const pointOf = event => ({ x: Number(event?.client_x) || 0, y: Number(event?.client_y) || 0 });
+ // A drag across this share of the grid's width turns the whole page.
+ const TURN_SPAN_RATIO = 0.6;
++// What an empty cell hands the grid's swipe handlers in a plate's place: the ground, never turned over.
++export const MYSTIC_GRID_GROUND = Object.freeze({ ground: true });
++const turnsOver = plate => !!plate && plate !== MYSTIC_GRID_GROUND;
+ 
+ export const createMysticGridRuntime = ({ state, render, activateItem, itemFromHit, readLevel, runtimeResolver, surfacePainter, treeId, now = () => Date.now() }) => {
+     let source = null;
+@@ -103,7 +106,7 @@ export const createMysticGridRuntime = ({ state, render, activateItem, itemFromH
+             drag: (event, plate = null) => {
+                 const moved = swipe.move('grid', pointOf(event));
+                 if (!moved || moved.held || !state.grid) return;
+-                if (moved.axis === 'y' && plate && (plateFlip.active() || state.phase === MYSTIC_PHASE.open)) return void plateFlip.follow(plate, moved.dy);
++                if (moved.axis === 'y' && turnsOver(plate) && (plateFlip.active() || state.phase === MYSTIC_PHASE.open)) return void plateFlip.follow(plate, moved.dy);
+                 if (moved.axis !== 'x') return;
+                 if (!dragged) {
+                     if (state.phase !== MYSTIC_PHASE.open || Math.abs(moved.dx) < TILE_SWIPE_MIN_PX) return;
+@@ -119,10 +122,14 @@ export const createMysticGridRuntime = ({ state, render, activateItem, itemFromH
+                 swipe.move('grid', point);
+                 const lifted = swipe.release('grid', point);
+                 if (lifted.kind === 'swipe' && state.grid && state.phase === MYSTIC_PHASE.open) void turnToward(lifted.direction);
+-                if (lifted.kind === 'swipe_vertical' && plate && state.grid && state.phase === MYSTIC_PHASE.open) plateFlip.flick(plate, lifted.direction);
++                if (lifted.kind === 'swipe_vertical' && turnsOver(plate) && state.grid && state.phase === MYSTIC_PHASE.open) plateFlip.flick(plate, lifted.direction);
++                // An empty cell is the grid's ground: a swipe up from it is the caller's way home.
++                if (lifted.kind === 'swipe_vertical' && lifted.direction === 'up' && plate === MYSTIC_GRID_GROUND && state.grid && state.phase === MYSTIC_PHASE.open) void source?.home?.();
+             },
+             cancel: () => { ended()?.driver?.release(); plateFlip.cancel(); swipe.cancel(); }
+         },
++        // The caller's way home (`home()`: the Dashboard's root), asked by a swipe up from the grid's ground; false without one.
++        home: () => (state.grid && state.phase === MYSTIC_PHASE.open && typeof source?.home === 'function' ? (void source.home(), true) : false),
+         cancelSwipe: () => { ended()?.driver?.release(); plateFlip.cancel(); swipe.cancel(); },
+         persistentAt: (x, y) => {
+             if (state.gridSuspended) return { key: '__mystic_hosted__', type: 'hosted' };
+diff --git a/intuition/ribbon/bevy_ui_mystic_item_handlers.js b/intuition/ribbon/bevy_ui_mystic_item_handlers.js
+index e9d4e30..b622621 100644
+--- a/intuition/ribbon/bevy_ui_mystic_item_handlers.js
++++ b/intuition/ribbon/bevy_ui_mystic_item_handlers.js
+@@ -2,6 +2,8 @@ import { BEVY_MYSTIC_ROOT_ID, BEVY_MYSTIC_CENTER_ID } from './bevy_ui_mystic_mod
+ import { MYSTIC_PHASE } from './bevy_ui_mystic_motion.js';
+ import { SLIDE_START_TOLERANCE_PX } from '../../domains/rendering/bevy_ui_pointer_capture.js';
+ import { HOLD_YIELD_TRAVEL_PX } from '../../domains/rendering/bevy_ui_pointer_hold.js';
++import { TILE_SWIPE_MIN_PX } from '../runtime/bevy_panel/bevy_panel_tile_gesture.js';
++import { MYSTIC_GRID_GROUND } from './bevy_ui_mystic_grid_runtime.js';
+ const keyOf = value => String(value == null ? '' : value).trim();
+ const pointOf = event => ({ x: Number(event?.client_x) || 0, y: Number(event?.client_y) || 0 });
+ export const bevyUiMysticItemHandlers = ({ state, grid, close, isOriginatingHoldPress, updateHover, releaseAt, releaseCentreHold, pressCentre, activateCentre, activateItem, returnToRoot, activateLongPress }) => {
+@@ -21,6 +23,8 @@ export const bevyUiMysticItemHandlers = ({ state, grid, close, isOriginatingHold
+                     groundPress = null;
+                     if (grid.releasePersistent(event)) return;
+                     if (ground && Math.hypot(point.x - ground.x, point.y - ground.y) < SLIDE_START_TOLERANCE_PX) return void grid.navigate('back');
++                    // A swipe up from the ground is the caller's way home (the Dashboard's root), never a plate chosen where it lifts.
++                    if (ground && ground.y - point.y >= TILE_SWIPE_MIN_PX && ground.y - point.y > Math.abs(point.x - ground.x) && grid.home()) return;
+                     releaseAt({ clientX: event.client_x, clientY: event.client_y, event });
+                 },
+                 cancel: () => { groundPress = null; grid.cancelPersistent(); releaseCentreHold(); state.openingPointerDown = false; }
+@@ -37,6 +41,8 @@ export const bevyUiMysticItemHandlers = ({ state, grid, close, isOriginatingHold
+         // On a grid every plate (its return too) takes the sideways swipe that turns the page; a hold ends it.
+         const swipes = state.grid ? grid.swipeHandlers : { press: () => {} };
+         const held = action => () => { grid.cancelSwipe(); return action(); };
++        // An empty cell hands the grid's ground in a plate's place (a page turn's handlers still: never bound to a surface).
++        const groundSwipes = state.grid ? { ...swipes, drag: event => swipes.drag(event, MYSTIC_GRID_GROUND), release: event => swipes.release(event, MYSTIC_GRID_GROUND) } : swipes;
+         // On a grid (the eVe home) a plate held lays its options as rows: the release chooses the one under the finger
+         // (bevy_ui_pointer_runtime.js, dashboard_hold_options.js); a travel that locks the drag's axis, however slow, is
+         // the plate's drag, never its hold (bevy_ui_pointer_hold.js `yieldsToTravel`).
+@@ -52,7 +58,8 @@ export const bevyUiMysticItemHandlers = ({ state, grid, close, isOriginatingHold
+         };
+         placements.forEach((placement) => {
+             // An empty cell touched is the band's Back (user request, 28 Oct. 2026): the page before, then the level above.
+-            if (state.grid && placement.item?.type === 'empty') return void (handlers[placement.id] = { ...swipes, activate: () => grid.navigate('back') });
++            // It is the grid's ground: a swipe up from it goes home as from the ground around the plates.
++            if (state.grid && placement.item?.type === 'empty') return void (handlers[placement.id] = { ...groundSwipes, activate: () => grid.navigate('back') });
+             handlers[placement.id] = placement.isBack ? {
+                 ...(state.grid ? swipes : {}),
+                 activate: () => activateItem({ key: '__mystic_back__', type: 'back' }, { source: 'bevy_mystic_activate' }),
+@@ -66,7 +73,7 @@ export const bevyUiMysticItemHandlers = ({ state, grid, close, isOriginatingHold
+         });
+         // A plate's own handlers die with its surface; the page turn's are the grid's, not a plate's: the
+         // finger that started a turn keeps driving it, and lifts it, across the new page's surface.
+-        const epoch = state.surfaceEpoch, turning = new Set(Object.values(swipes));
++        const epoch = state.surfaceEpoch, turning = new Set([...Object.values(swipes), ...Object.values(groundSwipes)]);
+         for (const callbacks of Object.values(handlers)) for (const [name, callback] of Object.entries(callbacks)) {
+             if (!turning.has(callback)) callbacks[name] = Object.assign(event => epoch === state.surfaceEpoch && callback(event), callback);
+         }
+diff --git a/intuition/runtime/bevy_panel/bevy_panel_editable_text.js b/intuition/runtime/bevy_panel/bevy_panel_editable_text.js
+index aaf83b9..f2d0dd8 100644
+--- a/intuition/runtime/bevy_panel/bevy_panel_editable_text.js
++++ b/intuition/runtime/bevy_panel/bevy_panel_editable_text.js
+@@ -5,6 +5,7 @@ import { sliceRichText } from '../../../domains/rendering/rich_text_style.js';
+ import { BEVY_PANEL_TOKENS, hoverSurface } from './bevy_panel_tokens.js';
+ import { node, textNode } from './bevy_panel_tree_primitives.js';
+ import { laidTextNodes } from './bevy_panel_laid_text.js';
++import { TILE_SWIPE_MIN_PX } from './bevy_panel_tile_gesture.js';
+ 
+ const handlerSet = ({ onPress, onRelease, onCancel, onFocus, onHover, onHoverLeave, onBlur, onDrag, onDoubleClick, onLongPress, onWheel }) => ({
+     ...(typeof onPress === 'function' ? { press: onPress } : {}),
+@@ -248,9 +249,32 @@ const panelTextFieldHandlers = (intentPrefix, key, emit, { keyName = 'key' } = {
+     };
+ };
+ 
++// A field's swipe, read from its own intents (`press`, then `drag` with the pointer's `event`): once its travel from the
++// press is a tile swipe's length and mostly vertical, `onSwipe('up' | 'down')` runs once for that press and neither the
++// press nor its drags reach the field (its caret and selection stay where they were). The press waits for the finger to say
++// which: a sideways travel, a tap's focus, a hold hand it on first, so every other gesture stays the field's own.
++const panelTextFieldSwipe = (emit, onSwipe) => {
++    let press = null;
++    const pointOf = event => ({ x: Number(event?.client_x) || 0, y: Number(event?.client_y) || 0 });
++    const handOn = () => { const held = press?.intent; if (press) press.intent = null; return held ? emit(held) : null; };
++    return (intent) => {
++        const action = String(intent?.type || '').split('.').pop();
++        if (action === 'press') { press = { ...pointOf(intent.event), intent, acted: false }; return { ok: true }; }
++        if (action === 'drag' && press && !press.acted && press.intent) {
++            const at = pointOf(intent.event), dx = at.x - press.x, dy = at.y - press.y;
++            if (Math.max(Math.abs(dx), Math.abs(dy)) < TILE_SWIPE_MIN_PX) return { ok: true };
++            if (Math.abs(dy) > Math.abs(dx)) { press.acted = true; press.intent = null; onSwipe(dy < 0 ? 'up' : 'down'); return { ok: true }; }
++        }
++        if (action === 'drag' && press?.acted) return { ok: true };
++        handOn();
++        return emit(intent);
++    };
++};
++
+ export {
+     editableTextInputNode,
+     panelTextFieldHandlers,
++    panelTextFieldSwipe,
+     numberInputNode,
+     searchFieldLeadPx,
+     searchFieldNode,
+diff --git a/intuition/runtime/bevy_panel/bevy_panel_tile_gesture.js b/intuition/runtime/bevy_panel/bevy_panel_tile_gesture.js
+index 5e5295b..f216480 100644
+--- a/intuition/runtime/bevy_panel/bevy_panel_tile_gesture.js
++++ b/intuition/runtime/bevy_panel/bevy_panel_tile_gesture.js
+@@ -57,15 +57,16 @@ export const createBevyPanelTileGesture = ({ swipeMinPx = TILE_SWIPE_MIN_PX, axi
+ // A node's press and lift read as the sideways swipe alone (`onSwipe('left' | 'right')`), the
+ // whole travel deciding the axis: no `drag`, so a scroll area around the node keeps its vertical
+ // travel (a scroll swallows the lift) and a tap stays the node's own `activate`. Nodes that share
+-// a `key` (rows and the list under them) are one swipe zone.
++// a `key` (rows and the list under them) are one swipe zone. `vertical`: an up or down swipe is told too
++// (`onSwipe('up' | 'down')`): a node's lift after a travel its scroll area did not take (the eVe home's ground).
+ const clientPoint = event => ({ x: Number(event?.client_x) || 0, y: Number(event?.client_y) || 0 });
+-export const bevyPanelSwipeHandlers = (gesture, key, onSwipe) => ({
++export const bevyPanelSwipeHandlers = (gesture, key, onSwipe, { vertical = false } = {}) => ({
+     press: event => gesture.press(key, clientPoint(event)),
+     release: (event) => {
+         const point = clientPoint(event);
+         gesture.move(key, point);
+         const ended = gesture.release(key, point);
+-        if (ended.kind === 'swipe') onSwipe(ended.direction);
++        if (ended.kind === 'swipe' || (vertical && ended.kind === 'swipe_vertical')) onSwipe(ended.direction);
+     },
+     cancel: () => gesture.cancel()
+ });
+diff --git a/intuition/runtime/eve_intuition/atome_contextual_edit_projection_runtime.js b/intuition/runtime/eve_intuition/atome_contextual_edit_projection_runtime.js
+index e07459c..f270d31 100644
+--- a/intuition/runtime/eve_intuition/atome_contextual_edit_projection_runtime.js
++++ b/intuition/runtime/eve_intuition/atome_contextual_edit_projection_runtime.js
+@@ -10,6 +10,7 @@ import { readRecordActionState } from '../../tools/core/record_action_state.js';
+ import { ATOME_CONTEXTUAL_EDIT_TREE_ID, buildAtomeContextualEditTree, resolveActiveRailToolDefinition } from './atome_contextual_edit_model.js';
+ import { resolveContextMenuContext } from '../../menu/context_menu_resolver.js';
+ import { isRailBaseDefinition } from './atome_contextual_rail_order.js';
++import { observeOngoingTool, ongoingToolRect } from '../../../domains/dashboard/dashboard_ongoing_tool.js';
+ const keyOf = value => String(value == null ? '' : value).trim();
+ const finiteHeight = value => (Number.isFinite(Number(value)) ? Number(value) : 0);
+ const requestRenderFrame = callback => typeof globalThis.window?.requestAnimationFrame === 'function'
+@@ -29,7 +30,9 @@ export const createAtomeContextualEditProjectionRuntime = ({
+     // for every path of the projection, the level rail and the pinned zone
+     // alike, so the two can never reserve two different heights. The ribbon
+     // answers 0 while hidden; reserve its tool size plus the common edge gap.
+-    const reservedBandHeight = (surface) => readMainMenuHeight(surface) || resolveBevyMainMenuItemSize() + BEVY_MENU_TOKENS.toolGapPx;
++    // The « en cours » tool above the Atome handle (#dashboard_ongoing_tool.js) takes the rail's lowest place: the rail rises by it.
++    const ongoingRise = () => { const tool = ongoingToolRect(); return tool && globalThis.window?.__eveWorkspaceMode?.mode === 'project' ? tool.height + BEVY_MENU_TOKENS.toolGapPx : 0; };
++    const reservedBandHeight = (surface) => (readMainMenuHeight(surface) || resolveBevyMainMenuItemSize() + BEVY_MENU_TOKENS.toolGapPx) + ongoingRise();
+     const activeToolIds = () => {
+         const ids = new Set();
+         const visit = (definition) => {
+@@ -326,6 +329,8 @@ export const createAtomeContextualEditProjectionRuntime = ({
+         if (state.renderFrame) return;
+         state.renderFrame = requestRenderFrame(() => { state.renderFrame = 0; void render(); }) || 1;
+     };
++    // The « en cours » tool came, went or moved: a rail on screen rises or comes back down by it (the rail lives as the app).
++    observeOngoingTool(() => { if (state.mounted) scheduleRender(); });
+     return {
+         render, scheduleRender, activeSlots, activeToolIds, displayDefinitions, handedness,
+         readRenderedGeometry: () => renderedGeometry,
+-- 
+2.43.0
+

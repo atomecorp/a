@@ -493,6 +493,9 @@ tests/squirrel/*
 
 !tests/eve/program_session_contract.test.mjs
 !tests/eve/program_nutrition.test.mjs
+!tests/eve/dashboard_swipe_navigation.test.mjs
+!tests/eve/menu_swipe_explore_tap.test.mjs
+!tests/eve/ongoing_tool.test.mjs
 
 # Music provider contract, authorization and receipt regressions
 !tests/music/
