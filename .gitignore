@@ -113,6 +113,7 @@ tests/shared/*
 tests/eve/*
 !tests/eve/training_beep_clock.test.mjs
 !tests/eve/voice_tool_limit.test.mjs
+!tests/eve/commit_bus_trace.test.mjs
 !tests/eve/sync_scope_quota.test.mjs
 !tests/eve/bevy_panel_home_lifecycle.test.mjs
 !tests/eve/workspace_bootstrap_nonblocking.test.mjs

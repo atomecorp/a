@@ -15,6 +15,22 @@ export async function loadAIAgent() {
     return ensureAIAgent();
 }
 
+// Tool modules the interface loads only when the person opens their panel (eVe/intuition/panel_definitions.js):
+// their tools register at that import. An MCP caller loads them all once, on its first discovery or call, so
+// every tool is reachable through MCP while boot and gestures stay as they are (R-109, 2 Nov. 2026).
+const mcpToolModuleLoaders = new Set();
+let mcpToolModules = null;
+export function registerMcpToolModules(loader) {
+    if (typeof loader !== 'function') return () => {};
+    mcpToolModuleLoaders.add(loader); mcpToolModules = null;
+    return () => { mcpToolModuleLoaders.delete(loader); mcpToolModules = null; };
+}
+export function loadMcpToolModules() {
+    mcpToolModules ||= Promise.allSettled([...mcpToolModuleLoaders].map(loader => Promise.resolve().then(loader)))
+        .then(results => results.filter(result => result.status === 'rejected').map(result => String(result.reason?.message || result.reason)));
+    return mcpToolModules;
+}
+
 export function ensureRuntimeToolApi() {
     if (typeof globalThis === 'undefined') {
         throw new Error('Global context unavailable for MCP bridge');

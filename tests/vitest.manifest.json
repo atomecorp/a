@@ -138,6 +138,7 @@
   "tests/eve/capture_video_preview_panel.test.mjs",
   "tests/eve/clipboard_explicit_selection.test.mjs",
   "tests/eve/clipboard_paste_selection.test.mjs",
+  "tests/eve/commit_bus_trace.test.mjs",
   "tests/eve/communication_call_session.test.mjs",
   "tests/eve/communication_notifications_publications.test.mjs",
   "tests/eve/conditions_integrations.test.mjs",

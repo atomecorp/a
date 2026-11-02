@@ -569,6 +569,12 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   écriture refusée avant octroi, `tools/list_changed` reçu, 189 → 962 outils avec « Modifier ». Classement : 985/994
   outils d'interface exposés ; 9 invisibles tant que leur panneau n'est pas ouvert (enregistrement paresseux). 28 fichiers
   écrivent par `Atome.commit` hors du bus (gestes, créations) : tri à faire. Corrections en attente de décision.
+- **Corrections du 2026-11-02 (1, 2, 3 validés par l'utilisateur)** : outils paresseux chargés au premier appel MCP,
+  `tools/list_changed` à l'apparition d'un outil, liste paginée gardée ; chaque écriture tracée sur le bus après la
+  trame (1–7 µs côté geste) ; trois bugs d'annulation corrigés (scène, état relu, écritures en vol). Sondes : externe 11/11,
+  couverture 8/8, parité 9/12 à 11/11. **Reste ouvert** : annulation envoyée juste après une modification
+  (`history_source_transaction_not_found`, interface et MCP), côté processus du coffre. Détail
+  `todo/audit_mcp_r109_2026-11-02.md` § 6–7.
 
 ### R-107 — Fusion R-104 → main (2026-11-01) : décisions et essais restés ouverts
 - Statut : ATTENTE UTILISATEUR (2026-11-01) — questions posées dans le compte rendu final de la session de fusion,

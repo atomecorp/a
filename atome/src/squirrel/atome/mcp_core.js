@@ -71,7 +71,13 @@ export function normalizeStringList(value, fallback = []) {
     return value.map((entry) => String(entry || '').trim()).filter(Boolean);
 }
 
+// Bumped by every `mcp.tools.list_changed` (a tool appeared, a grant changed): a tools/list kept for its next pages
+// is built again (mcp_protocol.js).
+let mcpToolsGeneration = 0;
+export const readMcpToolsGeneration = () => mcpToolsGeneration;
+
 export function pushMcpEvent(type, payload = {}) {
+    if (type === 'mcp.tools.list_changed') mcpToolsGeneration += 1;
     const event = {
         seq: ++mcpEventSeq,
         at: nowIso(),
