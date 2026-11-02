@@ -49,6 +49,10 @@ tests
 tests/*
 !tests/
 !tests/vitest.setup.mjs
+# Native pre-schema upgrade regressions
+!tests/tauri/
+tests/tauri/*
+!tests/tauri/local_atome_schema.rs
 !tests/tv/
 !tests/tv/*.test.mjs
 !tests/apple_music/

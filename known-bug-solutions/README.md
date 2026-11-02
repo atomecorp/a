@@ -10,6 +10,7 @@ the established solution before attempting a new implementation.
 
 | Symptom | Folder |
 | --- | --- |
+| Android update stays on its launch cover; native ADOLE initialization reports `no such column: thread_ref` | [native-news-schema-upgrade](native-news-schema-upgrade/README.md) |
 | A Dashboard list's cover keeps its old words after an action (« Confirmée » after « Annul. ») although its projected record is new; no repaint fixes it | [scene-render-request-lost](scene-render-request-lost/README.md) |
 | A panel on the Dashboard (Devenir coach, Nouvelle vente) draws its body blank once scrolled, though touches land on the hidden rows | [panel-scroll-composite-overflow](panel-scroll-composite-overflow/README.md) |
 | Dashboard footer (Back, bottom field, docked Atom) drawn but not reacting to a touch on a wide screen (iPad, desktop); band tools above work | [footer-untouchable-past-centred-frame](footer-untouchable-past-centred-frame/README.md) |

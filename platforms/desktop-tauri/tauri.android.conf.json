@@ -20,7 +20,7 @@
     "resources": [],
     "android": {
       "minSdkVersion": 29,
-      "versionCode": 11,
+      "versionCode": 13,
       "debugApplicationIdSuffix": ".debug"
     }
   }

@@ -37,6 +37,8 @@ macro_rules! eprintln {
     };
 }
 
+#[path = "local_atome_schema.rs"]
+mod schema;
 #[path = "local_atome_history.rs"]
 mod history;
 #[path = "local_atome_containment.rs"]
@@ -401,14 +403,8 @@ pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> 
     conn.execute("PRAGMA foreign_keys = ON", [])?;
     let _ = conn.execute_batch("PRAGMA journal_mode = WAL;");
 
-    // A legacy Tauri database already owns `events`, so CREATE TABLE IF NOT
-    // EXISTS cannot add the sync envelope columns. Add them before executing
-    // the canonical schema because that schema creates the stream/sequence
-    // index immediately afterwards.
-    ensure_event_sync_columns(&conn)?;
-    // Same for the account × device keys of authentication V1: the schema
-    // indexes `device_id` (database/adole_schema_migrations.js does this on Fastify).
-    ensure_auth_device_key_columns(&conn)?;
+    // Existing tables need their current columns before canonical indexes are created.
+    schema::prepare_legacy_columns(&conn)?;
     conn.execute_batch(ADOLE_SCHEMA_SQL)?;
 
     ensure_permissions_columns(&conn)?;
@@ -423,118 +419,6 @@ pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> 
     );
 
     Ok(conn)
-}
-
-// Adds the columns a table created by an older schema lacks (no-op when the
-// table does not exist yet: the canonical schema creates it whole).
-fn ensure_legacy_columns(conn: &Connection, table: &str, columns: &[(&str, &str)]) -> Result<(), rusqlite::Error> {
-    let exists = conn
-        .query_row(
-            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1",
-            [table],
-            |_| Ok(()),
-        )
-        .optional()?
-        .is_some();
-    if !exists {
-        return Ok(());
-    }
-
-    let mut statement = conn.prepare(&format!("PRAGMA table_info({table})"))?;
-    let rows = statement.query_map([], |row| row.get::<_, String>(1))?;
-    let names = rows.filter_map(Result::ok).collect::<HashSet<_>>();
-    for (column, ddl) in columns {
-        if !names.contains(*column) {
-            conn.execute(ddl, [])?;
-        }
-    }
-    Ok(())
-}
-
-fn ensure_event_sync_columns(conn: &Connection) -> Result<(), rusqlite::Error> {
-    ensure_legacy_columns(conn, "events", &[
-        ("stream_id", "ALTER TABLE events ADD COLUMN stream_id TEXT"),
-        ("sequence", "ALTER TABLE events ADD COLUMN sequence INTEGER"),
-        ("source", "ALTER TABLE events ADD COLUMN source TEXT"),
-        ("lww_decisions", "ALTER TABLE events ADD COLUMN lww_decisions TEXT"),
-        ("projection", "ALTER TABLE events ADD COLUMN projection TEXT"),
-    ])
-}
-
-fn ensure_auth_device_key_columns(conn: &Connection) -> Result<(), rusqlite::Error> {
-    ensure_legacy_columns(conn, "auth_device_keys", &[
-        ("key_role", "ALTER TABLE auth_device_keys ADD COLUMN key_role TEXT NOT NULL DEFAULT 'session'"),
-        ("device_id", "ALTER TABLE auth_device_keys ADD COLUMN device_id TEXT"),
-        ("assurance", "ALTER TABLE auth_device_keys ADD COLUMN assurance TEXT NOT NULL DEFAULT 'software'"),
-        ("device_class", "ALTER TABLE auth_device_keys ADD COLUMN device_class TEXT NOT NULL DEFAULT 'personal'"),
-        ("platform", "ALTER TABLE auth_device_keys ADD COLUMN platform TEXT"),
-        ("label", "ALTER TABLE auth_device_keys ADD COLUMN label TEXT"),
-        ("enrolled_by", "ALTER TABLE auth_device_keys ADD COLUMN enrolled_by TEXT"),
-        ("credential_id", "ALTER TABLE auth_device_keys ADD COLUMN credential_id TEXT"),
-        ("sign_count", "ALTER TABLE auth_device_keys ADD COLUMN sign_count INTEGER NOT NULL DEFAULT 0"),
-        ("last_seen_ms", "ALTER TABLE auth_device_keys ADD COLUMN last_seen_ms INTEGER"),
-        ("connection_proof", "ALTER TABLE auth_device_keys ADD COLUMN connection_proof INTEGER NOT NULL DEFAULT 0"),
-    ])
-}
-
-#[cfg(test)]
-mod event_sync_schema_migration_tests {
-    use super::*;
-
-    #[test]
-    fn legacy_auth_device_keys_gain_v1_columns_before_canonical_indexes() {
-        let database = Connection::open_in_memory().expect("memory database");
-        database
-            .execute_batch(
-                "CREATE TABLE auth_device_keys (
-                    key_id TEXT PRIMARY KEY, principal_id TEXT NOT NULL, public_key TEXT NOT NULL,
-                    enrolled_ms INTEGER NOT NULL, restricted_until_ms INTEGER NOT NULL, revoked_ms INTEGER
-                 );
-                 INSERT INTO auth_device_keys VALUES ('legacy-key', 'user', '{}', 1, 1, NULL);",
-            )
-            .expect("legacy auth_device_keys schema");
-        ensure_auth_device_key_columns(&database).expect("pre-schema migration");
-        database.execute_batch(ADOLE_SCHEMA_SQL).expect("canonical schema over a legacy key table");
-        let role: String = database
-            .query_row("SELECT key_role FROM auth_device_keys WHERE key_id = 'legacy-key'", [], |row| row.get(0))
-            .expect("legacy key kept");
-        assert_eq!(role, "session");
-    }
-
-    #[test]
-    fn legacy_events_gain_sync_columns_before_canonical_indexes() {
-        let database = Connection::open_in_memory().expect("memory database");
-        database
-            .execute_batch(
-                "CREATE TABLE events (
-                    id TEXT PRIMARY KEY, ts TEXT NOT NULL, atome_id TEXT,
-                    project_id TEXT, kind TEXT NOT NULL, payload TEXT,
-                    actor TEXT, tx_id TEXT, gesture_id TEXT
-                 );
-                 INSERT INTO events (id, ts, kind) VALUES ('legacy-event', '2026-08-28T00:00:00Z', 'set');",
-            )
-            .expect("legacy events schema");
-
-        ensure_event_sync_columns(&database).expect("pre-schema migration");
-        database
-            .execute_batch(ADOLE_SCHEMA_SQL)
-            .expect("canonical schema after migration");
-
-        let columns = database
-            .prepare("PRAGMA table_info(events)")
-            .expect("events columns")
-            .query_map([], |row| row.get::<_, String>(1))
-            .expect("events column rows")
-            .filter_map(Result::ok)
-            .collect::<HashSet<_>>();
-        for required in ["stream_id", "sequence", "source", "lww_decisions", "projection"] {
-            assert!(columns.contains(required), "missing {required}");
-        }
-        let historical_count: i64 = database
-            .query_row("SELECT COUNT(*) FROM events WHERE id = 'legacy-event'", [], |row| row.get(0))
-            .expect("historical event count");
-        assert_eq!(historical_count, 1);
-    }
 }
 
 fn ensure_permissions_columns(conn: &Connection) -> Result<(), rusqlite::Error> {
