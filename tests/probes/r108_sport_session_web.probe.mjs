@@ -81,6 +81,14 @@ try {
         return list;
     });
     await page.screenshot({ path: path.join(OUT, 'dashboard_ongoing.png') });
+    // BUG-005: what the ▶ tool opens, « En direct » (dashboard_ongoing_scene.js): its foot has ✕ and ▶ (pause / run).
+    await check('en_direct_shown', async () => {
+        const shown = await page.evaluate(async () => JSON.parse(JSON.stringify(await (await import('/eVe/domains/dashboard/dashboard_ongoing_scene.js')).presentOngoing({}))));
+        if (shown?.ok !== true) throw new Error(JSON.stringify(shown));
+        await wait(1500);
+        await page.screenshot({ path: path.join(OUT, 'en_direct.png') });
+        return shown;
+    });
     const sessionBefore = await page.evaluate(async () => JSON.stringify((await import('/eVe/domains/programs/activity_ongoing.js')).ongoingActivities()[0]?.key || ''));
     await check('ongoing_entry_reopens_same_session', async () => {
         await page.evaluate(async () => (await import('/eVe/domains/programs/activity_ongoing.js')).ongoingActivities()[0].open());
