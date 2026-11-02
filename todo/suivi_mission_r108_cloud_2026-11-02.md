@@ -76,6 +76,11 @@ seulement : `.gitmodules` inchangé) ; tous les tests ci-dessous chargent eVe à
 | D5 | Heure/météo : en-tête validé ou tuiles | `ref/v5_a_portrait.png` | À DÉCIDER |
 | D6 | iPhone Duo | aucun appareil ni API dans le dépôt | BLOQUÉ |
 
+## 4 bis. Non résolu, à faire par l'agent
+
+- Maquettes aux vrais jetons pour chaque décision du § 3 (BUG-005, BUG-006, BUG-010, BUG-011, BUG-004, TÂCHE de design).
+- BUG-008 E1 (séance montre orpheline quand l'app iPhone est tuée) et E3 (curseur d'arrêt contre défilement horizontal).
+
 ## 5. Essais appareil à faire (scénario et preuve attendue)
 
 1. **Identité du runtime** (iPhone) : installer une build contenant a `≥ 136c922e` / eVe `≥ d364671f` ; preuve : version JS lue
