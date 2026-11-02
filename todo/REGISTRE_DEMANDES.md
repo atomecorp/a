@@ -525,8 +525,15 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   `c0*.png`. Bloqué : lignes avant Lancer sur une carte cardio (question 62).
 
 ### R-108 — Incident iOS 1.46 (44) : projets, Sport, registre R-104, design V5 (2026-11-01 soir)
+- Mission cloud 2026-11-02 (branche `claude/magical-ptolemy-x4b0re` de a et eVe, base a `9c8f11af8` / eVe `29a07f03`) :
+  suivi ligne par ligne `todo/suivi_mission_r108_cloud_2026-11-02.md`. Corrigé et testé dans le cloud : BUG-012/013 (cas
+  limites de la libération du quota : id d'appareil, démarrage, clé illisible, échec IndexedDB ; Vitest 7/7, Web réel
+  26/26), BUG-016 (ancrage des bips par intersection des lectures, partagé entre séances ; Vitest 4/4), BUG-008 E2
+  (actions de carte de la montre mises en file, jamais perdues ; syntaxe seulement), clone propre (setup Vitest suivi,
+  `logs/` créé). Web réel sans défaut : BUG-015 13/13, Sport 11/11 (BUG-005 : Stop sur la carte ; « En direct » sans
+  Stop = décision). Aucun essai appareil : scénarios au § 5 du suivi.
 - Re-signalement utilisateur,2026-11-02 (chat optimisation) : « en cliquant sur un projet sur iOS [...] directement à la racine du Dashboard », demande d'explication du correctif et de couverture du dossier R104. Audit en lecture seule : les31 entrées du paquet sont présentes au registre, plus BUG-016 ; le rapport global déclare8 entrées touchées et0 correction validée sur appareil. L'iPhone joignable porte toujours1.46(44), mais le paquet de test porte lui aussi44 : ce numéro seul ne prouve pas la présence du runtime corrigé. iPad Atomic indisponible à la lecture CoreDevice. Source c95afeb43 présente,12/12 tests sync relancés avec succès ; ce n'est pas une preuve d'ouverture réelle. Aucune installation, création de projet, modification du volume, écriture Git ou publication faite par cet audit. À établir : installation effective et identité du runtime, puis les5 ouvertures/5 créations/BUG-015/mesure sonore déjà prévus ; ne pas déclarer l'incident résolu.
-- Statut : ATTENTE UTILISATEUR (2026-11-01) — question posée en fin de session.
+- Statut : ATTENTE UTILISATEUR (2026-11-02) — essais iPhone/montre et décisions (R-107, V5 D1–D6, BUG-005/006/010/011/004, REG-001/002) ; code cloud publié sur les branches de session.
 - Source : mission « MISSION COMPLÈTE — incident iOS build 44, registre R-104 intégral et design V5 » (2026-11-01), dossier
   `~/Desktop/R104_MAIN_PACKAGE_2026-11-01/`. Rapports : `todo/rapport_incident_ios_build44.md`,
   `todo/rapport_global_post_R104_MAIN_2026-11-01.md` ; registre de débogage annoté (« Résultat 2026-11-01 soir », BUG-016).
