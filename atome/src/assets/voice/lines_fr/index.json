@@ -105,12 +105,6 @@
    "phonemes": "^ʒə nə sɥi pa disponibl : nu som oʁ liɲ .$",
    "sha256": "4c11ad5e8979872c878eec421f0c5b8e5d901da8f2383c6c42bb90dd8ba795dd"
   },
-  "Erreur de l’assistant : la cause n’a pas été fournie par le service.": {
-   "file": "c0abc11b2976a587.wav",
-   "samples": 81920,
-   "phonemes": "^ɛʁœʁ də lasistɑ̃ : la koz na pa ete fuʁni paʁ lə sɛʁvis .$",
-   "sha256": "1e1c6d9d71cfaf962e5cb3ede873f9b069ae0049b8f0e7350729c551c9149d72"
-  },
   "OpenAI a refusé la clé API enregistrée.": {
    "file": "17f6cd014057a91c.wav",
    "samples": 57344,
@@ -291,11 +285,11 @@
    "phonemes": "^lə sɛʁvœʁ na pa ʁepɔ̃dy . ʁeesɛ .$",
    "sha256": "0f9bcb271481f1b3c1c6067fddff83cb5c20352419f17c48e49b525f42df2c5d"
   },
-  "Crédit ou plafond de dépenses OpenAI atteint.": {
-   "file": "e5943a7fb5a6de38.wav",
-   "samples": 58880,
-   "phonemes": "^kʁedi u plafɔ̃ də depɑ̃s opɛnai atɛ̃ .$",
-   "sha256": "7d027f04b50c3ea6bae9f7d33d5e384834285ae8eaab84cf6c878227e9efda6e"
+  "Le crédit de ta clé OpenAI est épuisé. Recharge-le sur ton compte OpenAI.": {
+   "file": "2216eab7232639ed.wav",
+   "samples": 105728,
+   "phonemes": "^lə kʁedi də ta kle opɛnai ɛ epɥize . ʁəʃaʁʒlə syʁ tɔ̃ kɔ̃t opɛnai .$",
+   "sha256": "887780652735c47c744e57556c6d803618d2799aa43d8923c9e27d485b0fdc44"
   },
   "OpenAI limite les requêtes. Réessaie dans un instant.": {
    "file": "1a4d032aaec1eeb9.wav",
@@ -303,11 +297,11 @@
    "phonemes": "^opɛnai limit le ʁəkɛt . ʁeesɛ dɑ̃ œ̃ ɛ̃stɑ̃ .$",
    "sha256": "ae2d5f92cdb28695287b6b72dedb643d721cf34824b431da47970afed41e449b"
   },
-  "OpenAI refuse la demande (HTTP 429) : limite de requêtes ou crédit du compte épuisé. Vérifie le crédit OpenAI puis réessaie.": {
-   "file": "d0aa3b231dfc15d1.wav",
-   "samples": 166400,
-   "phonemes": "^opɛnai ʁəfyz la dəmɑ̃d ( aʃtetepe katʁ sɑ̃ vɛ̃nœf ) : limit də ʁəkɛt u kʁedi dy kɔ̃t epɥize . veʁifi lə kʁedi opɛnai pɥi ʁeesɛ .$",
-   "sha256": "5d158ef586c2f86da6dd0e3762fd746971247cfb41ea0e71321a5afff69d1f87"
+  "OpenAI limite les demandes pour le moment. Réessaie dans un instant.": {
+   "file": "190f995e8cb952b2.wav",
+   "samples": 86784,
+   "phonemes": "^opɛnai limit le dəmɑ̃d puʁ lə momɑ̃ . ʁeesɛ dɑ̃ œ̃ ɛ̃stɑ̃ .$",
+   "sha256": "e3ed2526f7d71253d4fb0740f0be852a72edc443b92ab74e8823eac7ca726503"
   },
   "Ce modèle n’est pas disponible pour le compte configuré.": {
    "file": "f8a012137e590cc6.wav",
@@ -386,6 +380,102 @@
    "samples": 41472,
    "phonemes": "^ʒwɛ̃ limaʒ avɑ̃ də lytilize .$",
    "sha256": "1f096231e242b66b3b84296e0e6bd261efa40d5943003d3c4bddb173cc455e94"
+  },
+  "Erreur de l’assistant : le service n’a fourni aucune cause.": {
+   "file": "8b6585686818a920.wav",
+   "samples": 71168,
+   "phonemes": "^ɛʁœʁ də lasistɑ̃ : lə sɛʁvis na fuʁni okyn koz .$",
+   "sha256": "7931f23fbba4d72e639a9c9dcaae04b6e38298a522267b3e18374dc22931d87a"
+  },
+  "Erreur de l’assistant ({code}).": {
+   "file": "77eea0b2c7130417.wav",
+   "samples": 36608,
+   "phonemes": "^ɛʁœʁ də lasistɑ̃ ( kod ) .$",
+   "sha256": "098362c343e4026527dadd07d7ac72595dbbcc1c20605d31b3747b0075631ff9"
+  },
+  "Le crédit partagé d’eVe est épuisé. Ta propre clé OpenAI, dans Réglages, permet de continuer.": {
+   "file": "9c1b1cca23ccb88c.wav",
+   "samples": 129792,
+   "phonemes": "^lə kʁedi paʁtaʒe dəv ɛ epɥize . ta pʁopʁ kle opɛnai , dɑ̃ ʁeɡlaʒ , pɛʁmɛ də kɔ̃tinye .$",
+   "sha256": "49fbd9b414bcd10274f18611b7ff04a19f3597154aa2b6b3deba0057e420a2ba"
+  },
+  "Crédit ou plafond de dépenses OpenAI atteint.": {
+   "file": "e5943a7fb5a6de38.wav",
+   "samples": 58880,
+   "phonemes": "^kʁedi u plafɔ̃ də depɑ̃s opɛnai atɛ̃ .$",
+   "sha256": "7d027f04b50c3ea6bae9f7d33d5e384834285ae8eaab84cf6c878227e9efda6e"
+  },
+  "OpenAI bloque l’accès : la facturation du compte est à régler.": {
+   "file": "59e815164a8da54b.wav",
+   "samples": 81408,
+   "phonemes": "^opɛnai blok laksɛ : la faktyʁasjɔ̃ dy kɔ̃t ɛ a ʁeɡle .$",
+   "sha256": "d0598aef4b4d72c8032c6c9ff929371e453792cbbd4f59bee19a555b4ba0ce7d"
+  },
+  "OpenAI demande un paiement (HTTP 402) : la facturation du compte est à régler.": {
+   "file": "99a4a9dd81759632.wav",
+   "samples": 106752,
+   "phonemes": "^opɛnai dəmɑ̃d œ̃ pɛəmɑ̃ ( aʃtetepe katʁ sɑ̃ dø ) : la faktyʁasjɔ̃ dy kɔ̃t ɛ a ʁeɡle .$",
+   "sha256": "d88be0bcb4042d982eea1412a001644dd63961e4a44fc272e8cb074876ee5d42"
+  },
+  "OpenAI limite les demandes (HTTP 429). Réessaie dans un instant.": {
+   "file": "b34f72142fba585e.wav",
+   "samples": 115712,
+   "phonemes": "^opɛnai limit le dəmɑ̃d ( aʃtetepe katʁ sɑ̃ vɛ̃nœf ) . ʁeesɛ dɑ̃ œ̃ ɛ̃stɑ̃ .$",
+   "sha256": "e8b723fd736cb2db4b27c8a8352c72e489860b03d0870b10c7ec6691e9547bb4"
+  },
+  "La réponse d’OpenAI s’est arrêtée avant la fin. Réessaie.": {
+   "file": "1ab9ca10265bf6a4.wav",
+   "samples": 72704,
+   "phonemes": "^la ʁepɔ̃s dopɛnai sɛ aʁɛte avɑ̃ la fɛ̃ . ʁeesɛ .$",
+   "sha256": "b1df9969531be6afd50cce4ae91777c707da9cdf05704a2fe16feaadc03ea63d"
+  },
+  "Toutes les places du crédit partagé d’eVe sont prises. Ta propre clé OpenAI, dans Réglages, permet de continuer.": {
+   "file": "96b363c5114c57cb.wav",
+   "samples": 133120,
+   "phonemes": "^tut le plas dy kʁedi paʁtaʒe dəv sɔ̃ pʁiz . ta pʁopʁ kle opɛnai , dɑ̃ ʁeɡlaʒ , pɛʁmɛ də kɔ̃tinye .$",
+   "sha256": "01e5afcb4bfa57b89e424e4e5b088304aa1f3008d20a9912b0e41825e7939ca6"
+  },
+  "Le crédit partagé d’eVe est indisponible sur ce serveur.": {
+   "file": "b36ad95ca10c79b5.wav",
+   "samples": 74240,
+   "phonemes": "^lə kʁedi paʁtaʒe dəv ɛ ɛ̃disponibl syʁ sə sɛʁvœʁ .$",
+   "sha256": "24cb464230023c3f3104c2d830a555822c72ea91e01f85c9d9c15d77eff9bde5"
+  },
+  "Le serveur atome n’a pas pu mener la demande IA à bien. Réessaie.": {
+   "file": "67539d8e23457087.wav",
+   "samples": 71168,
+   "phonemes": "^lə sɛʁvœʁ atom na pa py məne la dəmɑ̃d ia a bjɛ̃ . ʁeesɛ .$",
+   "sha256": "3bbd1e4930daafa66132f72105005c98bfd07b6f252d3be63598435a3c84a36a"
+  },
+  "Le service IA n’a pas répondu à temps. Vérifie la connexion puis réessaie.": {
+   "file": "1771d46c785ba94f.wav",
+   "samples": 87552,
+   "phonemes": "^lə sɛʁvis ia na pa ʁepɔ̃dy a tɑ̃ . veʁifi la konɛksjɔ̃ pɥi ʁeesɛ .$",
+   "sha256": "a00cb40430a9a1263204bef7e9f49f4e5ff825a226be8e145cc017dbd3d81711"
+  },
+  "Le service IA a refusé la clé configurée.": {
+   "file": "bf754e11e566daf2.wav",
+   "samples": 55040,
+   "phonemes": "^lə sɛʁvis ia a ʁəfyze la kle kɔ̃fiɡyʁe .$",
+   "sha256": "d334aece20ecd73598e9aac63e4319b98ea60986041188da1832253da5b9a723"
+  },
+  "Le service IA est injoignable. Vérifie le réseau puis réessaie.": {
+   "file": "7d2aefc234e4a8cf.wav",
+   "samples": 77824,
+   "phonemes": "^lə sɛʁvis ia ɛ ɛ̃ʒwaɲabl . veʁifi lə ʁezo pɥi ʁeesɛ .$",
+   "sha256": "e5508c26ea82bb04134a1e7af218179864678ea81f63fa1f76fac6aa7d906428"
+  },
+  "Le service IA a renvoyé une réponse illisible. Réessaie.": {
+   "file": "e9c54400297197a5.wav",
+   "samples": 73472,
+   "phonemes": "^lə sɛʁvis ia a ʁɑ̃voie yn ʁepɔ̃s ilizibl . ʁeesɛ .$",
+   "sha256": "4ec304e253ccab006fafd9a4b636dcf02db5a35338db8857903b6e72a50774dc"
+  },
+  "Hors ligne, ce navigateur ne reconnaît pas la voix sur cet appareil. Tu peux continuer par écrit.": {
+   "file": "cb424ecbffc1b6a4.wav",
+   "samples": 116480,
+   "phonemes": "^oʁ liɲ , sə naviɡatœʁ nə ʁəkonai pa la vwa syʁ sɛt apaʁɛj . ty pø kɔ̃tinye paʁ ekʁi .$",
+   "sha256": "1509f972ecd31667bf8f4720483493ff60b1615cf41043195a7a3adc414f642d"
   },
   "L’activation vocale ne fonctionne pas sur cet appareil pour le moment.": {
    "file": "c669b3715ee80dd2.wav",
@@ -615,11 +705,11 @@
    "phonemes": "^lə pwa , lə somɛj , la foʁm , lə kalm , tɔ̃ ʒuʁnal : diləmwa , u apɥi syʁ tɔ̃ ʃwa .$",
    "sha256": "23431687bbce89289f24be010677f26f6fe3c3793acffe2f84db285e3f5f5e70"
   },
-  "Tu as le choix entre : poids, sommeil, muscles, douleur, orientation, du temps pour toi, calme, journal, forme, bien vieillir, bien-être, moral, beauté, ou ton propre objectif.": {
-   "file": "d5f4e879b1666c02.wav",
-   "samples": 269568,
-   "phonemes": "^ty a lə ʃwa ɑ̃tʁ : pwa , somɛj , myskl , dulœʁ , oʁjɛ̃tasjɔ̃ , dy tɑ̃ puʁ twa , kalm , ʒuʁnal , foʁm , bjɛ̃ vjɛjiʁ , bjɛ̃ɛtʁ , moʁal , bote , u tɔ̃ pʁopʁ obʒɛktif .$",
-   "sha256": "a4b82f6382750e1ba8856b8f02612100b6948d9a89eae75abc00e6147dc13c5a"
+  "Tu as le choix entre : poids, sommeil, muscles, douleur, orientation, du temps pour toi, calme, journal, forme, bien vieillir, bien-être, moral, beauté, plaisir, ou ton propre objectif.": {
+   "file": "facf3c6501986ef1.wav",
+   "samples": 302080,
+   "phonemes": "^ty a lə ʃwa ɑ̃tʁ : pwa , somɛj , myskl , dulœʁ , oʁjɛ̃tasjɔ̃ , dy tɑ̃ puʁ twa , kalm , ʒuʁnal , foʁm , bjɛ̃ vjɛjiʁ , bjɛ̃ɛtʁ , moʁal , bote , plɛziʁ , u tɔ̃ pʁopʁ obʒɛktif .$",
+   "sha256": "f6af7e4ada9db7f6fb67b7708baf5450b2bcf628276ce9455baefe812abc4c8b"
   },
   "Tu règles ton objectif sommeil : la durée de ta nuit, ton heure de lever, l’effort que tu veux faire, et ton temps de préparation avant de te coucher.": {
    "file": "71ac5e036c09076a.wav",
