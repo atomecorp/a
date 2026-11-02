@@ -616,8 +616,11 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   sans socle (bande et ruban), à gauche pour un droitier en projet aussi ; la zone de saisie du ruban en projet prend toute
   la place, les outils en barres, animation 0,68 s. Preuves : `temp/swipe_r110/grid.probe.mjs` 5/5,
   `project_finder.probe.mjs` 3/3, `menu.probe.mjs` 7/7, `rail.probe.mjs` 12/12, `swipe.probe.mjs` 13/13.
-- Reste ouvert : le trait blanc vu par l'utilisateur entre l'Agenda et le V (non reproduit ; capture demandée) ; l'outil
-  « tâche de fond » (inexistant).
+- L'outil « tâche de fond » = le disque orange « en cours » (tâche 2) : une séance qui continue hors de son écran (un minuteur
+  de sport) le montre au-dessus de l'assistant, dans la case de la grille gardée libre ; FAIT (l'utilisateur l'a reconnu, 2026-11-02).
+- Trait blanc entre l'Agenda et le V : vu sur une capture d'une version intermédiaire jamais poussée (champ du bas bogué) ;
+  non reproduit sur le code poussé (30 images de l'ouverture de la recherche, `temp/swipe_r110/frames.probe.mjs`). À rouvrir
+  si l'utilisateur le revoit, avec sa capture.
 
 ### R-109 — Vérification MCP « universel en accès » (cahier V1.2/V1.23) sur l'app réelle (2026-11-02)
 - Statut : OUVERT (2026-11-02) — vérification partielle faite, écart démontré, audit complet et correction à faire.
