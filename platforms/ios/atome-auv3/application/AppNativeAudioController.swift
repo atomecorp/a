@@ -168,10 +168,28 @@ final class AppNativeAudioController: NSObject, @unchecked Sendable {
 
     @objc private func handleAudioSessionRouteChange(_ notification: Notification) {
         queue.async {
+            self.keepOutputOffReceiver()
             guard !self.audioSessionConsumers.captureConsumerIds.isEmpty else { return }
             AppNativeAudioDiagnostics.log(
                 "session route_changed \(self.audioSessionDiagnosticSnapshot())"
             )
+        }
+    }
+
+    /// The phone's receiver (the earpiece held to the ear) is never this app's output. WebKit opens the
+    /// microphone of a page (getUserMedia: the assistant's early input and its realtime session) by turning
+    /// the shared session into play-and-record without `.defaultToSpeaker`, unseen by the consumers above:
+    /// the output then fell on the receiver, eVe's sentence cut in the middle and nothing was heard after.
+    /// The output goes back to the loudspeaker; the capture under way is left as it is.
+    private func keepOutputOffReceiver() {
+        let session = AVAudioSession.sharedInstance()
+        guard session.category == .playAndRecord,
+              session.currentRoute.outputs.contains(where: { $0.portType == .builtInReceiver }) else { return }
+        do {
+            try session.overrideOutputAudioPort(.speaker)
+            AppNativeAudioDiagnostics.log("session receiver_overridden \(audioSessionDiagnosticSnapshot(session: session))")
+        } catch {
+            AppNativeAudioDiagnostics.log("session receiver_override_failed error=\(error.localizedDescription)")
         }
     }
 
