@@ -609,7 +609,15 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 - Point ouvert à poser à l'utilisateur : l'« outil tâche de fond » demandé n'existe pas dans le code (seuls existent l'outil
   Messages et le disque « en cours ») ; leur place est gardée (le disque au-dessus de l'assistant, Messages dans la bande).
   À préciser par l'utilisateur : ce que cet outil doit signaler.
-- Git : rien n'est commité ni poussé (aucune demande d'écriture Git pour la tâche 3).
+- Git : poussé sur `main` à la demande de l'utilisateur (2026-11-02) ; suivis poussés de même.
+- Corrections après test de l'utilisateur (2026-11-02), FAITES et poussées : une seule grille d'écran (« un seul tableau »,
+  `eVe/elements/system_ui_grid.js`) pour la bande, les outils de rubrique, les flèches et le ruban du projet ; le micro
+  collé à l'assistant ; Précédent / Suivant avaient le même identifiant (une seule flèche visible) : corrigé ; l'assistant
+  sans socle (bande et ruban), à gauche pour un droitier en projet aussi ; la zone de saisie du ruban en projet prend toute
+  la place, les outils en barres, animation 0,68 s. Preuves : `temp/swipe_r110/grid.probe.mjs` 5/5,
+  `project_finder.probe.mjs` 3/3, `menu.probe.mjs` 7/7, `rail.probe.mjs` 12/12, `swipe.probe.mjs` 13/13.
+- Reste ouvert : le trait blanc vu par l'utilisateur entre l'Agenda et le V (non reproduit ; capture demandée) ; l'outil
+  « tâche de fond » (inexistant).
 
 ### R-109 — Vérification MCP « universel en accès » (cahier V1.2/V1.23) sur l'app réelle (2026-11-02)
 - Statut : OUVERT (2026-11-02) — vérification partielle faite, écart démontré, audit complet et correction à faire.
