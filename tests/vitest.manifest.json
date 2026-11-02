@@ -377,6 +377,7 @@
   "tests/eve/video_recording_preview_stream_contract.test.mjs",
   "tests/eve/virtual_scene_phase1_contract.test.mjs",
   "tests/eve/voice_playback_bootstrap.test.mjs",
+  "tests/eve/voice_tool_limit.test.mjs",
   "tests/eve/wake_classifier.test.mjs",
   "tests/eve/wake_detector.test.mjs",
   "tests/eve/wake_enrollment.test.mjs",

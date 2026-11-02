@@ -1,4 +1,5 @@
 import { projectOpenAiSchema } from './provider_client_transport.js';
+import { PROVIDER_SESSION_TOOL_LIMIT } from '../../shared/provider_tool_limit.js';
 import { stableStringify } from './agent_gateway_normalize.js';
 import { aiQuotaTracker } from './quota_tracker.js';
 import { requestProviderService } from './provider_broker.js';
@@ -95,9 +96,13 @@ export const createConversationSession = ({
         // commands of the tools open now; schemas and permissions still come from MCP.
         const context = await Promise.resolve(toolContext()).catch(() => null);
         signal.throwIfAborted();
-        const preload = new Set(['ui.draw.edit', 'ui.ai.image.generate', ...MCP_CONTRACT_PRELOAD, ...ASSISTANT_CONTEXT_COMMAND_NAMES,
-            ...(Array.isArray(context?.preload) ? context.preload : [])]);
-        const direct = tools.filter(tool => preload.has(toolMap.get(tool.name)?.name));
+        // Most useful first, within the provider's limit with the search tool (R-108, 2 Nov. 2026: 167 names
+        // preloaded since R-104 made every voice opening refused, provider_tool_not_authorized): the commands
+        // of the tools open now, the assistant's context commands, core creation, then the contract families.
+        const preload = [...new Set([...(Array.isArray(context?.preload) ? context.preload : []), ...ASSISTANT_CONTEXT_COMMAND_NAMES,
+            'ui.draw.edit', 'ui.ai.image.generate', ...MCP_CONTRACT_PRELOAD])];
+        const byName = new Map(tools.map(tool => [toolMap.get(tool.name)?.name, tool]));
+        const direct = preload.map(name => byName.get(name)).filter(Boolean).slice(0, PROVIDER_SESSION_TOOL_LIMIT - 1);
         const notes = (Array.isArray(context?.notes) ? context.notes : []).map(String).filter(Boolean);
         const rules = (Array.isArray(context?.instructions) ? context.instructions : []).map(String).filter(Boolean);
         return { tools: [search, ...direct], catalog: tools, toolMap,
@@ -137,7 +142,7 @@ export const createConversationSession = ({
                     }).filter(entry => entry.score > 0).sort((a, b) => b.score - a.score).slice(0, 12).map(entry => entry.tool);
                     for (const tool of matches) if (!work.tools.some(current => current.name === tool.name)) work.tools.push(tool);
                     work.tools = [work.tools.find(tool => tool.name === 'atome_tool_search'),
-                        ...work.tools.filter(tool => tool.name !== 'atome_tool_search').slice(-95)];
+                        ...work.tools.filter(tool => tool.name !== 'atome_tool_search').slice(-(PROVIDER_SESSION_TOOL_LIMIT - 1))];
                     appendResult(work, call, 'atome_tool_search', { tools: matches, catalog_size: work.catalog.length });
                     continue;
                 }

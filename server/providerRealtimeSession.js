@@ -2,6 +2,7 @@ import WebSocket from 'ws';
 import { createHash } from 'node:crypto';
 import { openAiFailure } from '../atome/src/squirrel/ai/openai_stream.js';
 import { OPENAI_MODALITY_MODELS } from '../atome/src/squirrel/ai/model_catalog_registry.js';
+import { PROVIDER_SESSION_TOOL_LIMIT } from '../atome/src/shared/provider_tool_limit.js';
 
 const sessions = new WeakMap();
 const principals = new Map();
@@ -17,7 +18,7 @@ const closeDetached = session => {
     void session.close().catch(() => console.warn('[OpenAI] Live voice remote cleanup failed'));
 };
 const catalog = tools => {
-    if (!Array.isArray(tools) || tools.length > 96 || tools.some(tool => tool?.type !== 'function')) throw new Error('provider_tool_not_authorized');
+    if (!Array.isArray(tools) || tools.length > PROVIDER_SESSION_TOOL_LIMIT || tools.some(tool => tool?.type !== 'function')) throw new Error('provider_tool_not_authorized');
     return tools;
 };
 const only = (value, fields) => value && typeof value === 'object' && Object.keys(value).every(field => fields.includes(field));

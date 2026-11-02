@@ -165,3 +165,14 @@ Page des décisions (captures de l'app réelle, maquette V5) : https://claude.ai
   aussi les traces vocales de la page (`[voice-trace]`, `AppPageHost.swift`). Non validé sur appareil.
 - Sonde périmée constatée : `tests/probes/ios_app_native_audio_recording_contract.probe.mjs` lit
   `AppNativeAudioPlayback.swift`, absent du dépôt (préexistant).
+- **Cause trouvée de l'assistante muette et sans réponse (journal du 2 nov., 13 h 57, traces actives)** —
+  `voice.assistant.open.failed error=provider_tool_not_authorized` à chaque ouverture : depuis R-104 l'ouverture vocale
+  préchargeait 167 outils, le relais temps réel (`server/providerRealtimeSession.js`) en refuse plus de 96. Correctif :
+  au plus `PROVIDER_SESSION_TOOL_LIMIT` (96, `atome/src/shared/provider_tool_limit.js`, partagé avec le serveur),
+  outil de recherche compris, les plus utiles d'abord (outils ouverts, commandes de contexte, création, familles du
+  contrat) ; les autres restent joignables par la recherche (`conversation_session.js`). Test
+  `tests/eve/voice_tool_limit.test.mjs` (rouge sur l'ancien code, vert sur le nouveau). Le serveur déployé n'est pas
+  modifié (même limite).
+- **Échec silencieux** — `voice_line_missing` : un échec sans phrase propre lisait la phrase « codée » (avec le code),
+  qui n'a pas de réplique enregistrée. Elle dit désormais la phrase générique « L'assistant vocal est indisponible. »,
+  le texte codé restant affiché (`assistantSpokenError`, eVe).
