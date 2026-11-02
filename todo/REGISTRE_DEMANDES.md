@@ -549,6 +549,20 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 - Toujours ouvert : décisions R-107 et V5 D1–D6 ; affichage de la date des vidéos (maquette) ; montre E1–E3 ; push,
   build 1.46 (45) et déploiement serveur sur accord explicite.
 
+### R-110 — Appel entrant : Accepter / Refuser dans la bande du bas, sonnerie plus longue (2026-11-02)
+- Statut : OUVERT (2026-11-02) — codé et validé hors appareil ; reste l'essai réel à deux comptes.
+- Demande (chat cloud 2026-11-02) : « on sent bien la sonnerie … mais il n'y a rien pour accepter ou pour refuser. Il faut des
+  boutons accepter, refuser … à la place de l'input box en bas … deux outils … vérifie que ça accepte, que la visio s'initie …
+  augmente un petit peu le temps avant de refuser l'appel ».
+- Fait : sur le Dashboard, pendant la sonnerie, Refuser (✕) puis Accepter (téléphone, glyphe allumé) à la place du champ
+  (`eVe/domains/dashboard/dashboard_communication_input.js`, hôte de `visio_incoming_call.js#attachHost`) ; sonnerie 10 s → 30 s
+  (`atome/src/shared/communication_contract.js`). Accepter passe par `joinVisioCall` (commande serveur `accept` puis entrée dans la
+  salle). Preuves : `tests/eve/visio_incoming_call.test.mjs` 4/4, `tests/server/visio_commands.test.mjs` 5/6 (le 6e exige mediasoup,
+  absent du conteneur), sonde de la bande réelle `temp/visio_call_ring/band_probe.mjs` 12/12.
+- Reste : essai réel entre deux comptes (Web et iPhone) : les deux outils à l'écran, Accepter ouvre la visio avec image et son
+  dans les deux sens, Refuser prévient l'appelant, 30 s sans réponse mènent à la messagerie. Dans un projet, le ruban garde son
+  chemin (toucher le texte qui clignote accepte ; Accepter / Refuser dans son rail).
+
 ### R-109 — Vérification MCP « universel en accès » (cahier V1.2/V1.23) sur l'app réelle (2026-11-02)
 - Statut : OUVERT (2026-11-02) — vérification partielle faite, écart démontré, audit complet et correction à faire.
 - Demande : « dis-moi si on a bien intégré ce nouveau concept : quasiment toutes les actions passent par MCP, même quand ce

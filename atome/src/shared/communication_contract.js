@@ -1,4 +1,5 @@
-export const CALL_RING_TIMEOUT_MS = 10_000;
+// How long an incoming call rings before it is missed (the caller then leaves a message): 30 s (user, 2026-11-02: 10 s was too short).
+export const CALL_RING_TIMEOUT_MS = 30_000;
 export const CALL_MODES = Object.freeze(['audio', 'visio']);
 export const COMMUNICATION_PAGE_SIZE = 30;
 export const COMMUNICATION_PRIORITIES = Object.freeze(['normal', 'priority', 'urgent']);

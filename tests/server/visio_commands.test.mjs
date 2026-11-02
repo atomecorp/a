@@ -18,10 +18,10 @@ const fixture = (options = {}) => {
     };
     return { commands, publish, begin, rooms };
 };
-test('the common adjustable delay is 10 seconds and expiration is terminal', async () => {
-    expect(CALL_RING_TIMEOUT_MS).toBe(10000);
+test('the common adjustable delay is 30 seconds and expiration is terminal', async () => {
+    expect(CALL_RING_TIMEOUT_MS).toBe(30000);
     const f = fixture(), roomId = await f.begin();
-    await vi.advanceTimersByTimeAsync(9999);
+    await vi.advanceTimersByTimeAsync(CALL_RING_TIMEOUT_MS - 1);
     expect((await f.commands.execute('alice', 'state', { roomId })).status).toBe('ringing');
     await vi.advanceTimersByTimeAsync(1);
     expect((await f.commands.execute('alice', 'state', { roomId })).status).toBe('recording');
@@ -31,7 +31,7 @@ test('the common adjustable delay is 10 seconds and expiration is terminal', asy
 test('acceptance wins before expiration; a refusal wins immediately', async () => {
     const f = fixture(), roomId = await f.begin();
     expect((await f.commands.execute('bob', 'accept', { roomId, deviceKey: 'bob-device' })).status).toBe('live');
-    await vi.advanceTimersByTimeAsync(15000);
+    await vi.advanceTimersByTimeAsync(CALL_RING_TIMEOUT_MS + 5000);
     expect((await f.commands.execute('alice', 'state', { roomId })).status).toBe('live');
     const second = await f.begin();
     expect((await f.commands.execute('bob', 'decline', { roomId: second })).status).toBe('recording');
