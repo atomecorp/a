@@ -618,6 +618,14 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   `project_finder.probe.mjs` 3/3, `menu.probe.mjs` 7/7, `rail.probe.mjs` 12/12, `swipe.probe.mjs` 13/13.
 - L'outil « tâche de fond » = le disque orange « en cours » (tâche 2) : une séance qui continue hors de son écran (un minuteur
   de sport) le montre au-dessus de l'assistant, dans la case de la grille gardée libre ; FAIT (l'utilisateur l'a reconnu, 2026-11-02).
+- Demandes du 2026-11-03 (même session) FAITES et poussées : l'outil Dashboard (Organize en projet) toujours dans le coin
+  opposé à l'assistant, Retour juste avant lui (bande et ruban) ; gestes des tuiles : glisser latéral sous le doigt depuis
+  une dalle comme depuis le vide ou la marge, droite = page d'avant puis niveau au-dessus sans pause ; sur l'accueil, une
+  tuile glissée vers la gauche ouvre sa rubrique en tournant sous le doigt ; vers le haut, toute dalle se retourne et ouvre
+  son contenu, vers le bas rien ne s'ouvre et un niveau ouvert se referme. Preuves : `temp/swipe_r110/pages.probe.mjs` 11/11,
+  `flip.probe.mjs` 6/6, `project_finder.probe.mjs` 3/3. Limite : l'ouverture suit le doigt jusqu'au retournement, puis le
+  contenu s'ouvre à son propre rythme (pas encore un agrandissement continu lié au doigt) ; une tuile sans contenu n'ouvre
+  pas encore de bloc vide.
 - Trait blanc entre l'Agenda et le V : vu sur une capture d'une version intermédiaire jamais poussée (champ du bas bogué) ;
   non reproduit sur le code poussé (30 images de l'ouverture de la recherche, `temp/swipe_r110/frames.probe.mjs`). À rouvrir
   si l'utilisateur le revoit, avec sa capture.
