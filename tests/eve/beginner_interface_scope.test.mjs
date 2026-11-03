@@ -133,6 +133,8 @@ test('blank beginner List keeps the shared rail at the bottom, Organize staying 
     expect(railKeys()).toEqual(['delete', ...BEGINNER_LIST_RAIL_KEYS]);
     const layout = runtime.readState().railLayout;
     expect(layout.y + layout.railHeight).toBe(layout.bottom);
-    expect(layout.bottom).toBe(720 - 60 - layout.gap);
+    // The rail's foot on the one screen grid (« un seul tableau »): right above the ribbon's row, a tool drawn inside its
+    // cell — the surface's 720 less the 8 px margin, one 60 px row and half the 5 px joint.
+    expect(layout.bottom).toBe(Math.floor(720 - 8 - 60 - 2.5));
     expect(railKeys()).not.toContain('container_dashboard');
 });
