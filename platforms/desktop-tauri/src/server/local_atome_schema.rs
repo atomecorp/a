@@ -4,6 +4,7 @@ use std::collections::HashSet;
 pub(crate) fn prepare_legacy_columns(conn: &Connection) -> Result<(), rusqlite::Error> {
     ensure_event_sync_columns(conn)?;
     ensure_auth_device_key_columns(conn)?;
+    ensure_auth_recovery_columns(conn)?;
     ensure_legacy_columns(
         conn,
         "news_publications",
@@ -107,6 +108,20 @@ fn ensure_auth_device_key_columns(conn: &Connection) -> Result<(), rusqlite::Err
         ("sign_count", "ALTER TABLE auth_device_keys ADD COLUMN sign_count INTEGER NOT NULL DEFAULT 0"),
         ("last_seen_ms", "ALTER TABLE auth_device_keys ADD COLUMN last_seen_ms INTEGER"),
         ("connection_proof", "ALTER TABLE auth_device_keys ADD COLUMN connection_proof INTEGER NOT NULL DEFAULT 0"),
+    ])
+}
+
+// A recovery code names its account by itself (`lookup`, indexed by the canonical
+// schema) and carries the account's wrapped backup keys; pairing seals them too.
+// Mirrors database/adole_schema_migrations.js#prepareAdoleSchemaColumns.
+fn ensure_auth_recovery_columns(conn: &Connection) -> Result<(), rusqlite::Error> {
+    ensure_legacy_columns(conn, "auth_recovery_codes", &[
+        ("lookup", "ALTER TABLE auth_recovery_codes ADD COLUMN lookup TEXT"),
+        ("backup_keys", "ALTER TABLE auth_recovery_codes ADD COLUMN backup_keys TEXT"),
+    ])?;
+    ensure_legacy_columns(conn, "auth_pair_requests", &[
+        ("requester_backup_key", "ALTER TABLE auth_pair_requests ADD COLUMN requester_backup_key TEXT"),
+        ("backup_keys", "ALTER TABLE auth_pair_requests ADD COLUMN backup_keys TEXT"),
     ])
 }
 

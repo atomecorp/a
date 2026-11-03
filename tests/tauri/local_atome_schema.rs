@@ -164,3 +164,30 @@ fn legacy_events_gain_sync_columns_before_canonical_indexes() {
         .expect("historical event count");
     assert_eq!(historical_count, 1);
 }
+
+#[test]
+fn legacy_recovery_codes_gain_lookup_before_its_index() {
+    let database = Connection::open_in_memory().unwrap();
+    database
+        .execute_batch(
+            "CREATE TABLE auth_recovery_codes (
+            principal_id TEXT PRIMARY KEY, verifier TEXT NOT NULL, created_ms INTEGER NOT NULL
+         );
+         INSERT INTO auth_recovery_codes VALUES ('owner', 'kept-verifier', 1);",
+        )
+        .unwrap();
+    for _ in 0..2 {
+        prepare_legacy_columns(&database).unwrap();
+        database
+            .execute_batch(ADOLE_SCHEMA_SQL)
+            .expect("canonical schema over legacy recovery codes");
+    }
+    let kept: (String, Option<String>, Option<String>) = database
+        .query_row(
+            "SELECT verifier, lookup, backup_keys FROM auth_recovery_codes WHERE principal_id='owner'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!(kept, ("kept-verifier".into(), None, None));
+}
