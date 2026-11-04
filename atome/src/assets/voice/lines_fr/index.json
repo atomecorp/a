@@ -77,9 +77,9 @@
   },
   "Encore un instant, je me connecte.": {
    "file": "e142691ac388d9ef.wav",
-   "samples": 51456,
-   "phonemes": "^ɑ̃koʁ œ̃ ɛ̃stɑ̃ , ʒə mə konɛkt .$",
-   "sha256": "f90c5e9032f5c0418f50697f1b8b83f9c400832f58c6c3ee3c034d18e31b74af"
+   "samples": 54272,
+   "phonemes": "^ɑ̃koʁ œ̃ nɛ̃stɑ̃ , ʒə mə konɛkt .$",
+   "sha256": "1fd569935d77704b76f21ac569673aa066d200c740d840c37d5056b197b47d16"
   },
   "C’est bon, je suis prête. Je reste à l’écoute : pour m’arrêter, touche-moi. Pour travailler ou me demander quelque chose, parle-moi.": {
    "file": "29f76a95a979a011.wav",
@@ -95,21 +95,21 @@
   },
   "Le profil de cette discussion est incompatible avec le registre actuel.": {
    "file": "92306174d9374e2f.wav",
-   "samples": 86784,
-   "phonemes": "^lə pʁofil də sɛt diskysjɔ̃ ɛ ɛ̃kɔ̃patibl avɛk lə ʁəʒistʁ aktyɛl .$",
-   "sha256": "5c48a4dbf6234d65997eb9126b475c03586ca912707953a9b4d3b8cf0429ca9f"
+   "samples": 85248,
+   "phonemes": "^lə pʁofil də sɛt diskysjɔ̃ ɛ tɛ̃kɔ̃patibl avɛk lə ʁəʒistʁ aktyɛl .$",
+   "sha256": "5b77377d461fed7cf939f40f1efad4921940032dd192e0d0c453a88f2da79c70"
   },
   "Je n’arrive pas à me connecter. Réessaie dans un moment, ou écris-moi.": {
    "file": "970a71ba6419902a.wav",
-   "samples": 84736,
-   "phonemes": "^ʒə naʁiv pa a mə konɛkte . ʁeesɛ dɑ̃ œ̃ momɑ̃ , u ekʁimwa .$",
-   "sha256": "bc9575ceda3c654400d79a63cad09928add62c39aeba4e1c4286fd79afcbe378"
+   "samples": 85504,
+   "phonemes": "^ʒə naʁiv pa a mə konɛkte . ʁeesɛ dɑ̃ zœ̃ momɑ̃ , u ekʁimwa .$",
+   "sha256": "f35561d557c8fc7e87f8aae86117d7bd0a9e4745f59777ad5e33a54f55984933"
   },
   "L'assistant vocal est indisponible.": {
    "file": "a49bbcde624f0bd9.wav",
-   "samples": 43520,
-   "phonemes": "^lasistɑ̃ vokal ɛ ɛ̃disponibl .$",
-   "sha256": "8a301a98880ebc125ada26934fbc056235d44653db4ff8dcbda7a5edb864393e"
+   "samples": 42496,
+   "phonemes": "^lasistɑ̃ vokal ɛ tɛ̃disponibl .$",
+   "sha256": "288d974a3a736e4b5b9ce7b781194377fd55610fa179a9449eb137b6e888635a"
   },
   "Je ne suis pas disponible : nous sommes hors ligne.": {
    "file": "53349cb9beaade2a.wav",
@@ -203,9 +203,9 @@
   },
   "Le service vocal est indisponible. Tu peux écrire dans Message.": {
    "file": "fae5776d0804cb7a.wav",
-   "samples": 85504,
-   "phonemes": "^lə sɛʁvis vokal ɛ ɛ̃disponibl . ty pø ekʁiʁ dɑ̃ mɛsaʒ .$",
-   "sha256": "91081aae06f0317cd83d896e7832656163a796eca156894d31974fe8f6f4426c"
+   "samples": 88320,
+   "phonemes": "^lə sɛʁvis vokal ɛ tɛ̃disponibl . ty pø ekʁiʁ dɑ̃ mɛsaʒ .$",
+   "sha256": "42d77c7339ba55b73290c8c84cdc88e7f9e884805d0daa4a781f787b60f5c409"
   },
   "Précise ta demande d’image dans Message.": {
    "file": "8c174cc0881609ed.wav",
@@ -227,9 +227,9 @@
   },
   "Choisis un projet avant de créer un objet.": {
    "file": "b90ab851de05f532.wav",
-   "samples": 42496,
-   "phonemes": "^ʃwazi œ̃ pʁoʒɛ avɑ̃ də kʁee œ̃ obʒɛ .$",
-   "sha256": "3afccbdec4a66fd901ad5d7a43323afc0e936c8c7a83470b24ffa73720b59a0f"
+   "samples": 44288,
+   "phonemes": "^ʃwazi œ̃ pʁoʒɛ avɑ̃ də kʁee œ̃ nobʒɛ .$",
+   "sha256": "024e7f0a122d043f0c4298bdf68b579521a96fc9400cb732eb9aff966cac7b89"
   },
   "Choisis un projet avant cette demande.": {
    "file": "a33b9c8753bd095f.wav",
@@ -299,21 +299,21 @@
   },
   "Le crédit de ta clé OpenAI est épuisé. Recharge-le sur ton compte OpenAI.": {
    "file": "2216eab7232639ed.wav",
-   "samples": 105728,
-   "phonemes": "^lə kʁedi də ta kle opɛnai ɛ epɥize . ʁəʃaʁʒlə syʁ tɔ̃ kɔ̃t opɛnai .$",
-   "sha256": "887780652735c47c744e57556c6d803618d2799aa43d8923c9e27d485b0fdc44"
+   "samples": 107008,
+   "phonemes": "^lə kʁedi də ta kle opɛnai ɛ tepɥize . ʁəʃaʁʒlə syʁ tɔ̃ kɔ̃t opɛnai .$",
+   "sha256": "5d5ea2470c9a40e117f136d18d301e0b120824ba47e3b4df823c2bc8c40742c3"
   },
   "OpenAI limite les requêtes. Réessaie dans un instant.": {
    "file": "1a4d032aaec1eeb9.wav",
-   "samples": 69888,
-   "phonemes": "^opɛnai limit le ʁəkɛt . ʁeesɛ dɑ̃ œ̃ ɛ̃stɑ̃ .$",
-   "sha256": "ae2d5f92cdb28695287b6b72dedb643d721cf34824b431da47970afed41e449b"
+   "samples": 69632,
+   "phonemes": "^opɛnai limit le ʁəkɛt . ʁeesɛ dɑ̃ zœ̃ nɛ̃stɑ̃ .$",
+   "sha256": "8ee42976180371d97e4b37fa455ee531ad10d73b242e9dc280f035d5831e1799"
   },
   "OpenAI limite les demandes pour le moment. Réessaie dans un instant.": {
    "file": "190f995e8cb952b2.wav",
-   "samples": 86784,
-   "phonemes": "^opɛnai limit le dəmɑ̃d puʁ lə momɑ̃ . ʁeesɛ dɑ̃ œ̃ ɛ̃stɑ̃ .$",
-   "sha256": "e3ed2526f7d71253d4fb0740f0be852a72edc443b92ab74e8823eac7ca726503"
+   "samples": 77824,
+   "phonemes": "^opɛnai limit le dəmɑ̃d puʁ lə momɑ̃ . ʁeesɛ dɑ̃ zœ̃ nɛ̃stɑ̃ .$",
+   "sha256": "1393eb5279b620826c6097b65c20d4b3d6bffffb2cfd393fb292e224dd3df288"
   },
   "Ce modèle n’est pas disponible pour le compte configuré.": {
    "file": "f8a012137e590cc6.wav",
@@ -353,9 +353,9 @@
   },
   "Le micro est indisponible. Reconnecte-le puis touche l’assistant.": {
    "file": "2679a366225d3ca7.wav",
-   "samples": 80896,
-   "phonemes": "^lə mikʁo ɛ ɛ̃disponibl . ʁəkonɛktlə pɥi tuʃ lasistɑ̃ .$",
-   "sha256": "23c1732d31194d201df52138df3daa2601913ec33d46b807feffe710917b462b"
+   "samples": 81920,
+   "phonemes": "^lə mikʁo ɛ tɛ̃disponibl . ʁəkonɛktlə pɥi tuʃ lasistɑ̃ .$",
+   "sha256": "0a6ca7c0ae787299c8679cda92069adc2b1ddf9127063ab982efc4f610a74ff8"
   },
   "Cette discussion conservée a été supprimée. Elle n’a pas été recréée.": {
    "file": "22bb414e218b8b35.wav",
@@ -371,9 +371,9 @@
   },
   "Une demande est encore en cours.": {
    "file": "2b7b20a320dcad1e.wav",
-   "samples": 41472,
-   "phonemes": "^yn dəmɑ̃d ɛ ɑ̃koʁ ɑ̃ kuʁ .$",
-   "sha256": "a7a3816d5fa17549ca289db984d0b4a70fb83363137c851850c9ff6565a6c630"
+   "samples": 38912,
+   "phonemes": "^yn dəmɑ̃d ɛ tɑ̃koʁ ɑ̃ kuʁ .$",
+   "sha256": "e61c8c2710b231c471df8c004c6373be8ab963c1ea1287f21a367d32c96e7ece"
   },
   "Ce niveau de raisonnement n’est pas disponible pour ce modèle.": {
    "file": "f771cc47b9eb36bc.wav",
@@ -407,9 +407,9 @@
   },
   "Le crédit partagé d’eVe est épuisé. Ta propre clé OpenAI, dans Réglages, permet de continuer.": {
    "file": "9c1b1cca23ccb88c.wav",
-   "samples": 129792,
-   "phonemes": "^lə kʁedi paʁtaʒe dəv ɛ epɥize . ta pʁopʁ kle opɛnai , dɑ̃ ʁeɡlaʒ , pɛʁmɛ də kɔ̃tinye .$",
-   "sha256": "49fbd9b414bcd10274f18611b7ff04a19f3597154aa2b6b3deba0057e420a2ba"
+   "samples": 126464,
+   "phonemes": "^lə kʁedi paʁtaʒe dəv ɛ tepɥize . ta pʁopʁ kle opɛnai , dɑ̃ ʁeɡlaʒ , pɛʁmɛ də kɔ̃tinye .$",
+   "sha256": "9dd16a5b3b109b338a60431cd00e370fc404875b9e07e1ba0a9a87945d9efd02"
   },
   "Crédit ou plafond de dépenses OpenAI atteint.": {
    "file": "e5943a7fb5a6de38.wav",
@@ -419,27 +419,27 @@
   },
   "OpenAI bloque l’accès : la facturation du compte est à régler.": {
    "file": "59e815164a8da54b.wav",
-   "samples": 81408,
-   "phonemes": "^opɛnai blok laksɛ : la faktyʁasjɔ̃ dy kɔ̃t ɛ a ʁeɡle .$",
-   "sha256": "d0598aef4b4d72c8032c6c9ff929371e453792cbbd4f59bee19a555b4ba0ce7d"
+   "samples": 79872,
+   "phonemes": "^opɛnai blok laksɛ : la faktyʁasjɔ̃ dy kɔ̃t ɛ ta ʁeɡle .$",
+   "sha256": "e79af54f37b9b3d736d8d2965bd9f528604d75895c59df8c879be686f17123a8"
   },
   "OpenAI demande un paiement (HTTP 402) : la facturation du compte est à régler.": {
    "file": "99a4a9dd81759632.wav",
-   "samples": 106752,
-   "phonemes": "^opɛnai dəmɑ̃d œ̃ pɛəmɑ̃ ( aʃtetepe katʁ sɑ̃ dø ) : la faktyʁasjɔ̃ dy kɔ̃t ɛ a ʁeɡle .$",
-   "sha256": "d88be0bcb4042d982eea1412a001644dd63961e4a44fc272e8cb074876ee5d42"
+   "samples": 107008,
+   "phonemes": "^opɛnai dəmɑ̃d œ̃ pɛmɑ̃ ( aʃtetepe katʁ sɑ̃ dø ) : la faktyʁasjɔ̃ dy kɔ̃t ɛ ta ʁeɡle .$",
+   "sha256": "ddbcef3850b0326792e7b070282dd5675ba5ce8ad1b45682331b2a9c92dad468"
   },
   "OpenAI limite les demandes (HTTP 429). Réessaie dans un instant.": {
    "file": "b34f72142fba585e.wav",
-   "samples": 115712,
-   "phonemes": "^opɛnai limit le dəmɑ̃d ( aʃtetepe katʁ sɑ̃ vɛ̃nœf ) . ʁeesɛ dɑ̃ œ̃ ɛ̃stɑ̃ .$",
-   "sha256": "e8b723fd736cb2db4b27c8a8352c72e489860b03d0870b10c7ec6691e9547bb4"
+   "samples": 107520,
+   "phonemes": "^opɛnai limit le dəmɑ̃d ( aʃtetepe katʁ sɑ̃ vɛ̃nœf ) . ʁeesɛ dɑ̃ zœ̃ nɛ̃stɑ̃ .$",
+   "sha256": "52d6f87c32ef1fe176c228b6369266356c0d5442117a385baf289acbe2cb7b9b"
   },
   "La réponse d’OpenAI s’est arrêtée avant la fin. Réessaie.": {
    "file": "1ab9ca10265bf6a4.wav",
-   "samples": 72704,
-   "phonemes": "^la ʁepɔ̃s dopɛnai sɛ aʁɛte avɑ̃ la fɛ̃ . ʁeesɛ .$",
-   "sha256": "b1df9969531be6afd50cce4ae91777c707da9cdf05704a2fe16feaadc03ea63d"
+   "samples": 68096,
+   "phonemes": "^la ʁepɔ̃s dopɛnai sɛ taʁɛte avɑ̃ la fɛ̃ . ʁeesɛ .$",
+   "sha256": "23a391bcb0dac3ba555a7f2c896c7a7f7a4efa4f3c078e096983da5f10b266e1"
   },
   "Toutes les places du crédit partagé d’eVe sont prises. Ta propre clé OpenAI, dans Réglages, permet de continuer.": {
    "file": "96b363c5114c57cb.wav",
@@ -449,9 +449,9 @@
   },
   "Le crédit partagé d’eVe est indisponible sur ce serveur.": {
    "file": "b36ad95ca10c79b5.wav",
-   "samples": 74240,
-   "phonemes": "^lə kʁedi paʁtaʒe dəv ɛ ɛ̃disponibl syʁ sə sɛʁvœʁ .$",
-   "sha256": "24cb464230023c3f3104c2d830a555822c72ea91e01f85c9d9c15d77eff9bde5"
+   "samples": 71936,
+   "phonemes": "^lə kʁedi paʁtaʒe dəv ɛ tɛ̃disponibl syʁ sə sɛʁvœʁ .$",
+   "sha256": "eb51f4555f4e187b6b9ffe9e663ed339cad2fda97e72408bc8ad78ed1dd2624e"
   },
   "Le serveur atome n’a pas pu mener la demande IA à bien. Réessaie.": {
    "file": "67539d8e23457087.wav",
@@ -473,9 +473,9 @@
   },
   "Le service IA est injoignable. Vérifie le réseau puis réessaie.": {
    "file": "7d2aefc234e4a8cf.wav",
-   "samples": 77824,
-   "phonemes": "^lə sɛʁvis ia ɛ ɛ̃ʒwaɲabl . veʁifi lə ʁezo pɥi ʁeesɛ .$",
-   "sha256": "e5508c26ea82bb04134a1e7af218179864678ea81f63fa1f76fac6aa7d906428"
+   "samples": 77312,
+   "phonemes": "^lə sɛʁvis ia ɛ tɛ̃ʒwaɲabl . veʁifi lə ʁezo pɥi ʁeesɛ .$",
+   "sha256": "2932578bcc76c846d187b354cf96b8a0541f98a9e4d6c1d270c3a81643a4c5ef"
   },
   "Le service IA a renvoyé une réponse illisible. Réessaie.": {
    "file": "e9c54400297197a5.wav",
@@ -497,9 +497,9 @@
   },
   "L’activation vocale n’est pas disponible : le modèle de la phrase est absent.": {
    "file": "bfd97af5fbe9fcc2.wav",
-   "samples": 113152,
-   "phonemes": "^laktivasjɔ̃ vokal nɛ pa disponibl : lə modɛl də la fʁaz ɛ absɑ̃ .$",
-   "sha256": "3a7d29e4253c5c23222d54fbaf6fb252f7afe6133fdb3e257220a30e57ca3e2c"
+   "samples": 106240,
+   "phonemes": "^laktivasjɔ̃ vokal nɛ pa disponibl : lə modɛl də la fʁaz ɛ tabsɑ̃ .$",
+   "sha256": "40a5395bd9833eedf94a94929732f4a2d51de9cc20b7ca8d1ac05f9eae3195be"
   },
   "L’activation vocale ne peut pas écouter : l’accès au micro est refusé.": {
    "file": "3514138aef454230.wav",
@@ -521,15 +521,15 @@
   },
   "L’écoute est déjà occupée. Réessaie dans un instant.": {
    "file": "a97cd57621428a34.wav",
-   "samples": 61952,
-   "phonemes": "^lekut ɛ deʒa okype . ʁeesɛ dɑ̃ œ̃ ɛ̃stɑ̃ .$",
-   "sha256": "7af69d2157d72561ea05ae9262d0f48e235c2ae167bd7094fb5ff045513cc3ff"
+   "samples": 77056,
+   "phonemes": "^lekut ɛ deʒa okype . ʁeesɛ dɑ̃ zœ̃ nɛ̃stɑ̃ .$",
+   "sha256": "159e61f7ef2f876f7056dd9a9060ab529d9f59b600887aac1c9d4d29ecda8254"
   },
   "Le micro s’est arrêté pendant l’écoute.": {
    "file": "4a9ea7a649a9526f.wav",
-   "samples": 44032,
-   "phonemes": "^lə mikʁo sɛ aʁɛte pɑ̃dɑ̃ lekut .$",
-   "sha256": "699187f0ad60511116b71398f9128a529dcd2118e9d83617fe480247560d1714"
+   "samples": 47616,
+   "phonemes": "^lə mikʁo sɛ taʁɛte pɑ̃dɑ̃ lekut .$",
+   "sha256": "9a22ea01ba1184b9dec6fac69db294f0c12e0cd6a8d1f1e546ee1dfa44ad4338"
   },
   "Cet appareil n’arrive pas à suivre l’écoute en temps réel.": {
    "file": "f64c7de9e97ee65b.wav",
@@ -545,15 +545,15 @@
   },
   "Je n’ai pas entendu la phrase. L’apprentissage est annulé, tu peux recommencer.": {
    "file": "8e2e8cc061ca9d7e.wav",
-   "samples": 99840,
-   "phonemes": "^ʒə nɛ pa ɑ̃tɑ̃dy la fʁaz . lapʁɑ̃tisaʒ ɛ anyle , ty pø ʁəkomɑ̃se .$",
-   "sha256": "27e11b8431337037045b44d08739dbfecef1860be40175a7984c978a6e4be01e"
+   "samples": 112128,
+   "phonemes": "^ʒə nɛ pa ɑ̃tɑ̃dy la fʁaz . lapʁɑ̃tisaʒ ɛ tanyle , ty pø ʁəkomɑ̃se .$",
+   "sha256": "755c2d69db292bbe0355d7d3977932b27f6c9eb8b430f4acf85b81d02bd1ebed"
   },
   "Les enregistrements ne sont pas assez nets. Recommence dans un endroit plus calme.": {
    "file": "cd97232f7253cc21.wav",
-   "samples": 89088,
-   "phonemes": "^le ɑ̃ʁəʒistʁəmɑ̃ nə sɔ̃ pa ase nɛ . ʁəkomɑ̃s dɑ̃ œ̃ ɑ̃dʁwa ply kalm .$",
-   "sha256": "7f0c7dc2a8d8ef8065f1175f785e0771068ae3c8040d8e1bbbea2d57845b5d20"
+   "samples": 93696,
+   "phonemes": "^le zɑ̃ʁəʒistʁəmɑ̃ nə sɔ̃ pa ase nɛ . ʁəkomɑ̃s dɑ̃ zœ̃ nɑ̃dʁwa ply kalm .$",
+   "sha256": "9fba1eee6d8d205353ea28001452ce2eabae60aa9af2221074920e49db1e036a"
   },
   "Je n’ai pas reçu assez de son. Vérifie le micro et recommence.": {
    "file": "ef4e55a852d0dae7.wav",
@@ -617,9 +617,9 @@
   },
   "Tu as les mêmes fonctions, mais sans réseau : tu ne pourras pas communiquer avec les autres.": {
    "file": "55e2689ce521abc4.wav",
-   "samples": 103168,
-   "phonemes": "^ty a le mɛm fɔ̃ksjɔ̃ , mɛ sɑ̃ ʁezo : ty nə puʁa pa komynike avɛk le otʁ .$",
-   "sha256": "90e7ed158e047ff09b11bb1986a9dc21ee4fe85862129d8acf96fde90d60c550"
+   "samples": 99072,
+   "phonemes": "^ty a le mɛm fɔ̃ksjɔ̃ , mɛ sɑ̃ ʁezo : ty nə puʁa pa komynike avɛk le zotʁ .$",
+   "sha256": "cba51e65f430739e5d221b0c9ba3cd3a7ba2a573d328173ae11a2b43eacdd841"
   },
   "En bas, tu crées un compte, et je serai là pour t’épauler tout le temps.": {
    "file": "d02d81deb944d0ca.wav",
@@ -630,14 +630,14 @@
   "Tu auras l’intelligence artificielle pour t’aider, et tes documents seront sauvegardés et synchronisés.": {
    "file": "1273a8cdaecc5740.wav",
    "samples": 112384,
-   "phonemes": "^ty oʁa lɛ̃tɛliʒɑ̃s aʁtifisjɛl puʁ tɛde , e te dokymɑ̃ səʁɔ̃ sovəɡaʁde e sɛ̃ʃʁonize .$",
-   "sha256": "bb8f8a6056a80ddfcbae2e0fdb26022e6895259e8187b2a9ff112ec67d841aea"
+   "phonemes": "^ty oʁa lɛ̃tɛliʒɑ̃s aʁtifisjɛl puʁ tɛde , e te dokymɑ̃ səʁɔ̃ sovəɡaʁde e sɛ̃kʁonize .$",
+   "sha256": "b9c475458c4b9cac3fae0ac440500482c131df62bb72946335ebbe691db3665e"
   },
   "Tu pourras aussi partager tes humeurs, tes documents et tes vidéos avec les gens que tu aimes.": {
    "file": "8e369d084d56c0d4.wav",
-   "samples": 96000,
-   "phonemes": "^ty puʁa osi paʁtaʒe te ymœʁ , te dokymɑ̃ e te video avɛk le ʒɑ̃ kə ty ɛm .$",
-   "sha256": "d0648895288abb58091489b603e5297b6a27d73036981b63333442b455931ac8"
+   "samples": 100608,
+   "phonemes": "^ty puʁa osi paʁtaʒe te zymœʁ , te dokymɑ̃ e te video avɛk le ʒɑ̃ kə ty ɛm .$",
+   "sha256": "d4c8024348d9b8cfb2ebbf6b5bf8403ed1eae10162bd7520f822a49fe5b552d4"
   },
   "Dis-moi ce que tu préfères et je clique pour toi, ou appuie sur l’un des deux boutons.": {
    "file": "c137e15e5fe41d93.wav",
@@ -659,33 +659,33 @@
   },
   "Dernière étape : l’abonnement est à douze euros par mois.": {
    "file": "f87be688dca9ef66.wav",
-   "samples": 67584,
-   "phonemes": "^dɛʁnjɛʁ etap : labonəmɑ̃ ɛ a duz œʁo paʁ mwa .$",
-   "sha256": "2db9fd0b972ab3ac3a59bc02123242ce5ab251e12a1901e9edbf458127b6b147"
+   "samples": 72192,
+   "phonemes": "^dɛʁnjɛʁ etap : labonəmɑ̃ ɛ ta duz œʁo paʁ mwa .$",
+   "sha256": "e718f954f9e4e896d5ce1f5005d3f10bebf60960e2d4e2f96a326633808d893e"
   },
   "Pour l’instant, rien ne sera débité : c’est une simulation.": {
    "file": "e5bb796ce9476798.wav",
-   "samples": 76544,
-   "phonemes": "^puʁ lɛ̃stɑ̃ , ʁjɛ̃ nə səʁa debite : sɛ yn simylasjɔ̃ .$",
-   "sha256": "576cc469491587bf970fdc9b6a248324ba544376f2e23f6545d5efc51a377250"
+   "samples": 80896,
+   "phonemes": "^puʁ lɛ̃stɑ̃ , ʁjɛ̃ nə səʁa debite : sɛ tyn simylasjɔ̃ .$",
+   "sha256": "ab84a250c144977518e984b7718bee304cc5e394f922b85e71bc513358834e89"
   },
   "Choisis comment tu veux payer, puis appuie sur Payer.": {
    "file": "c635b80952582f01.wav",
-   "samples": 55808,
-   "phonemes": "^ʃwazi komɑ̃ ty vø paie , pɥi apɥi syʁ paie .$",
-   "sha256": "2de03fed1af7981194ff431fd27767573862f26f5d505fcd7f3fd777e62eb7eb"
+   "samples": 60672,
+   "phonemes": "^ʃwazi komɑ̃ ty vø pɛje , pɥi apɥi syʁ pɛje .$",
+   "sha256": "dc7b61faf211a65b2db3f92dad69513b5f0a73a057d7d35bf173303bfff4dc70"
   },
   "Appuie sur Payer : le magasin de ton appareil te demandera de confirmer.": {
    "file": "8f5a1c2401b5dc41.wav",
-   "samples": 86528,
-   "phonemes": "^apɥi syʁ paie : lə maɡazɛ̃ də tɔ̃ apaʁɛj tə dəmɑ̃dəʁa də kɔ̃fiʁme .$",
-   "sha256": "1333ffae53f615193d10987819f80ca5d31af6d346b14941d02158afe80ece58"
+   "samples": 88832,
+   "phonemes": "^apɥi syʁ pɛje : lə maɡazɛ̃ də tɔ̃ napaʁɛj tə dəmɑ̃dəʁa də kɔ̃fiʁme .$",
+   "sha256": "655552878165f1ec4487a6448fda1e0f2e1e95ad3265e6fec120810462eaf593"
   },
   "Si tu veux, dis payer, et je le fais pour toi.": {
    "file": "2aa9612f74600e57.wav",
-   "samples": 67840,
-   "phonemes": "^si ty vø , di paie , e ʒə lə fɛ puʁ twa .$",
-   "sha256": "ed1895d9d3253479a75e83e547b9d499ccbf1b3a215655a9b76a4b485e928c1c"
+   "samples": 62720,
+   "phonemes": "^si ty vø , di pɛje , e ʒə lə fɛ puʁ twa .$",
+   "sha256": "a8a8cf6afbf400d2e1283b2946db43f75d66a5f07d55eae62ffec003370fc905"
   },
   "Voilà, ton compte est créé. Bienvenue !": {
    "file": "812eba7064f9646e.wav",
@@ -725,9 +725,9 @@
   },
   "Tu règles ton objectif sommeil : la durée de ta nuit, ton heure de lever, l’effort que tu veux faire, et ton temps de préparation avant de te coucher.": {
    "file": "71ac5e036c09076a.wav",
-   "samples": 167168,
-   "phonemes": "^ty ʁɛɡl tɔ̃ obʒɛktif somɛj : la dyʁe də ta nɥi , tɔ̃ œʁ də ləve , lɛfoʁ kə ty vø fɛʁ , e tɔ̃ tɑ̃ də pʁepaʁasjɔ̃ avɑ̃ də tə kuʃe .$",
-   "sha256": "70102924e368739efc3194820c94b4e9193cef4b5420aeb9a6387f8c41e1ec9b"
+   "samples": 176384,
+   "phonemes": "^ty ʁɛɡl tɔ̃ nobʒɛktif somɛj : la dyʁe də ta nɥi , tɔ̃ nœʁ də ləve , lɛfoʁ kə ty vø fɛʁ , e tɔ̃ tɑ̃ də pʁepaʁasjɔ̃ avɑ̃ də tə kuʃe .$",
+   "sha256": "39fad077ff1e01a6aa49d5dae58a37d32febcf31d29e3b8af1949866bd32af92"
   },
   "Tu peux aussi rejoindre le réseau des personnes qui partagent le même objectif que toi. Dis « valider » quand c’est prêt.": {
    "file": "cceb7af1af8ebc10.wav",
@@ -737,9 +737,9 @@
   },
   "Voici ton programme. J’ai ajouté des événements quotidiens à ton calendrier, tu pourras les désactiver.": {
    "file": "73bbf1a7eccaea7e.wav",
-   "samples": 124416,
-   "phonemes": "^vwasi tɔ̃ pʁoɡʁam . ʒɛ aʒute de evenəmɑ̃ kotidjɛ̃ a tɔ̃ kalɑ̃dʁje , ty puʁa le dezaktive .$",
-   "sha256": "68f3c572294877f543fc7675e6c4cffbd342bcf002fd33e303efdc685bc7f71d"
+   "samples": 126720,
+   "phonemes": "^vwasi tɔ̃ pʁoɡʁam . ʒɛ aʒute de zevenəmɑ̃ kotidjɛ̃ a tɔ̃ kalɑ̃dʁje , ty puʁa le dezaktive .$",
+   "sha256": "c713e69d906ce3f07c19b1d4813481965fd505c69d382a01c3a61ed08d81e7fd"
   },
   "Tu peux garder ou décocher la sieste, la méditation et la nutrition.": {
    "file": "582b5746045eb939.wav",
@@ -755,15 +755,15 @@
   },
   "Tu règles ton objectif : l’effort que tu veux faire, le temps que tu y donnes chaque jour et l’heure de ta séance, que je mets dans ton calendrier.": {
    "file": "c0c6c2df19f651c6.wav",
-   "samples": 148992,
-   "phonemes": "^ty ʁɛɡl tɔ̃ obʒɛktif : lɛfoʁ kə ty vø fɛʁ , lə tɑ̃ kə ty i don ʃak ʒuʁ e lœʁ də ta seɑ̃s , kə ʒə mɛ dɑ̃ tɔ̃ kalɑ̃dʁje .$",
-   "sha256": "1f3d64a6be3bd2c1e01b482739d8a9ca69d92def857725243e000bf3932a1b75"
+   "samples": 154368,
+   "phonemes": "^ty ʁɛɡl tɔ̃ nobʒɛktif : lɛfoʁ kə ty vø fɛʁ , lə tɑ̃ kə ty i don ʃak ʒuʁ e lœʁ də ta seɑ̃s , kə ʒə mɛ dɑ̃ tɔ̃ kalɑ̃dʁje .$",
+   "sha256": "7edd65a733150a830f2a0379f762552c5f5418e080d9c4d9cc9ea3b23b537aba"
   },
   "D’accord, je m’en occupe.": {
    "file": "a24203d4b01a3d9e.wav",
-   "samples": 34304,
-   "phonemes": "^dakoʁ , ʒə mɑ̃ okyp .$",
-   "sha256": "3d0f9280b1f14519027f317bd4e417548775633a7d2448578998a52558f4a45d"
+   "samples": 38144,
+   "phonemes": "^dakoʁ , ʒə mɑ̃ nokyp .$",
+   "sha256": "f24167c427c7764f1823e36a472e361bedefc13487f8a3d4dcc82eef5c99cda5"
   },
   "Je n’ai pas bien compris. Redis-le-moi, ou appuie sur un bouton.": {
    "file": "d8df3d7400749d8a.wav",
@@ -773,9 +773,9 @@
   },
   "Un nouvel appareil demande à ouvrir ton espace. Si c’est le tien, tape en bas le nombre qu’il affiche.": {
    "file": "295de311bea8e3ee.wav",
-   "samples": 120064,
-   "phonemes": "^œ̃ nuvɛl apaʁɛj dəmɑ̃d a uvʁiʁ tɔ̃ ɛspas . si sɛ lə tjɛ̃ , tap ɑ̃ ba lə nɔ̃bʁ kil afiʃ .$",
-   "sha256": "3af258f40db442eb10603445afbbfa5c54cdf5fa1ed9cb2bf75439a7db0965cd"
+   "samples": 115968,
+   "phonemes": "^œ̃ nuvɛl apaʁɛj dəmɑ̃d a uvʁiʁ tɔ̃ nɛspas . si sɛ lə tjɛ̃ , tap ɑ̃ ba lə nɔ̃bʁ kil afiʃ .$",
+   "sha256": "8d14a65380f92fb88fbd24ce9d4c4deb2b7b55bfdf4d95ac2489658de5f74cf3"
   },
   "Je vais apprendre ta voix. Je vais te demander de dire la phrase 4 fois.": {
    "file": "dd51313d3cd048b5.wav",

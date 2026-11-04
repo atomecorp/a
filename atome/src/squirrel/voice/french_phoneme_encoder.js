@@ -11,6 +11,20 @@ const WORD_EXCEPTIONS = Object.freeze(Object.fromEntries(Object.entries({
     tous: 'tu', tu: 'ty', veux: 'vø', vingt: 'vɛ̃', yeux: 'jø'
 }).map(([word, ipa]) => [word, Object.freeze([...ipa])])));
 
+// The liaisons French always makes, the consonant a word lends to the next one when that one starts with a vowel
+// or a mute h (`les autres` le zotʁ, `un ami` œ̃ nami, `c'est un` sɛ tœ̃): determiners, pronouns, numbers,
+// prepositions and short verbs. `et` never links.
+const LIAISONS = Object.freeze(Object.fromEntries([
+    ['z', ['les', 'des', 'mes', 'tes', 'ses', 'ces', 'nos', 'vos', 'leurs', 'aux', 'deux', 'trois', 'six', 'dix', 'nous', 'vous',
+        'ils', 'elles', 'dans', 'chez', 'très', 'sans', 'quelques', 'plusieurs']],
+    ['n', ['un', 'aucun', 'mon', 'ton', 'son', 'on', 'en']],
+    ['t', ['est', 'sont', 'ont', 'tout', 'quand', 'petit', 'grand']]
+].flatMap(([consonant, words]) => words.map(word => [word, consonant]))));
+// Words whose h stops a liaison (`les héros`, `les haricots`).
+const ASPIRATED_H = new Set(['hache', 'haine', 'hall', 'hamac', 'hamster', 'handicap', 'hangar', 'haricot', 'haricots', 'harpe',
+    'hasard', 'hâte', 'haut', 'haute', 'hautes', 'hauts', 'hauteur', 'héros', 'hibou', 'hiboux', 'hockey', 'honte', 'hors', 'housse',
+    'hublot', 'huit', 'hurler', 'hutte']);
+
 const VOWEL = /[aeiouyàâäéèêëîïôöùûüÿœ]/;
 const ELIDED = /^(c|d|j|l|m|n|s|t|qu)$/;
 // Final letters that are not pronounced (`temps`, `projets`, `pendant`).
@@ -75,7 +89,8 @@ const eSound = (word, index) => {
     const [first, second] = after;
     if (first === 'x' || (after.length === 1 && /[lrcf]/.test(first))) return 'ɛ';
     const cluster = /[bcdfgptv]/.test(first) && /[rl]/.test(second || '');
-    const digraph = /^(ch|ph|th|gn)/.test(after);
+    // One sound each; a ch read k before n is two consonants (`technique`).
+    const digraph = /^(ch(?!n)|ph|th|gn)/.test(after);
     return isConsonant(first) && isConsonant(second) && !cluster && !digraph ? 'ɛ' : 'ə';
 };
 
@@ -106,12 +121,16 @@ const wordToPhonemes = (word) => {
         if (rest.startsWith('ou')) { output.push(VOWEL.test(at(2)) && !rest.startsWith('ouill') ? 'w' : 'u'); index += 2; continue; }
         if (rest.startsWith('oi')) { output.push('w', 'a'); index += 2; continue; }
         if (rest.startsWith('ui') && index > 0) { output.push('ɥ', 'i'); index += 2; continue; }
+        // ay before a vowel is ɛj (`payer`, `crayon`); the e of aie is mute (`paiement`).
+        if (rest.startsWith('ay') && VOWEL.test(at(2))) { output.push('ɛ', 'j'); index += 2; continue; }
+        if (rest.startsWith('aie')) { output.push('ɛ'); index += 3; continue; }
         if (/^(ai|ei|è|ê|ë)/.test(rest)) { output.push('ɛ'); index += /^(ai|ei)/.test(rest) ? 2 : 1; continue; }
         if (rest[0] === 'é') { output.push('e'); index += 1; continue; }
         if (/^(er|ez)$/.test(rest) || rest === 'ers') { output.push('e'); break; }
         if (rest.startsWith('tion')) { output.push('s'); index += 1; continue; }
         if (rest.startsWith('gn')) { output.push('ɲ'); index += 2; continue; }
-        if (rest.startsWith('ch')) { output.push('ʃ'); index += 2; continue; }
+        // Before r, l or n, ch is the Greek k (`synchronisé`, `chrome`, `technique`).
+        if (rest.startsWith('ch')) { output.push(/[rln]/.test(at(2)) ? 'k' : 'ʃ'); index += 2; continue; }
         if (rest.startsWith('ph')) { output.push('f'); index += 2; continue; }
         if (rest.startsWith('th')) { output.push('t'); index += 2; continue; }
         if (rest.startsWith('qu')) { output.push('k'); index += 2; continue; }
@@ -153,9 +172,15 @@ export const encodeFrenchPhonemes = (text, phonemeIdMap) => {
     // A hyphenated compound (`est-ce`, `connecte-toi`) and an elided word
     // (`t'écoute`) are one sound group: no word break inside them.
     const tokens = normalizedText.match(/[a-zàâäçéèêëîïôöùûüÿœ']+(?:-[a-zàâäçéèêëîïôöùûüÿœ']+)*|[(),.!?:;\-]/g) || [];
+    const isWord = token => Boolean(token) && !/^[(),.!?:;\-]$/.test(token);
     tokens.forEach((token, tokenIndex) => {
-        if (/^[(),.!?:;\-]$/.test(token)) phonemes.push(token);
-        else token.split('-').forEach(word => phonemes.push(...wordToPhonemes(word)));
+        if (!isWord(token)) { phonemes.push(token); }
+        else {
+            const previous = tokens[tokenIndex - 1], first = token.split('-')[0];
+            const liaison = isWord(previous) && LIAISONS[previous.split('-').at(-1)];
+            if (liaison && (VOWEL.test(first[0]) || (first[0] === 'h' && !ASPIRATED_H.has(first)))) phonemes.push(liaison);
+            token.split('-').forEach(word => phonemes.push(...wordToPhonemes(word)));
+        }
         if (tokenIndex < tokens.length - 1 && !ELIDED.test(token)) phonemes.push(' ');
     });
     phonemes.push('$');

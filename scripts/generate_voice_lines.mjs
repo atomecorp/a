@@ -2,8 +2,9 @@
 // voice-activation, first-launch guide and pairing request messages) with the shipped Siwis voice, so the
 // app plays them without running a second ONNX engine next to the wake
 // detector. `--check` prints the phonemes only; review them after any text change.
-// `--missing` renders only the sentences the index lacks and keeps every other line
-// as it is (the voice is not deterministic: a full run rewrites them all).
+// `--missing` renders only the sentences the index lacks or whose phonemes changed (an
+// encoder fix) and keeps every other line as it is (the voice is not deterministic: a full
+// run rewrites them all).
 //
 //   node scripts/generate_voice_lines.mjs [--check] [--missing]
 import { createHash } from 'node:crypto';
@@ -59,8 +60,8 @@ const previous = missing ? JSON.parse(readFileSync(path.join(OUTPUT, 'index.json
 const lines = {};
 mkdirSync(OUTPUT, { recursive: true });
 for (const text of texts) {
-    if (previous[text]) { lines[text] = previous[text]; continue; }
     const { ids, phonemes } = encodeFrenchPhonemes(text, config.phoneme_id_map);
+    if (previous[text]?.phonemes === phonemes.join('')) { lines[text] = previous[text]; continue; }
     const result = await session.run({
         input: new ort.Tensor('int64', BigInt64Array.from(ids, BigInt), [1, ids.length]),
         input_lengths: new ort.Tensor('int64', BigInt64Array.from([BigInt(ids.length)]), [1]),

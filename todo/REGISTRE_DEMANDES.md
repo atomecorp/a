@@ -19,6 +19,21 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 
 ## Entrées à exécuter
 
+### R-117 — Écran guidé « deux façons » : textes superposés, prononciation d'eVe (2026-11-04)
+- Statut : FAIT (2026-11-04) — prononciation corrigée et phrases régénérées ; le chevauchement ne vient que du chemin de test
+- Source : toi, pendant les prises R-013 sur « Ipad atomic » : « les textes se chevauchent… le texte et même les logos sont
+  superposés » ; « il dit synchro au lieu de prononcer synchroniser… il fait pas les liaisons ».
+- Chevauchement : je l'avais provoqué en ouvrant l'écran guidé par-dessus ta session ouverte. Aucun bouton de l'app ne fait
+  ça : depuis Contact, le Retour de l'écran du téléphone referme tout. Le vrai premier lancement ne dessine que son écran à lui.
+  Preuve : `temp/r013/first_launch_web/choice_layout.probe.mjs` ALL OK (format iPad paysage, capture `out/choice.png`).
+- Prononciation : l'encodeur lisait « ch » toujours ʃ (« synchronisés » → sɛ̃ʃʁonize) et ne faisait aucune liaison. Il lit
+  maintenant ch = k devant r, l, n, et fait les liaisons obligatoires (« les‿autres », « tes‿humeurs », « dans‿un‿instant »,
+  « c'est‿une » ; jamais après « et », jamais devant un h aspiré). 34 des 138 phrases d'eVe régénérées, les autres identiques.
+  Preuves : `temp/r013/atomic/liaison.probe.mjs` 21/21, `tests/eve/assistant_audio_playback.test.mjs` 8/8.
+- Corrigé aussi : « Payer » était lu « paie » et « paiement » « pè-e-ment » (ay devant voyelle = ɛj, e muet de aie) :
+  4 phrases régénérées, sonde 21/21. À l'oreille sur l'iPad : c'est toi qui écoutes (app reconstruite avec les 34 premières
+  phrases ; les 4 de « Payer » entrent au prochain build).
+
 ### R-116 — Ruban du projet sur l'iPad : outil Vue disparu, outil du Dashboard qui se décale (2026-11-04)
 - Statut : FAIT (2026-11-04, Web ; appareil non vérifié, c'est toi qui testes sur l'iPad)
 - Source : gestes réels sur l'iPad atomic (build 1.48 (46), projet ouvert, main droite) rapportés à la session d'étude
@@ -413,8 +428,8 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 - Preuve : `node temp/r012/spotify_seek.probe.mjs` → 10/10 (vrai contrat, vraie opération serveur, vraie source ; seule l’API HTTP de Spotify est simulée). Essai sur un vrai compte Premium : R-102.
 
 ### R-013 — Moteur vocal : restes ouverts
-- Statut : ATTENTE UTILISATEUR (2026-10-30, soir) — Q12 et Q61 FAITES (ci-dessous) ; reste tes 10 « répète » sur l'iPad
-  « Jeezs's Tab » avec le mode d'essai (étapes ci-dessous, envoyées le 2026-10-30), puis leur rejeu au banc.
+- Statut : FAIT (2026-11-04) — Q12 et Q61 faites (ci-dessous) ; « répète » dit par toi sur l'iPad USB « Ipad atomic » : 3 sur 3 compris
+  (puce du 2026-11-04 ci-dessous). Démarrage sourd et mode avion restent dans R-102.
 - Source : mémoire « Refonte du moteur vocal » du 2026-10-23 ; `todo/refonte_assistant_vocal.md` §17, §18.7.
 - Rapprochement du 2026-10-30 : rien n'a bougé depuis le 2026-10-23 (FRAMEWORK_STATE, 2026-10-23, liste encore les
   trois défauts).
@@ -456,6 +471,15 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 - Défaut hors lot vu le 2026-10-30 : l'objectif « pleasure » (`DASHBOARD_OBJECTIVES`) n'a pas de phrases vocales
   (`eve.first_launch.intent.goal.pleasure` absent de `eVe/i18n/languages_first_launch_voice.js`) : l'écran Objectifs du
   guide n'a aucune phrase pour lui (et `temp/r013/phrases.mjs` échoue sur `goals`).
+- FAIT le 2026-11-04 : prises sur l'iPad branché en USB, « Ipad atomic » (iPad Pro 2e génération, iOS 27.0.1 ; « Jeezs's Tab »
+  n'est plus qu'en Wi-Fi). App reconstruite (moteur vocal natif avec le mode d'essai) et installée ; écran guidé « deux façons »
+  ouvert par-dessus la session (`openCredentials`, `access`, `start`, sans déconnexion ni données effacées), WebDriverAgent pour
+  les captures. 4 prises (`temp/r013/device_atomic/`, `takes.json`) : 3 « répète » nets, tous compris par le moteur de l'iPad
+  (`heard: répète`) ; la 4e (`too_long`, 23 s) n'en contient pas : 10 s de parole ou de bruit continu avant. Avant : 0 sur 3. Tu as
+  jugé « répète a fonctionné » ; 3 prises au lieu des 10 prévues. Le rejeu au banc Mac n'a pas été refait : la source et le
+  binaire `temp/r013/engine_probe`, `temp/r013/target` ont disparu de `temp/` (nettoyage) ; le verdict est celui du moteur de
+  l'iPad. Outils : `temp/reco_voice/ipad_takes.mjs` (appareil par `IPAD_UDID`, défaut Ipad atomic ; corrigé pour le débogueur
+  qui renvoie des objets), `temp/r013/atomic/eval.mjs`.
 
 ### R-014 — Publication programmée : contacts par profil (Q7)
 - Statut : FAIT (2026-10-30, soir) — Q35 : appui long sur la tuile d'un réseau dans Publier → « Profils » (`temp/reco_small/r014_network_hold.probe.mjs` 13/13).
@@ -575,6 +599,7 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   par le code la laisse maintenant s'éteindre). `eVe/domains/rendering/bevy_ui_node_capture.js`,
   `eVe/domains/rendering/bevy_ui_scroll_runtime.js`. Preuves : `temp/reco_resultats/results.probe.mjs` ALL OK (`run14.log`),
   image `temp/reco_resultats/out/q41_image_envoyee.png`.
+- Revérifié le 2026-11-04 sur l'arbre actuel, sans compte ni vraie clé (l'utilisateur testera Strava plus tard, statut inchangé) : `strava_server.probe.mjs` 35/35, `strava_import.probe.mjs` 25/25, `ui_settings.probe.mjs` ALL OK sans clés et avec clés d'essai, 0 erreur (`temp/reco_strava/rerun_1104_*.log`).
 - Revérifié le 2026-11-04 sur l'arbre actuel, sans compte ni vraie clé (l'utilisateur testera Strava plus tard, statut inchangé) : `strava_server.probe.mjs` 35/35, `strava_import.probe.mjs` 25/25, `ui_settings.probe.mjs` ALL OK sans clés et avec clés d'essai, 0 erreur (`temp/reco_strava/rerun_1104_*.log`).
 
 ### R-104 — Refonte globale atome/eVe : cartographie, MCP universel en accès, offline sans IA
