@@ -26,10 +26,13 @@ final class WatchLink: ObservableObject {
     // MARK: - From the iPhone
 
     // A page that has not been greeted since it started says so (its tiles' version still empty): it is greeted now, once.
+    // A workout this watch started for a touch (WatchSensorSession.swift#startedOnWatch) is let go when the iPhone asks
+    // something instead of starting, or once the activity under way is over.
     func received(model text: String) {
-        let before = model?.catalog
+        let before = model?.catalog, wasRunning = model?.card?.session != nil
         do { model = try JSONDecoder().decode(WatchModel.self, from: Data(text.utf8)) }
         catch { Self.log.error("Watch model not read: \(error.localizedDescription, privacy: .public)") }
+        if model?.card?.asking != nil || (wasRunning && model?.card?.session == nil) { WatchSensorSession.shared.watchStartLetGo() }
         if !assistantOn { WatchVoice.shared.stop() }
         if model?.catalog == "", before != "" { hello() }
     }
@@ -53,6 +56,8 @@ final class WatchLink: ObservableObject {
     }
 
     func act(_ action: String, on card: WatchCard, extra: [String: Any] = [:]) {
+        if action == "start" { WatchSensorSession.shared.startedOnWatch(card.kind) }
+        if action == "stop" { WatchSensorSession.shared.watchStartLetGo() }
         var request: [String: Any] = ["kind": "card", "card": card.kind, "action": action, "id": card.id]
         extra.forEach { request[$0.key] = $0.value }
         send(request)

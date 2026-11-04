@@ -246,12 +246,15 @@ public class auv3Utils: AUAudioUnit, NativeAudioUnitControl {
 
         // Create bus arrays with proper error handling to prevent reuse after initialization failure
         do {
-            let inputBus = try AUAudioUnitBus(format: format)
             let outputBus = try AUAudioUnitBus(format: format)
-            
+            // The instrument component ('aumu', auv3/Info.plist) generates its audio:
+            // it has no input bus. The music effect ('aumf') keeps its one input.
+            let inputBusses = componentDescription.componentType == kAudioUnitType_MusicDevice
+                ? [] : [try AUAudioUnitBus(format: format)]
+
             _inputBusArray = AUAudioUnitBusArray(audioUnit: self,
                                                  busType: .input,
-                                                 busses: [inputBus])
+                                                 busses: inputBusses)
 
             _outputBusArray = AUAudioUnitBusArray(audioUnit: self,
                                                   busType: .output,

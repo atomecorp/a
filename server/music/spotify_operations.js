@@ -21,6 +21,7 @@ export async function readSpotify(ctx, record, action, input) {
         return { playback: state?.is_playing === true ? 'playing' : state ? 'paused' : 'stopped',
             current_song: state?.item?.type === 'track' ? musicItem(state.item) : null,
             ...(Number(state?.progress_ms) >= 0 && state?.item ? { position: Number(state.progress_ms) / 1000 } : {}),
+            shuffle: state?.shuffle_state === true,
             device: state?.device ? { id: state.device.id, name: state.device.name, restricted: state.device.is_restricted === true } : null };
     }
     if (action === 'devices') {
@@ -58,13 +59,16 @@ export async function controlSpotify(ctx, record, action, input) {
     const deviceId = input.device_id || state.device?.id;
     if (!deviceId) throw new MusicFailure('NO_ACTIVE_DEVICE');
     if (!input.device_id && state.device?.restricted) throw new MusicFailure('PERMISSION_DENIED');
-    const suffix = '?' + new URLSearchParams({ ...(action === 'seek' ? { position_ms: String(Math.round(input.seconds * 1000)) } : {}), device_id: deviceId });
+    const suffix = '?' + new URLSearchParams({ ...(action === 'seek' ? { position_ms: String(Math.round(input.seconds * 1000)) } : {}),
+        ...(action === 'shuffle' ? { state: String(input.on === true) } : {}), device_id: deviceId });
     const path = action === 'play' || action === 'resume' ? 'play' : action;
     const body = action === 'play' ? (target.kind === 'song' ? { uris: [songUri(target.id)] }
         : { context_uri: 'spotify:' + target.kind + ':' + target.id }) : undefined;
     await spotifyApi(ctx, record, '/me/player/' + path + suffix, { method: ['next', 'previous'].includes(action) ? 'POST' : 'PUT', body, effect: true });
     const observed = await readSpotify(ctx, record, 'get_state', {});
     const sameSong = target.kind !== 'song' || observed.current_song?.id === target.id;
+    // A shuffle is seen done when the device reads it back as asked.
+    if (action === 'shuffle') return { ok: true, playback: observed.shuffle === (input.on === true) ? observed.playback : 'opened_unconfirmed', shuffle: observed.shuffle };
     // A seek is seen done when the song now plays within two seconds of the asked position.
     if (action === 'seek') {
         const reached = Number.isFinite(observed.position) && Math.abs(observed.position - input.seconds) <= 2;

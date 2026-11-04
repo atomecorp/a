@@ -14,7 +14,7 @@ import { distanceKm } from '../atome/src/shared/public_event_contract.js';
 // - OpenAgenda kinds (`concerts`, `stage`, `expos`, `events`, `family`, `free`,
 //   `sport`, `outings`): the public OpenAgenda events dataset (OpenDataSoft, no key), within
 //   `radiusKm` of `lat`/`lon`, soonest first.
-// - Places (`cinemas`, `heritage`, `restaurants`, `bars`): the places of France from
+// - Places (`cinemas`, `heritage`, `restaurants`, `lodging`, `bars`): the places of France from
 //   OpenStreetMap (OpenDataSoft, no key, ODbL), nearest first, with their own website
 //   (sessions are never invented here).
 // - `films`: the films showing in `region` (TMDB `now_playing`, `TMDB_API_KEY`: the
@@ -65,6 +65,9 @@ const PLACES = Object.freeze({
     heritage: { dataset: 'osm-france-historic', fields: 'website,wikipedia', types: ['castle', 'manor', 'fort', 'city_gate', 'citywalls', 'tower',
         'ruins', 'archaeological_site', 'monument', 'church', 'chapel', 'monastery', 'place_of_worship'] },
     restaurants: { dataset: 'osm-france-food-service', types: ['restaurant', 'cafe'], fields: 'website,phone' },
+    // Hébergements (D18 item 13 A): every staffed lodging of OpenStreetMap's tourism=*; an unstaffed wilderness hut is not one.
+    lodging: { dataset: 'osm-france-tourism-accommodation', types: ['hotel', 'motel', 'guest_house', 'hostel', 'apartment', 'chalet', 'camp_site',
+        'caravan_site', 'alpine_hut'], fields: 'website,phone' },
     bars: { dataset: 'osm-france-food-service', types: ['bar', 'pub', 'biergarten'], fields: 'website,phone' }
 });
 const KINDS = new Set([...Object.keys(AGENDA_WORDS), ...Object.keys(PLACES), ...Object.keys(TOURISM_KINDS), 'films', 'matches', 'sources', 'declared']);

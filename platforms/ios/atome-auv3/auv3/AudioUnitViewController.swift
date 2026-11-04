@@ -84,6 +84,15 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
             // The extension has no HealthKit entitlement and must not read health
             // data next to the real-time audio thread: an explicit, clean refusal.
             completion(["ok": false, "error": "health_host_unsupported"], nil)
+        } else if command == "auv3_component" {
+            // Which of the extension's components the host loaded (auv3/Info.plist):
+            // the instrument plays the MIDI its host routes into it.
+            guard let au = self.audioUnit else {
+                completion(["ok": false], "AUv3 audio unit unavailable")
+                return
+            }
+            let instrument = au.componentDescription.componentType == kAudioUnitType_MusicDevice
+            completion(["ok": true, "kind": instrument ? "instrument" : "music_effect"], nil)
         } else if command == "audio_init" {
             // The native Kira engine runs on the host's clock: the render block
             // pulls it (todo/audio_to_finalize §6.1, step C).

@@ -47,6 +47,7 @@ import { FORUM_ASSISTANT_INSTRUCTIONS, FORUM_COMMANDS, FORUM_CONFIRMED_COMMANDS,
 import { VIDEO_TRAIN_ASSISTANT_INSTRUCTIONS, VIDEO_TRAIN_COMMANDS, VIDEO_TRAIN_CONFIRMED_COMMANDS, validateVideoTrainInput } from '../video_train/contracts.js';
 import { RESULTS_SEND_ASSISTANT_INSTRUCTIONS, RESULTS_SEND_COMMANDS, validateResultsSendInput } from '../results_send/contracts.js';
 import { STRAVA_ASSISTANT_INSTRUCTIONS, STRAVA_COMMANDS, validateStravaInput } from '../strava/contracts.js';
+import { HEALTH_SYNC_ASSISTANT_INSTRUCTIONS, HEALTH_SYNC_COMMANDS, HEALTH_SYNC_CONFIRMED_COMMANDS, validateHealthSyncInput } from '../health/health_sync_contracts.js';
 import { MCP_ACCESS_ASSISTANT_INSTRUCTIONS, MCP_ACCESS_COMMANDS, MCP_ACCESS_CONFIRMED_COMMANDS, validateMcpAccessInput } from '../mcp_access/contracts.js';
 import { OBJECTIVE_NETWORK_ASSISTANT_INSTRUCTIONS, OBJECTIVE_NETWORK_COMMANDS, OBJECTIVE_NETWORK_CONFIRMED_COMMANDS, validateObjectiveNetworkInput } from '../objective_network/contracts.js';
 
@@ -183,6 +184,9 @@ export const MCP_CONTRACT_FAMILIES = Object.freeze([
     // Strava (Préférences › Santé): connecting and disconnecting the person's account are the user's to confirm.
     { id: 'strava', commands: STRAVA_COMMANDS, validate: validateStravaInput, noClient: 'AUTH_REQUIRED',
         confirmed: ['strava.connect', 'strava.disconnect'], instructions: STRAVA_ASSISTANT_INSTRUCTIONS, preload: ['strava.get_state', 'strava.import'] },
+    // This device's health store as a source of sport sessions (Préférences › Santé): connecting and disconnecting are the user's to confirm.
+    { id: 'health_sync', commands: HEALTH_SYNC_COMMANDS, validate: validateHealthSyncInput, noClient: 'health_host_unsupported',
+        confirmed: HEALTH_SYNC_CONFIRMED_COMMANDS, instructions: HEALTH_SYNC_ASSISTANT_INSTRUCTIONS, preload: ['health_sync.get_state', 'health_sync.sync'] },
     // Publier: a send, an update, a send now and a cancel are the user's to confirm.
     { id: 'publish', commands: PUBLISH_COMMANDS, validate: validatePublishInput, noClient: 'AUTH_REQUIRED',
         confirmed: PUBLISH_CONFIRMED_COMMANDS, instructions: PUBLISH_ASSISTANT_INSTRUCTIONS,

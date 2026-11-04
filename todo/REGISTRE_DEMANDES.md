@@ -19,6 +19,117 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 
 ## Entrées à exécuter
 
+### R-116 — Ruban du projet sur l'iPad : outil Vue disparu, outil du Dashboard qui se décale (2026-11-04)
+- Statut : FAIT (2026-11-04, Web ; appareil non vérifié, c'est toi qui testes sur l'iPad)
+- Source : gestes réels sur l'iPad atomic (build 1.48 (46), projet ouvert, main droite) rapportés à la session d'étude
+  Rust-first : « l'outil vue a disparu, ce qui est absolument pas normal… j'ai 6 items en bas » ; « quand j'agrandis… ça
+  décale l'item du dashboard qui se décale sur le côté légèrement quand je déplace. Il doit rester en place ».
+- Causes : (1) un premier lancement écrit le niveau `beginner` (`first_launch_model.js`) et `context_menus.json` réservait
+  `view` à `intermediate` : au niveau débutant le ruban n'a que 6 outils (Capturer, Créer, Trouver, Communiquer, Aide,
+  Contact) ; (2) la loupe comptait Organiser (et le Retour d'un niveau) dans la rangée parcourue, et ses bornes allaient
+  jusqu'au bord de l'écran : l'outil grossi poussait Organiser de côté (–1 à +3 px, puis la rangée hors écran à –15 px) ;
+  (3) vu en route : chaque publication du profil (démarrage, changement de niveau…) remettait le ruban du côté gaucher
+  (l'Atome à droite, Organiser à gauche) jusqu'au prochain redimensionnement.
+- Fait : `view` passe `beginner` (registre reconstruit, une seule entrée changée) ; la loupe laisse l'Atome et le coin de
+  navigation à leur case et grossit les outils entre eux (`bevy_ui_main_menu_interactions.js#collectLensLayout`) ;
+  `setVisualPreferences` reprend le côté du miroir V6.1 (`bevy_ui_main_menu_runtime.js`). Test
+  `tests/eve/bevy_ui_main_menu_contract.test.mjs` (racines débutant) mis à jour.
+- Preuve : `node temp/ribbon_view_lens/lens.probe.mjs` à 1389 × 970 → 17/17 (Vue aux trois niveaux, Atome à gauche et
+  Organiser à droite à chaque niveau, Organiser immobile sur les 401 images de la loupe, rangée grossie entre x = 98 et
+  838) ; avant correction `temp/ribbon_view_lens/baseline.log` → 3 échecs (Vue absente en débutant, Organiser bougé sur
+  380/380 images, rangée à –14,9 px). Rapport : `temp/probe_reports/dashboard_enhancement/ribbon_view_lens/`.
+- Reste : vérifier sur l'iPad après la prochaine build. Calendrier reste `intermediate` (rien demandé).
+
+### R-115 — Cahier D18 : améliorations 1–15 et débogages D1–D21 (2026-11-04)
+- Statut : EN COURS (2026-11-04, session D18) — agents par lot en cours ; état par point dans
+  `todo/ameliorations_debogages_D18_2026-11-04.md` (copie du cahier fourni + D19–D21 ajoutés oralement le 4 nov.).
+- Source : fichier `atome-eVe_ameliorations_debogages_D18.md` donné le 2026-11-04 ; D19 (glisser sur le V en paysage),
+  D20 (code du second appareil introuvable, aucune notification app ouverte), D21 (rafraîchissement transversal) dits
+  oralement le même jour.
+- Fait, prouvé (Web) : D17/D18 (`temp/d18_rail/probe_rail_palette.mjs` 62/62 sur le vrai modèle + défilement), D11
+  (seuil 115 px ; accueil réel : libellés 120 à 15,6 px, `temp/d18_rail/ui.probe.mjs`), D10 (commit eVe `c774fce4`, revérifié par le lot Activités).
+- Partage : § 8 « Elastic Design » confié à la session R-114 (accord du 2026-11-04) ; § 9 reste ici.
+- Rendus (Web prouvé, appareil non vérifié) : D1–D3 (`temp/d18_comms/`, appel audio/visio accepté par la bande rouge
+  de l'accueil, aperçu visio au-dessus, fil gardé en place) ; D4 (`temp/d18_webview/web_d4.probe.mjs` 21/21 ; Web
+  ouvre la page d'accueil du moteur, `web.engine`) ; D6 (`temp/d18_delete/` 19/19 + 3/3 + 6/6 ; 4 causes dont la
+  plaque supprimée restée affichée) ; D12/D13/D16 compilés (`temp/d18_native/` : plantage micro au changement de
+  route audio, recopie de séance montre, identité de signature Tauri stable — réglage de signature à confirmer) ;
+  D19 corrigé par la session R-114 (`temp/r114_tile_norm/neighbours.probe.mjs`).
+- D14 rendu (Web prouvé `temp/d18_scanner/main.probe.mjs` 35/35 + store 7/7, gtin 11/11, axes 3/3) : cause « Service
+  produits indisponible » = liste des additifs OFF chargée avant chaque lecture (`server/ws_open_food_facts.js`,
+  fiche `known-bug-solutions/food-scan-provider-unavailable/`) ; bip, clé GS1, retour arrière, doublons, flux unique.
+  Production : déployer atome.one. Score /100 seuil 60 : étudié seulement (`temp/d18_scanner/SCORE_STUDY.md`, déconseillé).
+- 6 rendu (Node `temp/d18_health/health_sync.probe.mjs` 17/17 relancé ; Kotlin, cargo, swiftc typecheck OK ; appareil non
+  vérifié) : import des séances Santé/Health Connect (ancre, reprise, doublons Strava comptés une fois), `health_sync.*`,
+  Préférences › Santé. Questions : marque des séances importées (`temp/d18_health/mockups/m1_seances_importees.png`) ;
+  à la déconnexion garder/proposer/supprimer ; séance supprimée dans Santé ; envoi au serveur des données HealthKit
+  (règle App Store 5.1.3) ou appareil seul ; Android `READ_HEALTH_DATA_HISTORY` (au-delà de 30 jours).
+- 14, 13 A/B, D10 rendus (`temp/d18_activities/` : registre 29/29 relancé, auto-imbrications 3 → 0, parcours réel 25/26) :
+  libellés Briques, Discipl., Spas, Matchs, Tout ; plaque Loisirs « Héberg. » (OSM) ; étude des sources `SOURCES_STUDY.md`.
+  Questions : 13 C/D fiches de lieux (`temp/d18_activities/mockups/` 4 PNG, glyphes patrimoine/thermes, avis payants
+  Google/Tripadvisor ?) ; Agenda › Sorties › Sortie en eVe Basic (quel nom change) ; eVe Basic : Bien-être, GPS,
+  Boutique, Compléments jamais ouverts par la progression (quel palier les donne).
+- 7 rendu (`temp/d18_assistant/engine_off.probe.mjs` 19/19, `engine_unit` relancé ok) : moteur IA OFF par défaut
+  (`preferences.assistant.engine`, rangée « Assistant IA » d'Accueil › Assistant), verrou unique
+  `atome/src/squirrel/ai/assistant_engine.js` ; 0 appel au démarrage, à la navigation, au repos ; une demande explicite
+  passe. Question : brancher CarPlay vaut-il demande explicite (D12) ou CarPlay obéit-il à l'interrupteur ?
+- 1–3 moteur rendu (`temp/d18_sport/resume.probe.mjs` 26/26 : reprise de la dernière séance comparable, progression,
+  adaptation, mode 1 bras/2 bras séparés, `eVe/domains/training/training_resume.js`) ; UI bloquée (règle 16) :
+  `temp/d18_sport/mockups/m1_detail_reprise.png`, `m2_detail_un_bras.png`. Questions : défaut sans progression choisie
+  (double progression actuelle ou Maintien) ; pas choisi appliqué exactement (22 kg) malgré la règle 19 ; pas proposés
+  par défaut ; Perso et Record reprennent-ils aussi ?
+- D7 rendu (Web, sortie audio réelle `temp/d18_sport/d7_engine.probe.mjs`) : bips déjà justes ; voix corrigée (modèle
+  chargé au lancement, mots rendus d'avance et posés sur l'horloge des bips). Bips natifs non reproduits ici : écoute
+  sur appareil ; `backend.kira.js` `render_clock` avale l'erreur native (hors lot, à corriger par son propriétaire).
+- 10 B bis rendu (`temp/d18_gestures/bbis.probe.mjs` vraie app ALL OK, `stage_turn.probe.mjs` relancé ALL OK) : un aller-retour
+  sans lever garde la page, sans action ni sortie de rubrique (`page_turn_driver.js` `lift()`/`fellBack()`). 10 A/B/C
+  bloqués (règle 16) : `temp/d18_gestures/mockups/` (A1, A2, B, C + README des questions) — A : retournement suit le
+  doigt ? les autres tuiles tournent ? axe d'une tuile en diagonale ? vague partant du doigt ? B : garder la convention
+  1 ? que fait un glisser gauche/droite sur l'accueil ? C : libellé et glyphe de la plaque des vues, changement au lâcher
+  ou par toucher, profils à gauche, glisser droite sur le V sans profils ?
+- D9 première passe rendue (`temp/d18_search/types.probe.mjs`, `RESULTS.md`) : agenda entier, activité déclarée sous
+  Activité, plaques du registre sous leur filtre, résultats qui ouvrent un niveau, Médiathèque, glyphe des rubriques ;
+  reprise faite (27/27, `run_full3.log`) : heure/météo ne recouvrent plus « Rechercher », playlists, livres, journaux
+  Sport, messages reçus, activités proches, santé/objectifs/profils (clés de registre en gabarit), accents des médias
+  de projet. Questions : Lieux sur une carte (`temp/d18_search/mockups/m_lieux_carte.png`) ; groupes de contacts (aucune
+  vue n'existe pour les ouvrir, nouvelle vue à dessiner ?).
+- D15 + 15 rendus, non vérifiés sur appareil ni dans un hôte réel (`temp/d18_auv3/`) : aucun rapport de plantage sur les
+  appareils ; au simulateur le plugin se charge et s'arrête sur l'absence de GPU (attendu). Causes probables corrigées :
+  assistant ouvert d'office (lot 7), micro de la phrase d'éveil armé dans le plugin (`wake_runtime.js` `plugin_host`,
+  sonde OK), modèle de voix de 63 Mo préchargé dans le plugin (`boot_runtime.js`, session D18). Nouveau composant
+  instrument `aumu` + routage MIDI de l'hôte (`eVe/domains/audio_fx/host_instrument_midi.js`, sonde 6/6, build simulateur OK).
+  Reste : tests hôtes (AUM, GarageBand, Logic, Cubasis) sur l'iPad ; chemin MIDI natif à faible latence (inexistant).
+- D21 première passe rendue (`temp/d18_refresh/refresh.probe.mjs` 22/22, `signal.unit.mjs` relancé OK, `VIEWS.md`) : un
+  commit local n'émettait aucun signal ; rubrique, Finder, prompteur, courses n'écoutaient pas les autres appareils ;
+  le serveur ignorait `include_deleted` (suppression faite ailleurs jamais importée, alarme qui sonnait encore). Signal
+  unique `atome/src/squirrel/apis/unified/atome_change_signal.js`. Reprise faite (33/33, `followers.unit.mjs` relancé) :
+  Info, collection de programmes, Timeline › Projets, Médias, journal et programme Sport, prises, calques, modules
+  Matrix ; double `forget` du calendrier corrigé. Reste : retrait d'une alarme depuis un autre appareil, route détail,
+  vu 2 fois sur 3 (non reproduit) ; prises/calques/Matrix vérifiés à la syntaxe seulement. Hors lot : `synchronize()`.
+- D20 rendu (Web : `temp/d18_auth/second_device.probe.mjs` 14/14, rouge sur le code d'avant ; `pair_push.probe.mjs` 5/5 relancé) :
+  question d'appairage gardée dans le champ du bas à travers rubrique, panneau, relance ; redemandée au réveil et à la
+  reconnexion ; push « Atome » aux appareils qui ne l'ont pas entendue. Non testé sur l'iPad (pas en USB) : il faut
+  déployer le serveur atome.one (+ APNs) et un paquet JS iOS. Question : `pair-pending` montre la demande à un appareil
+  en période d'essai de 72 h qui ne peut pas l'approuver — aligner sur l'avis en direct (le cacher) ?
+- Questions à poser (règle 16), maquettes prêtes : D1 outil « Décrocher » (`temp/d18_comms/mockups/d1_decrocher_bande_accueil.png`,
+  A codé = champ rouge, B proposé) ; D4 outil « Moteur » (`temp/d18_webview/mockups/m1_moteur_panel.png`) ; § 9 réglages
+  contre la règle 14 (`temp/d18_visual/AUDIT.md`) ; D19 place de « Se déconnecter » sur téléphone couché (forme L1) ;
+  D13 Live Activity (nouvel élément) ; 12 propositions de roadmap absentes (place dans l'UI) ; 11 aperçu HTML local
+  (nouvelle surface DOM, à arbitrer) ; D14 fiche verdict par axes, confirmation « Au panier », déjà présent, prise
+  figée (`temp/d18_scanner/mockups/m1`–`m4`).
+- 4–5 première passe rendue (`temp/d18_music/` : ordre 14/14 et contrat 12/12 relancés, vraie app 21/23) : la musique continue
+  d'une page à l'autre (`eVe/domains/music/music_listening.js`, une seule musique à la fois), outil « Aléatoire » après
+  « Suiv. » (aléatoire du service Apple Music/Spotify, mélange de session pour les listes eVe). Question : valider le
+  nouveau glyphe `shuffle.svg` et sa place (`temp/d18_music/shots/A2_musique_shuffle_on.png`). Reprise faite (vraie app
+  25/25, `sound_end.probe.mjs` 7/7 relancé) : les sons stockés portent leur durée, une liste avance seule ; plaque Musique =
+  défaut de la sonde, pas du produit.
+- D5 rendu (Web : `temp/d18_panelgrid/slab.probe.mjs` 600/600 relancé, vraie app `grid.probe.mjs` 25/25, `fx_ribbon` et
+  `hold_rows` OK) : panneaux posés sur des colonnes entières, élargis de 7,5 px de chaque côté, outils du pied à la case de
+  la grille ; panneau FX de la timeline ; ruban à 0,5 px corrigé (arrondi) ; rangées de l'appui long qui ne s'affichaient
+  pas (glyphe manquant) corrigées. Sonde rail R-114 : attente de case périmée (70 → 55 en paysage), relancée OK.
+- Tous les lots sont rendus (dossiers `temp/d18_<lot>/`). Audits 11 et 12 rendus : `temp/d18_audits/HTML_AUDIT.md`,
+  `FEEDBACK_CHAIN_AUDIT.md` (11 : aperçu isolé et conversion absents ; 12 : chaîne des bugs OK, propositions absentes).
+
 ### R-112 — Publish the remaining version and Framework State changes on main (2026-11-03)
 - Statut : FAIT — eVe main `0e9acd42` and Atome main `170775861` published and independently verified with `git ls-remote` on 2026-11-03 after the user's explicit one-operation exception.
 - Source: current Codex chat, 2026-11-03: « Ils devraient être poussés sur main. Fais-le à ma place »; files identified as `eVe/version.txt` and `eVe/documentations/FRAMEWORK_STATE.md`.
@@ -180,7 +291,7 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   9/9 ; captures `temp/reco_activites/capture/quiet/`, `capture/loisirs_cut/`.
 
 ### R-006 — Tâche urgente du 22 oct. : designs et questions restés en attente
-- Statut : EN COURS (2026-10-31) — réponse « Oui, reco partout » : Q66 à Q68 (Sport) et Q70 à Q73 (Santé) en codage.
+- Statut : FAIT (2026-11-04) — toutes les questions tranchées (« Oui, reco partout » des 30 et 31 oct.) sont codées et prouvées : Q66 à Q68 (Sport, Beauté), Q67 Duo, Q70 à Q73 (Santé), le contexte d'eau de la molette des souffles ; preuves dans les puces ci-dessous.
 - Source : `todo/urgent_task_suivi_2026-10-22.md` ; études `todo/etude_sante_plaisir_thalasso_2026-10-22.md` §7,
   `todo/etude_activites_sport_objectifs_2026-10-27.md`.
 - Rapproché le 2026-10-30 :
@@ -205,10 +316,14 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   - Posées puis validées le 2026-10-31 (« Oui, reco partout », questions n° 66 à 68) : Q18 échauffement (`q18a`-`q18d`) et programmes prêts (`q18e`, `q18f`) ; Q19 ligne « Duo » au maintien (« Côte à côte » dépasse les 6 lettres de la règle 11) et zones l'une sur l'autre (`q19a`-`q19c`) ; Q20 plaque, prise guidée et comparaison « Beauté » (`q20a`-`q20c`). Maquettes et questions : `temp/reco_sport/mockups/` et `temp/reco_sport/mockups/questions.md`.
   - FAIT le 2026-10-31 (Q66 = Q18) : échauffement par défaut sur les exercices chargés à la barre ou à la machine (8 × 50 % puis 5 × 75 % de la charge, 60 s de repos après chacune ; pas `warmup` de `program_session_contract.js`, jamais compté comme une série), « + 2 échauf. » sur la carte et durée qui le compte (5:21 → 8:00 au développé couché 40 kg), ligne « Échauffement » du Détail, « 1/2 » sur « échauf. » en orange pendant la séance, rouleau « Échauf. » de Perso (Aucune / 1 série / 2 séries ; `training.set_profile` `warmup_sets`). Programmes prêts : outil « Prêts » dans la bande de « Mon programme », panneau « Programmes prêts » (accordéons Débutant, Force, Haut / Bas à 5 séances, Remise en forme ; `atome/src/shared/training_ready_programs.js`), disque « Prendre ce programme » : il remplace « Mon programme » (la séance du jour, en alternance), ses jours vont à l'agenda en séries hebdomadaires, un programme pris avant quitte l'agenda à partir du jour même ; les séances faites restent au Suivi. Commandes `training.list_ready_programs`, `training.take_ready_program` (confirmée), `training.open_program` `panel: ready`. Preuves : `temp/reco_sport/warmup.probe.mjs` 18/18, `ready.probe.mjs` 21/21, `ready_runtime.probe.mjs` PASS, `q66_q68_ui.probe.mjs` (vraie page) 26/26, captures `temp/reco_sport/shots/q66*.png`.
   - FAIT le 2026-10-31 (Q68 = Q20) : module « Beauté » : plaque dans Activité › Bien-être à côté de Sieste ; prise guidée (caméra en haut, dernière photo de la même pose en transparence, rouleaux « Pose » et « Zone », disque orange « Prendre la photo », bande ✕ / Suivi / Rappel) ; la photo passe par le seul chemin de prise (`bevy_panel_media_capture.js`, médias de la personne) puis rejoint les photos Beauté ; « Suivi » montre deux dates de la même pose côte à côte, chacune sur son rouleau ; « Rappel » met ou retire un rappel hebdomadaire dans l'agenda. Famille MCP `beauty` : `open`, `list_photos`, `shoot` (confirmée), `add_photo`, `read_reminder`, `set_reminder`. Preuves : `temp/reco_sport/beauty.probe.mjs` 13/13, `q66_q68_ui.probe.mjs` (caméra factice de Chromium) 26/26, captures `temp/reco_sport/shots/q68*.png`. Q67 (« Duo », Q19) confiée à un autre agent, rien codé ici. Non vérifié : iOS, Tauri, vraie caméra.
+  - FAIT le 2026-11-04 (Q68, règle 18 « va dans tes médias, comme toute prise ») : sur le Web aucune photo prise n'apparaissait dans les médias de la personne (Beauté comme toute autre prise) : le serveur répond un chemin relatif au dossier de la personne (`captures/x.jpg`) et `media_persistence_service.js#resolveRecordingPath` le réécrivait en `recordings/x.jpg`, alors que la liste des médias ne garde une image que sous `captures/`. Corrigé chez ce propriétaire (le dossier rendu par le serveur est gardé). Preuve en vraie page : `temp/reco_sport/beauty_media.probe.mjs` 10/10 (photo du disque → rangée sous `captures/` → listée par `listUserMedia` locale et serveur, donc « mes médias » du panneau d'import → Média › Images › « Mes images » la montre ; capture `temp/reco_sport/shots/q68d_mediatheque_images.png`). Non réparé : les photos déjà enregistrées avant la correction gardent leur chemin `recordings/` et restent hors de la liste. Sondes Q66/Q68 relancées le 2026-11-04 : `q66_q68_ui.probe.mjs` 25/25, sondes Node 21/21, 18/18, 13/13.
 - FAIT le 2026-10-30 (reco partout) : Q21 objectif « Plaisir » (OBJ-14, phrases vocales comprises), Q22 hors progression, Q23 suggestion du jour dans la bulle d'eVe Basic (une par jour, jamais sous un panneau de préparation, jamais la respiration en séjour Thalasso ; « ne me propose plus rien » à la voix, `brick_session.suggestions`), Q24 le Ressenti en fin de séance de brique (motif Sport M5b) et après un soin Thalasso fait, Q26 séjour Thalasso côté données et voix (`thalasso.*`), Q27 source de chaque entrée de Loisirs (la découverte locale existait), Q28 `health_profile.read` demande l'accord à chaque fois, Q34 « i » du Kapalabhati (eau, grossesse, épilepsie, cœur, panique) et jamais en contexte d'eau. Preuves : `node temp/reco_sante/pure.probe.mjs` 25/25 ; `PROBE_ISOLATED=1 node temp/reco_sante/ui.probe.mjs` 27/28 (seul échec : l'étape « grille posee » du harnais), rapport `temp/reco_sante/ui.probe.report.json`, captures `temp/reco_sante/shots/`.
   - BLOQUÉ Q29 : aucun stockage « appareil seulement » n'existe (Web → Fastify, Tauri → synchro Axum, iOS → synchro Swift) ; les allergies et intolérances d'aujourd'hui (`program_preference`, portée globale) sont synchronisées, contrairement à la décision. Il faut créer ce mécanisme (décision d'architecture) ; tant qu'il manque, les nouveaux sujets du profil (grossesse, cœur, articulations, respiration, peau, thyroïde/diabète, épilepsie, panique) ne sont pas enregistrés (Q25).
   - À valider par l'utilisateur (maquettes, écrans non codés) : Q25 lignes à case du profil santé (`temp/reco_sante/out/m1_profil_sante.png`), Q26 écran du séjour et ajout d'un soin (`m2_sejour_thalasso.png`, et où le ranger), Q23 geste « Ne plus proposer » au maintien sur la phrase (`m3_ne_plus_proposer.png`). Questions dans chaque PNG.
-  - Non fait : la molette des souffles n'est pas filtrée par un contexte d'eau (la carte n'en a pas) ; eVe Pro n'a pas de bulle sur son accueil (pas de suggestion).
+  - FAIT le 2026-11-04 : la molette des souffles de la carte Respiration suit le contexte d'eau : pendant un séjour Thalasso (`thalasso.stay_read`, `today.in_stay`) elle n'offre plus le Kapalabhati, sauf s'il est déjà le souffle choisi par la personne, qui reste le sien (`dashboard_brick_session_card.js#breathsFor`, brique `breath_pattern.js#breathPatternIds`). Preuve : `PROBE_ISOLATED=1 node temp/reco_sante/breath_water.probe.mjs` (journal `temp/reco_sante/breath_water.log`) : hors séjour Alternée a Kapalabhati pour voisin ; en séjour Perso ; Kapalabhati choisi en séjour reste affiché ; aucune erreur. eVe Pro n'a pas de bulle sur son accueil : hors décision (Q23 vise la bulle d'eVe Basic).
+- FAIT le 2026-10-31 (reco partout) : Q67 Duo (= Q19, code et preuves du 2026-11-04) : deux outils du Dashboard à l'écran ensemble. Au maintien d'une plaque consultée (un exercice, une liste de médias), ligne « Duo » sous « Favori » et « Progr. » ; touchée, sa page s'ouvre et la zone du haut avec elle (téléphone : l'une sur l'autre, découpe 4:3 de la V6.1, l'outil tenu en bas avec sa bande inchangée ; tablette et ordinateur : côte à côte, l'outil tenu à droite). La zone offre les tuiles de l'accueil (la dernière choisie en premier, pages tournées d'un glisser de côté), puis le niveau de la tuile ; une plaque y ouvre sa page ; une vidéo touchée y joue seule à sa proportion, au pied de la zone, sans les pastilles de la liste, un toucher sur l'image rendant les lignes. Le « Duo » allumé d'un maintien fait sur la zone la ferme ; le ✕ de l'outil tenu ferme les deux ; jamais proposé par l'assistant de lui-même. MCP `dashboard.duo.open { tile? }`, `dashboard.duo.choose { tile }`, `dashboard.duo.close`. Propriétaire `eVe/domains/dashboard/dashboard_duo.js`. Preuves : `temp/reco_duo/duo_phone.probe.mjs` 32/32 (430 × 932), `temp/reco_duo/duo_wide.probe.mjs` 8/8 (1280 × 860), captures `temp/reco_duo/shots/phone_*.png` et `wide_*.png`. Non vérifié : image vidéo réelle en Chromium sans écran (nœud et boîte seulement), iOS, Tauri, Android. Reste hors lot : sur téléphone, la carte Sport n'a que 399 px dans la découpe 4:3 et son disque orange passe sous sa propre bande (mise en page de la carte dans une pièce courte, `dashboard_training_card_view.js`).
+- FAIT le 2026-11-04 (Q70 à Q73, « Oui, reco partout » du 2026-10-31) : Q70 stockage « cet appareil seulement » : un atome `device:` (`atome/src/shared/device_scope_contract.js`) passe par `window.Atome.commit` comme les autres, n'est jamais envoyé ni synchronisé (Web : pas de ligne dans la file d'envoi, jamais adopté ; Fastify le refuse, `device_only_atome` ; Tauri `is_device_local_atome_id` ; iOS `enqueueSyncEvent`) ; tout le profil santé y vit (`device:health_profile:<personne>`, allergies et intolérances `device:program_preference:…`), l'ancienne copie synchronisée déplacée une fois puis supprimée par le pipeline (`eVe/domains/programs/health_profile_store.js`). Q71 lignes à case standard (case à gauche), « Rien à déclarer » en tête, cocher une autre la décoche (`health_profile.declare`). Q72 écran du séjour Thalasso selon m2 (lieu et dates sur molettes en haut, une carte par jour, « Soin » variante B), rangé dans Santé › Thalasso et ouvert par `thalasso.open` (`dashboard_thalasso_card.js`, `dashboard_thalasso_view.js`). Q73 maintien sur la phrase d'eVe → une seule ligne « Ne plus proposer » (`dashboard_daily_suggestion.js`). Preuves : `node temp/reco_sante/device.probe.mjs` 23/23 ; `PROBE_ISOLATED=1 node temp/reco_sante/device_ui.probe.mjs` (vraie page, Fastify isolé, compte neuf) 32/32 vérifications Q70 à Q73 (`temp/reco_sante/device_ui_full_2026-11-04.txt`, captures `temp/reco_sante/shots_device_full/`, seule ligne en échec : le rechargement coupé par la limite de 10 min, machine à charge 430) puis `RECO_ONLY=q70` 20/20 avec le rechargement (`temp/reco_sante/device_ui_q70_reload_2026-11-04.txt`) ; Tauri `cargo test --lib local_atome_sync_worker` 8 réussis ; iOS `swiftc -parse` seulement. Écart : « Ne plus proposer » est dans la dalle standard du maintien (✕ à gauche), pas nue sous la phrase comme la maquette. Non vérifié : Tauri et iOS en marche.
+
 ### R-007 — Finder du projet : maquette à six états jamais validée
 - Statut : FAIT (2026-10-31) — Finder A–F (`temp/reco_finder/r007.probe.mjs` 46 OK, `r007_ef.probe.mjs` 30/30) et Q75 cœur blanc sans fond partout (Finder, Contacts : `heart_contacts.probe.mjs`). Seul échec : l'étape « grille posee » du harnais. Non vérifié : PeerTube, clavier iOS, cœur du Train vidéo.
 - Source : session `e9cfee6f` du 2026-10-27, arrêtée sur « Valides-tu la maquette du Finder ? » (liste, Choix,
@@ -460,12 +575,18 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   par le code la laisse maintenant s'éteindre). `eVe/domains/rendering/bevy_ui_node_capture.js`,
   `eVe/domains/rendering/bevy_ui_scroll_runtime.js`. Preuves : `temp/reco_resultats/results.probe.mjs` ALL OK (`run14.log`),
   image `temp/reco_resultats/out/q41_image_envoyee.png`.
+- Revérifié le 2026-11-04 sur l'arbre actuel, sans compte ni vraie clé (l'utilisateur testera Strava plus tard, statut inchangé) : `strava_server.probe.mjs` 35/35, `strava_import.probe.mjs` 25/25, `ui_settings.probe.mjs` ALL OK sans clés et avec clés d'essai, 0 erreur (`temp/reco_strava/rerun_1104_*.log`).
 
 ### R-104 — Refonte globale atome/eVe : cartographie, MCP universel en accès, offline sans IA
-- Statut : EN COURS — phases A à E faites dans le worktree `refonte-r104` ; phase F (fusion dans les deux `main`)
-  faite le 2026-11-01 (session de fusion, merges sans force, branches `refonte-r104` publiées comme points de
-  restauration, sauvegardes `backup/main-pre-r104-20261101-140505`) ; régressions iOS 1.45 (43) suivies en BUG-012 à
-  BUG-015 du registre de débogage ; suite de la fusion (décisions, push, essais) en R-107.
+- Statut : FAIT (vérifié le 2026-11-04) — phases A à F faites. Preuves relues : fusion atome `c02dcb734` et eVe
+  `090dab6e`, toutes deux contenues dans `origin/main` (atome `60047e3b2` = `git ls-remote`) ; correctif du moteur de
+  rendu de main gardé (`05e58963d`, paire `56e875eee68a1239`) ; test Tauri corrigé en place
+  (`tests/tauri/local_atome_history.rs`) ; FRAMEWORK_STATE § 5 du 2026-11-01 ; phase E consignée dans
+  `temp/r104/PHASE_D_LOG.md` « Phase E » (worktree). Ce qui reste n'est plus R-104 : décisions et essais d'appareil
+  en R-107, incident iOS en R-108, accès MCP universel en R-109.
+- Fusion (2026-11-01) : session de fusion, merges sans force, branches `refonte-r104` publiées comme points de
+  restauration, sauvegardes `backup/main-pre-r104-20261101-140505` ; régressions iOS 1.45 (43) suivies en BUG-012 à
+  BUG-015 du registre de débogage.
 - Historique : signal de départ donné le 2026-10-30 au soir, session `41da0099`. Fait au départ : commit eVe
   `402f9924` puis parent `e3f1d0849`, push des deux `main` (vérifié sur GitHub). TestFlight : une publication 1.41 (40)
   de la session montre tournait déjà sur le même état ; pas de doublon lancé (le script refuse deux publications).
@@ -638,7 +759,15 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   si l'utilisateur le revoit, avec sa capture.
 
 ### R-109 — Vérification MCP « universel en accès » (cahier V1.2/V1.23) sur l'app réelle (2026-11-02)
-- Statut : OUVERT (2026-11-02) — vérification partielle faite, écart démontré, audit complet et correction à faire.
+- Statut : FAIT (vérifié le 2026-11-04, session `41da0099`, Web réel, serveur de test isolé). Preuves relancées par
+  moi : `temp/r109/probes/gesture_bus_trace.probe.mjs` 15/15 (`out/gesture_verify.log` : forme, déplacement, dessin,
+  calque, emplacement, prise / relecture / modèle du rail naturel, recadrage, rangement Créer, toutes les écritures des
+  atomes touchés nommées, trace 0,6 µs par écriture), `r109_mcp_parity_web` 12/12 (MCP p50 4–13 ms, p95 7–63 ms),
+  `r108_mcp_coverage_web` 8/8, `registry:check` ok (4211 entrées), `exposure_registry.probe.mjs` 10/10.
+  Tests unitaires voisins : 11 échecs (pincement, point d'écran d'un dépôt Natural, capture
+  `media_input_enumeration_unavailable`) tous dans du code non touché par R-109 (`surface_pinch_runtime.js` 28 sept.,
+  `surface_runtime.js` 26 oct., `media_input_devices.js` 29 oct.) ; `project_view_molecule_combine` 2/10 identiques
+  sur HEAD. Non vérifié : iOS et Tauri (pont stdio vers le serveur local), appareil réel.
 - Demande : « dis-moi si on a bien intégré ce nouveau concept : quasiment toutes les actions passent par MCP, même quand ce
   n'est pas une IA » (chat cloud 2026-11-02). Cahier : `todo/refonte_globale_architecture_mcp_offline_v1_2_2026-10-30.md`
   (identique au V1.23 fourni, même SHA-256) : MCP universel en accès, UI / voix / script / MCP sur les mêmes contrats
@@ -665,6 +794,21 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   `todo/audit_mcp_r109_2026-11-02.md` § 6–7.
 - **Annulation immédiate corrigée (2026-11-02)** : l'annulation partait au serveur avant que la file d'envoi du
   navigateur lui ait remis l'écriture ; elle vide d'abord cette file (`flushWorkspace`). Parité 12/12, trois fois.
+- **Classement § 5.3 dans le registre — FAIT (2026-11-04)** : champ `exposure` (+ `exposure_blocked_on`) sur chaque
+  outil et méthode MCP, calculé au build (`scripts/registry/registry_project_exposure.mjs`, `registry_annotate.mjs#annotateExposure`),
+  refus des `UI_only` / `needs_adapter` non exceptés (`annotations.json` `exposure_exceptions`, vide), `_meta['atome/exposure']`
+  dans `tools/list`. Preuves : `temp/r109/probes/exposure_registry.probe.mjs` 10/10, `temp/r109/probes/exposure_web.probe.mjs`
+  8/8 (page 1 213 outils, programme 189 puis 1 135, 0 écart avec le registre).
+- **Tri des écritures et outil armé — CODÉ (2026-11-04)** : détail `temp/r109/TRIAGE.md`, audit § 9. Les propriétaires
+  partagés (`createAtome`, `updateAtomeProperties`, `commitRuntimeSetBatch`, duplication) transmettent `{source, tool_id}`
+  à l'écriture ; 48 fichiers triés : (b) gestes 6 tracés avec l'outil armé, (a) propriétaires appelés par un outil 32,
+  (c) contournements 6 → 0 : `ui.layer.add`, `ui.placeholder.fill`, `ui.crop`, `creation.keep` créés,
+  relecture / modèle du rail naturel par `ui.record.actions.replay` / `.template` ; la forme SVG n'écrit plus l'atome
+  depuis la vue (balisage lu à la création, sinon `shape_svg_markup_unreadable`). Hors des 48 : texte, cercle, lasso,
+  molécule (création, combinaison, transformation) tracés. Les autres opérations de molécule (dégrouper, supprimer,
+  extraire) sont des exécuteurs d'outil déjà sur le bus par leur commande ; leur écriture garde la trace `local`.
+  Vérifié par moi : `registry:check` ok (4211 entrées), `exposure_registry.probe.mjs` 10/10.
+  `tests/eve/project_view_molecule_combine.test.mjs` : 2 échecs sur 10, **identiques sur HEAD intact** (préexistants, pas R-109).
 
 ### R-107 — Fusion R-104 → main (2026-11-01) : décisions et essais restés ouverts
 - Statut : ATTENTE UTILISATEUR (2026-11-01) — questions posées dans le compte rendu final de la session de fusion,
@@ -676,8 +820,8 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 - Fait et prouvé (Web) : fusion eVe et atome (`090dab6e` / `c02dcb734`), BUG-001 (caméra arrière au scan, eVe
   `83556da1`), BUG-006 causes 3 et 4 (eVe `70c845cf`), BUG-003 (rouleaux de date, âge Sport, contrôle Rencontre ;
   eVe `fb5aa1f0`, atome `668f7ead7`), BUG-012/013/015 vérifiés sur main ; sondes `temp/r104merge/probes/`.
-- **Push de main : non fait.** Attend ton feu vert, après l'essai sur appareil d'une build > 43 (BUG-012, BUG-013,
-  BUG-014 ne se tranchent que sur l'iPhone/iPad).
+- Push de main : fait depuis (R-112, 2026-11-03) ; `origin/main` contient la fusion R-104 (vérifié le 2026-11-04).
+  BUG-012, BUG-013 et BUG-014 ne se tranchent toujours que sur l'iPhone/iPad (build > 43).
 - Décisions de design à prendre (règle 16, rien codé) :
   - Design V5 D1–D6 : `temp/r104merge/design_v5/AUDIT_DESIGN_V5.md`, maquette `mockups/m1_tuiles_v5.png`.
   - BUG-005 : (a) Stop dans le pied de « En direct » ou (b) l'outil ▶ ouvre la fiche quand une seule activité tourne.
@@ -723,8 +867,8 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 - Question du 2026-10-29 (session `0b6e244a`) : rouvrir l'inscription une minute pour créer le compte de test.
   Probablement dépassée par l'inscription sur invitation (2026-10-30) : à confirmer avec toi.
 
-### R-104 — Montre : tuiles jamais reçues (glyphe iPhone seul)
-- Statut : EN COURS (2026-10-30, soir) — envoi TestFlight 1.41 (40) en cours depuis cette session.
+### R-113 — Montre : tuiles jamais reçues (glyphe iPhone seul)
+- Statut : ATTENTE UTILISATEUR (2026-11-04) — build 40 VALID sur App Store Connect le 2026-10-30 ; les builds suivants (43, 45, 46, VALID) portent aussi le correctif. Demandé : installer le dernier build TestFlight et relancer l'app montre.
 - Source : ta photo du 2026-10-30 au soir (session `84259824`) : au premier lancement de TestFlight 1.40 (39), la montre
   ne montre que le glyphe bleu de l'iPhone, sans texte, donc elle n'a jamais reçu ses tuiles.
 - Cause trouvée : l'iPhone n'ouvrait sa liaison montre (WCSession) qu'au chargement de la fenêtre d'eVe ; la demande de
@@ -732,4 +876,50 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   au lancement, page démarrée sans fenêtre à la demande, la montre resalue une page qui ne l'a pas encore été). Preuves :
   sonde `temp/watch_companion/probe_watch_link.mjs` 53/53, cible montre compilée, dessin des images vérifié en WebKit
   (`temp/watch_companion/webkit/paint_probe.swift`).
-- Reste : ton essai sur la montre avec la 1.41 (40) (déclaration de chiffrement option 2 dans App Store Connect, puis mise à jour TestFlight).
+- Reste : ton essai sur la montre avec le dernier build TestFlight (46 au 2026-11-04).
+
+### R-114 — Tuiles de l'accueil adaptées à l'écran (iPhone, Android, iPad)
+- Statut : FAIT (2026-11-04) — accueil, ruban d'un projet et rail contextuel sur la même case de la norme (50–80 px) ; L1 en paysage téléphone ; rangées vides entières en trop ; D19 (propositions du V en paysage) corrigé avec D18. Preuves : `temp/r114_tile_norm/{matrix,neighbours,rail}.probe.mjs` (tout OK), app réelle `home_real.probe.mjs` 25/25 et `ribbon_real.probe.mjs` 6/6. Non vérifié : appareils iOS/Android, zones sûres natives. Correction du 4 nov. (reproche de l'utilisateur : V sans case au-dessus, Basic couché sans Heure/Météo et ordre changé) : L1 = la matrice debout gardée case pour case, ses quatre rangées aplaties à 1,5, Heure/Météo/Agenda en colonne à gauche, pour Pro comme pour Basic ; le V garde ses quatre voisins du portrait (Déconnecter dessus, Réglages dessous). Preuves : `temp/r114_tile_norm/l1_v.probe.mjs` (app réelle, tout OK), `matrix`/`neighbours` (ordre et voisins = portrait), planche `temp/r114_tile_norm/out/r114_L1_corrige.png`. Android 640×360 couché : case 49 (plus petit écran, sous la norme d'un px). Le contenu des panneaux garde l'unité de 60. Plafond de 9 caractères gardé (règle 11). Partage : § 9 de D18 (joint réglable → `SYSTEM_UI_GRID_JOINT_PX`, rapport des textes).
+- Source : prompt collé du 2026-11-04 « Adaptation automatique des tuiles atome/eVe » (grille 4:3 / 3:4, 3 × 4 tuiles
+  debout, taille maximale, joints 1 pt, zones sûres, textes proportionnels, recalcul à la rotation).
+- Réponses de l'utilisateur (2026-11-04, outil de questions) :
+  - Taille : une NORME min/max pour tous les appareils, pas une taille par appareil ; tuile min ~100 (voir les plus petits
+    écrans), max ~160, à étudier en maquette. Plus de place ⇒ plus de cases (tuiles ou outils), le 4:3 est un MINIMUM ;
+    debout sur iPhone, Heure/Météo/Agenda calés en haut, le reste en bas ; la place en trop est quantifiée en cases vides
+    entières (comme des icônes manquantes), jamais un espace libre en accordéon.
+  - Joint : variable, réglage de 0 (ou 1) à 6 px dans les préférences visuelles (transparence, flou, couleurs) ; la tuile
+    rétrécit d'autant. Ce réglage appartient à la tâche D18 § 9 (`todo/ameliorations_debogages_D18_2026-11-04.md`,
+    « atome eVe Improvement and Debugging ») : l'utilisateur l'y reporte lui-même.
+  - Textes : rapport réglable (1,1 / 1,2 / 1,3) dans les mêmes préférences visuelles (D18 § 9), pas proportionnel à la tuile ;
+    coupe « … » automatique à la largeur plutôt qu'un nombre de caractères, si possible (audit demandé).
+  - Un seul tableau pour tout outil (accueil, bandes, rail contextuel, menu principal, ruban) ; seule exception le menu
+    Mystic (même taille et style, mobile sous le doigt). FAIT : écrit dans AGENTS.md règle 13 et en mémoire ; ne plus demander.
+- Audit des textes : la coupe automatique à la largeur mesurée existe déjà dans les deux propriétaires
+  (`bevy_ui_menu_surface.js#truncateBevyToolLabel` via `fitSingleLineText`, `dashboard_creation_records.js#dashboardLabelBandText`
+  via `measureLabel`) ; c'est le plafond de 9 caractères de la règle 11 qui s'y ajoute. Passer au tout-automatique = retirer ce plafond.
+- Constat d'architecture : l'unité est une constante figée au chargement (`SYSTEM_UI_TOOL_UNIT_PX = 60`,
+  `eVe/elements/system_ui_tokens.js`, lue par ~89 fichiers) ; une unité choisie par écran et à la rotation demande d'en
+  faire une valeur vivante relue par la grille (`system_ui_grid.js`), la matrice et les bandes.
+- Maquette d'étude : `temp/r114_tile_norm/out/r114_norme_tuiles.png` (source `temp/r114_tile_norm/build.mjs`) — unité
+  50–80 (tuile 100–160) : iPhone SE 118, Android 360 × 640 114, iPhone 16 Pro 128 (+2 rangées vides), Pro Max 140,
+  iPad 11″ debout 160 (+4 col., +4 rangées), iPad couché 152 ; iPhone couché : A 4:3 à tuile 74 (sous le min),
+  B compact 12 × 5 à 122 (hors 4:3), C 4:3 à 100 qui défile.
+- Questions ouvertes : (1) valider la norme 100–160 ; (2) iPhone couché A, B ou C ; (3) coupe « … » automatique seule
+  (retirer le plafond de 9 caractères de la règle 11) ou garder le plafond.
+- Ensuite : codage (unité vivante, matrice élastique en cases entières, recalcul à la rotation), règles 11–12 réécrites.
+- Suite (2026-11-04) : A, B et C refusés. L'utilisateur garde la taille de base 120 (unité 60) et demande de remodeler les tuiles
+  (120 × 60, 240 × 120, 180 × 60…, debout comme couché) pour un bloc 4:3 qui tienne couché. Maquette
+  `temp/r114_tile_norm/out/r114_paysage_L1_L2.png` (source `build_landscape.mjs`), unité 60 fixe, sans défilement sur iPhone SE,
+  Android 640 × 360, iPhone 16 Pro et Pro Max couchés :
+  - L1 (recommandée) : le bloc debout tel quel (Activité · V · Média / Projets · Moniteur · Contacts / Capture au centre) en
+    tuiles 120 × 90 (1,5 unité, multiple d'une demi-case, règle 12), 360 × 270 = 4:3 exact ; Heure, Météo, Agenda en colonne à gauche.
+  - L2 : six tuiles 120 × 60 en bloc 2 × 3 (240 × 180, 4:3 exact), Heure/Météo/Agenda à gauche, le V à droite.
+- VALIDÉ par l'utilisateur (2026-11-04) : L1 ; règle « on remplit la place » : unité choisie par écran dans la norme (tuile
+  120 par défaut, jamais < 100, jamais > 160), la plus grande qui tient, tout le tableau grandissant avec (bande comprise) ;
+  bloc 4:3 au minimum, jamais de défilement sur téléphone, les tuiles changent de forme par demi-cases, jamais de taille
+  ni d'ordre ; plus de tuiles qu'une page ⇒ la place en trop en montre davantage, en 4:3, avant d'ajouter une page.
+  Écrit dans AGENTS.md règle 12 (2026-11-04).
+- Reste à coder : unité vivante (`system_ui_tokens.js` `SYSTEM_UI_TOOL_UNIT_PX`, ~89 lecteurs) relue par la grille, la matrice,
+  les bandes, le rail et le menu principal ; matrice couchée L1 (`dashboard_home_matrix.js`) ; remplissage des pages en 4:3
+  (`dashboard_mystic_grid.js`) ; recalcul à la rotation. Question restante : plafond de 9 caractères des libellés (règle 11)
+  gardé, ou coupe « … » à la largeur seule. Joint et rapport des textes : tâche D18 § 9.

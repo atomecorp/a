@@ -154,6 +154,7 @@
         <string>remote-notification</string>
 		<string>audio</string>
 		<string>location</string>
+		<string>workout-processing</string>
 	</array>
 	<key>UIFileSharingEnabled</key>
 	<true/>

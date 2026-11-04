@@ -54,6 +54,8 @@ final class AppNativeHealthController {
     let healthStore = HKHealthStore()
     private var observers: [String: HKObserverQuery] = [:]
     private lazy var workout = HealthWorkoutRecorder(store: healthStore) { [weak self] ids in self?.stateQueue.async { self?.signal(ids) } }
+    // The store's sport sessions read for their import (AppNativeHealthActivities.swift).
+    private lazy var activities = HealthActivityReader(store: healthStore)
     #endif
     // The raw motion of activity sessions, kept on this device (HealthSensorRecorder.swift).
     private let sensors = HealthSensorRecorder()
@@ -76,6 +78,7 @@ final class AppNativeHealthController {
 
     static func canHandle(command: String) -> Bool {
         commands.contains(command) || HealthWorkoutRecorder.commands.contains(command) || HealthSensorRecorder.commands.contains(command)
+            || HealthActivityReader.commands.contains(command)
     }
 
     func attach(webView: WKWebView, openSettings: (() -> Void)? = nil) {
@@ -163,6 +166,8 @@ final class AppNativeHealthController {
             #if canImport(HealthKit)
             case _ where HealthWorkoutRecorder.commands.contains(command):
                 workout.handle(command, payload: payload) { result in self.stateQueue.async { self.current(generation) ? reply(result) : fail("health_context_changed") } }
+            case _ where HealthActivityReader.commands.contains(command):
+                activities.handle(command, payload: payload) { result in self.stateQueue.async { self.current(generation) ? reply(result) : fail("health_context_changed") } }
             #endif
             default:
                 fail("health_command_unknown")
@@ -491,18 +496,5 @@ final class AppNativeHealthController {
     #if canImport(HealthKit)
     // A heart rate the paired watch measured for the running session (application/AppWatchSensorBridge.swift).
     func watchHeartRate(bpm: Double, at end: Date) { stateQueue.async { self.workout.watchHeartRate(bpm, at: end) } }
-
-    static func statusCode(_ error: Error?) -> String {
-        guard let error = error as? HKError else { return "error" }
-        switch error.code {
-        case .errorDatabaseInaccessible: return "store_locked"
-        case .errorHealthDataUnavailable: return "unavailable"
-        case .errorHealthDataRestricted: return "unavailable"
-        case .errorAuthorizationNotDetermined: return "permission_required"
-        case .errorAuthorizationDenied: return "permission_denied"
-        default: return "error"
-        }
-    }
-
     #endif
 }

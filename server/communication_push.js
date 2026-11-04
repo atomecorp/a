@@ -36,7 +36,8 @@ export function createCommunicationPush({ query, transport = createApnsTransport
             [input.installationId, claims.sub, claims.cnf.kid, kind]);
         return { ok: true };
     }
-    async function deliver(principal, item) {
+    // `exceptKeyIds`: device keys already told live; `personalOnly`: personal devices out of probation alone (an account notice).
+    async function deliver(principal, item, { exceptKeyIds = null, personalOnly = false } = {}) {
         if (!transport.configured() && !androidTransport.configured()) return { ok: false, error: 'push_configuration_required' };
         const control = item.kind === 'call-state' && /^[a-f0-9-]{36}$/.test(item.room_id);
         const call = item.kind === 'call-invitation' && /^[a-f0-9-]{36}$/.test(item.room_id)
@@ -44,12 +45,14 @@ export function createCommunicationPush({ query, transport = createApnsTransport
         const kind = call || control ? 'voip' : 'alert';
         if (item.kind === 'call-invitation' && !call) return { ok: true, expired: true };
         const expiresAt = call ? Number(item.expires_at) : now() + (control ? 60000 : 86400000);
-        const installations = await query('all', `SELECT i.* FROM auth_push_installations i
+        const reachable = await query('all', `SELECT i.*, k.device_class AS key_class, k.restricted_until_ms AS key_restricted_ms FROM auth_push_installations i
             JOIN auth_device_sessions s ON s.session_id=i.session_id
             JOIN auth_device_keys k ON k.key_id=i.key_id
             WHERE i.principal_id=? AND i.kind=? AND s.principal_id=i.principal_id AND s.key_id=i.key_id
             AND k.principal_id=i.principal_id AND s.revoked_ms IS NULL AND k.revoked_ms IS NULL
             AND s.expires_ms>? AND s.idle_expires_ms>?`, [principal, kind, now(), now()]);
+        const installations = reachable.filter(row => !exceptKeyIds?.has(row.key_id)
+            && (!personalOnly || (row.key_class === 'personal' && !(row.key_restricted_ms > now()))));
         const results = [];
         await query('run', 'DELETE FROM auth_push_deliveries WHERE expires_ms <= ?', [now()]);
         for (let offset = 0; offset < installations.length; offset += 4) await Promise.all(installations.slice(offset, offset + 4).map(async installation => {
@@ -70,6 +73,8 @@ export function createCommunicationPush({ query, transport = createApnsTransport
             const payload = { aps: call ? {} : { alert: { title: 'Atome', 'loc-key': 'ATOME_NOTIFICATION' },
                 ...(quiet ? { 'interruption-level': 'passive' } : { sound: 'default' }) },
                 atome: { principal_id: principal, notification_id: item.id, peer_id: item.from_id,
+                    // A new device's request: its touch makes the app ask for it (native_notification_actions.js).
+                    ...(item.kind === 'auth-pair-request' ? { kind: item.kind, pair_id: item.id } : {}),
                     ...(call || control ? { room_id: item.room_id, call_mode: item.call_mode, expires_at: expiresAt } : {}),
                     ...(control ? { status: item.status, accepted_principal_id: item.acceptedPrincipalId,
                         accepted_key_id: item.acceptedKeyId } : {}) } };

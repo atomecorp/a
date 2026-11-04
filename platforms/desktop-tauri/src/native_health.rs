@@ -111,6 +111,23 @@ fn sensors_payload(account: &str, payload: &Value) -> Value {
     value
 }
 
+// The sessions' import: the chosen categories, the store's opaque position, the start of the history asked.
+fn activities_payload(payload: &Value) -> Value {
+    let categories: Vec<Value> = payload["categories"]
+        .as_array()
+        .map(|items| items.iter().filter(|item| item.is_string()).take(8).cloned().collect())
+        .unwrap_or_default();
+    let mut value = json!({ "categories": categories, "anchor": Value::Null });
+    // Its length is checked by the plugin, which refuses a longer one (`health_anchor_invalid`).
+    if let Some(anchor) = payload["anchor"].as_str() {
+        value["anchor"] = json!(anchor);
+    }
+    if let Some(from) = payload["from"].as_f64() {
+        value["from"] = json!(from as i64);
+    }
+    value
+}
+
 async fn plugin<R: Runtime>(app: &AppHandle<R>, method: &'static str, payload: Value) -> Result<Value, String> {
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || tauri_plugin_health::call(&app, method, payload))
@@ -164,7 +181,7 @@ pub async fn health_invoke<R: Runtime>(
         | "health_unobserve" | "health_workout_prepare" | "health_workout_start" | "health_workout_pause"
         | "health_workout_resume" | "health_workout_end" | "health_sensors_start" | "health_sensors_stop"
         | "health_sensors_status" | "health_sensors_list" | "health_sensors_delete" | "health_sensors_enable"
-        | "health_sensors_read" | "health_sensors_restore" => {
+        | "health_sensors_read" | "health_sensors_restore" | "health_activities_read" => {
             let account = match verified_account(&payload["auth"]).await {
                 Ok(account) => account,
                 Err(code) => return Ok(failure(code)),
@@ -203,6 +220,7 @@ pub async fn health_invoke<R: Runtime>(
                 "health_workout_start" => plugin(&app, "workoutStart", workout_payload(&payload)).await,
                 "health_workout_pause" | "health_workout_resume" => plugin(&app, "workoutEvent", workout_payload(&payload)).await,
                 "health_workout_end" => plugin(&app, "workoutEnd", workout_payload(&payload)).await,
+                "health_activities_read" => plugin(&app, "activitiesRead", activities_payload(&payload)).await,
                 _ => plugin(&app, "unobserve", monitors_payload(&payload)).await,
             }
         }

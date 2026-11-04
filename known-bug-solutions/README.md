@@ -112,6 +112,7 @@ the established solution before attempting a new implementation.
 | iOS: importing or downloading a background leaves the surface unchanged, no error (opaque `atome:` origin vs CORS) | [ios-opaque-origin-media-cors](ios-opaque-origin-media-cors/README.md) |
 | Project view: reorder detaches a Molecule member, Delete bypasses the Molecule, Create Text/Code/Return/long press misroute text editing | [project-view-molecule-text-regressions](project-view-molecule-text-regressions/README.md) |
 | Slow first canvas (purple wait), surface briefly drawn at 75 %, unstable motion while the UI prepares | [ui-preparation-motion](ui-preparation-motion/README.md) |
+| Barcode scan: « Service produits indisponible » for every product for minutes while Open Food Facts answers (additives taxonomy failure blocked product reads) | [food-scan-provider-unavailable](food-scan-provider-unavailable/README.md) |
 
 ## Maintenance rules
 

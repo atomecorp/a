@@ -19,10 +19,12 @@ const PRODUCT_HOSTS = Object.freeze({
   obf: 'https://world.openbeautyfacts.org',
   opf: 'https://world.openproductsfacts.org'
 });
+const PROVIDER_NAMES = Object.freeze({ off: 'Open Food Facts', obf: 'Open Beauty Facts', opf: 'Open Products Facts' });
 const FOOD_SEARCH_ENDPOINT = 'https://search.openfoodfacts.org/search';
 const ADDITIVES_TAXONOMY = 'https://static.openfoodfacts.org/data/taxonomies/additives.json';
 const PRODUCT_FIELDS = ['code', 'product_name', 'brands', 'quantity', 'image_url', 'nutriscore_grade', 'nova_group',
-  'ecoscore_grade', 'additives_tags', 'ingredients_n', 'allergens_tags', 'traces_tags', 'nutriments', 'categories_tags'].join(',');
+  'ecoscore_grade', 'additives_tags', 'ingredients_n', 'allergens_tags', 'traces_tags', 'nutriments', 'categories_tags',
+  'ingredients_text', 'lang', 'origins', 'manufacturing_places', 'completeness', 'last_modified_t'].join(',');
 const WINDOW_MS = 60_000;
 const LIMITS = Object.freeze({ read: { address: 10, global: 14 }, search: { address: 5, global: 8 } });
 const PRODUCT_TTL_MS = 6 * 60 * 60 * 1000;
@@ -55,6 +57,7 @@ const grade = (value) => {
 };
 const amount = (value) => (value === null || value === undefined || value === '' || !Number.isFinite(Number(value)) ? null : Number(value));
 const tags = (value) => (Array.isArray(value) ? value.map(String) : []);
+const text = (value, max) => (String(value || '').trim() ? String(value).trim().slice(0, max) : null);
 const firstBrand = (brands) => String((Array.isArray(brands) ? brands : String(brands || '').split(','))[0] || '').trim();
 
 export const normalizeFoodProduct = (raw, source, additiveRisks) => {
@@ -66,7 +69,9 @@ export const normalizeFoodProduct = (raw, source, additiveRisks) => {
     nutriscore: grade(raw?.nutriscore_grade),
     nova: [1, 2, 3, 4].includes(Number(raw?.nova_group)) ? Number(raw.nova_group) : null,
     green_score: grade(raw?.ecoscore_grade),
-    additives: tags(raw?.additives_tags).map((tag) => ({ tag, risk: additiveRisks.get(tag) || null })),
+    additives: tags(raw?.additives_tags).map((tag) => ({ tag, risk: additiveRisks?.get(tag) || null })),
+    // The additives taxonomy unreachable: their risks are unknown, never « no risk » (the verdict then waits for them).
+    additives_evaluated: additiveRisks instanceof Map,
     // OFF reads additives from the analysed ingredient list; without one, nothing is known about them.
     ingredients_known: Number(raw?.ingredients_n) > 0,
     allergens: tags(raw?.allergens_tags), traces: tags(raw?.traces_tags),
@@ -75,9 +80,16 @@ export const normalizeFoodProduct = (raw, source, additiveRisks) => {
       saturated_fat: amount(nutriments['saturated-fat_100g']), carbohydrates: amount(nutriments.carbohydrates_100g), sugars: amount(nutriments.sugars_100g),
       salt: amount(nutriments.salt_100g), fiber: amount(nutriments.fiber_100g), proteins: amount(nutriments.proteins_100g)
     },
-    categories_tags: tags(raw?.categories_tags)
+    categories_tags: tags(raw?.categories_tags),
+    // Absent stays null (never an empty answer read as « none »): the ingredient list as written on the pack (its language),
+    // where the ingredients come from and where it is made, and where these facts come from (ODbL, the product's page).
+    ingredients_text: text(raw?.ingredients_text, 4000), ingredients_lang: text(raw?.lang, 8),
+    origins: text(raw?.origins, 400), manufacturing_places: text(raw?.manufacturing_places, 400),
+    provenance: { database: PROVIDER_NAMES[source], licence: 'ODbL', url: `${PRODUCT_HOSTS[source]}/product/${String(raw?.code || '')}`,
+      last_modified: Number(raw?.last_modified_t) > 0 ? new Date(Number(raw.last_modified_t) * 1000).toISOString() : null,
+      completeness: amount(raw?.completeness) }
   };
-  return { ...product, verdict: assessFoodHealth(product, additiveRisks), selection: evaluateFoodSelection(product) };
+  return { ...product, verdict: assessFoodHealth(product, additiveRisks || new Map()), selection: evaluateFoodSelection(product) };
 };
 
 const createTtlCache = (ttl, now) => {
@@ -148,11 +160,20 @@ export const createOpenFoodFactsHandler = ({
     return taxonomy.loading;
   };
 
-  const lookup = async (barcode, source, address, agent) => {
+  // The taxonomy (0.9 MB) failing must not fail every product read for its retry delay (D14: scans answered « service
+  // indisponible » for 5 minutes): the product is read, its additives' risks unknown (`additives_evaluated: false`),
+  // the cause logged, and it is not cached, so the next read judges it once the taxonomy answers.
+  const risksOrUnknown = (agent, requestId) => additiveRisks(agent).catch((error) => {
+    log('warn', { component: 'open_food_facts', request_id: requestId, message: 'ADDITIVES_TAXONOMY_UNAVAILABLE',
+      data: { cause: String(error?.message || error).slice(0, 300) } });
+    return null;
+  });
+
+  const lookup = async (barcode, source, address, agent, requestId = null) => {
     const key = `${source}:${barcode}`;
     const cached = products.get(key);
     if (cached) return cached;
-    const risks = await additiveRisks(agent);
+    const risks = await risksOrUnknown(agent, requestId);
     consume('read', address);
     const response = await request(`${PRODUCT_HOSTS[source]}/api/v2/product/${barcode}?fields=${PRODUCT_FIELDS}`, agent);
     if (response.status === 404) throw failure('PRODUCT_NOT_FOUND');
@@ -160,19 +181,19 @@ export const createOpenFoodFactsHandler = ({
     const payload = await response.json();
     if (payload?.status !== 1 || !payload.product) throw failure('PRODUCT_NOT_FOUND');
     const product = normalizeFoodProduct({ ...payload.product, code: payload.product.code || barcode }, source, risks);
-    products.set(key, product);
+    if (risks) products.set(key, product);
     return product;
   };
 
   const search = async (url, listOf, source, address, agent) => {
     const cached = searches.get(url);
     if (cached) return cached;
-    const risks = await additiveRisks(agent);
+    const risks = await risksOrUnknown(agent, null);
     consume('search', address);
     const found = listOf(await json(url, agent))
       .filter((raw) => BARCODE.test(String(raw?.code || '')))
       .map((raw) => normalizeFoodProduct(raw, source, risks));
-    searches.set(url, found);
+    if (risks) searches.set(url, found);
     return found;
   };
 
@@ -231,7 +252,7 @@ export const createOpenFoodFactsHandler = ({
       return reply(requestId, { ok: false, error: 'NOT_CONFIGURED' });
     }
     try {
-      if (action === 'lookup') return reply(requestId, { ok: true, product: await lookup(barcode, source, address, agent) });
+      if (action === 'lookup') return reply(requestId, { ok: true, product: await lookup(barcode, source, address, agent, requestId) });
       if (action === 'search') return reply(requestId, { ok: true, products: await searchByText(query, source, limit, address, agent) });
       return reply(requestId, { ok: true, ...await alternatives(barcode, address, agent) });
     } catch (error) {

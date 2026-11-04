@@ -189,6 +189,7 @@ final class NativeCalendarAlarm {
                     try? AlarmManager.shared.cancel(id: nativeId(for: id))
                     unmarkOwned([id])
                 }
+                removeNotifications(atomeIds: Array(stale))
                 markOwned(scheduled)
                 return ["ok": failed.isEmpty,
                         "platform": "alarmkit",
@@ -331,8 +332,7 @@ final class NativeCalendarAlarm {
             }
         }
         group.notify(queue: .main) {
-            let identifiers = stale.map { notificationIdentifier(for: $0) }
-            if !identifiers.isEmpty { center.removePendingNotificationRequests(withIdentifiers: identifiers) }
+            removeNotifications(atomeIds: Array(stale))
             unmarkOwned(Array(stale))
             markOwned(scheduled)
             respond(completion, ["ok": true, "platform": "notification", "scheduled": scheduled,
@@ -368,6 +368,19 @@ final class NativeCalendarAlarm {
         return UNNotificationRequest(identifier: notificationIdentifier(for: id), content: content, trigger: trigger)
     }
 
+    /// AlarmKit and local notifications are two stores: an alarm mirrored as a
+    /// notification before iOS 26 (the same device, updated since) stays pending
+    /// there after its AlarmKit twin is cancelled. A cancel clears both, and the
+    /// banner a deleted item left in Notification Center with them. Only the
+    /// identifiers derived from these atome alarm ids are touched.
+    private static func removeNotifications(atomeIds: [String]) {
+        let identifiers = atomeIds.map { notificationIdentifier(for: $0) }
+        guard !identifiers.isEmpty else { return }
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: identifiers)
+        center.removeDeliveredNotifications(withIdentifiers: identifiers)
+    }
+
     private static func notificationIdentifier(for atomeId: String) -> String {
         notificationPrefix + nativeId(for: atomeId).uuidString.lowercased()
     }
@@ -382,10 +395,8 @@ final class NativeCalendarAlarm {
         }
         if #available(iOS 26.0, *) {
             for id in atomeIds { try? AlarmManager.shared.cancel(id: nativeId(for: id)) }
-        } else {
-            let identifiers = atomeIds.map { notificationIdentifier(for: $0) }
-            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: identifiers)
         }
+        removeNotifications(atomeIds: atomeIds)
         unmarkOwned(atomeIds)
         respond(completion, ["ok": true, "canceled": atomeIds], nil)
     }

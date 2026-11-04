@@ -229,6 +229,10 @@ export const createGlobalVoiceApi = ({
             const service = await ensureReady();
             return service.tts.preloadLocal();
         },
+        async renderLocalTts(text) {
+            const service = await ensureReady();
+            return service.tts.renderLocal(text);
+        },
         subscribeTtsFrames(listener) {
             let unsubscribe = () => { };
             let cancelled = false;

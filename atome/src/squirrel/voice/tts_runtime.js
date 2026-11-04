@@ -64,6 +64,16 @@ export const createTtsRuntime = ({
         return { session_id: id, stopped: true };
     };
 
+    // A phrase's samples, not played: { pcm, sampleRate, phonemes }.
+    const generate = async (text, signal) => {
+        const generated = synthesize ? await synthesize(String(text || ''), signal)
+            : await request('synthesize', { text: String(text || '') });
+        const pcm = generated.pcm instanceof Float32Array ? generated.pcm : new Float32Array(generated.pcm);
+        const sampleRate = Math.trunc(Number(generated.sampleRate));
+        if (!pcm.length || sampleRate <= 0) throw new Error('tts_pcm_invalid');
+        return { pcm, sampleRate, phonemes: generated.phonemes || [] };
+    };
+
     const speak = async (sessionId, text) => {
         const id = String(sessionId || '').trim();
         if (!id) throw new Error('local_tts_session_required');
@@ -74,12 +84,9 @@ export const createTtsRuntime = ({
         const assetId = `__voice_tts_asset_${id}_${++sequence}`;
         const voiceId = `__voice_tts_voice_${id}_${sequence}`;
         try {
-            generated = synthesize ? await synthesize(String(text || ''), controller.signal)
-                : await request('synthesize', { text: String(text || '') });
+            generated = await generate(text, controller.signal);
             controller.signal.throwIfAborted();
-            pcm = generated.pcm instanceof Float32Array ? generated.pcm : new Float32Array(generated.pcm);
-            sampleRate = Math.trunc(Number(generated.sampleRate));
-            if (!pcm.length || sampleRate <= 0) throw new Error('tts_pcm_invalid');
+            ({ pcm, sampleRate } = generated);
             await audio.loadTransientAsset({ assetId, bytes: pcm16WavBytes(pcm, sampleRate), source_layer: 'voice_tts' });
             loaded = true; controller.signal.throwIfAborted();
             await audio.startVoice({ assetId, voiceId, source_layer: 'voice_tts' });
@@ -93,7 +100,7 @@ export const createTtsRuntime = ({
         } finally { if (generating.get(id) === controller) generating.delete(id); }
         const startedAt = now();
         const durationMs = pcm.length / sampleRate * 1000;
-        const phonemes = audiblePhonemes(generated.phonemes || []);
+        const phonemes = audiblePhonemes(generated.phonemes);
         let resolvePlayback;
         let rejectPlayback;
         const promise = new Promise((resolve, reject) => {
@@ -145,6 +152,8 @@ export const createTtsRuntime = ({
 
     return Object.freeze({
         preload: () => request('preload'),
+        // A phrase rendered ahead, for a caller that plays it at its own instant on the engine's clock.
+        render: text => generate(text),
         speak,
         stop,
         subscribeFrames: (listener) => frameBus.subscribe(listener)

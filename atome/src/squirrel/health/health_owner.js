@@ -16,6 +16,7 @@ import { buildLogEnvelope } from '../../shared/logging.js';
 import { createHealthHistoryReader } from './health_history_reader.js';
 import { createHealthMindfulRecorder, createHealthWorkoutRecorder } from './health_workout.js';
 import { createHealthSensorRecorder } from './health_sensors.js';
+import { createHealthActivityReader } from './health_activity_reader.js';
 
 const DEFAULT_POLL_MS = 60000;
 const RETAINED_READING_FRESH_MS = 60000;
@@ -464,6 +465,8 @@ export function createHealthOwner({
         workout: createHealthWorkoutRecorder({ call, context, loadLinkStatus, describe, link }),
         mindful: createHealthMindfulRecorder({ call, context, loadLinkStatus, describe }),
         sensors: createHealthSensorRecorder({ call, context, describe }),
+        // The store's sessions read for their import (#health_activity_sync.js); values never reach a command's caller.
+        activities: createHealthActivityReader({ call, context, loadLinkStatus, describe, now }),
         refresh: (ids) => scheduleRead(ids || Array.from(consumers.keys())),
         reading: (monitorId) => readings.get(monitorId) || null,
         resetContext,

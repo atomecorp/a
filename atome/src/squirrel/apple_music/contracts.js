@@ -29,6 +29,7 @@ const definitions = {
     pause: [{}, [], 'control', 'Pause Apple Music without clearing its queue.'],
     stop: [{}, [], 'control', 'Stop Apple Music playback.'],
     seek: [{ seconds: { type: 'number', minimum: 0, maximum: 86400 } }, ['seconds'], 'control', 'Move the current Apple Music song to a time, in seconds from its start.'],
+    shuffle: [{ on: { type: 'boolean' } }, ['on'], 'control', 'Turn Apple Music shuffle on or off for the current queue (play order only; playlists are never reordered).'],
     artwork: [{ ids: { type: 'array', minItems: 1, maxItems: 25, items: id, uniqueItems: true }, scope, size: { type: 'integer', minimum: 32, maximum: 600 } }, [], 'read',
         'Read song covers as image data: the given song IDs from their scope, or without ids the song playing now. Never changes playback.'],
     next: [{}, [], 'control', 'Skip to the next Apple Music track in the current queue.'],
@@ -53,7 +54,7 @@ export const APPLE_MUSIC_COMMANDS = Object.freeze(Object.entries(definitions).ma
         supported: { type: 'boolean' }, items: { type: 'array', items: APPLE_MUSIC_ITEM_SCHEMA },
         candidates: { type: 'array', items: APPLE_MUSIC_ITEM_SCHEMA }, playlist_id: id, request_id: requestId,
         status: { type: 'string' }, has_more: { type: 'boolean' }, title: { type: 'string' }, artist: { type: 'string' },
-        duration: { type: 'number' }, position: { type: 'number' },
+        duration: { type: 'number' }, position: { type: 'number' }, shuffle: { type: 'boolean' },
         subscription: { type: 'boolean' }, capabilities: { type: 'array', items: { type: 'string' } } } }
 })));
 export function validateAppleMusicInput(action, input = {}) {

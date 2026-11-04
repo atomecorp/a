@@ -4,6 +4,7 @@ import {
 import { loadRuntimeUserProfile } from './profile_loader.js';
 import { createGlobalSecurityApi } from '../security/bootstrap.js';
 import { requestProviderService } from './provider_broker.js';
+import { requireAssistantEngine } from './assistant_engine.js';
 import { readResponseText } from './openai_stream.js';
 import {
     DEFAULT_TIMEOUT_MS,
@@ -330,6 +331,8 @@ export const requestProviderCompletion = async ({
     if (typeof fetchImpl !== 'function') {
         throw new Error('provider_fetch_unavailable');
     }
+    // The other providers are reached from here, not through the broker: the same engine rule.
+    requireAssistantEngine();
 
     const provider = AI_PROVIDER_DEFINITIONS[toText(providerId)];
     if (!provider) {

@@ -8,7 +8,11 @@ final class AppNativeAudioController: NSObject, @unchecked Sendable {
     static let shared = AppNativeAudioController()
 
     let queue = DispatchQueue(label: "atome.app.native_audio", qos: .userInitiated)
-    let recordingEngine = AVAudioEngine()
+    // The wake capture's engine, made anew at each start (AppNativeWakeCapture.swift): an engine reads its
+    // input's hardware format once, and a tap in a format the route no longer has (CarPlay, a headset, WebKit's
+    // microphone at another rate) is refused by an exception that ends the app.
+    var recordingEngine = AVAudioEngine()
+    var recordingEngineObserver: NSObjectProtocol?
     let recordingScopeBinCount = 64
 
     var audioSessionConsumers = AppNativeAudioConsumerRegistry()

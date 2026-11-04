@@ -1941,7 +1941,7 @@ The shared scene is not a reason to rebuild static Dashboard records when a tool
 - List transport projects ordered open Molecules into one ephemeral Kira sequence. Its per-Molecule offsets arm the existing Record scheduler at natural boundaries; it creates no durable sequence snapshot and no second media engine.
 - The obsolete DOM Molecule panel and its orphan footer-tool contract are deleted and may not return.
 - The acceptance owner is `scripts/molecule_acceptance_manifest.json` plus the composable `quality:*` package commands. UI/visual coverage stays on the official server and the shared canvas; endurance reuses that same real journey for 30 minutes and records heap, overlay, scene, canvas, transport and Record evidence without a test-only product seam.
-- Desktop navigation waits for an actual TCP listener through `platforms/desktop-tauri/src/local_http_navigation.rs` before loading the local URL. The former fixed 250 ms sleep is retired, so native startup readiness belongs to the local HTTP boundary rather than machine timing.
+- Desktop startup (2026-11-04, D16): `platforms/desktop-tauri/src/lib.rs` binds Axum's 127.0.0.1:3000 listener before it creates the main window (`create: false` in `tauri.conf.json`), hands it to `server::start_server`, and the window's one load waits in that listener's backlog — no refused first request, no second navigated load; a server that returns or panics paints `TAURI_LOCAL_HTTP_FAILURE_SCRIPT` at once. Only Android's boot page still waits for the listener (`local_http_navigation.rs#wait_for_local_http`) before replacing itself.
 
 # Canonical Atome/Molecule List architecture — 2026-08-27, authoritative
 

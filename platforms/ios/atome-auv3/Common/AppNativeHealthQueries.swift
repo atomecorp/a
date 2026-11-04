@@ -4,6 +4,19 @@ import HealthKit
 
 // Queries share the controller's store and channel lifetime; no second owner.
 extension AppNativeHealthController {
+    // A HealthKit error as the page's status codes (also AppNativeHealthActivities.swift).
+    static func statusCode(_ error: Error?) -> String {
+        guard let error = error as? HKError else { return "error" }
+        switch error.code {
+        case .errorDatabaseInaccessible: return "store_locked"
+        case .errorHealthDataUnavailable: return "unavailable"
+        case .errorHealthDataRestricted: return "unavailable"
+        case .errorAuthorizationNotDetermined: return "permission_required"
+        case .errorAuthorizationDenied: return "permission_denied"
+        default: return "error"
+        }
+    }
+
     private func failure(_ error: Error?) -> [String: Any] {
         let code = Self.statusCode(error)
         Self.log.error("HealthKit query failed status=\(code, privacy: .public) domain=\((error as NSError?)?.domain ?? "unknown", privacy: .public) code=\((error as NSError?)?.code ?? 0)")

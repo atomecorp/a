@@ -108,6 +108,7 @@ const handleOperation = async (operation, payload = {}) => {
             atomeType: payload.atome_type || payload.atomeType || null,
             includeShared: false,
             excludeSystem: payload.exclude_system === true || payload.excludeSystem === true,
+            includeDeleted: payload.includeDeleted === true || payload.include_deleted === true,
             limit: payload.limit,
             offset: payload.offset,
             order: payload.order,

@@ -77,6 +77,47 @@
                     <!-- UIFileSharingEnabled, UIApplicationSupportsLocalStorage, LSSupportsOpeningDocumentsInPlace → supprimées -->
 
                 </dict>
+
+                <!-- The same audio unit as an instrument ('aumu'): same class, same
+                     engine, same page. It has no audio input; the MIDI its host
+                     routes into it plays the instruments eVe plays live. -->
+                <dict>
+                    <key>description</key>
+                    <string>atomeauv3 instrument</string>
+
+                    <key>name</key>
+                    <string>atome: atome Instrument</string>
+
+                    <key>manufacturer</key>
+                    <string>ATOM</string>
+
+                    <key>subtype</key>
+                    <string>atom</string>
+
+                    <key>type</key>
+                    <string>aumu</string>
+
+                    <key>supportsMIDI</key>
+                    <true/>
+                    <key>supportsMIDIInput</key>
+                    <true/>
+                    <key>supportsMIDIOutput</key>
+                    <true/>
+                    <key>hasMIDIOutput</key>
+                    <true/>
+
+                    <key>sandboxSafe</key>
+                    <true/>
+
+                    <key>tags</key>
+                    <array>
+                        <string>Synthesizer</string>
+                        <string>Sampler</string>
+                    </array>
+
+                    <key>version</key>
+                    <integer>67072</integer>
+                </dict>
             </array>
         </dict>
     </dict>

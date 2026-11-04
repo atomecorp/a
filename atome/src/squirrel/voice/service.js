@@ -23,6 +23,7 @@ import { requireOnDeviceRecognition, startBrowserRecognition } from './service_b
 import { startTauriRecognition } from './service_tauri_stt.js';
 import { startAssistantTranscription } from './service_assistant_stt.js';
 import { checkConnection } from '../apis/unified/adole_connection.js';
+import { assistantEngineOn } from '../ai/assistant_engine.js';
 import { createTtsRuntime } from './tts_runtime.js';
 import { createVoiceInputMeterRuntime } from './service_input_meter.js';
 import { createWakeRuntime } from './wake_runtime.js';
@@ -214,8 +215,8 @@ export const createVoiceService = ({
         startTauriRecognition,
         startAssistantTranscription, requireOnDeviceRecognition,
         deviceOnline: () => checkConnection('fastify'),
-        // The assistant can transcribe for this person: an account its provider accepts, and the device online.
-        transcriptionAvailable: async () => providerPrincipalReady() && await checkConnection('fastify')
+        // The assistant can transcribe for this person: the AI engine on (D18 item 7), an account its provider accepts, and the device online.
+        transcriptionAvailable: async () => assistantEngineOn(env) && providerPrincipalReady() && await checkConnection('fastify')
     });
     // Stops whichever engine speaks for this session.
     const stopSpeech = async (sessionId, reason) => {
@@ -244,6 +245,7 @@ export const createVoiceService = ({
             return stopped || { session_id: sessionId, provider: providers.tts.selected, stopped: true };
         },
         preloadLocal: () => localTts.preload(),
+        renderLocal: (text) => localTts.render(text),
         subscribeFrames: (listener) => localTts.subscribeFrames(listener)
     };
 

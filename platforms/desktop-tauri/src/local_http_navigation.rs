@@ -1,6 +1,5 @@
-use std::net::{SocketAddr, TcpStream};
-use std::thread;
-use std::time::{Duration, Instant};
+#[cfg(any(target_os = "android", test))]
+use std::{net::{SocketAddr, TcpStream}, thread, time::{Duration, Instant}};
 
 /// Canonical page/runtime identity, including the actual native mobile platform.
 pub fn runtime_init_script() -> String {
@@ -19,6 +18,8 @@ pub fn runtime_init_script() -> String {
     script
 }
 
+// Android's boot page waits for Axum before navigating (lib.rs); the desktop window loads once Axum's port is bound.
+#[cfg(any(target_os = "android", test))]
 pub fn wait_for_local_http(address: SocketAddr, timeout: Duration) -> bool {
     let started_at = Instant::now();
     while started_at.elapsed() < timeout {

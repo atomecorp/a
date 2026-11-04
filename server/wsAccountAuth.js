@@ -8,6 +8,7 @@ import { resolveWebAuthnConfig } from './auth_webauthn.js';
 import { readDeviceSessionToken, validateConnectionDeviceSession } from './auth_session_validation.js';
 import { randomHandle } from './auth_link_security.js';
 import { wsApiConnections } from './wsApiState.js';
+import { communicationPush } from './communication_push.js';
 
 // Authentication V1 on `/ws/api`: accounts without phone, device pairing with
 // number matching, recovery, device management. Same `auth` / `auth-response`
@@ -32,8 +33,11 @@ export function createWsAccountAuth({ service, database, jwtSecret, createAccoun
     const query = database.query, transaction = database.withTransaction;
     // Server-originated notices reach the live connections of the account;
     // the payload names an internal action, never a URL or a secret.
-    const notify = async (principalId, notice, { exceptDeviceId = null, personalOnly = false } = {}) => {
+    // `push`: the devices that heard nothing live (an iPad asleep, the app closed) get the OS notification;
+    // its touch opens the app, which asks for what waits (main_menu_auth_runtime.js#askWaitingRequests).
+    const notify = async (principalId, notice, { exceptDeviceId = null, personalOnly = false, push = false } = {}) => {
         if (!principalId) return;
+        const heard = new Set();
         for (const connection of wsApiConnections) {
             const claims = connection._wsApiDeviceClaims;
             if (claims?.sub !== principalId || connection.readyState !== 1) continue;
@@ -43,7 +47,11 @@ export function createWsAccountAuth({ service, database, jwtSecret, createAccoun
                 if (personalOnly && (key.device_class !== 'personal' || key.restricted_until_ms > now())) continue;
             }
             connection.send(JSON.stringify({ type: 'auth-notice', ...notice }));
+            heard.add(claims.cnf?.kid);
         }
+        if (push) void communicationPush.deliver(principalId, { id: notice.pairId, kind: notice.kind }, { exceptKeyIds: heard, personalOnly })
+            .then((result) => { if (!result.ok && result.error !== 'push_configuration_required') console.warn('[auth] notice push not delivered', JSON.stringify({ kind: notice.kind, results: result.results?.length || 0 })); },
+                (error) => console.warn('[auth] notice push failed', error?.message || error));
     };
     const approvals = createApprovals({ query, proof, webauthn: resolveWebAuthnConfig(), now });
     const invites = createInvites({ query, transaction, proof, devices, mailer, origin, now });

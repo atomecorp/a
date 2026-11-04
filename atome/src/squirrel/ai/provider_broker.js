@@ -1,6 +1,7 @@
 import { getSessionState } from '../apis/unified/adole_api/session.js';
 import { aiQuotaTracker } from './quota_tracker.js';
 import { reportRuntimeError } from '../runtime_errors.js';
+import { requireAssistantEngine } from './assistant_engine.js';
 
 // A refusal that comes from the LINK, not from the provider.
 //
@@ -98,6 +99,14 @@ const neverSent = (result) => isTransportFailure(result) && String(result?.error
 // replaces it, so it is replayed once like the idempotent actions.
 const isReplayableOnLinkLoss = (action) => IDEMPOTENT_PROVIDER_ACTIONS.has(action) || action === 'realtime-connect';
 
+// What the provider route carries besides the AI engine — the account's credentials and secrets, its
+// connected services (music, Strava, social), the end of a call or a session, and the reading of a
+// generation already asked for: these never wait for the engine switch (assistant_engine.js).
+const NON_ENGINE_ACTIONS = new Set(['cancel', 'realtime-close', 'audio.providers', 'audio.capabilities', 'audio.job', 'audio.output',
+    'video.providers', 'video.capabilities', 'video.estimate', 'video.job', 'video.cancel', 'video.output']);
+const NON_ENGINE_FAMILIES = ['credential.', 'secret.', 'music.', 'strava.', 'social.'];
+export const isAssistantEngineAction = (action) => !NON_ENGINE_ACTIONS.has(action) && !NON_ENGINE_FAMILIES.some(family => action.startsWith(family));
+
 // Whether a provider call is accepted for the person signed in: an authenticated account (a guest has no server
 // principal). The one rule `requestProviderService` applies, read beforehand by whoever chooses a route (dictation).
 export const providerPrincipalReady = () => getSessionState()?.mode === 'authenticated';
@@ -107,6 +116,7 @@ export const requestProviderService = async (action, payload = {}, {
     expectedPrincipal = null, signal = null, onProgress = null, transport = null, usageTracker = aiQuotaTracker, principal = () => getSessionState()?.user?.id
 } = {}) => {
     signal?.throwIfAborted();
+    if (isAssistantEngineAction(String(action))) requireAssistantEngine();
     const requestPrincipal = principal();
     if (expectedPrincipal !== null && requestPrincipal !== expectedPrincipal) throw new Error('provider_principal_changed');
     let token;

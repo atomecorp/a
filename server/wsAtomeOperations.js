@@ -254,7 +254,9 @@ async function handleStateCurrent(message, userId, connection) {
             atomeType: message.atome_type || message.atomeType || null,
             ownerId: userId,
             includeShared: message.include_shared === true || message.includeShared === true,
-            excludeSystem: message.exclude_system === true || message.excludeSystem === true
+            excludeSystem: message.exclude_system === true || message.excludeSystem === true,
+            // A device mirroring its workspace must learn a deletion made elsewhere (browser_workspace.js).
+            includeDeleted: message.include_deleted === true || message.includeDeleted === true
         };
         const rawStates = vaultRouter
             ? await vaultRouter.listStates(userId, { ...options, project_id: projectId })

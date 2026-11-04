@@ -8,6 +8,7 @@ import { NUTRITION_CONSUMPTION_SCHEMA } from './program_nutrition_contract.js';
 import { HEALTH_DECLARATION_SCHEMA } from './health_declaration_contract.js';
 import { HEALTH_FEELING_SCHEMA } from './health_feeling_contract.js';
 import { ACTIVITY_IMPORT_SCHEMA } from './activity_import_contract.js';
+import { ACTIVITY_SOURCE_SCHEMA } from './activity_source_contract.js';
 import { PROGRAM_ACTIVITY_RECORD_SCHEMAS } from './program_activity_contract.js';
 import { DASHBOARD_UNLOCK_SCHEMA } from './dashboard_progression_contract.js';
 
@@ -75,7 +76,7 @@ export const CORE_DATA_ATOME_TYPES = Object.freeze([
             program_session: PROGRAM_SESSION_SCHEMA,
             program_session_transition: PROGRAM_SESSION_TRANSITION_SCHEMA,
             program_nutrition_consumption: NUTRITION_CONSUMPTION_SCHEMA, health_declaration: HEALTH_DECLARATION_SCHEMA,
-            health_feeling: HEALTH_FEELING_SCHEMA, activity_import: ACTIVITY_IMPORT_SCHEMA,
+            health_feeling: HEALTH_FEELING_SCHEMA, activity_import: ACTIVITY_IMPORT_SCHEMA, activity_source: ACTIVITY_SOURCE_SCHEMA,
             // The agreement to eVe using the card's body weight and age (#eVe/domains/user/body_data_runtime.js).
             body_data_consent: { type: 'object', required: ['version', 'granted', 'date'], properties: {
                 version: { type: 'number', enum: [1] }, granted: { type: 'boolean' }, date: { type: 'string' } } },

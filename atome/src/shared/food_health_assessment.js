@@ -38,7 +38,7 @@ export const FOOD_SELECTION_POLICY = Object.freeze({ version: 'v2', provisional:
         source: 'Open Food Facts: allergens and traces; the allergens the person declared (EU Regulation 1169/2011, Annex II)' },
     { id: 'nutriscore_e', provisional: true, reads: ['nutriscore'], source: 'Open Food Facts: Nutri-Score' },
     { id: 'nutriscore_d_nova_4', provisional: true, reads: ['nutriscore', 'nova'], source: 'Open Food Facts: Nutri-Score, NOVA group' },
-    { id: 'additive_high_risk', provisional: true, reads: ['additives', 'ingredients_known'], source: 'Open Food Facts additives taxonomy: EFSA overexposure risk' }
+    { id: 'additive_high_risk', provisional: true, reads: ['additives', 'ingredients_known', 'additives_evaluated'], source: 'Open Food Facts additives taxonomy: EFSA overexposure risk' }
 ].map(rule => Object.freeze({ ...rule, reads: Object.freeze(rule.reads) }))) });
 export const FOOD_ADDITIVE_RISKS = Object.freeze(['high', 'moderate', 'no']);
 
@@ -62,8 +62,9 @@ const RULE_CHECKS = Object.freeze({
     nutriscore_d_nova_4: ({ grade, nova }) => (!grade ? ['to_check', 'no_nutriscore'] : grade !== 'd' ? ['compliant']
         : !nova ? ['to_check', 'no_nova'] : nova === 4 ? ['excluded', 'nutriscore_d_nova_4'] : ['compliant']),
     // An additive is read from the analysed ingredient list; the taxonomy marks the ones of high risk.
-    additive_high_risk: ({ additives, known }) => (additives.some(additive => additive?.risk === 'high') ? ['excluded', 'additive_high_risk']
-        : known ? ['compliant'] : ['to_check', 'ingredients_unknown']),
+    // Additives whose risks could not be read (the taxonomy unreachable, `additives_evaluated: false`) are not cleared.
+    additive_high_risk: ({ additives, known, evaluated }) => (additives.some(additive => additive?.risk === 'high') ? ['excluded', 'additive_high_risk']
+        : !known ? ['to_check', 'ingredients_unknown'] : !evaluated && additives.length ? ['to_check', 'additives_unevaluated'] : ['compliant']),
     // Nothing declared, nothing to check. A product whose ingredient list was not analysed may hide one.
     allergen_declared: ({ allergens, traces, known, declared }) => {
         if (!declared.allergens.length) return ['compliant'];
@@ -83,6 +84,7 @@ export const evaluateFoodSelection = (product, policy = FOOD_SELECTION_POLICY, d
     const facts = { grade: NUTRISCORE_GRADES.includes(product?.nutriscore || '-') ? product.nutriscore : null,
         nova: [1, 2, 3, 4].includes(product?.nova) ? product.nova : null,
         additives: Array.isArray(product?.additives) ? product.additives : [], known: product?.ingredients_known === true,
+        evaluated: product?.additives_evaluated !== false,
         allergens: Array.isArray(product?.allergens) ? product.allergens : [], traces: Array.isArray(product?.traces) ? product.traces : [],
         declared: { allergens: Array.isArray(declared?.allergens) ? declared.allergens : [], traces: declared?.traces === true } };
     const rules = policy.rules.map(({ id, reads, provisional }) => {
@@ -103,7 +105,32 @@ export const assessFoodHealth = (product, additiveRisks) => {
     const grade = NUTRISCORE_GRADES.includes(product?.nutriscore || '-') ? product.nutriscore : null;
     if (grade === 'd' || product?.nova === 4 || additives.some(additive => additive.risk === 'moderate')
         || highFoodNutrients(product).length) return 'limit';
-    return grade && product?.ingredients_known === true ? 'good' : null;
+    const unevaluated = product?.additives_evaluated === false && additives.length > 0;
+    return grade && product?.ingredients_known === true && !unevaluated ? 'good' : null;
+};
+
+// The four questions a verdict mixes, kept apart (D14, 4 Nov. 2026), each `{ state, reasons, source }`, state `known` with its
+// reasons or `unknown` when the data to answer it is absent (absent is never read as harmless):
+//   nutrition:  the Nutri-Score grade and the nutrients above their high level;
+//   processing: the NOVA group (4 = ultra-processed); NOVA says how a food is made, not that it is harmful;
+//   additives:  the additives read from the analysed ingredient list, with their EFSA overexposure risk;
+//   toxicology: only what an authority documented about this product's own substances — here the EFSA overexposure
+//               risk of its additives (`documented` lists the high ones). The mere presence of a substance proves nothing:
+//               without such an evaluation the answer is `not_established`, never a risk.
+export const assessFoodAxes = (product) => {
+    const grade = NUTRISCORE_GRADES.includes(product?.nutriscore || '-') ? product.nutriscore : null;
+    const nova = [1, 2, 3, 4].includes(product?.nova) ? product.nova : null;
+    const known = product?.ingredients_known === true, additives = Array.isArray(product?.additives) ? product.additives : [];
+    const evaluated = additives.filter(additive => FOOD_ADDITIVE_RISKS.includes(additive?.risk));
+    const high = evaluated.filter(additive => additive.risk === 'high').map(additive => additive.tag);
+    return {
+        nutrition: { state: grade ? 'known' : 'unknown', grade, nutrients_high: highFoodNutrients(product), source: 'Open Food Facts: Nutri-Score, nutrients per 100 g (UK FSA high levels)' },
+        processing: { state: nova ? 'known' : 'unknown', nova, ultra_processed: nova === 4, source: 'Open Food Facts: NOVA group' },
+        additives: { state: known && (product?.additives_evaluated !== false || !additives.length) ? 'known' : 'unknown', count: known ? additives.length : null,
+            risky: evaluated.filter(additive => additive.risk !== 'no').map(({ tag, risk }) => ({ tag, risk })), source: 'Open Food Facts: additives from the analysed ingredient list' },
+        toxicology: { state: high.length ? 'documented' : 'not_established', documented: high, unevaluated: additives.length - evaluated.length,
+            source: 'EFSA overexposure risk, through the Open Food Facts additives taxonomy' }
+    };
 };
 
 // The worst additive risk of a normalized product (`additives: [{ tag, risk }]`):

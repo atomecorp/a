@@ -3,6 +3,7 @@ import { runWakeEnrollment } from './wake_enrollment.js';
 
 import { normalizeAssistantPreferences } from './wake_preferences.js';
 import { getSessionState } from '../apis/unified/adole_api/session.js';
+import { isAuv3AudioRuntime } from '../../application/audio_runtime/runtime_audio_backend.js';
 export { normalizeAssistantPreferences } from './wake_preferences.js';
 
 // Owns the standby lifecycle. The enabled profile preference arms this device: listening
@@ -11,6 +12,9 @@ export { normalizeAssistantPreferences } from './wake_preferences.js';
 // a spoken or explicit request out loud without announcing failures at every launch.
 export const createWakeRuntime = ({ env = globalThis, backend = createWakeDetectorBackend({ env }) } = {}) => {
     const listeners = new Set(), blockers = new Set();
+    // Inside the AUv3 the microphone and the audio session are its host's: standby never listens there
+    // (no detector engine, no capture), whatever the profile says.
+    if (isAuv3AudioRuntime(env)) blockers.add('plugin_host');
     let engine = null, pending = Promise.resolve(), generation = 0, disposed = false;
     let enabled = false, armed = false, assistant = null, unsubscribe = () => {};
     let captureRetry = null;

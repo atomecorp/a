@@ -20,7 +20,6 @@ use std::{
     borrow::Cow,
     fs as stdfs,
     io::{Cursor, Read},
-    net::SocketAddr,
     path::Component,
     path::{Path, PathBuf},
     process::Command,
@@ -5031,7 +5030,8 @@ async fn handle_ws_sync(state: AppState, mut socket: WebSocket) {
     println!("🔌 WebSocket sync connection closed");
 }
 
-pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: PathBuf) {
+// `listener`: 127.0.0.1:3000, bound by the caller before the window loads (lib.rs), so its first request waits for this server.
+pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: PathBuf, listener: std::io::Result<std::net::TcpListener>) {
     // Service principal
     let base_dir = static_dir.clone();
     let static_dir_abs = base_dir.canonicalize().unwrap_or_else(|_| base_dir.clone());
@@ -5309,12 +5309,11 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
         .layer(middleware::from_fn(log_request_middleware))
         .with_state(state);
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     println!("Serveur Axum {} démarré: http://localhost:3000", version);
     println!("🔗 WebSocket API enabled: ws://localhost:3000/ws/api");
     println!("🔗 WebSocket Sync enabled: ws://localhost:3000/ws/sync");
 
-    let listener = match tokio::net::TcpListener::bind(addr).await {
+    let listener = match listener.and_then(|listener| { listener.set_nonblocking(true)?; tokio::net::TcpListener::from_std(listener) }) {
         Ok(listener) => listener,
         Err(err) => {
             eprintln!(

@@ -1,20 +1,33 @@
-/** Activities a connected service measured (Strava first; register R-016 lot F, question 31): one record per person and
- *  civil day of their start, each activity once, by its service and its id there. Every value is `instrumented`
- *  (#video_train_contract.js VIDEO_TRAIN_MEASURE_SOURCES): the person's device measured it and the service passed it on.
- *  A re-import replaces an activity's entry only when the service changed it; nothing imported is erased (disconnecting
- *  the service keeps it). The assistant never reads them: the services' terms forbid it (the user, 2026-10-28). */
-export const ACTIVITY_IMPORT_SOURCES = Object.freeze(['strava']);
+/** Activities measured outside atome and imported into the person's records: a connected service (Strava, register
+ *  R-016 lot F, question 31) or this device's health store (Apple Health / HealthKit on iOS, Health Connect on Android;
+ *  D18 improvement 6). One record per person and civil day of their start, each activity once, by its source and its id
+ *  there. Every value is `instrumented` (#video_train_contract.js VIDEO_TRAIN_MEASURE_SOURCES): a device measured it and
+ *  the source passed it on; a measure the source does not give is absent, never estimated. `origin` is the app that
+ *  recorded it (a bundle id, a package name) and `device` the device model the source names. A re-import replaces an
+ *  activity's entry only when the source changed it; nothing imported is erased (disconnecting the source keeps it).
+ *  The same session given by two sources (or two apps of one store) is kept twice, its provenance intact, the later one
+ *  marked `duplicate_of` the first: readers count it once. The assistant never reads them (the user, 2026-10-28). */
+export const ACTIVITY_IMPORT_SOURCES = Object.freeze(['strava', 'apple_health', 'health_connect']);
 export const ACTIVITY_IMPORT_MEASURE_SOURCE = 'instrumented';
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
-// The measures an activity may carry, each in its own unit: seconds moving, metres, metres climbed, beats per minute.
-export const ACTIVITY_IMPORT_MEASURES = Object.freeze(['moving_s', 'distance_m', 'elevation_m', 'heart_avg', 'heart_max']);
+// Each source's own identifier of an activity: Strava's number, a HealthKit object UUID, a Health Connect record id.
+const SOURCE_IDS = Object.freeze({ strava: '^[0-9]{1,20}$', apple_health: '^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$',
+    health_connect: '^[A-Za-z0-9-]{1,64}$' });
+const SOURCE_ID = new RegExp(Object.values(SOURCE_IDS).map(pattern => `(?:${pattern})`).join('|'));
+const ORIGIN = '^[A-Za-z0-9._-]{1,120}$', DEVICE = '^[^\\u0000-\\u001f]{1,60}$';
+const KEY = '^[a-z_]{1,20}:[A-Za-z0-9-]{1,64}$';
+// The measures an activity may carry, each in its own unit: seconds moving, metres, metres climbed, beats per minute,
+// kilocalories burned actively, steps.
+export const ACTIVITY_IMPORT_MEASURES = Object.freeze(['moving_s', 'distance_m', 'elevation_m', 'heart_avg', 'heart_max', 'active_kcal', 'steps']);
 const measure = { type: 'number', minimum: 0 };
 const ENTRY = Object.freeze({ type: 'object', additionalProperties: false,
     required: ['source', 'source_id', 'sport', 'start', 'end', 'measure_source', 'imported_at'], properties: {
-        source: { type: 'string', enum: ACTIVITY_IMPORT_SOURCES }, source_id: { type: 'string', pattern: '^[0-9]{1,20}$' },
+        source: { type: 'string', enum: ACTIVITY_IMPORT_SOURCES }, source_id: { type: 'string', pattern: SOURCE_ID.source },
         sport: { type: 'string', pattern: '^[A-Za-z]{1,40}$' }, start: { type: 'string' }, end: { type: 'string' },
         ...Object.fromEntries(ACTIVITY_IMPORT_MEASURES.map(key => [key, measure])),
+        origin: { type: 'string', pattern: ORIGIN }, device: { type: 'string', pattern: DEVICE },
+        duplicate_of: { type: 'string', pattern: KEY },
         measure_source: { type: 'string', enum: [ACTIVITY_IMPORT_MEASURE_SOURCE] }, imported_at: { type: 'string' }
     } });
 export const ACTIVITY_IMPORT_SCHEMA = Object.freeze({ type: 'object', additionalProperties: false, required: ['version', 'day', 'entries'],
@@ -22,14 +35,18 @@ export const ACTIVITY_IMPORT_SCHEMA = Object.freeze({ type: 'object', additional
         entries: { type: 'array', maxItems: 200, items: ENTRY } } });
 
 const invalid = () => { throw Object.assign(new Error('activity_import_invalid'), { code: 'activity_import_invalid' }); };
-/** One activity checked against the contract (its end never before its start). */
+const matches = (pattern, value) => value === undefined || (typeof value === 'string' && new RegExp(pattern).test(value));
+/** One activity checked against the contract (its end never before its start, its id in its source's own form). */
 export const validateActivityImportEntry = entry => {
     const props = ENTRY.properties;
     if (!entry || typeof entry !== 'object' || Object.keys(entry).some(key => !Object.hasOwn(props, key))
         || ENTRY.required.some(key => entry[key] === undefined)
-        || !ACTIVITY_IMPORT_SOURCES.includes(entry.source) || !/^[0-9]{1,20}$/.test(entry.source_id) || !/^[A-Za-z]{1,40}$/.test(entry.sport)
+        || !ACTIVITY_IMPORT_SOURCES.includes(entry.source) || !new RegExp(SOURCE_IDS[entry.source]).test(entry.source_id)
+        || !/^[A-Za-z]{1,40}$/.test(entry.sport)
         || ![entry.start, entry.end, entry.imported_at].every(value => typeof value === 'string' && ISO.test(value))
         || Date.parse(entry.end) < Date.parse(entry.start) || entry.measure_source !== ACTIVITY_IMPORT_MEASURE_SOURCE
+        || !matches(ORIGIN, entry.origin) || !matches(DEVICE, entry.device) || !matches(KEY, entry.duplicate_of)
+        || entry.duplicate_of === activityImportKey(entry)
         || ACTIVITY_IMPORT_MEASURES.some(key => entry[key] !== undefined && !(Number.isFinite(entry[key]) && entry[key] >= 0))) invalid();
     return entry;
 };
@@ -43,6 +60,15 @@ export const validateActivityImport = (record, dayOf) => {
 };
 export const activityImportId = (actor, day) => `activity_import:${encodeURIComponent(actor)}:${day}`;
 export const activityImportKey = entry => `${entry.source}:${entry.source_id}`;
-/** Whether the service still says the same thing (the moment of the import aside). */
+/** Whether the source still says the same thing (the moment of the import aside). */
 export const activityImportSame = (left, right) => Object.keys(ENTRY.properties).filter(key => key !== 'imported_at')
     .every(key => left[key] === right[key]);
+// Two recordings are one session when their times overlap by four fifths of their union (a watch and a phone app
+// starting a few seconds apart). Two entries of one source and one app are never the same session: that app said two.
+const SAME_SESSION_OVERLAP = 0.8;
+export const activityImportSameSession = (left, right) => {
+    if (activityImportKey(left) === activityImportKey(right) || (left.source === right.source && left.origin === right.origin)) return false;
+    const [a0, a1, b0, b1] = [left.start, left.end, right.start, right.end].map(Date.parse);
+    const union = Math.max(a1, b1) - Math.min(a0, b0), common = Math.min(a1, b1) - Math.max(a0, b0);
+    return union > 0 && common / union >= SAME_SESSION_OVERLAP;
+};

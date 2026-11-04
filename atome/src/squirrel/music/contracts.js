@@ -44,6 +44,7 @@ const shapes = {
     next: [{ device_id: id }, [], 'control', 'Skip to the next track on the Spotify device.'],
     previous: [{ device_id: id }, [], 'control', 'Return to the previous track on the Spotify device.'],
     seek: [{ seconds: { type: 'number', minimum: 0, maximum: 86400 }, device_id: id }, ['seconds'], 'control', 'Move the current Spotify song to a position, in seconds, on its device. Premium required.'],
+    shuffle: [{ on: { type: 'boolean' }, device_id: id }, ['on'], 'control', 'Turn shuffle on or off for the Spotify device queue (play order only; playlists are never reordered). Premium required.'],
     create_playlist: [{ name: text, description: { type: 'string', maxLength: 1000 }, request_id: requestId }, ['name'], 'write', 'Create a private Spotify playlist with a durable request/receipt. Never repeat an unconfirmed write.'],
     add_tracks: [{ playlist_id: id, track_ids: { type: 'array', minItems: 1, maxItems: 25, uniqueItems: true, items: id }, request_id: requestId },
         ['playlist_id', 'track_ids'], 'write', 'Append exact song IDs to an authorized playlist, with a durable request/receipt. Never repeat an unconfirmed write.'],
@@ -62,7 +63,7 @@ export const MUSIC_COMMANDS = Object.freeze(Object.entries(shapes).map(([action,
         identity: { type: 'object', additionalProperties: false, properties: { id: { type: 'string' }, name: { type: 'string' } } },
         account: { type: 'object' }, cancelled: { type: 'boolean' }, provider_revoked: { type: 'boolean' },
         playlist_id: id, song_id: id, favorited: { type: 'boolean' }, has_more: { type: 'boolean' }, expires_at: { type: 'number' }, url: { type: 'string' },
-        position: { type: 'number' } } }
+        position: { type: 'number' }, shuffle: { type: 'boolean' } } }
 })));
 export function validateMusicInput(action, input = {}) {
     const schema = MUSIC_COMMANDS.find(command => command.action === action)?.input_schema;

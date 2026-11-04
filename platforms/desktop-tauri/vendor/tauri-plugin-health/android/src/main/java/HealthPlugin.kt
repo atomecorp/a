@@ -66,6 +66,8 @@ class HealthPlugin(private val activity: Activity) : Plugin(activity) {
     private var lastStepSignal = 0L
     // The raw motion of activity sessions, kept on this device (HealthSensorRecorder.kt).
     private val sensors by lazy { HealthSensorRecorder(activity.applicationContext) }
+    // The sessions other apps recorded, read for their import (HealthActivityImport.kt).
+    private val activities by lazy { HealthActivityImport(activity.packageName) }
 
     internal class Spec(
         val record: KClass<out Record>,
@@ -437,6 +439,17 @@ class HealthPlugin(private val activity: Activity) : Plugin(activity) {
             } catch (_: Exception) {
                 fail(invoke, "health_workout_save_failed")
             }
+        }
+    }
+
+    // ---- sport sessions read for their import (account and association verified by health_invoke) ---
+
+    @Command
+    fun activitiesRead(invoke: Invoke) {
+        scope.launch {
+            val hc = client() ?: return@launch fail(invoke, "health_connect_unavailable")
+            val granted = try { hc.permissionController.getGrantedPermissions() } catch (_: Exception) { emptySet() }
+            invoke.resolve(activities.read(hc, granted, invoke.getArgs()))
         }
     }
 

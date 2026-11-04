@@ -2,6 +2,7 @@ import { socketHealthMixin } from './websocket_health.js';
 import { CONFIG } from './adole_backend.js';
 import { getToken } from './adole_connection.js';
 import { getSyncScopeStore } from './sync_scope_store.js';
+import { ATOME_CHANGE_EVENTS, atomeChangeEventName, dispatchAtomeChange } from './atome_change_signal.js';
 
 // A key-bound token (`cnf.pop`) is accepted only after this connection signs a
 // fresh challenge with the session key; the account owner registers the signer.
@@ -338,7 +339,7 @@ export class SyncEngine {
             id: message.atome_id,
             atome_id: message.atome_id,
             project_id: message.project_id || projection.project_id || null,
-            atome_type: message.atome_type || projection.atome_type || projectionProperties.type || projectionProperties.kind || null,
+            atome_type: message.atome_type || projection.atome_type || projectionProperties.type || projectionProperties.kind || props.type || props.kind || null,
             event_id: eventId,
             tx_id: message.tx_id,
             gesture_id: message.gesture_id,
@@ -349,13 +350,9 @@ export class SyncEngine {
             origin: 'ws/sync',
             durable: true
         };
-        if (kind === 'delete' && lifecycleWins) this.dispatch('squirrel:atome-deleted', common);
-        else if (kind === 'restore') {
-            if (lifecycleWins) this.dispatch('squirrel:atome-restored', {
-                ...common, properties: { ...projectionProperties, ...props }
-            });
-        }
-        else if (Object.keys(props).length || deleteKeys.length) this.dispatch('squirrel:atome-updated', common);
+        const name = atomeChangeEventName({ kind, props, deleteKeys, lifecycleWins });
+        dispatchAtomeChange(this.env, name, name === ATOME_CHANGE_EVENTS.restored
+            ? { ...common, properties: { ...projectionProperties, ...props } } : common);
         this.persistCursor(stream, sequence);
         this.ack(stream, sequence);
     }

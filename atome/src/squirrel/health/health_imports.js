@@ -9,8 +9,8 @@ import { civilDayRange } from './health_values.js';
 import { healthHistoryRanges, normalizeHealthHistoryDay } from './health_history.js';
 import { healthAccessAllowedNow } from './health_actor_gate.js';
 import { healthDeclarationDay } from '../../shared/health_declaration_contract.js';
-import { activityImportId, activityImportKey, activityImportSame, validateActivityImport, validateActivityImportEntry,
-    ACTIVITY_IMPORT_MEASURE_SOURCE } from '../../shared/activity_import_contract.js';
+import { activityImportId, activityImportKey, activityImportSame, activityImportSameSession, validateActivityImport,
+    validateActivityImportEntry, ACTIVITY_IMPORT_MEASURE_SOURCE } from '../../shared/activity_import_contract.js';
 
 // The monitor the imported activities join: the day's workout sessions.
 export const HEALTH_IMPORTED_SESSION_MONITOR = 'workout_duration';
@@ -85,8 +85,11 @@ export function createHealthImports({ owner, store, actor, now = () => Date.now(
         return () => { active = false; listeners.delete(changed); return release(); };
     };
 
-    // One service's activities as it gave them (each { source_id, sport, start, end, measures… }), written day by day,
+    // The days either side of `day`: a session given by another source may start on the other side of midnight.
+    const neighbours = day => [-1, 1].map(offset => healthDeclarationDay(Date.parse(`${day}T12:00:00`) + offset * 86400000));
+    // One source's activities as it gave them (each { source_id, sport, start, end, measures… }), written day by day,
     // one after the other: a new one is added, a changed one replaced, an unchanged one leaves its day untouched (no event).
+    // A session another source (or another app of the same store) already gave is kept, marked `duplicate_of` it.
     const apply = ({ source, activities } = {}) => {
         const at = new Date(now()).toISOString();
         let entries;
@@ -102,8 +105,12 @@ export function createHealthImports({ owner, store, actor, now = () => Date.now(
             });
             for (const [day, items] of [...byDay].sort(([left], [right]) => left.localeCompare(right))) {
                 const id = activityImportId(person, day), current = await readDay(id), next = [...(current?.entries || [])];
+                const around = [];
+                for (const other of neighbours(day)) around.push(...((await readDay(activityImportId(person, other)))?.entries || []));
                 let changed = false;
-                items.forEach(item => {
+                items.forEach(given => {
+                    const first = [...next, ...around].find(kept => !kept.duplicate_of && activityImportSameSession(kept, given));
+                    const item = first ? { ...given, duplicate_of: activityImportKey(first) } : given;
                     const index = next.findIndex(kept => activityImportKey(kept) === activityImportKey(item));
                     if (index < 0) { next.push(item); counts.added += 1; changed = true; }
                     else if (activityImportSame(next[index], item)) counts.unchanged += 1;

@@ -27,7 +27,9 @@ use std::path::{Path, PathBuf};
 use tauri::{Manager, State};
 
 const TAURI_LOCAL_HTTP_PORT: u16 = 3000;
+#[cfg(target_os = "android")]
 const TAURI_LOCAL_HTTP_URL: &str = "http://127.0.0.1:3000/";
+#[cfg(target_os = "android")]
 const TAURI_LOCAL_HTTP_WAIT_SECS: u64 = 120;
 // Un ecran vide ne dit rien. Celui-ci nomme la panne : le serveur local n'a pas
 // demarre, l'application n'est donc pas chargee — et aucune donnee n'est perdue.
@@ -212,9 +214,17 @@ pub fn run() {
         .manage(assistant_link::AssistantRequestInbox::default())
         // A main-frame page load claims a new health channel (see native_health.rs).
         .on_page_load(|webview, payload| {
-            if webview.label() == "main" && payload.event() == tauri::webview::PageLoadEvent::Started {
-                use tauri::Manager;
-                native_health::reset_on_page_load(&webview.state::<std::sync::Mutex<native_health::HealthChannelState>>());
+            if webview.label() != "main" { return; }
+            match payload.event() {
+                tauri::webview::PageLoadEvent::Started => native_health::reset_on_page_load(
+                    &webview.state::<std::sync::Mutex<native_health::HealthChannelState>>()),
+                // The loaded page learns the window's size (then each resize, `on_window_event`).
+                #[cfg(not(target_os = "android"))]
+                tauri::webview::PageLoadEvent::Finished => if let Some(win) = webview.app_handle().get_webview_window("main") {
+                    viewport_runtime::publish_current_webview_viewport(&win);
+                },
+                #[cfg(target_os = "android")]
+                tauri::webview::PageLoadEvent::Finished => {}
             }
         })
         .on_window_event(|_window, event| {
@@ -401,8 +411,15 @@ pub fn run() {
             let uploads_dir_for_server = uploads_dir.clone();
             let data_dir_for_server = data_dir.clone();
 
+            // Desktop: Axum's port is bound before the window exists (`create: false` in tauri.conf.json), so the page's
+            // first request waits in the listener's backlog until Axum serves it: one load, never a request refused
+            // by a server not yet up (a blank page until a second, navigated load).
+            #[cfg(not(target_os = "android"))]
+            let listener = std::net::TcpListener::bind(("127.0.0.1", TAURI_LOCAL_HTTP_PORT));
             #[cfg(target_os = "android")]
             let materialize_handle = app.handle().clone();
+            #[cfg(not(target_os = "android"))]
+            let server_handle = app.handle().clone();
             std::thread::spawn(move || {
                 // No server without the web root: the navigation thread then
                 // reports the failure on screen instead of the app crashing.
@@ -411,105 +428,63 @@ pub fn run() {
                     eprintln!("[tauri] Android assets could not be materialized: {err}");
                     return;
                 }
+                #[cfg(target_os = "android")]
+                let listener = std::net::TcpListener::bind(("127.0.0.1", TAURI_LOCAL_HTTP_PORT));
                 let rt = tokio::runtime::Runtime::new().unwrap();
-                rt.block_on(async {
-                    server::start_server(
-                        static_dir_for_server,
-                        uploads_dir_for_server,
-                        data_dir_for_server,
-                    )
-                    .await;
-                });
+                let served = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| rt.block_on(
+                    server::start_server(static_dir_for_server, uploads_dir_for_server, data_dir_for_server, listener))));
+                if served.is_err() { eprintln!("[tauri] Local Axum server panicked"); }
+                // The server only returns when it could not start or stopped: the window says so instead of staying blank.
+                #[cfg(not(target_os = "android"))]
+                if let Some(win) = server_handle.get_webview_window("main") {
+                    let _ = win.eval(TAURI_LOCAL_HTTP_FAILURE_SCRIPT);
+                }
             });
 
+            #[cfg(not(target_os = "android"))]
+            {
+                let config = app.config().app.windows.iter().find(|window| window.label == "main")
+                    .ok_or("main window missing from tauri.conf.json")?.clone();
+                tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?
+                    .initialization_script(&format!("window.__ATOME_PROJECT_ROOT__={:?};", project_root.to_string_lossy()))
+                    .build()?;
+            }
+
+            #[cfg(target_os = "android")]
             let navigation_handle = app.handle().clone();
+            #[cfg(target_os = "android")]
             std::thread::spawn(move || {
                 let address = std::net::SocketAddr::from(([127, 0, 0, 1], TAURI_LOCAL_HTTP_PORT));
-                // La fenetre demarre sur l'URL de developpement ; elle n'est renvoyee
-                // vers Axum qu'une fois celui-ci pret. Abandonner au bout de 15 s la
-                // laissait sur ce port : les modules y sont servis en HTML, eVe ne
-                // montait jamais, et l'utilisateur voyait une fenetre vide avec des
-                // erreurs CORS trompeuses. On attend donc plus longtemps, et l'echec
-                // se DIT a l'ecran au lieu de se taire.
+                // The boot page stays until Axum answers; the failure is said on screen, never silent.
                 let mut waited_secs = 0u64;
                 let mut ready = false;
                 while waited_secs < TAURI_LOCAL_HTTP_WAIT_SECS {
-                    if local_http_navigation::wait_for_local_http(
-                        address,
-                        std::time::Duration::from_secs(5),
-                    ) {
+                    if local_http_navigation::wait_for_local_http(address, std::time::Duration::from_secs(5)) {
                         ready = true;
                         break;
                     }
                     waited_secs += 5;
-                    eprintln!(
-                        "[tauri] Local Axum server not ready after {}s (port {})",
-                        waited_secs, TAURI_LOCAL_HTTP_PORT
-                    );
-                }
-                if !ready {
-                    eprintln!(
-                        "[tauri] Local Axum server never answered on port {}",
-                        TAURI_LOCAL_HTTP_PORT
-                    );
-                    if let Some(win) = navigation_handle.get_webview_window("main") {
-                        let _ = win.eval(TAURI_LOCAL_HTTP_FAILURE_SCRIPT);
-                    }
-                    return;
+                    eprintln!("[tauri] Local Axum server not ready after {}s (port {})", waited_secs, TAURI_LOCAL_HTTP_PORT);
                 }
                 let Some(win) = navigation_handle.get_webview_window("main") else {
                     eprintln!("[tauri] Unable to navigate main window: window not found");
                     return;
                 };
+                if !ready {
+                    eprintln!("[tauri] Local Axum server never answered on port {}", TAURI_LOCAL_HTTP_PORT);
+                    let _ = win.eval(TAURI_LOCAL_HTTP_FAILURE_SCRIPT);
+                    return;
+                }
                 let Ok(url) = tauri::Url::parse(TAURI_LOCAL_HTTP_URL) else {
                     eprintln!("[tauri] Unable to parse local Axum URL");
                     return;
                 };
-                // Android: the boot page is replaced, never stacked, so the system Back
+                // The boot page is replaced, never stacked, so the system Back
                 // (Tauri's app plugin goes back in the WebView history) cannot return to it.
-                #[cfg(target_os = "android")]
-                let navigated = win.eval(&format!("location.replace({:?})", url.as_str()));
-                #[cfg(not(target_os = "android"))]
-                let navigated = win.navigate(url);
-                if let Err(err) = navigated {
+                if let Err(err) = win.eval(&format!("location.replace({:?})", url.as_str())) {
                     eprintln!("[tauri] Unable to navigate main window to local Axum server: {}", err);
                 }
-                #[cfg(not(target_os = "android"))]
-                {
-                    std::thread::sleep(std::time::Duration::from_millis(350));
-                    viewport_runtime::publish_current_webview_viewport(&win);
-                }
             });
-
-            {
-                let handle = app.handle();
-                if let Some(win) = handle.get_webview_window("main") {
-                    let _ = win.eval(&format!(
-                        "window.__ATOME_LOCAL_HTTP_PORT__={};window.__SQUIRREL_TAURI_CANONICAL_URL__={:?};",
-                        TAURI_LOCAL_HTTP_PORT,
-                        TAURI_LOCAL_HTTP_URL
-                    ));
-                    let root_js = format!(
-                        "window.__ATOME_PROJECT_ROOT__={:?};",
-                        project_root.to_string_lossy()
-                    );
-                    let _ = win.eval(&root_js);
-                } else {
-                    for (_, w) in app.webview_windows() {
-                        let _ = w.eval(&format!(
-                            "window.__ATOME_LOCAL_HTTP_PORT__={};window.__SQUIRREL_TAURI_CANONICAL_URL__={:?};",
-                            TAURI_LOCAL_HTTP_PORT,
-                            TAURI_LOCAL_HTTP_URL
-                        ));
-                        let root_js = format!(
-                            "window.__ATOME_PROJECT_ROOT__={:?};",
-                            project_root.to_string_lossy()
-                        );
-                        let _ = w.eval(&root_js);
-                        break;
-                    }
-                }
-            }
 
             Ok(())
         })

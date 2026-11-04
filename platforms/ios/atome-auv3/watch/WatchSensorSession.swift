@@ -44,6 +44,8 @@ final class WatchSensorSession: NSObject, WCSessionDelegate, HKWorkoutSessionDel
     private var origin: TimeInterval = 0
     private var startedAt = Date()
     private var streamIndex: [String: Int] = [:]
+    // A start touched on this watch, its workout held until the iPhone's session takes it up (`startedOnWatch`).
+    private var watchStart = false
 
     func activate() {
         guard WCSession.isSupported() else { return }
@@ -98,7 +100,9 @@ final class WatchSensorSession: NSObject, WCSessionDelegate, HKWorkoutSessionDel
             let at = (request["at"] as? NSNumber)?.int64Value ?? 0
             guard state == "start", self.heartSession != id, Int64(Date().timeIntervalSince1970 * 1000) - at < Self.staleStartMs else { return }
             self.heartSession = id
-            if self.session == nil { self.startedAt = Date() }
+            // A workout this watch started for its own touch is the session's: it goes on, never doubled.
+            self.watchStart = false
+            if self.session == nil, self.workout == nil { self.startedAt = Date() }
             self.startWorkout()
         }
     }
@@ -140,6 +144,34 @@ final class WatchSensorSession: NSObject, WCSessionDelegate, HKWorkoutSessionDel
         if let error { return Self.log.error("Watch recording not sent: \(error.localizedDescription, privacy: .public)") }
         do { try FileManager.default.removeItem(at: fileTransfer.file.fileURL) }
         catch { Self.log.error("Sent watch recording not removed: \(error.localizedDescription, privacy: .public)") }
+    }
+
+    // MARK: - A start touched on the watch
+
+    // iOS never lets the watch bring the iPhone app to the front. The allowed way for it to take a start touched here up:
+    // this watch starts the workout at once and mirrors it to the iPhone, which iOS then launches in the background
+    // (startMirroringToCompanionDevice; application/AppWatchSensorBridge.swift#mirroringStarted), its page then doing the
+    // card's start (the request queued by WatchLink.swift). The iPhone's session adopts this workout (its "workout" start).
+    func startedOnWatch(_ kind: String) {
+        queue.addOperation {
+            guard self.workout == nil, self.session == nil, self.heartSession == nil else { return }
+            let configuration = HKWorkoutConfiguration()
+            configuration.activityType = kind == "brick" ? .mindAndBody : .traditionalStrengthTraining
+            configuration.locationType = .indoor
+            self.configuration = configuration
+            self.startedAt = Date()
+            self.watchStart = true
+            self.startWorkout()
+        }
+    }
+
+    // A start the iPhone did not take up (it asks something on the phone, the card was stopped or is over): let go.
+    func watchStartLetGo() {
+        queue.addOperation {
+            guard self.watchStart else { return }
+            self.watchStart = false
+            if self.session == nil, self.heartSession == nil { self.endWorkout() }
+        }
     }
 
     // MARK: - Recording (on the queue)
@@ -250,7 +282,7 @@ final class WatchSensorSession: NSObject, WCSessionDelegate, HKWorkoutSessionDel
             guard let self else { return }
             if let error { Self.log.error("Watch workout not authorized: \(error.localizedDescription, privacy: .public)") }
             self.queue.addOperation {
-                guard self.session != nil || self.heartSession != nil, self.workout == nil else { return }
+                guard self.session != nil || self.heartSession != nil || self.watchStart, self.workout == nil else { return }
                 do {
                     let workout = try HKWorkoutSession(healthStore: self.store, configuration: self.configuration)
                     let builder = workout.associatedWorkoutBuilder()
@@ -262,6 +294,11 @@ final class WatchSensorSession: NSObject, WCSessionDelegate, HKWorkoutSessionDel
                     workout.startActivity(with: self.startedAt)
                     builder.beginCollection(withStart: self.startedAt) { _, error in
                         if let error { Self.log.error("Watch workout collection failed: \(error.localizedDescription, privacy: .public)") }
+                    }
+                    if self.watchStart {
+                        workout.startMirroringToCompanionDevice { mirrored, error in
+                            if !mirrored { Self.log.error("Watch workout not mirrored: \(error?.localizedDescription ?? "unknown", privacy: .public)") }
+                        }
                     }
                 } catch {
                     Self.log.error("Watch workout not started: \(error.localizedDescription, privacy: .public)")
@@ -307,6 +344,7 @@ final class WatchSensorSession: NSObject, WCSessionDelegate, HKWorkoutSessionDel
     private func releaseWorkout(_ ended: HKWorkoutSession) {
         queue.addOperation {
             guard self.workout === ended, let builder = self.builder else { return }
+            self.watchStart = false
             self.workout = nil
             self.builder = nil
             builder.endCollection(withEnd: Date()) { _, _ in builder.discardWorkout() }

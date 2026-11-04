@@ -23,6 +23,8 @@ import HealthKit
 protocol HealthWorkoutWatchLink: AnyObject {
     func startWorkout(session: String, activity: HKWorkoutActivityType, startedAt: Date)
     func stopWorkout(session: String)
+    // A workout started on the watch and mirrored here: the wrist already measures at workout rate.
+    var mirrorsWatchWorkout: Bool { get }
 }
 #endif
 
@@ -158,7 +160,8 @@ final class HealthWorkoutRecorder {
         configuration.activityType = type
         configuration.locationType = .indoor
         let started: HKWorkoutBuilder
-        if #available(iOS 26.0, *) {
+        // The watch's mirrored workout already holds the live session: this one records with the builder only.
+        if #available(iOS 26.0, *), Self.watchLink?.mirrorsWatchWorkout != true {
             guard let workout = try? HKWorkoutSession(healthStore: store, configuration: configuration) else { return fail("health_workout_unavailable") }
             let liveBuilder = workout.associatedWorkoutBuilder()
             liveBuilder.dataSource = HKLiveWorkoutDataSource(healthStore: store, workoutConfiguration: configuration)

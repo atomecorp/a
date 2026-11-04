@@ -82,6 +82,7 @@ final class AppNativeAppleMusicController {
         result["title"] = player.queue.currentEntry?.title ?? ""
         result["artist"] = player.queue.currentEntry?.subtitle ?? ""
         result["position"] = player.playbackTime
+        result["shuffle"] = player.state.shuffleMode == .songs
         if let entry = player.queue.currentEntry, case let .song(song) = entry.item {
             result["current_entry_id"] = entry.id; result["current_song_id"] = song.id.rawValue
             result["duration"] = song.duration ?? 0

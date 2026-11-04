@@ -13,6 +13,7 @@ import { whenBackgroundAllowed } from '../shared/background_work.js';
 import { resolveConfiguredAiProviderCredentials } from './provider_client.js';
 import { cloneJson as clone, toText } from '../shared/scalars.js';
 import { requestProviderService } from './provider_broker.js';
+import { assistantEngineOn } from './assistant_engine.js';
 
 const REFRESH_INTERVAL_MS = 60 * 60 * 1000;
 const DEFAULT_TIMEOUT_MS = 15000;
@@ -256,7 +257,8 @@ export const bootstrapAiModelCatalogRefresh = ({
 
     let running = false;
     const run = async ({ force = false } = {}) => {
-        if (running) return null;
+        // Nobody asked for it: with the AI engine off, the catalog is never asked on its own.
+        if (running || !assistantEngineOn(env)) return null;
         running = true;
         try {
             // A background refresh (launch, interval): it asks every provider at once.

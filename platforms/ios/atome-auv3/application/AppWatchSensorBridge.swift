@@ -13,7 +13,7 @@ import os.log
 // It is also the one crossing of the companion app (watch/WatchLink.swift, lots W1-W7): the watch's requests go to the page
 // (WatchLinkInbox.swift) and its microphone too; the page's screen model ("link" in the context), its tiles (a file) and the
 // assistant's voice go to the watch. Nothing else crosses this bridge.
-final class AppWatchSensorBridge: NSObject, HealthSensorWatchLink, HealthWorkoutWatchLink, WCSessionDelegate {
+final class AppWatchSensorBridge: NSObject, HealthSensorWatchLink, HealthWorkoutWatchLink, WCSessionDelegate, HKWorkoutSessionDelegate {
     static let shared = AppWatchSensorBridge()
     private static let log = Logger(subsystem: "atome", category: "WatchSensors")
     private let store = HKHealthStore()
@@ -24,6 +24,9 @@ final class AppWatchSensorBridge: NSObject, HealthSensorWatchLink, HealthWorkout
     // dictionary, so both are kept together, on this queue.
     private let contextQueue = DispatchQueue(label: "one.atome.watch.context")
     private var context: [String: Any] = [:]
+    // The workout a start touched on the watch mirrors here (watch/WatchSensorSession.swift#startedOnWatch), held while it runs.
+    private let mirroredLock = NSLock()
+    private var mirrored: HKWorkoutSession?
 
     func activate() {
         guard WCSession.isSupported() else { return }
@@ -31,6 +34,24 @@ final class AppWatchSensorBridge: NSObject, HealthSensorWatchLink, HealthWorkout
         WCSession.default.activate()
         HealthSensorRecorder.watchLink = self
         HealthWorkoutRecorder.watchLink = self
+        // Set at launch, as HealthKit requires: a start touched on the watch launches this app in the background for it.
+        store.workoutSessionMirroringStartHandler = { [weak self] session in self?.mirroringStarted(session) }
+    }
+
+    var mirrorsWatchWorkout: Bool {
+        mirroredLock.lock()
+        defer { mirroredLock.unlock() }
+        return mirrored != nil
+    }
+
+    // iOS gives the watch no way to bring this app to the front: a mirrored workout launches it in the background, where it
+    // runs while the workout lasts. The page starts without a window and takes the card's start the watch sent with it.
+    private func mirroringStarted(_ session: HKWorkoutSession) {
+        mirroredLock.lock()
+        mirrored = session
+        mirroredLock.unlock()
+        session.delegate = self
+        DispatchQueue.main.async { AppPageHost.shared.start(windowless: true) }
     }
 
     private var watchReady: Bool {
@@ -159,5 +180,22 @@ final class AppWatchSensorBridge: NSObject, HealthSensorWatchLink, HealthWorkout
         }
     }
     func sessionDidBecomeInactive(_ session: WCSession) {}
+
+    // The watch ended its mirrored workout, or it failed: it is let go.
+    func workoutSession(_ workoutSession: HKWorkoutSession, didChangeTo toState: HKWorkoutSessionState, from fromState: HKWorkoutSessionState, date: Date) {
+        if toState == .ended || toState == .stopped { releaseMirrored(workoutSession) }
+    }
+    func workoutSession(_ workoutSession: HKWorkoutSession, didFailWithError error: Error) {
+        Self.log.error("Mirrored watch workout failed: \(error.localizedDescription, privacy: .public)")
+        releaseMirrored(workoutSession)
+    }
+    func workoutSession(_ workoutSession: HKWorkoutSession, didDisconnectFromRemoteDeviceWithError error: Error?) {
+        releaseMirrored(workoutSession)
+    }
+    private func releaseMirrored(_ session: HKWorkoutSession) {
+        mirroredLock.lock()
+        if mirrored === session { mirrored = nil }
+        mirroredLock.unlock()
+    }
     func sessionDidDeactivate(_ session: WCSession) { WCSession.default.activate() }
 }

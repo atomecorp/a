@@ -40,7 +40,7 @@ test('the real gateway and registered executor expose iOS consent, and Authorize
     const envelope = await command('apple_music.get_state', {});
     expect(envelope.result.bridged).toBe('registered_handler');
     const source = createMusicSource({ provider: 'apple_music', command, notice: async () => {} });
-    expect(await source.state()).toEqual({ ok: true, need: 'authorize', now: null });
+    expect(await source.state()).toEqual({ ok: true, need: 'authorize', now: null, shuffle: false });
     await source.authorize();
     expect(native).toHaveBeenLastCalledWith('authorize', {}, expect.any(Object));
 });

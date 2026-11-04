@@ -43,6 +43,8 @@ enum AppleMusicPlayback {
             }
             try await player.play(); try check(); return state()
         }
+        // Shuffle is the queue's play order only (never a playlist's saved order); it holds for the next queue too.
+        if request.operation == "shuffle" { player.state.shuffleMode = request.on ? .songs : .off; try check(); return state() }
         guard player.queue.currentEntry != nil || player.state.playbackStatus != .stopped else { throw AppleMusicFailure(code: "NO_ACTIVE_MUSIC") }
         try check()
         switch request.operation {

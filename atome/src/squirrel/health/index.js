@@ -9,6 +9,7 @@ import { createHealthChannel, resolveNativeHealthInvoke } from './health_channel
 import { createHealthOwner } from './health_owner.js';
 import { createHealthDeclarations } from './health_declarations.js';
 import { createHealthImports } from './health_imports.js';
+import { createHealthActivitySync } from './health_activity_sync.js';
 import { createHealthFeeling } from './health_feeling.js';
 import { createSensorConsent } from './health_sensor_consent.js';
 import { createSensorBackup } from './sensor_backup.js';
@@ -69,7 +70,11 @@ const declared = createHealthDeclarations({ owner: imported, actor: getCurrentUs
 const backup = createSensorBackup({ sensors: measuredOwner.sensors, store, actor: getCurrentUserId,
     keys: async () => (await import('../apis/unified/adole_api/auth_methods_account.js')).pairingClient().backupKeys(),
     files: async () => (await import('../apis/unified/adole.js')).FastifyAdapter.file });
-const owner = Object.freeze({ ...declared, feeling: createHealthFeeling({ store, actor: getCurrentUserId }),
+// The sport sessions of this device's health store, imported (D18 improvement 6), keyed by this installation's identity
+// (the native imports' own, #shared/import_lifecycle.js). Imported lazily: this module is evaluated in the boot wave.
+const activitySync = createHealthActivitySync({ owner: measuredOwner, imports: imported.imports, store, actor: getCurrentUserId,
+    device: async () => (await import('../shared/import_lifecycle.js')).resolveImportDevice(env) });
+const owner = Object.freeze({ ...declared, activitySync, feeling: createHealthFeeling({ store, actor: getCurrentUserId }),
     sensors: createSensorConsent({ sensors: measuredOwner.sensors, backup, store, actor: getCurrentUserId }) });
 
 export const getHealthOwner = () => owner;

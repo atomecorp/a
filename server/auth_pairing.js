@@ -76,7 +76,7 @@ export function createPairing({ query, transaction, proof, sessions, devices, ha
             await proof.audit('pair_started', target, row.request_id);
             return { ...row, code, match, target };
         });
-        if (outcome.target) await notify(outcome.target, { kind: 'auth-pair-request', pairId: outcome.request_id }, { personalOnly: true });
+        if (outcome.target) await notify(outcome.target, { kind: 'auth-pair-request', pairId: outcome.request_id }, { personalOnly: true, push: true });
         return { ok: true, pairId: outcome.request_id, code: outcome.code, matchNumber: outcome.match, expiresAt: outcome.expires_ms };
     }
     // A shared device reopens an account it holds a key for: its owner approves each opening.
@@ -115,7 +115,7 @@ export function createPairing({ query, transaction, proof, sessions, devices, ha
             await proof.audit('shared_open_started', key.principal_id, row.request_id);
             return { ...row, code, match, principalId: key.principal_id };
         });
-        await notify(outcome.principalId, { kind: 'auth-pair-request', pairId: outcome.request_id }, { personalOnly: true });
+        await notify(outcome.principalId, { kind: 'auth-pair-request', pairId: outcome.request_id }, { personalOnly: true, push: true });
         return { ok: true, pairId: outcome.request_id, code: outcome.code, matchNumber: outcome.match, expiresAt: outcome.expires_ms };
     }
     // An enrolled device types or dictates the request code shown on the new one.

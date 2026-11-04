@@ -34,7 +34,7 @@ export const SHOPPING_PRODUCT_SCHEMA = Object.freeze({ type: 'object', additiona
     // What the selection policy reads (food_health_assessment.js#evaluateFoodSelection), kept so it judges the item again.
     additives: { type: 'array', maxItems: 64, items: { type: 'object', additionalProperties: false, required: ['tag', 'risk'], properties: {
         tag: { type: 'string', minLength: 1, maxLength: 80 }, risk: { type: ['string', 'null'], enum: ['high', 'moderate', 'no', null] } } } },
-    ingredients_known: { type: 'boolean' },
+    ingredients_known: { type: 'boolean' }, additives_evaluated: { type: 'boolean' },
     // The Open Food Facts allergens taxonomy tags it names, and those it may hold as traces (the rule `allergen_declared`).
     allergens: { type: 'array', maxItems: 32, items: { type: 'string', minLength: 1, maxLength: 80 } },
     traces: { type: 'array', maxItems: 32, items: { type: 'string', minLength: 1, maxLength: 80 } },

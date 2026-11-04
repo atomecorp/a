@@ -40,6 +40,7 @@ pub const METHODS: &[&str] = &[
     "sensorsEnable",
     "sensorsRead",
     "sensorsRestore",
+    "activitiesRead",
 ];
 
 pub fn init<R: Runtime>() -> TauriPlugin<R> {

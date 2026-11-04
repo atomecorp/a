@@ -7,3 +7,11 @@ rustflags = ["-C", "link-arg=-Wl,-z,max-page-size=16384", "-C", "link-arg=-Wl,-z
 
 [target.x86_64-linux-android]
 rustflags = ["-C", "link-arg=-Wl,-z,max-page-size=16384", "-C", "link-arg=-Wl,-z,common-page-size=16384"]
+
+# macOS: the app binary `tauri dev` runs is signed with the bundle's stable identity first
+# (scripts/tauri_sign_and_run.sh), so the login keychain keeps trusting it across rebuilds.
+[target.aarch64-apple-darwin]
+runner = "../../scripts/tauri_sign_and_run.sh"
+
+[target.x86_64-apple-darwin]
+runner = "../../scripts/tauri_sign_and_run.sh"

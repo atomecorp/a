@@ -26,8 +26,15 @@ extension AppNativeAudioController {
                 }
                 do {
                     try self.acquireAudioSessionConsumer("wake", kind: .musicCapture)
-                    let input = self.recordingEngine.inputNode
+                    // A new engine reads the route as it is now: its tap format is the input's hardware rate.
+                    let engine = AVAudioEngine()
+                    self.recordingEngine = engine
+                    let input = engine.inputNode
                     let format = input.outputFormat(forBus: 0)
+                    guard format.sampleRate > 0, format.channelCount > 0,
+                          format.sampleRate == input.inputFormat(forBus: 0).sampleRate else {
+                        throw NSError(domain: "wake", code: 2, userInfo: [NSLocalizedDescriptionKey: "wake_input_unavailable"])
+                    }
                     guard let output = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 16000,
                                                      channels: 1, interleaved: false),
                           let converter = AVAudioConverter(from: format, to: output) else {
@@ -62,8 +69,18 @@ extension AppNativeAudioController {
                             self.wakeCaptureSamples.append(contentsOf: frame)
                         }
                     }
-                    self.recordingEngine.prepare()
-                    try self.recordingEngine.start()
+                    // The route changing under the capture (CarPlay connecting, a headset) stops the engine:
+                    // the capture ends as failed and the page starts a new one on the new route.
+                    self.recordingEngineObserver = NotificationCenter.default.addObserver(
+                        forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil) { [weak self] _ in
+                        self?.queue.async {
+                            guard let self, self.recordingEngine === engine, self.wakeCaptureActive else { return }
+                            self.stopWakeCapture()
+                            self.wakeCaptureFailed = true
+                        }
+                    }
+                    engine.prepare()
+                    try engine.start()
                     self.complete(completion, payload: ["active": true, "sample_rate": 16000])
                 } catch {
                     self.stopWakeCapture()
@@ -79,6 +96,10 @@ extension AppNativeAudioController {
         if wakeCaptureActive {
             recordingEngine.stop()
             recordingEngine.inputNode.removeTap(onBus: 0)
+        }
+        if let observer = recordingEngineObserver {
+            NotificationCenter.default.removeObserver(observer)
+            recordingEngineObserver = nil
         }
         wakeCaptureActive = false
         wakeCaptureSamples.removeAll(keepingCapacity: false)

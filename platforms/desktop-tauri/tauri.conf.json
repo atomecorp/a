@@ -11,6 +11,7 @@
     "windows": [
       {
         "label": "main",
+        "create": false,
         "title": "atome",
         "width": 800,
         "height": 600,
@@ -25,7 +26,9 @@
     "active": true,
     "targets": "all",
     "macOS": {
-      "infoPlist": "Info.plist"
+      "infoPlist": "Info.plist",
+      "signingIdentity": "Developer ID Application: Jean-Eric Godard (2W25PVZ57F)",
+      "hardenedRuntime": false
     },
     "icon": [
       "icons/32x32.png",
