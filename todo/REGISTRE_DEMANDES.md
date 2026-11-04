@@ -600,7 +600,6 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   `eVe/domains/rendering/bevy_ui_scroll_runtime.js`. Preuves : `temp/reco_resultats/results.probe.mjs` ALL OK (`run14.log`),
   image `temp/reco_resultats/out/q41_image_envoyee.png`.
 - Revérifié le 2026-11-04 sur l'arbre actuel, sans compte ni vraie clé (l'utilisateur testera Strava plus tard, statut inchangé) : `strava_server.probe.mjs` 35/35, `strava_import.probe.mjs` 25/25, `ui_settings.probe.mjs` ALL OK sans clés et avec clés d'essai, 0 erreur (`temp/reco_strava/rerun_1104_*.log`).
-- Revérifié le 2026-11-04 sur l'arbre actuel, sans compte ni vraie clé (l'utilisateur testera Strava plus tard, statut inchangé) : `strava_server.probe.mjs` 35/35, `strava_import.probe.mjs` 25/25, `ui_settings.probe.mjs` ALL OK sans clés et avec clés d'essai, 0 erreur (`temp/reco_strava/rerun_1104_*.log`).
 
 ### R-104 — Refonte globale atome/eVe : cartographie, MCP universel en accès, offline sans IA
 - Statut : FAIT (vérifié le 2026-11-04) — phases A à F faites. Preuves relues : fusion atome `c02dcb734` et eVe
