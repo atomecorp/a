@@ -32,34 +32,35 @@ fn image_from_mask(width: u32, height: u32, rgba: Vec<u8>) -> Image {
 /// trois canaux de couleur sont blancs et seul l'alpha porte la forme, comme le
 /// masque rectangulaire arrondi qu'il remplace.
 pub fn shape_mask_texture(silhouette: &AtomeShapeSilhouette) -> AtomeTexture {
-    let width = silhouette.width.ceil().max(1.0) as u32;
-    let height = silhouette.height.ceil().max(1.0) as u32;
+    shape_mask_texture_at(silhouette, [0.0; 2])
+}
+
+/// The same mask sampled `phase` (0..1 px on each axis) further along: texel `i` holds the
+/// coverage at `i + 0.5 + phase`. A shadow moved by a fractional offset clears its owner's
+/// pixels from it exactly (shape_shadow_gpu.rs), where interpolating the mask would not be.
+/// The GPU draws the same texture (`shape_mask_gpu.rs`); this one is its reference.
+pub(crate) fn shape_mask_texture_at(
+    silhouette: &AtomeShapeSilhouette,
+    phase: [f32; 2],
+) -> AtomeTexture {
+    let width = silhouette.width.ceil().max(1.0) as u32 + u32::from(phase[0] > 0.0);
+    let height = silhouette.height.ceil().max(1.0) as u32 + u32::from(phase[1] > 0.0);
     let mut rgba = vec![255; width as usize * height as usize * 4];
     for y in 0..height {
         for x in 0..width {
-            let coverage = silhouette.coverage(x as f32 + 0.5, y as f32 + 0.5);
+            let coverage =
+                silhouette.coverage(x as f32 + 0.5 + phase[0], y as f32 + 0.5 + phase[1]);
             rgba[(y as usize * width as usize + x as usize) * 4 + 3] =
                 (coverage * 255.0).round().clamp(0.0, 255.0) as u8;
         }
     }
     AtomeTexture {
+        external: None,
         animation: None,
         width,
         height,
         rgba,
     }
-}
-
-pub fn image_handle_from_shape_mask(
-    images: &mut Assets<Image>,
-    silhouette: &AtomeShapeSilhouette,
-    id: &str,
-) -> Result<Handle<Image>, String> {
-    let texture = shape_mask_texture(silhouette);
-    if texture.width == 0 || texture.height == 0 {
-        return Err(format!("bevy_shape_mask_dimension_required:{id}"));
-    }
-    Ok(images.add(image_from_mask(texture.width, texture.height, texture.rgba)))
 }
 
 fn mask_cache_key(silhouette: &AtomeShapeSilhouette) -> AtomeRoundedRectMaskCacheKey {
@@ -80,9 +81,8 @@ fn mask_cache_key(silhouette: &AtomeShapeSilhouette) -> AtomeRoundedRectMaskCach
     }
 }
 
-/// Le masque d'une silhouette, memoise : le balayage est en O(largeur x hauteur)
-/// sur le CPU et une forme pleine surface coute plusieurs millisecondes a
-/// chaque apparition.
+/// The mask of a silhouette, cached: one texture per box, rounding and geometry. The GPU draws it
+/// (`shape_mask_gpu.rs`); a painted surface is still painted on the CPU.
 pub fn cached_image_handle_from_shape_mask(
     world: &mut World,
     silhouette: &AtomeShapeSilhouette,
@@ -128,17 +128,15 @@ pub fn cached_image_handle_from_shape_surface(
             .total_bytes
             .saturating_sub(cache.byte_sizes.remove(&key).unwrap_or(0));
     }
-    let handle = {
-        let mut images = world
-            .get_resource_mut::<Assets<Image>>()
-            .ok_or_else(|| "bevy_image_assets_required".to_string())?;
-        match paint {
-            Some(paint) => {
-                let texture = paint.texture(silhouette, fill);
-                images.add(image_from_mask(texture.width, texture.height, texture.rgba))
-            }
-            None => image_handle_from_shape_mask(&mut images, silhouette, id)?,
+    let handle = match paint {
+        Some(paint) => {
+            let texture = paint.texture(silhouette, fill);
+            world
+                .get_resource_mut::<Assets<Image>>()
+                .ok_or_else(|| "bevy_image_assets_required".to_string())?
+                .add(image_from_mask(texture.width, texture.height, texture.rgba))
         }
+        None => crate::shape_mask_gpu::queue_shape_mask(world, silhouette, [0.0; 2])?,
     };
     let mut cache = world.resource_mut::<AtomeRoundedRectMaskCache>();
     let byte_size = key.width as usize * key.height as usize * 4;
@@ -190,6 +188,7 @@ pub(crate) fn apply_mask_to_texture(
         }
     }
     AtomeTexture {
+        external: None,
         animation: texture.animation.clone(),
         width: texture.width,
         height: texture.height,
@@ -320,9 +319,11 @@ fn resolved_mask_coverage(
         .clamp(0.0, 1.0)
 }
 
-/// Rasterise the source in this target's coordinate system. Unlike the legacy
-/// helper above, this never stretches a mask independently over each group
-/// child: non-overlapping pixels are transparent and rotations remain spatial.
+/// Rasterise the source in this target's coordinate system. Unlike the helper
+/// above, this never stretches a mask independently over each group child:
+/// non-overlapping pixels are transparent and rotations remain spatial. The GPU
+/// draws the same texture (`spatial_mask_gpu.rs`); this one is its reference and
+/// serves the consumers that read bytes (a browser image, a CPU-built shadow).
 pub(crate) fn mask_texture_for_target(
     mask: &AtomeMaskStyle,
     target_size: [f32; 2],
@@ -339,6 +340,7 @@ pub(crate) fn mask_texture_for_target(
         }
     }
     AtomeTexture {
+        external: None,
         animation: None,
         width,
         height,
@@ -346,6 +348,9 @@ pub(crate) fn mask_texture_for_target(
     }
 }
 
+/// `texture`'s alpha times the nearest texel of the mask's coverage, divided by 255,
+/// its colours kept. The GPU cuts the same way (`spatial_mask_gpu.rs`); this one is
+/// its reference and cuts the scene a renderer starts with.
 pub(crate) fn apply_spatial_mask_to_texture(
     texture: &AtomeTexture,
     mask: &AtomeMaskStyle,
@@ -377,6 +382,7 @@ pub(crate) fn apply_spatial_mask_to_texture(
         }
     }
     AtomeTexture {
+        external: None,
         animation: texture.animation.clone(),
         width: texture.width,
         height: texture.height,

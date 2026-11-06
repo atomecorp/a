@@ -30,7 +30,10 @@ pub struct AtomeProjectView {
 
 impl Default for AtomeProjectView {
     fn default() -> Self {
-        Self { zoom: 1.0, pan: Vec2::ZERO }
+        Self {
+            zoom: 1.0,
+            pan: Vec2::ZERO,
+        }
     }
 }
 
@@ -67,7 +70,11 @@ fn default_project_space() -> bool {
 /// `atome_rect_transform` maps logical (x, y) to world (x - W/2, H/2 - y). The
 /// view affine on logical pixels therefore becomes, in world space, a uniform
 /// scale by `zoom` followed by this translation.
-pub fn compose_project_view(view: &AtomeProjectView, surface: Vec2, transform: &Transform) -> Transform {
+pub fn compose_project_view(
+    view: &AtomeProjectView,
+    surface: Vec2,
+    transform: &Transform,
+) -> Transform {
     let zoom = view.zoom;
     let offset = Vec2::new(
         (zoom - 1.0) * surface.x * 0.5 + view.pan.x,
@@ -80,7 +87,11 @@ pub fn compose_project_view(view: &AtomeProjectView, surface: Vec2, transform: &
             transform.translation.z,
         ),
         rotation: transform.rotation,
-        scale: Vec3::new(transform.scale.x * zoom, transform.scale.y * zoom, transform.scale.z),
+        scale: Vec3::new(
+            transform.scale.x * zoom,
+            transform.scale.y * zoom,
+            transform.scale.z,
+        ),
     }
 }
 
@@ -89,7 +100,9 @@ pub fn apply_project_view(world: &mut World, patch: AtomeProjectViewPatch) -> Re
         return Err("bevy_project_view_not_finite".to_string());
     }
     let next = AtomeProjectView {
-        zoom: patch.zoom.clamp(PROJECT_VIEW_MIN_ZOOM, PROJECT_VIEW_MAX_ZOOM),
+        zoom: patch
+            .zoom
+            .clamp(PROJECT_VIEW_MIN_ZOOM, PROJECT_VIEW_MAX_ZOOM),
         pan: Vec2::new(patch.pan_x, patch.pan_y),
     };
     let mut view = world.resource_mut::<AtomeProjectView>();
@@ -131,7 +144,9 @@ pub fn apply_project_space(world: &mut World, patch: AtomeProjectSpacePatch) -> 
             // Back to screen space: the global must stop carrying the view.
             for owned in owned_entities(world, entity) {
                 if let Some(transform) = world.get::<Transform>(owned).copied() {
-                    world.entity_mut(owned).insert(GlobalTransform::from(transform));
+                    world
+                        .entity_mut(owned)
+                        .insert(GlobalTransform::from(transform));
                 }
             }
         }
@@ -153,11 +168,15 @@ pub fn sync_project_view_globals(world: &mut World) {
         let config = world.resource::<AtomeBevyRendererConfig>();
         Vec2::new(config.width, config.height)
     };
-    let owners: Vec<Entity> =
-        world.query_filtered::<Entity, With<AtomeProjectSpace>>().iter(world).collect();
+    let owners: Vec<Entity> = world
+        .query_filtered::<Entity, With<AtomeProjectSpace>>()
+        .iter(world)
+        .collect();
     for owner in owners {
         for entity in owned_entities(world, owner) {
-            let Some(transform) = world.get::<Transform>(entity).copied() else { continue };
+            let Some(transform) = world.get::<Transform>(entity).copied() else {
+                continue;
+            };
             let global = GlobalTransform::from(compose_project_view(&view, surface, &transform));
             if world.get::<GlobalTransform>(entity) != Some(&global) {
                 world.entity_mut(entity).insert(global);
@@ -173,8 +192,10 @@ mod tests {
 
     fn logical_of(t: &Transform, surface: Vec2, size: Vec2) -> Vec2 {
         // Inverse of atome_rect_transform for an unrotated rect: top-left logical corner.
-        Vec2::new(t.translation.x + surface.x * 0.5 - size.x * t.scale.x * 0.5,
-            surface.y * 0.5 - t.translation.y - size.y * t.scale.y * 0.5)
+        Vec2::new(
+            t.translation.x + surface.x * 0.5 - size.x * t.scale.x * 0.5,
+            surface.y * 0.5 - t.translation.y - size.y * t.scale.y * 0.5,
+        )
     }
 
     #[test]
@@ -191,12 +212,21 @@ mod tests {
         let surface = Vec2::new(1280.0, 800.0);
         let size = Vec2::new(200.0, 80.0);
         let t = atome_rect_transform(100.0, 50.0, size.x, size.y, surface.x, surface.y, 3.0);
-        let view = AtomeProjectView { zoom: 2.0, pan: Vec2::new(-30.0, 40.0) };
+        let view = AtomeProjectView {
+            zoom: 2.0,
+            pan: Vec2::new(-30.0, 40.0),
+        };
         let out = compose_project_view(&view, surface, &t);
         // screen = project * zoom + pan
         let corner = logical_of(&out, surface, size);
-        assert!((corner - Vec2::new(100.0 * 2.0 - 30.0, 50.0 * 2.0 + 40.0)).length() < 1e-3, "{corner:?}");
-        assert!((out.translation.z - t.translation.z).abs() < 1e-6, "depth must not be scaled");
+        assert!(
+            (corner - Vec2::new(100.0 * 2.0 - 30.0, 50.0 * 2.0 + 40.0)).length() < 1e-3,
+            "{corner:?}"
+        );
+        assert!(
+            (out.translation.z - t.translation.z).abs() < 1e-6,
+            "depth must not be scaled"
+        );
         assert!((out.scale.x - t.scale.x * 2.0).abs() < 1e-6);
     }
 
@@ -204,9 +234,30 @@ mod tests {
     fn zoom_is_clamped_and_non_finite_rejected() {
         let mut world = World::new();
         world.init_resource::<AtomeProjectView>();
-        apply_project_view(&mut world, AtomeProjectViewPatch { zoom: 1000.0, pan_x: 0.0, pan_y: 0.0 }).unwrap();
-        assert_eq!(world.resource::<AtomeProjectView>().zoom, PROJECT_VIEW_MAX_ZOOM);
-        assert!(apply_project_view(&mut world, AtomeProjectViewPatch { zoom: f32::NAN, pan_x: 0.0, pan_y: 0.0 }).is_err());
+        apply_project_view(
+            &mut world,
+            AtomeProjectViewPatch {
+                zoom: 1000.0,
+                pan_x: 0.0,
+                pan_y: 0.0,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            world.resource::<AtomeProjectView>().zoom,
+            PROJECT_VIEW_MAX_ZOOM
+        );
+        assert!(
+            apply_project_view(
+                &mut world,
+                AtomeProjectViewPatch {
+                    zoom: f32::NAN,
+                    pan_x: 0.0,
+                    pan_y: 0.0
+                }
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -218,14 +269,48 @@ mod tests {
         let t = atome_rect_transform(10.0, 10.0, 20.0, 20.0, 1280.0, 800.0, 0.0);
         let atom = world.spawn((t, GlobalTransform::from(t))).id();
         let ui = world.spawn((t, GlobalTransform::from(t))).id();
-        world.resource_mut::<AtomeEntityTable>().by_id.insert("atom".into(), atom);
-        apply_project_space(&mut world, AtomeProjectSpacePatch { ids: vec!["atom".into()], project: true }).unwrap();
-        apply_project_view(&mut world, AtomeProjectViewPatch { zoom: 3.0, pan_x: 5.0, pan_y: 7.0 }).unwrap();
+        world
+            .resource_mut::<AtomeEntityTable>()
+            .by_id
+            .insert("atom".into(), atom);
+        apply_project_space(
+            &mut world,
+            AtomeProjectSpacePatch {
+                ids: vec!["atom".into()],
+                project: true,
+            },
+        )
+        .unwrap();
+        apply_project_view(
+            &mut world,
+            AtomeProjectViewPatch {
+                zoom: 3.0,
+                pan_x: 5.0,
+                pan_y: 7.0,
+            },
+        )
+        .unwrap();
         sync_project_view_globals(&mut world);
-        assert_ne!(*world.get::<GlobalTransform>(atom).unwrap(), GlobalTransform::from(t));
-        assert_eq!(*world.get::<GlobalTransform>(ui).unwrap(), GlobalTransform::from(t));
+        assert_ne!(
+            *world.get::<GlobalTransform>(atom).unwrap(),
+            GlobalTransform::from(t)
+        );
+        assert_eq!(
+            *world.get::<GlobalTransform>(ui).unwrap(),
+            GlobalTransform::from(t)
+        );
         // leaving project space restores the plain global
-        apply_project_space(&mut world, AtomeProjectSpacePatch { ids: vec!["atom".into()], project: false }).unwrap();
-        assert_eq!(*world.get::<GlobalTransform>(atom).unwrap(), GlobalTransform::from(t));
+        apply_project_space(
+            &mut world,
+            AtomeProjectSpacePatch {
+                ids: vec!["atom".into()],
+                project: false,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            *world.get::<GlobalTransform>(atom).unwrap(),
+            GlobalTransform::from(t)
+        );
     }
 }

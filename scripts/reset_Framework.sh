@@ -317,8 +317,8 @@ stop_production_service_if_needed
 stop_dev_fastify_if_needed
 
 # Remove Tauri build artifacts
-TAURI_TARGET="$PROJECT_ROOT/platforms/desktop-tauri/target"
-remove_dir "$TAURI_TARGET" "📦 Removing Tauri build artifacts"
+RUST_TARGET="$PROJECT_ROOT/target"
+remove_dir "$RUST_TARGET" "📦 Removing Rust workspace build artifacts"
 
 # Remove database storage
 DATABASE_STORAGE="$PROJECT_ROOT/database_storage"
@@ -464,17 +464,14 @@ const userRootRaw = process.env.SQUIRREL_SHELL_USER_ROOT || 'data/users';
 const userRootPath = path.isAbsolute(userRootRaw) ? userRootRaw : path.join(projectRoot, userRootRaw);
 const uploadsRaw = process.env.SQUIRREL_UPLOADS_DIR || '';
 const uploadsPath = uploadsRaw ? (path.isAbsolute(uploadsRaw) ? uploadsRaw : path.join(projectRoot, uploadsRaw)) : '';
-const monitoredRaw = process.env.SQUIRREL_MONITORED_DIR || '';
-const monitoredPath = monitoredRaw ? (path.isAbsolute(monitoredRaw) ? monitoredRaw : path.join(projectRoot, monitoredRaw)) : '';
 
-process.stdout.write(`LIBSQL_URL=${libsqlUrl}\nSQLITE_PATH=${sqlitePath}\nUSER_ROOT=${userRootPath}\nUPLOADS_DIR=${uploadsPath}\nMONITORED_DIR=${monitoredPath}\n`);
+process.stdout.write(`LIBSQL_URL=${libsqlUrl}\nSQLITE_PATH=${sqlitePath}\nUSER_ROOT=${userRootPath}\nUPLOADS_DIR=${uploadsPath}\n`);
 NODE
 
     LIBSQL_URL_VALUE=""
     SQLITE_PATH_VALUE=""
     USER_ROOT_VALUE=""
     UPLOADS_DIR_VALUE=""
-    MONITORED_DIR_VALUE=""
     if [ -f "$DB_INFO_TMP" ]; then
         while IFS= read -r line; do
             case "$line" in
@@ -482,7 +479,6 @@ NODE
                 SQLITE_PATH=*) SQLITE_PATH_VALUE="${line#SQLITE_PATH=}" ;;
                 USER_ROOT=*) USER_ROOT_VALUE="${line#USER_ROOT=}" ;;
                 UPLOADS_DIR=*) UPLOADS_DIR_VALUE="${line#UPLOADS_DIR=}" ;;
-                MONITORED_DIR=*) MONITORED_DIR_VALUE="${line#MONITORED_DIR=}" ;;
             esac
         done <"$DB_INFO_TMP"
         rm -f "$DB_INFO_TMP" 2>/dev/null || true
@@ -498,9 +494,6 @@ NODE
     echo "    - USER_ROOT: ${USER_ROOT_VALUE:-data/users}"
     if [ -n "$UPLOADS_DIR_VALUE" ]; then
         echo "    - UPLOADS_DIR: $UPLOADS_DIR_VALUE"
-    fi
-    if [ -n "$MONITORED_DIR_VALUE" ]; then
-        echo "    - MONITORED_DIR: $MONITORED_DIR_VALUE"
     fi
 
     if [ -n "$LIBSQL_URL_VALUE" ]; then
@@ -568,18 +561,6 @@ if [ -n "$UPLOADS_DIR_VALUE" ]; then
             remove_dir "$UPLOADS_DIR_VALUE" "🗂️  Removing uploads dir (absolute)"
         else
             echo "⚠️  Refusing to delete uploads dir outside project root: $UPLOADS_DIR_VALUE"
-        fi
-    fi
-fi
-
-if [ -n "$MONITORED_DIR_VALUE" ]; then
-    if is_safe_project_path "$MONITORED_DIR_VALUE"; then
-        remove_dir "$MONITORED_DIR_VALUE" "🗂️  Removing monitored dir (env)"
-    else
-        if [[ "$ALLOW_ABSOLUTE_DATA_DELETE" == "1" ]]; then
-            remove_dir "$MONITORED_DIR_VALUE" "🗂️  Removing monitored dir (absolute)"
-        else
-            echo "⚠️  Refusing to delete monitored dir outside project root: $MONITORED_DIR_VALUE"
         fi
     fi
 fi
@@ -763,7 +744,7 @@ echo ""
 echo "🎉 Framework reset complete!"
 
 # Optional: purge Tauri WebView storage (localStorage/cache)
-# This does NOT live in platforms/desktop-tauri/target; it is stored in OS user dirs.
+# This does NOT live in the Rust target directory; it is stored in OS user dirs.
 OS_NAME="$(uname -s)"
 
 # Optional escape hatch (debugging): allow skipping OS user storage purge.

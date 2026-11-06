@@ -1,9 +1,11 @@
 //! The web renderer's frame clock: how queued work becomes a rendered frame.
 //!
 //! The winit loop runs in `Reactive` mode (an idle heartbeat, not a display-rate
-//! loop); a frame happens when something wakes it. Input-driven work wakes it
-//! by requesting the window's next animation frame — input and decoder-paced
-//! video frames alike — so each frame costs exactly one render.
+//! loop) and reacts to its own wakes only; a frame happens when something wakes
+//! it. Queued work wakes it by requesting the window's next animation frame and
+//! announcing it as a user event — input and decoder-paced video frames alike —
+//! so each frame costs exactly one render, and a pointer move the renderer has
+//! no use for costs none.
 
 use atome_bevy_renderer_core::frame_demand::AtomeFrameDemand;
 use bevy::platform::time::Instant;
@@ -59,10 +61,25 @@ pub(crate) const WEB_IDLE_SETTLE_MS: u64 = 3_000;
 /// whatever this wait is.
 pub(crate) const WEB_SETTLED_HEARTBEAT_MS: u64 = 10_000;
 
+/// The renderer reacts to its own wakes only (user events), never to winit's
+/// window or device events: it consumes none of them — the page routes every
+/// pointer, key and resize itself and sends the outcome as ops. Reacting to
+/// them ran a full update and present for every mouse move over the page,
+/// over the canvas or not (measured 2026-11-04: 120 frames for 120 moves that
+/// touched nothing).
+fn web_update_mode() -> UpdateMode {
+    UpdateMode::Reactive {
+        wait: Duration::from_millis(WEB_IDLE_HEARTBEAT_MS),
+        react_to_device_events: false,
+        react_to_user_events: true,
+        react_to_window_events: false,
+    }
+}
+
 pub(crate) fn web_winit_settings() -> WinitSettings {
     WinitSettings {
-        focused_mode: UpdateMode::reactive(Duration::from_millis(WEB_IDLE_HEARTBEAT_MS)),
-        unfocused_mode: UpdateMode::reactive(Duration::from_millis(WEB_IDLE_HEARTBEAT_MS)),
+        focused_mode: web_update_mode(),
+        unfocused_mode: web_update_mode(),
     }
 }
 
@@ -101,12 +118,19 @@ pub(crate) fn adapt_web_idle_heartbeat(
         },
     );
     let with_wait = |mut mode: UpdateMode| {
-        if let UpdateMode::Reactive { wait: ref mut current, .. } = mode {
+        if let UpdateMode::Reactive {
+            wait: ref mut current,
+            ..
+        } = mode
+        {
             *current = wait;
         }
         mode
     };
-    let (focused, unfocused) = (with_wait(settings.focused_mode), with_wait(settings.unfocused_mode));
+    let (focused, unfocused) = (
+        with_wait(settings.focused_mode),
+        with_wait(settings.unfocused_mode),
+    );
     if focused != settings.focused_mode || unfocused != settings.unfocused_mode {
         settings.focused_mode = focused;
         settings.unfocused_mode = unfocused;
@@ -131,27 +155,31 @@ pub(crate) fn remember_event_loop_proxy(proxy: Option<Res<EventLoopProxyWrapper>
 
 // Wakes are the renderer's frame clock.
 //
-// The loop no longer self-ticks at display rate (see `web_winit_settings`), so
+// The loop does not self-tick at display rate (see `web_winit_settings`), so
 // a wake is what turns queued work into a frame. It must therefore never be
 // dropped for being "too soon" — a time-based throttle here would cap the
 // interactive frame rate at its own period.
 //
-// A wake requests the window's next animation frame: winit delivers it as one
-// `RedrawRequested`, whose update drains every queue and renders once, in step
-// with the compositor. Wakes issued before that frame starts are already
-// covered by it, so only the first one requests; `web_frame_probe_begin`
-// re-arms the request when the tick starts.
+// A wake does two things, once per frame:
+// - it requests the window's next animation frame, which winit delivers as
+//   one `RedrawRequested`, so the update drains every queue and renders once,
+//   in step with the compositor;
+// - it announces the work to Bevy with a `WakeUp` user event: the update mode
+//   reacts to user events only, so a frame that nobody announced (a mouse move
+//   winit turned into a window event) runs no update.
 //
-// The request is a frame, never a winit `WakeUp` user event. A `WakeUp` sent
-// while the loop is running — from inside a tick — is queued behind
-// `AboutToWait` and only processed on the loop's next turn: with nothing else
-// asking for a frame, that turn was the 500 ms heartbeat, and every wake in
-// between was merged into the stranded one. Interaction then rendered at
-// 2 frames/s (measured 2026-10-07: 70-150 wakes/s, 2 ticks/s). A frame
-// request cannot be stranded: the browser always delivers it.
+// A `WakeUp` sent from inside a tick is queued behind `AboutToWait` and only
+// read on the loop's next turn: alone it was stranded until the 500 ms
+// heartbeat (measured 2026-10-07: 70-150 wakes/s, 2 ticks/s). The frame
+// request is that next turn — the browser always delivers it — so the
+// announced work renders on the next frame. A `WakeUp` sent between frames
+// is read at once: it renders then if the last frame has been presented, else
+// on the frame Bevy requests for it.
 //
-// Requesting only once per frame also keeps the request cheap and safe:
-// winit cancels and re-requests its animation frame on every call, so
+// Wakes issued before that frame starts are already covered by it, so only
+// the first one requests; `web_frame_probe_begin` re-arms the request when the
+// tick starts. Requesting only once per frame also keeps the request cheap and
+// safe: winit cancels and re-requests its animation frame on every call, so
 // repeated calls from a callback running ahead of it would push it back one
 // frame each time.
 //
@@ -174,14 +202,43 @@ pub(crate) fn wake_web_renderer() {
         });
         return;
     }
-    if request_web_frame() {
+    request_announced_web_frame();
+}
+
+/// Called at the end of a tick: if a wake was merged into it, request the next
+/// frame now (see `wake_web_renderer`).
+pub(crate) fn continue_merged_wake() {
+    if !WEB_WAKE_COALESCED.with(|cell| cell.replace(false)) {
         return;
     }
-    // Before the window exists there is no frame to request: hand the wake to
-    // the event loop instead (the startup ticks drain the queues).
-    WEB_FRAME_REQUESTED.with(|cell| {
-        *cell.borrow_mut() = false;
-    });
+    if WEB_FRAME_REQUESTED.with(|cell| cell.replace(true)) {
+        return;
+    }
+    request_announced_web_frame();
+}
+
+/// One frame for queued work: the animation frame and its `WakeUp`. Before the
+/// window exists there is no frame to request: the `WakeUp` alone runs the
+/// startup ticks that drain the queues (`remember_event_loop_proxy` sends it
+/// once the loop's proxy is known).
+fn request_announced_web_frame() {
+    announce_web_work();
+    if !request_web_frame() {
+        WEB_FRAME_REQUESTED.with(|cell| {
+            *cell.borrow_mut() = false;
+        });
+    }
+}
+
+/// The first frame of the started renderer, announced like any other but not
+/// counted as a wake: no export asked for it.
+pub(crate) fn request_startup_web_frame() {
+    if !WEB_FRAME_REQUESTED.with(|cell| cell.replace(true)) {
+        request_announced_web_frame();
+    }
+}
+
+fn announce_web_work() {
     WEB_EVENT_LOOP_PROXY.with(|cell| {
         if let Some(proxy) = cell.borrow().as_ref() {
             if proxy.send_event(WinitUserEvent::WakeUp).is_err() {
@@ -195,22 +252,6 @@ pub(crate) fn wake_web_renderer() {
             });
         }
     });
-}
-
-/// Called at the end of a tick: if a wake was merged into it, request the next
-/// frame now (see `wake_web_renderer`).
-pub(crate) fn continue_merged_wake() {
-    if !WEB_WAKE_COALESCED.with(|cell| cell.replace(false)) {
-        return;
-    }
-    if WEB_FRAME_REQUESTED.with(|cell| cell.replace(true)) {
-        return;
-    }
-    if !request_web_frame() {
-        WEB_FRAME_REQUESTED.with(|cell| {
-            *cell.borrow_mut() = false;
-        });
-    }
 }
 
 fn request_web_frame() -> bool {

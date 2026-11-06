@@ -14,9 +14,9 @@ export const DASHBOARD_PROGRESSION_ERRORS = Object.freeze(['progression_actor_re
     'progression_commit_failed', 'progression_unlock_invalid', 'progression_read_incomplete', 'progression_unknown_command',
     'progression_invalid_argument', 'progression_settings_invalid', 'progression_settings_unavailable', 'progression_schedule_unavailable',
     'progression_time_budget_required', 'progression_aim_invalid', 'progression_deadline_invalid', 'progression_challenge_invalid',
-    'progression_done_invalid', 'progression_session_required', 'progression_session_choice_invalid', 'progression_ongoing_unavailable', 'progression_ongoing_none', 'progression_ongoing_unknown', 'progression_stage_layout_unavailable', 'progression_search_unavailable', 'progression_duo_unavailable', 'progression_duo_nothing_held', 'progression_duo_tile_unknown',
+    'progression_done_invalid', 'progression_session_required', 'progression_session_choice_invalid', 'progression_ongoing_unavailable', 'progression_ongoing_none', 'progression_ongoing_unknown', 'progression_recent_none', 'progression_recent_unknown', 'progression_recent_unavailable', 'progression_stage_layout_unavailable', 'progression_search_unavailable', 'progression_duo_unavailable', 'progression_duo_nothing_held', 'progression_duo_tile_unknown',
     'progression_results_unavailable', 'progression_results_closed', 'progression_results_day_invalid', 'progression_results_week_future',
-    'progression_preparation_unavailable', 'progression_close_failed']);
+    'progression_preparation_unavailable', 'progression_close_failed', 'progression_delete_failed']);
 
 const progress = { type: 'object', properties: { source: { type: 'string', enum: DASHBOARD_UNLOCK_SOURCES }, met: count, required: count, window_days: count } };
 const brick = { type: 'object', properties: { brick_id: { type: 'string' }, kind: { type: 'string', enum: ['tile', 'activity', 'tool'] },
@@ -107,6 +107,10 @@ const definitions = {
         + 'stop (its programme paused, its sessions in the calendar and their alarms suspended); its sessions, counts and calendar past stay. '
         + 'A closed objective lists closed { at }; closing it again changes nothing (already true).',
         { objective_id: { type: 'string' }, closed: { type: 'object' }, already: { type: 'boolean' } }],
+    'objective.delete': [{ ...named }, [], true,
+        'Delete one of the user\'s objectives (« supprime mon objectif Poids »), as « Supprimer » in its tile\'s hold does at its second touch: '
+        + 'its project leaves through the canonical delete (its sessions and counts recorded elsewhere stay). Confirmed by the user first.',
+        { objective_id: { type: 'string' }, deleted: { type: 'boolean' } }],
     'session.objectives.read': [{ session_id: { type: 'string', minLength: 1 } }, [], false,
         'List the objectives one Sport, nap or meditation session counts for (the session followed now when session_id is omitted), '
         + 'each with counted true or false.', sessionRows],
@@ -124,6 +128,17 @@ const definitions = {
         'Show on the home the activities under way (a Sport exercise, a nap, a meditation, a breathing, a relaxation, running or '
         + 'paused): the one named by key (else the last chosen, else the first) large with its time, a row for each. Writes nothing.',
         { shown: { type: 'array', items: { type: 'string' } }, chosen: { type: 'string' } }],
+    // Activité › Récent (D32): what was done lately, to take it up again.
+    'activity.recent': [{ limit: { type: 'integer', minimum: 1, maximum: 34 } }, [], false,
+        'List the activities the user did lately, newest first, each once (as Activité › Récent shows them): a Sport exercise or a '
+        + 'nap, meditation, breathing or relaxation, with key, family (training or brick), id, label, glyph, status of its latest '
+        + 'session (running, paused, completed, stopped) and at (its last move). Writes nothing.',
+        { activities: { type: 'array', items: { type: 'object', properties: { key: { type: 'string' }, family: { type: 'string' }, id: { type: 'string' },
+            label: { type: 'string' }, glyph: { type: 'string' }, status: { type: 'string' }, at: { type: 'string' } } } } }],
+    'activity.resume': [{ key: { type: 'string', minLength: 1, maxLength: 200 } }, [], false,
+        'Take an activity up again where the user was, as a touch on its Récent tile does (key from dashboard.activity.recent, the '
+        + 'newest without it): a session left running or paused comes back on its live card; otherwise its card opens as it was left. '
+        + 'Writes nothing.', { key: { type: 'string' }, status: { type: 'string' }, label: { type: 'string' } }],
     'stage.layout': [{ layout: { type: 'string', enum: ['tiles', 'list'] } }, ['layout'], false,
         'Lay the long collection shown on the home\'s stage (a shopping aisle, the basket…) as tiles a page at a time or as a '
         + 'list of rows, as its band\'s Liste / Tuiles tool does. Writes nothing.', { layout: { type: 'string' } }],
@@ -187,9 +202,10 @@ export const DASHBOARD_PROGRESSION_ASSISTANT_INSTRUCTIONS = 'Home progression: t
     + 'on its summary « compte aussi pour Bien vieillir » calls dashboard.session.objectives.set counted true with goal aging, « pas pour Poids » '
     + 'counted false with goal weight; « je veux courir 5 km avant le 15 mars » calls dashboard.objective.deadline.set, « défi : 21 jours de '
     + 'planche » dashboard.objective.challenge.set count 21 unit days, « je vise la force » dashboard.objective.aim.set (dashboard.objectives.list '
-    + 'answers about them); « règle mon objectif Muscles », « montre-moi ses réglages » call dashboard.objective.prepare; « j\'ai atteint mon objectif, clos-le » calls dashboard.objective.close. A locked brick is only hidden from that home: it removes no capability, so never refuse a Sport, '
+    + 'answers about them); « règle mon objectif Muscles », « montre-moi ses réglages » call dashboard.objective.prepare; « j\'ai atteint mon objectif, clos-le » calls dashboard.objective.close. « supprime mon objectif Poids » calls dashboard.objective.delete (confirmed first). A locked brick is only hidden from that home: it removes no capability, so never refuse a Sport, '
     + 'shopping, food, GPS or any other request because of the tier, call its tool directly. « qu\'est-ce qui est en cours », « montre ma '
-    + 'séance en cours » call dashboard.ongoing.open. « deux outils à la fois », « mets une vidéo pendant ma séance » call dashboard.duo.open '
+    + 'séance en cours » call dashboard.ongoing.open; « mes dernières activités » calls dashboard.activity.recent, « reprends où j\'en étais », '
+    + '« reprends mes pompes » dashboard.activity.resume (key of that activity, the newest without it). « deux outils à la fois », « mets une vidéo pendant ma séance » call dashboard.duo.open '
     + '(tile media), « ferme le duo » dashboard.duo.close; never propose the Duo unasked. « affiche en liste », « en tuiles » on a long collection call dashboard.stage.layout. « ferme la recherche », « efface la recherche » call dashboard.search.end. '
     + '« montre mes résultats », « mes résultats d\'hier » call dashboard.results.open (day); on the Résultats shown « la semaine dernière » '
     + 'dashboard.results.week offset -1, « mardi » dashboard.results.day, « seulement le sport » dashboard.results.filter [sport], « tout » [all], '

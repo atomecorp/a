@@ -1,13 +1,17 @@
 use super::*;
-use std::time::Duration;
 use std::sync::atomic::AtomicUsize;
+use std::time::Duration;
 
 static TEST_LOCK: Mutex<()> = Mutex::new(());
 
 struct TrackedResource(Arc<AtomicUsize>, std::thread::ThreadId);
 impl Drop for TrackedResource {
     fn drop(&mut self) {
-        assert_eq!(self.1, std::thread::current().id(), "device disposal must stay on its creating thread");
+        assert_eq!(
+            self.1,
+            std::thread::current().id(),
+            "device disposal must stay on its creating thread"
+        );
         self.0.fetch_add(1, Ordering::SeqCst);
     }
 }
@@ -19,11 +23,13 @@ fn foreground_transition_does_not_wait_for_device_initialization() {
     stop().unwrap();
     let (entered, opening) = mpsc::channel();
     let (release, released) = mpsc::channel();
-    let initializing = std::thread::spawn(move || start_with(16000, move |_| {
-        entered.send(()).unwrap();
-        released.recv().unwrap();
-        Ok(())
-    }));
+    let initializing = std::thread::spawn(move || {
+        start_with(16000, move |_| {
+            entered.send(()).unwrap();
+            released.recv().unwrap();
+            Ok(())
+        })
+    });
     opening.recv_timeout(Duration::from_secs(3)).unwrap();
     let (done, completion) = mpsc::channel();
     let background = std::thread::spawn(move || {
@@ -38,7 +44,10 @@ fn foreground_transition_does_not_wait_for_device_initialization() {
     background.join().unwrap();
     stop().unwrap();
     set_foreground(true).unwrap();
-    assert!(responsive, "a delayed microphone driver must not freeze the native foreground event");
+    assert!(
+        responsive,
+        "a delayed microphone driver must not freeze the native foreground event"
+    );
 }
 
 #[test]
@@ -49,7 +58,14 @@ fn repeated_start_stop_releases_every_owned_resource() {
     let released = Arc::new(AtomicUsize::new(0));
     for cycle in 1..=100 {
         let count = released.clone();
-        assert_eq!(start_with(16000, move |_| Ok(TrackedResource(count, std::thread::current().id()))).unwrap()["active"], true);
+        assert_eq!(
+            start_with(16000, move |_| Ok(TrackedResource(
+                count,
+                std::thread::current().id()
+            )))
+            .unwrap()["active"],
+            true
+        );
         assert_eq!(stop().unwrap()["active"], false);
         assert!(CAPTURE.lock().unwrap().is_none());
         assert_eq!(released.load(Ordering::SeqCst), cycle);
@@ -63,7 +79,10 @@ fn slow_disposal_keeps_its_reservation_without_blocking_foreground() {
     stop().unwrap();
     struct SlowDrop(mpsc::Sender<()>, mpsc::Receiver<()>);
     impl Drop for SlowDrop {
-        fn drop(&mut self) { self.0.send(()).unwrap(); self.1.recv().unwrap(); }
+        fn drop(&mut self) {
+            self.0.send(()).unwrap();
+            self.1.recv().unwrap();
+        }
     }
     let (dropping, disposing) = mpsc::channel();
     let (release, released) = mpsc::channel();
@@ -79,7 +98,10 @@ fn slow_disposal_keeps_its_reservation_without_blocking_foreground() {
     release.send(()).unwrap();
     stopping.join().unwrap().unwrap();
     foreground.join().unwrap();
-    assert!(responsive, "foreground events must not join a device destructor");
+    assert!(
+        responsive,
+        "foreground events must not join a device destructor"
+    );
     assert_eq!(read.unwrap()["active"], false);
     assert_eq!(competing.unwrap_err(), "wake_capture_busy");
     assert!(CAPTURE.lock().unwrap().is_none());
@@ -90,7 +112,10 @@ fn failed_acquisition_releases_the_reservation_for_a_later_start() {
     let _serial = TEST_LOCK.lock().unwrap();
     set_foreground(true).unwrap();
     stop().unwrap();
-    assert_eq!(start_with::<()>(16000, |_| Err("microphone_unavailable".into())).unwrap_err(), "microphone_unavailable");
+    assert_eq!(
+        start_with::<()>(16000, |_| Err("microphone_unavailable".into())).unwrap_err(),
+        "microphone_unavailable"
+    );
     assert!(CAPTURE.lock().unwrap().is_none());
     start_with(16000, |_| Ok(())).unwrap();
     stop().unwrap();

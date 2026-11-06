@@ -30,7 +30,7 @@ Légende : **Web** = codé et prouvé sur Web/Node ; **appareil** = reste à tes
 | 6 Synchro Santé / Health Connect | Node + compilation ; marque à valider, 4 décisions ; appareil | `temp/d18_health/` 17/17 |
 | 7 Assistant désactivé par défaut | Web ; question CarPlay ; appareil | `temp/d18_assistant/` 19/19 |
 | 8 Elastic Design | confié à R-114 (fait) | `temp/r114_tile_norm/` |
-| 9 Préférences visuelles | bloqué (règle 14 ; joint, rapport des textes) | `temp/d18_visual/AUDIT.md` |
+| 9 Préférences visuelles | joint (0–6 px) et rapport des textes (1,1–1,3) FAITS par R-114 le 4 nov. (choix personnel, défauts de la charte ; `temp/r114_tile_norm/visual_settings.probe.mjs`) ; reste bloqué (règle 14) : opacité, flou, rayon, couleurs | `temp/d18_visual/AUDIT.md` |
 | 10 Gestes | B bis Web ; A, B, C bloqués (maquettes) | `temp/d18_gestures/` |
 | 11 HTML embarqué | audit rendu ; nouvelle surface à arbitrer | `temp/d18_audits/HTML_AUDIT.md` |
 | 12 Roadmap et signalements | audit rendu ; place dans l'UI à arbitrer | `temp/d18_audits/FEEDBACK_CHAIN_AUDIT.md` |
@@ -875,3 +875,198 @@ Légende : **Web** = codé et prouvé sur Web/Node ; **appareil** = reste à tes
 
 ### D21. Rafraîchissement des vues — transversal à tout le framework (priorité haute)
 **Constat (utilisateur, 4 nov. 2026) :** beaucoup d'actions ne rafraîchissent pas la vue immédiatement (ex. une alarme supprimée reste affichée) ; il faut fermer/rouvrir le panneau ou l'app. Toute action reçue doit rafraîchir la vue concernée immédiatement. Corriger le mécanisme de manière transversale.
+
+## Ajouts du 5 novembre 2026 (questions une par une, réponses validées ; détail : `todo/REGISTRE_DEMANDES.md` R-115)
+
+### D22. Navigation du bas sur une seule ligne — Fait (Web, 5 nov. 2026)
+- [x] Une seule ligne en bas : `Atome | Saisie | ← | ⌂ | →` ; plus de rangée de flèches au-dessus (`pagerRect` et sa case gardée libre retirés).
+- [x] ← = Précédent + Retour (page d'avant, niveau au-dessus, accueil) ; → = page ou étape suivante, absente quand rien ne suit ; ← toujours à gauche de →, gaucher compris.
+- [x] Avec l'outil Dashboard : `← | ⌂ | →`, sinon `⌂ | ←` — jamais au bord tant qu'une flèche est là ; sans lui les flèches se touchent `← | →`.
+- [x] Une rubrique de premier niveau n'affiche jamais l'outil Dashboard. Premier lancement aligné : l'Atome dans son coin (gauche pour un droitier, droite pour un gaucher), ← → et ✕ dans l'autre coin, sur chaque écran ancré.
+- [x] Tuile Agenda (eVe Pro) : plus de feuilletage latéral des rendez-vous ; glisser à droite l'ouvre comme toute tuile (règle 20).
+- Maquettes validées : `temp/d18_plan/out2/` (sauf 6 et 7, remplacées par `⌂ | ←`).
+- Preuve : `PROBE_PREBUILT_SERVER=1 PROBE_ISOLATED=1 PROBE_SERVER_START_MS=240000 node temp/d18_nav_line/nav_line.probe.mjs right|left|landscape|mic` — 44/44, 31/31, 31/31, 15/15 ; vrai premier lancement `node temp/d18_nav_line/first_launch.probe.mjs both` — 82/82 (rapports `temp/d18_nav_line/out_*/report.json`, `first_launch_out/report.json` ; captures `temp/d18_nav_line/shots_*/`, `first_launch_out/`). Reste : essai sur l'iPad USB (utilisateur).
+
+### D23. Médias : toucher, double toucher, maintien, plein écran, suivant — Fait (Web)
+- [x] Consultation, Exécution, Dashboard : toucher = contrôles affichés / masqués ; double toucher = plein écran (et sortie) ; maintien = menu Mystic toujours.
+- [x] Plein écran : le média seul ; un toucher montre les contrôles et la ✕ (place de Retour) ; sortie par double toucher ou ✕.
+- [x] Glissement latéral en plein écran : doigt vers la gauche = média suivant de la collection, droite = précédent.
+- [x] Photos et sons aussi (son : pochette, sinon forme d'onde).
+- [x] Édition d'un projet inchangée (toucher = sélection, rail pour lire, double toucher = recadrage).
+- Étude des axes : `temp/d18_plan/swipe_axes_study.md` (flux futurs : vertical dans le sujet, latéral = sujet voisin).
+- Codé (5 nov.) : capacité unique `eVe/domains/rendering/tap_or_double.js` (pointeur BevyUI et canevas) ; Dashboard `dashboard_media_scrub.js#handlers` (`onDouble`, `onHold`, `still`), `dashboard_media_sideways.js`, ✕ du plein écran dans la case de Retour (`media_controls_overlay.js#mediaControlsCloseNode`), pastilles « Tous / Mes vidéos / Autres » absentes du plein écran, jeton `mediaControls.ground` ; projet `project_media_gestures.js`, `project_media_fullscreen.js` (l'Atome posé sur un fond noir éphémère, sa place rendue), `project_context_hold.js` (maintien = Mystic hors Édition) ; commandes `films.control controls|hide_controls`, `media_lists.control`, `projects.media`.
+- [x] Suite (5 nov.) : plein écran = le média seul, la marque « V » des profils retirée du cadre du Dashboard tant que dure le plein écran (`dashboard_mystic_runtime.js` `frameNodes`), rendue à la sortie.
+- [x] Suite : prises (liste des prises, Retouche et listes de Créer), prises de l'entraînement et vidéos de la conversation : même ✕ en case de Retour (`media_controls_overlay.js#mediaFullscreenCloseNodes` / `createMediaCloseOverlay`, toutes deux par `mediaControlsCloseNode`) et même glissé latéral sur leur collection (`sidewaysThrough`) ; commande `captures.fullscreen`.
+- [x] Suite : son d'un projet en plein écran : sa pochette quand l'atome en porte une (`poster_source`), sinon sa forme d'onde ; une seule règle de pochette avec le Dashboard (`eVe/domains/media/media_cover.js#mediaSoundCover`).
+- [x] Suite : mode Exécution essayé à part (sonde, partie D).
+- [x] Suite : `media_lists.control` pilote aussi la Médiathèque quand elle est ouverte (`registerMediaLibraryControl`, une seule commande partagée `dashboard_stage_list_media.js#command`).
+- [x] Suite 2 (5 nov.) : la ✕ du plein écran peinte partout. Causes : l'arbre de la ✕ portait l'identifiant de son hôte (`<hôte>_fullscreen_close`), que l'hôte, propriétaire de tous les enregistrements de son préfixe, effaçait à chaque peinture ; et la ✕ posée dans l'arbre de l'hôte restait sous l'image (profondeur de l'outil). Corrigé à la source (`createMediaCloseOverlay({ hostTreeId })`, `mediaControlsToolsLayer()`). Sol noir = jeton `EVE_COMMON_SKIN_TOKENS.mediaGround` pour tout hôte. Une vidéo de conversation finie en plein écran rend le fil. Le son téléversé depuis le Dashboard ne tombe plus sur `play_record_audio_facade_unavailable` (modules audio différés chargés d'abord). Preuves : `media_gestures.probe.mjs` LAEBCD 68/68 (✕ peinte L et E par pixels), `training_takes.probe.mjs` 11/11 (prises d'une séance de Sport : ✕ peinte, glissés, bout immobile, ✕), `conversation_takes.probe.mjs` (deux comptes, deux vidéos : ✕ peinte, glissés, fin de vidéo), `list_share_ui.probe.mjs` S7 (✕ peinte 0,97).
+- Règles 13 et 20 d'AGENTS.md : vérifiées, elles portent le texte de l'utilisateur (l'image d'une vidéo, place nommée de ses contrôles ; doigt vers la gauche = suivant).
+- Preuve : `PROBE_PREBUILT_SERVER=1 PROBE_ISOLATED=1 node temp/d18_media_gestures/media_gestures.probe.mjs` (rapport `temp/probe_reports/d18_media_gestures/report/report.json`, captures `temp/d18_media_gestures/shots/`). Parties L (Médiathèque), A (Dashboard), E (prises), B/C (Consultation, Édition), D (Exécution). Reste : essai sur l'iPad USB (utilisateur) ; une liste eVe ne prend pas d'image (contrat `audio|video`) ; pochette des services de musique et lecteurs TV / en ligne laissés tels quels (consigne).
+
+### D24. Activité › Médicaments — À réaliser
+- [ ] Source BDPM importée chaque mois par un binaire Rust natif, index poussé aux appareils, recherche sur l'appareil.
+- [x] Tuile visible d'emblée après Compléments (eVe Pro et Basic) ; écrans M1–M6 validés (`temp/d18_plan/med_mockups/`). Fait 5 nov. (Web) : `temp/d18_meds/meds.probe.mjs`, `basic.probe.mjs`, `model.probe.mjs`, captures `temp/d18_meds/out/`.
+- [x] Fiche : plusieurs heures, début/fin ou sans fin, si besoin (max par jour), notice, rappel ; prises Prise / Reportée / Oubliée ; historique ; scan DataMatrix. Fait 5 nov. (Web ; scan par un lecteur simulé, DataMatrix iOS compilé seulement).
+- [x] Doses = recommandations (5 nov.) : « Par prise », les heures et « Max/jour » pré-remplis selon la posologie de la référence pour les paramètres connus de la personne (âge, sexe, poids, taille, IMC, grossesse, fonction rénale et hépatique, glycémie, HbA1c, tension, résultats du Carnet ; un paramètre absent reste inconnu, jamais deviné) ; « — » sans posologie connue ; fiche « à valider », sans prise ni rappel, jusqu'à « Valider » (✓) dans la rangée d'outils. Fait (Web, `temp/d18_meds/meds.probe.mjs`, `model.probe.mjs`) ; posologie lue dans la fixture tant que le contrat Rust n'en porte pas.
+- [x] Roller « Max/jour » à côté de « Si besoin » (même brique), pré-rempli par la référence, sinon « — ». Fait (Web).
+- [x] Supprimer : second toucher gardé (validé 5 nov.).
+- [x] (5 nov., R-115) Ajouter ou changer un médicament : sa fiche dit ce que la personne prend et est, sur ses propres lignes, sans élément nouveau : interactions (compléments compris), allergie, antécédent, profil, vie (sport, sommeil, coucher, conduite, soleil, alcool déclarés au profil Santé, sinon « inconnu ») et aliments. Preuve : `temp/d18_cross_check/cross.probe.mjs` 44/44.
+- [x] (5 nov., R-115, règle 21 qui remplace Q70) Le profil Santé (« Ce que eVe doit savoir », alcool compris) et les allergies et intolérances vivent sur le serveur, scellés pour la seule personne (`health_profile_store.js`, type `health_profile`, rien en clair) ; ce que Q70 gardait sur l'appareil y est scellé une fois puis effacé. Un appareil appairé, ou reconnecté après déconnexion, retrouve tout. Preuve : `temp/d18_cross_check/profile_server.probe.mjs` 30/30 (trois navigateurs : appairé, reconnecté, restauré par le code de secours ; coffres, base et trames lus).
+- [x] Carnet : une ligne de DFG en mL/min/1,73m² (aussi mL/min/1.73m2, ml/min/1,73 m²) est lue (lecteur de résultats, unité par surface corporelle) et prise comme DFG. Fait (`temp/d18_meds/lab_reader.probe.mjs`).
+- [x] Allaitement : ligne du profil de santé juste après Grossesse (même brique), lue dans les paramètres de la personne. Fait (Web, `temp/d18_meds/meds.probe.mjs`).
+- [x] eVe Basic : un médicament existant (déclaré, scanné, ou reçu puis validé) fait gagner la tuile Activité, supprimé elle repart. Fait (Web, `temp/d18_meds/basic.probe.mjs`).
+- [x] Pause (suspend prises et rappels), Arrêter (fin aujourd'hui, historique gardé), Supprimer (efface tout après confirmation), pour une liste entière ou un médicament ; arrêt automatique à la date de fin. Fait 5 nov. (Web, coffre serveur lu).
+- [ ] Chiffrement de bout en bout des traitements et prises (clé du compte) ; jamais lus par les IA. Fait 5 nov. pour ce qui est ENVOYÉ : une liste de médicaments, de compléments ou d'atomes (conseils du médecin, papier signé de l'ordonnance compris) part scellée sur l'appareil pour la clé publique de chaque destinataire (`share_keys.js`, `list_share_sealed.js`) ; le serveur ne porte que du chiffré, ni dans ses coffres ni dans le flux temps réel (`temp/d18_meds/share.probe.mjs` 36/36, coffres et trames lus) ; l'aide à la prescription (D27), partagée en direct dans les deux sens, est scellée de même (`temp/d18_rx_aid/rx_aid.probe.mjs` 66/66). Proposition, non demandée : chiffrer au repos les traitements et prises de la personne dans SON coffre. Fait aussi 5 nov. (règle 21) : le profil Santé et les allergies scellés pour la personne seule, sur le serveur ; un appareil appairé ou restauré reçoit désormais les clés de secours du compte (défaut corrigé, il ne les recevait jamais).
+
+### D25. Envoyer une liste à un tiers — transversal à toutes les listes — À réaliser
+- [x] Toute liste (médicaments, compléments, playlists, courses, programmes d'activité, tout atome liste ou protocole) : outil « Envoi » → Publier (carte nom + nombre), aussi par le réseau intégré. Fait 5 nov. hors écrans de santé : playlists (S1b), programmes (maintien d'un programme dans Projets › « Envoi »), modèles de protocole (Modèles › Envoi par `share.send`), courses partagées en direct (`share.send` live) ; un seul moteur `share.*` (`shopping.share` et `template_share` retirés). Écrans Médicaments/Compléments : faits 5 nov. (Envoi, scellé ; `temp/d18_meds/share.probe.mjs`).
+- [x] « + » : Pour moi / Pour un tiers ; une liste pour un tiers reste chez l'auteur (tuile « Marie (3) »), hors Dashboard et Agenda. Fait 5 nov. (Web, écrans Médicaments/Compléments, aucune occurrence d'Agenda ; `share.probe.mjs`).
+- [x] (5 nov.) Liste de santé chiffrée de bout en bout : clé publique par compte, scellée pour chaque destinataire ; destinataire sans clé = partage en attente, invitation existante, scellée et envoyée dès sa clé publiée ; le sceau porte le papier signé de l'ordonnance et les enfants d'une liste d'atomes (conseils `food_advice_tip`). Fait (Web ; `share.probe.mjs` 32/32, `temp/d18_ordonnance/ordonnance.probe.mjs` 57/57, `temp/d18_food/food.probe.mjs`).
+- [x] Le destinataire valide (Valider / Refuser, mots repris sur toutes les cartes de partage) ; liste liée : chaque version marquée à valider, Détacher garde une copie ; programmes partageables (plan seul). Fait 5 nov. (Web) : `temp/d18_list_share/list_share_ui.probe.mjs` 43/43, `server_lists.probe.mjs` 25/25, captures `temp/d18_list_share/out/s5`, `s6`.
+- [x] Brouillon IA depuis une ordonnance (photo en vignette), à valider ; l'IA ne lit jamais le traitement. Fait 5 nov. (Web) : vignette 4:3 sous les mots d'eVe, touchée = le plein écran média de D23 (photo seule sur tout l'écran, un toucher montre la ✕ dans la case de Retour, ✕ ou double toucher = retour) ; `list_share_ui.probe.mjs` (S7, captures `s7_*`, `s7b`, `s7c`). La ✕ de `createMediaCloseOverlay` est peinte depuis la suite 2 de D23 (S7 : 0,97 des pixels de sa case changent au toucher).
+- [x] Une famille de commandes `share.*` (MCP/voix). Maquettes validées : `temp/d18_plan/share_mockups/out/`. Audit : `temp/d18_plan/list_share_audit.md`. Fait 5 nov. : `eVe/domains/sharing/list_share_commands.js` (send, view, accept, refuse, detach, revoke, sent, announce, list_create, draft), registre reconstruit.
+- Branché 5 nov. (fin) : les écrans de santé appellent les crochets ci-dessous. Historique : Codé 5 nov., à brancher : Envoi sur les listes de la Médiathèque (S1b/S2 prouvé) ; les écrans Médicaments/Compléments appellent les crochets de `eVe/domains/sharing/list_share_health.js` (Envoi `openListSend({ list_kind })`, « + » `openNewList`, tuiles « Marie (n) » `thirdPartyListTiles`, hors Dashboard/Agenda `keptForOthers`/`isKeptForOther`, nouvelle version `announceProductChange`) — panneau S3 et tuiles S4 prouvés, branchement aux écrans de santé non fait (fichiers de la session Médicaments) ; outil Envoi d'un programme posé (5 nov.) ; vignette S7 faite (5 nov.) ; Publier : fiche du carnet et compte du même numéro = une seule personne (5 nov.).
+
+### D26. Ordonnance dictée — FAIT 5 nov. (Web de bout en bout ; impression native compilée, jamais lancée sur appareil)
+- [x] « + » Pour un tiers, puis l'outil « Rédiger » de la liste (O1) : dictée (outil « Dicter » de la bande, micro allumé, lignes en direct) → lecture BDPM + IA qui corrige → lignes « à valider » pré-remplies par la posologie → Valider ; aussi saisie tapée, photo lue par l'IA, Ajouter (fiche médicament), et l'assistant (`ordonnance.new` « Fais une ordonnance pour Marie »). Fait 5 nov. (Web).
+- [x] Document A4 (O4) : identité du praticien (profil professionnel, sinon fiche de base), demandée sur l'ordonnance quand elle manque et écrite dans la fiche ; patient, âge, « Lyon, le … », lignes, conseils. Réglages › Ma fiche › Profil › « Ordonnances » (O6) : la même identité, et les ordonnances reçues. Fait 5 nov. (Web).
+- [x] Signature au doigt (O5, pinceau, gomme, Valider) ; Exporter (PDF A4). Fait 5 nov. (Web).
+- [x] Imprimer partout (5 nov.) : une brique `file_export.js#printExportFile` (la page A4 en JPEG) ; Web = impression du navigateur ; iOS = `export_file_print` du pont natif existant (`NativePersonalImport.swift`, `UIPrintInteractionController`, iPad en popover) ; Tauri = commande `export_file_print` (`native_file_export.rs` : fenêtre de la page seule, `print()` de la webview sur macOS, `window.print()` ailleurs ; Android : `export_print_unavailable`). Annulé par la personne = pas une erreur ; hôte sans impression (AUv3, Android) = `ordonnance_print_unavailable`. Preuve : pont factice dans la sonde (appel, JPEG A4, imprimé / annulé / indisponible) ; Swift `swiftc -typecheck` propre sur les 3 fichiers ; `cargo clippy -p squirrel --all-targets` sans avertissement first-party. Jamais lancé sur appareil (test de l'utilisateur).
+- [x] Envoi : outil Envoi → Publier (`openListSend`), et `ordonnance.send` vers le compte du patient ; le patient la valide, ses lignes deviennent ses médicaments et son papier signé (scellé par la session Médicaments) est son ordonnance reçue. Fait 5 nov. (Web, de bout en bout).
+- [x] Conseils alimentaires du médecin (5 nov., décision du coordinateur, même motif) : une phrase « Conseil : … » dictée ou tapée devient une ligne « Conseil » (même brique de ligne), un `food_advice_tip` (D28) sous la liste, signé de son nom, ses aliments lus par la base de règles ; touchée deux fois, elle est retirée ; imprimée sous les médicaments, figée à la signature, et sur le papier du patient. Fait (Web).
+- [x] Le conseil appliqué chez le patient : validée, la liste lui donne le conseil, et sa fiche d'aliment montre « Conseil · Dr Claire Martin » (sceau des enfants par la session Médicaments). Fait 5 nov. (Web, sonde).
+- [x] Une famille MCP/voix `ordonnance.*` (16 commandes, dont `tip_remove` ; seuls `open` et `new` ouverts à l'assistant et au MCP, le reste = la personne dans l'app).
+- Preuve : `PROBE_PREBUILT_SERVER=1 node temp/d18_ordonnance/ordonnance.probe.mjs` → 57/57 (`temp/d18_ordonnance/run14.log`), `node temp/d18_ordonnance/unit.mjs` → 16/16 ; captures `temp/d18_ordonnance/out/`.
+- Maquettes O1–O6 validées : `temp/d18_plan/ordonnance_mockups/out/` ; identité lue dans la fiche du praticien (profil professionnel, sinon de base), sinon saisie sur l'ordonnance qui remplit la fiche.
+
+### Points validés le 5 novembre sur des lots déjà codés
+- [x] D13 : icônes = SVG d'eVe dans le catalogue du widget (fait 5 nov., appex compilé) ; « 0:42 », toucher → séance, rien pendant le 3-2-1 gardés.
+- [ ] Tuile Agenda d'eVe Pro : plus de défilement latéral (règle à un axe).
+- [x] Admin partout : serveurs locaux iOS/Tauri relaient les trames d'admin vers atome.one. Codé 5 nov. (`account-roles`, `feature-request-admin`, `share` avec le jeton distant du compte ; `public_relay.rs` clippy propre, `FastifySyncPublicRelay.swift` analysé) ; jamais lancé sur appareil.
+- Groupe de contacts (grille depuis le bas), Roadmap, motif de refus, aperçu de page (site nommé, Autoriser, Réseau des pages, « Lancer ») : gardés tels que codés.
+
+### D27. Aide à la prescription — FAIT (5 nov. 2026, Web ; `PROBE_PREBUILT_SERVER=1 node temp/d18_rx_aid/rx_aid.probe.mjs` 56/56 ; restes nommés dans R-115)
+- [x] Symptômes (patient ou médecin, voix ou texte) → pré-diagnostic, traitement suggéré et pré-ordonnance par l'assistant ; le patient les voit aussi, « à valider par le médecin », et les envoie à un médecin de ses contacts, qui valide, corrige ou refuse. (Écrans `prescription_aid_screens.js`, famille `prescription_aid.*` ; l'outil « Sympt. » de la bande Médicaments est une jointure laissée à son propriétaire, R-115.)
+- [x] Contrôles par règles sur l'appareil (Thésaurus ANSM + RCP §4.3/4.4/4.5 importés par le binaire Rust avec la BDPM) : médicament–médicament, médicament–aliment (liste de courses, repas des objectifs), allergies et antécédents du Carnet. (`prescription_aid_rules.js` ; aliments : `prescription_aid.food_flags`, la liste et les repas les lisent par D28 dès la liste reçue ; antécédents montrés au médecin, pas encore règle.)
+- [x] Ligne en cause marquée (raison, source), alternative ou écart d'horaire proposé ; une contre-indication bloque Valider tant que le médecin ne l'a ni changée ni confirmée ; l'aliment à éviter signalé sur la liste de courses et les repas.
+- [x] Horaires de prise optimisés (RCP, repas, sommeil), proposés et ajustables dans les marges des règles. (La journée est lue : programme Sommeil, repas tenus ; un fait absent est montré inconnu et l'heure suit alors les espacements.)
+- [x] L'assistant ne reçoit symptômes et éléments du carnet que le temps d'une demande lancée par la personne.
+- Maquettes P1–P5 : `temp/d18_plan/prescription_aid_mockups/out/` (à valider).
+- Maquettes P1–P5 validées ; lever un blocage : toucher la ligne → Remplacer ou Confirmer. Captures du rendu : `temp/d18_rx_aid/out/`.
+- [x] (5 nov.) Restes fermés : « Sympt. » dans Médicaments, aliments par D28 (pré-ordonnance validée = traitement), journée lue, aides reçues dans Profil › Ordonnances, antécédents × RCP 4.3/4.4, ligne bloquée amenée en vue (`run23.log` 66/66). Reste le sceau du partage (agent médicaments).
+
+### D28. Conseils alimentaires selon la santé — transverse — FAIT (5 nov. 2026, Web ; reste l'écran de saisie du médecin, sans maquette — R-115)
+- [x] Base de règles sourcée dans eVe (HAS, ANSES/PNNS, FFD…) par pathologie et allergie : aliments déconseillés (raison, source), conseils de cuisson et de préparation, idées reçues corrigées ; appliquée par règles, expliquée par l'assistant.
+- [x] D'office dès qu'une pathologie ou une allergie est au Carnet ; le médecin peut ajouter, retirer, nuancer par une liste envoyée (validée par le patient), ses ajouts portent son nom. (Commandes, envoi par share.send/accept et application faits ; l'écran de saisie du médecin attend sa maquette — R-115.)
+- [x] Partout où il y a un aliment : verdict du scanner, liste de courses, repas et recettes des objectifs, assistant (food_advice.rules). Fiche de médicament/complément : interactions et espacements (food_advice.products), même rangée, Pourquoi/Source au toucher.
+- Maquettes F1–F4 validées : `temp/d18_plan/food_advice_mockups/out/` ; le verdict principal suit la santé de la personne.
+
+### D29. Compléments alimentaires — parité avec les Médicaments — À réaliser
+- [x] Parité D24 (fiche, heures, si besoin, début/fin, Pause/Arrêter/Supprimer, historique, rappels) : mêmes briques, fait 5 nov. (Web, `temp/d18_meds/meds.probe.mjs`).
+- [x] Exactement la même chose que D24–D27 : partage de liste, interactions (règles enrichies de la nutrivigilance ANSES et des ingrédients Compl'Alim), optimisation des horaires, selon la pathologie ou l'objectif. (D28 : interactions aliment, médicament et pathologie, espacements en heures, mêmes lignes qu'un médicament — `temp/d18_food/food.probe.mjs` 51/51.)
+- [x] (5 nov.) Préconisations, interactions, posologies et conseils tiennent compte des allergies, intolérances, interactions, espacements et de TOUS les paramètres physiologiques et biologiques de la personne (âge, poids, taille/IMC, sexe, grossesse/allaitement, fonction rénale et hépatique, glycémie/HbA1c, tension, biologie du Carnet) — D24, D27, D28, D29.
+  - FAIT 5 nov. (recoupement R-115) : un lecteur pour tout, `readFoodAdviceContext`. La fiche médicament ou complément, l'ordonnance (lignes vérifiées contre le Carnet du patient), l'aide à la prescription et les fiches d'aliment croisent les compléments × médicaments (règle ANSES lue dans les deux sens), les compléments entre eux, les allergies, les antécédents, le profil (RCP 4.3/4.4/4.6), grossesse et allaitement, les aliments achetés ou mangés, le sport et le sommeil (RCP 4.2–4.8). Conduite, soleil et alcool se déclarent dans Préférences › Santé (« Je conduis », « Exposition au soleil », « Alcool » en verres par semaine sur le rouleau) ; jamais déclarés, ils restent « inconnu », jamais supposés. Preuve : `temp/d18_cross_check/cross.probe.mjs` 44/44, `rx_aid.probe.mjs` 68/68, matrice `temp/d18_cross_check/matrix.md`.
+  - D27 (5 nov.) : la pré-ordonnance lit tous ces paramètres (`readPersonParameters` → profil du contrat, critères RCP 4.3/4.4, posologie) ; un paramètre absent est montré « inconnu », jamais deviné ; compléments contrôlés comme les médicaments (thésaurus + règles ANSES). Ligne gardée ouverte pour D24/D28/D29.
+- [ ] (5 nov.) eVe Basic : un médicament (déclaré, scanné ou reçu puis validé) fait gagner la tuile Activité.
+
+### D30. Activités — le disque orange met en pause — FAIT (5 nov. 2026, Web)
+- [x] Pendant une séance (ex. les pompes), toucher le disque orange = pause, un nouveau toucher reprend ; plus jamais la phase suivante au toucher.
+- [x] Outils du bas pendant la séance : « Suivant » (phase suivante) et « Stop ». Toutes les activités au disque orange.
+  Preuve : `PROBE_PREBUILT_SERVER=1 node temp/d18_disc_pause/disc_pause.probe.mjs` → 37/37 (pompes, chaise au mur, sieste ; Live Activity
+  `paused`, minuteur figé, aucun bip placé en pause ; MCP `training.card_action` pause / resume / next / stop), captures `temp/d18_disc_pause/out/`.
+  En pause le disque garde son chiffre, son mot devient « En pause » ; « Filmer » reste entre Suivant et Stop. Reste : la montre (son disque
+  envoie toujours `done`, Swift non touché).
+- [x] D30 montre (5 nov.) : le disque de la montre met en pause et reprend (`act("pause")`), et l'outil de la page Contrôles est « Suivant » (`act("next")`, libellé `forward` donné par `dashboard_ongoing_entry.js`). `WatchCardScreen.swift`, `WatchLinkModel.swift`. Le Swift passe `swiftc -parse`. Pas encore lancé sur une montre : c'est le test de l'utilisateur.
+
+### D31. Activités — se filmer : choix de la caméra, et blocage après l'arrêt — À corriger
+Demande de l'utilisateur (5 nov.) : « on peut pas changer de caméra… on clique sur filmer, il faut qu'il propose caméra frontale, choisir la caméra » ; « une fois que c'est filmé, j'arrête, tout est bloqué, je peux pas fermer la fenêtre, j'ai plus qu'à envoyer… ça plante » (peut-être une ancienne version).
+- [x] Pendant une séance filmée, l'outil « Caméra » de la bande passe à la caméra suivante (frontale ↔ arrière, ou entrée vidéo suivante). C'est le même outil que la capture du Dashboard (`ui.capture.camera_switch`, `camera_source.js#nextCameraSource`) : même motif, donc pas de maquette. Il n'apparaît que s'il y a plus d'une caméra.
+  FAIT (5 nov., Web) : bande Suivant · Caméra · Filmer · Stop ; comme la capture, la prise vidéo en cours est gardée (liée à la séance) et
+  la suivante démarre sur l'autre caméra ; MCP `training.card_action camera`. Preuve : `PROBE_PREBUILT_SERVER=1 node temp/d18_disc_pause/film_camera.probe.mjs`
+  → 37/37 (deux fausses caméras Chromium), captures `temp/d18_disc_pause/out_film/`.
+- [x] Après l'arrêt d'une prise filmée, rien ne reste bloqué : on peut fermer, revenir et reprendre. Reproduire sur Web, trouver la cause et la corriger.
+  FAIT (5 nov., Web). Cause trouvée : la séance d'une carte (`dashboard_training_session.js#record`, Sport et séances-briques) REFUSAIT
+  tout geste touché pendant qu'une autre écriture de la séance était en cours (le départ, une pause, une fin de pas) : le Stop était perdu
+  sans rien dire, la séance restait « en cours », sans résumé ni sortie — intermittent sur Web, d'autant plus probable que l'écriture est
+  lente (iPad). Correction : une écriture à la fois, dans l'ordre des touchers ; un geste touché pendant une écriture attend sa fin et part
+  sur la nouvelle révision ; un geste dont le pas est déjà fini (double Suivant) ou dont la séance est finie n'écrit rien. La piste
+  « Mystic resté hébergé après Back » : c'est le comportement voulu — Back (« Passer », `card_action back`) ramène la carte à son
+  départ, toujours ouverte ; son ✕ la ferme et l'accueil répond. Preuves : `PROBE_PREBUILT_SERVER=1 node temp/d18_disc_pause/move_in_flight.probe.mjs`
+  → 4/4 (avant correction 2/4 : Stop perdu) ; `temp/d18_disc_pause/back_freeze.probe.mjs` → 82/82 deux fois (Pompes et Sieste, ouvertes
+  depuis leur plate et depuis Récent, filmées pour Pompes, Stop, puis « Passer » ou `card_action back`, ✕, toucher sur l'accueil qui rouvre
+  la carte ; captures `temp/d18_disc_pause/out_back/`) ; avant correction, une exécution sur trois perdait le Stop de la Sieste.
+
+### D32. Activité — une tuile « Récent » — FAIT (5 nov. 2026, Web)
+Demande de l'utilisateur (5 nov.) : « il faudra rajouter aussi récent. On clique dessus, on aura… les plus récentes… Pas la peine d'en mettre des tonnes. Mais tu peux remplir les cases avec les dernières activités récentes, ça permet de reprendre… où on en était. »
+- [x] Une plate « Récent » dans la rubrique Activité (eVe Pro et eVe Basic), à côté de Médicaments. C'est le même motif qu'une plate de rubrique, donc pas de maquette.
+- [x] Touchée, elle ouvre un niveau de tuiles qui ne remplit que les cases libres d'une page avec les activités les plus récentes, la plus récente en premier : séances, cartes, programmes, sans doublon. Une seule page, jamais de pagination.
+- [x] Toucher une tuile reprend l'activité où on en était (la séance en cours ou en pause, sinon sa carte au point laissé).
+- [x] La plate n'apparaît pas tant qu'aucune activité n'a été faite.
+  Preuve : `PROBE_PREBUILT_SERVER=1 node temp/d18_recent/recent.probe.mjs` → 31/31 (compte neuf sans plate ; 18 activités, Pro et Basic ;
+  une page pleine, la plus récente en premier, sans doublon, jamais de page suivante ; Pompes en pause reprises sur leur carte vivante à la
+  même phase ; Méditation en pause sans carte reprise par sa carte ; Chaise au mur rouverte au niveau 2 laissé ; MCP `dashboard.activity.recent`
+  et `dashboard.activity.resume`), captures `temp/d18_recent/out/`. Choix consignés dans R-115 (D32).
+
+### D33. Activité terminée — un pouce levé et trois bips — Validé (5 nov.) : C + bips à chaque série
+Demande de l'utilisateur (5 nov.), en deux temps :
+- d'abord un gros pouce à la place du disque, « avec peut-être des points à récolter… pour encourager les gens » ;
+- puis, précisé : « peut-être sur le panneau terminé, en face de terminé, tu mets un pouce, peut-être pas aussi énorme… et peut-être mettre un petit son… trois petits sons… très rapide. Pour signaler la fin de la série ».
+Maquettes : `temp/d18_plan/done_mockups/out/` (a pouce blanc, b pouce orange, c pouce orange + ligne Points), sur l'écran « Terminé » réel.
+- [x] Le pouce à côté de « Terminé » (variante choisie par l'utilisateur), seulement pour une activité menée à son terme, jamais pour « Arrêté ».
+- [x] Trois bips courts et rapides à la fin de CHAQUE série (réponse de l'utilisateur), par le moteur de bips de D7, avec le même réglage de son.
+- [x] Variante C validée : pouce orange + ligne « Points ». Points : un nombre naturel (règle 19), cumulé dans le compte (règle 21).
+  FAIT (5 nov., Web) : `PROBE_PREBUILT_SERVER=1 node temp/d18_disc_pause/done_points.probe.mjs` → 18/18 (3 bips par série, aucun en fin de
+  repos ; pouce et Points sur Terminé, rien sur Arrêté ; total relu du profil après rechargement). Règle des points dans R-115.
+
+### D34. Rouleaux — le glisser fait défiler le panneau au lieu du rouleau — FAIT (Web, 5 nov.)
+Demande de l'utilisateur (5 nov.) : « des séries, on a des espèces de rouleaux… quand on clique, ça entraîne le panneau complet. Ça doit pas… quand on est sur un rouleau, automatiquement, ça le déroule. Et sur le panneau, ça scrolle, mais que ça scrolle pas le panneau quand on est sur le rouleau. »
+- [x] Un glisser qui commence sur un rouleau fait tourner ce rouleau seul, sans jamais faire défiler le panneau qui le contient. Cela vaut pour tous les rouleaux : Séries, Rép., Repos, Charge, Max/jour, heures, dates.
+- [x] Un glisser qui commence ailleurs dans le panneau le fait défiler, comme aujourd'hui.
+- Cause : la fenêtre du rouleau était inerte, son champ de valeur large de son seul texte ; un appui à côté tombait sur la
+  zone de défilement. Correction : la fenêtre porte le glisser (`bevy_panel_numeric_field.js#numericRollerFieldNode`,
+  `pointer_capture`). Preuve : `temp/d18_rollers/rollers.probe.mjs` 72/72 (avant : 41/71). Fiche
+  `known-bug-solutions/roller-drag-scrolls-panel/`.
+
+### D35. L'assistante ne dit jamais qu'elle est prête — FAIT (Web, 5 nov.)
+Demande de l'utilisateur (5 nov.) : à l'arrivée elle dit « Attends, je prépare tes documents », puis « Salut », jamais qu'elle est prête ; il doit demander « tu es là ? ».
+- [x] Chaque fois qu'elle peut écouter (arrivée eVe Pro, ouverture au toucher, rappel avec contexte, session locale hors ligne), elle dit une phrase prête, avant toute parole du modèle ; le modèle n'est jamais invité à parler le premier à une arrivée simple.
+- [x] Si on lui a parlé avant (`heard`), elle répond à cela ; sa propre phrase et le bruit ne comptent plus comme parole.
+- [x] Une phrase prête impossible à dire devient une erreur visible de la session.
+- Cause et correction : `known-bug-solutions/assistant-ready-sentence-missing/`. Preuve : `temp/d18_assistant_ready/ready_sentence.probe.mjs` 9/9 (avant : 4/9).
+- [ ] Appareil (utilisateur) : sur l'iPad USB, la phrase prête s'entend à l'arrivée (route audio iOS quand le micro s'ouvre).
+
+### Défauts connus du 5 novembre (session D18, Web) — détail : `todo/REGISTRE_DEMANDES.md` R-115
+- [x] 1 Accueil couché : plus de défilement ni de curseur ; le cadre de l'accueil est un panneau découpé (`temp/d18_defects/landscape_scroll.probe.mjs` 33/33).
+- [x] 2 Vignette de projet : la capture lit le média sur l'origine de l'app, plus sur 127.0.0.1:3000 (`temp/d18_defects/capture.probe.mjs`).
+- [x] 3 Course Basic/Pro : reproduite (appareil sans copie du profil, lecture lente → Pro puis Basic) ; l'accueil n'est plus présenté que sur un style connu, sans délai ni niveau par défaut ; style absent = erreur explicite (`temp/d18_defects/basic_slow_profile.probe.mjs` 17/17 : rechargements, déconnexion → connexion même compte, autre compte Pro, retour depuis un projet ; captures `shots_basic_slow_profile/`). Reste : appareils (utilisateur).
+- [x] 4 Couleurs lues en direct (rail d'imbrication, sol et film des panneaux, badge, marque des profils, Carnet) (`temp/d18_defects/live_colours.probe.mjs` 8/8) ; Live Activity confiée à la session Sport.
+- [x] 5 Capture sur un compte neuf : un projet est créé pour les prises, plus de `dashboard_capture_project_missing` (`temp/d18_defects/capture.probe.mjs`).
+- [x] 6 Caméra : plus aucune requête `stream://` (`temp/d18_defects/capture.probe.mjs` 10/10).
+- [x] 7 Le rail contextuel ne couvre plus la fin de la timeline (`temp/d18_defects/rail_timeline.probe.mjs` 6/6).
+- [x] 8 Tests périmés après D22 : aucun test ne cite les noms retirés ; rien à changer.
+
+### D36. Tout ce qu'on crée doit pouvoir s'effacer — À corriger, transverse
+Demande de l'utilisateur (5 nov.) : « si je crée un complément, si je fais un clic long dessus, je peux pas le supprimer. Ça doit être transverse… tous les items que l'on peut créer… Dès qu'on crée quelque chose, on puisse l'effacer. Et ensuite, tu vas challenger. »
+- [x] Inventaire de tout ce qu'une personne peut créer (Dashboard et projet) : compléments, médicaments, listes, playlists, programmes, objectifs, alarmes, contacts, prises, dessins, modèles, ordonnances, profils de vie, projets…
+  FAIT (5 nov., Web) : `temp/d18_delete/inventory.md`. 23 lignes. Les objets faits par le système sont nommés à part. Avant (code d'avant D36, vrais appuis longs) : 3 objets déjà OK et le texte de Créer par son bandeau ; 14 manques prouvés.
+- [x] Chacun : l'appui long sur sa tuile ou sa ligne propose « Supprimer », au second toucher, comme partout. L'effacement passe par le pipeline canonique (corbeille si elle existe) et se fait aussi par commande vocale.
+  FAIT (5 nov., Web) : `temp/d18_delete/d36/hold_delete.probe.mjs`, 17/17 objets sondés. Chacun : appui long réel, 1er toucher qui arme seulement, 2e qui efface, absent de l'écran, de la commande et du coffre, absent après rechargement. MCP : 13 OK, 4 familles de santé refusées par conception. Pas de corbeille dans le code : l'effacement canonique est `kind: 'delete'`. Reste noté dans R-115 : le média importé de la Médiathèque (copies de l'appareil en Rust/Swift) et l'objectif, corrigé mais non sondé sur le canevas.
+  FAIT les restes (5 nov., Web) : média de la Médiathèque effacé de bout en bout (écran, commande, coffre, octets du serveur, magasin du navigateur, rechargement, 2e session ; Tauri et iOS compilés, non lancés), `media_import.delete` ; Loisirs (appui long réel : Favori) ; objectif sondé sur eVe Basic (2 touchers, MCP) ; chaîne d'effets et effet enregistré sondés. Détail dans R-115.
+- [x] Une revue adverse de l'inventaire et des preuves (« challenger »).
+  Revue faite : `temp/d18_delete/challenge/report.md` (19 constats). FAIT (5 nov., Web) les constats 2–6, 9–13, 15–18 : une seule confirmation (l'état armé partagé de `bevy_ui_tools_band.js`, désarmé par tout toucher ailleurs), plus rien ne s'efface au 1er toucher, annonces et ventes vraiment effacées, machines effacées, séries gardées en Atomes propres (un écrit périmé ne les fait plus revenir), `calendar.delete_event` refuse un id inconnu. Détail et choix : R-115. Restent à l'autre agent : constats 1, 7, 8, 14, 19.
+  FAIT (5 nov., Web) les constats 1, 7, 8, 14, 19.
+  - Un projet effacé emporte son contenu.
+  - Préréglages, livres, disciplines, pratiques, prises, ressenti, résultats de laboratoire, photos Beauté et imports
+    Strava s'effacent, par commande et par appui long. Le ressenti et les résultats sont refusés à MCP.
+  - Soins et séjour Thalasso, courrier du site, forums et messages de forum ont leur appui long (« Quitter » pour un
+    membre). Un forum est une tuile.
+  - Une liste faite pour soi est une tuile.
+  - Une liste partagée effacée est retirée chez son destinataire, en direct.
+  Sondes : `temp/d18_delete/d36b/items.probe.mjs` 24/24 et `lists_forums.probe.mjs` 14/14 (deux comptes).
+  Corrigés ensuite, avec preuve : la tuile quittée suit aussitôt ; un retrait manqué hors ligne est rattrapé à la
+  reconnexion ; l'appui long d'un outil du niveau de la rangée la plus basse s'ancre sur l'outil
+  (`anchor.probe.mjs` 3/3, `lists_forums.probe.mjs` 16/16).
+  FAIT (6 nov., Web, maquettes A validées) : les scripts d'un texte dans Créer › Texte › Calc › « Scripts », les activités
+  Strava dans Sport › Journal, chacun effacé par son appui long (`script.remove`, `strava.remove_import`).
+  Sonde `temp/d18_lists_mockup/proof.probe.mjs` 26/26. Détail dans R-115.

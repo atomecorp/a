@@ -110,7 +110,7 @@ reconnection loop itself was not exercised on the device.
 ## Regression checks
 
 - `npx vitest run tests/eve/sync_engine.test.mjs` (burst persistence test).
-- `node --test tests/server/ws_sync_runtime.test.mjs`.
+- `cargo test -p atome-vault -p atome-server --test ws_sync` (the Rust runtime, `tests/atome_server/ws_sync.rs`).
 - `node temp/dashboard_heat_2026-10-13/sync_engine_storm.probe.mjs [srcRoot]`.
 - `node --test tests/server/ws_sync_stream_heads.test.mjs` (real vault workers).
 - `node --test tests/probes/ios_sync_batch_subscribe.probe.mjs` (compiled native client).

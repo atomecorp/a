@@ -32,7 +32,15 @@ pub struct ActionQueue {
 impl ActionQueue {
     pub fn new(capacity: usize) -> Self {
         let slots = || (0..capacity.max(1)).map(|_| AtomicU64::new(0)).collect();
-        Self { heads: slots(), frames: slots(), tails: slots(), written: AtomicUsize::new(0), read: AtomicUsize::new(0), dropped: AtomicUsize::new(0), starved: AtomicUsize::new(0) }
+        Self {
+            heads: slots(),
+            frames: slots(),
+            tails: slots(),
+            written: AtomicUsize::new(0),
+            read: AtomicUsize::new(0),
+            dropped: AtomicUsize::new(0),
+            starved: AtomicUsize::new(0),
+        }
     }
 
     fn capacity(&self) -> usize {
@@ -47,10 +55,17 @@ impl ActionQueue {
             return;
         }
         let slot = written % self.capacity();
-        self.heads[slot].store((u64::from(fired.marker) << 32) | u64::from(fired.count), Ordering::Relaxed);
+        self.heads[slot].store(
+            (u64::from(fired.marker) << 32) | u64::from(fired.count),
+            Ordering::Relaxed,
+        );
         self.frames[slot].store(fired.frame, Ordering::Relaxed);
-        self.tails[slot].store((u64::from(fired.generation) << 8) | u64::from(fired.note), Ordering::Relaxed);
-        self.written.store(written.wrapping_add(1), Ordering::Release);
+        self.tails[slot].store(
+            (u64::from(fired.generation) << 8) | u64::from(fired.note),
+            Ordering::Relaxed,
+        );
+        self.written
+            .store(written.wrapping_add(1), Ordering::Release);
     }
 
     // Control thread only: every firing reported so far, oldest first.

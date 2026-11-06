@@ -72,8 +72,8 @@ export const beginShapedSlider = (session, origin) => ({ ...session, origin: { x
 // release closes a slider it opened), the shape is decided once, then the value follows.
 // `metrics.lengthPx`: the bar's and the column's travel for the whole range; `metrics.barSign` /
 // `metrics.columnSign`: -1 where the bar grows leftwards or the column downwards (a host's inside);
-// `metrics.provisional`: the shape shown before the gesture decided one; `metrics.natural`: natural values hold the finger a
-// little along the bar and the column (tool_slider_drag.js#travelledSliderValue).
+// `metrics.provisional`: the shape shown before the gesture decided one. Natural values hold the finger a little along the
+// bar and the column (tool_slider_drag.js#travelledSliderValue); the dial turns evenly.
 export const dragShapedSlider = (session, delta, config = {}, metrics = {}, allowed = TOOL_SLIDER_SHAPES) => {
     const previous = session.path.at(-1) || session.origin;
     const point = { x: previous.x + finite(delta?.x), y: previous.y + finite(delta?.y) };
@@ -96,5 +96,5 @@ export const dragShapedSlider = (session, delta, config = {}, metrics = {}, allo
         return settled({ centre, turn, value: quantize(start + (turn * 180 / Math.PI / DIAL_RANGE_DEGREES) * range, config) });
     }
     const travel = shape === 'bar' ? (point.x - session.origin.x) * (metrics.barSign ?? 1) : (session.origin.y - point.y) * (metrics.columnSign ?? 1);
-    return settled({ value: travelledSliderValue(start, travel, length, config, metrics.natural === true) });
+    return settled({ value: travelledSliderValue(start, travel, length, config) });
 };

@@ -11,7 +11,7 @@
 use crate::dsp::AtomicParam;
 use crate::graph::MAX_BLOCK;
 use crate::instrument_actions::{ActionBook, DrainedActions};
-use crate::instrument_spec::{build_sampler, InstrumentSpec};
+use crate::instrument_spec::{InstrumentSpec, build_sampler};
 use atome_dsp::Processor;
 use atome_instrument::sampler::PARAMS;
 use atome_instrument::{EventKind, NoteEvent, SampleData, Sampler};
@@ -39,12 +39,18 @@ fn unpack(word: u64) -> Option<EventKind> {
     let note = ((word >> 32) & 0xff) as u8;
     let value = f32::from_bits(word as u32);
     match word >> 40 {
-        1 => Some(EventKind::NoteOn { note, velocity: value }),
+        1 => Some(EventKind::NoteOn {
+            note,
+            velocity: value,
+        }),
         2 => Some(EventKind::NoteOff { note }),
         3 => Some(EventKind::Sustain { down: value > 0.5 }),
         4 => Some(EventKind::PitchBend { semitones: value }),
         5 => Some(EventKind::AllNotesOff),
-        6 => Some(EventKind::Controller { number: note, value }),
+        6 => Some(EventKind::Controller {
+            number: note,
+            value,
+        }),
         _ => None,
     }
 }
@@ -75,7 +81,8 @@ impl EventRing {
         let slot = written % RING_EVENTS;
         self.words[slot].store(pack(kind), Ordering::Relaxed);
         self.frames[slot].store(frame, Ordering::Relaxed);
-        self.written.store(written.wrapping_add(1), Ordering::Release);
+        self.written
+            .store(written.wrapping_add(1), Ordering::Release);
         Ok(())
     }
 
@@ -90,7 +97,10 @@ impl EventRing {
                 break;
             }
             if let Some(kind) = unpack(self.words[slot].load(Ordering::Relaxed)) {
-                sampler.schedule(NoteEvent { offset: frame.saturating_sub(from) as u32, kind });
+                sampler.schedule(NoteEvent {
+                    offset: frame.saturating_sub(from) as u32,
+                    kind,
+                });
             }
             read = read.wrapping_add(1);
         }
@@ -114,6 +124,12 @@ pub struct InstrumentSlot {
     rendered: AtomicU64,
     pending: Mutex<Option<Box<Playing>>>,
     active: Mutex<Option<Box<Playing>>>,
+    // Boxes, not values: the render thread hands a retired player over by its
+    // pointer and never frees it; its memory is released off the audio thread.
+    #[allow(
+        clippy::vec_box,
+        reason = "real-time hand-over: no move, no free on the audio thread"
+    )]
     retired: Mutex<Vec<Box<Playing>>>,
 }
 
@@ -122,7 +138,10 @@ impl InstrumentSlot {
         Arc::new(Self {
             now: EventRing::new(),
             dated: EventRing::new(),
-            params: PARAMS.iter().map(|param| AtomicParam::new(param.default)).collect(),
+            params: PARAMS
+                .iter()
+                .map(|param| AtomicParam::new(param.default))
+                .collect(),
             rendered: AtomicU64::new(0),
             pending: Mutex::new(None),
             active: Mutex::new(None),
@@ -130,7 +149,12 @@ impl InstrumentSlot {
         })
     }
 
-    fn offer(&self, sampler: Sampler, values: [f32; PARAMS.len()], outputs: usize) -> Result<(), String> {
+    fn offer(
+        &self,
+        sampler: Sampler,
+        values: [f32; PARAMS.len()],
+        outputs: usize,
+    ) -> Result<(), String> {
         for (slot, value) in self.params.iter().zip(values) {
             slot.set(value);
         }
@@ -139,8 +163,17 @@ impl InstrumentSlot {
             retired.reserve(4);
         }
         let samples = MAX_BLOCK * outputs;
-        let playing = Box::new(Playing { sampler: Box::new(sampler), values, outputs, left: vec![0.0; samples], right: vec![0.0; samples] });
-        *self.pending.lock().map_err(|error| format!("instrument lock: {error}"))? = Some(playing);
+        let playing = Box::new(Playing {
+            sampler: Box::new(sampler),
+            values,
+            outputs,
+            left: vec![0.0; samples],
+            right: vec![0.0; samples],
+        });
+        *self
+            .pending
+            .lock()
+            .map_err(|error| format!("instrument lock: {error}"))? = Some(playing);
         Ok(())
     }
 
@@ -150,11 +183,15 @@ impl InstrumentSlot {
     }
 
     fn adopt(&self, active: &mut Option<Box<Playing>>) {
-        let Ok(mut retired) = self.retired.try_lock() else { return };
+        let Ok(mut retired) = self.retired.try_lock() else {
+            return;
+        };
         if retired.len() >= retired.capacity() {
             return;
         }
-        let Ok(mut pending) = self.pending.try_lock() else { return };
+        let Ok(mut pending) = self.pending.try_lock() else {
+            return;
+        };
         let Some(next) = pending.take() else { return };
         if let Some(previous) = active.replace(next) {
             retired.push(previous);
@@ -168,10 +205,20 @@ impl InstrumentSlot {
         for bus in buses.iter_mut() {
             bus[..frames].fill(Frame::ZERO);
         }
-        let Ok(mut active) = self.active.try_lock() else { return };
+        let Ok(mut active) = self.active.try_lock() else {
+            return;
+        };
         self.adopt(&mut active);
-        let Some(playing) = active.as_mut() else { return };
-        let Playing { sampler, values, outputs, left, right } = &mut **playing;
+        let Some(playing) = active.as_mut() else {
+            return;
+        };
+        let Playing {
+            sampler,
+            values,
+            outputs,
+            left,
+            right,
+        } = &mut **playing;
         for (id, (slot, value)) in self.params.iter().zip(values.iter_mut()).enumerate() {
             let next = slot.get();
             if next != *value {
@@ -181,16 +228,22 @@ impl InstrumentSlot {
         }
         let rendered = self.rendered.load(Ordering::Relaxed);
         self.now.drain(u64::MAX, u64::MAX, sampler);
-        self.dated.drain(rendered, rendered + frames as u64, sampler);
+        self.dated
+            .drain(rendered, rendered + frames as u64, sampler);
         let span = frames * *outputs;
         sampler.process_outputs(&mut left[..span], &mut right[..span], frames);
         for (bus, out) in buses.iter_mut().enumerate().take(*outputs) {
             let at = bus * frames;
-            for (frame, (left, right)) in out[..frames].iter_mut().zip(left[at..at + frames].iter().zip(right[at..at + frames].iter())) {
+            for (frame, (left, right)) in out[..frames].iter_mut().zip(
+                left[at..at + frames]
+                    .iter()
+                    .zip(right[at..at + frames].iter()),
+            ) {
                 *frame = Frame::new(*left, *right);
             }
         }
-        self.rendered.store(rendered + frames as u64, Ordering::Release);
+        self.rendered
+            .store(rendered + frames as u64, Ordering::Release);
     }
 }
 
@@ -211,7 +264,10 @@ impl Instruments {
     }
 
     pub fn unload_sample(&mut self, sample_id: &str) -> Result<(), String> {
-        self.samples.remove(sample_id).map(|_| ()).ok_or_else(|| format!("instrument sample {sample_id} is not loaded"))
+        self.samples
+            .remove(sample_id)
+            .map(|_| ())
+            .ok_or_else(|| format!("instrument sample {sample_id} is not loaded"))
     }
 
     pub fn has_sample(&self, sample_id: &str) -> bool {
@@ -220,8 +276,15 @@ impl Instruments {
 
     // A new description: a strip already playing the instrument takes the rebuilt sampler.
     pub fn set(&mut self, spec: InstrumentSpec, sample_rate: u32) -> Result<(), String> {
-        if let Some(&routed) = self.routed.get(&spec.id).filter(|&&routed| routed > spec.outputs) {
-            return Err(format!("instrument {}: output {routed} plays on a strip, the description has {}", spec.id, spec.outputs));
+        if let Some(&routed) = self
+            .routed
+            .get(&spec.id)
+            .filter(|&&routed| routed > spec.outputs)
+        {
+            return Err(format!(
+                "instrument {}: output {routed} plays on a strip, the description has {}",
+                spec.id, spec.outputs
+            ));
         }
         let (mut sampler, values, infos) = build_sampler(&spec, &self.samples, sample_rate)?;
         let book = self.books.entry(spec.id.clone()).or_default();
@@ -239,14 +302,24 @@ impl Instruments {
     }
 
     // The slot a strip plays, built the first time a program names the instrument.
-    pub fn slot(&mut self, instrument_id: &str, sample_rate: u32) -> Result<Arc<InstrumentSlot>, String> {
+    pub fn slot(
+        &mut self,
+        instrument_id: &str,
+        sample_rate: u32,
+    ) -> Result<Arc<InstrumentSlot>, String> {
         if let Some(slot) = self.slots.get(instrument_id) {
             return Ok(slot.clone());
         }
-        let spec = self.specs.get(instrument_id).ok_or_else(|| format!("instrument {instrument_id} is not loaded"))?;
+        let spec = self
+            .specs
+            .get(instrument_id)
+            .ok_or_else(|| format!("instrument {instrument_id} is not loaded"))?;
         let (mut sampler, values, _) = build_sampler(spec, &self.samples, sample_rate)?;
         // The description's own build: its marker table was recorded when it was set.
-        let book = self.books.get(instrument_id).ok_or_else(|| format!("instrument {instrument_id} is not loaded"))?;
+        let book = self
+            .books
+            .get(instrument_id)
+            .ok_or_else(|| format!("instrument {instrument_id} is not loaded"))?;
         sampler.report_actions(book.queue(), book.generation());
         let slot = InstrumentSlot::new();
         slot.offer(sampler, values, spec.outputs)?;
@@ -256,10 +329,17 @@ impl Instruments {
 
     // Its declared outputs; reading output `output` must lie within them.
     pub fn check_output(&self, instrument_id: &str, output: usize) -> Result<(), String> {
-        let spec = self.specs.get(instrument_id).ok_or_else(|| format!("instrument {instrument_id} is not loaded"))?;
+        let spec = self
+            .specs
+            .get(instrument_id)
+            .ok_or_else(|| format!("instrument {instrument_id} is not loaded"))?;
         match output < spec.outputs {
             true => Ok(()),
-            false => Err(format!("instrument {instrument_id} has no output {} (it has {})", output + 1, spec.outputs)),
+            false => Err(format!(
+                "instrument {instrument_id} has no output {} (it has {})",
+                output + 1,
+                spec.outputs
+            )),
         }
     }
 
@@ -271,11 +351,18 @@ impl Instruments {
     }
 
     fn played(&self, instrument_id: &str) -> Result<&Arc<InstrumentSlot>, String> {
-        self.slots.get(instrument_id).ok_or_else(|| format!("instrument {instrument_id} is on no strip"))
+        self.slots
+            .get(instrument_id)
+            .ok_or_else(|| format!("instrument {instrument_id} is on no strip"))
     }
 
     // A note now (the start of the next block), or at `frame` of the instrument's own clock.
-    pub fn event(&self, instrument_id: &str, kind: EventKind, frame: Option<u64>) -> Result<(), String> {
+    pub fn event(
+        &self,
+        instrument_id: &str,
+        kind: EventKind,
+        frame: Option<u64>,
+    ) -> Result<(), String> {
         let slot = self.played(instrument_id)?;
         match frame {
             Some(frame) => slot.dated.push(frame, kind),
@@ -284,7 +371,10 @@ impl Instruments {
     }
 
     pub fn set_param(&self, instrument_id: &str, name: &str, value: f32) -> Result<(), String> {
-        let param = PARAMS.iter().find(|param| param.key == name).ok_or_else(|| format!("instrument param {name} is unknown"))?;
+        let param = PARAMS
+            .iter()
+            .find(|param| param.key == name)
+            .ok_or_else(|| format!("instrument param {name} is unknown"))?;
         self.played(instrument_id)?.params[param.id as usize].set(param.clamp(value));
         Ok(())
     }
@@ -295,6 +385,10 @@ impl Instruments {
 
     // The command markers the instrument fired since the last drain (control thread).
     pub fn drain_actions(&self, instrument_id: &str) -> Result<DrainedActions, String> {
-        Ok(self.books.get(instrument_id).ok_or_else(|| format!("instrument {instrument_id} is not loaded"))?.drain())
+        Ok(self
+            .books
+            .get(instrument_id)
+            .ok_or_else(|| format!("instrument {instrument_id} is not loaded"))?
+            .drain())
     }
 }

@@ -9,6 +9,8 @@ export function readSystemMailConfig(env = process.env) {
     const password = String(env.ATOME_MAIL_SMTP_PASSWORD || '');
     if (!address || !host || !password) return null;
     const security = String(env.ATOME_MAIL_SMTP_SECURITY || 'tls').trim().toLowerCase();
+    // Clear text is refused (user decision, 2026-11-06): a mail always travels encrypted.
+    if (security === 'none') throw new Error('mail_security_cleartext_refused');
     if (!['tls', 'starttls'].includes(security)) throw new Error('system_mail_security_invalid');
     return { address, auth: { username: String(env.ATOME_MAIL_SMTP_USER || address).trim(), password },
         smtp: { host, port: Number(env.ATOME_MAIL_SMTP_PORT || (security === 'tls' ? 465 : 587)), security } };

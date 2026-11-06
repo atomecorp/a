@@ -51,6 +51,8 @@ export function createDeviceRegistry({ query, now }) {
     // A remote approval needs a user-verified key on a personal device out of probation.
     // A device enrolled by a recovery may replace the code it consumed at once, so the
     // account is never left without one.
+    // A device that hears the account's requests (live notice, push, pending list): personal and out of probation.
+    const hearsAccountRequests = (key) => !!key && key.revoked_ms === null && key.device_class === 'personal' && !(key.restricted_until_ms > now());
     async function requireApprover(sessionKey, purpose) {
         if (!sessionKey || sessionKey.revoked_ms !== null) reject('auth_session_invalid');
         const approve = await approveKeyOf(sessionKey);
@@ -94,5 +96,5 @@ export function createDeviceRegistry({ query, now }) {
         return sessions;
     }
     const touch = (keyId) => query('run', 'UPDATE auth_device_keys SET last_seen_ms = ? WHERE key_id = ?', [now(), keyId]);
-    return { enroll, byId, deviceOf, approveKeyOf, requireApprover, list, revokeDevice, touch, newDeviceId: randomHandle };
+    return { enroll, byId, deviceOf, approveKeyOf, requireApprover, hearsAccountRequests, list, revokeDevice, touch, newDeviceId: randomHandle };
 }

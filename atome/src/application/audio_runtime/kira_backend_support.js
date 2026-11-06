@@ -15,7 +15,7 @@ export function normalizeAuv3LocalPath(source) {
   var value = String(source).trim();
   if (!value || value.startsWith('blob:') || value.startsWith('data:')) return '';
   try {
-    var parsed = new URL(value, 'atome:///');
+    const parsed = new URL(value, 'atome:///');
     if (parsed.protocol === 'http:' || parsed.protocol === 'https:' || parsed.protocol === 'atome:' || parsed.protocol === 'file:') {
       value = parsed.pathname || value;
     }
@@ -73,9 +73,9 @@ export function createKiraClipMeta() {
 
     clear_marker_follow_actions(arg) {
       if (!arg || !arg.clip_id || !arg.marker) return;
-      var meta = clipMeta.get(arg.clip_id);
+      const meta = clipMeta.get(arg.clip_id);
       if (meta) {
-        var m = meta.markers.get(arg.marker);
+        const m = meta.markers.get(arg.marker);
         if (m) m.followActions = [];
       }
     },

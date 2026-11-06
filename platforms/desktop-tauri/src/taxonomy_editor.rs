@@ -31,7 +31,15 @@ mod enabled {
     use std::fs;
     use std::path::PathBuf;
 
-    const REQUIRED_KEYS: [&str; 7] = ["vocabulary", "order", "commands", "menus", "views", "behaviors", "version"];
+    const REQUIRED_KEYS: [&str; 7] = [
+        "vocabulary",
+        "order",
+        "commands",
+        "menus",
+        "views",
+        "behaviors",
+        "version",
+    ];
 
     fn taxonomy_path() -> Result<PathBuf, String> {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -48,16 +56,23 @@ mod enabled {
 
     pub fn read() -> Result<TaxonomyFile, String> {
         let path = taxonomy_path()?;
-        let text = fs::read_to_string(&path).map_err(|error| format!("taxonomy_read_failed:{error}"))?;
-        Ok(TaxonomyFile { path: path.to_string_lossy().to_string(), text })
+        let text =
+            fs::read_to_string(&path).map_err(|error| format!("taxonomy_read_failed:{error}"))?;
+        Ok(TaxonomyFile {
+            path: path.to_string_lossy().to_string(),
+            text,
+        })
     }
 
     // The JavaScript editor runs the full validator before calling this; the
     // bridge re-checks what it can on its own side so a malformed document
     // never reaches the repository.
     fn check_document(text: &str) -> Result<(), String> {
-        let value: serde_json::Value = serde_json::from_str(text).map_err(|error| format!("taxonomy_json_invalid:{error}"))?;
-        let object = value.as_object().ok_or_else(|| "taxonomy_structure_invalid".to_string())?;
+        let value: serde_json::Value =
+            serde_json::from_str(text).map_err(|error| format!("taxonomy_json_invalid:{error}"))?;
+        let object = value
+            .as_object()
+            .ok_or_else(|| "taxonomy_structure_invalid".to_string())?;
         for key in REQUIRED_KEYS {
             if !object.contains_key(key) {
                 return Err(format!("taxonomy_key_missing:{key}"));
@@ -75,10 +90,16 @@ mod enabled {
         save_at(&taxonomy_path()?, &backup_dir()?, text, previous)
     }
 
-    pub(super) fn save_at(path: &std::path::Path, backups: &std::path::Path, text: String, previous: String) -> Result<TaxonomySaveResult, String> {
+    pub(super) fn save_at(
+        path: &std::path::Path,
+        backups: &std::path::Path,
+        text: String,
+        previous: String,
+    ) -> Result<TaxonomySaveResult, String> {
         check_document(&text)?;
         let path = path.to_path_buf();
-        let current = fs::read_to_string(&path).map_err(|error| format!("taxonomy_read_failed:{error}"))?;
+        let current =
+            fs::read_to_string(&path).map_err(|error| format!("taxonomy_read_failed:{error}"))?;
         if current != previous {
             return Err("taxonomy_changed_on_disk".to_string());
         }
@@ -131,7 +152,8 @@ mod tests {
     const VALID: &str = r#"{"version":2,"vocabulary":{},"order":[],"commands":{},"menus":{},"views":{},"behaviors":{}}"#;
 
     fn sandbox(name: &str) -> (std::path::PathBuf, std::path::PathBuf) {
-        let root = std::env::temp_dir().join(format!("atome_taxonomy_test_{name}_{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("atome_taxonomy_test_{name}_{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(root.join("backups")).unwrap();
         let file = root.join("context_menus.json");
@@ -151,7 +173,13 @@ mod tests {
     #[test]
     fn refuses_when_the_file_changed_on_disk() {
         let (file, backups) = sandbox("changed");
-        let error = save_at(&file, &backups, VALID.to_string(), "SOMETHING ELSE".to_string()).unwrap_err();
+        let error = save_at(
+            &file,
+            &backups,
+            VALID.to_string(),
+            "SOMETHING ELSE".to_string(),
+        )
+        .unwrap_err();
         assert_eq!(error, "taxonomy_changed_on_disk");
         assert_eq!(fs::read_to_string(&file).unwrap(), "OLD");
     }
@@ -159,10 +187,26 @@ mod tests {
     #[test]
     fn refuses_an_invalid_document() {
         let (file, backups) = sandbox("invalid");
-        assert!(save_at(&file, &backups, "{".to_string(), "OLD".to_string()).unwrap_err().starts_with("taxonomy_json_invalid"));
-        assert_eq!(save_at(&file, &backups, r#"{"version":1}"#.to_string(), "OLD".to_string()).unwrap_err(), "taxonomy_key_missing:vocabulary");
+        assert!(
+            save_at(&file, &backups, "{".to_string(), "OLD".to_string())
+                .unwrap_err()
+                .starts_with("taxonomy_json_invalid")
+        );
+        assert_eq!(
+            save_at(
+                &file,
+                &backups,
+                r#"{"version":1}"#.to_string(),
+                "OLD".to_string()
+            )
+            .unwrap_err(),
+            "taxonomy_key_missing:vocabulary"
+        );
         let v1 = VALID.replace("\"version\":2", "\"version\":1");
-        assert_eq!(save_at(&file, &backups, v1, "OLD".to_string()).unwrap_err(), "taxonomy_version_invalid");
+        assert_eq!(
+            save_at(&file, &backups, v1, "OLD".to_string()).unwrap_err(),
+            "taxonomy_version_invalid"
+        );
         assert_eq!(fs::read_to_string(&file).unwrap(), "OLD");
     }
 }

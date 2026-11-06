@@ -14,12 +14,13 @@
 //! shape the canvas keeps what lies under the corners (wallpaper, Atomes below).
 
 use bevy::{
-    core_pipeline::core_2d::{Transparent2d, CORE_2D_DEPTH_FORMAT},
+    core_pipeline::core_2d::{CORE_2D_DEPTH_FORMAT, Transparent2d},
     ecs::system::lifetimeless::SRes,
     math::FloatOrd,
     mesh::{Mesh2d, VertexBufferLayout},
     prelude::*,
     render::{
+        Render, RenderApp, RenderStartup, RenderSystems,
         extract_component::{ExtractComponent, ExtractComponentPlugin},
         mesh::RenderMesh,
         render_asset::RenderAssets,
@@ -29,7 +30,6 @@ use bevy::{
         },
         render_phase::{PhaseItem, RenderCommand, RenderCommandResult, TrackedRenderPass},
         render_resource::{
-            binding_types::{sampler, texture_2d},
             BindGroup, BindGroupEntries, BindGroupLayoutDescriptor, BindGroupLayoutEntries,
             BlendComponent, BlendFactor, BlendOperation, BlendState, ColorTargetState, ColorWrites,
             CompareFunction, DepthBiasState, DepthStencilState, Face, FilterMode, FragmentState,
@@ -37,16 +37,16 @@ use bevy::{
             SamplerBindingType, SamplerDescriptor, ShaderStages, SpecializedRenderPipeline,
             SpecializedRenderPipelines, StencilFaceState, StencilState, TextureSampleType,
             VertexFormat, VertexState, VertexStepMode,
+            binding_types::{sampler, texture_2d},
         },
         renderer::RenderDevice,
         sync_world::{MainEntity, MainEntityHashMap},
         texture::GpuImage,
         view::{ExtractedView, RenderVisibleEntities},
-        Render, RenderApp, RenderStartup, RenderSystems,
     },
     sprite_render::{
-        init_mesh_2d_pipeline, DrawMesh2d, Mesh2dPipeline, Mesh2dPipelineKey,
-        RenderMesh2dInstances, SetMesh2dBindGroup, SetMesh2dViewBindGroup,
+        DrawMesh2d, Mesh2dPipeline, Mesh2dPipelineKey, RenderMesh2dInstances, SetMesh2dBindGroup,
+        SetMesh2dViewBindGroup, init_mesh_2d_pipeline,
     },
 };
 use std::any::TypeId;
@@ -70,9 +70,15 @@ pub struct AtomeMediaWindow {
 
 /// Re-bakes the cut-out's shape from the entity's live silhouette and mask:
 /// at spawn, on a resize, on a rounding/variant patch and on a mask patch.
-pub fn refresh_media_window_mask(world: &mut World, entity: Entity, id: &str) -> Result<(), String> {
+pub fn refresh_media_window_mask(
+    world: &mut World,
+    entity: Entity,
+    id: &str,
+) -> Result<(), String> {
     let silhouette = entity_shape_silhouette(world, entity);
-    let mask = world.get::<AtomeResolvedMask>(entity).and_then(|value| value.0.clone());
+    let mask = world
+        .get::<AtomeResolvedMask>(entity)
+        .and_then(|value| value.0.clone());
     let handle = silhouette_mask_handle(world, &silhouette, mask, id)?;
     world
         .get_mut::<AtomeMediaWindow>(entity)
@@ -255,7 +261,10 @@ impl SpecializedRenderPipeline for MediaWindowPipeline {
                     format: key.target_format(),
                     // The cut-out erases what lies beneath it (wallpaper,
                     // Atomes below) down to transparency, inside its shape only.
-                    blend: Some(BlendState { color: DESTINATION_OUT, alpha: DESTINATION_OUT }),
+                    blend: Some(BlendState {
+                        color: DESTINATION_OUT,
+                        alpha: DESTINATION_OUT,
+                    }),
                     write_mask: ColorWrites::ALL,
                 })],
                 ..default()
@@ -351,7 +360,7 @@ fn queue_media_windows(
             // Same depth ordering as sprites and videos.
             let mesh_z = mesh_instance.transforms.world_from_local.translation.z;
             transparent_phase.add_transient(Transparent2d {
-                entity: (render_entity, visible_entity.into()),
+                entity: (render_entity, visible_entity),
                 draw_function: draw_window,
                 pipeline: pipeline_id,
                 sort_key: FloatOrd(mesh_z),

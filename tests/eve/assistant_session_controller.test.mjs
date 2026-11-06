@@ -11,15 +11,19 @@ const withMcpBridge = (api) => ({
 });
 
 const translateVoiceKey = (key) => {
-    if (key.endsWith('opening_greeting')) return voiceTexts.openingGreeting;
     if (key.endsWith('touch_response')) return voiceTexts.touchResponse;
     return 'Assistant vocal eVe';
 };
 
 const voiceTexts = {
-    openingGreeting: 'Salut, que veux-tu ?',
+    readyLine: 'Je suis là, qu’est-ce que tu souhaites faire ?',
     touchResponse: 'Oui, je suis toujours là. Comment puis-je t’aider ?'
 };
+
+// Her ready sentence is the assistant announcer's, said by the page's voice-line player.
+const translateReadyList = () => [voiceTexts.readyLine];
+const voiceLines = (spoken) => ({ prepare: async () => {}, stop: async () => {}, subscribeFrames: () => () => {},
+    say: async (text) => { spoken.push(text); return { promise: Promise.resolve() }; } });
 
 const deferred = () => {
     let resolve;
@@ -49,10 +53,10 @@ test('the shared BevyUI hold recognizer reopens right after a silent close', asy
         stopSpeaking: async () => ({ ok: true }),
         interrupt: async () => ({ ok: true })
     });
-    const runtime = createEveAssistantRuntime({
+    const runtime = createEveAssistantRuntime({ translateList: translateReadyList,
         dockFactory: () => ({ open() {}, close() {}, blur() {}, refresh() {} }),
         providerResolver: async () => ({ ok: true, providerId: 'local' }),
-        env: { addEventListener: () => { }, performance: { now: () => clock } },
+        env: { __eveVoiceLines: voiceLines(spoken), addEventListener: () => { }, performance: { now: () => clock } },
         voiceApiResolver: () => voiceApi,
         now: () => clock,
         requestFrame: (callback) => { frameCallback = callback; return 1; },
@@ -107,7 +111,7 @@ test('the shared BevyUI hold recognizer reopens right after a silent close', asy
     assert.equal(runtime.getState().transition, 'appearing');
     await advance(420);
     assert.equal(runtime.getState().sessionId, 'hold-session-2');
-    assert.deepEqual(spoken, [voiceTexts.openingGreeting, voiceTexts.openingGreeting]);
+    assert.deepEqual(spoken, [voiceTexts.readyLine, voiceTexts.readyLine]);
 });
 
 test('assistant public API preserves project interaction, trace command, render teardown and clean reopen', async () => {
@@ -139,11 +143,11 @@ test('assistant public API preserves project interaction, trace command, render 
         stopSpeaking: async () => ({ ok: true }),
         interrupt: async () => ({ ok: true })
     });
-    const runtime = createEveAssistantRuntime({
+    const runtime = createEveAssistantRuntime({ translateList: translateReadyList,
         dockFactory: () => ({ open() {}, close() {}, blur() {}, refresh() {} }),
         providerResolver: async () => ({ ok: true, providerId: 'local' }),
-        env: {
-            addEventListener: (type, listener) => { listeners[type] = listener; },
+        env: { __eveVoiceLines: voiceLines([]),
+            addEventListener: (type, listener) => { (listeners[type] ||= []).push(listener); },
             requestAnimationFrame: (callback) => { frameCallback = callback; return 1; },
             cancelAnimationFrame: () => { },
             performance: { now: () => clock },
@@ -181,7 +185,7 @@ test('assistant public API preserves project interaction, trace command, render 
     await runtime.open();
     await advance(420);
     assert.equal(runtime.getState().sessionId, 'session-2');
-    listeners.keydown({ key: 'Escape' });
+    listeners.keydown.forEach(listener => listener({ key: 'Escape' }));
     await advance(320);
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(runtime.getState().phase, 'closed');
@@ -203,10 +207,10 @@ test('closing during connection cancels startup and remains reopenable', async (
         stopSpeaking: async () => ({ ok: true }),
         interrupt: async () => ({ ok: true })
     });
-    const runtime = createEveAssistantRuntime({
+    const runtime = createEveAssistantRuntime({ translateList: translateReadyList,
         dockFactory: () => ({ open() {}, close() {}, blur() {}, refresh() {} }),
         providerResolver: async () => ({ ok: true, providerId: 'local' }),
-        env: { addEventListener: () => { } },
+        env: { __eveVoiceLines: voiceLines(spokenTexts), addEventListener: () => { } },
         voiceApiResolver: () => voiceApi,
         requestFrame: (callback) => { frameCallback = callback; return 1; },
         cancelFrame: () => { },
@@ -245,7 +249,7 @@ test('closing during connection cancels startup and remains reopenable', async (
     await Promise.resolve();
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(runtime.getState().active, true);
-    assert.deepEqual(spokenTexts, [voiceTexts.openingGreeting]);
+    assert.deepEqual(spokenTexts, [voiceTexts.readyLine]);
 });
 
 test('assistant releases visual interaction after animation without waiting for native voice cleanup', async () => {
@@ -265,10 +269,10 @@ test('assistant releases visual interaction after animation without waiting for 
         stopSpeaking: async () => nativeStop.promise,
         interrupt: async () => ({ ok: true })
     });
-    const runtime = createEveAssistantRuntime({
+    const runtime = createEveAssistantRuntime({ translateList: translateReadyList,
         dockFactory: () => ({ open() {}, close() {}, blur() {}, refresh() {} }),
         providerResolver: async () => ({ ok: true, providerId: 'local' }),
-        env: { addEventListener: () => { } },
+        env: { __eveVoiceLines: voiceLines([]), addEventListener: () => { } },
         voiceApiResolver: () => voiceApi,
         requestFrame: (callback) => { frameCallback = callback; return 1; },
         cancelFrame: () => { },
@@ -316,10 +320,10 @@ test('voice connection starts independently of renderer warmup', async () => {
         stopSpeaking: async () => ({ ok: true }),
         interrupt: async () => ({ ok: true })
     });
-    const runtime = createEveAssistantRuntime({
+    const runtime = createEveAssistantRuntime({ translateList: translateReadyList,
         dockFactory: () => ({ open() {}, close() {}, blur() {}, refresh() {} }),
         providerResolver: async () => ({ ok: true, providerId: 'local' }),
-        env: { addEventListener: () => { } },
+        env: { __eveVoiceLines: voiceLines([]), addEventListener: () => { } },
         voiceApiResolver: () => voiceApi,
         requestFrame: (callback) => { frameCallback = callback; return 1; },
         cancelFrame: () => { },
@@ -378,10 +382,10 @@ test('assistant runtime survives ten complete voiced open and close cycles with 
         stopSpeaking: async () => ({ ok: true }),
         interrupt: async () => ({ ok: true })
     });
-    const runtime = createEveAssistantRuntime({
+    const runtime = createEveAssistantRuntime({ translateList: translateReadyList,
         dockFactory: () => ({ open() {}, close() {}, blur() {}, refresh() {} }),
         providerResolver: async () => ({ ok: true, providerId: 'local' }),
-        env: { addEventListener: () => { }, console: { error: () => { } }, performance: { now: () => clock } },
+        env: { __eveVoiceLines: voiceLines(spokenTexts), addEventListener: () => { }, console: { error: () => { } }, performance: { now: () => clock } },
         voiceApiResolver: () => voiceApi,
         now: () => clock,
         requestFrame: (callback) => { frameCallback = callback; return 1; },
@@ -401,7 +405,7 @@ test('assistant runtime survives ten complete voiced open and close cycles with 
         assert.equal(runtime.getState().phase, 'closed');
     }
     assert.equal(sessionSequence, 10);
-    assert.deepEqual(spokenTexts, Array.from({ length: 10 }, () => voiceTexts.openingGreeting));
+    assert.deepEqual(spokenTexts, Array.from({ length: 10 }, () => voiceTexts.readyLine));
     assert.equal(clearCount, 10);
 });
 
@@ -419,7 +423,7 @@ test('a cancelled provider lookup cannot close the replacement session or duplic
         subscribeTtsFrames: () => () => {}, speak: async () => ({ promise: Promise.resolve() }),
         startListening: async () => ({ promise: new Promise(() => {}) }), executeUtterance: async () => ({}),
         cancelListening: async () => ({}), stopSpeaking: async () => ({}), interrupt: async () => ({}) });
-    const runtime = createEveAssistantRuntime({ env: {}, voiceApiResolver: () => voiceApi,
+    const runtime = createEveAssistantRuntime({ translateList: translateReadyList, env: { __eveVoiceLines: voiceLines([]) }, voiceApiResolver: () => voiceApi,
         providerResolver: async () => ++attempts === 1 ? new Promise((resolve, reject) => { rejectProvider = reject; }) : { ok: true, providerId: 'local' },
         dockFactory: () => ({ open: async () => {}, close: async () => {}, refresh() {}, blur() {} }),
         now: () => time, requestFrame: callback => { frame = callback; return 1; }, cancelFrame: () => { frame = null; },

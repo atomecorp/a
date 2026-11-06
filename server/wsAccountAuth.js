@@ -28,6 +28,16 @@ export const ACCOUNT_PUBLIC_ERRORS = ['auth_device_class_required', 'auth_paymen
     'auth_connection_proof_required', 'auth_signup_closed', 'auth_invite_invalid', 'auth_invite_email_invalid',
     'system_mail_unconfigured', ...BILLING_PUBLIC_ERRORS];
 
+// The waiting device hears about its request on the socket it asked from
+// (here, or by the Rust front: server/ws_api_front.js `front-pair-update`).
+export function tellRequester(pairId, state) {
+    for (const connection of wsApiConnections) {
+        if (connection._authPairRequestId === pairId && connection.readyState === 1) {
+            connection.send(JSON.stringify({ type: 'auth-pair-update', pairId, state }));
+        }
+    }
+}
+
 export function createWsAccountAuth({ service, database, jwtSecret, createAccount, findById, disconnectSession, billing, mailer, origin, now = Date.now }) {
     const { proof, devices, handles, sessions } = service;
     const query = database.query, transaction = database.withTransaction;
@@ -44,7 +54,7 @@ export function createWsAccountAuth({ service, database, jwtSecret, createAccoun
             if (exceptDeviceId || personalOnly) {
                 const key = await devices.byId(claims.cnf?.kid);
                 if (!key || (exceptDeviceId && devices.deviceOf(key) === exceptDeviceId)) continue;
-                if (personalOnly && (key.device_class !== 'personal' || key.restricted_until_ms > now())) continue;
+                if (personalOnly && !devices.hearsAccountRequests(key)) continue;
             }
             connection.send(JSON.stringify({ type: 'auth-notice', ...notice }));
             heard.add(claims.cnf?.kid);
@@ -58,14 +68,6 @@ export function createWsAccountAuth({ service, database, jwtSecret, createAccoun
     const accounts = createAccountAuth({ query, transaction, proof, sessions, devices, handles, approvals, invites, createAccount, notify, disconnectSession, now, billing });
     const pairing = createPairing({ query, transaction, proof, sessions, devices, handles, approvals, accounts, findById, notify, disconnectSession, now });
     const recovery = createRecovery({ query, transaction, proof, sessions, devices, handles, approvals, accounts, findById, notify, now });
-    // The waiting device hears about its request on the socket it asked from.
-    const tellRequester = (pairId, state) => {
-        for (const connection of wsApiConnections) {
-            if (connection._authPairRequestId === pairId && connection.readyState === 1) {
-                connection.send(JSON.stringify({ type: 'auth-pair-update', pairId, state }));
-            }
-        }
-    };
     async function claimsOf(message, connection) {
         const claims = await validateConnectionDeviceSession(connection, message.token, jwtSecret()) || connection._wsApiDeviceClaims;
         if (!claims || claims.auth_version !== 1) throw new Error('auth_session_invalid');

@@ -1,0 +1,156 @@
+[package]
+name = "atome-server"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "The one atome server: the vault supervisor (one atome-vault process per person), the shared HTTP behaviour (CORS, request id, static roots) and the front, in front of Fastify until every route is ported"
+
+# The SFU of the calls (src/visio, the mediasoup crate and its C++ worker), the server's own:
+# the local servers of Tauri and iOS build without it (`default-features = false`).
+[features]
+default = ["visio"]
+visio = ["dep:mediasoup"]
+
+[[bin]]
+name = "atome-server"
+path = "src/main.rs"
+required-features = ["visio"]
+
+[[test]]
+name = "auth_proof"
+path = "../../../tests/atome_server/auth_proof.rs"
+
+[[test]]
+name = "atome_requests"
+path = "../../../tests/atome_server/atome_requests.rs"
+
+[[test]]
+name = "conditions"
+path = "../../../tests/atome_server/conditions.rs"
+
+[[test]]
+name = "coach_contract_parity"
+path = "../../../tests/atome_server/coach_contract_parity.rs"
+
+[[test]]
+name = "direct_messages"
+path = "../../../tests/atome_server/direct_messages.rs"
+
+[[test]]
+name = "passwords"
+path = "../../../tests/atome_server/passwords.rs"
+
+[[test]]
+name = "media_names"
+path = "../../../tests/atome_server/media_names.rs"
+
+[[test]]
+name = "media_token"
+path = "../../../tests/atome_server/media_token.rs"
+
+[[test]]
+name = "news"
+path = "../../../tests/atome_server/news.rs"
+
+[[test]]
+name = "directory"
+path = "../../../tests/atome_server/directory.rs"
+
+[[test]]
+name = "downloads"
+path = "../../../tests/atome_server/downloads.rs"
+
+[[test]]
+name = "notification_stack"
+path = "../../../tests/atome_server/notification_stack.rs"
+
+[[test]]
+name = "push"
+path = "../../../tests/atome_server/push.rs"
+
+[[test]]
+name = "supervisor"
+path = "../../../tests/atome_server/supervisor.rs"
+
+[[test]]
+name = "vault_router"
+path = "../../../tests/atome_server/vault_router.rs"
+
+[[test]]
+name = "mail"
+path = "../../../tests/atome_server/mail.rs"
+
+[[test]]
+name = "ws_api"
+path = "../../../tests/atome_server/ws_api.rs"
+
+[[test]]
+name = "ws_sync"
+path = "../../../tests/atome_server/ws_sync.rs"
+
+[[test]]
+name = "central_schema"
+path = "../../../tests/atome_server/central_schema.rs"
+
+[[test]]
+name = "offline_manifest"
+path = "../../../tests/atome_server/offline_manifest.rs"
+
+[[example]]
+name = "vault_supervisor"
+path = "../../../tests/atome_server/vault_supervisor.rs"
+
+[dependencies]
+atome-store = { path = "../../engines/atome-store" }
+atome-vault = { path = "../atome-vault" }
+# The one calendar engine (content lines, the personal import's calendar reader, the occurrences).
+atome-calendar = { path = "../../engines/atome-calendar" }
+# The JavaScript readings of a JSON value the ported code keeps (vault_router::js).
+atome-js-values = { path = "../../engines/js-values" }
+# The health reference contract (its records and choices), the owner of the bundle's shape.
+atome-health-ref = { path = "../../engines/atome-health-ref" }
+argon2 = "0.5"
+axum = { workspace = true, features = ["ws"] }
+futures-util = "0.3"
+# The local server of a device (src/local): its session secret, its media names, its logs.
+hex = "0.4"
+rand = "0.8"
+tracing = "0.1"
+urlencoding = "2"
+icu_normalizer = "2"
+subtle = "2"
+base64 = "0.22"
+bcrypt = "0.15"
+chrono = "0.4"
+indexmap = "2"
+jsonwebtoken = "9"
+percent-encoding = "2"
+ring = "0.17"
+regex = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "http2", "rustls-tls-native-roots", "stream"] }
+rusqlite.workspace = true
+rustix = { version = "1", features = ["process"] }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tokio = { workspace = true, features = ["full"] }
+# The mail protocols' TLS (mail/socket.rs), verified against the system's roots, and the charsets of a message.
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+rustls-native-certs = "0.8"
+encoding_rs = "0.8"
+tokio-tungstenite = { workspace = true, features = ["rustls-tls-native-roots"] }
+tower = { version = "0.5", features = ["util"] }
+tower-http = { workspace = true, features = ["fs", "limit", "compression-br", "compression-gzip"] }
+url = "2"
+uuid = { version = "1", features = ["v4"] }
+# The calls' SFU (visio feature): 0.21.0, whose worker answers the router capabilities of Node's mediasoup 3.19.
+mediasoup = { version = "=0.21.0", optional = true }
+
+[dev-dependencies]
+tempfile.workspace = true
+flate2 = "1.1"
+brotli = "9"
+
+[lints]
+workspace = true

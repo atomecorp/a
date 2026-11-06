@@ -11,27 +11,17 @@ BUILD_OUT_DIR="$PROJECT_ROOT/temp/audio_wasm_pack"
 
 echo "[build] Building squirrel-audio-wasm..."
 
-# Check wasm-pack is installed
-if ! command -v wasm-pack &> /dev/null; then
-    echo "[build] wasm-pack not found. Installing..."
-    cargo install wasm-pack
-fi
-
-cd "$SCRIPT_DIR"
-
 rm -rf "$BUILD_OUT_DIR"
 mkdir -p "$BUILD_OUT_DIR" "$OUT_DIR"
 trap 'rm -rf "$BUILD_OUT_DIR"' EXIT
 
-# Rust 1.95 emits WasmGC/reference-type descriptors that stable browser
-# engines reject (for example: "invalid heap type 'exact'"). This flag is
-# intentionally scoped to the browser audio artifact: native Tauri Kira does
-# not consume this module or inherit this compiler setting.
-RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-C target-feature=-reference-types" wasm-pack build \
-    --target web \
-    --out-dir "$BUILD_OUT_DIR" \
-    --out-name squirrel_audio_wasm \
-    --release
+# The wasm-bindgen 0.2.122 glue needs reference types (its externref table);
+# the module keeps the Safari 15 feature set: no GC or exact heap types
+# (checked with `wasm-tools validate`, 2026-11-04).
+# shellcheck source=../wasm_web_build.sh
+source "$SCRIPT_DIR/../wasm_web_build.sh"
+wasm_web_build squirrel-audio-wasm wasm-audio squirrel_audio_wasm \
+    "$BUILD_OUT_DIR" squirrel_audio_wasm -O
 
 for artifact in \
     squirrel_audio_wasm.js \

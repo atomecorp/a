@@ -1,26 +1,23 @@
 mod android_assets;
 mod assistant_link;
-mod auth_device;
 mod audio_engine;
-mod bevy_backend;
+mod auth_device;
+mod code_workspace;
 mod dev_logging;
 mod local_http_navigation;
-mod native_clipboard;
-mod native_contacts;
-mod native_personal_import;
-mod native_file_export;
 mod native_billing;
-mod native_health;
+mod native_clipboard;
 mod native_communication;
+mod native_contacts;
+mod native_file_export;
+mod native_health;
 mod native_midi;
-mod runtime_logging;
+mod native_personal_import;
 mod server;
 mod streaming_view;
 mod taxonomy_editor;
-mod code_workspace;
 #[cfg(not(target_os = "android"))]
 mod viewport_runtime;
-#[cfg(target_os = "android")] mod android_tls_roots;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -44,7 +41,7 @@ const TAURI_LOCAL_HTTP_FAILURE_SCRIPT: &str = concat!(
 );
 macro_rules! println {
     ($($arg:tt)*) => {
-        if crate::runtime_logging::xcode_logs_enabled() {
+        if atome_server::local::xcode_logs_enabled() {
             std::println!($($arg)*);
         }
     };
@@ -52,7 +49,7 @@ macro_rules! println {
 
 macro_rules! eprintln {
     ($($arg:tt)*) => {
-        if crate::runtime_logging::xcode_logs_enabled() {
+        if atome_server::local::xcode_logs_enabled() {
             std::eprintln!($($arg)*);
         }
     };
@@ -69,14 +66,12 @@ fn project_root(state: State<ProjectPaths>) -> String {
 }
 
 fn project_root_from_static_dir(static_dir: &Path) -> PathBuf {
-    if static_dir.file_name().and_then(|name| name.to_str()) == Some("src") {
-        if let Some(atome_dir) = static_dir.parent() {
-            if atome_dir.file_name().and_then(|name| name.to_str()) == Some("atome") {
-                if let Some(root) = atome_dir.parent() {
-                    return root.to_path_buf();
-                }
-            }
-        }
+    if static_dir.file_name().and_then(|name| name.to_str()) == Some("src")
+        && let Some(atome_dir) = static_dir.parent()
+        && atome_dir.file_name().and_then(|name| name.to_str()) == Some("atome")
+        && let Some(root) = atome_dir.parent()
+    {
+        return root.to_path_buf();
     }
 
     static_dir.parent().unwrap_or(static_dir).to_path_buf()
@@ -111,6 +106,10 @@ fn resolve_shared_uploads_dir(static_dir: &Path, default_uploads_dir: &Path) -> 
     }
 }
 
+#[allow(
+    unsafe_code,
+    reason = "sets the process environment before any thread exists"
+)]
 fn load_env_file(path: &Path, override_existing: bool) -> Result<bool, String> {
     if !path.exists() {
         return Ok(false);
@@ -137,7 +136,8 @@ fn load_env_file(path: &Path, override_existing: bool) -> Result<bool, String> {
             value = value[1..value.len().saturating_sub(1)].to_string();
         }
         let value = value.replace("\\n", "\n");
-        std::env::set_var(key, value);
+        // SAFETY: run() loads the .env files first, before any thread exists.
+        unsafe { std::env::set_var(key, value) };
     }
     Ok(true)
 }
@@ -147,10 +147,10 @@ fn load_env_from_candidates() {
     if let Ok(cwd) = std::env::current_dir() {
         bases.push(cwd);
     }
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(parent) = exe.parent() {
-            bases.push(parent.to_path_buf());
-        }
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(parent) = exe.parent()
+    {
+        bases.push(parent.to_path_buf());
     }
 
     for base in bases {
@@ -214,15 +214,20 @@ pub fn run() {
         .manage(assistant_link::AssistantRequestInbox::default())
         // A main-frame page load claims a new health channel (see native_health.rs).
         .on_page_load(|webview, payload| {
-            if webview.label() != "main" { return; }
+            if webview.label() != "main" {
+                return;
+            }
             match payload.event() {
                 tauri::webview::PageLoadEvent::Started => native_health::reset_on_page_load(
-                    &webview.state::<std::sync::Mutex<native_health::HealthChannelState>>()),
+                    &webview.state::<std::sync::Mutex<native_health::HealthChannelState>>(),
+                ),
                 // The loaded page learns the window's size (then each resize, `on_window_event`).
                 #[cfg(not(target_os = "android"))]
-                tauri::webview::PageLoadEvent::Finished => if let Some(win) = webview.app_handle().get_webview_window("main") {
-                    viewport_runtime::publish_current_webview_viewport(&win);
-                },
+                tauri::webview::PageLoadEvent::Finished => {
+                    if let Some(win) = webview.app_handle().get_webview_window("main") {
+                        viewport_runtime::publish_current_webview_viewport(&win);
+                    }
+                }
                 #[cfg(target_os = "android")]
                 tauri::webview::PageLoadEvent::Finished => {}
             }
@@ -231,10 +236,10 @@ pub fn run() {
             // Android: the Kotlin host (MainActivity) owns the viewport and its safe-area insets.
             #[cfg(not(target_os = "android"))]
             viewport_runtime::publish_native_viewport(_window, event);
-            if let tauri::WindowEvent::Focused(focused) = event {
-                if let Err(error) = audio_engine::wake_capture::set_foreground(*focused) {
-                    eprintln!("wake foreground transition failed: {}", error);
-                }
+            if let tauri::WindowEvent::Focused(focused) = event
+                && let Err(error) = audio_engine::wake_capture::set_foreground(*focused)
+            {
+                eprintln!("wake foreground transition failed: {}", error);
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -293,14 +298,12 @@ pub fn run() {
             audio_engine::bridge::audio_get_levels,
             audio_engine::bridge::audio_get_scope,
             audio_engine::bridge::audio_shutdown,
-            bevy_backend::bevy_native_start,
-            bevy_backend::bevy_native_apply_ops,
-            bevy_backend::bevy_native_resize,
             native_clipboard::clipboard_write_text,
             native_clipboard::clipboard_read_text,
             native_clipboard::clipboard_read_items,
             native_clipboard::clipboard_has_text,
             native_file_export::export_file_save,
+            native_file_export::export_file_print,
             native_health::health_invoke,
             native_billing::billing_invoke,
             native_communication::notifications_invoke,
@@ -316,8 +319,6 @@ pub fn run() {
         ])
         .setup(|app| {
             let path_resolver = app.path();
-            #[cfg(target_os = "android")] android_tls_roots::install(path_resolver)?;
-
             // Android exposes no file system path for bundled resources:
             // `resource_dir()` returns the URI "asset://localhost/" there. The staged
             // web root is therefore written to the application data directory before
@@ -431,9 +432,17 @@ pub fn run() {
                 #[cfg(target_os = "android")]
                 let listener = std::net::TcpListener::bind(("127.0.0.1", TAURI_LOCAL_HTTP_PORT));
                 let rt = tokio::runtime::Runtime::new().unwrap();
-                let served = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| rt.block_on(
-                    server::start_server(static_dir_for_server, uploads_dir_for_server, data_dir_for_server, listener))));
-                if served.is_err() { eprintln!("[tauri] Local Axum server panicked"); }
+                let served = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    rt.block_on(server::start_server(
+                        static_dir_for_server,
+                        uploads_dir_for_server,
+                        data_dir_for_server,
+                        listener,
+                    ))
+                }));
+                if served.is_err() {
+                    eprintln!("[tauri] Local Axum server panicked");
+                }
                 // The server only returns when it could not start or stopped: the window says so instead of staying blank.
                 #[cfg(not(target_os = "android"))]
                 if let Some(win) = server_handle.get_webview_window("main") {
@@ -443,10 +452,19 @@ pub fn run() {
 
             #[cfg(not(target_os = "android"))]
             {
-                let config = app.config().app.windows.iter().find(|window| window.label == "main")
-                    .ok_or("main window missing from tauri.conf.json")?.clone();
+                let config = app
+                    .config()
+                    .app
+                    .windows
+                    .iter()
+                    .find(|window| window.label == "main")
+                    .ok_or("main window missing from tauri.conf.json")?
+                    .clone();
                 tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?
-                    .initialization_script(&format!("window.__ATOME_PROJECT_ROOT__={:?};", project_root.to_string_lossy()))
+                    .initialization_script(format!(
+                        "window.__ATOME_PROJECT_ROOT__={:?};",
+                        project_root.to_string_lossy()
+                    ))
                     .build()?;
             }
 
@@ -459,19 +477,28 @@ pub fn run() {
                 let mut waited_secs = 0u64;
                 let mut ready = false;
                 while waited_secs < TAURI_LOCAL_HTTP_WAIT_SECS {
-                    if local_http_navigation::wait_for_local_http(address, std::time::Duration::from_secs(5)) {
+                    if local_http_navigation::wait_for_local_http(
+                        address,
+                        std::time::Duration::from_secs(5),
+                    ) {
                         ready = true;
                         break;
                     }
                     waited_secs += 5;
-                    eprintln!("[tauri] Local Axum server not ready after {}s (port {})", waited_secs, TAURI_LOCAL_HTTP_PORT);
+                    eprintln!(
+                        "[tauri] Local Axum server not ready after {}s (port {})",
+                        waited_secs, TAURI_LOCAL_HTTP_PORT
+                    );
                 }
                 let Some(win) = navigation_handle.get_webview_window("main") else {
                     eprintln!("[tauri] Unable to navigate main window: window not found");
                     return;
                 };
                 if !ready {
-                    eprintln!("[tauri] Local Axum server never answered on port {}", TAURI_LOCAL_HTTP_PORT);
+                    eprintln!(
+                        "[tauri] Local Axum server never answered on port {}",
+                        TAURI_LOCAL_HTTP_PORT
+                    );
                     let _ = win.eval(TAURI_LOCAL_HTTP_FAILURE_SCRIPT);
                     return;
                 }
@@ -482,7 +509,10 @@ pub fn run() {
                 // The boot page is replaced, never stacked, so the system Back
                 // (Tauri's app plugin goes back in the WebView history) cannot return to it.
                 if let Err(err) = win.eval(&format!("location.replace({:?})", url.as_str())) {
-                    eprintln!("[tauri] Unable to navigate main window to local Axum server: {}", err);
+                    eprintln!(
+                        "[tauri] Unable to navigate main window to local Axum server: {}",
+                        err
+                    );
                 }
             });
 

@@ -7,6 +7,8 @@ import { generatedFile } from './registry_paths.mjs';
 import { assembleRegistry } from './registry_assemble.mjs';
 import { schemaErrors, integrityErrors } from './registry_integrity.mjs';
 import { atomeTypesErrors } from './registry_atome_types.mjs';
+import { billingCatalogErrors } from './registry_billing_catalog.mjs';
+import { aiProviderCatalogErrors } from './registry_ai_provider_catalog.mjs';
 
 export async function checkRegistry() {
     const file = generatedFile('full-map.json');
@@ -20,6 +22,8 @@ export async function checkRegistry() {
         errors.push(`stale_hash: ${changed.join(', ')} changed since the last build (npm run registry:build)`);
     }
     errors.push(...await atomeTypesErrors());
+    errors.push(...await billingCatalogErrors());
+    errors.push(...await aiProviderCatalogErrors());
     return { ok: errors.length === 0, errors, map };
 }
 

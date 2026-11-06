@@ -66,7 +66,14 @@ Identify the root cause and architectural issue. Correct the source and perform 
 
 ## Language and stack details
 
-The main application language and architectural stack are governed by the root instructions. Existing platform-specific boundaries permit Rust for Tauri and iOS platform code, Swift for iOS native code, Ruby where needed for scripts, and C/C++ for DSP or high-end operations. These exceptions do not authorize moving main application behavior to another language or introducing a new dependency or platform layer.
+The main application language and architectural stack are governed by root rule 7: Rust by default, performance first, Rust at equal performance; JavaScript as the thin browser glue. Platform-specific boundaries permit Swift for iOS native code, Kotlin for Android, Ruby where needed for scripts, and C/C++ for DSP or high-end operations. These boundaries do not authorize a new dependency or platform layer.
+
+Rust workspace contract (2026-11-04):
+- One workspace at the root: `Cargo.toml` (members, `[workspace.dependencies]`, lints, `[patch]`, every build profile), one `Cargo.lock`, one `target/`. A member manifest inherits `edition`, `rust-version`, `publish` and `[lints]` from the workspace and never declares a profile or a patch. Third-party sources kept verbatim (the wgpu fork, the STT plugin) stay excluded.
+- Edition 2024, Rust 1.95 (`rust-toolchain.toml`). `unsafe` is denied workspace-wide; a C ABI or allocator boundary allows it on its module or item with a `reason`.
+- Build profiles: `wasm-renderer`, `wasm-audio`, `wasm-direct` (browser, built by `platforms/web/wasm_web_build.sh` with the wasm-bindgen CLI of the exact locked version, then wasm-opt), `ios` and `ios-dev` (`platforms/ios/build_bevy_renderer.sh`), the default release profile for Tauri desktop and Android.
+- `npm run check:rust` (`scripts/rust/check.sh`) is the gate: `cargo fmt --check`, clippy with no first-party warning on host (Tauri included), the three browser WASM crates and iOS, each package's tests with its own features, and `cargo deny check` (`deny.toml`: advisories, licenses, bans, sources). A RustSec advisory is fixed by an update, never ignored without its reason in `deny.toml`.
+- `npm run check:js` (Biome 2, `biome.jsonc`) is the JavaScript gate; formatting is not enforced. The rules turned off are listed with their reason in `biome.jsonc`; `noUnusedVariables` and `noUnusedImports` warn until their backlog is cleared.
 
 TypeScript and Python implementations are forbidden. Report the conflicting requirement and a compliant alternative rather than implementing them.
 

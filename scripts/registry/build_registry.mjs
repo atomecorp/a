@@ -10,6 +10,8 @@ import { schemaErrors, integrityErrors, orphanPlacements } from './registry_inte
 import { uiTree, searchIndex, inventoryReport, graphMermaid } from './registry_outputs.mjs';
 import { indexMarkdown } from './registry_index_md.mjs';
 import { writeAtomeTypes } from './registry_atome_types.mjs';
+import { writeBillingCatalog } from './registry_billing_catalog.mjs';
+import { writeAiProviderCatalog } from './registry_ai_provider_catalog.mjs';
 
 // Owners whose facts cannot be projected in Node, with the reason found (architecture §4).
 export const REGISTRY_HOLES = Object.freeze([
@@ -40,6 +42,8 @@ export async function buildRegistry() {
     writeJson('inventory-report.json', report);
     writeJson('ui-tree.json', uiTree(map));
     await writeAtomeTypes();
+    await writeBillingCatalog();
+    await writeAiProviderCatalog();
     writeJson('search-index.json', search);
     fs.writeFileSync(generatedFile('graph.mmd'), graphMermaid(map));
     fs.writeFileSync(generatedFile('index.md'), indexMarkdown(map, search, report));

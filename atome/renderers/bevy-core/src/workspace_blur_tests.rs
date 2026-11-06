@@ -1,5 +1,5 @@
 use bevy::{
-    camera::{visibility::RenderLayers, ClearColorConfig},
+    camera::{ClearColorConfig, visibility::RenderLayers},
     prelude::*,
     render::render_resource::{TextureFormat, TextureUsages},
 };
@@ -8,29 +8,39 @@ use crate::{
     plugin::AtomeBevyRendererPlugin,
     types::AtomeBevyRendererConfig,
     workspace_backdrop::{
-        set_workspace_backdrop_enabled, AtomePresentationCamera, AtomeWorkspaceBackdrop, MENU_PRESENTATION_LAYER,
-        WORKSPACE_CAPTURE_LAYER,
+        AtomePresentationCamera, AtomeWorkspaceBackdrop, MENU_PRESENTATION_LAYER,
+        WORKSPACE_CAPTURE_LAYER, set_workspace_backdrop_enabled,
     },
     workspace_blur::{
-        backdrop_blur_lod, backdrop_capture_pixel_size, backdrop_mip_level_count, workspace_blur_mip_pass,
-        AssistantOpticsSettings, WORKSPACE_BACKDROP_DOWNSCALE,
+        AssistantOpticsSettings, WORKSPACE_BACKDROP_DOWNSCALE, backdrop_blur_lod,
+        backdrop_capture_pixel_size, backdrop_mip_level_count, workspace_blur_mip_pass,
     },
 };
 
 #[test]
 fn blur_pyramid_copies_the_capture_after_this_frame_was_written() {
-    use bevy::core_pipeline::{upscaling::upscaling, Core2d, Core2dSystems};
+    use bevy::core_pipeline::{Core2d, Core2dSystems, upscaling::upscaling};
     // Same wiring as Bevy's Core2d plugin: `upscaling` blits the camera's view
     // target into its output image only after the post-process sets.
     let mut schedule = Core2d::base_schedule();
-    schedule.add_systems((upscaling.after(Core2dSystems::PostProcess), workspace_blur_mip_pass()));
+    schedule.add_systems((
+        upscaling.after(Core2dSystems::PostProcess),
+        workspace_blur_mip_pass(),
+    ));
     let mut world = World::new();
     schedule.initialize(&mut world).unwrap();
     // System names need Bevy's debug feature: tell the two apart by type.
-    let upscaling_type = IntoSystem::into_system(upscaling).type_id();
-    let order: Vec<bool> =
-        schedule.systems().unwrap().map(|(_, system)| system.type_id() == upscaling_type).collect();
-    assert_eq!(order, vec![true, false], "the pyramid must copy the capture written this frame, not the previous one");
+    let upscaling_type = IntoSystem::into_system(upscaling).system_type();
+    let order: Vec<bool> = schedule
+        .systems()
+        .unwrap()
+        .map(|(_, system)| system.system_type() == upscaling_type)
+        .collect();
+    assert_eq!(
+        order,
+        vec![true, false],
+        "the pyramid must copy the capture written this frame, not the previous one"
+    );
 }
 
 #[test]
@@ -54,34 +64,68 @@ fn assistant_optics_settings_are_bounded() {
 #[test]
 fn capture_and_blur_pyramid_are_downscaled_gpu_targets() {
     let mut app = App::new();
-    app.add_plugins(AtomeBevyRendererPlugin::new(AtomeBevyRendererConfig::with_surface_metrics(
-        640.0,
-        480.0,
-        1280.0,
-        960.0,
-        2.0,
-        Default::default(),
-    )));
+    app.add_plugins(AtomeBevyRendererPlugin::new(
+        AtomeBevyRendererConfig::with_surface_metrics(
+            640.0,
+            480.0,
+            1280.0,
+            960.0,
+            2.0,
+            Default::default(),
+        ),
+    ));
     app.update();
     let state = app.world().resource::<AtomeWorkspaceBackdrop>();
     let expected = backdrop_capture_pixel_size(state.pixel_size);
     assert_eq!(expected, UVec2::new(320, 240));
-    let image = app.world().resource::<Assets<Image>>().get(&state.image).unwrap();
-    assert_eq!((image.texture_descriptor.size.width, image.texture_descriptor.size.height), (expected.x, expected.y));
-    assert_eq!(image.texture_descriptor.mip_level_count, backdrop_mip_level_count(expected));
+    let image = app
+        .world()
+        .resource::<Assets<Image>>()
+        .get(&state.image)
+        .unwrap();
+    assert_eq!(
+        (
+            image.texture_descriptor.size.width,
+            image.texture_descriptor.size.height
+        ),
+        (expected.x, expected.y)
+    );
+    assert_eq!(
+        image.texture_descriptor.mip_level_count,
+        backdrop_mip_level_count(expected)
+    );
     // WebGPU guarantees only four storage textures per shader stage; the A12Z
     // iPad exposes exactly four and a storage-based pyramid quit the renderer.
     // Every level is written as a colour attachment instead.
-    assert!(!image.texture_descriptor.usage.contains(TextureUsages::STORAGE_BINDING));
-    assert!(image.texture_descriptor.usage.contains(TextureUsages::RENDER_ATTACHMENT));
+    assert!(
+        !image
+            .texture_descriptor
+            .usage
+            .contains(TextureUsages::STORAGE_BINDING)
+    );
+    assert!(
+        image
+            .texture_descriptor
+            .usage
+            .contains(TextureUsages::RENDER_ATTACHMENT)
+    );
     assert!(image.data.is_none());
     // The capture, the pyramid and the materials sampling it share one linear format.
     assert_eq!(image.texture_descriptor.format, TextureFormat::Rgba8Unorm);
     assert!(image.texture_descriptor.view_formats.is_empty());
     assert!(image.texture_view_descriptor.is_none());
-    let capture = app.world().resource::<Assets<Image>>().get(&state.capture_image).unwrap();
+    let capture = app
+        .world()
+        .resource::<Assets<Image>>()
+        .get(&state.capture_image)
+        .unwrap();
     assert_eq!(capture.texture_descriptor.mip_level_count, 1);
-    assert!(capture.texture_descriptor.usage.contains(TextureUsages::COPY_SRC));
+    assert!(
+        capture
+            .texture_descriptor
+            .usage
+            .contains(TextureUsages::COPY_SRC)
+    );
     assert_eq!(capture.texture_descriptor.format, TextureFormat::Rgba8Unorm);
     assert!(capture.texture_view_descriptor.is_none());
 }
@@ -98,11 +142,16 @@ fn blur_radius_is_per_surface_and_dpr_aware() {
 #[test]
 fn backdrop_uses_only_capture_and_presentation_cameras() {
     let mut app = App::new();
-    app.add_plugins(AtomeBevyRendererPlugin::new(AtomeBevyRendererConfig::empty(640.0, 480.0)));
+    app.add_plugins(AtomeBevyRendererPlugin::new(
+        AtomeBevyRendererConfig::empty(640.0, 480.0),
+    ));
     app.update();
     let state = app.world().resource::<AtomeWorkspaceBackdrop>().clone();
-    let presentation =
-        app.world_mut().query_filtered::<Entity, With<AtomePresentationCamera>>().single(app.world()).unwrap();
+    let presentation = app
+        .world_mut()
+        .query_filtered::<Entity, With<AtomePresentationCamera>>()
+        .single(app.world())
+        .unwrap();
     let camera_count = {
         let world = app.world_mut();
         let mut query = world.query::<&Camera>();
@@ -112,7 +161,10 @@ fn backdrop_uses_only_capture_and_presentation_cameras() {
     assert_eq!(app.world().get::<Msaa>(state.camera), Some(&Msaa::Off));
     assert_eq!(app.world().get::<Msaa>(presentation), Some(&Msaa::Off));
     assert_eq!(app.world().get::<Camera>(state.camera).unwrap().order, -3);
-    assert!(matches!(app.world().get::<Camera>(state.camera).unwrap().clear_color, ClearColorConfig::Custom(_)));
+    assert!(matches!(
+        app.world().get::<Camera>(state.camera).unwrap().clear_color,
+        ClearColorConfig::Custom(_)
+    ));
     set_workspace_backdrop_enabled(app.world_mut(), true).unwrap();
     assert!(app.world().get::<Camera>(state.camera).unwrap().is_active);
     set_workspace_backdrop_enabled(app.world_mut(), false).unwrap();
@@ -122,16 +174,19 @@ fn backdrop_uses_only_capture_and_presentation_cameras() {
 #[test]
 fn capture_isolated_and_shaders_use_the_canonical_viewport() {
     let mut app = App::new();
-    app.add_plugins(AtomeBevyRendererPlugin::new(AtomeBevyRendererConfig::empty(640.0, 480.0)));
+    app.add_plugins(AtomeBevyRendererPlugin::new(
+        AtomeBevyRendererConfig::empty(640.0, 480.0),
+    ));
     app.update();
     let capture = app.world().resource::<AtomeWorkspaceBackdrop>().camera;
     let capture_layers = app.world().get::<RenderLayers>(capture).unwrap();
     assert!(capture_layers.intersects(&RenderLayers::layer(WORKSPACE_CAPTURE_LAYER)));
     assert!(!capture_layers.intersects(&RenderLayers::layer(MENU_PRESENTATION_LAYER)));
 
-    for shader in
-        [include_str!("assets/shaders/backdrop_surface.wgsl"), include_str!("assets/shaders/procedural_sdf.wgsl")]
-    {
+    for shader in [
+        include_str!("assets/shaders/backdrop_surface.wgsl"),
+        include_str!("assets/shaders/procedural_sdf.wgsl"),
+    ] {
         assert!(shader.contains("frag_coord_to_uv(mesh.position.xy, view.viewport)"));
         assert!(shader.contains("textureSampleLevel"));
         assert!(!shader.contains("textureDimensions(original_texture)"));

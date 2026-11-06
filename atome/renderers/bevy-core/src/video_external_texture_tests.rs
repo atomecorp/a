@@ -4,10 +4,10 @@ use crate::{
     render_ops::{apply_resource, apply_spawn, apply_style, apply_transform},
     shape_sdf::{AtomeShapeGeometry, AtomeShapeSilhouette, AtomeShapeVariant},
     types::{
-        default_uv_rect, AtomeBevyRendererConfig, AtomeColorFilters, AtomeEntityTable,
-        AtomeLocalTransform, AtomeMaskStyle, AtomeRenderNode, AtomeRendererDiagnostics,
-        AtomeResourcePatch, AtomeSelectionOverlay, AtomeStylePatch, AtomeTransformPatch,
-        AtomeTransition,
+        AtomeBevyRendererConfig, AtomeColorFilters, AtomeEntityTable, AtomeLocalTransform,
+        AtomeMaskStyle, AtomeRenderNode, AtomeRendererDiagnostics, AtomeResourcePatch,
+        AtomeSelectionOverlay, AtomeStylePatch, AtomeTransformPatch, AtomeTransition,
+        default_uv_rect,
     },
 };
 use bevy::{
@@ -23,7 +23,9 @@ pub(crate) fn video_node(id: &str) -> AtomeRenderNode {
         logical_position: [10.0, 20.0],
         logical_size: [160.0, 90.0],
         clip_rect: None,
-        clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
+        clip_rotation: 0.0,
+        clip_rounded_rects: vec![],
+        clip_fades: vec![],
         scale: [1.0, 1.0],
         rotation: 0.0,
         origin: [0.0, 0.0],
@@ -152,9 +154,15 @@ fn masked_video_nodes_bake_the_silhouette_into_an_alpha_texture() {
         .resource::<Assets<Image>>()
         .get(handle)
         .expect("the mask image must exist");
-    assert_eq!(image.texture_descriptor.size.width, 160, "the alpha resource matches the video quad");
-    assert_eq!(image.texture_descriptor.size.height, 90, "the alpha resource matches the video quad");
-    let data = image.data.as_ref().expect("the mask image carries pixels");
+    assert_eq!(
+        image.texture_descriptor.size.width, 160,
+        "the alpha resource matches the video quad"
+    );
+    assert_eq!(
+        image.texture_descriptor.size.height, 90,
+        "the alpha resource matches the video quad"
+    );
+    let (_, _, data) = crate::shape_mask_gpu::twin::image_pixels(&world, handle);
     assert_eq!(data.len(), 160 * 90 * 4);
     // Le coin haut-gauche d'une etoile est HORS silhouette : alpha nul.
     assert_eq!(data[3], 0);
@@ -241,7 +249,13 @@ fn a_live_mask_style_patch_keeps_the_video_entity_and_playback_mesh() {
     }"#).unwrap();
     apply_style(&mut world, patch).unwrap();
 
-    assert_eq!(world.resource::<AtomeEntityTable>().by_id.get("live_mask_video"), Some(&entity));
+    assert_eq!(
+        world
+            .resource::<AtomeEntityTable>()
+            .by_id
+            .get("live_mask_video"),
+        Some(&entity)
+    );
     assert_eq!(world.get::<Mesh2d>(entity).unwrap().0, mesh_before);
     let mask_after = world
         .get::<AtomeVideoExternalTexture>(entity)
@@ -249,7 +263,10 @@ fn a_live_mask_style_patch_keeps_the_video_entity_and_playback_mesh() {
         .mask_texture
         .clone();
     assert!(mask_before.is_some() && mask_after.is_some());
-    assert_ne!(mask_before, mask_after, "only the alpha texture is replaced");
+    assert_ne!(
+        mask_before, mask_after,
+        "only the alpha texture is replaced"
+    );
 }
 
 #[test]
@@ -281,7 +298,9 @@ fn video_transform_resizes_external_texture_mesh_without_sprite_state() {
             logical_position: [30.0, 40.0],
             logical_size: [320.0, 180.0],
             clip_rect: None,
-            clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
+            clip_rotation: 0.0,
+            clip_rounded_rects: vec![],
+            clip_fades: vec![],
             scale: [1.0, 1.0],
             rotation: 0.0,
             origin: [0.0, 0.0],
@@ -309,7 +328,9 @@ fn video_translation_reuses_external_texture_mesh_asset() {
                 logical_position: [10.0 + step as f32, 20.0 + step as f32 * 2.0],
                 logical_size: [160.0, 90.0],
                 clip_rect: None,
-                clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
+                clip_rotation: 0.0,
+                clip_rounded_rects: vec![],
+                clip_fades: vec![],
                 scale: [1.0, 1.0],
                 rotation: 0.0,
                 origin: [0.0, 0.0],
@@ -343,7 +364,9 @@ fn selected_video_translation_reuses_overlay_entities_and_texture() {
             logical_position: [42.0, 57.0],
             logical_size: [160.0, 90.0],
             clip_rect: None,
-            clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
+            clip_rotation: 0.0,
+            clip_rounded_rects: vec![],
+            clip_fades: vec![],
             scale: [1.0, 1.0],
             rotation: 0.0,
             origin: [0.0, 0.0],
@@ -353,8 +376,14 @@ fn selected_video_translation_reuses_overlay_entities_and_texture() {
 
     let translated_overlay = world.get::<AtomeSelectionOverlay>(entity).unwrap();
     assert_eq!(translated_overlay.entities, original_overlay.entities);
-    assert_eq!(translated_overlay.image_handles, original_overlay.image_handles);
-    assert_eq!(world.resource::<Assets<Image>>().len(), original_image_count);
+    assert_eq!(
+        translated_overlay.image_handles,
+        original_overlay.image_handles
+    );
+    assert_eq!(
+        world.resource::<Assets<Image>>().len(),
+        original_image_count
+    );
     for (index, overlay_entity) in translated_overlay.entities.iter().enumerate() {
         let translated = world.get::<Transform>(*overlay_entity).unwrap().translation;
         assert_near(translated.x, original_positions[index].x + 32.0);
@@ -377,7 +406,9 @@ fn video_transform_preserves_external_texture_uv_rect() {
             logical_position: [30.0, 40.0],
             logical_size: [320.0, 180.0],
             clip_rect: None,
-            clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
+            clip_rotation: 0.0,
+            clip_rounded_rects: vec![],
+            clip_fades: vec![],
             scale: [1.0, 1.0],
             rotation: 0.0,
             origin: [0.0, 0.0],
@@ -410,7 +441,9 @@ fn video_transform_applies_scale_rotation_and_preserves_them_on_surface_resize()
             logical_position: [30.0, 40.0],
             logical_size: [320.0, 180.0],
             clip_rect: None,
-            clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
+            clip_rotation: 0.0,
+            clip_rounded_rects: vec![],
+            clip_fades: vec![],
             scale: [1.5, 0.75],
             rotation: 30.0,
             origin: [0.5, 0.5],

@@ -109,7 +109,7 @@ mod extraction {
 
     use tauri::Manager;
 
-    use super::{manifest_contents, project_relative_path, MANIFEST_FILE};
+    use super::{MANIFEST_FILE, manifest_contents, project_relative_path};
 
     fn is_safe_relative_path(path: &Path) -> bool {
         path.components()

@@ -1,15 +1,16 @@
+use crate::frame_clock::{
+    WEB_IDLE_HEARTBEAT_MS, WEB_IDLE_SETTLE_MS, WEB_LAST_ACTIVITY, WEB_SETTLED_HEARTBEAT_MS,
+    WEB_WAKE_COALESCED,
+};
 use atome_bevy_renderer_core::{
-    render_math::atome_camera_projection, AtomeBevyRendererConfig, AtomeEntityTable,
-    AtomeRenderNode, AtomeRenderOp, AtomeRenderScene, AtomeRendererDiagnostics, AtomeStylePatch,
-    AtomeSurfaceBackgroundPatch, AtomeTransformPatch, AtomeTransition,
+    AtomeBevyRendererConfig, AtomeEntityTable, AtomeRenderNode, AtomeRenderOp, AtomeRenderScene,
+    AtomeRendererDiagnostics, AtomeStylePatch, AtomeSurfaceBackgroundPatch, AtomeTransformPatch,
+    AtomeTransition, render_math::atome_camera_projection,
 };
 use bevy::prelude::*;
 use bevy::window::{CompositeAlphaMode, RequestRedraw, WindowResized, WindowResolution};
 use bevy::winit::UpdateMode;
 use std::time::Duration;
-use crate::frame_clock::{
-    WEB_IDLE_HEARTBEAT_MS, WEB_IDLE_SETTLE_MS, WEB_LAST_ACTIVITY, WEB_SETTLED_HEARTBEAT_MS, WEB_WAKE_COALESCED,
-};
 
 use super::*;
 
@@ -22,7 +23,9 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         logical_position: [12.0, 24.0],
         logical_size: [120.0, 50.0],
         clip_rect: None,
-        clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
+        clip_rotation: 0.0,
+        clip_rounded_rects: vec![],
+        clip_fades: vec![],
         scale: [1.0, 1.0],
         rotation: 0.0,
         origin: [0.0, 0.0],
@@ -304,7 +307,13 @@ fn surface_patch_tells_the_cameras_in_the_same_update() {
     assert_eq!(resized, vec![(window, 430.0, 602.0)]);
     // Told again by the browser, the window already matches: nothing more is written.
     apply_browser_window_resize_to_surface(app.world_mut());
-    assert_eq!(app.world().resource::<Messages<WindowResized>>().iter_current_update_messages().count(), 1);
+    assert_eq!(
+        app.world()
+            .resource::<Messages<WindowResized>>()
+            .iter_current_update_messages()
+            .count(),
+        1
+    );
 }
 
 #[test]
@@ -327,7 +336,12 @@ fn screen_density_drift_without_resize_message_is_given_back() {
             ..default()
         })
         .id();
-    app.world_mut().entity_mut(window).get_mut::<Window>().unwrap().resolution.set_scale_factor(2.0);
+    app.world_mut()
+        .entity_mut(window)
+        .get_mut::<Window>()
+        .unwrap()
+        .resolution
+        .set_scale_factor(2.0);
 
     apply_browser_window_resize_to_surface(app.world_mut());
 
@@ -413,7 +427,9 @@ fn queued_exports_apply_through_shared_core() {
         logical_position: [64.0, 72.0],
         logical_size: [140.0, 90.0],
         clip_rect: None,
-        clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
+        clip_rotation: 0.0,
+        clip_rounded_rects: vec![],
+        clip_fades: vec![],
         scale: [1.0, 1.0],
         rotation: 0.0,
         origin: [0.0, 0.0],
@@ -456,7 +472,7 @@ fn queued_surface_background_export_uses_shared_core_op() {
 fn queued_audio_progress_styles_are_coalesced_per_atome() {
     let _ = drain_web_ops();
 
-    queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
+    queue_web_op(AtomeRenderOp::Style(Box::new(AtomeStylePatch {
         id: "waveform_1".to_string(),
         color: None,
         selected: None,
@@ -476,8 +492,8 @@ fn queued_audio_progress_styles_are_coalesced_per_atome() {
         polygon_sides: None,
         mask: None,
         progress_ring: None,
-    }));
-    queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
+    })));
+    queue_web_op(AtomeRenderOp::Style(Box::new(AtomeStylePatch {
         id: "waveform_1".to_string(),
         color: None,
         selected: None,
@@ -497,8 +513,8 @@ fn queued_audio_progress_styles_are_coalesced_per_atome() {
         polygon_sides: None,
         mask: None,
         progress_ring: None,
-    }));
-    queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
+    })));
+    queue_web_op(AtomeRenderOp::Style(Box::new(AtomeStylePatch {
         id: "waveform_2".to_string(),
         color: None,
         selected: None,
@@ -518,7 +534,7 @@ fn queued_audio_progress_styles_are_coalesced_per_atome() {
         polygon_sides: None,
         mask: None,
         progress_ring: None,
-    }));
+    })));
 
     let ops = drain_web_ops();
     assert_eq!(ops.len(), 2);
@@ -538,7 +554,7 @@ fn queued_audio_progress_styles_are_coalesced_per_atome() {
 fn queued_opacity_styles_are_merged_per_atome() {
     let _ = drain_web_ops();
 
-    queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
+    queue_web_op(AtomeRenderOp::Style(Box::new(AtomeStylePatch {
         id: "video_1".to_string(),
         color: Some([0.5, 0.5, 0.5, 1.0]),
         selected: None,
@@ -558,8 +574,8 @@ fn queued_opacity_styles_are_merged_per_atome() {
         polygon_sides: None,
         mask: None,
         progress_ring: None,
-    }));
-    queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
+    })));
+    queue_web_op(AtomeRenderOp::Style(Box::new(AtomeStylePatch {
         id: "video_1".to_string(),
         color: None,
         selected: None,
@@ -579,7 +595,7 @@ fn queued_opacity_styles_are_merged_per_atome() {
         polygon_sides: None,
         mask: None,
         progress_ring: None,
-    }));
+    })));
 
     let ops = drain_web_ops();
     assert_eq!(ops.len(), 1);
@@ -594,7 +610,7 @@ fn queued_opacity_styles_are_merged_per_atome() {
 fn queued_styles_are_not_merged_across_non_style_ops_for_same_atome() {
     let _ = drain_web_ops();
 
-    queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
+    queue_web_op(AtomeRenderOp::Style(Box::new(AtomeStylePatch {
         id: "atom_1".to_string(),
         color: None,
         selected: None,
@@ -614,9 +630,9 @@ fn queued_styles_are_not_merged_across_non_style_ops_for_same_atome() {
         polygon_sides: None,
         mask: None,
         progress_ring: None,
-    }));
+    })));
     queue_web_op(AtomeRenderOp::Despawn("atom_1".to_string()));
-    queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
+    queue_web_op(AtomeRenderOp::Style(Box::new(AtomeStylePatch {
         id: "atom_1".to_string(),
         color: None,
         selected: None,
@@ -636,7 +652,7 @@ fn queued_styles_are_not_merged_across_non_style_ops_for_same_atome() {
         polygon_sides: None,
         mask: None,
         progress_ring: None,
-    }));
+    })));
 
     let ops = drain_web_ops();
     assert_eq!(ops.len(), 3);
@@ -646,7 +662,7 @@ fn queued_styles_are_not_merged_across_non_style_ops_for_same_atome() {
 fn queued_styles_with_transition_are_not_merged() {
     let _ = drain_web_ops();
 
-    queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
+    queue_web_op(AtomeRenderOp::Style(Box::new(AtomeStylePatch {
         id: "atom_t".to_string(),
         color: None,
         selected: None,
@@ -666,8 +682,8 @@ fn queued_styles_with_transition_are_not_merged() {
         polygon_sides: None,
         mask: None,
         progress_ring: None,
-    }));
-    queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
+    })));
+    queue_web_op(AtomeRenderOp::Style(Box::new(AtomeStylePatch {
         id: "atom_t".to_string(),
         color: None,
         selected: None,
@@ -687,26 +703,10 @@ fn queued_styles_with_transition_are_not_merged() {
         polygon_sides: None,
         mask: None,
         progress_ring: None,
-    }));
+    })));
 
     let ops = drain_web_ops();
     assert_eq!(ops.len(), 2);
-}
-
-#[test]
-fn initial_web_redraw_is_requested_before_user_input() {
-    let mut app = App::new();
-    app.add_message::<RequestRedraw>();
-
-    request_initial_web_redraw(app.world_mut());
-
-    assert_eq!(
-        app.world()
-            .resource::<Messages<RequestRedraw>>()
-            .iter_current_update_messages()
-            .count(),
-        1
-    );
 }
 
 #[test]
@@ -813,16 +813,19 @@ fn video_copy_diagnostics_are_shared_with_web_exports() {
 fn assert_reactive_mode(mode: UpdateMode, expected_wait: Duration) {
     let UpdateMode::Reactive {
         wait,
+        react_to_device_events,
         react_to_user_events,
         react_to_window_events,
-        ..
     } = mode
     else {
         panic!("web renderer must not use continuous winit updates");
     };
     assert_eq!(wait, expected_wait);
-    assert!(react_to_user_events);
-    assert!(react_to_window_events);
+    assert!(react_to_user_events, "a wake is announced as a user event");
+    assert!(
+        !react_to_window_events && !react_to_device_events,
+        "a pointer move the renderer has no use for must not run an update"
+    );
 }
 
 #[test]
@@ -853,14 +856,20 @@ fn idle_heartbeat_is_far_slower_than_the_display_so_a_static_workspace_stops_red
     // near a display period here means the renderer redraws a motionless
     // workspace ~60 times a second, which is what overheated the device.
     // Frames come from wakes now; this interval is only a failsafe.
-    assert!(
-        WEB_IDLE_HEARTBEAT_MS >= 500,
-        "the idle wait must not approach a frame period, got {WEB_IDLE_HEARTBEAT_MS}ms"
-    );
+    const {
+        assert!(
+            WEB_IDLE_HEARTBEAT_MS >= 500,
+            "the idle wait must not approach a frame period"
+        )
+    };
 }
 
 fn focused_wait(app: &App) -> Duration {
-    match app.world().resource::<bevy::winit::WinitSettings>().focused_mode {
+    match app
+        .world()
+        .resource::<bevy::winit::WinitSettings>()
+        .focused_mode
+    {
         UpdateMode::Reactive { wait, .. } => wait,
         other => panic!("expected a reactive update mode, got {other:?}"),
     }
@@ -870,16 +879,25 @@ fn focused_wait(app: &App) -> Duration {
 fn settled_workspace_stretches_the_idle_heartbeat_and_a_wake_restores_it() {
     let mut app = bench_app();
     app.update();
-    assert_eq!(focused_wait(&app), Duration::from_millis(WEB_IDLE_HEARTBEAT_MS));
+    assert_eq!(
+        focused_wait(&app),
+        Duration::from_millis(WEB_IDLE_HEARTBEAT_MS)
+    );
 
     let quiet_since = Instant::now() - Duration::from_millis(WEB_IDLE_SETTLE_MS + 50);
     WEB_LAST_ACTIVITY.with(|cell| cell.set(Some(quiet_since)));
     app.update();
-    assert_eq!(focused_wait(&app), Duration::from_millis(WEB_SETTLED_HEARTBEAT_MS));
+    assert_eq!(
+        focused_wait(&app),
+        Duration::from_millis(WEB_SETTLED_HEARTBEAT_MS)
+    );
 
     wake_web_renderer();
     app.update();
-    assert_eq!(focused_wait(&app), Duration::from_millis(WEB_IDLE_HEARTBEAT_MS));
+    assert_eq!(
+        focused_wait(&app),
+        Duration::from_millis(WEB_IDLE_HEARTBEAT_MS)
+    );
 }
 
 fn bench_app() -> App {

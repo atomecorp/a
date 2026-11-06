@@ -1,12 +1,11 @@
 // The three menus (contextual rail, project ribbon, main ribbon) share one pointer route and one lens (user request of
 // 2 Nov. 2026): a quick swipe along a bar that scrolls scrolls it and runs nothing; a slow exploration grows the tool under
-// the finger and its release runs nothing; a short tap runs its tool once; a press that stops a glide is no tap; the grown
-// tool stays whole inside the visible span of a bar that scrolls; a swipe's suppression never swallows the next tap.
+// the finger and its release runs nothing; a short tap runs its tool once; a press that stops a glide is no tap; a swipe's
+// suppression never swallows the next tap (the grown tool kept whole in a scrolling bar: bevy-core `linear_lens_tests.rs`).
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { createBevyUiPointerRuntime } from '../../eVe/domains/rendering/bevy_ui_pointer_runtime.js';
 import { LENS_FLING_PX_PER_MS } from '../../eVe/domains/rendering/bevy_ui_pointer_reveal_runtime.js';
-import { solveLinearLensLayout } from '../../eVe/intuition/ribbon/bevy_ui_linear_menu_lens_geometry.js';
 import { createBevyMainMenuScrollRuntime } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_scroll_runtime.js';
 
 const TREE = 'menu', TOOL = 'tool_a', NEXT = 'tool_b';
@@ -75,19 +74,6 @@ test('a press that stops a glide is no tap', () => {
     route('pointerdown', at(30, 0));
     route('pointerup', at(30, 60));
     assert.deepEqual(ran(), []);
-});
-
-test('the grown tool stays whole inside the visible span of a bar that scrolls', () => {
-    const tiles = [0, 1, 2, 3].map(index => ({ rest: { x: 100 + index * 65, y: 800, size: 60 } }));
-    // The last visible tool, against the viewport's right end (its block): grown twice, centred it would pass it.
-    const sizes = [60, 60, 60, 120];
-    const free = solveLinearLensLayout({ tiles, sizes, gap: 5 });
-    assert.ok(free[3].x + free[3].size > 355);
-    const kept = solveLinearLensLayout({ tiles, sizes, gap: 5, viewport: [100, 355] });
-    assert.equal(kept[3].x + kept[3].size, 355);
-    assert.ok(kept[2].x + kept[2].size <= kept[3].x - 5 + 0.001);
-    // At rest nothing moves.
-    assert.deepEqual(solveLinearLensLayout({ tiles, sizes: [60, 60, 60, 60], gap: 5, viewport: [100, 355] }).map(tile => tile.x), [100, 165, 230, 295]);
 });
 
 test('a swipe of the ribbon never swallows the next tap; a press while it still snaps is no tap', () => {

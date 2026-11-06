@@ -1,7 +1,7 @@
 import Foundation
 
 /// Handles copying bundled assets into the writable sandbox roots on demand.
-/// This lets LocalHTTPServer/FileSystemBridge keep serving legacy resources
+/// This lets FileSystemBridge keep serving legacy resources
 /// without ever reading directly from the .appex bundle (for sandbox safety).
 final class SandboxAssetManager {
     static let shared = SandboxAssetManager()

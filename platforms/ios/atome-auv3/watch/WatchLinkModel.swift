@@ -91,6 +91,7 @@ struct WatchSessionState: Decodable, Equatable {
     let heart: Double?
     let caption: String?
     let pause: String?
+    let forward: String?
 }
 
 // A figure that runs is counted here: `ends_at` (a time left) or `since` (a time spent), in ms since 1970.

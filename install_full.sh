@@ -538,22 +538,6 @@ update_fastify_stack() {
 }
 
 
-ensure_chokidar_dependency() {
-  local desired="${1:-^3.6.0}"
-  log_info "👀 Checking chokidar dependency"
-  if (cd "$PROJECT_ROOT" && npm ls chokidar >/dev/null 2>&1); then
-    log_ok "✅ chokidar already installed"
-    return
-  fi
-
-  log_info "📦 Installing chokidar@${desired}"
-  if (cd "$PROJECT_ROOT" && npm install "chokidar@${desired}"); then
-    log_ok "✅ chokidar ready"
-  else
-    log_warn "⚠️  Unable to install chokidar automatically"
-  fi
-}
-
 reinstall_project_dependencies() {
   local installer="$PROJECT_ROOT/scripts/install_dependencies.sh"
   if [ ! -f "$installer" ]; then
@@ -795,7 +779,6 @@ main() {
     run_latest_updates
   fi
 
-  ensure_chokidar_dependency
   reinstall_project_dependencies
   install_sqlite_modules
   setup_sqlite_database

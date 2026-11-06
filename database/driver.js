@@ -152,10 +152,13 @@ class SqliteDriver {
     }
 
     /**
-     * Begin a manual transaction
+     * Begin a manual transaction, holding the write lock from the start: the vault
+     * router (atome-server) writes this database from another process, and a deferred
+     * transaction that read before its write fails at once (SQLITE_BUSY) when that
+     * process wrote in between, where an immediate one waits its turn.
      */
     beginTransaction() {
-        this.db.exec('BEGIN TRANSACTION');
+        this.db.exec('BEGIN IMMEDIATE');
     }
 
     /**

@@ -102,7 +102,7 @@ struct WatchCardScreen: View {
         WatchBand(link: link, theme: theme, back: leave)
     }
 
-    // Contrôles: what comes next, the disc as a tool slid along its well to ■ to stop; Back leaves, Pause pauses or resumes.
+    // Contrôles: what comes next, the disc as a tool slid along its well to ■ to stop; Back leaves, Suivant goes to the next phase.
     @ViewBuilder private func controls(_ size: CGSize) -> some View {
         let session = card.session
         WatchTitle(text: card.title, theme: theme)
@@ -114,18 +114,18 @@ struct WatchCardScreen: View {
         .frame(width: size.width - 16).offset(x: 8, y: y(58, size))
         WatchBand(link: link, theme: theme, back: leave) {
             if session?.phase != "countdown" {
-                WatchToolButton(theme: theme, label: session?.pause ?? "", action: { act("pause") }) {
-                    Image(systemName: session?.phase == "paused" ? "play.fill" : "pause.fill").font(.system(size: 18))
+                WatchToolButton(theme: theme, label: session?.forward ?? "", action: { act("next") }) {
+                    Image(systemName: "forward.end.fill").font(.system(size: 18))
                 }
             }
         }
     }
 
-    // Disque: the step under way on top, the disc and its ring (a touch does what the iPhone's disc does), « Ensuite · … », the pulse.
+    // Disque: the step under way on top, the disc and its ring (a touch pauses or resumes, as the iPhone's disc), « Ensuite · … », the pulse.
     @ViewBuilder private func discPage(_ size: CGSize) -> some View {
         let session = card.session
         WatchTitle(text: session?.line ?? card.title, theme: theme)
-        WatchDisc(theme: theme, ring: session?.ring, action: { act("done") }) { WatchFigureView(figure: session?.figure) }
+        WatchDisc(theme: theme, ring: session?.ring, action: { act("pause") }) { WatchFigureView(figure: session?.figure) }
             .position(x: size.width / 2, y: y(94, size))
         if let next = session?.next, !next.isEmpty {
             Text(next).font(.system(size: 13)).lineLimit(1).frame(maxWidth: size.width - 80, alignment: .leading)

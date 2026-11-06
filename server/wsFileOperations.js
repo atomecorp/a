@@ -16,24 +16,11 @@ import {
 import { isWsApiPrincipalProvisioned } from './wsApiIdentity.js';
 
 /**
- * @param {object} ctx
- * @param {object} ctx.connection - the WebSocket connection
- * @param {object} ctx.data - parsed inbound message
- * @param {Function} ctx.safeSend - reply sender bound to this connection
- * @param {string} ctx.projectRoot
- * @param {string} ctx.UPLOADS_TMP_DIR
- * @param {object} ctx.deps - server-side helpers kept in server.js
+ * The account a file request acts for: the connection's, else its device session's
+ * (the connection then joins that account), provisioned; else the request's refusal.
+ * Shared with the Rust front (`front-file-requester`, server/ws_api_front.js).
  */
-export async function handleWsFileOperation({ connection, data, safeSend, projectRoot, UPLOADS_TMP_DIR, deps, provisioned = isWsApiPrincipalProvisioned }) {
-    const {
-        databaseEnabled, coerceWsChunkSize, ensureVideoPlaybackCache, getRequiredJwtSecret,
-        listUserDownloadsSnapshot, normalizeUserRelativePath, registerFileUpload,
-        resolveDownloadTarget, resolveUserAssetPath, resolveUserUploadPath, sanitizeUploadId, deleteFile
-    } = deps;
-    const fs = fsPromises;
-    const action = data.action || '';
-    const requestId = data.requestId;
-
+export async function fileRequester(connection, data, getRequiredJwtSecret, provisioned = isWsApiPrincipalProvisioned) {
     const resolveRequesterId = async () => {
       let requesterId = connection?._wsApiUserId || null;
       try {
@@ -72,24 +59,41 @@ export async function handleWsFileOperation({ connection, data, safeSend, projec
     };
 
     const userId = await resolveRequesterId();
-    if (!userId) {
+    if (!userId) return { error: 'file_request_auth_required' };
+    if (!await provisioned(userId)) return { error: 'remote_account_not_provisioned' };
+    return { userId };
+}
+
+/**
+ * @param {object} ctx
+ * @param {object} ctx.connection - the WebSocket connection
+ * @param {object} ctx.data - parsed inbound message
+ * @param {Function} ctx.safeSend - reply sender bound to this connection
+ * @param {string} ctx.projectRoot
+ * @param {string} ctx.UPLOADS_TMP_DIR
+ * @param {object} ctx.deps - server-side helpers kept in server.js
+ */
+export async function handleWsFileOperation({ connection, data, safeSend, projectRoot, UPLOADS_TMP_DIR, deps, provisioned = isWsApiPrincipalProvisioned }) {
+    const {
+        databaseEnabled, coerceWsChunkSize, ensureVideoPlaybackCache, getRequiredJwtSecret,
+        listUserDownloadsSnapshot, normalizeUserRelativePath, registerFileUpload,
+        resolveDownloadTarget, resolveUserAssetPath, resolveUserUploadPath, sanitizeUploadId, deleteFile
+    } = deps;
+    const fs = fsPromises;
+    const action = data.action || '';
+    const requestId = data.requestId;
+
+    const requester = await fileRequester(connection, data, getRequiredJwtSecret, provisioned);
+    if (requester.error) {
       safeSend({
         type: 'file-response',
         requestId,
         success: false,
-        error: 'file_request_auth_required'
+        error: requester.error
       });
       return;
     }
-    if (!await provisioned(userId)) {
-      safeSend({
-        type: 'file-response',
-        requestId,
-        success: false,
-        error: 'remote_account_not_provisioned'
-      });
-      return;
-    }
+    const userId = requester.userId;
     const identifier = data.atome_id || data.id || data.file_id || data.identifier || data.file;
 
     const sendFileResponse = (payload) => {

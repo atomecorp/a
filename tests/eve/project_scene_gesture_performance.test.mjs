@@ -63,7 +63,10 @@ test('Project scene drag applies direct Bevy transforms without full projection 
         scale: [1, 1],
         rotation: 0,
         origin: [0, 0],
-        clip_rect: null
+        clip_rect: null,
+        clip_rotation: 0,
+        clip_rounded_rects: [],
+        clip_fades: []
     });
 
     await flushFrames();
@@ -154,95 +157,6 @@ test('Molecule drag coalesces every member to one direct transform per display f
         clientX: 38,
         clientY: 37,
         pointerId: 12
-    }));
-    await flushFrames();
-});
-
-test('Tauri dense media scene keeps a Molecule drag on one native transform batch per display frame', async () => {
-    clearAllProjectScenes();
-    const dom = new JSDOM('<!doctype html><html><body><main id="project"></main></body></html>', {
-        url: 'tauri://localhost/'
-    });
-    globalThis.document = dom.window.document;
-    globalThis.window = dom.window;
-    const flushFrames = installFrameScheduler(dom.window);
-    const nativeCalls = [];
-    dom.window.__ATOME_NATIVE_BEVY_PRESENTABLE__ = true;
-    dom.window.__TAURI_INTERNALS__ = {
-        invoke: async (command, payload) => {
-            nativeCalls.push({ command, payload });
-            return { success: true, native: true, presentable: true, renderer_mode: 'embedded_scene' };
-        }
-    };
-    dom.window.Atome = { commitBatch: async () => ({ ok: true }) };
-    const records = [];
-    for (let moleculeIndex = 0; moleculeIndex < 10; moleculeIndex += 1) {
-        const ownerId = `dense_molecule_${moleculeIndex}`;
-        const column = moleculeIndex % 5;
-        const row = Math.floor(moleculeIndex / 5);
-        const left = 10 + column * 150;
-        const top = 20 + row * 130;
-        records.push({
-            id: ownerId,
-            type: 'group',
-            properties: {
-                kind: 'group', molecule_entity: 'molecule', left, top,
-                width: 125, height: 90, z_index: 0
-            }
-        });
-        for (let memberIndex = 0; memberIndex < 3; memberIndex += 1) {
-            const member = makeRecord(`dense_member_${moleculeIndex}_${memberIndex}`);
-            member.parent_id = ownerId;
-            member.properties.left = left + memberIndex * 40;
-            member.properties.top = top + memberIndex * 12;
-            member.properties.width = 34;
-            member.properties.height = 30;
-            member.properties.media_url = memberIndex === 2
-                ? '/atome/src/assets/images/ballanim.png'
-                : `/media/dense_${moleculeIndex}_${memberIndex}.png`;
-            records.push(member);
-        }
-    }
-
-    await renderProjectScene({
-        projectId: 'project_tauri_dense_gesture_perf',
-        records,
-        host: dom.window.document.getElementById('project'),
-        bevyMediaTextureResolver: async () => ({ width: 1, height: 1, rgba: [255, 0, 0, 255] })
-    });
-
-    nativeCalls.length = 0;
-    ensureBevyPerfDiagnostics().reset({ enabled: true });
-    dom.window.document.dispatchEvent(pointerEvent(dom.window, 'pointerdown', {
-        clientX: 20, clientY: 25, pointerId: 21
-    }));
-    for (let index = 1; index <= 8; index += 1) {
-        dom.window.document.dispatchEvent(pointerEvent(dom.window, 'pointermove', {
-            clientX: 20 + index * 3, clientY: 25 + index * 2, pointerId: 21
-        }));
-    }
-    await flushFrames.animationFrames();
-    await Promise.resolve();
-
-    const nativeOps = nativeCalls.filter(call => call.command === 'bevy_native_apply_ops');
-    assert.equal(nativeOps.every(call => call.payload.ops.every(op => ['transform', 'style'].includes(op.type))), true);
-    const nativeTransformCalls = nativeOps.filter(call => call.payload.ops.some(op => op.type === 'transform'));
-    const perf = ensureBevyPerfDiagnostics().summary();
-    assert.equal(records.length, 40);
-    assert.equal(nativeTransformCalls.length, 1);
-    assert.equal(nativeTransformCalls[0].payload.ops.length, 4);
-    assert.equal(nativeTransformCalls[0].payload.ops.every((op) => op.type === 'transform'), true);
-    assert.deepEqual(nativeTransformCalls[0].payload.ops.map((op) => op.patch.id), [
-        'dense_molecule_0',
-        'dense_member_0_0',
-        'dense_member_0_1',
-        'dense_member_0_2'
-    ]);
-    assert.equal(perf.counters['gesture.frame.projection_fallback'] || 0, 0);
-    assert.equal(perf.counters['projection.runtime.total'] || 0, 0);
-
-    dom.window.document.dispatchEvent(pointerEvent(dom.window, 'pointerup', {
-        clientX: 44, clientY: 41, pointerId: 21
     }));
     await flushFrames();
 });

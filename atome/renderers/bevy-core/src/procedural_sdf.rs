@@ -3,18 +3,21 @@ use bevy::{
     prelude::*,
     reflect::TypePath,
     render::{
-        render_resource::{AsBindGroup, ShaderType},
         RenderApp,
+        render_resource::{AsBindGroup, ShaderType},
     },
     shader::{Shader, ShaderRef},
     sprite_render::{AlphaMode2d, Material2d, Material2dPlugin},
 };
 
-use crate::workspace_backdrop::{set_workspace_backdrop_enabled, AtomeWorkspaceBackdrop, MENU_PRESENTATION_LAYER};
-use crate::workspace_blur::{backdrop_blur_lod, AssistantOpticsSettings};
+use crate::workspace_backdrop::{
+    AtomeWorkspaceBackdrop, MENU_PRESENTATION_LAYER, set_workspace_backdrop_enabled,
+};
+use crate::workspace_blur::{AssistantOpticsSettings, backdrop_blur_lod};
 use crate::{types::AtomeProceduralSdf, video_external_texture::video_quad_mesh_handle_from_size};
 
-const PROCEDURAL_SDF_SHADER_HANDLE: Handle<Shader> = uuid_handle!("aedaf527-1d86-49dd-bfea-e27453fa6932");
+const PROCEDURAL_SDF_SHADER_HANDLE: Handle<Shader> =
+    uuid_handle!("aedaf527-1d86-49dd-bfea-e27453fa6932");
 
 #[derive(Clone, Copy, Debug, ShaderType)]
 pub struct ProceduralSdfUniform {
@@ -58,6 +61,10 @@ pub struct ProceduralSdfMaterial {
     #[texture(7)]
     #[sampler(8)]
     pub menu_back: Handle<Image>,
+    /// That background's blur pyramid (mystic_capture.rs): what a plate's glass blurs.
+    #[texture(9)]
+    #[sampler(10)]
+    pub menu_back_blur: Handle<Image>,
 }
 
 impl Material2d for ProceduralSdfMaterial {
@@ -99,7 +106,12 @@ fn material_from_contract(
     ProceduralSdfMaterial {
         uniform: ProceduralSdfUniform {
             morph: Vec4::from_array(normalized.morph),
-            dynamics: Vec4::new(normalized.phase, normalized.pulse, normalized.time, normalized.intensity),
+            dynamics: Vec4::new(
+                normalized.phase,
+                normalized.pulse,
+                normalized.time,
+                normalized.intensity,
+            ),
             transition: Vec4::new(
                 normalized.glow_reveal,
                 normalized.core_reveal,
@@ -107,7 +119,12 @@ fn material_from_contract(
                 normalized.disappearing,
             ),
             optics,
-            contact: Vec4::new(normalized.contact[0], normalized.contact[1], normalized.attraction, normalized.stretch),
+            contact: Vec4::new(
+                normalized.contact[0],
+                normalized.contact[1],
+                normalized.attraction,
+                normalized.stretch,
+            ),
             destructive: Vec4::new(
                 normalized.destructive_direction[0],
                 normalized.destructive_direction[1],
@@ -165,6 +182,7 @@ fn material_from_contract(
         menu_front: backdrop.clone(),
         menu_face: backdrop.clone(),
         menu_back: backdrop.clone(),
+        menu_back_blur: backdrop.clone(),
         backdrop,
     }
 }
@@ -184,19 +202,28 @@ pub fn insert_procedural_sdf(
         .get_resource::<crate::types::AtomeBevyRendererConfig>()
         .map(|config| config.device_pixel_ratio)
         .unwrap_or(1.0);
-    let mut optics =
-        world.get_resource::<AssistantOpticsSettings>().copied().unwrap_or_default().sdf_uniform(device_pixel_ratio);
+    let mut optics = world
+        .get_resource::<AssistantOpticsSettings>()
+        .copied()
+        .unwrap_or_default()
+        .sdf_uniform(device_pixel_ratio);
     optics.x = normalized.lens_refraction_px * device_pixel_ratio.max(1.0);
     let mesh = {
-        let mut meshes =
-            world.get_resource_mut::<Assets<Mesh>>().ok_or_else(|| "bevy_mesh_assets_required".to_string())?;
+        let mut meshes = world
+            .get_resource_mut::<Assets<Mesh>>()
+            .ok_or_else(|| "bevy_mesh_assets_required".to_string())?;
         video_quad_mesh_handle_from_size(&mut meshes, logical_size, [0.0, 0.0, 1.0, 1.0])
     };
     let material = {
         let mut materials = world
             .get_resource_mut::<Assets<ProceduralSdfMaterial>>()
             .ok_or_else(|| "bevy_procedural_sdf_assets_required".to_string())?;
-        materials.add(material_from_contract(normalized, backdrop, optics, device_pixel_ratio))
+        materials.add(material_from_contract(
+            normalized,
+            backdrop,
+            optics,
+            device_pixel_ratio,
+        ))
     };
     world.entity_mut(entity).insert((
         Mesh2d(mesh),
@@ -205,30 +232,50 @@ pub fn insert_procedural_sdf(
         bevy::render::batching::NoAutomaticBatching,
         bevy::camera::visibility::RenderLayers::layer(if normalized.mode > 2.5 {
             crate::mystic_capture::MENU_OVERLAY_LAYER
-        } else { MENU_PRESENTATION_LAYER }),
+        } else {
+            MENU_PRESENTATION_LAYER
+        }),
     ));
     set_workspace_backdrop_enabled(world, true)?;
     Ok(())
 }
 
-pub fn resize_procedural_sdf(world: &mut World, entity: Entity, logical_size: [f32; 2]) -> Result<(), String> {
-    if world.get::<MeshMaterial2d<crate::login_light::LoginLightMaterial>>(entity).is_some() {
+pub fn resize_procedural_sdf(
+    world: &mut World,
+    entity: Entity,
+    logical_size: [f32; 2],
+) -> Result<(), String> {
+    if world
+        .get::<MeshMaterial2d<crate::login_light::LoginLightMaterial>>(entity)
+        .is_some()
+    {
         return crate::login_light::resize(world, entity, logical_size);
     }
-    if world.get::<MeshMaterial2d<ProceduralSdfMaterial>>(entity).is_none() {
+    if world
+        .get::<MeshMaterial2d<ProceduralSdfMaterial>>(entity)
+        .is_none()
+    {
         return Ok(());
     }
     let mesh = {
-        let mut meshes =
-            world.get_resource_mut::<Assets<Mesh>>().ok_or_else(|| "bevy_mesh_assets_required".to_string())?;
+        let mut meshes = world
+            .get_resource_mut::<Assets<Mesh>>()
+            .ok_or_else(|| "bevy_mesh_assets_required".to_string())?;
         video_quad_mesh_handle_from_size(&mut meshes, logical_size, [0.0, 0.0, 1.0, 1.0])
     };
     world.entity_mut(entity).insert(Mesh2d(mesh));
     Ok(())
 }
 
-pub fn patch_procedural_sdf(world: &mut World, entity: Entity, contract: AtomeProceduralSdf) -> Result<(), String> {
-    if world.get::<MeshMaterial2d<crate::login_light::LoginLightMaterial>>(entity).is_some() {
+pub fn patch_procedural_sdf(
+    world: &mut World,
+    entity: Entity,
+    contract: AtomeProceduralSdf,
+) -> Result<(), String> {
+    if world
+        .get::<MeshMaterial2d<crate::login_light::LoginLightMaterial>>(entity)
+        .is_some()
+    {
         return crate::login_light::patch(world, entity, contract);
     }
     let handle = world
@@ -243,16 +290,20 @@ pub fn patch_procedural_sdf(world: &mut World, entity: Entity, contract: AtomePr
     let mut materials = world
         .get_resource_mut::<Assets<ProceduralSdfMaterial>>()
         .ok_or_else(|| "bevy_procedural_sdf_assets_required".to_string())?;
-    let mut material = materials.get_mut(&handle).ok_or_else(|| "bevy_procedural_sdf_material_missing".to_string())?;
+    let mut material = materials
+        .get_mut(&handle)
+        .ok_or_else(|| "bevy_procedural_sdf_material_missing".to_string())?;
     let backdrop = material.backdrop.clone();
     let mut optics = material.uniform.optics;
     optics.x = normalized.lens_refraction_px * device_pixel_ratio.max(1.0);
     let front = material.menu_front.clone();
     let face = material.menu_face.clone();
     let back = material.menu_back.clone();
+    let back_blur = material.menu_back_blur.clone();
     *material = material_from_contract(normalized, backdrop, optics, device_pixel_ratio);
     material.menu_front = front;
     material.menu_face = face;
     material.menu_back = back;
+    material.menu_back_blur = back_blur;
     Ok(())
 }

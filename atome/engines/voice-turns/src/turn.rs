@@ -30,9 +30,13 @@ pub const FRAME_SECONDS: f64 = 0.032;
 pub enum TurnStep {
     Idle,
     /// The first near frame: the turn starts; `gain` applies to every frame of the turn.
-    Opened { gain: f32 },
+    Opened {
+        gain: f32,
+    },
     /// A frame inside the turn and the gain to feed it with (low frames attenuated under a television).
-    Inside { gain: f32 },
+    Inside {
+        gain: f32,
+    },
     Closed(TurnEnd),
 }
 
@@ -43,11 +47,22 @@ pub enum TurnEnd {
 }
 
 pub fn level_db(frame: &[f32]) -> f64 {
-    let energy = frame.iter().map(|sample| (*sample as f64).powi(2)).sum::<f64>() / frame.len().max(1) as f64;
+    let energy = frame
+        .iter()
+        .map(|sample| (*sample as f64).powi(2))
+        .sum::<f64>()
+        / frame.len().max(1) as f64;
     (10.0 * energy.max(1e-18).log10()).max(FLOOR_DB)
 }
 
-struct Open { reference_db: f64, gate: bool, frames: usize, first_near: usize, last_near: usize, heard: Vec<(f64, bool)> }
+struct Open {
+    reference_db: f64,
+    gate: bool,
+    frames: usize,
+    first_near: usize,
+    last_near: usize,
+    heard: Vec<(f64, bool)>,
+}
 
 #[derive(Default)]
 pub struct TurnDetector {
@@ -58,7 +73,9 @@ pub struct TurnDetector {
 impl TurnDetector {
     fn reference_db(&self) -> f64 {
         let mut levels: Vec<f64> = self.ambient.iter().map(|(level, _)| *level).collect();
-        if levels.is_empty() { return FLOOR_DB; }
+        if levels.is_empty() {
+            return FLOOR_DB;
+        }
         levels.sort_by(|a, b| a.total_cmp(b));
         levels[(levels.len() - 1) * 9 / 10]
     }
@@ -70,26 +87,46 @@ impl TurnDetector {
         !self.ambient.is_empty() && speech as f64 / self.ambient.len() as f64 > SPEECH_AMBIENT_SHARE
     }
 
-    pub fn reset(&mut self) { self.open = None; }
+    pub fn reset(&mut self) {
+        self.open = None;
+    }
 
     /// A frame of the room: at most RISE_DB above it once its first second is known.
     fn learn(&mut self, level: f64, speech: bool) {
-        let room = if self.ambient.len() < MIN_AMBIENT_FRAMES { level } else { level.min(self.reference_db() + RISE_DB) };
+        let room = if self.ambient.len() < MIN_AMBIENT_FRAMES {
+            level
+        } else {
+            level.min(self.reference_db() + RISE_DB)
+        };
         self.ambient.push_back((room, speech));
-        if self.ambient.len() > AMBIENT_FRAMES { self.ambient.pop_front(); }
+        if self.ambient.len() > AMBIENT_FRAMES {
+            self.ambient.pop_front();
+        }
     }
 
     pub fn push(&mut self, probability: f32, level: f64) -> TurnStep {
         let speech = probability > SPEECH_PROBABILITY;
         let Some(open) = self.open.as_mut() else {
             let reference_db = self.reference_db();
-            if speech && level > reference_db + MARGIN_DB && self.ambient.len() >= MIN_AMBIENT_FRAMES {
+            if speech
+                && level > reference_db + MARGIN_DB
+                && self.ambient.len() >= MIN_AMBIENT_FRAMES
+            {
                 // The softer first syllables that preceded this frame belong to the person.
-                let mut onset: Vec<(f64, bool)> = (0..ONSET_FRAMES.min(self.ambient.len())).filter_map(|_| self.ambient.pop_back()).collect();
+                let mut onset: Vec<(f64, bool)> = (0..ONSET_FRAMES.min(self.ambient.len()))
+                    .filter_map(|_| self.ambient.pop_back())
+                    .collect();
                 onset.reverse();
                 onset.push((level, speech));
                 let gate = self.speech_ambient();
-                self.open = Some(Open { reference_db, gate, frames: 1, first_near: 0, last_near: 0, heard: onset });
+                self.open = Some(Open {
+                    reference_db,
+                    gate,
+                    frames: 1,
+                    first_near: 0,
+                    last_near: 0,
+                    heard: onset,
+                });
                 return TurnStep::Opened { gain: 1.0 };
             }
             self.learn(level, speech);
@@ -98,19 +135,36 @@ impl TurnDetector {
         let index = open.frames;
         open.frames += 1;
         let near = speech && level > open.reference_db + MARGIN_DB;
-        if near { open.last_near = index; }
+        if near {
+            open.last_near = index;
+        }
         open.heard.push((level, speech));
-        let end = if index - open.last_near >= END_FRAMES { Some(TurnEnd::Spoken) }
-            else if open.frames >= MAX_TURN_FRAMES { Some(TurnEnd::TooLong) } else { None };
+        let end = if index - open.last_near >= END_FRAMES {
+            Some(TurnEnd::Spoken)
+        } else if open.frames >= MAX_TURN_FRAMES {
+            Some(TurnEnd::TooLong)
+        } else {
+            None
+        };
         if let Some(end) = end {
             let near_seconds = (open.last_near - open.first_near + 1) as f64 * FRAME_SECONDS;
-            let end = if near_seconds > MAX_NEAR_SECONDS { TurnEnd::TooLong } else { end };
+            let end = if near_seconds > MAX_NEAR_SECONDS {
+                TurnEnd::TooLong
+            } else {
+                end
+            };
             let heard = std::mem::take(&mut open.heard);
             self.open = None;
-            if end == TurnEnd::TooLong { for (level, speech) in heard { self.learn(level, speech); } }
+            if end == TurnEnd::TooLong {
+                for (level, speech) in heard {
+                    self.learn(level, speech);
+                }
+            }
             return TurnStep::Closed(end);
         }
-        TurnStep::Inside { gain: self.gain(level) }
+        TurnStep::Inside {
+            gain: self.gain(level),
+        }
     }
 
     /// Gain for a frame of the open turn (also used for the pre-roll frames).

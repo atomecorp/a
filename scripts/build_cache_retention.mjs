@@ -42,7 +42,7 @@ export function planBuildCleanup({ root = projectRoot,
     readWorkspace = workspaceOf, converge = true, residue = null } = {}) {
     if (!['start', 'end'].includes(phase)) throw new Error('build_cache_phase_invalid');
     root = fs.realpathSync(root);
-    const target = path.join(root, 'platforms/desktop-tauri/target');
+    const target = path.join(root, 'target');
     const temp = path.join(root, 'temp');
     const plan = [];
     const wholeDirectories = [];

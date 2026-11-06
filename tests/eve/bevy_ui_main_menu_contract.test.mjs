@@ -163,8 +163,9 @@ test('the permanent bar is the five intents plus view/help/contact; mode and act
     // The roots the ribbon really draws come from the taxonomy, in its own order.
     const { resolveMainMenuVisibility } = await import('../../eVe/intuition/menu/context_menu_resolver.js');
     assert.deepEqual(resolveMainMenuVisibility({ level: 'advanced' }).roots, content.toolbox.children);
-    // Beginner keeps the beginner families (the registry's `menu_slot.main.roots`, R-104 D5); protected levels keep all.
-    assert.deepEqual(resolveMainMenuVisibility({ level: 'beginner' }).roots, content.toolbox.children.filter(key => !['calendar', 'view'].includes(key)));
+    // Beginner keeps the beginner families (the registry's `menu_slot.main.roots`, R-104 D5), View included (user, 4 Nov. 2026);
+    // protected levels keep all.
+    assert.deepEqual(resolveMainMenuVisibility({ level: 'beginner' }).roots, content.toolbox.children.filter(key => key !== 'calendar'));
     assert.deepEqual(resolveMainMenuVisibility({ level: 'intermediate' }).roots, content.toolbox.children);
     const taxonomy = JSON.parse(readFileSync(resolve(process.cwd(),
         'eVe/intuition/menu/context_menus.json'), 'utf8'));
@@ -679,7 +680,7 @@ test('View keeps its own icon and label when the canonical view mode changes', a
 });
 
 test('the main menu keeps assistant input and options owned by the dock', async () => {
- const h=createRuntimeHarness(); let dashboard=0;
+ const h=createRuntimeHarness(); const dashboard=0;
  h.window.eveAssistantApi={getState:()=>({active:true}),listen:()=>{throw Error('unexpected voice activation');}};
  try { await h.runtime.showFully();
   assert.equal(h.runtime.assistantFieldOpen,undefined);

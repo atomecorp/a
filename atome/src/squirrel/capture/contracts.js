@@ -22,6 +22,7 @@ const definitions = {
     play: [{ atome_id: id }, [], 'Play an item of the open list (the current one when none is given): a sound, a video in the preview, a text read aloud. Played again: it stops.', false, 'control'],
     pause: [{}, [], 'Pause the sound or video playing in the open list, or play it on.', false, 'control'],
     preview: [{ visible: { type: 'boolean' } }, ['visible'], 'Show or take away the open list\'s preview (Aperçu); taken away, the rows fill the list.', false, 'control'],
+    fullscreen: [{ enabled: { type: 'boolean' } }, ['enabled'], 'Put the item shown in the open list on the whole screen, or give the list back (its double touch).', false, 'control'],
     delete: [{ atome_ids: { type: 'array', minItems: 1, maxItems: 500, items: id } }, ['atome_ids'],
         'Delete items of the open list from their project (Suppr.).', true, 'write']
 };
@@ -41,4 +42,4 @@ export const captureError = error => (CAPTURE_ERRORS.includes(error?.code || err
 export const CAPTURE_ASSISTANT_INSTRUCTIONS = 'Captures and their lists: « enregistre un son / une vidéo », « prends une photo », « dicte un texte » call captures.start '
     + '(kind audio, video, photo, text); « arrête » during a take calls captures.stop; « change de caméra », « l\'autre caméra » captures.camera. On the list open: captures.state gives its items; « la précédente », '
     + '« la suivante » call captures.show (step); « lis-la », « joue-la », « lis-moi ce texte » captures.play; « pause » captures.pause; « cache / montre l\'aperçu » '
-    + 'captures.preview; « supprime-la » captures.delete with the atome_id of the current item (captures.state). Never invent an atome_id.';
+    + 'captures.preview; « plein écran », « sors du plein écran » captures.fullscreen; « supprime-la » captures.delete with the atome_id of the current item (captures.state). Never invent an atome_id.';

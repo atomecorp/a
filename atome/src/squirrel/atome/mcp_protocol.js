@@ -8,14 +8,13 @@
 // decided (the relay does this round trip for a program, teleport/remote_command.js).
 import { handleAtomeMCPRequestAsync } from './mcp.js';
 import { atomeMCPHandlers } from './mcp_handlers.js';
-import { cancelOperationRecord, hasOwn, MCP_ERROR, mcpError, mcpOperations, readMcpToolsGeneration } from './mcp_core.js';
+import { cancelOperationRecord, hasOwn, isMcpInfrastructureMethod, MCP_ERROR, mcpError, mcpOperations, readMcpToolsGeneration } from './mcp_core.js';
 import { ensureRuntimeToolApi, loadAIAgent, loadMcpToolModules } from './mcp_bridges.js';
 import { MCP_RESOURCE_TEMPLATES } from './mcp_resources.js';
 
 // Newest first: a client asking for one of these gets it, any other gets the newest.
 export const MCP_PROTOCOL_VERSIONS = Object.freeze(['2025-06-18', '2025-03-26', '2024-11-05']);
 export const MCP_SERVER_INFO = Object.freeze({ name: 'atome-eve', version: '1.0.0' });
-const INFRASTRUCTURE_METHOD = /^(mcp\.|runtime\.|ai\.|atome\.describe$)/;
 const CONFIRMATION_META = 'atome/confirmation';
 const CONFIRMATION_ID_META = 'atome/confirmation_id';
 // A page of tools/list stays well under the relay's answer size (server/remoteCommandRelay.js).
@@ -36,7 +35,7 @@ async function entry(method, params, transport, requestId) {
 
 // A tool name is a business method first, then a Runtime V2 tool, then an assistant tool (as tools/list orders them).
 async function toolRequest(name, args) {
-    if (hasOwn.call(atomeMCPHandlers, name) && !INFRASTRUCTURE_METHOD.test(name)) return { method: name, params: { ...args } };
+    if (hasOwn.call(atomeMCPHandlers, name) && !isMcpInfrastructureMethod(name)) return { method: name, params: { ...args } };
     await loadMcpToolModules();
     if (await ensureRuntimeToolApi().resolveTool(name)) return { method: 'runtime.tools.call', params: { tool_id: name, input: { ...args } } };
     if ((await loadAIAgent()).getTool(name)) return { method: 'ai.tools.call', params: { tool_name: name, params: { ...args } } };
@@ -107,7 +106,9 @@ const METHODS = {
             inputSchema: tool.inputSchema,
             ...(tool.outputSchema ? { outputSchema: tool.outputSchema } : {}),
             annotations: { readOnlyHint: tool.risk_tier === 'read', destructiveHint: ['high', 'irreversible'].includes(tool.risk_tier) },
-            _meta: { 'atome/risk_tier': tool.risk_tier, 'atome/confirmation_required': tool.confirmation_required, 'atome/source': tool.source }
+            _meta: { 'atome/risk_tier': tool.risk_tier, 'atome/exposure': tool.exposure,
+                ...(tool.exposure_blocked_on ? { 'atome/exposure_blocked_on': tool.exposure_blocked_on } : {}),
+                'atome/confirmation_required': tool.confirmation_required, 'atome/source': tool.source }
         })), ...(next < tools.length ? { nextCursor: String(next) } : {}) };
     },
     'tools/call': callTool,

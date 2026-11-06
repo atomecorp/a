@@ -153,7 +153,7 @@ export const matrixResizeMethods = {
 
     // Observer pour détecter les changements de taille du parent
     this.resizeObserver = new ResizeObserver((entries) => {
-      for (let entry of entries) {
+      for (const entry of entries) {
         this.handleResize(entry);
       }
     });

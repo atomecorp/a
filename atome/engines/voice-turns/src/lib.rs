@@ -5,9 +5,9 @@
 
 mod turn;
 
-pub use turn::{level_db, TurnEnd};
 use std::collections::VecDeque;
 use turn::{TurnDetector, TurnStep};
+pub use turn::{TurnEnd, level_db};
 
 /// 32 ms at 16 kHz: the frame Silero scores.
 pub const FRAME_SAMPLES: usize = 512;
@@ -36,7 +36,10 @@ pub enum Action {
 }
 
 fn to_pcm(frame: &[f32], gain: f32) -> Vec<i16> {
-    frame.iter().map(|sample| (sample * gain * 32768.0).clamp(-32768.0, 32767.0) as i16).collect()
+    frame
+        .iter()
+        .map(|sample| (sample * gain * 32768.0).clamp(-32768.0, 32767.0) as i16)
+        .collect()
 }
 
 pub struct Conversation {
@@ -52,8 +55,15 @@ pub struct Conversation {
 
 impl Default for Conversation {
     fn default() -> Self {
-        Self { turns: TurnDetector::default(), preroll: VecDeque::new(), speaking: false, tail: 0, input_db: f64::NEG_INFINITY,
-            recording: None, recorded: None }
+        Self {
+            turns: TurnDetector::default(),
+            preroll: VecDeque::new(),
+            speaking: false,
+            tail: 0,
+            input_db: f64::NEG_INFINITY,
+            recording: None,
+            recorded: None,
+        }
     }
 }
 
@@ -61,8 +71,11 @@ impl Conversation {
     /// While eVe speaks the microphone is ignored, then for 300 ms after her voice ends.
     /// True when the stream is cut: the host resets the Silero state.
     pub fn set_speaking(&mut self, speaking: bool) -> bool {
-        if speaking { self.reset(); }
-        else if self.speaking { self.tail = SPEAKING_TAIL_FRAMES; }
+        if speaking {
+            self.reset();
+        } else if self.speaking {
+            self.tail = SPEAKING_TAIL_FRAMES;
+        }
         self.speaking = speaking;
         speaking
     }
@@ -71,52 +84,73 @@ impl Conversation {
     pub fn reset(&mut self) {
         self.turns.reset();
         self.preroll.clear();
-        if let Some(take) = self.recording.as_mut() {
-            if take.cuts.last() != Some(&take.pcm.len()) { take.cuts.push(take.pcm.len()); }
+        if let Some(take) = self.recording.as_mut()
+            && take.cuts.last() != Some(&take.pcm.len())
+        {
+            take.cuts.push(take.pcm.len());
         }
     }
 
     /// Test mode, off by default: keeps every scored frame and hands them over turn by turn.
     pub fn set_recording(&mut self, on: bool) {
-        if on == self.recording.is_some() { return; }
+        if on == self.recording.is_some() {
+            return;
+        }
         self.recording = on.then(Take::default);
         self.recorded = None;
     }
 
     /// The take the last closed turn completed, once.
-    pub fn take_recording(&mut self) -> Option<Take> { self.recorded.take() }
+    pub fn take_recording(&mut self) -> Option<Take> {
+        self.recorded.take()
+    }
 
     /// Level of the last frame, in dBFS.
-    pub fn input_db(&self) -> f64 { self.input_db }
+    pub fn input_db(&self) -> f64 {
+        self.input_db
+    }
 
     /// First step of every frame (`FRAME_SAMPLES` samples in [-1, 1]): records its level and
     /// tells whether the host must score it, i.e. whether anyone is listened to.
     pub fn listen(&mut self, frame: &[f32]) -> bool {
         self.input_db = level_db(frame);
-        if self.speaking { return false; }
-        if self.tail > 0 { self.tail -= 1; return false; }
+        if self.speaking {
+            return false;
+        }
+        if self.tail > 0 {
+            self.tail -= 1;
+            return false;
+        }
         true
     }
 
     /// Second step, for a frame `listen` accepted: its Silero speech probability.
     pub fn push(&mut self, frame: Vec<f32>, probability: f32) -> Vec<Action> {
         let level = self.input_db;
-        if let Some(take) = self.recording.as_mut() { take.pcm.extend_from_slice(&frame); }
+        if let Some(take) = self.recording.as_mut() {
+            take.pcm.extend_from_slice(&frame);
+        }
         match self.turns.push(probability, level) {
             TurnStep::Idle => {
                 self.preroll.push_back((frame, level));
-                if self.preroll.len() > PREROLL_FRAMES { self.preroll.pop_front(); }
+                if self.preroll.len() > PREROLL_FRAMES {
+                    self.preroll.pop_front();
+                }
                 Vec::new()
             }
             TurnStep::Opened { gain } => {
                 let mut actions = vec![Action::SpeechStart];
-                for (before, before_level) in self.preroll.drain(..) { actions.push(Action::Feed(to_pcm(&before, self.turns.gain(before_level)))); }
+                for (before, before_level) in self.preroll.drain(..) {
+                    actions.push(Action::Feed(to_pcm(&before, self.turns.gain(before_level))));
+                }
                 actions.push(Action::Feed(to_pcm(&frame, gain)));
                 actions
             }
             TurnStep::Inside { gain } => vec![Action::Feed(to_pcm(&frame, gain))],
             TurnStep::Closed(end) => {
-                if let Some(take) = self.recording.as_mut() { self.recorded = Some(std::mem::take(take)); }
+                if let Some(take) = self.recording.as_mut() {
+                    self.recorded = Some(std::mem::take(take));
+                }
                 vec![Action::Close(end)]
             }
         }

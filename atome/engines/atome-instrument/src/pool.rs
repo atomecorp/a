@@ -13,7 +13,11 @@ impl VoicePool {
     // `capacity` exceeds the largest polyphony by a margin for the voices still fading.
     pub fn new(capacity: usize) -> Self {
         // Voice `v` reads through rings `v × MAX_PLAYERS..` of a streaming bank.
-        Self { voices: (0..capacity).map(|index| Voice::with_rings(index * MAX_PLAYERS)).collect() }
+        Self {
+            voices: (0..capacity)
+                .map(|index| Voice::with_rings(index * MAX_PLAYERS))
+                .collect(),
+        }
     }
 
     pub fn voices(&self) -> &[Voice] {
@@ -25,7 +29,10 @@ impl VoicePool {
     }
 
     pub fn sounding(&self) -> usize {
-        self.voices.iter().filter(|voice| voice.active && !voice.choking).count()
+        self.voices
+            .iter()
+            .filter(|voice| voice.active && !voice.choking)
+            .count()
     }
 
     // A voice to start a note on, after stealing one if `polyphony` is reached.
@@ -46,6 +53,11 @@ impl VoicePool {
             return index;
         }
         // Every voice is busy, even fading ones: the oldest is cut short.
-        self.voices.iter().enumerate().min_by_key(|(_, voice)| (!voice.choking, voice.started_at)).map(|(index, _)| index).expect("a pool has voices")
+        self.voices
+            .iter()
+            .enumerate()
+            .min_by_key(|(_, voice)| (!voice.choking, voice.started_at))
+            .map(|(index, _)| index)
+            .expect("a pool has voices")
     }
 }

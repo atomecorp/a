@@ -3,8 +3,8 @@
 // another rate is resampled in and out. Loudness is normalised from the file's
 // metadata so changing amp never jumps the level, and a DC blocker follows.
 
-use crate::resample::{Resampler, HALF_TAPS};
-use crate::{db_to_amplitude, ParamSpec, Processor, Smoothed, StereoBlock, Unit};
+use crate::resample::{HALF_TAPS, Resampler};
+use crate::{ParamSpec, Processor, Smoothed, StereoBlock, Unit, db_to_amplitude};
 use nam_rs::{Model, NamModel};
 
 pub use nam_rs::Error as AmpModelError;
@@ -49,7 +49,9 @@ impl AmpModel {
     // Builds the network from a parsed capture. Allocates: never on the audio thread.
     pub fn from_nam(capture: &NamModel) -> Result<Self, AmpModelError> {
         let model = Model::from_nam(capture)?;
-        let normalisation = capture.loudness().map_or(1.0, |loudness| db_to_amplitude(NORMALISED_LOUDNESS_DB - loudness));
+        let normalisation = capture.loudness().map_or(1.0, |loudness| {
+            db_to_amplitude(NORMALISED_LOUDNESS_DB - loudness)
+        });
         Ok(Self {
             model,
             model_rate: capture.expected_sample_rate(),
@@ -88,7 +90,8 @@ impl AmpModel {
             conversion.scratch[produced] = conversion.inward.read();
             produced += 1;
         }
-        self.model.process_buffer(&mut conversion.scratch[..produced]);
+        self.model
+            .process_buffer(&mut conversion.scratch[..produced]);
         for &sample in &conversion.scratch[..produced] {
             conversion.outward.push(sample);
         }
@@ -115,11 +118,22 @@ impl Processor for AmpModel {
             let mut inward = Resampler::new();
             inward.allocate(device_rate, self.model_rate, max_block + HALF_TAPS * 2);
             let mut outward = Resampler::new();
-            outward.allocate(self.model_rate, device_rate, model_block + outward_lead + HALF_TAPS * 2);
+            outward.allocate(
+                self.model_rate,
+                device_rate,
+                model_block + outward_lead + HALF_TAPS * 2,
+            );
             // The lead, in device frames, rounded down to a whole frame.
             let latency = (outward_lead as f64 / ratio).floor() as u32;
             let advance = outward_lead as f64 - latency as f64 * ratio;
-            Some(Conversion { inward, outward, scratch: vec![0.0; model_block], outward_lead, advance, latency })
+            Some(Conversion {
+                inward,
+                outward,
+                scratch: vec![0.0; model_block],
+                outward_lead,
+                advance,
+                latency,
+            })
         };
         self.reset();
     }
@@ -140,7 +154,9 @@ impl Processor for AmpModel {
     }
 
     fn set_param(&mut self, id: u32, value: f32) {
-        let Some(spec) = PARAMS.get(id as usize) else { return };
+        let Some(spec) = PARAMS.get(id as usize) else {
+            return;
+        };
         let value = spec.clamp(value);
         match id {
             INPUT_DB => self.input.set(db_to_amplitude(value)),
@@ -163,7 +179,9 @@ impl Processor for AmpModel {
     }
 
     fn latency_frames(&self) -> u32 {
-        self.conversion.as_ref().map_or(0, |conversion| conversion.latency)
+        self.conversion
+            .as_ref()
+            .map_or(0, |conversion| conversion.latency)
     }
 
     fn reset(&mut self) {

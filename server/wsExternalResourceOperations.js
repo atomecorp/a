@@ -9,10 +9,14 @@ import { handleWsCoaches } from './ws_coaches.js';
 import { handleWsVideoCatalog } from './ws_video_catalog.js';
 import { handleWsGpsOperation } from './wsGpsOperations.js';
 import { handleWsOpenFoodFacts } from './ws_open_food_facts.js';
+import { handleWsHealthReference } from './ws_health_reference.js';
 import { handleWsBookSource } from './ws_book_sources.js';
 import { handleWsMediaLibrary } from './ws_media_library.js';
 import { handleWsBugReport } from './ws_bug_reports.js';
+import { handleWsFeatureRequest } from './ws_feature_requests.js';
+import { handleWsAccountRoles } from './auth_account_roles.js';
 import { handleWsTone3000 } from './ws_tone3000.js';
+import { handleWsShareKeys } from './ws_share_keys.js';
 
 export async function handleWsExternalResourceOperation(data, connection, address) {
     return await handleWsPersonalImport(data, connection)
@@ -26,9 +30,13 @@ export async function handleWsExternalResourceOperation(data, connection, addres
         || await handleWsVideoCatalog(data, address)
         || await handleWsGpsOperation(data, address)
         || await handleWsOpenFoodFacts(data, address)
+        || await handleWsHealthReference(data)
         || await handleWsBookSource(data, address)
         || await handleWsTone3000(data, address)
         // An account is its own client (a proxied server sees every address alike).
         || await handleWsMediaLibrary(data, connection?._wsApiUserId ? `user:${connection._wsApiUserId}` : address)
-        || await handleWsBugReport(data, connection, address);
+        || await handleWsBugReport(data, connection, address)
+        || await handleWsFeatureRequest(data, connection, address)
+        || await handleWsAccountRoles(data, connection)
+        || await handleWsShareKeys(data, connection);
 }

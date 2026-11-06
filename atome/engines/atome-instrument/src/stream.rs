@@ -8,10 +8,15 @@
 // A frame the ring does not hold yet plays silent and is counted (starvation,
 // reported beside the dropped markers).
 
+#![allow(
+    unsafe_code,
+    reason = "the lock-free stream ring shared by its feeder and the render thread"
+)]
+
 use crate::interp::TAPS;
 use std::cell::UnsafeCell;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 // Frames a ring holds: a power of two, so a frame's slot is its low bits.
 // 8192 frames last 170 ms read at pitch (48 kHz), 43 ms two octaves up.
@@ -45,13 +50,19 @@ pub struct Target {
 
 // Request word: generation (16 bits) | reverse (1) | sample (15) | origin (32).
 fn pack(generation: u16, target: Option<Target>) -> u64 {
-    let (sample, reverse, origin) = target.map_or((IDLE_SAMPLE, 0, 0), |t| (t.sample as u64, u64::from(t.reverse), t.origin as u64));
+    let (sample, reverse, origin) = target.map_or((IDLE_SAMPLE, 0, 0), |t| {
+        (t.sample as u64, u64::from(t.reverse), t.origin as u64)
+    });
     (u64::from(generation) << 48) | (reverse << 47) | (sample << 32) | origin
 }
 
 fn unpack(word: u64) -> (u16, Option<Target>) {
     let sample = (word >> 32) & IDLE_SAMPLE;
-    let target = (sample != IDLE_SAMPLE).then_some(Target { sample: sample as usize, reverse: (word >> 47) & 1 == 1, origin: (word & 0xffff_ffff) as usize });
+    let target = (sample != IDLE_SAMPLE).then_some(Target {
+        sample: sample as usize,
+        reverse: (word >> 47) & 1 == 1,
+        origin: (word & 0xffff_ffff) as usize,
+    });
     ((word >> 48) as u16, target)
 }
 
@@ -86,7 +97,13 @@ unsafe impl Sync for StreamRing {}
 impl StreamRing {
     fn new() -> Self {
         let cells = || (0..RING_CELLS).map(|_| UnsafeCell::new(0.0)).collect();
-        Self { left: cells(), right: cells(), request: AtomicU64::new(pack(0, None)), cursor: AtomicU64::new(0), filled: AtomicU64::new(0) }
+        Self {
+            left: cells(),
+            right: cells(),
+            request: AtomicU64::new(pack(0, None)),
+            cursor: AtomicU64::new(0),
+            filled: AtomicU64::new(0),
+        }
     }
 
     pub fn target(&self) -> Option<Target> {
@@ -98,14 +115,16 @@ impl StreamRing {
     pub fn aim(&self, target: Option<Target>, force: bool) {
         let (generation, current) = unpack(self.request.load(Ordering::Relaxed));
         if force || current != target {
-            self.request.store(pack(generation.wrapping_add(1), target), Ordering::Release);
+            self.request
+                .store(pack(generation.wrapping_add(1), target), Ordering::Release);
         }
     }
 
     // Render: the first `frames` from the origin will not be read again.
     pub fn release(&self, frames: usize) {
         let generation = tag(self.request.load(Ordering::Relaxed));
-        self.cursor.store(tagged(generation, frames as u64), Ordering::Release);
+        self.cursor
+            .store(tagged(generation, frames as u64), Ordering::Release);
     }
 
     // Render: the frames of its target it may read now, `start..end` in source frames.
@@ -118,13 +137,24 @@ impl StreamRing {
         }
         let count = (filled & COUNT) as i64;
         let cursor = self.cursor.load(Ordering::Relaxed);
-        let released = if tag(cursor) == generation { (cursor & COUNT) as i64 } else { 0 };
+        let released = if tag(cursor) == generation {
+            (cursor & COUNT) as i64
+        } else {
+            0
+        };
         let origin = target.origin as i64;
-        Some(if target.reverse { (origin - count, origin - released) } else { (origin + released, origin + count) })
+        Some(if target.reverse {
+            (origin - count, origin - released)
+        } else {
+            (origin + released, origin + count)
+        })
     }
 
     pub(crate) fn cells(&self) -> (*const f32, *const f32) {
-        (self.left[0].get() as *const f32, self.right[0].get() as *const f32)
+        (
+            self.left[0].get() as *const f32,
+            self.right[0].get() as *const f32,
+        )
     }
 
     fn store(&self, frame: usize, left: f32, right: f32) {
@@ -155,24 +185,41 @@ impl StreamRing {
             0
         };
         let Some(source) = sources.get(target.sample).and_then(Option::as_ref) else {
-            feeder.fail(format!("ring aimed at sample {}, which does not stream", target.sample));
-            self.filled.store(tagged(generation, count as u64 | FAILED), Ordering::Release);
+            feeder.fail(format!(
+                "ring aimed at sample {}, which does not stream",
+                target.sample
+            ));
+            self.filled
+                .store(tagged(generation, count as u64 | FAILED), Ordering::Release);
             return 0;
         };
         let cursor = self.cursor.load(Ordering::Acquire);
-        let released = if tag(cursor) == generation { (cursor & COUNT) as usize } else { 0 };
+        let released = if tag(cursor) == generation {
+            (cursor & COUNT) as usize
+        } else {
+            0
+        };
         // A starved player is ahead of the ring: frames it released are skipped.
         count = count.max(released);
-        let available = if target.reverse { target.origin } else { source.frames().saturating_sub(target.origin) };
+        let available = if target.reverse {
+            target.origin
+        } else {
+            source.frames().saturating_sub(target.origin)
+        };
         let limit = (released + RING_FRAMES - TAPS).min(available);
         let mut written = 0;
         while count < limit {
             let len = (limit - count).min(CHUNK);
-            let at = if target.reverse { target.origin - count - len } else { target.origin + count };
+            let at = if target.reverse {
+                target.origin - count - len
+            } else {
+                target.origin + count
+            };
             let (left, right) = (&mut feeder.left[..len], &mut feeder.right[..len]);
             if let Err(reason) = source.read(at, left, right) {
                 feeder.fail(reason);
-                self.filled.store(tagged(generation, count as u64 | FAILED), Ordering::Release);
+                self.filled
+                    .store(tagged(generation, count as u64 | FAILED), Ordering::Release);
                 return written;
             }
             let mono = source.channels() == 1;
@@ -181,7 +228,8 @@ impl StreamRing {
             }
             count += len;
             written += len;
-            self.filled.store(tagged(generation, count as u64), Ordering::Release);
+            self.filled
+                .store(tagged(generation, count as u64), Ordering::Release);
             if tag(self.request.load(Ordering::Acquire)) != generation {
                 break;
             }
@@ -199,7 +247,11 @@ pub struct Streams {
 
 impl Streams {
     pub fn new(sources: Vec<Option<Arc<dyn FrameSource>>>, rings: usize) -> Arc<Self> {
-        Arc::new(Self { rings: (0..rings).map(|_| StreamRing::new()).collect(), sources: sources.into(), claimed: AtomicBool::new(false) })
+        Arc::new(Self {
+            rings: (0..rings).map(|_| StreamRing::new()).collect(),
+            sources: sources.into(),
+            claimed: AtomicBool::new(false),
+        })
     }
 
     pub fn ring(&self, index: usize) -> &StreamRing {
@@ -212,13 +264,19 @@ impl Streams {
 
     // One thread fills a set of rings: the first claim wins, a second is refused.
     pub fn claim(&self) -> Result<(), String> {
-        self.claimed.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire).map(|_| ()).map_err(|_| "these rings already have their feeder".to_string())
+        self.claimed
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .map(|_| ())
+            .map_err(|_| "these rings already have their feeder".to_string())
     }
 
     // Feeder thread only (after `claim`): every ring read ahead; answers the frames written.
     pub fn fill(&self, feeder: &mut Feeder) -> usize {
         debug_assert!(self.claimed.load(Ordering::Relaxed), "fill after claim");
-        self.rings.iter().map(|ring| ring.fill(&self.sources, feeder)).sum()
+        self.rings
+            .iter()
+            .map(|ring| ring.fill(&self.sources, feeder))
+            .sum()
     }
 }
 
@@ -231,7 +289,11 @@ pub struct Feeder {
 
 impl Feeder {
     pub fn new() -> Self {
-        Self { left: vec![0.0; CHUNK], right: vec![0.0; CHUNK], failures: Vec::new() }
+        Self {
+            left: vec![0.0; CHUNK],
+            right: vec![0.0; CHUNK],
+            failures: Vec::new(),
+        }
     }
 
     fn fail(&mut self, reason: String) {
@@ -285,8 +347,15 @@ mod worker {
     fn worker() -> &'static Worker {
         static WORKER: OnceLock<Worker> = OnceLock::new();
         WORKER.get_or_init(|| {
-            let thread = thread::Builder::new().name("atome-sample-stream".into()).spawn(run).expect("the sample streaming thread starts");
-            Worker { sets: Mutex::new(Vec::new()), failures: Mutex::new(Vec::new()), thread: thread.thread().clone() }
+            let thread = thread::Builder::new()
+                .name("atome-sample-stream".into())
+                .spawn(run)
+                .expect("the sample streaming thread starts");
+            Worker {
+                sets: Mutex::new(Vec::new()),
+                failures: Mutex::new(Vec::new()),
+                thread: thread.thread().clone(),
+            }
         })
     }
 
@@ -294,14 +363,22 @@ mod worker {
     pub fn serve(streams: &Arc<Streams>) -> Result<(), String> {
         streams.claim()?;
         let worker = worker();
-        worker.sets.lock().map_err(|error| format!("stream worker lock: {error}"))?.push(Arc::downgrade(streams));
+        worker
+            .sets
+            .lock()
+            .map_err(|error| format!("stream worker lock: {error}"))?
+            .push(Arc::downgrade(streams));
         worker.thread.unpark();
         Ok(())
     }
 
     // The reads that failed since the last call (their rings starve, counted).
     pub fn take_failures() -> Vec<String> {
-        worker().failures.lock().map(|mut failures| std::mem::take(&mut *failures)).unwrap_or_default()
+        worker()
+            .failures
+            .lock()
+            .map(|mut failures| std::mem::take(&mut *failures))
+            .unwrap_or_default()
     }
 
     fn run() {
@@ -320,11 +397,11 @@ mod worker {
             let written: usize = live.iter().map(|set| set.fill(&mut feeder)).sum();
             live.clear();
             let failed = feeder.take_failures();
-            if !failed.is_empty() {
-                if let Ok(mut failures) = worker.failures.lock() {
-                    failures.extend(failed);
-                    failures.truncate(21);
-                }
+            if !failed.is_empty()
+                && let Ok(mut failures) = worker.failures.lock()
+            {
+                failures.extend(failed);
+                failures.truncate(21);
             }
             if written == 0 {
                 thread::park_timeout(IDLE_WAIT);

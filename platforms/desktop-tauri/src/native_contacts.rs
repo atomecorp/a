@@ -36,10 +36,19 @@ fn read_windows_contacts() -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
-pub async fn macos_contacts_snapshot(app: tauri::AppHandle, cursor: Option<String>, collections: Option<Vec<String>>) -> Result<serde_json::Value, String> {
+pub async fn macos_contacts_snapshot(
+    app: tauri::AppHandle,
+    cursor: Option<String>,
+    collections: Option<Vec<String>>,
+) -> Result<serde_json::Value, String> {
     #[cfg(target_os = "macos")]
     {
-        return crate::native_personal_import::read(app, "contact", serde_json::json!({"cursor": cursor, "collections": collections.unwrap_or_default()})).await;
+        crate::native_personal_import::read(
+            app,
+            "contact",
+            serde_json::json!({"cursor": cursor, "collections": collections.unwrap_or_default()}),
+        )
+        .await
     }
 
     #[cfg(target_os = "windows")]
@@ -54,9 +63,11 @@ pub async fn macos_contacts_snapshot(app: tauri::AppHandle, cursor: Option<Strin
     #[cfg(target_os = "android")]
     {
         let _ = (cursor, collections);
-        return tokio::task::spawn_blocking(move || tauri_plugin_mobile_host::call(&app, "contacts", serde_json::json!({})))
-            .await
-            .map_err(|error| format!("android_contacts_task_failed:{error}"))?;
+        return tokio::task::spawn_blocking(move || {
+            tauri_plugin_mobile_host::call(&app, "contacts", serde_json::json!({}))
+        })
+        .await
+        .map_err(|error| format!("android_contacts_task_failed:{error}"))?;
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "android")))]

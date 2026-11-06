@@ -15,23 +15,37 @@ pub(crate) struct Layout<'a> {
 
 impl<'a> Layout<'a> {
     pub(crate) fn new(program: &'a Program) -> Result<Self, String> {
-        let strip_of: HashMap<&str, usize> = program.strips.iter().enumerate().map(|(index, strip)| (strip.id.as_str(), index)).collect();
+        let strip_of: HashMap<&str, usize> = program
+            .strips
+            .iter()
+            .enumerate()
+            .map(|(index, strip)| (strip.id.as_str(), index))
+            .collect();
         if strip_of.len() != program.strips.len() {
             return Err("duplicate mix strip id".to_string());
         }
         let mut module_at = HashMap::new();
         for (index, strip) in program.strips.iter().enumerate() {
             for (step, module) in strip.chain.iter().enumerate() {
-                if module_at.insert(module.id.as_str(), (index, step)).is_some() {
+                if module_at
+                    .insert(module.id.as_str(), (index, step))
+                    .is_some()
+                {
                     return Err(format!("duplicate mix module id {}", module.id));
                 }
             }
         }
-        Ok(Self { strip_of, module_at })
+        Ok(Self {
+            strip_of,
+            module_at,
+        })
     }
 
     pub(crate) fn strip(&self, id: &str) -> Result<usize, String> {
-        self.strip_of.get(id).copied().ok_or_else(|| format!("mix target {id} missing"))
+        self.strip_of
+            .get(id)
+            .copied()
+            .ok_or_else(|| format!("mix target {id} missing"))
     }
 
     pub(crate) fn target(&self, target: &Target) -> Result<Option<usize>, String> {
@@ -44,17 +58,31 @@ impl<'a> Layout<'a> {
     // The strip an IN module reads (D-S3), None for a live input or an instrument.
     pub(crate) fn mix_source(&self, source: &MixSource) -> Result<Option<usize>, String> {
         match source {
-            MixSource::Strip { id } => self.strip_of.get(id.as_str()).map(|index| Some(*index)).ok_or_else(|| format!("IN source {id} missing")),
+            MixSource::Strip { id } => self
+                .strip_of
+                .get(id.as_str())
+                .map(|index| Some(*index))
+                .ok_or_else(|| format!("IN source {id} missing")),
             _ => Ok(None),
         }
     }
 
     // The strip (and step, for a port) a key listens to.
-    pub(crate) fn key_source(&self, key: &KeySource) -> Result<(usize, Option<(usize, usize)>), String> {
+    pub(crate) fn key_source(
+        &self,
+        key: &KeySource,
+    ) -> Result<(usize, Option<(usize, usize)>), String> {
         match key {
-            KeySource::Strip { id } => self.strip_of.get(id.as_str()).map(|index| (*index, None)).ok_or_else(|| format!("key source {id} missing")),
+            KeySource::Strip { id } => self
+                .strip_of
+                .get(id.as_str())
+                .map(|index| (*index, None))
+                .ok_or_else(|| format!("key source {id} missing")),
             KeySource::Port { module_id, port } => {
-                let (strip, step) = *self.module_at.get(module_id.as_str()).ok_or_else(|| format!("key source module {module_id} missing"))?;
+                let (strip, step) = *self
+                    .module_at
+                    .get(module_id.as_str())
+                    .ok_or_else(|| format!("key source module {module_id} missing"))?;
                 Ok((strip, Some((step, *port))))
             }
         }
@@ -87,7 +115,11 @@ pub fn dependency_order(program: &Program) -> Result<Vec<usize>, String> {
     let mut incoming = vec![0usize; count];
     for (index, strip) in program.strips.iter().enumerate() {
         for (_, target) in strip_routes(strip) {
-            if let Some(to) = target.map(|target| layout.target(target)).transpose()?.flatten() {
+            if let Some(to) = target
+                .map(|target| layout.target(target))
+                .transpose()?
+                .flatten()
+            {
                 edges[index].push(to);
                 incoming[to] += 1;
             }
@@ -98,20 +130,31 @@ pub fn dependency_order(program: &Program) -> Result<Vec<usize>, String> {
                 edges[from].push(index);
                 incoming[index] += 1;
             }
-            if let Some(from) = module.source.as_ref().map(|source| layout.mix_source(source)).transpose()?.flatten() {
+            if let Some(from) = module
+                .source
+                .as_ref()
+                .map(|source| layout.mix_source(source))
+                .transpose()?
+                .flatten()
+            {
                 edges[from].push(index);
                 incoming[index] += 1;
             }
         }
     }
     let mut placed = vec![false; count];
-    let mut ready: Vec<usize> = (0..count).rev().filter(|index| incoming[*index] == 0).collect();
+    let mut ready: Vec<usize> = (0..count)
+        .rev()
+        .filter(|index| incoming[*index] == 0)
+        .collect();
     let mut order = Vec::with_capacity(count);
     while order.len() < count {
         let next = match ready.pop() {
             Some(index) if placed[index] => continue,
             Some(index) => index,
-            None => (0..count).find(|index| !placed[*index]).expect("an unplaced strip remains"),
+            None => (0..count)
+                .find(|index| !placed[*index])
+                .expect("an unplaced strip remains"),
         };
         placed[next] = true;
         order.push(next);
@@ -138,7 +181,11 @@ pub(crate) fn ports_of(spec: &ModuleSpec) -> usize {
 // summing point is delayed so all arrivals line up with the slowest one. A
 // return is the loop's own delay and is never compensated. Returns each
 // strip's route delays in `strip_routes` order.
-pub fn compensation(program: &Program, order: &[usize], module_latency: &dyn Fn(&ModuleSpec) -> usize) -> Result<Vec<Vec<usize>>, String> {
+pub fn compensation(
+    program: &Program,
+    order: &[usize],
+    module_latency: &dyn Fn(&ModuleSpec) -> usize,
+) -> Result<Vec<Vec<usize>>, String> {
     let layout = Layout::new(program)?;
     let count = program.strips.len();
     let mut position = vec![0usize; count];
@@ -177,9 +224,17 @@ pub fn compensation(program: &Program, order: &[usize], module_latency: &dyn Fn(
             route_latency[index].push(entry);
         }
     }
-    Ok(route_latency.iter().map(|routes| routes.iter().map(|(to, compensated, at)| match (to, compensated) {
-        (_, false) => 0,
-        (Some(to), true) => arrival[*to] - at,
-        (None, true) => main_arrival - at,
-    }).collect()).collect())
+    Ok(route_latency
+        .iter()
+        .map(|routes| {
+            routes
+                .iter()
+                .map(|(to, compensated, at)| match (to, compensated) {
+                    (_, false) => 0,
+                    (Some(to), true) => arrival[*to] - at,
+                    (None, true) => main_arrival - at,
+                })
+                .collect()
+        })
+        .collect())
 }

@@ -16,7 +16,11 @@ pub(crate) fn handler() -> RenderErrorHandler {
     RenderErrorHandler(record_and_quit)
 }
 
-fn record_and_quit(error: &RenderError, main_world: &mut World, _: &mut World) -> RenderErrorPolicy {
+fn record_and_quit(
+    error: &RenderError,
+    main_world: &mut World,
+    _: &mut World,
+) -> RenderErrorPolicy {
     WEB_RENDER_ERROR.with(|cell| {
         let mut recorded = cell.borrow_mut();
         if recorded.is_empty() {

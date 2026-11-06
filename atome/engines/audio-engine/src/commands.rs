@@ -4,11 +4,14 @@
 // (camelCase, as the JS `backend.kira.js` sends them). Results are the JSON
 // the JS side reads.
 
-use crate::{calibration, direct, instrument, metering, mix, mix_assets, playback, playback_schedule, recorder, wake_capture};
+use crate::{
+    calibration, direct, instrument, metering, mix, mix_assets, playback, playback_schedule,
+    recorder, wake_capture,
+};
 use atome_mix_graph::instrument_command::InstrumentAnswer;
 use atome_mix_graph::voice::{ScheduledVoice, VoiceRequest};
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 
 fn clip_metadata_json(metadata: &playback::ClipMetadata) -> Value {
@@ -24,14 +27,24 @@ fn resolve_path(project_root: Option<&Path>, raw: &str) -> Result<PathBuf, Strin
     if Path::new(raw).is_absolute() {
         return Ok(PathBuf::from(raw));
     }
-    project_root.map(|root| root.join(raw)).ok_or_else(|| format!("relative_path_without_project_root: {raw}"))
+    project_root
+        .map(|root| root.join(raw))
+        .ok_or_else(|| format!("relative_path_without_project_root: {raw}"))
 }
 
 fn existing(path: PathBuf) -> Result<PathBuf, String> {
     if !path.exists() {
-        return Err(format!("Audio clip path does not exist: {}", path.display()));
+        return Err(format!(
+            "Audio clip path does not exist: {}",
+            path.display()
+        ));
     }
-    path.canonicalize().map_err(|e| format!("Unable to canonicalize audio clip path {}: {e}", path.display()))
+    path.canonicalize().map_err(|e| {
+        format!(
+            "Unable to canonicalize audio clip path {}: {e}",
+            path.display()
+        )
+    })
 }
 
 pub fn init() -> Result<Value, String> {
@@ -48,7 +61,10 @@ pub fn load_clip(project_root: Option<&Path>, id: &str, path: &str) -> Result<Va
         let decode_path = transcode::prepare_native_audio_decode_path(&resolved)?;
         let metadata = match playback::load_clip(id, &decode_path.to_string_lossy()) {
             Ok(metadata) => metadata,
-            Err(first_error) if decode_path != resolved && transcode::is_video_container_requiring_native_audio_extract(&resolved) => {
+            Err(first_error)
+                if decode_path != resolved
+                    && transcode::is_video_container_requiring_native_audio_extract(&resolved) =>
+            {
                 let rebuilt = transcode::rebuild_native_audio_decode_path(&resolved)?;
                 playback::load_clip(id, &rebuilt.to_string_lossy())
                     .map_err(|retry| format!("native_audio_decode_failed_after_cache_rebuild: first={first_error}; retry={retry}"))?
@@ -58,7 +74,10 @@ pub fn load_clip(project_root: Option<&Path>, id: &str, path: &str) -> Result<Va
         (decode_path, metadata)
     };
     #[cfg(target_os = "ios")]
-    let (decode_path, metadata) = (resolved.clone(), playback::load_clip(id, &resolved.to_string_lossy())?);
+    let (decode_path, metadata) = (
+        resolved.clone(),
+        playback::load_clip(id, &resolved.to_string_lossy())?,
+    );
     Ok(json!({
         "success": true, "id": id, "path": resolved.to_string_lossy(), "decode_path": decode_path.to_string_lossy(),
         "input_path": path, "input_path_was_absolute": Path::new(path).is_absolute(),
@@ -85,17 +104,39 @@ pub fn play(id: &str) -> Result<Value, String> {
     Ok(json!({ "success": true, "id": id }))
 }
 
-pub fn play_instance(asset_id: &str, voice_id: &str, request: &VoiceRequest, strip_id: Option<&str>) -> Result<Value, String> {
+pub fn play_instance(
+    asset_id: &str,
+    voice_id: &str,
+    request: &VoiceRequest,
+    strip_id: Option<&str>,
+) -> Result<Value, String> {
     playback::play_instance(
-        asset_id, voice_id, request.start_seconds, request.duration_seconds, request.gain, request.pan, request.rate,
-        request.loop_start_seconds, request.loop_end_seconds, strip_id,
+        asset_id,
+        voice_id,
+        request.start_seconds,
+        request.duration_seconds,
+        request.gain,
+        request.pan,
+        request.rate,
+        request.loop_start_seconds,
+        request.loop_end_seconds,
+        strip_id,
     )?;
     Ok(json!({ "success": true, "asset_id": asset_id, "voice_id": voice_id }))
 }
 
 pub fn schedule_instances(voices: &[ScheduledVoice]) -> Result<Value, String> {
-    let frames = voices.iter()
-        .map(|voice| playback_schedule::schedule_instance(&voice.asset_id, &voice.voice_id, &voice.voice, voice.start_render_frame, voice.strip_id.as_deref()))
+    let frames = voices
+        .iter()
+        .map(|voice| {
+            playback_schedule::schedule_instance(
+                &voice.asset_id,
+                &voice.voice_id,
+                &voice.voice,
+                voice.start_render_frame,
+                voice.strip_id.as_deref(),
+            )
+        })
         .collect::<Result<Vec<u64>, String>>()?;
     Ok(json!({ "success": true, "start_render_frames": frames }))
 }
@@ -109,12 +150,14 @@ pub fn render_clock() -> Result<Value, String> {
 }
 
 pub fn mix_apply(program: Value) -> Result<Value, String> {
-    let program: atome_mix_graph::Program = serde_json::from_value(program).map_err(|error| format!("mix program invalid: {error}"))?;
+    let program: atome_mix_graph::Program =
+        serde_json::from_value(program).map_err(|error| format!("mix program invalid: {error}"))?;
     Ok(json!({ "success": true, "strips": mix::apply_program(program)? }))
 }
 
 pub fn mix_levels() -> Result<Value, String> {
-    let levels: Vec<Value> = mix::levels()?.into_iter()
+    let levels: Vec<Value> = mix::levels()?
+        .into_iter()
         .map(|level| json!({ "strip_id": level.strip_id, "peak": level.peak, "rms": level.rms }))
         .collect();
     Ok(json!({ "success": true, "levels": levels }))
@@ -124,7 +167,11 @@ pub fn mix_devices() -> Result<Value, String> {
     Ok(json!({ "success": true, "devices": mix::devices() }))
 }
 
-pub fn mix_asset_load(project_root: Option<&Path>, asset_id: &str, path: &str) -> Result<Value, String> {
+pub fn mix_asset_load(
+    project_root: Option<&Path>,
+    asset_id: &str,
+    path: &str,
+) -> Result<Value, String> {
     if asset_id.is_empty() {
         return Err("mix_asset_load needs an asset id".to_string());
     }
@@ -134,18 +181,27 @@ pub fn mix_asset_load(project_root: Option<&Path>, asset_id: &str, path: &str) -
 }
 
 // A Sampler's sample, loaded once for every instrument that names `sample_id` (a long WAV streams).
-pub fn instrument_sample_load(project_root: Option<&Path>, sample_id: &str, path: &str) -> Result<Value, String> {
+pub fn instrument_sample_load(
+    project_root: Option<&Path>,
+    sample_id: &str,
+    path: &str,
+) -> Result<Value, String> {
     if sample_id.is_empty() {
         return Err("instrument_sample_load needs a sample id".to_string());
     }
     let loaded = instrument::load_sample(sample_id, &existing(resolve_path(project_root, path)?)?)?;
-    Ok(json!({ "success": true, "sample_id": sample_id, "frames": loaded.frames, "sample_rate": loaded.sample_rate, "channels": loaded.channels, "streamed": loaded.streamed }))
+    Ok(
+        json!({ "success": true, "sample_id": sample_id, "frames": loaded.frames, "sample_rate": loaded.sample_rate, "channels": loaded.channels, "streamed": loaded.streamed }),
+    )
 }
 
 pub fn instrument_run(command: Value) -> Result<Value, String> {
-    let command = serde_json::from_value(command).map_err(|error| format!("instrument command invalid: {error}"))?;
+    let command = serde_json::from_value(command)
+        .map_err(|error| format!("instrument command invalid: {error}"))?;
     Ok(match instrument::run(command)? {
-        InstrumentAnswer::Actions(drained) => json!({ "success": true, "frame": null, "drained": drained }),
+        InstrumentAnswer::Actions(drained) => {
+            json!({ "success": true, "frame": null, "drained": drained })
+        }
         InstrumentAnswer::Frames(frames) => json!({ "success": true, "frame": frames }),
         InstrumentAnswer::Done => json!({ "success": true, "frame": null }),
     })
@@ -167,22 +223,29 @@ pub fn mix_module_state(module_id: &str) -> Result<Value, String> {
 
 // The direct path: what is played live, in the device callback (L2).
 pub fn direct_apply(program: Value) -> Result<Value, String> {
-    let program: atome_mix_graph::Program = serde_json::from_value(program).map_err(|error| format!("direct program invalid: {error}"))?;
-    Ok(json!({ "success": true, "strips": direct::apply(program)?, "buffer_frames": direct::BUFFER_FRAMES }))
+    let program: atome_mix_graph::Program = serde_json::from_value(program)
+        .map_err(|error| format!("direct program invalid: {error}"))?;
+    Ok(
+        json!({ "success": true, "strips": direct::apply(program)?, "buffer_frames": direct::BUFFER_FRAMES }),
+    )
 }
 
 // Round trip of the direct path through an input (default: the default input).
 pub fn direct_measure_latency(device_name: Option<&str>) -> Result<Value, String> {
     let device = match device_name.filter(|name| !name.is_empty()) {
         Some(name) => name.to_string(),
-        None => cpal::traits::DeviceTrait::name(&recorder::input_device(None)?).map_err(|error| format!("input_device_name: {error}"))?,
+        None => recorder::device_name(&recorder::input_device(None)?)
+            .map_err(|error| format!("input_device_name: {error}"))?,
     };
-    let rate = playback_schedule::render_clock().map(|clock| clock.sample_rate).ok_or("Audio engine not initialized")?;
+    let rate = playback_schedule::render_clock()
+        .map(|clock| clock.sample_rate)
+        .ok_or("Audio engine not initialized")?;
     Ok(json!({ "success": true, "round_trip": direct::measure_round_trip(&device, rate)? }))
 }
 
 pub fn direct_levels() -> Result<Value, String> {
-    let levels: Vec<Value> = direct::levels()?.into_iter()
+    let levels: Vec<Value> = direct::levels()?
+        .into_iter()
         .map(|level| json!({ "strip_id": level.strip_id, "peak": level.peak, "rms": level.rms }))
         .collect();
     Ok(json!({ "success": true, "levels": levels }))
@@ -194,7 +257,9 @@ pub fn direct_cut_tail(module_id: &str) -> Result<Value, String> {
 }
 
 pub fn direct_module_state(module_id: &str) -> Result<Value, String> {
-    Ok(json!({ "success": true, "module_id": module_id, "state": direct::module_state(module_id)? }))
+    Ok(
+        json!({ "success": true, "module_id": module_id, "state": direct::module_state(module_id)? }),
+    )
 }
 
 pub fn stop(id: &str) -> Result<Value, String> {
@@ -227,13 +292,31 @@ pub fn set_playback_rate(id: &str, rate: f64) -> Result<Value, String> {
     Ok(json!({ "success": true, "id": id }))
 }
 
-pub fn record_start(project_root: Option<&Path>, session_id: &str, file_path: &str, sample_rate: u32, channels: u16, input_device_name: Option<String>) -> Result<Value, String> {
-    let absolute = resolve_path(project_root, file_path)?.to_string_lossy().to_string();
+pub fn record_start(
+    project_root: Option<&Path>,
+    session_id: &str,
+    file_path: &str,
+    sample_rate: u32,
+    channels: u16,
+    input_device_name: Option<String>,
+) -> Result<Value, String> {
+    let absolute = resolve_path(project_root, file_path)?
+        .to_string_lossy()
+        .to_string();
     metering::reset();
-    recorder::start_on_device(session_id, &absolute, sample_rate, channels, input_device_name)?;
-    let (sample_rate, channels) = recorder::session_format(session_id).unwrap_or((sample_rate, channels));
-    Ok(json!({ "success": true, "session_id": session_id, "file_path": file_path, "absolute_file_path": absolute,
-        "sample_rate": sample_rate, "channels": channels }))
+    recorder::start_on_device(
+        session_id,
+        &absolute,
+        sample_rate,
+        channels,
+        input_device_name,
+    )?;
+    let (sample_rate, channels) =
+        recorder::session_format(session_id).unwrap_or((sample_rate, channels));
+    Ok(
+        json!({ "success": true, "session_id": session_id, "file_path": file_path, "absolute_file_path": absolute,
+        "sample_rate": sample_rate, "channels": channels }),
+    )
 }
 
 pub fn record_stop(session_id: &str) -> Result<Value, String> {
@@ -311,15 +394,24 @@ struct Args {
 
 // Every command by name, with the JSON arguments the JS side sends.
 pub fn dispatch(name: &str, args: &Value, project_root: Option<&Path>) -> Result<Value, String> {
-    let parsed: Args = serde_json::from_value(args.clone()).map_err(|error| format!("audio_command_args_invalid:{name}: {error}"))?;
-    let voice = || serde_json::from_value::<VoiceRequest>(args.clone()).map_err(|error| format!("audio_voice_invalid: {error}"));
+    let parsed: Args = serde_json::from_value(args.clone())
+        .map_err(|error| format!("audio_command_args_invalid:{name}: {error}"))?;
+    let voice = || {
+        serde_json::from_value::<VoiceRequest>(args.clone())
+            .map_err(|error| format!("audio_voice_invalid: {error}"))
+    };
     match name.trim_start_matches("audio_") {
         "init" => init(),
         "load_clip" => load_clip(project_root, &parsed.id, &parsed.path),
         "load_clip_from_bytes" => load_clip_from_bytes(&parsed.id, parsed.bytes),
         "has_clip" => has_clip(&parsed.id),
         "play" => play(&parsed.id),
-        "play_instance" => play_instance(&parsed.asset_id, &parsed.voice_id, &voice()?, parsed.strip_id.as_deref()),
+        "play_instance" => play_instance(
+            &parsed.asset_id,
+            &parsed.voice_id,
+            &voice()?,
+            parsed.strip_id.as_deref(),
+        ),
         "schedule_instances" => schedule_instances(&parsed.voices),
         "measure_input_latency" => measure_input_latency(parsed.device_name.as_deref()),
         "render_clock" => render_clock(),
@@ -330,7 +422,9 @@ pub fn dispatch(name: &str, args: &Value, project_root: Option<&Path>) -> Result
         "mix_asset_load" => mix_asset_load(project_root, &parsed.asset_id, &parsed.path),
         "mix_asset_unload" => mix_asset_unload(&parsed.asset_id),
         "mix_module_state" => mix_module_state(&parsed.module_id),
-        "instrument_sample_load" => instrument_sample_load(project_root, &parsed.sample_id, &parsed.path),
+        "instrument_sample_load" => {
+            instrument_sample_load(project_root, &parsed.sample_id, &parsed.path)
+        }
         "instrument" => instrument_run(parsed.command),
         "direct_apply" => direct_apply(parsed.program),
         "direct_levels" => direct_levels(),
@@ -344,7 +438,14 @@ pub fn dispatch(name: &str, args: &Value, project_root: Option<&Path>) -> Result
         "set_volume" => set_volume(&parsed.id, parsed.db),
         "set_pan" => set_pan(&parsed.id, parsed.pan),
         "set_playback_rate" => set_playback_rate(&parsed.id, parsed.rate),
-        "record_start" => record_start(project_root, &parsed.session_id, &parsed.file_path, parsed.sample_rate, parsed.channels, parsed.input_device_name),
+        "record_start" => record_start(
+            project_root,
+            &parsed.session_id,
+            &parsed.file_path,
+            parsed.sample_rate,
+            parsed.channels,
+            parsed.input_device_name,
+        ),
         "record_stop" => record_stop(&parsed.session_id),
         "get_levels" => get_levels(),
         "get_scope" => get_scope(),
@@ -353,7 +454,10 @@ pub fn dispatch(name: &str, args: &Value, project_root: Option<&Path>) -> Result
         "wake_stop" => wake_capture::stop(),
         "wake_read" => wake_capture::read(),
         #[cfg(feature = "voice")]
-        "voice_start" => crate::voice::session::start(&resolve_path(project_root, &parsed.models_root)?, parsed.own_capture),
+        "voice_start" => crate::voice::session::start(
+            &resolve_path(project_root, &parsed.models_root)?,
+            parsed.own_capture,
+        ),
         #[cfg(feature = "voice")]
         "voice_stop" => crate::voice::session::stop(),
         #[cfg(feature = "voice")]

@@ -32,7 +32,7 @@ export const APP_ATOME_TYPES = Object.freeze([
     declare('raw', 'media', 'server/file_types.js'),
     declare('site', 'data_model', 'eVe/domains/site/site_runtime.js'),
     declare('shop_listing', 'data_model', 'eVe/domains/shop/shop_runtime.js'),
-    declare('share_request', 'policy', 'server/sharing_requests.js'),
+    declare('share_request', 'policy', 'server/sharing.js'),
     declare('share_policy', 'policy', 'server/sharing.js'),
     declare('generic', 'generic', 'database/adole_event_atome_upsert.js')
 ]);

@@ -2,8 +2,8 @@
 // amp, or a room. Zero latency: the head of the response runs in small
 // partitions, its tail in large ones (two-stage uniform partitioning).
 
-use crate::resample::{Resampler, HALF_TAPS};
-use crate::{db_to_amplitude, ParamSpec, Processor, Smoothed, StereoBlock, Unit};
+use crate::resample::{HALF_TAPS, Resampler};
+use crate::{ParamSpec, Processor, Smoothed, StereoBlock, Unit, db_to_amplitude};
 use fft_convolver::TwoStageFFTConvolver;
 
 pub const MIX: u32 = 0;
@@ -30,18 +30,33 @@ pub struct Impulse {
 }
 
 impl Impulse {
-    pub fn new(left: Vec<f32>, right: Option<Vec<f32>>, sample_rate: f64) -> Result<Self, ImpulseError> {
+    pub fn new(
+        left: Vec<f32>,
+        right: Option<Vec<f32>>,
+        sample_rate: f64,
+    ) -> Result<Self, ImpulseError> {
         if left.is_empty() {
             return Err(ImpulseError::Empty);
         }
-        if right.as_ref().is_some_and(|right| right.len() != left.len()) {
+        if right
+            .as_ref()
+            .is_some_and(|right| right.len() != left.len())
+        {
             return Err(ImpulseError::ChannelLengthMismatch);
         }
-        let energy: f32 = left.iter().chain(right.iter().flatten()).map(|x| x * x).sum();
+        let energy: f32 = left
+            .iter()
+            .chain(right.iter().flatten())
+            .map(|x| x * x)
+            .sum();
         if energy <= 1.0e-12 {
             return Err(ImpulseError::Silent);
         }
-        Ok(Self { left, right, sample_rate })
+        Ok(Self {
+            left,
+            right,
+            sample_rate,
+        })
     }
 
     pub fn frames(&self) -> usize {
@@ -63,7 +78,10 @@ fn resample_whole(source: &[f32], source_rate: f64, device_rate: f64) -> Vec<f32
     let frames = (source.len() as f64 * ratio).ceil() as usize;
     let mut resampler = Resampler::new();
     resampler.allocate(source_rate, device_rate, source.len() + HALF_TAPS * 4);
-    for &sample in source.iter().chain(std::iter::repeat_n(&0.0, HALF_TAPS * 2)) {
+    for &sample in source
+        .iter()
+        .chain(std::iter::repeat_n(&0.0, HALF_TAPS * 2))
+    {
         resampler.push(sample);
     }
     let mut out = Vec::with_capacity(frames);
@@ -86,7 +104,10 @@ impl Convolution {
     pub fn new(impulse: Impulse) -> Self {
         Self {
             impulse,
-            convolvers: [TwoStageFFTConvolver::default(), TwoStageFFTConvolver::default()],
+            convolvers: [
+                TwoStageFFTConvolver::default(),
+                TwoStageFFTConvolver::default(),
+            ],
             wet: [Vec::new(), Vec::new()],
             mix: Smoothed::new(PARAMS[0].default, 20.0),
             level: Smoothed::new(1.0, 10.0),
@@ -102,18 +123,32 @@ impl Processor for Convolution {
         let impulse = &self.impulse;
         let device_rate = sample_rate as f64;
         let mut left = Impulse::at_rate(&impulse.left, impulse.sample_rate, device_rate);
-        let mut right = impulse.right.as_ref().map(|right| Impulse::at_rate(right, impulse.sample_rate, device_rate));
+        let mut right = impulse
+            .right
+            .as_ref()
+            .map(|right| Impulse::at_rate(right, impulse.sample_rate, device_rate));
         // Energy-normalised so the wet signal keeps the dry level, whatever
         // the response's own gain.
         let channels = if right.is_some() { 2.0 } else { 1.0 };
-        let energy = left.iter().chain(right.iter().flatten()).map(|x| x * x).sum::<f32>() / channels;
+        let energy = left
+            .iter()
+            .chain(right.iter().flatten())
+            .map(|x| x * x)
+            .sum::<f32>()
+            / channels;
         let scale = 1.0 / energy.sqrt();
         for sample in left.iter_mut().chain(right.iter_mut().flatten()) {
             *sample *= scale;
         }
         self.tail = left.len() as u32;
-        let tail_block = (left.len() / 8).next_power_of_two().clamp(HEAD_BLOCK * 4, 2048);
-        for (convolver, response) in self.convolvers.iter_mut().zip([&left, right.as_ref().unwrap_or(&left)]) {
+        let tail_block = (left.len() / 8)
+            .next_power_of_two()
+            .clamp(HEAD_BLOCK * 4, 2048);
+        for (convolver, response) in self
+            .convolvers
+            .iter_mut()
+            .zip([&left, right.as_ref().unwrap_or(&left)])
+        {
             convolver
                 .init(HEAD_BLOCK, tail_block, response)
                 .expect("block sizes are non-zero by construction");
@@ -140,7 +175,9 @@ impl Processor for Convolution {
     }
 
     fn set_param(&mut self, id: u32, value: f32) {
-        let Some(spec) = PARAMS.get(id as usize) else { return };
+        let Some(spec) = PARAMS.get(id as usize) else {
+            return;
+        };
         let value = spec.clamp(value);
         match id {
             MIX => self.mix.set(value),

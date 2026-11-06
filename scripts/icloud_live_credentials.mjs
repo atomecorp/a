@@ -158,6 +158,10 @@ export const resolveMailCredentials = (runtimeOverrides = null) => {
             if (!runtimeConfig) {
                 throw new Error('mail_credentials_missing');
             }
+            // Clear text is refused (user decision, 2026-11-06): a mail always travels encrypted.
+            if (runtimeConfig.imap.security === 'none' || runtimeConfig.smtp.security === 'none') {
+                throw new Error('mail_security_cleartext_refused');
+            }
             const missingFields = collectMissingFields(runtimeConfig);
             if (missingFields.length > 0) {
                 throw new Error(`mail_credentials_missing:${missingFields.join(',')}`);

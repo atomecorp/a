@@ -27,6 +27,9 @@ const normalizeMailPortPreference = (value, fallback) => {
     return parsed;
 };
 
+// `none` (clear text) is kept as stored so a saved preference is never lost, but every use refuses
+// it (user decision, 2026-11-06): scripts/icloud_live_credentials.mjs#resolveMailCredentials and
+// mail_socket.js#connectSocket answer `mail_security_cleartext_refused`.
 const normalizeMailSecurityPreference = (value, fallback) => {
     const normalized = String(value || '').trim().toLowerCase();
     if (['tls', 'starttls', 'ssl', 'none'].includes(normalized)) return normalized;

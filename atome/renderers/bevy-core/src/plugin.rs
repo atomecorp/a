@@ -3,20 +3,24 @@ use bevy::{image::Image, mesh::Mesh, prelude::*, ui::IsDefaultUiCamera};
 use crate::{
     backdrop_blur::apply_scene_effects,
     backdrop_surface::BackdropSurfacePlugin,
+    media_window::AtomeMediaWindowPlugin,
+    node_texture::texture_handle_for_node,
     procedural_sdf::ProceduralSdfPlugin,
     progress_ring::ProgressRingPlugin,
     render_math::atome_camera_projection,
     render_ops::apply_render_op,
     selection_overlay::rebuild_selection_overlay,
     shape_shadow_overlay::rebuild_shape_shadow_overlay,
-    spawn::{spawn_node_with_texture_handle, texture_handle_for_node},
+    spawn::spawn_node_with_texture_handle,
     types::*,
     ui::AtomeBevyUiPlugin,
-    media_window::AtomeMediaWindowPlugin,
-    video_external_texture::{insert_video_external_texture_component_for_node, AtomeVideoExternalTexturePlugin},
+    video_external_texture::{
+        AtomeVideoExternalTexturePlugin, insert_video_external_texture_component_for_node,
+    },
     waveform_playback_overlay::rebuild_waveform_playback_overlay,
     workspace_backdrop::{
-        spawn_workspace_backdrop, AtomePresentationCamera, MENU_PRESENTATION_LAYER, WORKSPACE_CAPTURE_LAYER,
+        AtomePresentationCamera, MENU_PRESENTATION_LAYER, WORKSPACE_CAPTURE_LAYER,
+        spawn_workspace_backdrop,
     },
     workspace_blur::WorkspaceBlurPlugin,
 };
@@ -40,6 +44,9 @@ impl Plugin for AtomeBevyRendererPlugin {
             .add_plugins(ProgressRingPlugin)
             .add_plugins(BackdropSurfacePlugin)
             .add_plugins(WorkspaceBlurPlugin)
+            .add_plugins(crate::shape_mask_gpu::ShapeMaskGpuPlugin)
+            .add_plugins(crate::spatial_mask_gpu::SpatialMaskGpuPlugin)
+            .add_plugins(crate::shape_shadow_gpu::ShapeShadowGpuPlugin)
             .add_plugins(AtomeBevyUiPlugin)
             .init_resource::<AtomeEntityTable>()
             .init_resource::<AtomeBackdropBlurState>()
@@ -50,7 +57,11 @@ impl Plugin for AtomeBevyRendererPlugin {
             .init_resource::<Time<Real>>()
             .init_non_send::<crate::animated_png::PngAnimations>()
             .init_resource::<crate::frame_demand::AtomeFrameDemand>()
-            .add_systems(Update, crate::animated_png::advance_animations.before(crate::frame_demand::apply_frame_demand))
+            .add_systems(
+                Update,
+                crate::animated_png::advance_animations
+                    .before(crate::frame_demand::apply_frame_demand),
+            )
             .add_systems(Update, crate::frame_demand::apply_frame_demand)
             .add_systems(PostUpdate, crate::mystic_capture::sync_menu_capture)
             .add_systems(PostUpdate, crate::clip_polygon::sync_clip_polygon_proxies)
@@ -65,6 +76,8 @@ impl Plugin for AtomeBevyRendererPlugin {
                     .before(bevy::camera::visibility::VisibilitySystems::CheckVisibility),
             )
             .add_systems(Startup, spawn_atome_bevy_scene);
+        #[cfg(target_arch = "wasm32")]
+        app.add_plugins(crate::browser_texture::BrowserTexturePlugin);
     }
 }
 
@@ -86,12 +99,15 @@ fn spawn_atome_bevy_scene(
         // power draw on mobile GPUs at a device pixel ratio of 3.
         Msaa::Off,
         atome_camera_projection(config.width, config.height),
-        bevy::camera::visibility::RenderLayers::layer(WORKSPACE_CAPTURE_LAYER).with(MENU_PRESENTATION_LAYER).with(crate::mystic_capture::MENU_OVERLAY_LAYER),
+        bevy::camera::visibility::RenderLayers::layer(WORKSPACE_CAPTURE_LAYER)
+            .with(MENU_PRESENTATION_LAYER)
+            .with(crate::mystic_capture::MENU_OVERLAY_LAYER),
         AtomePresentationCamera,
     ));
     for node in &config.initial_scene.nodes {
         let node_id = node.id.clone();
-        let texture_handle = texture_handle_for_node(&mut images, node).unwrap_or_else(|error| panic!("{error}"));
+        let texture_handle =
+            texture_handle_for_node(&mut images, node).unwrap_or_else(|error| panic!("{error}"));
         let node_for_world = node.clone();
         let surface_width = config.width;
         let surface_height = config.height;
@@ -105,8 +121,15 @@ fn spawn_atome_bevy_scene(
             );
             match result {
                 Ok(entity) => {
-                    insert_video_external_texture_component_for_node(world, entity, &node_for_world);
-                    world.resource_mut::<AtomeEntityTable>().by_id.insert(node_id, entity);
+                    insert_video_external_texture_component_for_node(
+                        world,
+                        entity,
+                        &node_for_world,
+                    );
+                    world
+                        .resource_mut::<AtomeEntityTable>()
+                        .by_id
+                        .insert(node_id, entity);
                     if let Err(error) = rebuild_selection_overlay(world, entity) {
                         world.resource_mut::<AtomeRendererDiagnostics>().last_error = Some(error);
                     }
@@ -124,7 +147,11 @@ fn spawn_atome_bevy_scene(
         });
     }
     commands.queue(|world: &mut World| {
-        let effects = world.resource::<AtomeBevyRendererConfig>().initial_scene.effects.clone();
+        let effects = world
+            .resource::<AtomeBevyRendererConfig>()
+            .initial_scene
+            .effects
+            .clone();
         if let Err(error) = apply_scene_effects(world, AtomeSceneEffectsPatch { effects }) {
             world.resource_mut::<AtomeRendererDiagnostics>().last_error = Some(error);
         }
@@ -140,8 +167,12 @@ pub fn apply_render_ops(world: &mut World, ops: Vec<AtomeRenderOp>) {
                 diagnostics.last_error = None;
             }
             Err(error) => {
-                world.resource_mut::<AtomeRendererDiagnostics>().last_error = Some(format!("{error:?}"));
+                world.resource_mut::<AtomeRendererDiagnostics>().last_error =
+                    Some(format!("{error:?}"));
             }
         }
     }
+    // Every op staged with its browser image has now made its texture.
+    #[cfg(target_arch = "wasm32")]
+    crate::browser_texture::release_unclaimed_browser_texture_sources();
 }

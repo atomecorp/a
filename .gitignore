@@ -19,8 +19,6 @@ Private/
 # Build outputs
 atome/src/svelte/build/
 platforms/ios/atome-auv3/build/
-platforms/web/audio-wasm/target/
-platforms/web/bevy-renderer/target/
 **/target/
 /temp/
 temp/
@@ -102,8 +100,6 @@ tests/server/*
 !tests/server/sync_sharing_service.probe.mjs
 !tests/server/user_vault_provider.probe.mjs
 !tests/server/user_vault_idle.probe.mjs
-!tests/server/ws_sync_replay_runtime.probe.mjs
-!tests/server/ws_sync_runtime.test.mjs
 !tests/shared/
 tests/shared/*
 !tests/shared/accessible_atom_node.test.mjs
@@ -314,7 +310,6 @@ yarn-error.log*
 *.swo
 
 # Tauri
-platforms/desktop-tauri/target/
 
 # Local databases (outside src/ to avoid hot-reload)
 data/
@@ -346,7 +341,6 @@ server/data/*.json
 
 # Process files
 .watcher.pid
-platforms/desktop-tauri/Cargo.lock
 platforms/desktop-tauri/gen/android-webroot/
 platforms/desktop-tauri/vendor/tauri-plugin-mobile-host/android/.tauri/
 platforms/desktop-tauri/vendor/tauri-plugin-mobile-host/android/build/

@@ -136,7 +136,8 @@ export function createSiteDomains({ query, store, publishing, resolver = dnsProm
         return { ok: true, simulated: true, domain: row.domain, state: row.state, expires_at: row.expires_at, auto_renew: row.auto_renew === 1,
             renew: shownPrice(domainPrice(TLD_RENEW_CENTS[tld] || TLD_PROVIDER_CENTS[tld])), records: parse(row.records_json) };
     };
-    const recordSet = async (ownerId, { domain, type, name = '@', value, remove = false }) => {
+    // `record_type`: a frame's own `type` is its family (`site`).
+    const recordSet = async (ownerId, { domain, record_type: type, name = '@', value, remove = false }) => {
         const row = await owned(ownerId, normalized(domain));
         if (!row) return fail('NOT_FOUND');
         const list = parse(row.records_json), same = entry => entry.type === type && entry.name === (name || '@');

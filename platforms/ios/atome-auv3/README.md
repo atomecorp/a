@@ -12,6 +12,15 @@ Example to build using the terminal:
 xcodebuild -project atome.xcodeproj -scheme atomeAudioUnit -destination "generic/platform=macOS,variant=Mac Catalyst" 
 clean build install
 
+## Rendering and the Rust static library
+
+The app and the AUv3 draw everything through the Web renderer (Bevy compiled to WASM, WebGPU) inside their
+WebView; there is no native renderer. Both targets link one Rust static library, built before Swift by the
+"Build iOS Bevy Renderer" phase (`../build_bevy_renderer.sh`, crate `platforms/ios/bevy-renderer`, linked as
+`-latome_ios_bevy_renderer`; the historical names are kept for the link settings and the build cache). It holds
+the native Kira audio engine (`Common/AtomeIosAudioEngineBridge.h`) and the embedded local server
+(`Common/AtomeIosLocalServerBridge.h`), and links no Bevy since 2026-11-06.
+
 ## TestFlight release
 
 The private registered-device OTA channel is documented in
@@ -101,9 +110,9 @@ your app use?”, select **option 2**:
 > encryption used in or accessed through Apple's operating system.
 
 This is not a proprietary encryption implementation. The iOS target directly
-uses CryptoKit for SHA-1 WebSocket negotiation, SHA-256 password hashing, and
-HMAC-SHA256 JWT authentication in
-`Common/LocalHTTPServer.swift`. Its bundled Atome resource root also includes
+uses CryptoKit for SHA-256 digests (`Common/AuthDeviceKey.swift`), and the linked
+Rust local server signs its sessions with HMAC-SHA256 JWT
+(`atome/servers/atome-server/src/local/local_auth_tokens.rs`). Its bundled Atome resource root also includes
 the WebCrypto RSA-PSS/SHA-256 server-signature verification path in
 `atome/security/serverVerificationCrypto.js`.
 

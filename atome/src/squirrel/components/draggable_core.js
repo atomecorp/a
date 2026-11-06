@@ -58,7 +58,7 @@ function makeDraggable(element, options = {}) {
       currentY += deltaY;
 
       // Construire le transform avec les effets demandés
-      let transformParts = [`translate(${currentX}px, ${currentY}px)`];
+      const transformParts = [`translate(${currentX}px, ${currentY}px)`];
 
       // Ajouter rotation si demandée
       if (rotationFactor > 0) {

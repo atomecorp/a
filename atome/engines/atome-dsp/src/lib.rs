@@ -42,7 +42,10 @@ impl<'a> StereoBlock<'a> {
 
     // A shorter view on the same samples, used to split a block at an event.
     pub fn slice(&mut self, start: usize, end: usize) -> StereoBlock<'_> {
-        StereoBlock { left: &mut self.left[start..end], right: &mut self.right[start..end] }
+        StereoBlock {
+            left: &mut self.left[start..end],
+            right: &mut self.right[start..end],
+        }
     }
 }
 

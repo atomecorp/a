@@ -6,6 +6,7 @@ use std::time::Duration;
 
 fn texture() -> AtomeTexture {
     AtomeTexture {
+        external: None,
         width: 100,
         height: 100,
         rgba: vec![],
@@ -44,10 +45,12 @@ fn apng_frame_timing_alpha_disposal_and_infinite_loops() {
         assert_eq!(frames[index], frames[index + 20], "loop frame {index}");
     }
     // A moving ball must erase previously occupied pixels instead of retaining trails.
-    assert!(frames.windows(2).any(|pair| pair[0]
-        .chunks_exact(4)
-        .zip(pair[1].chunks_exact(4))
-        .any(|(before, after)| before[3] > 0 && after[3] == 0)));
+    assert!(frames.windows(2).any(|pair| {
+        pair[0]
+            .chunks_exact(4)
+            .zip(pair[1].chunks_exact(4))
+            .any(|(before, after)| before[3] > 0 && after[3] == 0)
+    }));
 }
 
 #[test]
@@ -74,10 +77,12 @@ fn apng_finite_loop_keeps_last_frame_and_stops() {
     bytes[chunk + 12..chunk + 16].copy_from_slice(&(!crc).to_be_bytes());
     let (mut playback, _) = PngPlayback::new(&source, 0.0).unwrap();
     for index in 1..20 {
-        assert!(playback
-            .advance(index as f64 * 0.075 + 1e-8)
-            .unwrap()
-            .is_some());
+        assert!(
+            playback
+                .advance(index as f64 * 0.075 + 1e-8)
+                .unwrap()
+                .is_some()
+        );
     }
     assert!(playback.advance(1.5 + 1e-8).unwrap().is_none());
     assert!(playback.finished);
@@ -138,9 +143,9 @@ fn apng_updates_same_image_pauses_hidden_and_releases_on_replacement_or_despawn(
             .data,
         first
     );
-    app.world_mut()
-        .get_mut::<Visibility>(entity)
-        .map(|mut visibility| *visibility = Visibility::Hidden);
+    if let Some(mut visibility) = app.world_mut().get_mut::<Visibility>(entity) {
+        *visibility = Visibility::Hidden;
+    }
     app.update();
     let hidden = app
         .world()
@@ -162,6 +167,7 @@ fn apng_updates_same_image_pauses_hidden_and_releases_on_replacement_or_despawn(
         hidden
     );
     let still = AtomeTexture {
+        external: None,
         width: 1,
         height: 1,
         rgba: vec![255; 4],

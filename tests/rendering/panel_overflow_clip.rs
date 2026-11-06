@@ -27,7 +27,10 @@ mod video_clip_tests {
         let (mut world, entity) = world_with_video([0.0, 0.0, 1.0, 1.0]);
         let original = [10.0, 20.0, 200.0, 100.0];
         apply_video_clip_mesh(&mut world, entity, original, original).expect("clip");
-        let applied = world.get::<AtomeVideoClipMesh>(entity).copied().expect("mesh state");
+        let applied = world
+            .get::<AtomeVideoClipMesh>(entity)
+            .copied()
+            .expect("mesh state");
         assert_eq!(applied.0, [200.0, 100.0, 0.0, 0.0, 1.0, 1.0]);
     }
 
@@ -38,7 +41,10 @@ mod video_clip_tests {
         // La page ne laisse voir que la moitie droite, moitie basse.
         let visible = [100.0, 50.0, 100.0, 50.0];
         apply_video_clip_mesh(&mut world, entity, original, visible).expect("clip");
-        let applied = world.get::<AtomeVideoClipMesh>(entity).copied().expect("mesh state");
+        let applied = world
+            .get::<AtomeVideoClipMesh>(entity)
+            .copied()
+            .expect("mesh state");
         assert_eq!(applied.0, [100.0, 50.0, 0.5, 0.5, 0.5, 0.5]);
     }
 
@@ -48,7 +54,10 @@ mod video_clip_tests {
         let original = [0.0, 0.0, 100.0, 100.0];
         let visible = [50.0, 0.0, 50.0, 100.0];
         apply_video_clip_mesh(&mut world, entity, original, visible).expect("clip");
-        let applied = world.get::<AtomeVideoClipMesh>(entity).copied().expect("mesh state");
+        let applied = world
+            .get::<AtomeVideoClipMesh>(entity)
+            .copied()
+            .expect("mesh state");
         assert_eq!(applied.0, [50.0, 100.0, 0.5, 0.0, 0.25, 1.0]);
     }
 
@@ -60,8 +69,11 @@ mod video_clip_tests {
         apply_video_clip_mesh(&mut world, entity, original, visible).expect("clip");
         let first = world.resource::<Assets<Mesh>>().len();
         apply_video_clip_mesh(&mut world, entity, original, visible).expect("clip");
-        assert_eq!(world.resource::<Assets<Mesh>>().len(), first,
-            "une image de geste ne doit pas re-televerser le maillage");
+        assert_eq!(
+            world.resource::<Assets<Mesh>>().len(),
+            first,
+            "une image de geste ne doit pas re-televerser le maillage"
+        );
     }
 
     #[test]
@@ -70,9 +82,22 @@ mod video_clip_tests {
         // externe non — la video traversait alors la page sans etre coupee.
         let mut world = World::new();
         world.insert_resource(Assets::<Mesh>::default());
-        let entity = world.spawn(crate::video_external_texture::AtomeVideoQuad([0.0, 0.0, 1.0, 1.0])).id();
-        apply_video_clip_mesh(&mut world, entity, [0.0, 0.0, 200.0, 100.0], [0.0, 0.0, 120.0, 100.0]).expect("clip");
-        let applied = world.get::<AtomeVideoClipMesh>(entity).copied().expect("mesh state");
+        let entity = world
+            .spawn(crate::video_external_texture::AtomeVideoQuad([
+                0.0, 0.0, 1.0, 1.0,
+            ]))
+            .id();
+        apply_video_clip_mesh(
+            &mut world,
+            entity,
+            [0.0, 0.0, 200.0, 100.0],
+            [0.0, 0.0, 120.0, 100.0],
+        )
+        .expect("clip");
+        let applied = world
+            .get::<AtomeVideoClipMesh>(entity)
+            .copied()
+            .expect("mesh state");
         assert_eq!(applied.0, [120.0, 100.0, 0.0, 0.0, 0.6, 1.0]);
     }
 
@@ -80,12 +105,24 @@ mod video_clip_tests {
     fn clipping_twice_never_crops_its_own_crop() {
         let mut world = World::new();
         world.insert_resource(Assets::<Mesh>::default());
-        let entity = world.spawn(crate::video_external_texture::AtomeVideoQuad([0.0, 0.0, 1.0, 1.0])).id();
+        let entity = world
+            .spawn(crate::video_external_texture::AtomeVideoQuad([
+                0.0, 0.0, 1.0, 1.0,
+            ]))
+            .id();
         let original = [0.0, 0.0, 200.0, 100.0];
-        apply_video_clip_mesh(&mut world, entity, original, [0.0, 0.0, 100.0, 100.0]).expect("clip");
+        apply_video_clip_mesh(&mut world, entity, original, [0.0, 0.0, 100.0, 100.0])
+            .expect("clip");
         apply_video_clip_mesh(&mut world, entity, original, [0.0, 0.0, 50.0, 100.0]).expect("clip");
-        let applied = world.get::<AtomeVideoClipMesh>(entity).copied().expect("mesh state");
-        assert_eq!(applied.0, [50.0, 100.0, 0.0, 0.0, 0.25, 1.0], "le rectangle d origine reste la reference");
+        let applied = world
+            .get::<AtomeVideoClipMesh>(entity)
+            .copied()
+            .expect("mesh state");
+        assert_eq!(
+            applied.0,
+            [50.0, 100.0, 0.0, 0.0, 0.25, 1.0],
+            "le rectangle d origine reste la reference"
+        );
     }
 
     #[test]
@@ -96,25 +133,57 @@ mod video_clip_tests {
         let mut world = World::new();
         world.insert_resource(Assets::<Mesh>::default());
         let entity = world.spawn_empty().id();
-        crate::video_external_texture::insert_video_quad_mesh(&mut world, entity, [200.0, 100.0], [0.0, 0.0, 1.0, 1.0]).expect("quad");
+        crate::video_external_texture::insert_video_quad_mesh(
+            &mut world,
+            entity,
+            [200.0, 100.0],
+            [0.0, 0.0, 1.0, 1.0],
+        )
+        .expect("quad");
         let original = [0.0, 0.0, 200.0, 100.0];
         let visible = [0.0, 0.0, 140.0, 100.0];
         apply_video_clip_mesh(&mut world, entity, original, visible).expect("clip");
         assert!(world.get::<AtomeVideoClipMesh>(entity).is_some());
-        crate::video_external_texture::insert_video_quad_mesh(&mut world, entity, [200.0, 100.0], [0.0, 0.0, 1.0, 1.0]).expect("rebuild");
-        assert!(world.get::<AtomeVideoClipMesh>(entity).is_none(), "le quad refait oublie sa decoupe");
+        crate::video_external_texture::insert_video_quad_mesh(
+            &mut world,
+            entity,
+            [200.0, 100.0],
+            [0.0, 0.0, 1.0, 1.0],
+        )
+        .expect("rebuild");
+        assert!(
+            world.get::<AtomeVideoClipMesh>(entity).is_none(),
+            "le quad refait oublie sa decoupe"
+        );
         let before = world.resource::<Assets<Mesh>>().len();
         apply_video_clip_mesh(&mut world, entity, original, visible).expect("clip again");
-        assert_eq!(world.get::<AtomeVideoClipMesh>(entity).copied().map(|state| state.0), Some([140.0, 100.0, 0.0, 0.0, 0.7, 1.0]));
-        assert_eq!(world.resource::<Assets<Mesh>>().len(), before, "clipping reuses the rebuilt quad");
-        let mesh = world.resource::<Assets<Mesh>>().get(&world.get::<Mesh2d>(entity).unwrap().0).unwrap();
-        let Some(bevy::mesh::VertexAttributeValues::Float32x2(uvs)) = mesh.attribute(Mesh::ATTRIBUTE_UV_0) else {
+        assert_eq!(
+            world
+                .get::<AtomeVideoClipMesh>(entity)
+                .copied()
+                .map(|state| state.0),
+            Some([140.0, 100.0, 0.0, 0.0, 0.7, 1.0])
+        );
+        assert_eq!(
+            world.resource::<Assets<Mesh>>().len(),
+            before,
+            "clipping reuses the rebuilt quad"
+        );
+        let mesh = world
+            .resource::<Assets<Mesh>>()
+            .get(&world.get::<Mesh2d>(entity).unwrap().0)
+            .unwrap();
+        let Some(bevy::mesh::VertexAttributeValues::Float32x2(uvs)) =
+            mesh.attribute(Mesh::ATTRIBUTE_UV_0)
+        else {
             panic!("clipped video UVs required");
         };
         for uv in uvs {
             assert!(uv[0] <= 0.70001, "the rebuilt quad is cropped again");
         }
-        let Some(bevy::mesh::VertexAttributeValues::Float32x3(vertices)) = mesh.attribute(Mesh::ATTRIBUTE_POSITION) else {
+        let Some(bevy::mesh::VertexAttributeValues::Float32x3(vertices)) =
+            mesh.attribute(Mesh::ATTRIBUTE_POSITION)
+        else {
             panic!("clipped video vertices required");
         };
         assert!(vertices.iter().all(|vertex| vertex[0].abs() <= 70.001));
@@ -125,7 +194,13 @@ mod video_clip_tests {
         let mut world = World::new();
         world.insert_resource(Assets::<Mesh>::default());
         let entity = world.spawn_empty().id();
-        apply_video_clip_mesh(&mut world, entity, [0.0, 0.0, 10.0, 10.0], [0.0, 0.0, 5.0, 5.0]).expect("clip");
+        apply_video_clip_mesh(
+            &mut world,
+            entity,
+            [0.0, 0.0, 10.0, 10.0],
+            [0.0, 0.0, 5.0, 5.0],
+        )
+        .expect("clip");
         assert!(world.get::<AtomeVideoClipMesh>(entity).is_none());
     }
 }
@@ -133,30 +208,61 @@ mod video_clip_tests {
 #[cfg(test)]
 mod rounded_clip_tests {
     use super::*;
-    use bevy::sprite_render::ColorMaterial;
     use crate::clip_polygon::AtomeClipPolygonProxy;
+    use bevy::sprite_render::ColorMaterial;
 
     #[test]
     fn rounded_rail_stays_inside_both_corners_at_one_and_two_times_scale() {
         for scale in [1.0, 2.0] {
-            let rect = [0.0, 0.0, 200.0 * scale, 180.0 * scale, 15.0 * scale, 15.0 * scale, 0.0, 0.0];
+            let rect = [
+                0.0,
+                0.0,
+                200.0 * scale,
+                180.0 * scale,
+                15.0 * scale,
+                15.0 * scale,
+                0.0,
+                0.0,
+            ];
             for x in [4.0 * scale, 192.5 * scale] {
                 let position = [x, -80.0 * scale];
-                let points = visible_polygon_for_rounded_clips(position, [3.5 * scale, 280.0 * scale],
-                    AtomeLocalTransform::default(), Some([0.0, 0.0, rect[2], rect[3]]), 0.0, &[rect]);
+                let points = visible_polygon_for_rounded_clips(
+                    position,
+                    [3.5 * scale, 280.0 * scale],
+                    AtomeLocalTransform::default(),
+                    Some([0.0, 0.0, rect[2], rect[3]]),
+                    0.0,
+                    &[rect],
+                );
                 assert!(points.len() > 4, "corner must cut the straight rail");
                 for p in points {
-                    let distance = crate::texture::rounded_rect_signed_distance(p.x + x, p.y + position[1],
-                        rect[2], rect[3], [rect[4], rect[5], 0.0, 0.0]);
-                    assert!(distance <= 0.001, "rail outside rounded viewport: {distance}");
-                    assert!(p.y + position[1] <= rect[3] + 0.001, "rail crosses fixed action band");
+                    let distance = crate::texture::rounded_rect_signed_distance(
+                        p.x + x,
+                        p.y + position[1],
+                        rect[2],
+                        rect[3],
+                        [rect[4], rect[5], 0.0, 0.0],
+                    );
+                    assert!(
+                        distance <= 0.001,
+                        "rail outside rounded viewport: {distance}"
+                    );
+                    assert!(
+                        p.y + position[1] <= rect[3] + 0.001,
+                        "rail crosses fixed action band"
+                    );
                 }
             }
             let outline = rounded_clip_outline(rect);
             for i in 0..outline.len() {
                 let midpoint = (outline[i] + outline[(i + 1) % outline.len()]) / 2.0;
-                let distance = crate::texture::rounded_rect_signed_distance(midpoint.x, midpoint.y,
-                    rect[2], rect[3], [rect[4], rect[5], 0.0, 0.0]);
+                let distance = crate::texture::rounded_rect_signed_distance(
+                    midpoint.x,
+                    midpoint.y,
+                    rect[2],
+                    rect[3],
+                    [rect[4], rect[5], 0.0, 0.0],
+                );
                 assert!(distance >= -0.051, "chord exceeds the 0.05 pixel tolerance");
             }
         }
@@ -164,12 +270,28 @@ mod rounded_clip_tests {
 
     #[test]
     fn nested_rounded_clips_intersect_without_moving_the_outer_arc() {
-        let points = visible_polygon_for_rounded_clips([0.0, 0.0], [200.0, 180.0], AtomeLocalTransform::default(),
-            Some([0.0, 0.0, 200.0, 180.0]), 0.0,
-            &[[0.0, 0.0, 200.0, 180.0, 15.0, 15.0, 0.0, 0.0], [2.0, 0.0, 196.0, 160.0, 5.0, 5.0, 0.0, 0.0]]);
+        let points = visible_polygon_for_rounded_clips(
+            [0.0, 0.0],
+            [200.0, 180.0],
+            AtomeLocalTransform::default(),
+            Some([0.0, 0.0, 200.0, 180.0]),
+            0.0,
+            &[
+                [0.0, 0.0, 200.0, 180.0, 15.0, 15.0, 0.0, 0.0],
+                [2.0, 0.0, 196.0, 160.0, 5.0, 5.0, 0.0, 0.0],
+            ],
+        );
         assert!(points.len() > 4);
         for p in points {
-            assert!(crate::texture::rounded_rect_signed_distance(p.x, p.y, 200.0, 180.0, [15.0, 15.0, 0.0, 0.0]) <= 0.001);
+            assert!(
+                crate::texture::rounded_rect_signed_distance(
+                    p.x,
+                    p.y,
+                    200.0,
+                    180.0,
+                    [15.0, 15.0, 0.0, 0.0]
+                ) <= 0.001
+            );
             assert!(p.x >= 1.999 && p.x <= 198.001 && p.y <= 160.001);
         }
     }
@@ -177,7 +299,9 @@ mod rounded_clip_tests {
     #[test]
     fn rounded_scroll_reuses_and_hides_the_resident_proxy_then_clears_the_clip() {
         let mut app = App::new();
-        app.add_plugins(crate::AtomeBevyRendererPlugin::new(crate::AtomeBevyRendererConfig::empty(640.0, 480.0)));
+        app.add_plugins(crate::AtomeBevyRendererPlugin::new(
+            crate::AtomeBevyRendererConfig::empty(640.0, 480.0),
+        ));
         app.world_mut().init_resource::<Assets<ColorMaterial>>();
         app.update();
         let node: crate::AtomeRenderNode = serde_json::from_value(serde_json::json!({
@@ -188,21 +312,33 @@ mod rounded_clip_tests {
         let entity = crate::apply_spawn(app.world_mut(), node).unwrap();
         let proxy = app.world().get::<AtomeClipPolygonProxy>(entity).unwrap().0;
         let mesh = app.world().get::<Mesh2d>(proxy).unwrap().0.clone();
-        let patch = |y, rounded| serde_json::from_value::<crate::AtomeTransformPatch>(serde_json::json!({
-            "id":"rounded_rail", "logical_position":[192.5,y], "logical_size":[3.5,280.0],
-            "clip_rect":[0.0,0.0,200.0,180.0], "clip_rounded_rects":rounded
-        })).unwrap();
-        let rounded = vec![[0.0,0.0,200.0,180.0,15.0,15.0,0.0,0.0]];
+        let patch = |y, rounded| {
+            serde_json::from_value::<crate::AtomeTransformPatch>(serde_json::json!({
+                "id":"rounded_rail", "logical_position":[192.5,y], "logical_size":[3.5,280.0],
+                "clip_rect":[0.0,0.0,200.0,180.0], "clip_rounded_rects":rounded
+            }))
+            .unwrap()
+        };
+        let rounded = vec![[0.0, 0.0, 200.0, 180.0, 15.0, 15.0, 0.0, 0.0]];
         for y in [-90.0, -100.0] {
             crate::apply_transform(app.world_mut(), patch(y, rounded.clone())).unwrap();
-            assert_eq!(app.world().get::<AtomeClipPolygonProxy>(entity).unwrap().0, proxy);
+            assert_eq!(
+                app.world().get::<AtomeClipPolygonProxy>(entity).unwrap().0,
+                proxy
+            );
             assert_eq!(app.world().get::<Mesh2d>(proxy).unwrap().0, mesh);
         }
         crate::apply_transform(app.world_mut(), patch(-300.0, rounded.clone())).unwrap();
-        assert_eq!(app.world().get::<Visibility>(proxy), Some(&Visibility::Hidden));
+        assert_eq!(
+            app.world().get::<Visibility>(proxy),
+            Some(&Visibility::Hidden)
+        );
         crate::apply_transform(app.world_mut(), patch(-80.0, rounded)).unwrap();
-        assert_eq!(app.world().get::<Visibility>(proxy), Some(&Visibility::Visible));
-        crate::apply_transform(app.world_mut(), patch(-80.0, Vec::<[f32;8]>::new())).unwrap();
+        assert_eq!(
+            app.world().get::<Visibility>(proxy),
+            Some(&Visibility::Visible)
+        );
+        crate::apply_transform(app.world_mut(), patch(-80.0, Vec::<[f32; 8]>::new())).unwrap();
         assert!(app.world().get::<AtomeClipPolygonProxy>(entity).is_none());
         assert!(app.world().get_entity(proxy).is_err());
         // A rounded boundary also works without the optional rectangular clip.
@@ -212,6 +348,9 @@ mod rounded_clip_tests {
             "clip_rounded_rects":[[0.0,0.0,200.0,180.0,15.0,15.0,0.0,0.0]]
         })).unwrap();
         let inside_entity = crate::apply_spawn(app.world_mut(), inside).unwrap();
-        assert_eq!(app.world().get::<Visibility>(inside_entity), Some(&Visibility::Visible));
+        assert_eq!(
+            app.world().get::<Visibility>(inside_entity),
+            Some(&Visibility::Visible)
+        );
     }
 }

@@ -53,7 +53,7 @@ pub fn publish(minimums: &[f32; PAIR_COUNT], maximums: &[f32; PAIR_COUNT]) {
 pub fn snapshot() -> ScopeFrame {
     for _ in 0..4 {
         let before = VERSION.load(Ordering::Acquire);
-        if before == 0 || before % 2 != 0 {
+        if before == 0 || !before.is_multiple_of(2) {
             continue;
         }
         let pairs = (0..PAIR_COUNT)
@@ -65,7 +65,7 @@ pub fn snapshot() -> ScopeFrame {
             })
             .collect::<Vec<_>>();
         let after = VERSION.load(Ordering::Acquire);
-        if before == after && after % 2 == 0 {
+        if before == after && after.is_multiple_of(2) {
             return ScopeFrame {
                 available: true,
                 sequence: after / 2,
@@ -86,7 +86,7 @@ pub fn snapshot() -> ScopeFrame {
 
 #[cfg(test)]
 mod tests {
-    use super::{configure, publish, reset, snapshot, PAIR_COUNT};
+    use super::{PAIR_COUNT, configure, publish, reset, snapshot};
 
     #[test]
     fn publishes_a_bounded_lock_free_scope_snapshot() {

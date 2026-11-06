@@ -24,36 +24,70 @@ pub const ASSET_PARAM: &str = "asset_id";
 #[derive(Clone)]
 pub enum StoredAsset {
     AmpCapture(Arc<String>),
-    Impulse { left: Arc<Vec<f32>>, right: Option<Arc<Vec<f32>>>, sample_rate: f64 },
+    Impulse {
+        left: Arc<Vec<f32>>,
+        right: Option<Arc<Vec<f32>>>,
+        sample_rate: f64,
+    },
 }
 
 pub type AssetStore = HashMap<String, StoredAsset>;
 
 pub fn kind_of(spec: &ModuleSpec) -> Result<ModuleKind, String> {
-    let key = spec.effect.as_deref().ok_or_else(|| format!("dsp module {} has no kind", spec.id))?;
+    let key = spec
+        .effect
+        .as_deref()
+        .ok_or_else(|| format!("dsp module {} has no kind", spec.id))?;
     ModuleKind::from_key(key).map_err(|error| error.to_string())
 }
 
-fn asset_for(kind: ModuleKind, spec: &ModuleSpec, assets: &AssetStore) -> Result<ModuleAsset, String> {
+fn asset_for(
+    kind: ModuleKind,
+    spec: &ModuleSpec,
+    assets: &AssetStore,
+) -> Result<ModuleAsset, String> {
     if !matches!(kind, ModuleKind::Amp | ModuleKind::Convolution) {
         return Ok(ModuleAsset::None);
     }
-    let asset_id = spec.text(ASSET_PARAM).ok_or_else(|| format!("dsp module {} needs `{ASSET_PARAM}`", spec.id))?;
-    let stored = assets.get(asset_id).ok_or_else(|| format!("dsp asset {asset_id} is not loaded"))?;
+    let asset_id = spec
+        .text(ASSET_PARAM)
+        .ok_or_else(|| format!("dsp module {} needs `{ASSET_PARAM}`", spec.id))?;
+    let stored = assets
+        .get(asset_id)
+        .ok_or_else(|| format!("dsp asset {asset_id} is not loaded"))?;
     match (kind, stored) {
-        (ModuleKind::Amp, StoredAsset::AmpCapture(json)) => Ok(ModuleAsset::AmpCapture(json.as_ref().clone())),
-        (ModuleKind::Convolution, StoredAsset::Impulse { left, right, sample_rate }) => {
-            let impulse = Impulse::new(left.as_ref().clone(), right.as_ref().map(|right| right.as_ref().clone()), *sample_rate)
-                .map_err(|error| format!("dsp asset {asset_id}: {error:?}"))?;
+        (ModuleKind::Amp, StoredAsset::AmpCapture(json)) => {
+            Ok(ModuleAsset::AmpCapture(json.as_ref().clone()))
+        }
+        (
+            ModuleKind::Convolution,
+            StoredAsset::Impulse {
+                left,
+                right,
+                sample_rate,
+            },
+        ) => {
+            let impulse = Impulse::new(
+                left.as_ref().clone(),
+                right.as_ref().map(|right| right.as_ref().clone()),
+                *sample_rate,
+            )
+            .map_err(|error| format!("dsp asset {asset_id}: {error:?}"))?;
             Ok(ModuleAsset::Impulse(impulse))
         }
-        _ => Err(format!("dsp asset {asset_id} does not suit a {} module", kind.key())),
+        _ => Err(format!(
+            "dsp asset {asset_id} does not suit a {} module",
+            kind.key()
+        )),
     }
 }
 
 // One slot per parameter of the kind, in its table order.
 pub fn parameter_slots(kind: ModuleKind) -> Vec<AtomicParam> {
-    kind.params().iter().map(|spec| AtomicParam::new(spec.default)).collect()
+    kind.params()
+        .iter()
+        .map(|spec| AtomicParam::new(spec.default))
+        .collect()
 }
 
 pub fn write_parameters(kind: ModuleKind, slots: &[AtomicParam], spec: &ModuleSpec) {
@@ -79,12 +113,23 @@ pub struct DspRuntime {
 
 impl DspRuntime {
     // Starts at the described values, not ramping toward them from the defaults.
-    pub fn build(spec: &ModuleSpec, slots: &[AtomicParam], assets: &AssetStore, sample_rate: u32, block: usize) -> Result<Self, String> {
+    pub fn build(
+        spec: &ModuleSpec,
+        slots: &[AtomicParam],
+        assets: &AssetStore,
+        sample_rate: u32,
+        block: usize,
+    ) -> Result<Self, String> {
         let kind = kind_of(spec)?;
         if kind.is_generator() {
-            return Err(format!("dsp module {}: a generator is a strip input, not a chain module", spec.id));
+            return Err(format!(
+                "dsp module {}: a generator is a strip input, not a chain module",
+                spec.id
+            ));
         }
-        let mut processor = kind.build(asset_for(kind, spec, assets)?).map_err(|error| error.to_string())?;
+        let mut processor = kind
+            .build(asset_for(kind, spec, assets)?)
+            .map_err(|error| error.to_string())?;
         processor.prepare(sample_rate as f32, block);
         let latency = processor.latency_frames() as usize;
         let compensation = (latency > 0).then(|| {
@@ -94,8 +139,12 @@ impl DspRuntime {
             }
             lines
         });
-        let extra = (0..processor.extra_outputs()).map(|_| (vec![0.0; block], vec![0.0; block])).collect();
-        let key = processor.takes_key().then(|| (vec![0.0; block], vec![0.0; block]));
+        let extra = (0..processor.extra_outputs())
+            .map(|_| (vec![0.0; block], vec![0.0; block]))
+            .collect();
+        let key = processor
+            .takes_key()
+            .then(|| (vec![0.0; block], vec![0.0; block]));
         let mut runtime = Self {
             has_tail: processor.tail_frames() > 0,
             extra,
@@ -139,7 +188,13 @@ impl DspRuntime {
 
     // `key`, when wired, drives a keyed kind; `split` keeps ports 1.. apart
     // instead of folding them back into `buffer`.
-    pub fn process(&mut self, buffer: &mut [Frame], slots: &[AtomicParam], key: Option<&[Frame]>, split: bool) {
+    pub fn process(
+        &mut self,
+        buffer: &mut [Frame],
+        slots: &[AtomicParam],
+        key: Option<&[Frame]>,
+        split: bool,
+    ) {
         self.follow(slots);
         let frames = buffer.len();
         for (index, frame) in buffer.iter().enumerate() {
@@ -153,15 +208,23 @@ impl DspRuntime {
                     key_left[index] = frame.left;
                     key_right[index] = frame.right;
                 }
-                self.processor.process_keyed(&mut block, KeyBlock { left: &key_left[..frames], right: &key_right[..frames] });
+                self.processor.process_keyed(
+                    &mut block,
+                    KeyBlock {
+                        left: &key_left[..frames],
+                        right: &key_right[..frames],
+                    },
+                );
             }
             _ if split && !self.extra.is_empty() => {
                 let count = self.extra.len();
-                let mut ports: [StereoBlock; atome_dsp::crossover::MAX_BANDS - 1] = std::array::from_fn(|_| StereoBlock::new(&mut [], &mut []));
+                let mut ports: [StereoBlock; atome_dsp::crossover::MAX_BANDS - 1] =
+                    std::array::from_fn(|_| StereoBlock::new(&mut [], &mut []));
                 for (slot, (left, right)) in ports.iter_mut().zip(self.extra.iter_mut()) {
                     *slot = StereoBlock::new(&mut left[..frames], &mut right[..frames]);
                 }
-                self.processor.process_ports(&mut block, &mut ports[..count]);
+                self.processor
+                    .process_ports(&mut block, &mut ports[..count]);
             }
             _ => self.processor.process(&mut block),
         }
@@ -171,7 +234,9 @@ impl DspRuntime {
     }
 
     pub fn add_port(&self, port: usize, out: &mut [Frame]) {
-        let Some((left, right)) = self.extra.get(port.wrapping_sub(1)) else { return };
+        let Some((left, right)) = self.extra.get(port.wrapping_sub(1)) else {
+            return;
+        };
         for (index, frame) in out.iter_mut().enumerate() {
             *frame += Frame::new(left[index], right[index]);
         }
@@ -179,7 +244,9 @@ impl DspRuntime {
 
     // Bypassed: the dry signal, delayed by the latency the graph compensates.
     pub fn pass(&mut self, buffer: &mut [Frame]) {
-        let Some([left, right]) = self.compensation.as_mut() else { return };
+        let Some([left, right]) = self.compensation.as_mut() else {
+            return;
+        };
         let delay = self.latency as f32;
         for frame in buffer.iter_mut() {
             let out = Frame::new(left.read(delay), right.read(delay));

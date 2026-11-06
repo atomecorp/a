@@ -12,6 +12,15 @@ export const BUG_REPORT_SUBMIT = 'bug-report-submit';
 export const BUG_REPORT_STATUS = 'bug-report-status';
 export const BUG_REPORT_ORIGINS = Object.freeze(['user_requested', 'assistant_failure', 'manual']);
 export const BUG_REPORT_STATUS_MAX = 50;
+// A report is a bug or a feature request (« Bug / Demande », one add form). A request
+// is reviewed by an admin (server/ws_feature_requests.js): validated, it joins the
+// Roadmap (planned → in_progress → done), refused, it carries the admin's reason.
+export const BUG_REPORT_KINDS = Object.freeze(['bug', 'request']);
+export const FEATURE_REQUEST_ADMIN = 'feature-request-admin';
+export const FEATURE_REQUEST_ROADMAP = 'feature-request-roadmap';
+export const FEATURE_REQUEST_REVIEWS = Object.freeze(['validated', 'refused']);
+export const ROADMAP_STATES = Object.freeze(['planned', 'in_progress', 'done']);
+export const FEATURE_REQUEST_REASON_MAX = 1000;
 
 const ID = /^[A-Za-z0-9_-]{8,80}$/;
 const MAX_CONTEXT_BYTES = 32 * 1024;
@@ -44,9 +53,11 @@ export const normalizeBugReport = (input = {}) => {
     if (!title) return fail('bug_report_title_required');
     const context = plain(input.context) ? input.context : null;
     if (context && JSON.stringify(context).length > MAX_CONTEXT_BYTES) return fail('bug_report_context_too_large');
+    const kind = bugReportKindOf(input);
+    if (!BUG_REPORT_KINDS.includes(kind)) return fail('bug_report_kind_invalid');
     const consent = input.contact_consent === true;
     return { ok: true, report: {
-        id, origin: input.origin, created_iso: created.toISOString(), title,
+        id, kind, origin: input.origin, created_iso: created.toISOString(), title,
         description: text(input.description, 8000), request: text(input.request, 2000), reason: text(input.reason, 4000),
         attempted: (Array.isArray(input.attempted) ? input.attempted : []).slice(0, 20).map(entry => text(entry, 200)).filter(Boolean),
         platform: text(input.platform, 20),
@@ -68,3 +79,9 @@ export const normalizeBugReportRefs = (refs) => {
     }
     return { ok: true, refs: normalized };
 };
+
+// A report's kind; every report filed before requests existed is a bug.
+export const bugReportKindOf = report => (report?.kind === undefined ? 'bug' : report.kind);
+
+// An admin's refusal reason, bounded (may be empty).
+export const normalizeRefusalReason = value => text(value, FEATURE_REQUEST_REASON_MAX);

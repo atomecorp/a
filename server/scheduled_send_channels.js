@@ -6,8 +6,8 @@ import { resolveProviderCredentialVault } from './providerCredentialVault.js';
 import { handleSocialAction, updateSocialPost } from './social/social_operations.js';
 import { readSocialConfig } from './social/social_sessions.js';
 
-export function createScheduledSendChannels({ newsBroadcast, syncSharingService, vaultRouter, relations, rateAllowed, deliver, enqueue }) {
-    const newsPublish = (ownerId, news) => newsBroadcast.publish(ownerId, news);
+export function createScheduledSendChannels({ news, syncSharingService, vaultRouter, deliver, enqueue }) {
+    const newsPublish = (ownerId, entry) => news.publish(ownerId, entry);
 
     // `entry`: { toUserId | toPhone, message (the envelope text), share? (the share request of its attachments) }.
     const sendMessage = async (ownerId, entry) => {
@@ -21,7 +21,7 @@ export function createScheduledSendChannels({ newsBroadcast, syncSharingService,
             message = JSON.stringify(envelope);
         }
         const sent = await sendDirectMessage({ userId: ownerId, data: { toUserId: entry.toUserId, toPhone: entry.toPhone, message },
-            vaultRouter, relations, rateAllowed, deliver, enqueue });
+            vaultRouter, deliver, enqueue });
         await sent.deliverPush();
         return { message_id: sent.result.message_id || null };
     };

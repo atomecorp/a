@@ -1,5 +1,5 @@
 [Unit]
-Description=atome.one Fastify sync orchestrator
+Description=atome.one server (atome-server: Axum, vault supervisor)
 After=network-online.target
 Wants=network-online.target
 
@@ -9,7 +9,7 @@ User=atome
 Group=atome
 WorkingDirectory=/opt/a
 EnvironmentFile=/etc/squirrel/squirrel.env
-ExecStart=/usr/bin/node /opt/a/server/server.js
+ExecStart=/opt/a/target/release/atome-server
 Restart=on-failure
 RestartSec=5
 KillMode=control-group

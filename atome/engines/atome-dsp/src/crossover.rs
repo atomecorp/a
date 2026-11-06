@@ -9,7 +9,14 @@ pub const MAX_BANDS: usize = 4;
 const BUTTERWORTH_Q: f32 = std::f32::consts::FRAC_1_SQRT_2;
 const REDESIGN_FRAMES: usize = 16;
 
-pub const BANDS_2_PARAMS: [ParamSpec; 1] = [ParamSpec::new(0, "crossover_1", 21.0, 20000.0, 987.0, Unit::Hertz)];
+pub const BANDS_2_PARAMS: [ParamSpec; 1] = [ParamSpec::new(
+    0,
+    "crossover_1",
+    21.0,
+    20000.0,
+    987.0,
+    Unit::Hertz,
+)];
 pub const BANDS_3_PARAMS: [ParamSpec; 2] = [
     ParamSpec::new(0, "crossover_1", 21.0, 20000.0, 233.0, Unit::Hertz),
     ParamSpec::new(1, "crossover_2", 21.0, 20000.0, 2584.0, Unit::Hertz),
@@ -82,27 +89,52 @@ impl Bands {
         for (smoothed, spec) in frequencies.iter_mut().zip(params_for(bands)) {
             *smoothed = Smoothed::new(spec.default, 34.0);
         }
-        Self { bands, sample_rate: 48000.0, frequencies, crossovers: Default::default(), channels: Default::default() }
+        Self {
+            bands,
+            sample_rate: 48000.0,
+            frequencies,
+            crossovers: Default::default(),
+            channels: Default::default(),
+        }
     }
 
     // Each crossover keeps above the one below it, whatever was asked.
     fn redesign(&mut self, frames: usize) {
         let mut floor = 0.0f32;
-        for (smoothed, crossover) in self.frequencies.iter_mut().zip(self.crossovers.iter_mut()).take(self.bands - 1) {
+        for (smoothed, crossover) in self
+            .frequencies
+            .iter_mut()
+            .zip(self.crossovers.iter_mut())
+            .take(self.bands - 1)
+        {
             let mut frequency = smoothed.target();
             for _ in 0..frames.max(1) {
                 frequency = smoothed.tick();
             }
             let frequency = frequency.max(floor);
             floor = frequency;
-            crossover.low = Coefficients::design(Shape::LowPass, self.sample_rate, frequency, BUTTERWORTH_Q, 0.0);
-            crossover.high = Coefficients::design(Shape::HighPass, self.sample_rate, frequency, BUTTERWORTH_Q, 0.0);
+            crossover.low = Coefficients::design(
+                Shape::LowPass,
+                self.sample_rate,
+                frequency,
+                BUTTERWORTH_Q,
+                0.0,
+            );
+            crossover.high = Coefficients::design(
+                Shape::HighPass,
+                self.sample_rate,
+                frequency,
+                BUTTERWORTH_Q,
+                0.0,
+            );
             crossover.all_pass = Coefficients::all_pass(self.sample_rate, frequency, BUTTERWORTH_Q);
         }
     }
 
     fn settled(&self) -> bool {
-        self.frequencies[..self.bands - 1].iter().all(Smoothed::is_settled)
+        self.frequencies[..self.bands - 1]
+            .iter()
+            .all(Smoothed::is_settled)
     }
 }
 

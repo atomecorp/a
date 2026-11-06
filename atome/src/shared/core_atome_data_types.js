@@ -54,7 +54,10 @@ export const CORE_DATA_ATOME_TYPES = Object.freeze([
             kind: { type: 'string', enum: ['event', 'todo'] }, status: { type: 'string', enum: ['open', 'done', 'cancelled'] },
             due_at: { type: 'string' }, completed_at: { type: 'string' }, visio_room_id: { type: 'string' },
             created_iso: { type: 'string' }, updated_iso: { type: 'string' },
-            program_link: { type: 'object' }, suspended: { type: 'boolean' }, locked: { type: 'boolean' }
+            program_link: { type: 'object' }, suspended: { type: 'boolean' }, locked: { type: 'boolean' },
+            // A public event's publication (the author's), its status (written back by the server's projection,
+            // atome-server src/social/public_events/) and a coach session's booking (src/social/coaches/).
+            publication: { type: 'string' }, publication_status: { type: 'string' }, booking: { type: 'string' }
         }
     }),
     defineType({

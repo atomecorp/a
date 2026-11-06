@@ -53,12 +53,21 @@ const measuredOwner = createHealthOwner({
 
 // Read and written as Atomes through the mutation pipeline installed after this boot wave (eVe/core/atome_commit.js),
 // owned like the Programme's records: the signed-in account or this device's guest.
+const live = record => !record.deleted && !record.deleted_at && !record.meta?.deleted_at && (record.properties || record.props)?.__deleted !== true;
 const store = {
+    // A record deleted reads as none: its state keeps its last properties beside the deletion mark.
     read: async (id) => {
-        try { return await env.Atome.getStateCurrent(id); }
+        let record;
+        try { record = await env.Atome.getStateCurrent(id); }
         catch (error) { if (error?.message === 'atome_not_available_locally') return null; throw error; }
+        return record && live(record) ? record : null;
     },
-    commit: (event) => env.Atome.commit(event, { refreshState: true, realtimeBroadcast: true })
+    commit: (event) => env.Atome.commit(event, { refreshState: true, realtimeBroadcast: true }),
+    // Every live record of a type the person holds (state_current), for an owner that removes what it wrote.
+    list: async (type) => {
+        const result = await env.Atome.listStateCurrent(null, { atomeType: type, limit: Number.MAX_SAFE_INTEGER, excludeSystem: true });
+        return (Array.isArray(result) ? result : result?.records || []).filter(row => row && live(row));
+    }
 };
 // What the person declares (a glass of water) and the activities a connected service measured (#health_imports.js, Strava)
 // join what the store measured; how they feel is theirs too (#health_feeling.js); the raw motion is recorded only with the

@@ -32,6 +32,10 @@ pub struct VoiceStretch {
 
 // SAFETY: `Stretch` is `Send`; nothing reachable through `&VoiceStretch` touches
 // it (the latencies are copied at construction), so shared references are inert.
+#[allow(
+    unsafe_code,
+    reason = "a shared VoiceStretch exposes nothing of its stretcher"
+)]
 unsafe impl Sync for VoiceStretch {}
 
 impl VoiceStretch {
@@ -73,7 +77,10 @@ impl VoiceStretch {
     // Source frames priming needs: the stretcher's opening, then enough to fill
     // the output latency at `factor`.
     pub fn priming_frames(&self, factor: f32) -> (usize, usize) {
-        (self.input_latency, (self.output_latency as f32 / factor).ceil() as usize)
+        (
+            self.input_latency,
+            (self.output_latency as f32 / factor).ceil() as usize,
+        )
     }
 
     // `opening` and `ahead` are planar (left, right) source frames from the segment's start.
@@ -81,17 +88,24 @@ impl VoiceStretch {
         self.inner.reset();
         self.pending = 0.0;
         let opened = interleave(opening, &mut self.interleaved_in);
-        self.inner.seek(&self.interleaved_in[..opened], 1.0 / factor as f64);
+        self.inner
+            .seek(&self.interleaved_in[..opened], 1.0 / factor as f64);
         let fed = interleave(ahead, &mut self.interleaved_in);
         let dropped = self.output_latency * 2;
-        self.inner.process(&self.interleaved_in[..fed], &mut self.interleaved_out[..dropped]);
+        self.inner.process(
+            &self.interleaved_in[..fed],
+            &mut self.interleaved_out[..dropped],
+        );
     }
 
     // Stretches planar `input` into planar `left`/`right` (overwritten).
     pub fn process(&mut self, input: (&[f32], &[f32]), left: &mut [f32], right: &mut [f32]) {
         let fed = interleave(input, &mut self.interleaved_in);
         let frames = left.len();
-        self.inner.process(&self.interleaved_in[..fed], &mut self.interleaved_out[..frames * 2]);
+        self.inner.process(
+            &self.interleaved_in[..fed],
+            &mut self.interleaved_out[..frames * 2],
+        );
         for (index, (l, r)) in left.iter_mut().zip(right.iter_mut()).enumerate() {
             *l = self.interleaved_out[index * 2];
             *r = self.interleaved_out[index * 2 + 1];

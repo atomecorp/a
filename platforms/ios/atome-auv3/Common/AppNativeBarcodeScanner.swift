@@ -2,7 +2,8 @@
 //  AppNativeBarcodeScanner.swift
 //  In-store barcode reading for food.scan (eVe/domains/media/api/barcode_scan.js).
 //  The live camera preview's photo session gains a metadata output for retail
-//  codes while a scan runs; the newest code waits to be read once by JavaScript,
+//  codes and a medicine box's GS1 DataMatrix (D24) while a scan runs; JavaScript
+//  keeps the codes its caller accepts; the newest code waits to be read once by JavaScript,
 //  which polls it like the preview frames. No second camera session is opened.
 //
 
@@ -17,8 +18,13 @@ final class AppNativeBarcodeReader: NSObject, AVCaptureMetadataOutputObjectsDele
                         didOutput metadataObjects: [AVMetadataObject],
                         from connection: AVCaptureConnection) {
         let code = metadataObjects
-            .compactMap { ($0 as? AVMetadataMachineReadableCodeObject)?.stringValue }
-            .first { $0.range(of: "^[0-9]{8,14}$", options: .regularExpression) != nil }
+            .compactMap { $0 as? AVMetadataMachineReadableCodeObject }
+            .compactMap { object -> String? in
+                guard let value = object.stringValue else { return nil }
+                if object.type == .dataMatrix { return value }
+                return value.range(of: "^[0-9]{8,14}$", options: .regularExpression) != nil ? value : nil
+            }
+            .first
         guard let code else { return }
         lock.lock(); latest = code; lock.unlock()
     }
@@ -64,7 +70,7 @@ extension AppNativeMediaCaptureController {
             session.addOutput(output)
             session.commitConfiguration()
             output.setMetadataObjectsDelegate(reader, queue: self.sessionQueue)
-            let retail: [AVMetadataObject.ObjectType] = [.ean13, .ean8, .upce]
+            let retail: [AVMetadataObject.ObjectType] = [.ean13, .ean8, .upce, .dataMatrix]
             output.metadataObjectTypes = retail.filter { output.availableMetadataObjectTypes.contains($0) }
             reader.output = output
             _ = reader.take()

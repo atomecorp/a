@@ -10,8 +10,8 @@ use bevy::{
 };
 
 use crate::types::{
-    normalize_opacity, normalize_uv_rect, AtomeColorFilters, AtomeMaskStyle, AtomeRenderNode,
-    AtomeTransition,
+    AtomeColorFilters, AtomeMaskStyle, AtomeRenderNode, AtomeTransition, normalize_opacity,
+    normalize_uv_rect,
 };
 
 #[derive(Clone, Debug, Component, ExtractComponent)]
@@ -68,23 +68,12 @@ pub fn video_external_texture_component_from_node(
     })
 }
 
-/// La silhouette resolue d'un noeud video, cuite en texture d'alpha. Le masque
-/// vient de la projection (elle seule connait l'atome source) : sans silhouette
-/// utilisable, aucune texture n'est creee et la video reste entiere.
+/// A video node's resolved silhouette as an alpha texture (drawn on the GPU,
+/// `spatial_mask_gpu.rs`). The mask comes from the projection (only it knows the
+/// source atome): without a usable silhouette no texture is made, the video stays whole.
 fn video_mask_texture_handle(world: &mut World, node: &AtomeRenderNode) -> Option<Handle<Image>> {
     let mask = node.mask.clone().and_then(AtomeMaskStyle::normalized)?;
-    video_mask_handle_for_style(world, &mask, node.logical_size, &node.id)
-}
-
-fn video_mask_handle_for_style(
-    world: &mut World,
-    mask: &AtomeMaskStyle,
-    logical_size: [f32; 2],
-    id: &str,
-) -> Option<Handle<Image>> {
-    let texture = crate::shape_sdf::mask_texture_for_target(mask, logical_size);
-    let mut images = world.get_resource_mut::<Assets<Image>>()?;
-    crate::texture::image_handle_from_texture(&mut images, &Some(texture), &format!("{id}:mask")).ok()
+    crate::spatial_mask_gpu::queue_mask_coverage(world, &mask, node.logical_size).ok()
 }
 
 /// Replaces only the alpha resource of a live external video. The entity, mesh,
@@ -104,7 +93,10 @@ pub fn apply_video_mask_style(
         .ok_or_else(|| "bevy_video_mask_id_missing".to_string())?;
     let handle = mask
         .as_ref()
-        .and_then(|value| video_mask_handle_for_style(world, value, [size.width, size.height], &id));
+        .map(|value| {
+            crate::spatial_mask_gpu::queue_mask_coverage(world, value, [size.width, size.height])
+        })
+        .transpose()?;
     let mut video = world
         .get_mut::<AtomeVideoExternalTexture>(entity)
         .ok_or_else(|| format!("bevy_video_external_texture_missing:{id}"))?;
@@ -116,7 +108,11 @@ pub fn apply_video_mask_style(
 /// and media windows run the one shader path (alpha 1 = full coverage).
 pub(crate) fn opaque_mask_image() -> Image {
     Image::new_fill(
-        Extent3d { width: 1, height: 1, depth_or_array_layers: 1 },
+        Extent3d {
+            width: 1,
+            height: 1,
+            depth_or_array_layers: 1,
+        },
         TextureDimension::D2,
         &[255, 255, 255, 255],
         TextureFormat::Rgba8UnormSrgb,
@@ -223,14 +219,16 @@ pub fn insert_clipped_video_quad_mesh(
 ) -> Result<(), String> {
     let current = world.get::<Mesh2d>(entity).map(|mesh| mesh.0.clone());
     let handle = {
-        let mut meshes = world.get_resource_mut::<Assets<Mesh>>()
+        let mut meshes = world
+            .get_resource_mut::<Assets<Mesh>>()
             .ok_or_else(|| "bevy_mesh_assets_required".to_string())?;
         match current {
             Some(handle) => {
                 // Update the resident quad instead of retaining a new asset per crop.
-                *meshes.get_mut(&handle)
-                    .ok_or_else(|| "bevy_video_quad_asset_required".to_string())?
-                    = video_quad_mesh_from_size(logical_size, uv_rect);
+                *meshes
+                    .get_mut(&handle)
+                    .ok_or_else(|| "bevy_video_quad_asset_required".to_string())? =
+                    video_quad_mesh_from_size(logical_size, uv_rect);
                 handle
             }
             None => video_quad_mesh_handle_from_size(&mut meshes, logical_size, uv_rect),

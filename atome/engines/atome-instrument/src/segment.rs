@@ -8,8 +8,8 @@
 // acts on that frame. A player reads through a `Source` (reading.rs): spans
 // in memory, and for a streamed sample its ring, aimed at each render.
 
-use crate::interp::{dot, first_tap, weights, SincTables, TAPS};
-use crate::markers::{crossed, Hits, Marker, MarkerSpan, EDGE};
+use crate::interp::{SincTables, TAPS, dot, first_tap, weights};
+use crate::markers::{EDGE, Hits, Marker, MarkerSpan, crossed};
 use crate::reading::{Source, Window};
 use crate::sample::SampleData;
 use std::f64::consts::FRAC_PI_2;
@@ -61,7 +61,21 @@ pub struct Segment {
 impl Segment {
     // The whole sample, read once forward at its own pitch on `root`.
     pub fn whole(sample: usize, frames: usize, root: u8) -> Self {
-        Self { sample, start: 0, end: frames, offset: 0, velocity_offset: 0, root, tune_cents: 0.0, gain_db: 0.0, pan: 0.0, playback: Playback::Forward, looping: None, stretch: 1.0, markers: MarkerSpan { first: 0, len: 0 } }
+        Self {
+            sample,
+            start: 0,
+            end: frames,
+            offset: 0,
+            velocity_offset: 0,
+            root,
+            tune_cents: 0.0,
+            gain_db: 0.0,
+            pan: 0.0,
+            playback: Playback::Forward,
+            looping: None,
+            stretch: 1.0,
+            markers: MarkerSpan { first: 0, len: 0 },
+        }
     }
 
     pub fn is_stretched(&self) -> bool {
@@ -71,7 +85,10 @@ impl Segment {
     pub fn validate(&self, data: &SampleData) -> Result<(), String> {
         let frames = data.frames();
         if self.start >= self.end || self.end > frames {
-            return Err(format!("segment region {}..{} outside the sample's {} frames", self.start, self.end, frames));
+            return Err(format!(
+                "segment region {}..{} outside the sample's {} frames",
+                self.start, self.end, frames
+            ));
         }
         if self.is_stretched() {
             if cfg!(target_arch = "wasm32") {
@@ -83,9 +100,16 @@ impl Segment {
         }
         if let Some(spec) = self.looping {
             if spec.start < self.start || spec.end > self.end || spec.start + 2 > spec.end {
-                return Err(format!("loop {}..{} outside its region {}..{}", spec.start, spec.end, self.start, self.end));
+                return Err(format!(
+                    "loop {}..{} outside its region {}..{}",
+                    spec.start, spec.end, self.start, self.end
+                ));
             }
-            if spec.crossfade > 0 && (spec.ping_pong || spec.crossfade > spec.start || spec.crossfade > spec.end - spec.start) {
+            if spec.crossfade > 0
+                && (spec.ping_pong
+                    || spec.crossfade > spec.start
+                    || spec.crossfade > spec.end - spec.start)
+            {
                 return Err("a loop splice needs a round loop, as long as the loop at most, with that much sound before it".into());
             }
         }
@@ -112,7 +136,21 @@ pub struct SegmentPlayer {
 
 impl SegmentPlayer {
     pub const IDLE: Self = Self {
-        segment: Segment { sample: 0, start: 0, end: 1, offset: 0, velocity_offset: 0, root: 60, tune_cents: 0.0, gain_db: 0.0, pan: 0.0, playback: Playback::Forward, looping: None, stretch: 1.0, markers: MarkerSpan { first: 0, len: 0 } },
+        segment: Segment {
+            sample: 0,
+            start: 0,
+            end: 1,
+            offset: 0,
+            velocity_offset: 0,
+            root: 60,
+            tune_cents: 0.0,
+            gain_db: 0.0,
+            pan: 0.0,
+            playback: Playback::Forward,
+            looping: None,
+            stretch: 1.0,
+            markers: MarkerSpan { first: 0, len: 0 },
+        },
         position: 0.0,
         direction: 1.0,
         looping: false,
@@ -126,10 +164,17 @@ impl SegmentPlayer {
     };
 
     pub fn start(&mut self, segment: Segment, data: &SampleData, velocity: f32, level: f32) {
-        let skip = segment.offset as f64 + (segment.velocity_offset as f64 * velocity as f64).round();
+        let skip =
+            segment.offset as f64 + (segment.velocity_offset as f64 * velocity as f64).round();
         let (position, direction) = match segment.playback {
-            Playback::Forward => ((segment.start as f64 + skip).min(segment.end as f64 - 1.0), 1.0),
-            Playback::Reverse => ((segment.end as f64 - 1.0 - skip).max(segment.start as f64), -1.0),
+            Playback::Forward => (
+                (segment.start as f64 + skip).min(segment.end as f64 - 1.0),
+                1.0,
+            ),
+            Playback::Reverse => (
+                (segment.end as f64 - 1.0 - skip).max(segment.start as f64),
+                -1.0,
+            ),
         };
         let amplitude = atome_dsp::db_to_amplitude(segment.gain_db) * level;
         let angle = (segment.pan.clamp(-1.0, 1.0) + 1.0) * 0.25 * std::f32::consts::PI;
@@ -174,7 +219,15 @@ impl SegmentPlayer {
 
     // The key is up: a sustain loop lets go and the rest of the region plays.
     pub fn release(&mut self) {
-        if self.looping && matches!(self.segment.looping, Some(LoopSpec { mode: LoopMode::Sustain, .. })) {
+        if self.looping
+            && matches!(
+                self.segment.looping,
+                Some(LoopSpec {
+                    mode: LoopMode::Sustain,
+                    ..
+                })
+            )
+        {
             self.let_go();
         }
     }
@@ -185,9 +238,14 @@ impl SegmentPlayer {
 
     // A jump to `frame` (no marker fires). A loop the jump leaves behind lets go.
     pub fn seek(&mut self, frame: usize) {
-        self.position = (frame as f64).clamp(self.segment.start as f64, self.segment.end as f64 - 1.0);
+        self.position =
+            (frame as f64).clamp(self.segment.start as f64, self.segment.end as f64 - 1.0);
         if let Some(spec) = self.segment.looping.filter(|_| self.looping) {
-            let past = if self.direction > 0.0 { self.position >= spec.end as f64 } else { self.position < spec.start as f64 };
+            let past = if self.direction > 0.0 {
+                self.position >= spec.end as f64
+            } else {
+                self.position < spec.start as f64
+            };
             if past {
                 self.let_go();
             }
@@ -201,10 +259,27 @@ impl SegmentPlayer {
     // segment's own, sorted) or wrapped the loop, listed in `hits`. Answers the
     // frames rendered (fewer only on a hit or at the segment's end).
     #[allow(clippy::too_many_arguments)]
-    pub fn render(&mut self, source: &Source, tables: &SincTables, step: f64, markers: &[Marker], left: &mut [f32], right: &mut [f32], hits: &mut Hits) -> usize {
+    pub fn render(
+        &mut self,
+        source: &Source,
+        tables: &SincTables,
+        step: f64,
+        markers: &[Marker],
+        left: &mut [f32],
+        right: &mut [f32],
+        hits: &mut Hits,
+    ) -> usize {
         hits.clear();
         // A loop is left in the region's own direction: the ring waits there.
-        let leaving = if self.looping { if self.segment.playback == Playback::Forward { 1.0 } else { -1.0 } } else { self.direction };
+        let leaving = if self.looping {
+            if self.segment.playback == Playback::Forward {
+                1.0
+            } else {
+                -1.0
+            }
+        } else {
+            self.direction
+        };
         source.aim(self.position, leaving, std::mem::take(&mut self.reaim));
         source.release(self.position);
         let frames = left.len();
@@ -214,7 +289,13 @@ impl SegmentPlayer {
             let plain = plain.min(frames - at);
             if let Some(window) = window.filter(|_| plain > 0) {
                 let from = self.position;
-                self.render_plain(&window, tables, step, &mut left[at..at + plain], &mut right[at..at + plain]);
+                self.render_plain(
+                    &window,
+                    tables,
+                    step,
+                    &mut left[at..at + plain],
+                    &mut right[at..at + plain],
+                );
                 at += plain;
                 crossed(markers, from, self.position, |index| hits.push(index));
             } else {
@@ -234,17 +315,35 @@ impl SegmentPlayer {
     // Frames that can be read forward with no seam, no wrap and every tap inside
     // one window (a span in memory, or the ring): the common case, rendered
     // without a test per frame. The run ends on the frame that crosses the next marker.
-    fn plain_frames<'a>(&self, source: &Source<'a>, step: f64, markers: &[Marker]) -> (usize, Option<Window<'a>>) {
+    fn plain_frames<'a>(
+        &self,
+        source: &Source<'a>,
+        step: f64,
+        markers: &[Marker],
+    ) -> (usize, Option<Window<'a>>) {
         if self.direction < 0.0 || self.position < (TAPS / 2) as f64 {
             return (0, None);
         }
-        let Some(window) = source.window(first_tap(self.position.floor() as i64)) else { return (0, None) };
+        let Some(window) = source.window(first_tap(self.position.floor() as i64)) else {
+            return (0, None);
+        };
         let half = (TAPS / 2) as f64;
         let mut limit = (window.end as f64 - half - 1.0).min(self.segment.end as f64);
         if self.looping {
             let spec = self.segment.looping.expect("looping player has a loop");
-            let seam = if spec.crossfade > 0 { spec.end - spec.crossfade } else { spec.end };
-            limit = limit.min(seam as f64 - if spec.crossfade == 0 && !spec.ping_pong { half + 1.0 } else { 0.0 });
+            let seam = if spec.crossfade > 0 {
+                spec.end - spec.crossfade
+            } else {
+                spec.end
+            };
+            limit = limit.min(
+                seam as f64
+                    - if spec.crossfade == 0 && !spec.ping_pong {
+                        half + 1.0
+                    } else {
+                        0.0
+                    },
+            );
         }
         let room = limit - self.position;
         if room <= 0.0 {
@@ -253,13 +352,22 @@ impl SegmentPlayer {
         let frames = ((room / step).floor() as usize).saturating_sub(1);
         let next = markers.partition_point(|marker| marker.frame as f64 <= self.position);
         let frames = match markers.get(next) {
-            Some(marker) => frames.min(((marker.frame as f64 - self.position) / step).ceil() as usize),
+            Some(marker) => {
+                frames.min(((marker.frame as f64 - self.position) / step).ceil() as usize)
+            }
             None => frames,
         };
         (frames, Some(window))
     }
 
-    fn render_plain(&mut self, window: &Window, tables: &SincTables, step: f64, left: &mut [f32], right: &mut [f32]) {
+    fn render_plain(
+        &mut self,
+        window: &Window,
+        tables: &SincTables,
+        step: f64,
+        left: &mut [f32],
+        right: &mut [f32],
+    ) {
         let band = tables.band(step);
         let mut position = self.position;
         let (gain_left, gain_right) = (self.gain_left, self.gain_right);
@@ -268,7 +376,11 @@ impl SegmentPlayer {
             let w = weights(band, position - base);
             let first = first_tap(base as i64);
             let l = dot(&w, &window.taps(first, false));
-            let r = if self.mono { l } else { dot(&w, &window.taps(first, true)) };
+            let r = if self.mono {
+                l
+            } else {
+                dot(&w, &window.taps(first, true))
+            };
             *out_left += l * gain_left;
             *out_right += r * gain_right;
             position += step;
@@ -279,7 +391,9 @@ impl SegmentPlayer {
     #[inline]
     fn frame(&self, source: &Source, tables: &SincTables, step: f64) -> (f32, f32) {
         let (l, r) = self.read(source, tables, step, self.position);
-        let Some(spec) = self.segment.looping else { return (l, r) };
+        let Some(spec) = self.segment.looping else {
+            return (l, r);
+        };
         if !self.looping || spec.crossfade == 0 || self.direction < 0.0 {
             return (l, r);
         }
@@ -288,8 +402,16 @@ impl SegmentPlayer {
             return (l, r);
         }
         let (fade_in, fade_out) = (into / spec.crossfade as f64 * FRAC_PI_2).sin_cos();
-        let (bl, br) = self.read(source, tables, step, self.position - (spec.end - spec.start) as f64);
-        (l * fade_out as f32 + bl * fade_in as f32, r * fade_out as f32 + br * fade_in as f32)
+        let (bl, br) = self.read(
+            source,
+            tables,
+            step,
+            self.position - (spec.end - spec.start) as f64,
+        );
+        (
+            l * fade_out as f32 + bl * fade_in as f32,
+            r * fade_out as f32 + br * fade_in as f32,
+        )
     }
 
     #[inline]
@@ -301,7 +423,14 @@ impl SegmentPlayer {
             return (0.0, 0.0);
         };
         let left = dot(&weights, &left);
-        (left, if self.mono { left } else { dot(&weights, &right) })
+        (
+            left,
+            if self.mono {
+                left
+            } else {
+                dot(&weights, &right)
+            },
+        )
     }
 
     // The taps from `first`, both channels; None when a frame of the sample is
@@ -310,23 +439,32 @@ impl SegmentPlayer {
     fn taps(&self, source: &Source, first: i64) -> Option<([f32; TAPS], [f32; TAPS])> {
         let last = first + TAPS as i64;
         let wrap = match self.segment.looping {
-            Some(spec) if self.looping && spec.crossfade == 0 && !spec.ping_pong && self.direction > 0.0 => Some(spec),
+            Some(spec)
+                if self.looping
+                    && spec.crossfade == 0
+                    && !spec.ping_pong
+                    && self.direction > 0.0 =>
+            {
+                Some(spec)
+            }
             _ => None,
         };
         let frames = source.frames() as i64;
         let inside = first >= 0 && last <= frames;
-        if inside && wrap.is_none_or(|spec| last <= spec.end as i64) {
-            if let Some(window) = source.window_over(first, last) {
-                return Some((window.taps(first, false), window.taps(first, true)));
-            }
+        if inside
+            && wrap.is_none_or(|spec| last <= spec.end as i64)
+            && let Some(window) = source.window_over(first, last)
+        {
+            return Some((window.taps(first, false), window.taps(first, true)));
         }
         let mut taps = ([0.0f32; TAPS], [0.0f32; TAPS]);
         for tap in 0..TAPS {
             let mut index = first + tap as i64;
-            if let Some(spec) = wrap {
-                if index >= spec.end as i64 {
-                    index = spec.start as i64 + (index - spec.end as i64) % (spec.end - spec.start) as i64;
-                }
+            if let Some(spec) = wrap
+                && index >= spec.end as i64
+            {
+                index =
+                    spec.start as i64 + (index - spec.end as i64) % (spec.end - spec.start) as i64;
             }
             if index >= 0 && index < frames {
                 (taps.0[tap], taps.1[tap]) = source.frame(index)?;
@@ -390,7 +528,11 @@ impl SegmentPlayer {
     // Leaving a loop resumes the region's own direction.
     fn let_go(&mut self) {
         self.looping = false;
-        self.direction = if self.segment.playback == Playback::Forward { 1.0 } else { -1.0 };
+        self.direction = if self.segment.playback == Playback::Forward {
+            1.0
+        } else {
+            -1.0
+        };
     }
 }
 

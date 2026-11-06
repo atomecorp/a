@@ -17,6 +17,9 @@ export function mcpError(code, message) {
 }
 
 export const ATOME_MCP_PROTOCOL = '1.0.0';
+// Methods of the single entry that are its own machinery, not tools: tools/list never lists them, tools/call never
+// routes a tool name to them (mcp_discovery.js, mcp_protocol.js, the registry's exposure, scripts/registry).
+export const isMcpInfrastructureMethod = name => /^(mcp\.|runtime\.|ai\.|atome\.describe$)/.test(String(name));
 export const MCP_EVENT_NAME = 'squirrel:mcp';
 export const MCP_UI_EVENT_NAME = 'squirrel:mcp:ui';
 export const MCP_VOICE_EVENT_NAME = 'squirrel:mcp:voice';

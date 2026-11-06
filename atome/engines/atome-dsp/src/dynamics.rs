@@ -1,7 +1,7 @@
 // Dynamics: compressor and the output limiter that is always on the direct
 // path (audio safety, decision D13). Both are zero-latency (no lookahead).
 
-use crate::{amplitude_to_db, db_to_amplitude, KeyBlock, ParamSpec, Processor, StereoBlock, Unit};
+use crate::{KeyBlock, ParamSpec, Processor, StereoBlock, Unit, amplitude_to_db, db_to_amplitude};
 
 pub(crate) fn time_coefficient(time_ms: f32, sample_rate: f32) -> f32 {
     (-1.0 / (time_ms.max(0.01) * 0.001 * sample_rate)).exp()
@@ -13,10 +13,24 @@ pub const ATTACK_MS: u32 = 2;
 pub const RELEASE_MS: u32 = 3;
 pub const MAKEUP_DB: u32 = 4;
 pub const COMPRESSOR_PARAMS: [ParamSpec; 5] = [
-    ParamSpec::new(THRESHOLD_DB, "threshold_db", -60.0, 0.0, -18.0, Unit::Decibels),
+    ParamSpec::new(
+        THRESHOLD_DB,
+        "threshold_db",
+        -60.0,
+        0.0,
+        -18.0,
+        Unit::Decibels,
+    ),
     ParamSpec::new(RATIO, "ratio", 1.0, 20.0, 3.0, Unit::Ratio),
     ParamSpec::new(ATTACK_MS, "attack_ms", 0.1, 200.0, 9.0, Unit::Milliseconds),
-    ParamSpec::new(RELEASE_MS, "release_ms", 5.0, 2000.0, 144.0, Unit::Milliseconds),
+    ParamSpec::new(
+        RELEASE_MS,
+        "release_ms",
+        5.0,
+        2000.0,
+        144.0,
+        Unit::Milliseconds,
+    ),
     ParamSpec::new(MAKEUP_DB, "makeup_db", 0.0, 24.0, 0.0, Unit::Decibels),
 ];
 
@@ -71,7 +85,11 @@ impl Compressor {
                 None => block.left[index].abs().max(block.right[index].abs()),
             };
             let target = self.gain_reduction_db(amplitude_to_db(level));
-            let coefficient = if target > self.envelope_db { self.attack } else { self.release };
+            let coefficient = if target > self.envelope_db {
+                self.attack
+            } else {
+                self.release
+            };
             self.envelope_db = target + coefficient * (self.envelope_db - target);
             let gain = db_to_amplitude(-self.envelope_db) * makeup;
             block.left[index] *= gain;
@@ -121,7 +139,14 @@ impl Processor for Compressor {
 }
 
 pub const CEILING_DB: u32 = 0;
-pub const LIMITER_PARAMS: [ParamSpec; 1] = [ParamSpec::new(CEILING_DB, "ceiling_db", -12.0, 0.0, -1.0, Unit::Decibels)];
+pub const LIMITER_PARAMS: [ParamSpec; 1] = [ParamSpec::new(
+    CEILING_DB,
+    "ceiling_db",
+    -12.0,
+    0.0,
+    -1.0,
+    Unit::Decibels,
+)];
 
 // Instant-attack peak limiter followed by a hard ceiling: nothing ever leaves
 // above the ceiling, whatever a chain or a feedback mistake produces.
@@ -133,7 +158,11 @@ pub struct Limiter {
 
 impl Limiter {
     pub fn new() -> Self {
-        Self { ceiling: db_to_amplitude(LIMITER_PARAMS[0].default), release: 0.0, gain: 1.0 }
+        Self {
+            ceiling: db_to_amplitude(LIMITER_PARAMS[0].default),
+            release: 0.0,
+            gain: 1.0,
+        }
     }
 }
 
@@ -158,7 +187,12 @@ impl Processor for Limiter {
             }
             let peak = left.abs().max(right.abs());
             let needed = if peak > ceiling { ceiling / peak } else { 1.0 };
-            self.gain = if needed < self.gain { needed } else { 1.0 + self.release * (self.gain - 1.0) }.min(1.0);
+            self.gain = if needed < self.gain {
+                needed
+            } else {
+                1.0 + self.release * (self.gain - 1.0)
+            }
+            .min(1.0);
             *left = (*left * self.gain).clamp(-ceiling, ceiling);
             *right = (*right * self.gain).clamp(-ceiling, ceiling);
         }

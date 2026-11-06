@@ -25,7 +25,7 @@ const rate = (value) => {
 
 export async function probeMedia(filePath) {
     let size;
-    let head = new Uint8Array(16);
+    const head = new Uint8Array(16);
     try {
         size = (await stat(filePath)).size;
         const handle = await open(filePath, 'r');

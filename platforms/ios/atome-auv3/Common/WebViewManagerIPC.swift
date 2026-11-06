@@ -61,7 +61,7 @@ extension WebViewManager {
                                                   command: String,
                                                   payload: [String: Any]) {
         guard !requestId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        if ["macos_contacts_snapshot", "native_calendar_snapshot", "export_file_save", "export_file_share", "contacts_open_settings"].contains(command) {
+        if ["macos_contacts_snapshot", "native_calendar_snapshot", "export_file_save", "export_file_share", "export_file_print", "contacts_open_settings"].contains(command) {
             NativePersonalImport.shared.handle(command, payload: payload) { response, error in
                 sendNativeInvokeResponse(requestId: requestId, payload: response, error: error)
             }
@@ -87,8 +87,8 @@ extension WebViewManager {
         if command == "auth_local_request" {
             var message = payload
             message["type"] = "auth"
-            AiSRuntime.handleAuthMessage(message) { response in
-                sendNativeInvokeResponse(requestId: requestId, payload: response)
+            DispatchQueue.global(qos: .userInitiated).async {
+                sendNativeInvokeResponse(requestId: requestId, payload: LocalServer.shared.answer(message))
             }
             return
         }

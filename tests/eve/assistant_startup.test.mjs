@@ -7,6 +7,13 @@ const binding = vi.hoisted(() => ({ create: null }));
 vi.mock('../../atome/src/squirrel/voice/assistant_session_controller.js', () => ({
     bindVoiceAssistantSession: options => binding.create(options)
 }));
+// A written message is refused offline before its model is asked (assistant_offline.js#withAssistantOfflineModel):
+// a test of the online prerequisites says the server is reachable; the others keep the real check.
+const connection = vi.hoisted(() => ({ online: null }));
+vi.mock('../../atome/src/squirrel/apis/unified/adole_connection.js', async importOriginal => {
+    const actual = await importOriginal();
+    return { ...actual, checkConnection: backend => (connection.online === null ? actual.checkConnection(backend) : Promise.resolve(connection.online)) };
+});
 vi.mock('../../atome/src/squirrel/ai/assistant_provider_config.js', () => ({
     resolveAssistantProviderConfig: async () => ({ ok: false, providerId: 'openai', error: 'no_ai_key_configured' })
 }));
@@ -146,6 +153,7 @@ test('a text prerequisite preserves the exact turn and its explicit attachment w
     const previous = getSessionState();
     setSessionState({ mode: 'authenticated', user: { id: 'fixture' } }, { persist: false, silent: true });
     const settings = vi.fn(async () => ({ ok: true })), h = harness(undefined, settings);
+    connection.online = true;
     try {
         await h.api.open(); await h.flush();
         const attachment = h.api.addImageReference(new File(['fixture'], 'reference.txt', { type: 'text/plain' }));
@@ -157,7 +165,7 @@ test('a text prerequisite preserves the exact turn and its explicit attachment w
         expect(h.api.getState().conversation).toMatchObject({ id: before.id, level: before.level,
             turns: [{ role: 'user', text: 'Keep my exact request', attachments: [{ id: attachment, name: 'reference.txt' }] }] });
         expect(h.api.getState().image.references[0].id).toBe(attachment);
-    } finally { await h.dispose(); setSessionState(previous, { persist: false, silent: true }); }
+    } finally { connection.online = null; await h.dispose(); setSessionState(previous, { persist: false, silent: true }); }
 });
 
 test('a media prerequisite keeps references and opens the project chooser only through its link', async () => {

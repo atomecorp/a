@@ -20,7 +20,14 @@ pub struct Resampler {
 
 impl Resampler {
     pub fn new() -> Self {
-        Self { ring: Vec::new(), mask: 0, written: 0, position: 0.0, step: 1.0, table: Vec::new() }
+        Self {
+            ring: Vec::new(),
+            mask: 0,
+            written: 0,
+            position: 0.0,
+            step: 1.0,
+            table: Vec::new(),
+        }
     }
 
     // `step` = source rate / destination rate; `capacity` bounds the source
@@ -38,7 +45,11 @@ impl Resampler {
             let row = &mut self.table[phase * TAPS..(phase + 1) * TAPS];
             for (tap, weight) in row.iter_mut().enumerate() {
                 let x = tap as f64 - (HALF_TAPS as f64 - 1.0) - fraction;
-                let sinc = if x.abs() < 1.0e-9 { 1.0 } else { (PI * cutoff * x).sin() / (PI * cutoff * x) };
+                let sinc = if x.abs() < 1.0e-9 {
+                    1.0
+                } else {
+                    (PI * cutoff * x).sin() / (PI * cutoff * x)
+                };
                 let w = (x + HALF_TAPS as f64) / TAPS as f64;
                 let window = 0.42 - 0.5 * (2.0 * PI * w).cos() + 0.08 * (4.0 * PI * w).cos();
                 *weight = (cutoff * sinc * window) as f32;

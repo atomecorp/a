@@ -131,7 +131,10 @@ class BufferedSocket {
         });
     }
 
+    // STARTTLS: the same connection, now TLS. Bytes the server sent after its go-ahead would be read
+    // as if they came through TLS (a command injection): the upgrade is refused.
     async upgradeToTls(options = {}) {
+        if (this.buffer.length) throw new Error('tls_upgrade_unexpected_data');
         const tls = await import('node:tls');
         const tlsSocket = tls.connect({
             socket: this.socket,
@@ -155,10 +158,14 @@ class BufferedSocket {
 }
 
 const connectSocket = async (transport = {}) => {
-    const security = normalizeText(transport.security || 'plain').toLowerCase();
+    const security = normalizeText(transport.security || '').toLowerCase();
+    // A connection is encrypted from its first byte (`tls`, `ssl`) or by STARTTLS, the protocol
+    // client's own step before any credential; clear text is refused (user decision, 2026-11-06).
+    if (!['tls', 'ssl', 'starttls'].includes(security)) throw new Error('mail_security_cleartext_refused');
     const timeoutMs = toFiniteNumber(transport.timeout_ms || transport.timeoutMs, DEFAULT_TIMEOUT_MS);
     let socket;
-    if (security === 'tls') {
+    // `ssl` names the same implicit TLS as `tls`.
+    if (security === 'tls' || security === 'ssl') {
         const tls = await import('node:tls');
         socket = tls.connect({
             host: transport.host,

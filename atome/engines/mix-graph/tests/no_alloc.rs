@@ -2,10 +2,15 @@
 // every block of a graph that uses splits, keys, a loop and long tails, and
 // the swap to a new graph.
 
+#![allow(
+    unsafe_code,
+    reason = "a counting global allocator proves the render thread never allocates"
+)]
+
 use atome_mix_graph::{MixGraph, Program, StripCapture};
+use kira::Frame;
 use kira::effect::Effect;
 use kira::info::MockInfoBuilder;
-use kira::Frame;
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
@@ -49,14 +54,19 @@ const PROGRAM: &str = r#"{"strips":[
 fn rendering_never_allocates_not_even_across_a_swap() {
     let mut graph = MixGraph::new(48_000);
     let program: Program = serde_json::from_str(PROGRAM).unwrap();
-    let mut captures: Vec<StripCapture> = program.strips.iter().map(|strip| StripCapture::new(graph.capture_slot(&strip.id))).collect();
+    let mut captures: Vec<StripCapture> = program
+        .strips
+        .iter()
+        .map(|strip| StripCapture::new(graph.capture_slot(&strip.id)))
+        .collect();
     graph.apply(program.clone()).unwrap();
     let mut effect = graph.effect_builder().into_effect();
     effect.init(48_000, 128);
     let info = MockInfoBuilder::new().build();
     let mut input = vec![Frame::new(0.25, -0.25); 512];
     let mut out = vec![Frame::ZERO; 512];
-    let mut render = |effect: &mut atome_mix_graph::MixGraphEffect, captures: &mut [StripCapture]| {
+    let mut render = |effect: &mut atome_mix_graph::MixGraphEffect,
+                      captures: &mut [StripCapture]| {
         for capture in captures.iter_mut() {
             input.fill(Frame::new(0.25, -0.25));
             capture.process(&mut input, 1.0 / 48_000.0, &info);
@@ -73,7 +83,10 @@ fn rendering_never_allocates_not_even_across_a_swap() {
     assert_eq!(ALLOCATIONS.load(Ordering::SeqCst), 0, "blocks allocated");
     // An edit: the render thread swaps graphs and adopts the modules.
     let mut edited = program;
-    edited.strips[0].chain[2].params.insert("decay_s".into(), atome_mix_graph::program::serde_json_value::Value::Number(5.0));
+    edited.strips[0].chain[2].params.insert(
+        "decay_s".into(),
+        atome_mix_graph::program::serde_json_value::Value::Number(5.0),
+    );
     edited.strips[0].chain.remove(3);
     graph.apply(edited).unwrap();
     WATCHING.store(true, Ordering::SeqCst);
@@ -82,5 +95,8 @@ fn rendering_never_allocates_not_even_across_a_swap() {
     }
     WATCHING.store(false, Ordering::SeqCst);
     assert_eq!(ALLOCATIONS.load(Ordering::SeqCst), 0, "the swap allocated");
-    assert!(out.iter().all(|frame| frame.left.is_finite() && frame.right.is_finite()));
+    assert!(
+        out.iter()
+            .all(|frame| frame.left.is_finite() && frame.right.is_finite())
+    );
 }

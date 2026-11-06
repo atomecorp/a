@@ -8,6 +8,11 @@ import { projectBevyUiTreeRecords } from '../../eVe/domains/rendering/bevy_ui_ov
 import { patchBevyUiTreeMotion, projectBevyUiTreeOverlay } from '../../eVe/domains/rendering/bevy_ui_project_overlay_runtime.js';
 import { clearAllProjectScenes, getProjectSceneState, renderProjectScene } from '../../eVe/domains/rendering/project_scene_runtime.js';
 import { createTestCompositor, installDom } from './unified_rendering_test_helpers.mjs';
+import { SYSTEM_UI_METRICS } from '../../eVe/elements/system_ui_tokens.js';
+
+// A clip's corners are the ones the node is drawn with: the charter's radius for its size (AGENTS.md
+// rule 14), never rounder than declared, a straight corner kept straight.
+const drawn = ([x, y, width, height, ...radii]) => [x, y, width, height, ...radii.map(r => SYSTEM_UI_METRICS.cornerRadius(r, width, height))];
 
 const box = { x: 10, y: 20, width: 200, height: 180 };
 const viewport = { id: 'viewport', kind: 'scroll_area', style: { position: [10,20], size: [200,180], overflow: 'scroll_y', radius_corners: [15,15,0,0] }, children: [
@@ -22,7 +27,7 @@ test('rounded overflow preserves original arcs through square and nested interse
     const nested = overflowClipForNode({style:{overflow:'hidden'}},{x:0,y:0,width:500,height:300},clip);
     assert.deepEqual(nested.roundedRects,clip.roundedRects);
     assert.deepEqual(intersectBoxes(clip,{x:20,y:30,width:180,height:80}).roundedRects,clip.roundedRects);
-    assert.deepEqual(readBevyProjectionRoundedClips(clip),[[10,20,200,180,15,15,0,0]]);
+    assert.deepEqual(readBevyProjectionRoundedClips(clip),[drawn([10,20,200,180,15,15,0,0])]);
     assert.deepEqual(readBevyProjectionRoundedClips({x:0,y:0,width:20,height:20}),[]);
     assert.throws(()=>readBevyProjectionRoundedClips({roundedRects:[[0,0,20,20,-1,0,0,0]]}));
 });
@@ -36,7 +41,7 @@ test('scrolling moves only rail geometry and scales rounded overflow with the vi
     assert.deepEqual(next.properties.clip,first.properties.clip);
     assert.equal(next.properties.top,first.properties.top-40);
     const scaled = project(scaleTreeForRender({tree:tree(),scale:2}));
-    assert.deepEqual(scaled.properties.clip.roundedRects,[[20,40,400,360,30,30,0,0]]);
+    assert.deepEqual(scaled.properties.clip.roundedRects,[drawn([20,40,400,360,30,30,0,0])]);
 });
 
 test('resizing recomputes the rounded viewport while keeping scroll and render scale', () => {
@@ -48,7 +53,7 @@ test('resizing recomputes the rounded viewport while keeping scroll and render s
         resized.children[0].children[0].style.position[0]=252;
         const records=projectBevyUiTreeRecords({tree:scaleTreeForRender({tree:source,scale}),treeId:source.id,workspaceLayer:'panel'});
         const rail=records.find(record=>record.id.endsWith('_rail'));
-        assert.deepEqual(rail.properties.clip.roundedRects,[[30,40,260,140,15,15,0,0].map(value=>value*scale)]);
+        assert.deepEqual(rail.properties.clip.roundedRects,[drawn([30,40,260,140,15,15,0,0].map(value=>value*scale))]);
         assert.equal(rail.properties.left,282*scale);
         assert.equal(rail.properties.top,-100*scale);
     }
@@ -67,7 +72,7 @@ test('direct whole-tree motion translates rounded boundaries without respawning 
         const result=await patchBevyUiTreeMotion({treeId:source.id,updates:[{translateTree:[30,40]}],documentRef:dom.window.document});
         assert.equal(result.ok,true);
         const rail=getProjectSceneState('__eve_dashboard_workspace__').records.find(record=>record.id.endsWith('_rail'));
-        assert.deepEqual(rail.properties.clip.roundedRects,[[40,60,200,180,15,15,0,0]]);
+        assert.deepEqual(rail.properties.clip.roundedRects,[drawn([40,60,200,180,15,15,0,0])]);
         const ops=calls.flatMap(call=>call.ops||[]);
         assert.equal(ops.some(op=>op.type==='spawn'||op.type==='despawn'),false);
         assert.ok(ops.some(op=>op.type==='transform'&&op.patch?.clip_rounded_rects?.length===1), JSON.stringify(calls));
@@ -77,7 +82,7 @@ test('direct whole-tree motion translates rounded boundaries without respawning 
 test('nested rounded viewports retain both original boundaries', () => {
     const outer = overflowClipForNode(viewport, box);
     const inner = overflowClipForNode({style:{overflow:'hidden',radius:5}}, {x:12,y:20,width:196,height:160}, outer);
-    assert.deepEqual(inner.roundedRects, [[10,20,200,180,15,15,0,0],[12,20,196,160,5,5,5,5]]);
+    assert.deepEqual(inner.roundedRects, [drawn([10,20,200,180,15,15,0,0]),drawn([12,20,196,160,5,5,5,5])]);
 });
 
 

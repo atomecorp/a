@@ -6,12 +6,12 @@
 //! server verifies it with the Google Play Developer API before granting it.
 
 use serde_json::Value;
-use tauri::{
-    plugin::{Builder, TauriPlugin},
-    AppHandle, Runtime,
-};
 #[cfg(target_os = "android")]
 use tauri::Manager;
+use tauri::{
+    AppHandle, Runtime,
+    plugin::{Builder, TauriPlugin},
+};
 
 #[cfg(target_os = "android")]
 struct BillingPluginHandle<R: Runtime>(tauri::plugin::PluginHandle<R>);
@@ -34,7 +34,11 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
 
 /// Blocking call into Play Billing (the purchase sheet may stay open for
 /// minutes); run it off the async runtime.
-pub fn call<R: Runtime>(_app: &AppHandle<R>, method: &str, _payload: Value) -> Result<Value, String> {
+pub fn call<R: Runtime>(
+    _app: &AppHandle<R>,
+    method: &str,
+    _payload: Value,
+) -> Result<Value, String> {
     if !METHODS.contains(&method) {
         return Err("billing_command_unknown".into());
     }

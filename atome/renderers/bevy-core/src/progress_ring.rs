@@ -14,15 +14,17 @@ use bevy::{
     prelude::*,
     reflect::TypePath,
     render::{
-        render_resource::{AsBindGroup, ShaderType},
         RenderApp,
+        render_resource::{AsBindGroup, ShaderType},
     },
     shader::{Shader, ShaderRef},
     sprite_render::{AlphaMode2d, Material2d, Material2dPlugin},
 };
 use serde::Deserialize;
 
-use crate::{frame_demand::AtomeFrameDemand, video_external_texture::video_quad_mesh_handle_from_size};
+use crate::{
+    frame_demand::AtomeFrameDemand, video_external_texture::video_quad_mesh_handle_from_size,
+};
 
 const SHADER: Handle<Shader> = uuid_handle!("0f77173a-3776-4793-ac9c-a57d5d20eca7");
 // Half a pixel of arc per frame reads as continuous; never faster than the
@@ -97,7 +99,8 @@ pub struct AtomeProgressRingState {
 
 impl AtomeProgressRingState {
     fn progress_at(&self, now: f64) -> f32 {
-        (self.ring.progress as f64 + self.ring.rate as f64 * (now - self.since)).clamp(0.0, 1.0) as f32
+        (self.ring.progress as f64 + self.ring.rate as f64 * (now - self.since)).clamp(0.0, 1.0)
+            as f32
     }
     fn moving(&self, progress: f32) -> bool {
         (self.ring.rate < 0.0 && progress > 0.0) || (self.ring.rate > 0.0 && progress < 1.0)
@@ -110,7 +113,12 @@ impl AtomeProgressRingState {
         ProgressRingUniform {
             color: linear(self.ring.color),
             track: linear(self.ring.track),
-            shape: Vec4::new(self.size[0], self.size[1], self.ring.width.max(0.5), progress),
+            shape: Vec4::new(
+                self.size[0],
+                self.size[1],
+                self.ring.width.max(0.5),
+                progress,
+            ),
             opacity: Vec4::new(self.opacity.clamp(0.0, 1.0), 0.0, 0.0, 0.0),
         }
     }
@@ -121,25 +129,44 @@ pub struct ProgressRingPlugin;
 impl Plugin for ProgressRingPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Assets<Shader>>();
-        load_internal_asset!(app, SHADER, "assets/shaders/progress_ring.wgsl", Shader::from_wgsl);
+        load_internal_asset!(
+            app,
+            SHADER,
+            "assets/shaders/progress_ring.wgsl",
+            Shader::from_wgsl
+        );
         app.init_resource::<Assets<ProgressRingMaterial>>();
         if app.get_sub_app_mut(RenderApp).is_some() {
             app.add_plugins(Material2dPlugin::<ProgressRingMaterial>::default());
         }
-        app.add_systems(Update, advance_progress_rings.before(crate::frame_demand::apply_frame_demand));
+        app.add_systems(
+            Update,
+            advance_progress_rings.before(crate::frame_demand::apply_frame_demand),
+        );
     }
 }
 
 fn now(world: &World) -> f64 {
-    world.get_resource::<Time<Real>>().map(|time| time.elapsed_secs_f64()).unwrap_or(0.0)
+    world
+        .get_resource::<Time<Real>>()
+        .map(|time| time.elapsed_secs_f64())
+        .unwrap_or(0.0)
 }
 
 /// The `Time<Real>` second at which the ring's progress was true.
 fn since(world: &World, ring: &AtomeProgressRing) -> f64 {
-    now(world) - ring.at_ms.map(|at| ((wall_clock_ms() - at) / 1000.0).max(0.0)).unwrap_or(0.0)
+    now(world)
+        - ring
+            .at_ms
+            .map(|at| ((wall_clock_ms() - at) / 1000.0).max(0.0))
+            .unwrap_or(0.0)
 }
 
-fn write_uniform(world: &mut World, entity: Entity, state: AtomeProgressRingState) -> Result<(), String> {
+fn write_uniform(
+    world: &mut World,
+    entity: Entity,
+    state: AtomeProgressRingState,
+) -> Result<(), String> {
     let handle = world
         .get::<MeshMaterial2d<ProgressRingMaterial>>(entity)
         .ok_or("bevy_progress_ring_material_required")?
@@ -155,22 +182,51 @@ fn write_uniform(world: &mut World, entity: Entity, state: AtomeProgressRingStat
     Ok(())
 }
 
-pub fn insert(world: &mut World, entity: Entity, size: [f32; 2], ring: AtomeProgressRing, opacity: f32) -> Result<(), String> {
-    let state = AtomeProgressRingState { ring, since: since(world, &ring), size, opacity };
+pub fn insert(
+    world: &mut World,
+    entity: Entity,
+    size: [f32; 2],
+    ring: AtomeProgressRing,
+    opacity: f32,
+) -> Result<(), String> {
+    let state = AtomeProgressRingState {
+        ring,
+        since: since(world, &ring),
+        size,
+        opacity,
+    };
     let progress = state.progress_at(now(world));
-    let mesh = video_quad_mesh_handle_from_size(&mut world.resource_mut::<Assets<Mesh>>(), size, [0.0, 0.0, 1.0, 1.0]);
+    let mesh = video_quad_mesh_handle_from_size(
+        &mut world.resource_mut::<Assets<Mesh>>(),
+        size,
+        [0.0, 0.0, 1.0, 1.0],
+    );
     let material = world
         .resource_mut::<Assets<ProgressRingMaterial>>()
-        .add(ProgressRingMaterial { uniform: state.uniform(progress) });
-    world.entity_mut(entity).insert((Mesh2d(mesh), MeshMaterial2d(material), state));
+        .add(ProgressRingMaterial {
+            uniform: state.uniform(progress),
+        });
+    world
+        .entity_mut(entity)
+        .insert((Mesh2d(mesh), MeshMaterial2d(material), state));
     Ok(())
 }
 
 /// A new progress, rate or look: the arc restarts from what was just sent.
 pub fn patch(world: &mut World, entity: Entity, ring: AtomeProgressRing) -> Result<(), String> {
-    let state = *world.get::<AtomeProgressRingState>(entity).ok_or("bevy_progress_ring_state_required")?;
+    let state = *world
+        .get::<AtomeProgressRingState>(entity)
+        .ok_or("bevy_progress_ring_state_required")?;
     let since = since(world, &ring);
-    write_uniform(world, entity, AtomeProgressRingState { ring, since, ..state })
+    write_uniform(
+        world,
+        entity,
+        AtomeProgressRingState {
+            ring,
+            since,
+            ..state
+        },
+    )
 }
 
 /// The node's new size; nothing to do for an entity that is not a ring.
@@ -178,7 +234,11 @@ pub fn resize(world: &mut World, entity: Entity, size: [f32; 2]) -> Result<(), S
     let Some(state) = world.get::<AtomeProgressRingState>(entity).copied() else {
         return Ok(());
     };
-    let mesh = video_quad_mesh_handle_from_size(&mut world.resource_mut::<Assets<Mesh>>(), size, [0.0, 0.0, 1.0, 1.0]);
+    let mesh = video_quad_mesh_handle_from_size(
+        &mut world.resource_mut::<Assets<Mesh>>(),
+        size,
+        [0.0, 0.0, 1.0, 1.0],
+    );
     world.entity_mut(entity).insert(Mesh2d(mesh));
     write_uniform(world, entity, AtomeProgressRingState { size, ..state })
 }
@@ -193,7 +253,11 @@ pub fn set_opacity(world: &mut World, entity: Entity, opacity: f32) -> Result<()
 
 pub fn advance_progress_rings(
     time: Res<Time<Real>>,
-    rings: Query<(&MeshMaterial2d<ProgressRingMaterial>, &AtomeProgressRingState, Option<&Visibility>)>,
+    rings: Query<(
+        &MeshMaterial2d<ProgressRingMaterial>,
+        &AtomeProgressRingState,
+        Option<&Visibility>,
+    )>,
     mut materials: ResMut<Assets<ProgressRingMaterial>>,
     mut demand: ResMut<AtomeFrameDemand>,
 ) {

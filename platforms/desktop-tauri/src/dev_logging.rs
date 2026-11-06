@@ -3,9 +3,9 @@ use serde_json::Value;
 use std::path::PathBuf;
 use tracing::{debug, error, info, warn};
 use tracing_appender::non_blocking::WorkerGuard;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
-pub use crate::runtime_logging::xcode_logs_enabled;
+pub use atome_server::local::xcode_logs_enabled;
 
 #[derive(Debug, Deserialize)]
 pub struct WebviewLogPayload {
@@ -42,15 +42,15 @@ fn resolve_log_dir() -> PathBuf {
 
     // Finder-launched macOS apps often start with cwd = "/".
     // Never default to "/logs" because it is not writable.
-    if cwd.as_os_str() == "/" {
-        if let Ok(home) = std::env::var("HOME") {
-            let trimmed = home.trim();
-            if !trimmed.is_empty() {
-                return PathBuf::from(trimmed)
-                    .join("Library")
-                    .join("Logs")
-                    .join("squirrel");
-            }
+    if cwd.as_os_str() == "/"
+        && let Ok(home) = std::env::var("HOME")
+    {
+        let trimmed = home.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed)
+                .join("Library")
+                .join("Logs")
+                .join("squirrel");
         }
     }
 
@@ -70,10 +70,7 @@ fn resolve_log_dir() -> PathBuf {
 
 pub fn init_tracing() -> Option<WorkerGuard> {
     let log_dir = resolve_log_dir();
-    let file_logging_enabled = match std::fs::create_dir_all(&log_dir) {
-        Ok(_) => true,
-        Err(_) => false,
-    };
+    let file_logging_enabled = std::fs::create_dir_all(&log_dir).is_ok();
 
     let default_filter = if cfg!(debug_assertions) {
         "warn,voice=info"

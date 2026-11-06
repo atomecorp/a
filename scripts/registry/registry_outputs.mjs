@@ -64,7 +64,10 @@ export function inventoryReport(map, findings, holes) {
             doc_brick_alias_status: count(entries.filter(entry => entry.kind === 'doc_brick'), entry => entry.alias_status),
             tool_family_basis: count(entries.filter(entry => entry.family_basis), entry => entry.family_basis),
             contract_risk_tiers: count(entries.filter(entry => entry.kind === 'action_contract'), entry => entry.risk_tier),
-            contract_offline: count(entries.filter(entry => entry.kind === 'action_contract'), entry => entry.offline) },
+            contract_offline: count(entries.filter(entry => entry.kind === 'action_contract'), entry => entry.offline),
+            tool_exposure: count(entries.filter(entry => entry.kind === 'tool_definition'), entry => entry.exposure),
+            contract_exposure: count(entries.filter(entry => entry.exposure && entry.kind === 'action_contract'), entry => entry.exposure),
+            blocked_on: count(entries.filter(entry => entry.exposure_blocked_on), entry => `${entry.kind}:${entry.exposure_blocked_on.join('+')}`) },
         holes,
         findings: [...findings].sort((a, b) => (`${a.type}${a.id}` < `${b.type}${b.id}` ? -1 : 1)),
         collisions: { native_id_shared_across_kinds: [...nativeOwners].filter(([, ids]) => ids.length > 1).map(([native, ids]) => ({ native_id: native, ids: ids.sort() }))

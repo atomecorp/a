@@ -4,12 +4,12 @@
 use bevy::prelude::*;
 
 use crate::shape_sdf::{
-    apply_mask_to_texture, cached_image_handle_from_shape_mask, image_handle_from_shape_mask,
-    mask_texture_for_target, shape_mask_texture, AtomeShapeGeometry, AtomeShapeSilhouette, AtomeShapeVariant,
-    POLYGON_SIDES_MAX, POLYGON_SIDES_MIN, STAR_BRANCHES_MAX, STAR_BRANCHES_MIN,
-    STAR_INNER_RADIUS_MAX, STAR_INNER_RADIUS_MIN, STAR_INNER_RADIUS_FALLBACK,
+    AtomeShapeGeometry, AtomeShapeSilhouette, AtomeShapeVariant, POLYGON_SIDES_MAX,
+    POLYGON_SIDES_MIN, STAR_BRANCHES_MAX, STAR_BRANCHES_MIN, STAR_INNER_RADIUS_FALLBACK,
+    STAR_INNER_RADIUS_MAX, STAR_INNER_RADIUS_MIN, apply_mask_to_texture,
+    cached_image_handle_from_shape_mask, mask_texture_for_target, shape_mask_texture,
 };
-use crate::texture::{image_handle_from_rounded_rect_mask, AtomeCornerRadii};
+use crate::texture::{AtomeCornerRadii, image_handle_from_rounded_rect_mask};
 use crate::*;
 
 fn alpha_at(texture: &AtomeTexture, x: u32, y: u32) -> u8 {
@@ -47,13 +47,25 @@ fn polygon_silhouette(sides: u32, size: f32) -> AtomeShapeSilhouette {
 
 #[test]
 fn shape_variant_names_round_trip_and_unknown_names_are_squares() {
-    assert_eq!(AtomeShapeVariant::from_name("circle"), AtomeShapeVariant::Circle);
-    assert_eq!(AtomeShapeVariant::from_name(" STAR "), AtomeShapeVariant::Star);
-    assert_eq!(AtomeShapeVariant::from_name("polygon"), AtomeShapeVariant::Polygon);
+    assert_eq!(
+        AtomeShapeVariant::from_name("circle"),
+        AtomeShapeVariant::Circle
+    );
+    assert_eq!(
+        AtomeShapeVariant::from_name(" STAR "),
+        AtomeShapeVariant::Star
+    );
+    assert_eq!(
+        AtomeShapeVariant::from_name("polygon"),
+        AtomeShapeVariant::Polygon
+    );
     assert_eq!(AtomeShapeVariant::from_name(""), AtomeShapeVariant::Square);
     // Une variante inventee ne doit jamais faire tomber la scene : elle est le
     // carre, exactement comme un document ecrit avant l'outil.
-    assert_eq!(AtomeShapeVariant::from_name("hexagon"), AtomeShapeVariant::Square);
+    assert_eq!(
+        AtomeShapeVariant::from_name("hexagon"),
+        AtomeShapeVariant::Square
+    );
     assert_eq!(AtomeShapeVariant::Circle.as_str(), "circle");
 }
 
@@ -108,7 +120,10 @@ fn a_square_variant_reuses_the_rounded_rect_field_exactly() {
                 40.0,
                 [6.0, 0.0, 12.0, 4.0],
             );
-            assert!((silhouette.signed_distance(x as f32 + 0.5, y as f32 + 0.5) - expected).abs() < 1e-6);
+            assert!(
+                (silhouette.signed_distance(x as f32 + 0.5, y as f32 + 0.5) - expected).abs()
+                    < 1e-6
+            );
         }
     }
     assert!(silhouette.requires_mask());
@@ -176,9 +191,8 @@ fn a_star_points_up_and_keeps_its_notches() {
 fn a_star_with_more_branches_takes_more_of_its_box() {
     let five = shape_mask_texture(&star_silhouette(5, 0.5, 64.0));
     let twelve = shape_mask_texture(&star_silhouette(12, 0.5, 64.0));
-    let painted = |texture: &AtomeTexture| {
-        texture.rgba.chunks(4).filter(|pixel| pixel[3] > 0).count()
-    };
+    let painted =
+        |texture: &AtomeTexture| texture.rgba.chunks(4).filter(|pixel| pixel[3] > 0).count();
     assert!(painted(&twelve) > painted(&five));
 }
 
@@ -194,10 +208,7 @@ fn a_polygon_is_bounded_by_its_apothem() {
     let half = std::f32::consts::PI / 6.0;
     let apothem = radius * half.cos();
     let beyond = apothem + 4.0;
-    let outside_edge = (
-        50.0 + beyond * half.sin(),
-        50.0 - beyond * half.cos(),
-    );
+    let outside_edge = (50.0 + beyond * half.sin(), 50.0 - beyond * half.cos());
     assert!(hexagon.signed_distance(outside_edge.0, outside_edge.1) > 0.0);
     let inside_edge = (
         50.0 + (apothem - 4.0) * half.sin(),
@@ -249,7 +260,9 @@ fn a_node_reads_its_variant_and_its_defaults() {
             logical_position: [0.0, 0.0],
             logical_size: [120.0, 120.0],
             clip_rect: None,
-            clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
+            clip_rotation: 0.0,
+            clip_rounded_rects: vec![],
+            clip_fades: vec![],
             scale: [1.0, 1.0],
             rotation: 0.0,
             origin: [0.0, 0.0],
@@ -302,12 +315,8 @@ fn a_generated_mask_carries_the_shape_and_is_cached() {
     let first = cached_image_handle_from_shape_mask(world, &star, "shape_1").unwrap();
     let second = cached_image_handle_from_shape_mask(world, &star, "shape_2").unwrap();
     assert_eq!(first, second);
-    let other = cached_image_handle_from_shape_mask(
-        world,
-        &polygon_silhouette(6, 48.0),
-        "shape_3",
-    )
-    .unwrap();
+    let other = cached_image_handle_from_shape_mask(world, &polygon_silhouette(6, 48.0), "shape_3")
+        .unwrap();
     assert_ne!(first, other);
 }
 
@@ -318,6 +327,7 @@ fn a_mask_multiplies_the_alpha_and_never_the_colors() {
         rgba.extend_from_slice(&[10, 20, 30, 255]);
     }
     let source = AtomeTexture {
+        external: None,
         animation: None,
         width: 8,
         height: 4,
@@ -416,10 +426,26 @@ fn a_spatial_mask_keeps_its_world_position_and_rotation_inside_the_target() {
         }),
     };
     let texture = mask_texture_for_target(&mask, [100.0, 100.0]);
-    assert_eq!(alpha_at(&texture, 50, 50), 255, "the rotated source centre remains visible");
-    assert_eq!(alpha_at(&texture, 10, 10), 0, "the source is not stretched over the target");
-    assert_eq!(alpha_at(&texture, 50, 30), 0, "rotation moves the narrow edge in world space");
-    assert_eq!(alpha_at(&texture, 31, 50), 255, "the rotated long edge reaches its expected position");
+    assert_eq!(
+        alpha_at(&texture, 50, 50),
+        255,
+        "the rotated source centre remains visible"
+    );
+    assert_eq!(
+        alpha_at(&texture, 10, 10),
+        0,
+        "the source is not stretched over the target"
+    );
+    assert_eq!(
+        alpha_at(&texture, 50, 30),
+        0,
+        "rotation moves the narrow edge in world space"
+    );
+    assert_eq!(
+        alpha_at(&texture, 31, 50),
+        255,
+        "the rotated long edge reaches its expected position"
+    );
 }
 
 #[test]
@@ -433,20 +459,45 @@ fn a_raster_alpha_mask_uses_glyph_pixels_instead_of_its_bounding_box() {
         placement: None,
     };
     let texture = mask_texture_for_target(&mask, [4.0, 2.0]);
-    assert_eq!(alpha_at(&texture, 0, 0), 0, "the text box background stays transparent");
-    assert_eq!(alpha_at(&texture, 1, 0), 255, "a glyph pixel reveals the target");
-    assert_eq!(alpha_at(&texture, 2, 1), 255, "each raster alpha pixel is sampled");
-    assert_eq!(alpha_at(&texture, 3, 1), 0, "the rest of the text box never becomes a rectangle");
+    assert_eq!(
+        alpha_at(&texture, 0, 0),
+        0,
+        "the text box background stays transparent"
+    );
+    assert_eq!(
+        alpha_at(&texture, 1, 0),
+        255,
+        "a glyph pixel reveals the target"
+    );
+    assert_eq!(
+        alpha_at(&texture, 2, 1),
+        255,
+        "each raster alpha pixel is sampled"
+    );
+    assert_eq!(
+        alpha_at(&texture, 3, 1),
+        0,
+        "the rest of the text box never becomes a rectangle"
+    );
 }
 
 #[test]
 fn a_masked_image_goes_through_the_documented_handle_path() {
-    let mut images = Assets::<Image>::default();
-    let rounded = image_handle_from_rounded_rect_mask(&mut images, 20.0, 20.0, [4.0; 4], "rect")
-        .expect("le masque arrondi historique reste le meme");
+    let mut world = World::new();
+    world.init_resource::<Assets<Image>>();
+    let rounded = image_handle_from_rounded_rect_mask(
+        &mut world.resource_mut::<Assets<Image>>(),
+        20.0,
+        20.0,
+        [4.0; 4],
+        "rect",
+    )
+    .expect("le masque arrondi historique reste le meme");
+    let star =
+        cached_image_handle_from_shape_mask(&mut world, &star_silhouette(5, 0.5, 20.0), "star")
+            .expect("une etoile se masque");
+    let images = world.resource::<Assets<Image>>();
     assert!(images.contains(&rounded));
-    let star = image_handle_from_shape_mask(&mut images, &star_silhouette(5, 0.5, 20.0), "star")
-        .expect("une etoile se masque");
     assert!(images.contains(&star));
     assert_ne!(rounded, star);
 }
@@ -454,13 +505,14 @@ fn a_masked_image_goes_through_the_documented_handle_path() {
 #[test]
 fn the_block_shadow_of_a_star_has_its_points() {
     let star = star_silhouette(5, 0.5, 64.0);
-    let (width, height, rgba) = crate::shadow_texture::build_block_shadow_texture_rgba_for_silhouette(
-        &star,
-        [0.0, 0.0, 0.0, 1.0],
-        0.0,
-        false,
-    )
-    .expect("une ombre dure");
+    let (width, height, rgba) =
+        crate::shadow_texture::build_block_shadow_texture_rgba_for_silhouette(
+            &star,
+            [0.0, 0.0, 0.0, 1.0],
+            0.0,
+            false,
+        )
+        .expect("une ombre dure");
     assert_eq!((width, height), (64, 64));
     let alpha_at = |x: u32, y: u32| rgba[((y as usize * width as usize) + x as usize) * 4 + 3];
     // La pointe est peinte, le coin de la boite ne l'est pas : l'ombre d'une

@@ -111,6 +111,8 @@ function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     permissions: data.permissions || {},
                     mode: data.mode || 'real-time',
                     share_type: data.share_type || data.shareType || null,
+                    // The sender's own words with what they send: the invitation's message.
+                    note: data.note || null,
                     property_overrides: data.property_overrides || data.propertyOverrides || {},
                     // Droits D8 : ce que le destinataire voit / peut modifier, et jusqu'a quand.
                     // Ces cles etaient perdues ici : la restriction d'ecriture n'arrivait jamais.

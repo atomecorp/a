@@ -1,9 +1,9 @@
 use serde::Deserialize;
 
 use crate::types::{
-    default_transform_origin, default_transform_scale, AtomeBackdropStyle, AtomeColorFilters,
-    AtomeMaskStyle, AtomeProceduralSdf, AtomeRenderNode, AtomeSceneEffectsPatch, AtomeShadowStyle,
-    AtomeTexture, AtomeTransition,
+    AtomeBackdropStyle, AtomeColorFilters, AtomeMaskStyle, AtomeProceduralSdf, AtomeRenderNode,
+    AtomeSceneEffectsPatch, AtomeShadowStyle, AtomeTexture, AtomeTransition,
+    default_transform_origin, default_transform_scale,
 };
 
 #[derive(Clone, Debug, Deserialize)]
@@ -80,10 +80,7 @@ impl AtomeSurfaceBackgroundPatch {
             .as_ref()
             .filter(|video| !video.id.trim().is_empty() && video.width > 0 && video.height > 0)
     }
-
-
 }
-
 
 /// Un double Option doit distinguer trois etats : la cle absente du patch
 /// (`None`), la cle presente a `null` (`Some(None)`, le document retire la
@@ -184,10 +181,11 @@ pub struct AtomeResourcePatch {
 
 #[derive(Clone, Debug)]
 pub enum AtomeRenderOp {
-    Spawn(AtomeRenderNode),
+    // A node and a style patch are kilobytes: boxed, every op stays small in the queues.
+    Spawn(Box<AtomeRenderNode>),
     Despawn(String),
     Transform(AtomeTransformPatch),
-    Style(AtomeStylePatch),
+    Style(Box<AtomeStylePatch>),
     Reparent(AtomeParentPatch),
     Layer(AtomeLayerPatch),
     Visibility(AtomeVisibilityPatch),

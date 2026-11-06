@@ -59,16 +59,17 @@ let matches = { entries: null, at: 0 };
 // Job-centre workshops (France Travail) name every trade and are never a show.
 const AGENDA_WORDS = Object.freeze({ ...activityAgendaWords(), free: [] });
 // What each place kind reads: its OpenStreetMap dataset, the `type` values it keeps (a heritage
-// place worth a visit, not a plaque, a tomb or a wayside cross) and the fields that dataset has.
+// place worth a visit, not a plaque, a tomb or a wayside cross) and the fields that dataset has. The fields past the
+// website, the phone and the update date fill the place's card (D18 item 13 C: a line only for a field the record fills).
 const PLACES = Object.freeze({
     cinemas: { dataset: 'osm-france-cinema', types: [], fields: 'website,phone' },
-    heritage: { dataset: 'osm-france-historic', fields: 'website,wikipedia', types: ['castle', 'manor', 'fort', 'city_gate', 'citywalls', 'tower',
+    heritage: { dataset: 'osm-france-historic', fields: 'type,website,wikipedia,description,ref_mhs,civilization', types: ['castle', 'manor', 'fort', 'city_gate', 'citywalls', 'tower',
         'ruins', 'archaeological_site', 'monument', 'church', 'chapel', 'monastery', 'place_of_worship'] },
-    restaurants: { dataset: 'osm-france-food-service', types: ['restaurant', 'cafe'], fields: 'website,phone' },
+    restaurants: { dataset: 'osm-france-food-service', types: ['restaurant', 'cafe'], fields: 'type,website,phone,cuisine,opening_hours' },
     // Hébergements (D18 item 13 A): every staffed lodging of OpenStreetMap's tourism=*; an unstaffed wilderness hut is not one.
     lodging: { dataset: 'osm-france-tourism-accommodation', types: ['hotel', 'motel', 'guest_house', 'hostel', 'apartment', 'chalet', 'camp_site',
-        'caravan_site', 'alpine_hut'], fields: 'website,phone' },
-    bars: { dataset: 'osm-france-food-service', types: ['bar', 'pub', 'biergarten'], fields: 'website,phone' }
+        'caravan_site', 'alpine_hut'], fields: 'type,website,phone,email,stars,rooms' },
+    bars: { dataset: 'osm-france-food-service', types: ['bar', 'pub', 'biergarten'], fields: 'type,website,phone,cuisine,opening_hours' }
 });
 const KINDS = new Set([...Object.keys(AGENDA_WORDS), ...Object.keys(PLACES), ...Object.keys(TOURISM_KINDS), 'films', 'matches', 'sources', 'declared']);
 const UNPOSITIONED = new Set(['films', 'matches', 'sources']);
@@ -151,20 +152,35 @@ const wikipediaUrl = (value) => {
     const [, language, title] = /^([a-z]{2,3}):(.+)$/.exec(text(value)) || [];
     return language ? httpsUrl(`https://${language}.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, '_'))}`) : '';
 };
+// A place's card facts (D18 item 13 C), only those its record fills: a lodging's classification, rooms and e-mail, a
+// restaurant's cuisines and opening hours (OpenStreetMap's own syntax), a monument's description, its listing as a
+// historic monument (`heritage` with a Mérimée reference), its era and its Wikipedia page's title.
+const placeFacts = (record) => {
+    const stars = Number(record.stars), rooms = Number(record.rooms), [, wiki = ''] = /^[a-z]{2,3}:(.+)$/.exec(text(record.wikipedia)) || [];
+    const cuisine = (Array.isArray(record.cuisine) ? record.cuisine : text(record.cuisine).split(';')).map(text).filter(Boolean);
+    const facts = { type: text(record.type), stars: Number.isInteger(stars) && stars > 0 && stars <= 5 ? stars : 0, rooms: Number.isInteger(rooms) && rooms > 0 ? rooms : 0,
+        email: /^[^@\s]+@[^@\s]+$/.test(text(record.email)) ? text(record.email) : '', cuisine, hours: text(record.opening_hours), description: text(record.description),
+        listed: !!text(record.ref_mhs), mhs: text(record.ref_mhs), era: text(record.civilization), wikipedia: wiki.trim() };
+    return Object.fromEntries(Object.entries(facts).filter(([, value]) => (Array.isArray(value) ? value.length : value)));
+};
+// A thermal establishment, which the card offers « À proximité » (D18 item 13 D): no OpenStreetMap dataset of OpenDataSoft
+// carries a thermal tag, so its own name says it (« Les Thermes », « Thermes Adour », « Établissement thermal »).
+const THERMAL_NAME = /(^|[\s'’-])(thermes?|thermal|thermale|thermaux)($|[\s'’-])/i;
 const readPlaces = async (kind, spec, { fetchResource }) => {
     const { dataset, types, fields } = PLACES[kind];
     const where = [`within_distance(meta_geo_point, ${point(spec)}, ${spec.radiusKm}km)`, 'name is not null',
         ...(types.length ? [`(${types.map(type => `type = "${type}"`).join(' or ')})`] : []),
         ...(spec.query ? [`(name like "${spec.query}" or meta_name_com like "${spec.query}")`] : [])].join(' and ');
     const params = new URLSearchParams({ where, order_by: spec.sort === 'name' ? 'name' : `distance(meta_geo_point, ${point(spec)})`, limit: String(PAGE_SIZE), offset: String(spec.offset),
-        select: `meta_osm_id,name,meta_name_com,meta_geo_point,${fields}` });
+        select: `meta_osm_id,name,meta_name_com,meta_geo_point,meta_last_update,${fields}` });
     const payload = await readJson(fetchResource, `${ODS}/${dataset}/records?${params}`);
     const records = (Array.isArray(payload?.results) ? payload.results : []).filter(record => text(record.name));
     return { total: Number(payload?.total_count) || 0, entries: records.map((record) => {
-        const at = geo(record.meta_geo_point);
+        const at = geo(record.meta_geo_point), facts = placeFacts(record), updated = /^\d{4}-\d{2}-\d{2}/.exec(text(record.meta_last_update))?.[0] || '';
         return { id: `${kind}_${text(record.meta_osm_id)}`, kind: kind === 'cinemas' ? 'cinema' : 'place', title: text(record.name), place: text(record.name),
             city: text(record.meta_name_com), lat: at.lat, lon: at.lon, distanceKm: distanceKm(spec, at.lat, at.lon), phone: text(record.phone),
-            url: httpsUrl(record.website) || wikipediaUrl(record.wikipedia), image: '', source: SOURCES.places };
+            url: httpsUrl(record.website) || wikipediaUrl(record.wikipedia), image: '', source: SOURCES.places,
+            ...(Object.keys(facts).length ? { facts } : {}), ...(updated ? { updated } : {}), ...(THERMAL_NAME.test(text(record.name)) ? { thermal: true } : {}) };
     }) };
 };
 
@@ -248,7 +264,10 @@ export const handleWsShows = async (message, address, { fetchResource = fetch, n
             : spec.kind === 'films' ? pageOf(await readFilms(spec, deps), spec)
                 : spec.kind === 'matches' ? pageOf(await readMatches(deps), spec) : await readAgenda(spec.kind, spec, deps);
         const next = spec.offset + PAGE_SIZE;
-        return reply(requestId, { ok: true, entries, nextPageToken: next < Math.min(total, MAX_OFFSET) ? String(next) : '' });
+        // Bien-être's places (spas, thalassotherapy, balneotherapy) are the thermal card's too (D18 item 13 D); `total`: how many
+        // lie around (a thermal card's « À proximité » counts).
+        return reply(requestId, { ok: true, entries: spec.kind === 'wellbeing' ? entries.map(entry => ({ ...entry, thermal: true })) : entries, total,
+            nextPageToken: next < Math.min(total, MAX_OFFSET) ? String(next) : '' });
     } catch (error) {
         if (error?.message === 'shows_tourism_busy') return reply(requestId, { ok: false, error: 'shows_tourism_busy' });
         log('warn', { component: 'shows', request_id: requestId, message: 'shows_unavailable',

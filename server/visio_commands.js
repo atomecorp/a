@@ -7,7 +7,9 @@ export function createVisioCommands({ ensureRoomMeta, resolveRoomMeta, resolveUs
     notify, publish, saveScheduledRoom, closeRoom, online = () => true, now = Date.now, schedule = setTimeout, unschedule = clearTimeout }) {
     const timers = new Map();
     const stopTimer = id => { if (timers.has(id)) unschedule(timers.get(id)); timers.delete(id); };
-    const snapshot = meta => ({ roomId: meta.room_id, mode: meta.call_mode || 'visio', status: meta.call_status || 'live',
+    // One reading of a call's status for the answers and every rule: a planned room (no status) is live.
+    const statusOf = meta => meta.call_status || 'live';
+    const snapshot = meta => ({ roomId: meta.room_id, mode: meta.call_mode || 'visio', status: statusOf(meta),
         expiresAt: meta.expires_at || null, targetId: meta.call_target || null,
         acceptedPrincipalId: meta.accepted_principal || null, acceptedKeyId: meta.accepted_key || null });
     const announce = meta => {
@@ -80,7 +82,7 @@ export function createVisioCommands({ ensureRoomMeta, resolveRoomMeta, resolveUs
         const meta = await metaFor(userId, input);
         if (action === 'invite') {
             if (meta.call_status === 'preparing' && meta.owner_user_id === userId) return invite(userId, meta, input.target, true, vaultRouter);
-            if (meta.call_status !== 'live') throw new Error('visio_call_ended');
+            if (statusOf(meta) !== 'live') throw new Error('visio_call_ended');
             return invite(userId, meta, input.target);
         }
         if (action === 'state') {
@@ -98,7 +100,7 @@ export function createVisioCommands({ ensureRoomMeta, resolveRoomMeta, resolveUs
                 meta.accepted_devices.set(userId, key); meta.accepted_principal = userId; meta.accepted_key = key;
                 return finishRinging(meta, 'live');
             }
-            if (meta.call_status !== 'live') throw new Error('visio_call_ended');
+            if (statusOf(meta) !== 'live') throw new Error('visio_call_ended');
             meta.accepted_devices.set(userId, key); meta.accepted_principal = userId; meta.accepted_key = key;
             return announce(meta);
         }
@@ -120,7 +122,7 @@ export function createVisioCommands({ ensureRoomMeta, resolveRoomMeta, resolveUs
     };
     const peerLeft = async (roomId, userId) => {
         const meta = await resolveRoomMeta(roomId);
-        if (!meta?.call_target || meta.call_status !== 'live'
+        if (!meta?.call_target || statusOf(meta) !== 'live'
             || ![meta.owner_user_id, meta.call_target].includes(userId)) return;
         stopTimer(roomId); meta.call_status = 'cancelled';
         closeRoom(roomId); return announce(meta);

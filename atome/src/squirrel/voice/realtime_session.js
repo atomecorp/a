@@ -108,23 +108,22 @@ export const createRealtimeSession = ({
     // eVe says she is ready in her own voice, played locally once the session
     // has started. The microphone stays shut from its capture until then
     // (`capture`): a startup sentence heard in that gap was answered by the model.
+    // Every opening says it, a session that speaks first (a call-back) too: the model
+    // is asked to answer only once she has said it, so her readiness is always heard.
     const announceReadiness = async token => {
         armIdle(token);
         // Spoken to before she could listen: what was said plays now and she answers it, no sentence of hers.
         const heard = input?.heard() === true;
         input?.connected();
-        // A session that speaks first: the model is asked to answer now, from its instructions.
-        if (speakFirst) {
-            speakFirst = false; setInput(true); emit({ phase: 'listening', connected: true });
-            if (!heard) await request('realtime-send', { session_id: remoteId, events: [{ type: 'response.create' }] }, { signal: abort.signal });
-            return;
+        const first = speakFirst; speakFirst = false;
+        if (announceReady && !heard) {
+            emit({ phase: 'speaking', connected: true });
+            await announceReady();
+            if (token !== generation || !listening) return;
         }
-        if (!announceReady || heard) return emit({ phase: listening ? 'listening' : 'idle', connected: true });
-        emit({ phase: 'speaking', connected: true });
-        await announceReady();
-        if (token !== generation || !listening) return;
         setInput(true);
-        emit({ phase: 'listening' });
+        emit({ phase: listening ? 'listening' : 'idle', connected: true });
+        if (first && !heard) await request('realtime-send', { session_id: remoteId, events: [{ type: 'response.create' }] }, { signal: abort.signal });
     };
     // A touch on eVe: she answers in her own voice, the microphone shut while she
     // says it (as when she says she is ready), then she listens on.

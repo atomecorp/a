@@ -176,7 +176,7 @@ export const runLayeredMediaMoleculeAcceptance = async ({ page, report, ensurePr
     }
     const audioId = await importThroughMenu({ page, projectId: project.id, filePath: FIXTURES.audio, expectedKind: 'audio' });
     await absorbMember({ page, project, sourceId: audioId, targetId: videoId, report, outDir, shotName: 'layered_initial_armed' });
-    let members = [videoId, audioId];
+    const members = [videoId, audioId];
     let snapshot = await readMolecule(page, members);
     const moleculeId = snapshot.moleculeId;
     assertMembership(snapshot, members);

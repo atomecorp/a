@@ -72,3 +72,14 @@ export const activityImportSameSession = (left, right) => {
     const union = Math.max(a1, b1) - Math.min(a0, b0), common = Math.min(a1, b1) - Math.max(a0, b0);
     return union > 0 && common / union >= SAME_SESSION_OVERLAP;
 };
+// The training discipline (#training_disciplines.js) of an imported activity's sport, by the source's own names (Strava's
+// `sport_type`, this device's store's words): its name and glyph on Sport › Journal's row (R-115); a sport no discipline
+// names is the discipline « Autre » ('other').
+const SPORT_DISCIPLINES = Object.freeze({ run: 'run', trailrun: 'run', virtualrun: 'run', running: 'run', ride: 'bike', virtualride: 'bike',
+    ebikeride: 'bike', emountainbikeride: 'bike', mountainbikeride: 'bike', gravelride: 'bike', handcycle: 'bike', velomobile: 'bike', cycling: 'bike',
+    walk: 'walk', walking: 'walk', hike: 'outdoor', hiking: 'outdoor', swim: 'swim', swimming: 'swim', rowing: 'rower', virtualrow: 'rower',
+    elliptical: 'indoor_cardio', stairstepper: 'indoor_cardio', stairs: 'indoor_cardio', weighttraining: 'strength', strength: 'strength',
+    crossfit: 'fitness', hiit: 'fitness', workout: 'fitness', yoga: 'yoga_pilates', pilates: 'yoga_pilates', tennis: 'racket', badminton: 'racket',
+    squash: 'racket', tabletennis: 'racket', pickleball: 'racket', soccer: 'team', basketball: 'team', volleyball: 'team', dance: 'dance',
+    boxing: 'combat', martialarts: 'combat' });
+export const activityImportDiscipline = sport => SPORT_DISCIPLINES[String(sport).toLowerCase()] || 'other';

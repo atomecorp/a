@@ -61,7 +61,7 @@ Permanent checks: `tests/probes/ios_sync_restart.probe.mjs` (fresh schema, legac
 repair, process interruption and restart before settlement),
 `ios_sync_recovery.probe.mjs`, `ios_sync_delivery.probe.mjs`,
 `ios_sync_batch_subscribe.probe.mjs`, `ios_sync_health.probe.mjs`,
-`tests/server/ws_sync_runtime.test.mjs`, native `local_atome_ws_sync::tests`,
+`tests/atome_server/ws_sync.rs`, native `local_atome_ws_sync::tests`,
 `tests/eve/websocket_recovery.test.mjs`, `sync_engine.test.mjs`,
 `workspace_bootstrap_nonblocking.test.mjs`, `sync_status.test.mjs`,
 `browser_workspace.test.mjs`, `auth_device.test.mjs`, and home/boot contracts.

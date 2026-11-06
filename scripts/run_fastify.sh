@@ -82,10 +82,8 @@ if [ "$TEST_MODE" = true ]; then
     echo "🧪 Test mode enabled: pre-auth OTP verification bypass is active."
 fi
 
-echo "🚀 Démarrage du serveur Fastify v5..."
+echo "🚀 Démarrage d'atome-server..."
 echo "📂 Répertoire: $(pwd)"
-echo "🔧 Node.js: $(node --version)"
-echo "📦 NPM: $(npm --version)"
 echo ""
 
 # Vérifier si les dépendances sont installées ou si elles ont besoin d'être mises à jour
@@ -114,14 +112,19 @@ fi
 # Démarrer le serveur
 echo "🎯 Lancement du serveur..."
 
-# Libérer le port 3001 si un ancien process est encore actif
+# atome-server serves alone: the public port, every route and WebSocket, the clocks and the
+# vaults (one atome-vault process per person). No Node process runs.
+PUBLIC_PORT="${PORT:-3001}"
+
+# Libérer le port si un ancien process est encore actif
 if command -v lsof >/dev/null 2>&1; then
-    EXISTING_PIDS="$(lsof -ti:3001 || true)"
+    EXISTING_PIDS="$(lsof -ti:"$PUBLIC_PORT" || true)"
     if [[ -n "${EXISTING_PIDS}" ]]; then
-        echo "⚠️  Port 3001 déjà utilisé par: ${EXISTING_PIDS}. Arrêt des processus..."
+        echo "⚠️  Port $PUBLIC_PORT déjà utilisé par: ${EXISTING_PIDS}. Arrêt des processus..."
         echo "${EXISTING_PIDS}" | xargs kill -9 2>/dev/null || true
         sleep 1
     fi
 fi
 
-cd server && node server.js
+cargo build --release -p atome-server -p atome-vault
+exec "$PROJECT_ROOT/target/release/atome-server"

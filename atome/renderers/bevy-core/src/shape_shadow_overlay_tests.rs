@@ -12,7 +12,9 @@ pub(crate) fn shape_node(id: &str) -> AtomeRenderNode {
         logical_position: [12.0, 24.0],
         logical_size: [120.0, 50.0],
         clip_rect: None,
-        clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
+        clip_rotation: 0.0,
+        clip_rounded_rects: vec![],
+        clip_fades: vec![],
         scale: [1.0, 1.0],
         rotation: 0.0,
         origin: [0.0, 0.0],
@@ -124,15 +126,19 @@ fn shape_shadow_uses_bevy_overlay_without_changing_logical_size() {
         .expect("shape shadow should create a Bevy overlay");
     assert_eq!(overlay.entities.len(), 1);
     assert_eq!(overlay.image_handles.len(), 1);
-    assert_eq!(world.resource::<Assets<Image>>().len(), 1);
+    // The shadow's texture (written by the GPU) and the two masks it is blurred from: the
+    // silhouette grown by the spread and the owner's own.
+    assert_eq!(world.resource::<Assets<Image>>().len(), 3);
     let shadow_entity = overlay.entities[0];
     let shadow_sprite = world.get::<Sprite>(shadow_entity).unwrap();
     let shadow_size = shadow_sprite.custom_size.expect("shadow sprite size");
     assert!(shadow_size.x > 120.0);
     assert!(shadow_size.y > 50.0);
-    assert!(world
-        .get::<bevy::render::batching::NoAutomaticBatching>(shadow_entity)
-        .is_some());
+    assert!(
+        world
+            .get::<bevy::render::batching::NoAutomaticBatching>(shadow_entity)
+            .is_some()
+    );
     let shape_z = world.get::<Transform>(entity).unwrap().translation.z;
     let shadow_z = world.get::<Transform>(shadow_entity).unwrap().translation.z;
     assert_eq!(shadow_z, depth_for_layer(3) - 0.25);
@@ -165,7 +171,8 @@ fn shape_shadow_uses_bevy_overlay_without_changing_logical_size() {
     .unwrap();
 
     assert!(world.get::<AtomeShapeShadowOverlay>(entity).is_none());
-    assert_eq!(world.resource::<Assets<Image>>().len(), 1);
+    // The cached shadow and its two masks stay for the next shadow of that shape.
+    assert_eq!(world.resource::<Assets<Image>>().len(), 3);
     assert_eq!(
         world
             .resource::<AtomeShapeShadowTextureCache>()
@@ -241,7 +248,8 @@ fn repeated_shape_shadow_updates_replace_the_overlay_without_accumulating_entiti
         live_entity_count,
         "shadow rebuilds must not increase the live entity count"
     );
-    assert_eq!(world.resource::<Assets<Image>>().len(), 1);
+    // The shadow's texture and the owner's mask it is blurred from (no spread: one mask).
+    assert_eq!(world.resource::<Assets<Image>>().len(), 2);
     assert_eq!(
         world
             .resource::<AtomeShapeShadowTextureCache>()
@@ -287,7 +295,9 @@ fn shape_shadow_translation_reuses_existing_texture() {
             logical_position: [72.0, 84.0],
             logical_size: [120.0, 50.0],
             clip_rect: None,
-            clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
+            clip_rotation: 0.0,
+            clip_rounded_rects: vec![],
+            clip_fades: vec![],
             scale: [1.0, 1.0],
             rotation: 0.0,
             origin: [0.0, 0.0],
@@ -314,7 +324,10 @@ fn shape_shadow_translation_reuses_existing_texture() {
         Vec3::ZERO
     );
     assert_eq!(
-        world.get::<GlobalTransform>(first_shadow_entity).unwrap().compute_transform(),
+        world
+            .get::<GlobalTransform>(first_shadow_entity)
+            .unwrap()
+            .compute_transform(),
         *world.get::<Transform>(first_shadow_entity).unwrap(),
         "the shadow must reach the render world in the same patch as its owner"
     );
@@ -355,7 +368,8 @@ fn equivalent_shape_shadows_share_one_texture_asset() {
     )
     .unwrap();
 
-    assert_eq!(world.resource::<Assets<Image>>().len(), 1);
+    // One shadow texture and the one mask both owners share.
+    assert_eq!(world.resource::<Assets<Image>>().len(), 2);
     assert_eq!(
         world
             .resource::<AtomeShapeShadowTextureCache>()
@@ -420,15 +434,10 @@ fn rounded_shape_shadow_overlay_uses_card_radius() {
     let overlay = world
         .get::<AtomeShapeShadowOverlay>(entity)
         .expect("rounded shape shadow should create a Bevy overlay");
-    let shadow_image = world
-        .resource::<Assets<Image>>()
-        .get(&overlay.image_handles[0])
-        .expect("rounded shadow overlay should keep rgba data");
-    let width = shadow_image.texture_descriptor.size.width;
-    let data = shadow_image
-        .data
-        .as_ref()
-        .expect("rounded shadow should keep rgba data");
+    // The pixels the GPU writes (shape_shadow_gpu.rs), replayed tap for tap.
+    let (width, _, pixels) =
+        crate::shape_shadow_gpu::twin::shadow_pixels(&world, &overlay.image_handles[0]);
+    let (data, width) = (&pixels, width as u32);
     assert_eq!(alpha_at(data, width, 1, 10), 0);
     assert_eq!(alpha_at(data, width, 72, 37), 0);
     assert!(alpha_at(data, width, 132, 37) > 0);
@@ -486,7 +495,9 @@ fn shape_shadow_keeps_rectangular_corners_without_radius() {
     let (rect_width, _rect_height, rect_rgba) =
         build_shape_shadow_texture_rgba(shadow_style(), 120.0, 50.0, [0.0; 4]).unwrap();
 
-    assert!(alpha_at(&rounded_rgba, rounded_width, 14, 14) > alpha_at(&rect_rgba, rect_width, 14, 14));
+    assert!(
+        alpha_at(&rounded_rgba, rounded_width, 14, 14) > alpha_at(&rect_rgba, rect_width, 14, 14)
+    );
 }
 
 // Un atome tourne doit emporter son cadre de selection et son ombre : sinon le halo
@@ -494,11 +505,16 @@ fn shape_shadow_keeps_rectangular_corners_without_radius() {
 #[test]
 fn rotated_atom_overlays_follow_its_pose() {
     let mut world = test_world();
-    let shadow = AtomeShadowStyle { color: [0.0, 0.0, 0.0, 0.42], blur: 8.0, offset_x: 0.0, offset_y: 0.0, spread: 2.0,
-                     kind: crate::types::AtomeShadowKind::Drop,
-                     invert: false,
-                     follows_alpha: false,
-                 };
+    let shadow = AtomeShadowStyle {
+        color: [0.0, 0.0, 0.0, 0.42],
+        blur: 8.0,
+        offset_x: 0.0,
+        offset_y: 0.0,
+        spread: 2.0,
+        kind: crate::types::AtomeShadowKind::Drop,
+        invert: false,
+        follows_alpha: false,
+    };
     let entity = apply_spawn(
         &mut world,
         AtomeRenderNode {
@@ -513,13 +529,25 @@ fn rotated_atom_overlays_follow_its_pose() {
     let check = |world: &World, degrees: f32| {
         let pose = *world.get::<Transform>(entity).unwrap();
         let expected = Quat::from_rotation_z(-degrees.to_radians());
-        assert!(pose.rotation.angle_between(expected) < 1e-3, "atom pose {:?} vs {:?}", pose.rotation, expected);
+        assert!(
+            pose.rotation.angle_between(expected) < 1e-3,
+            "atom pose {:?} vs {:?}",
+            pose.rotation,
+            expected
+        );
         let selection = world.get::<AtomeSelectionOverlay>(entity).unwrap().entities[0];
-        let shape_shadow = world.get::<AtomeShapeShadowOverlay>(entity).unwrap().entities[0];
+        let shape_shadow = world
+            .get::<AtomeShapeShadowOverlay>(entity)
+            .unwrap()
+            .entities[0];
         for overlay in [selection, shape_shadow] {
             let transform = *world.get::<Transform>(overlay).unwrap();
-            assert!((transform.translation.truncate() - pose.translation.truncate()).length() < 0.01,
-                "overlay centre {:?} != atom centre {:?}", transform.translation, pose.translation);
+            assert!(
+                (transform.translation.truncate() - pose.translation.truncate()).length() < 0.01,
+                "overlay centre {:?} != atom centre {:?}",
+                transform.translation,
+                pose.translation
+            );
             assert!(transform.rotation.angle_between(expected) < 1e-3);
         }
     };
@@ -534,7 +562,9 @@ fn rotated_atom_overlays_follow_its_pose() {
             rotation: 0.0,
             origin: [0.0, 0.0],
             clip_rect: None,
-            clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
+            clip_rotation: 0.0,
+            clip_rounded_rects: vec![],
+            clip_fades: vec![],
         },
     )
     .unwrap();
@@ -568,7 +598,9 @@ fn a_rotated_page_clips_its_rotated_member_on_the_rotated_edge() {
             logical_size: [200.0, 100.0],
             rotation: angle,
             clip_rect: Some([frame_origin.x, frame_origin.y, 300.0, 200.0]),
-            clip_rotation: angle, clip_rounded_rects: vec![], clip_fades: vec![],
+            clip_rotation: angle,
+            clip_rounded_rects: vec![],
+            clip_fades: vec![],
             ..shape_node("page_member")
         },
     )
@@ -577,9 +609,16 @@ fn a_rotated_page_clips_its_rotated_member_on_the_rotated_edge() {
     assert_vec2_near(sprite.custom_size, Vec2::new(100.0, 100.0));
     let centre = member_pivot + rot(Vec2::new(50.0, 50.0), angle);
     let transform = *world.get::<Transform>(entity).unwrap();
-    let expected = Vec2::new(centre.x - surface_width / 2.0, surface_height / 2.0 - centre.y);
-    assert!((transform.translation.truncate() - expected).length() < 0.05,
-        "visible piece centre {:?} != {:?}", transform.translation, expected);
+    let expected = Vec2::new(
+        centre.x - surface_width / 2.0,
+        surface_height / 2.0 - centre.y,
+    );
+    assert!(
+        (transform.translation.truncate() - expected).length() < 0.05,
+        "visible piece centre {:?} != {:?}",
+        transform.translation,
+        expected
+    );
 }
 
 // Constat du 24 oct. 2026 (flèches du pied de l'accueil eVe) : une forme TOURNEE dans un
@@ -588,11 +627,16 @@ fn a_rotated_page_clips_its_rotated_member_on_the_rotated_edge() {
 #[test]
 fn a_rotated_shape_in_a_straight_clip_keeps_its_shadow_rotated() {
     let mut world = test_world();
-    let shadow = AtomeShadowStyle { color: [0.3, 0.95, 0.95, 0.95], blur: 6.0, offset_x: 0.0, offset_y: 0.0, spread: 1.0,
-                     kind: crate::types::AtomeShadowKind::Drop,
-                     invert: false,
-                     follows_alpha: false,
-                 };
+    let shadow = AtomeShadowStyle {
+        color: [0.3, 0.95, 0.95, 0.95],
+        blur: 6.0,
+        offset_x: 0.0,
+        offset_y: 0.0,
+        spread: 1.0,
+        kind: crate::types::AtomeShadowKind::Drop,
+        invert: false,
+        follows_alpha: false,
+    };
     let entity = apply_spawn(
         &mut world,
         AtomeRenderNode {
@@ -605,10 +649,21 @@ fn a_rotated_shape_in_a_straight_clip_keeps_its_shadow_rotated() {
     )
     .unwrap();
     let expected = Quat::from_rotation_z(-30.0_f32.to_radians());
-    let shape_shadow = world.get::<AtomeShapeShadowOverlay>(entity).unwrap().entities[0];
+    let shape_shadow = world
+        .get::<AtomeShapeShadowOverlay>(entity)
+        .unwrap()
+        .entities[0];
     let transform = *world.get::<Transform>(shape_shadow).unwrap();
-    assert!(transform.rotation.angle_between(expected) < 1e-3, "clipped shadow lost its rotation: {:?}", transform.rotation);
+    assert!(
+        transform.rotation.angle_between(expected) < 1e-3,
+        "clipped shadow lost its rotation: {:?}",
+        transform.rotation
+    );
     let pose = *world.get::<Transform>(entity).unwrap();
-    assert!((transform.translation.truncate() - pose.translation.truncate()).length() < 0.01,
-        "clipped shadow centre {:?} != shape centre {:?}", transform.translation, pose.translation);
+    assert!(
+        (transform.translation.truncate() - pose.translation.truncate()).length() < 0.01,
+        "clipped shadow centre {:?} != shape centre {:?}",
+        transform.translation,
+        pose.translation
+    );
 }

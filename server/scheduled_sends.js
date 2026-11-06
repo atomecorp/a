@@ -1,13 +1,12 @@
 // Scheduled sends (user decisions of 28 Oct. 2026, todo: publication programmée): what an owner asked to
 // leave at a time — a publication to the eVe feed, messages to people, a share to the social networks,
-// or the update of one already sent. The server holds it and its clock sends it through the very paths a
-// live send takes (News broadcast, direct messages, social publish), so a sleeping device never holds it
+// or the update of one already sent. The server holds it and its clock (the Rust front's, atome-server
+// src/ws_api/scheduled/) sends it through the very paths a live send takes (News broadcast, direct messages, social publish), so a sleeping device never holds it
 // back. Until its time the owner replaces it at will (Q2: what leaves is the content at its time).
 // Late (the owner's device reached the server after the time) it leaves at once and the owner is told
 // (Q3); a channel refusing (a network's session expired) is told too, the touch reopening it in the Agenda.
 import { createScheduledSendStore } from './scheduled_sends_store.js';
 
-const TICK_MS = Number(process.env.SCHEDULED_SENDS_TICK_MS) || 30_000;
 const LATE_MS = 2 * 60_000;
 const MAX_PAYLOAD_CHARS = 1_000_000;
 const KINDS = new Set(['send', 'update']);
@@ -41,9 +40,8 @@ const validPayload = (payload) => {
 // `socialUpdate(ownerId, social, parentDeliveries)`:
 // the live paths. `notify(ownerId, notification)`: the owner's Communication stack and push. `tell(ownerId, frame)`:
 // the owner's open devices (the Agenda follows the send's state).
-export function createScheduledSends({ query, newsPublish, sendMessage, socialPublish, socialUpdate, notify, tell, now = () => Date.now(), tickMs = TICK_MS }) {
+export function createScheduledSends({ query, newsPublish, sendMessage, socialPublish, socialUpdate, notify, tell, now = () => Date.now() }) {
     const store = createScheduledSendStore({ query });
-    let timer = null;
 
     const save = async (ownerId, message = {}) => {
         const sendId = text(message.send_id), kind = text(message.kind) || 'send', due = iso(message.due_at);
@@ -61,7 +59,6 @@ export function createScheduledSends({ query, newsPublish, sendMessage, socialPu
             if (!parent || parent.owner_id !== ownerId) throw new Error('scheduled_update_parent_required');
         }
         await store.put({ sendId, ownerId, kind, parentId, title: text(message.title).slice(0, 200), dueAt: due, payload: message.payload });
-        arm();
         return { ok: true, send: publicRow(await store.get(sendId)) };
     };
 
@@ -139,24 +136,6 @@ export function createScheduledSends({ query, newsPublish, sendMessage, socialPu
         return send;
     };
 
-    const tick = async () => {
-        for (const row of await store.due(new Date(now()).toISOString())) {
-            await fire(row).catch(error => console.error('[scheduled-sends] send failed', row.send_id, error));
-        }
-        arm();
-    };
-    // The next due time wakes the clock, bounded by the tick so a restart, a moved clock or a table not yet
-    // migrated at boot is caught on the next round.
-    function arm() {
-        clearTimeout(timer);
-        const wake = (wait) => {
-            clearTimeout(timer);
-            timer = setTimeout(() => { tick().catch((error) => { console.error('[scheduled-sends] clock failed', error); wake(tickMs); }); }, wait);
-            timer.unref?.();
-        };
-        store.next().then(row => wake(row ? Math.max(0, Math.min(tickMs, new Date(row.due_at).getTime() - now())) : tickMs), () => wake(tickMs));
-    }
-
     const sendNow = async (ownerId, message = {}) => {
         const row = await owned(ownerId, message.send_id);
         if (row.state !== 'pending') throw new Error('scheduled_send_already_done');
@@ -173,6 +152,5 @@ export function createScheduledSends({ query, newsPublish, sendMessage, socialPu
         throw new Error(`scheduled_action_unsupported:${action || 'missing'}`);
     };
 
-    arm();
-    return { handle, tick, stop: () => clearTimeout(timer) };
+    return { handle };
 }

@@ -38,9 +38,9 @@ for (const root of CLIENT_ROOTS) {
 // business routes were declared in the repository.
 const compositionFiles = [
     ...filesUnder('server').map((file) => path.relative(ROOT, file)),
-    'platforms/desktop-tauri/src/server/mod.rs',
-    'platforms/desktop-tauri/src/server/local_atome.rs',
-    'platforms/ios/atome-auv3/Common/LocalHTTPServer.swift'
+    // The one local host of Tauri and the iOS app, then the routes only Tauri adds.
+    ...filesUnder('atome/servers/atome-server/src/local').map((file) => path.relative(ROOT, file)),
+    ...filesUnder('platforms/desktop-tauri/src/server').map((file) => path.relative(ROOT, file))
 ];
 for (const relativePath of compositionFiles) {
     const source = fs.readFileSync(path.join(ROOT, relativePath), 'utf8');

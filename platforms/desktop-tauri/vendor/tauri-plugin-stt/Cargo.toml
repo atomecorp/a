@@ -67,7 +67,7 @@ version = "2.5.4"
 features = ["build"]
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies.cpal]
-version = "0.17"
+version = "0.18"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies.reqwest]
 version = "0.12"
@@ -76,5 +76,8 @@ features = ["blocking"]
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies.vosk]
 version = "0.3"
 
+# Vosk models are deflated ZIP archives (reading only); zip >= 9 carries the RustSec fixes.
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies.zip]
-version = "6.0.0"
+version = "9.3"
+default-features = false
+features = ["deflate-flate2-zlib-rs"]

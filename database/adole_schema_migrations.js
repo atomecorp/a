@@ -45,6 +45,12 @@ async function migratePermissionConditions(query) {
         } catch {
             migrated = { schemaVersion: 1, invalid: true, reason: 'legacy_condition_unmigratable' };
         }
+        // An empty condition is no condition: NULL, never the text `null`, which the next start
+        // would turn into a denying document.
+        if (migrated === null) {
+            await query('run', 'UPDATE permissions SET conditions = NULL WHERE permission_id = ?', [row.permission_id]);
+            continue;
+        }
         const serialized = JSON.stringify(migrated);
         if (serialized !== row.conditions) {
             await query('run', 'UPDATE permissions SET conditions = ? WHERE permission_id = ?', [serialized, row.permission_id]);

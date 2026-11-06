@@ -8,7 +8,7 @@
 use crate::composed::StepDraws;
 use crate::markers::{Marker, MarkerTable};
 use crate::sample::SampleBank;
-use crate::zone::{midi_velocity, Draw, Stack, Zone, MAX_OUTPUTS, MAX_PLAYERS};
+use crate::zone::{Draw, MAX_OUTPUTS, MAX_PLAYERS, Stack, Zone, midi_velocity};
 use std::f32::consts::FRAC_PI_2;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -19,7 +19,11 @@ pub struct Pick {
     pub level: f32,
 }
 
-pub const NO_PICK: Pick = Pick { zone: 0, take: 0, level: 0.0 };
+pub const NO_PICK: Pick = Pick {
+    zone: 0,
+    take: 0,
+    level: 0.0,
+};
 
 pub struct Keymap {
     zones: Vec<Zone>,
@@ -54,38 +58,76 @@ impl Keymap {
     }
 
     // `markers`: the table the segments' marker spans index.
-    pub fn with_markers(zones: Vec<Zone>, markers: Vec<Marker>, bank: &SampleBank, seed: u64) -> Result<Self, String> {
+    pub fn with_markers(
+        zones: Vec<Zone>,
+        markers: Vec<Marker>,
+        bank: &SampleBank,
+        seed: u64,
+    ) -> Result<Self, String> {
         let markers = MarkerTable::new(markers);
         for (index, zone) in zones.iter().enumerate() {
-            if zone.key_low > zone.key_high || zone.velocity_low > zone.velocity_high || zone.key_high > 127 || zone.velocity_high > 127 {
+            if zone.key_low > zone.key_high
+                || zone.velocity_low > zone.velocity_high
+                || zone.key_high > 127
+                || zone.velocity_high > 127
+            {
                 return Err(format!("zone {index}: empty key or velocity range"));
             }
             match &zone.composed {
                 None if zone.takes.is_empty() => return Err(format!("zone {index}: no take")),
-                Some(_) if !zone.takes.is_empty() => return Err(format!("zone {index}: a composed note plays its steps, not takes")),
-                _ => {}
-            }
-            for segment in zone.segments() {
-                let data = bank.get(segment.sample).ok_or_else(|| format!("zone {index}: sample {} is not in the bank", segment.sample))?;
-                segment.validate(data).map_err(|reason| format!("zone {index}: {reason}"))?;
-                markers.check(segment.markers, segment.start, segment.end).map_err(|reason| format!("zone {index}: {reason}"))?;
-            }
-            if let Some(composed) = &zone.composed {
-                composed.validate(&markers).map_err(|reason| format!("zone {index}: {reason}"))?;
-            }
-            match &zone.stack {
-                Stack::Mix(levels) if levels.len() != zone.takes.len() || levels.len() > MAX_PLAYERS => {
-                    return Err(format!("zone {index}: a mix has one level per take, {MAX_PLAYERS} at most"));
+                Some(_) if !zone.takes.is_empty() => {
+                    return Err(format!(
+                        "zone {index}: a composed note plays its steps, not takes"
+                    ));
                 }
                 _ => {}
             }
-            if zone.takes.iter().any(|take| take.stretch != zone.takes[0].stretch) {
-                return Err(format!("zone {index}: its takes share one stretch (one stretcher per voice)"));
+            for segment in zone.segments() {
+                let data = bank.get(segment.sample).ok_or_else(|| {
+                    format!("zone {index}: sample {} is not in the bank", segment.sample)
+                })?;
+                segment
+                    .validate(data)
+                    .map_err(|reason| format!("zone {index}: {reason}"))?;
+                markers
+                    .check(segment.markers, segment.start, segment.end)
+                    .map_err(|reason| format!("zone {index}: {reason}"))?;
+            }
+            if let Some(composed) = &zone.composed {
+                composed
+                    .validate(&markers)
+                    .map_err(|reason| format!("zone {index}: {reason}"))?;
+            }
+            match &zone.stack {
+                Stack::Mix(levels)
+                    if levels.len() != zone.takes.len() || levels.len() > MAX_PLAYERS =>
+                {
+                    return Err(format!(
+                        "zone {index}: a mix has one level per take, {MAX_PLAYERS} at most"
+                    ));
+                }
+                _ => {}
+            }
+            if zone
+                .takes
+                .iter()
+                .any(|take| take.stretch != zone.takes[0].stretch)
+            {
+                return Err(format!(
+                    "zone {index}: its takes share one stretch (one stretcher per voice)"
+                ));
             }
             if zone.output as usize >= MAX_OUTPUTS {
-                return Err(format!("zone {index}: output {} past the {MAX_OUTPUTS} an instrument has", zone.output));
+                return Err(format!(
+                    "zone {index}: output {} past the {MAX_OUTPUTS} an instrument has",
+                    zone.output
+                ));
             }
-            if let Some(&wrong) = zone.cuts.iter().find(|&&cut| cut >= zones.len() || cut == index) {
+            if let Some(&wrong) = zone
+                .cuts
+                .iter()
+                .find(|&&cut| cut >= zones.len() || cut == index)
+            {
                 return Err(format!("zone {index}: cannot cut zone {wrong}"));
             }
         }
@@ -93,7 +135,10 @@ impl Keymap {
             .iter()
             .enumerate()
             .map(|(index, zone)| {
-                if !zone.borrow_neighbours || zone.composed.is_some() || !matches!(zone.stack, Stack::Alternate(_)) {
+                if !zone.borrow_neighbours
+                    || zone.composed.is_some()
+                    || !matches!(zone.stack, Stack::Alternate(_))
+                {
                     return Vec::new();
                 }
                 zones
@@ -105,7 +150,8 @@ impl Keymap {
                             && matches!(other.stack, Stack::Alternate(_))
                             && other.velocity_low == zone.velocity_low
                             && other.velocity_high == zone.velocity_high
-                            && (other.key_high as i32 + 1 == zone.key_low as i32 || zone.key_high as i32 + 1 == other.key_low as i32)
+                            && (other.key_high as i32 + 1 == zone.key_low as i32
+                                || zone.key_high as i32 + 1 == other.key_low as i32)
                     })
                     .map(|(other_index, _)| other_index)
                     .collect()
@@ -113,20 +159,41 @@ impl Keymap {
             .collect();
         let count = zones.len();
         let steps = StepDraws::new(&zones, seed);
-        Ok(Self { zones, neighbours, counters: vec![0; count], last: vec![usize::MAX; count], release_counters: vec![0; count], random: seed.max(1), markers, steps, switches: None })
+        Ok(Self {
+            zones,
+            neighbours,
+            counters: vec![0; count],
+            last: vec![usize::MAX; count],
+            release_counters: vec![0; count],
+            random: seed.max(1),
+            markers,
+            steps,
+            switches: None,
+        })
     }
 
     // The keyswitch range; every zone's switch lies in it, and a zone has one only when the range exists.
     pub fn with_switches(mut self, switches: Option<Switches>) -> Result<Self, String> {
-        if let Some(range) = switches {
-            if range.low > range.high || range.high > 127 || !range.contains(range.default) {
-                return Err(format!("keyswitches {}..{} cannot start on {}", range.low, range.high, range.default));
-            }
+        if let Some(range) = switches
+            && (range.low > range.high || range.high > 127 || !range.contains(range.default))
+        {
+            return Err(format!(
+                "keyswitches {}..{} cannot start on {}",
+                range.low, range.high, range.default
+            ));
         }
         for (index, zone) in self.zones.iter().enumerate() {
             match (zone.switch, switches) {
-                (Some(key), Some(range)) if !range.contains(key) => return Err(format!("zone {index}: keyswitch {key} is outside the switch range")),
-                (Some(key), None) => return Err(format!("zone {index}: keyswitch {key} without a switch range")),
+                (Some(key), Some(range)) if !range.contains(key) => {
+                    return Err(format!(
+                        "zone {index}: keyswitch {key} is outside the switch range"
+                    ));
+                }
+                (Some(key), None) => {
+                    return Err(format!(
+                        "zone {index}: keyswitch {key} without a switch range"
+                    ));
+                }
                 _ => {}
             }
         }
@@ -139,7 +206,16 @@ impl Keymap {
     }
 
     pub fn stretches(&self) -> bool {
-        self.zones.iter().any(|zone| zone.takes.iter().chain(zone.composed.iter().flat_map(|composed| composed.segments())).any(|take| take.is_stretched()))
+        self.zones.iter().any(|zone| {
+            zone.takes
+                .iter()
+                .chain(
+                    zone.composed
+                        .iter()
+                        .flat_map(|composed| composed.segments()),
+                )
+                .any(|take| take.is_stretched())
+        })
     }
 
     pub fn markers(&self) -> &MarkerTable {
@@ -152,7 +228,8 @@ impl Keymap {
 
     // The segment step `step` of composed zone `zone` plays for this note.
     pub fn draw_step(&mut self, zone: usize, step: usize, note: u8, velocity: f32) -> usize {
-        self.steps.draw(zone, &self.zones[zone], step, note, velocity)
+        self.steps
+            .draw(zone, &self.zones[zone], step, note, velocity)
     }
 
     // A seeded draw in 0..count.
@@ -162,7 +239,11 @@ impl Keymap {
 
     // The outputs its zones sound on: one past the highest.
     pub fn outputs(&self) -> usize {
-        self.zones.iter().map(|zone| zone.output as usize + 1).max().unwrap_or(1)
+        self.zones
+            .iter()
+            .map(|zone| zone.output as usize + 1)
+            .max()
+            .unwrap_or(1)
     }
 
     pub fn zones(&self) -> &[Zone] {
@@ -188,14 +269,22 @@ impl Keymap {
             Stack::Alternate(draw) => {
                 let draw = *draw;
                 let own = self.zones[zone].takes.len();
-                let total = own + self.neighbours[zone].iter().map(|&other| self.zones[other].takes.len()).sum::<usize>();
+                let total = own
+                    + self.neighbours[zone]
+                        .iter()
+                        .map(|&other| self.zones[other].takes.len())
+                        .sum::<usize>();
                 let index = self.draw(zone, draw, total);
                 out[0] = self.candidate(zone, index, own);
                 1
             }
             Stack::Mix(levels) => {
                 for (take, level) in levels.iter().enumerate() {
-                    out[take] = Pick { zone, take, level: *level };
+                    out[take] = Pick {
+                        zone,
+                        take,
+                        level: *level,
+                    };
                 }
                 levels.len()
             }
@@ -213,11 +302,23 @@ impl Keymap {
                 if half > 0.0 && seam >= 1.0 && (seam as usize) < count && distance.abs() < half {
                     let t = (distance + half) / (2.0 * half) * FRAC_PI_2;
                     let upper = seam as usize;
-                    out[0] = Pick { zone, take: upper - 1, level: t.cos() };
-                    out[1] = Pick { zone, take: upper, level: t.sin() };
+                    out[0] = Pick {
+                        zone,
+                        take: upper - 1,
+                        level: t.cos(),
+                    };
+                    out[1] = Pick {
+                        zone,
+                        take: upper,
+                        level: t.sin(),
+                    };
                     return 2;
                 }
-                out[0] = Pick { zone, take: layer, level: 1.0 };
+                out[0] = Pick {
+                    zone,
+                    take: layer,
+                    level: 1.0,
+                };
                 1
             }
         }
@@ -236,17 +337,29 @@ impl Keymap {
 
     fn candidate(&self, zone: usize, mut index: usize, own: usize) -> Pick {
         if index < own {
-            return Pick { zone, take: index, level: 1.0 };
+            return Pick {
+                zone,
+                take: index,
+                level: 1.0,
+            };
         }
         index -= own;
         for &other in &self.neighbours[zone] {
             let takes = self.zones[other].takes.len();
             if index < takes {
-                return Pick { zone: other, take: index, level: 1.0 };
+                return Pick {
+                    zone: other,
+                    take: index,
+                    level: 1.0,
+                };
             }
             index -= takes;
         }
-        Pick { zone, take: 0, level: 1.0 }
+        Pick {
+            zone,
+            take: 0,
+            level: 1.0,
+        }
     }
 
     fn draw(&mut self, zone: usize, draw: Draw, total: usize) -> usize {

@@ -17,7 +17,9 @@ use bevy::{
 use crate::{
     backdrop_surface::BackdropSurfaceMaterial,
     clip::rotate_screen,
-    clip_polygon::{clip_convex_polygon, upsert_sprite_polygon_proxy, write_polygon_into_entity_mesh},
+    clip_polygon::{
+        clip_convex_polygon, upsert_sprite_polygon_proxy, write_polygon_into_entity_mesh,
+    },
     components::{AtomeClipFades, AtomeLocalTransform},
 };
 
@@ -34,8 +36,16 @@ fn ramp(t: f32, curve: f32) -> f32 {
 pub(crate) fn fade_alpha(fades: &[[f32; 7]], y: f32) -> f32 {
     fades.iter().fold(1.0, |alpha, fade| {
         let [_, top, _, height, upper, lower, curve] = *fade;
-        let from_top = if upper > 0.0 { ramp((y - top) / upper, curve) } else { 1.0 };
-        let from_bottom = if lower > 0.0 { ramp((top + height - y) / lower, curve) } else { 1.0 };
+        let from_top = if upper > 0.0 {
+            ramp((y - top) / upper, curve)
+        } else {
+            1.0
+        };
+        let from_bottom = if lower > 0.0 {
+            ramp((top + height - y) / lower, curve)
+        } else {
+            1.0
+        };
         alpha * from_top * from_bottom
     })
 }
@@ -56,7 +66,10 @@ fn cuts(fades: &[[f32; 7]], from: f32, to: f32) -> Vec<f32> {
             let [_, top, _, height, upper, lower, _] = *fade;
             (0..=RAMP_STRIPS).flat_map(move |index| {
                 let share = index as f32 / RAMP_STRIPS as f32;
-                [(upper > 0.0).then_some(top + upper * share), (lower > 0.0).then_some(top + height - lower * share)]
+                [
+                    (upper > 0.0).then_some(top + upper * share),
+                    (lower > 0.0).then_some(top + height - lower * share),
+                ]
             })
         })
         .flatten()
@@ -79,18 +92,43 @@ pub(crate) struct FadeFrame {
 }
 
 impl FadeFrame {
-    pub(crate) fn new(position: [f32; 2], size: [f32; 2], local: AtomeLocalTransform, clip_rotation: f32) -> Self {
+    pub(crate) fn new(
+        position: [f32; 2],
+        size: [f32; 2],
+        local: AtomeLocalTransform,
+        clip_rotation: f32,
+    ) -> Self {
         let origin = Vec2::new(local.origin[0] * size[0], local.origin[1] * size[1]);
         let scale = Vec2::new(
-            if local.scale[0].abs() > f32::EPSILON { local.scale[0] } else { 1.0 },
-            if local.scale[1].abs() > f32::EPSILON { local.scale[1] } else { 1.0 },
+            if local.scale[0].abs() > f32::EPSILON {
+                local.scale[0]
+            } else {
+                1.0
+            },
+            if local.scale[1].abs() > f32::EPSILON {
+                local.scale[1]
+            } else {
+                1.0
+            },
         );
-        Self { pivot: Vec2::new(position[0], position[1]) + origin, origin, scale, rotation: local.rotation, clip_rotation }
+        Self {
+            pivot: Vec2::new(position[0], position[1]) + origin,
+            origin,
+            scale,
+            rotation: local.rotation,
+            clip_rotation,
+        }
     }
 
     /// An upright box at `position` (a shadow laid flat on the screen).
     pub(crate) fn upright(position: [f32; 2]) -> Self {
-        Self { pivot: Vec2::new(position[0], position[1]), origin: Vec2::ZERO, scale: Vec2::ONE, rotation: 0.0, clip_rotation: 0.0 }
+        Self {
+            pivot: Vec2::new(position[0], position[1]),
+            origin: Vec2::ZERO,
+            scale: Vec2::ONE,
+            rotation: 0.0,
+            clip_rotation: 0.0,
+        }
     }
 
     fn to_fade(self, point: Vec2) -> Vec2 {
@@ -98,7 +136,7 @@ impl FadeFrame {
         rotate_screen(screen, -self.clip_rotation)
     }
 
-    fn from_fade(self, point: Vec2) -> Vec2 {
+    fn fade_to_frame(self, point: Vec2) -> Vec2 {
         let screen = rotate_screen(point, self.clip_rotation);
         self.origin + rotate_screen(screen - self.pivot, -self.rotation) / self.scale
     }
@@ -114,8 +152,14 @@ pub(crate) fn faded_polygon_mesh(
     uv_of: impl Fn(Vec2) -> [f32; 2],
 ) -> Option<(Mesh, Vec<[f32; 4]>)> {
     let across: Vec<Vec2> = polygon.iter().map(|point| frame.to_fade(*point)).collect();
-    let from = across.iter().map(|point| point.y).fold(f32::INFINITY, f32::min);
-    let to = across.iter().map(|point| point.y).fold(f32::NEG_INFINITY, f32::max);
+    let from = across
+        .iter()
+        .map(|point| point.y)
+        .fold(f32::INFINITY, f32::min);
+    let to = across
+        .iter()
+        .map(|point| point.y)
+        .fold(f32::NEG_INFINITY, f32::max);
     if across.len() < 3 || !reaches(fades, from, to) {
         return None;
     }
@@ -123,15 +167,24 @@ pub(crate) fn faded_polygon_mesh(
     edges.extend(cuts(fades, from, to));
     edges.push(to);
     let center = Vec2::new(visible[0] + visible[2] / 2.0, visible[1] + visible[3] / 2.0);
-    let (mut positions, mut uvs, mut colors, mut indices) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    let (mut positions, mut uvs, mut colors, mut indices) =
+        (Vec::new(), Vec::new(), Vec::new(), Vec::new());
     for band in edges.windows(2) {
-        let strip = [Vec2::new(-ACROSS, band[0]), Vec2::new(ACROSS, band[0]), Vec2::new(ACROSS, band[1]), Vec2::new(-ACROSS, band[1])];
+        let strip = [
+            Vec2::new(-ACROSS, band[0]),
+            Vec2::new(ACROSS, band[0]),
+            Vec2::new(ACROSS, band[1]),
+            Vec2::new(-ACROSS, band[1]),
+        ];
         let piece = clip_convex_polygon(&across, &strip);
         if piece.len() < 3 {
             continue;
         }
         let first = positions.len() as u32;
-        let local: Vec<Vec2> = piece.iter().map(|point| frame.from_fade(*point)).collect();
+        let local: Vec<Vec2> = piece
+            .iter()
+            .map(|point| frame.fade_to_frame(*point))
+            .collect();
         for (point, fade_point) in local.iter().zip(piece.iter()) {
             positions.push([point.x - center.x, center.y - point.y, 0.0]);
             uvs.push(uv_of(*point));
@@ -148,15 +201,30 @@ pub(crate) fn faded_polygon_mesh(
             .sum();
         for index in 1..count.saturating_sub(1) {
             let (b, c) = (first + index as u32, first + index as u32 + 1);
-            indices.extend_from_slice(&if signed_area < 0.0 { [first, c, b] } else { [first, b, c] });
+            indices.extend_from_slice(&if signed_area < 0.0 {
+                [first, c, b]
+            } else {
+                [first, b, c]
+            });
         }
     }
     if indices.is_empty() {
         return None;
     }
-    let mut key: Vec<[f32; 4]> = positions.iter().zip(uvs.iter()).map(|(p, uv)| [p[0], p[1], uv[0], uv[1]]).collect();
-    key.extend(colors.chunks(4).map(|chunk| [0, 1, 2, 3].map(|index| chunk.get(index).map_or(-1.0, |color| color[3]))));
-    let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
+    let mut key: Vec<[f32; 4]> = positions
+        .iter()
+        .zip(uvs.iter())
+        .map(|(p, uv)| [p[0], p[1], uv[0], uv[1]])
+        .collect();
+    key.extend(
+        colors
+            .chunks(4)
+            .map(|chunk| [0, 1, 2, 3].map(|index| chunk.get(index).map_or(-1.0, |color| color[3]))),
+    );
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    );
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
     mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
@@ -178,22 +246,37 @@ pub(crate) fn apply_faded_clip(
     sprite_uv: Option<&dyn Fn(Vec2) -> [f32; 2]>,
     transform: Transform,
 ) -> Result<bool, String> {
-    let Some(fades) = world.get::<AtomeClipFades>(entity).map(|value| value.0.clone()).filter(|fades| !fades.is_empty()) else {
+    let Some(fades) = world
+        .get::<AtomeClipFades>(entity)
+        .map(|value| value.0.clone())
+        .filter(|fades| !fades.is_empty())
+    else {
         return Ok(false);
     };
-    let local_visible = [visible[0] - original[0], visible[1] - original[1], visible[2], visible[3]];
+    let local_visible = [
+        visible[0] - original[0],
+        visible[1] - original[1],
+        visible[2],
+        visible[3],
+    ];
     if let Some(uv_of) = sprite_uv {
-        let Some((mesh, key)) = faded_polygon_mesh(polygon, local_visible, &fades, frame, uv_of) else {
+        let Some((mesh, key)) = faded_polygon_mesh(polygon, local_visible, &fades, frame, uv_of)
+        else {
             return Ok(false);
         };
         upsert_sprite_polygon_proxy(world, entity, mesh, key, transform)?;
         return Ok(true);
     }
-    if world.get::<MeshMaterial2d<BackdropSurfaceMaterial>>(entity).is_none() {
+    if world
+        .get::<MeshMaterial2d<BackdropSurfaceMaterial>>(entity)
+        .is_none()
+    {
         return Ok(false);
     }
     let size = Vec2::new(original[2].max(f32::EPSILON), original[3].max(f32::EPSILON));
-    let Some((mesh, key)) = faded_polygon_mesh(polygon, local_visible, &fades, frame, |point| (point / size).to_array()) else {
+    let Some((mesh, key)) = faded_polygon_mesh(polygon, local_visible, &fades, frame, |point| {
+        (point / size).to_array()
+    }) else {
         return Ok(false);
     };
     write_polygon_into_entity_mesh(world, entity, mesh, key)?;
@@ -214,7 +297,10 @@ mod clip_fade_tests {
         assert!((fade_alpha(&[HOME], 300.0) - 1.0).abs() < 1.0e-6);
         assert!(fade_alpha(&[HOME], 500.0).abs() < 1.0e-6);
         let quarter = fade_alpha(&[HOME], 115.0);
-        assert!((quarter - (1.0 - 0.75f32.powf(2.2))).abs() < 1.0e-5, "eased: {quarter}");
+        assert!(
+            (quarter - (1.0 - 0.75f32.powf(2.2))).abs() < 1.0e-5,
+            "eased: {quarter}"
+        );
     }
 
     #[test]
@@ -227,28 +313,79 @@ mod clip_fade_tests {
     #[test]
     fn a_tile_across_the_top_ramp_is_cut_in_strips_carrying_the_mask() {
         // A 120 px tile from y 80 to 200 (its top cut by the clip at 100), upright.
-        let tile = [Vec2::new(0.0, 20.0), Vec2::new(120.0, 20.0), Vec2::new(120.0, 120.0), Vec2::new(0.0, 120.0)];
-        let (mesh, _) = faded_polygon_mesh(&tile, [0.0, 20.0, 120.0, 100.0], &[HOME], FadeFrame::upright([10.0, 80.0]), |_| [0.0, 0.0])
-            .expect("the top ramp reaches the tile");
-        let Some(VertexAttributeValues::Float32x4(colors)) = mesh.attribute(Mesh::ATTRIBUTE_COLOR) else { panic!("colours") };
-        let Some(VertexAttributeValues::Float32x3(positions)) = mesh.attribute(Mesh::ATTRIBUTE_POSITION) else { panic!("positions") };
+        let tile = [
+            Vec2::new(0.0, 20.0),
+            Vec2::new(120.0, 20.0),
+            Vec2::new(120.0, 120.0),
+            Vec2::new(0.0, 120.0),
+        ];
+        let (mesh, _) = faded_polygon_mesh(
+            &tile,
+            [0.0, 20.0, 120.0, 100.0],
+            &[HOME],
+            FadeFrame::upright([10.0, 80.0]),
+            |_| [0.0, 0.0],
+        )
+        .expect("the top ramp reaches the tile");
+        let Some(VertexAttributeValues::Float32x4(colors)) = mesh.attribute(Mesh::ATTRIBUTE_COLOR)
+        else {
+            panic!("colours")
+        };
+        let Some(VertexAttributeValues::Float32x3(positions)) =
+            mesh.attribute(Mesh::ATTRIBUTE_POSITION)
+        else {
+            panic!("positions")
+        };
         for (position, color) in positions.iter().zip(colors.iter()) {
             // Back to the screen: the quad is centred on its visible box, y up.
             let screen_y = 80.0 + 70.0 - position[1];
-            assert!((color[3] - fade_alpha(&[HOME], screen_y)).abs() < 1.0e-4, "mask at {screen_y}: {}", color[3]);
+            assert!(
+                (color[3] - fade_alpha(&[HOME], screen_y)).abs() < 1.0e-4,
+                "mask at {screen_y}: {}",
+                color[3]
+            );
         }
-        assert!(colors.iter().any(|color| color[3] < 0.01), "clear on the edge");
-        assert!(colors.iter().any(|color| color[3] > 0.99), "whole past the ramp");
-        let Some(Indices::U32(indices)) = mesh.indices() else { panic!("indices") };
+        assert!(
+            colors.iter().any(|color| color[3] < 0.01),
+            "clear on the edge"
+        );
+        assert!(
+            colors.iter().any(|color| color[3] > 0.99),
+            "whole past the ramp"
+        );
+        let Some(Indices::U32(indices)) = mesh.indices() else {
+            panic!("indices")
+        };
         for triangle in indices.chunks(3) {
-            let [a, b, c] = [positions[triangle[0] as usize], positions[triangle[1] as usize], positions[triangle[2] as usize]];
-            assert!((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]) > 0.0, "front faces");
+            let [a, b, c] = [
+                positions[triangle[0] as usize],
+                positions[triangle[1] as usize],
+                positions[triangle[2] as usize],
+            ];
+            assert!(
+                (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]) > 0.0,
+                "front faces"
+            );
         }
     }
 
     #[test]
     fn a_tile_away_from_the_ramps_keeps_its_ordinary_quad() {
-        let tile = [Vec2::ZERO, Vec2::new(120.0, 0.0), Vec2::new(120.0, 120.0), Vec2::new(0.0, 120.0)];
-        assert!(faded_polygon_mesh(&tile, [0.0, 0.0, 120.0, 120.0], &[HOME], FadeFrame::upright([10.0, 200.0]), |_| [0.0, 0.0]).is_none());
+        let tile = [
+            Vec2::ZERO,
+            Vec2::new(120.0, 0.0),
+            Vec2::new(120.0, 120.0),
+            Vec2::new(0.0, 120.0),
+        ];
+        assert!(
+            faded_polygon_mesh(
+                &tile,
+                [0.0, 0.0, 120.0, 120.0],
+                &[HOME],
+                FadeFrame::upright([10.0, 200.0]),
+                |_| [0.0, 0.0]
+            )
+            .is_none()
+        );
     }
 }

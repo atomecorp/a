@@ -13,6 +13,7 @@ const definitions = {
     list: [{ kind }, [], 'List the free works offered and the books or audiobooks the user holds, with their download state.', false],
     download: [{ work_id: work }, ['work_id'], 'Download a free work offered by the library into the user\'s own files, for offline reading.', true],
     open: [{ work_id: work }, ['work_id'], 'Open a book or an audiobook on the presentation surface, where reading or listening stopped (downloading it first when needed).', true],
+    remove: [{ work_id: work }, ['work_id'], 'Delete a book or an audiobook the user holds (downloaded or imported) and its files; an offered work stays offered. Ask the user before calling it.', true],
     import: [{ kind }, ['kind'], 'Import a book (EPUB or PDF without DRM) or an audiobook (MP3 files, one per chapter) chosen by the user.', true],
     page: [{ direction: { type: 'string', enum: ['next', 'previous'] }, fraction: { type: 'number', minimum: 0, maximum: 1 } }, [],
         'Turn the open book one page (or go to `fraction` of it), or move the open audiobook one chapter.', true],
@@ -36,6 +37,7 @@ export const validateBooksInput = (action, input) => {
     return action === 'page' && !input.direction && input.fraction === undefined ? 'INVALID_ARGUMENT' : null;
 };
 export const booksError = error => (BOOKS_ERRORS.includes(error?.code || error?.message || error) ? (error?.code || error?.message || error) : 'COMMIT_FAILED');
+export const BOOKS_CONFIRMED_COMMANDS = Object.freeze(['books.remove']);
 export const BOOKS_ASSISTANT_INSTRUCTIONS = 'Books and audiobooks: « qu\'est-ce que j\'ai à lire », « mes livres audio » call books.list (kind book '
     + 'or audiobook); « lis-moi / ouvre <titre> », « reprends mon livre » call books.open with the work_id read from books.list; « page '
     + 'suivante », « reviens en arrière », « chapitre suivant » call books.page; « pause », « reprends », « avance de 30 secondes » on an '

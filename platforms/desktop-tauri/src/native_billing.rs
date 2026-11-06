@@ -6,7 +6,7 @@
 //! itself: the server verifies it with the Play Developer API. Desktop hosts,
 //! which keep the Web payment, answer `billing_store_unavailable`.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tauri::{AppHandle, Runtime, WebviewWindow};
 
 fn failure(code: &str) -> Value {
@@ -34,8 +34,10 @@ pub async fn billing_invoke<R: Runtime>(
         "kind": payload["kind"].as_str().unwrap_or_default(),
         "accountToken": payload["accountToken"].as_str().unwrap_or_default(),
     });
-    let result = tauri::async_runtime::spawn_blocking(move || tauri_plugin_billing::call(&app, "purchase", request))
-        .await
-        .map_err(|_| "billing_native_error".to_string())?;
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        tauri_plugin_billing::call(&app, "purchase", request)
+    })
+    .await
+    .map_err(|_| "billing_native_error".to_string())?;
     Ok(result.unwrap_or_else(|error| failure(&error)))
 }

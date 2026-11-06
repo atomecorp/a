@@ -1,9 +1,9 @@
 use crate::{
-    video_external_texture::video_quad_mesh_from_size,
-    workspace_backdrop::AtomePresentationCamera,
-    workspace_blur::composition::{composition_ranges, mesh_region, SampleRegion},
     AtomeBevyRendererConfig, AtomeBevyRendererPlugin, AtomeEntityTable, AtomeRenderNode,
     AtomeRenderScene,
+    video_external_texture::video_quad_mesh_from_size,
+    workspace_backdrop::AtomePresentationCamera,
+    workspace_blur::composition::{SampleRegion, composition_ranges, mesh_region},
 };
 use bevy::{
     camera::RenderTarget,
@@ -51,7 +51,11 @@ fn overlapping_glass_and_intervening_content_require_fresh_snapshots() {
     // Content between two planes of glass lies below the second one.
     assert_eq!(
         composition_ranges(
-            [(0, 20.0, Some(button)), (1, 25.0, None), (2, 30.0, Some(button))],
+            [
+                (0, 20.0, Some(button)),
+                (1, 25.0, None),
+                (2, 30.0, Some(button))
+            ],
             3
         ),
         vec![(0..2, true), (2..3, true)]
@@ -59,7 +63,11 @@ fn overlapping_glass_and_intervening_content_require_fresh_snapshots() {
     // Overlapping glass of one plane stays ordered.
     assert_eq!(
         composition_ranges(
-            [(0, 20.0, Some(button)), (1, 20.0, None), (2, 20.0, Some(button))],
+            [
+                (0, 20.0, Some(button)),
+                (1, 20.0, None),
+                (2, 20.0, Some(button))
+            ],
             3
         ),
         vec![(0..2, true), (2..3, true)]
@@ -233,15 +241,24 @@ fn gpu_pixels_compose_depth_without_self_capture_or_foreground_leakage() {
         .insert(RenderTarget::Image(target.clone().into()));
     let image = frame(&mut app, &target);
     // Web loads blit shaders asynchronously; invalidation must pause, then resume.
-    let shader = app.sub_app(bevy::render::RenderApp).world()
-        .resource::<bevy::core_pipeline::blit::BlitPipeline>().fragment_shader.clone();
-    let removed = app.world_mut().resource_mut::<Assets<bevy::shader::Shader>>()
-        .remove(shader.id()).unwrap();
+    let shader = app
+        .sub_app(bevy::render::RenderApp)
+        .world()
+        .resource::<bevy::core_pipeline::blit::BlitPipeline>()
+        .fragment_shader
+        .clone();
+    let removed = app
+        .world_mut()
+        .resource_mut::<Assets<bevy::shader::Shader>>()
+        .remove(shader.id())
+        .unwrap();
     for _ in 0..4 {
         app.update();
     }
-    app.world_mut().resource_mut::<Assets<bevy::shader::Shader>>()
-        .insert(shader.id(), removed).unwrap();
+    app.world_mut()
+        .resource_mut::<Assets<bevy::shader::Shader>>()
+        .insert(shader.id(), removed)
+        .unwrap();
     assert_eq!(rgb(&frame(&mut app, &target), 80, 96), rgb(&image, 80, 96));
     let one = rgb(&image, 16, 96)[0];
     let two = rgb(&image, 32, 96)[0];
@@ -331,6 +348,7 @@ fn gpu_pixels_compose_depth_without_self_capture_or_foreground_leakage() {
             source: Some("fixture://green-image".into()),
             presentation: true,
             texture: Some(crate::AtomeTexture {
+                external: None,
                 width: 8,
                 height: 8,
                 rgba: [0, 255, 0, 255].repeat(64),
@@ -449,24 +467,59 @@ fn gpu_pixels_compose_depth_without_self_capture_or_foreground_leakage() {
         crate::apply_render_op(app.world_mut(), crate::AtomeRenderOp::Despawn(id.into())).unwrap();
     }
     let empty = frame(&mut app, &target);
-    assert_eq!(rgb(&empty, 100, 96), [255, 255, 255], "empty scenes must clear old pixels");
+    assert_eq!(
+        rgb(&empty, 100, 96),
+        [255, 255, 255],
+        "empty scenes must clear old pixels"
+    );
     assert_eq!(rgb(&empty, 40, 96), [255, 255, 255]);
     // The palette uses the same glass, clipped to its existing folded corner.
-    let palette = shape("palette", [20.0, 20.0], [60.0, 60.0], 10, Some([0.0, 0.0, 0.0, 0.69]));
+    let palette = shape(
+        "palette",
+        [20.0, 20.0],
+        [60.0, 60.0],
+        10,
+        Some([0.0, 0.0, 0.0, 0.69]),
+    );
     crate::spawn::spawn_node_in_world(app.world_mut(), palette).unwrap();
     let ordinary = frame(&mut app, &target);
-    crate::apply_style(app.world_mut(), serde_json::from_value(serde_json::json!({
-        "id":"palette","backdrop":{"blur_px":16,"tint":[0,0,0,0.69],"corner_cut_px":11}
-    })).unwrap()).unwrap();
+    crate::apply_style(
+        app.world_mut(),
+        serde_json::from_value(serde_json::json!({
+            "id":"palette","backdrop":{"blur_px":16,"tint":[0,0,0,0.69],"corner_cut_px":11}
+        }))
+        .unwrap(),
+    )
+    .unwrap();
     let cut = frame(&mut app, &target);
-    assert_eq!(rgb(&cut, 50, 50), rgb(&ordinary, 50, 50), "cut must not alter glass opacity");
-    assert_eq!(rgb(&cut, 76, 23), [255, 255, 255], "folded corner must show the backdrop");
-    assert!(rgb(&ordinary, 76, 23)[0] < 180, "ordinary rounded corner must remain painted");
-    assert_eq!(rgb(&cut, 23, 23), rgb(&ordinary, 23, 23), "other corners must stay unchanged");
+    assert_eq!(
+        rgb(&cut, 50, 50),
+        rgb(&ordinary, 50, 50),
+        "cut must not alter glass opacity"
+    );
+    assert_eq!(
+        rgb(&cut, 76, 23),
+        [255, 255, 255],
+        "folded corner must show the backdrop"
+    );
+    assert!(
+        rgb(&ordinary, 76, 23)[0] < 180,
+        "ordinary rounded corner must remain painted"
+    );
+    assert_eq!(
+        rgb(&cut, 23, 23),
+        rgb(&ordinary, 23, 23),
+        "other corners must stay unchanged"
+    );
     let family_tint = [0.08, 0.04, 0.1, 0.69];
-    crate::apply_style(app.world_mut(), serde_json::from_value(serde_json::json!({
-        "id":"palette","backdrop":{"blur_px":16,"tint":family_tint,"corner_cut_px":11}
-    })).unwrap()).unwrap();
+    crate::apply_style(
+        app.world_mut(),
+        serde_json::from_value(serde_json::json!({
+            "id":"palette","backdrop":{"blur_px":16,"tint":family_tint,"corner_cut_px":11}
+        }))
+        .unwrap(),
+    )
+    .unwrap();
     let mut mystic: crate::AtomeProceduralSdf = serde_json::from_value(serde_json::json!({
         "mode":3,"morph":[1,1,0,0],"surface_size":[256,192],"background_blur_px":16,
         "assistant_background_tint":[0,0,0,0.69],"mystic_count":[1,0,8,0],"mystic_style":[2.5,0,0,0.6]
@@ -474,17 +527,32 @@ fn gpu_pixels_compose_depth_without_self_capture_or_foreground_leakage() {
     mystic.mystic_tiles[0] = [120.0, 142.0, 30.0, 8.0];
     mystic.mystic_tile_motion[0] = [1.0, 0.0, 1.0, 0.0];
     mystic.mystic_tile_colors[0] = [family_tint[0], family_tint[1], family_tint[2], 1.0];
-    crate::spawn::spawn_node_in_world(app.world_mut(), AtomeRenderNode {
-        kind: "procedural_sdf".into(), procedural: Some(mystic),
-        ..shape("mystic", [0.0, 0.0], [256.0, 192.0], 10, None)
-    }).unwrap();
+    crate::spawn::spawn_node_in_world(
+        app.world_mut(),
+        AtomeRenderNode {
+            kind: "procedural_sdf".into(),
+            procedural: Some(mystic),
+            ..shape("mystic", [0.0, 0.0], [256.0, 192.0], 10, None)
+        },
+    )
+    .unwrap();
     let unified = frame(&mut app, &target);
-    for (palette, mystic) in rgb(&unified, 50, 50).into_iter().zip(rgb(&unified, 120, 50)) {
-        assert!((palette as i16 - mystic as i16).abs() <= 2, "palette and Mystic must retain equal tint and transparency");
+    for (palette, mystic) in rgb(&unified, 50, 50)
+        .into_iter()
+        .zip(rgb(&unified, 120, 50))
+    {
+        assert!(
+            (palette as i16 - mystic as i16).abs() <= 2,
+            "palette and Mystic must retain equal tint and transparency"
+        );
     }
     if let Ok(directory) = std::env::var("ATOME_COMPOSITION_CAPTURE_DIR") {
         std::fs::create_dir_all(&directory).unwrap();
-        cut.clone().try_into_dynamic().unwrap().save(std::path::Path::new(&directory).join("palette-cut.png")).unwrap();
+        cut.clone()
+            .try_into_dynamic()
+            .unwrap()
+            .save(std::path::Path::new(&directory).join("palette-cut.png"))
+            .unwrap();
         for (name, pixels) in [
             ("layers", image),
             ("foreground", foreground),

@@ -23,7 +23,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 static SESSION_COUNTER: AtomicU64 = AtomicU64::new(0);
 static ACTIVE_SESSION_ID: AtomicU64 = AtomicU64::new(0);
 
-fn emit_audio_error<R: Runtime>(app: &AppHandle<R>, error: &cpal::StreamError) {
+fn emit_audio_error<R: Runtime>(app: &AppHandle<R>, error: &cpal::Error) {
     let _ = app.emit(
         "plugin:stt:diagnostic",
         serde_json::json!({
@@ -389,7 +389,7 @@ impl<R: Runtime> Stt<R> {
                 cpal::SampleFormat::F32 => {
                     let error_app = self.app.clone();
                     device.build_input_stream(
-                        &stream_config.into(),
+                        stream_config.into(),
                         move |data: &[f32], _: &cpal::InputCallbackInfo| {
                             let mono_i16: Vec<i16> = if channels == 1 {
                                 data.iter()
@@ -414,7 +414,7 @@ impl<R: Runtime> Stt<R> {
                 cpal::SampleFormat::I16 => {
                     let error_app = self.app.clone();
                     device.build_input_stream(
-                        &stream_config.into(),
+                        stream_config.into(),
                         move |data: &[i16], _: &cpal::InputCallbackInfo| {
                             let mono_i16: Vec<i16> = if channels == 1 {
                                 data.to_vec()
@@ -437,7 +437,7 @@ impl<R: Runtime> Stt<R> {
                 cpal::SampleFormat::U16 => {
                     let error_app = self.app.clone();
                     device.build_input_stream(
-                        &stream_config.into(),
+                        stream_config.into(),
                         move |data: &[u16], _: &cpal::InputCallbackInfo| {
                             let mono_i16: Vec<i16> = if channels == 1 {
                                 data.iter().map(|&s| (s as i32 - 32768) as i16).collect()

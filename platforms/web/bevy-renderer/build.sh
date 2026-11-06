@@ -9,22 +9,18 @@ BUILD_OUT_DIR="$PROJECT_ROOT/temp/bevy_renderer_wasm_pack"
 
 echo "[build] Building squirrel-bevy-renderer..."
 
-cd "$SCRIPT_DIR"
-
 rm -rf "$BUILD_OUT_DIR"
 mkdir -p "$BUILD_OUT_DIR" "$OUT_DIR"
 trap 'rm -rf "$BUILD_OUT_DIR"' EXIT
 
-if ! command -v wasm-pack >/dev/null 2>&1; then
-    echo "[build] wasm-pack not found"
-    exit 1
-fi
-
-wasm-pack build \
-    --target web \
-    --out-dir "$BUILD_OUT_DIR" \
-    --out-name squirrel_bevy_renderer \
-    --release
+# shellcheck source=../wasm_web_build.sh
+source "$SCRIPT_DIR/../wasm_web_build.sh"
+# -Oz targets size, which dominates cold project/Dashboard open cost for this
+# renderer. --all-features lets wasm-opt accept the post-MVP opcodes Rust emits
+# (nontrapping float-to-int, bulk-memory, sign-ext, ...); without it wasm-opt
+# validation aborts the build.
+wasm_web_build squirrel-bevy-renderer wasm-renderer squirrel_bevy_renderer \
+    "$BUILD_OUT_DIR" squirrel_bevy_renderer -Oz --all-features
 
 for artifact in \
     squirrel_bevy_renderer.js \

@@ -1,18 +1,18 @@
 use bevy::{
-    core_pipeline::{upscaling::upscaling, Core2d},
+    core_pipeline::{Core2d, upscaling::upscaling},
     ecs::schedule::ScheduleConfigs,
     prelude::*,
     render::{
+        RenderApp,
         extract_component::ExtractComponentPlugin,
         extract_resource::ExtractResourcePlugin,
         render_asset::RenderAssets,
         renderer::{RenderContext, ViewQuery},
         texture::GpuImage,
-        RenderApp,
     },
 };
 
-use crate::workspace_backdrop::{AtomeWorkspaceBackdrop, AtomeWorkspaceCamera};
+use crate::workspace_backdrop::AtomeWorkspaceBackdrop;
 
 /// Linear reduction applied before building the GPU blur pyramid. Capturing at
 /// quarter resolution removes detail that a backdrop blur would discard while
@@ -33,8 +33,9 @@ pub fn backdrop_mip_level_count(pixel_size: UVec2) -> u32 {
 
 /// Converts a public logical-pixel radius into an interpolated pyramid level.
 pub fn backdrop_blur_lod(logical_radius_px: f32, device_pixel_ratio: f32) -> f32 {
-    let radius_in_capture_texels =
-        logical_radius_px.clamp(0.0, 128.0) * device_pixel_ratio.max(1.0) / WORKSPACE_BACKDROP_DOWNSCALE as f32;
+    let radius_in_capture_texels = logical_radius_px.clamp(0.0, 128.0)
+        * device_pixel_ratio.max(1.0)
+        / WORKSPACE_BACKDROP_DOWNSCALE as f32;
     (radius_in_capture_texels.max(0.5) * 2.0).log2().max(0.0)
 }
 
@@ -85,17 +86,22 @@ impl AssistantOpticsSettings {
 /// radii remain stored on their owning material; no global radius can leak from
 /// one panel to another.
 pub fn refresh_backdrop_blur_metrics(world: &mut World, device_pixel_ratio: f32) {
-    if let Some(mut materials) = world.get_resource_mut::<Assets<crate::backdrop_surface::BackdropSurfaceMaterial>>() {
+    if let Some(mut materials) =
+        world.get_resource_mut::<Assets<crate::backdrop_surface::BackdropSurfaceMaterial>>()
+    {
         for (_, material) in materials.iter_mut() {
             let logical_radius = material.uniform.blur.x;
             material.uniform.blur.y = device_pixel_ratio;
             material.uniform.blur.z = backdrop_blur_lod(logical_radius, device_pixel_ratio);
         }
     }
-    if let Some(mut materials) = world.get_resource_mut::<Assets<crate::procedural_sdf::ProceduralSdfMaterial>>() {
+    if let Some(mut materials) =
+        world.get_resource_mut::<Assets<crate::procedural_sdf::ProceduralSdfMaterial>>()
+    {
         for (_, material) in materials.iter_mut() {
             material.uniform.shape.z = device_pixel_ratio.max(1.0);
-            material.uniform.shape.w = backdrop_blur_lod(material.uniform.gesture.z, device_pixel_ratio);
+            material.uniform.shape.w =
+                backdrop_blur_lod(material.uniform.gesture.z, device_pixel_ratio);
         }
     }
 }
@@ -115,14 +121,17 @@ impl Plugin for WorkspaceBlurPlugin {
         }
         app.add_plugins((
             ExtractResourcePlugin::<AtomeWorkspaceBackdrop>::default(),
-            ExtractComponentPlugin::<AtomeWorkspaceCamera>::default(),
+            ExtractComponentPlugin::<pyramid::BlurCapture>::default(),
         ));
-        app.sub_app_mut(RenderApp).add_systems(Core2d, workspace_blur_mip_pass());
+        app.sub_app_mut(RenderApp)
+            .add_systems(Core2d, workspace_blur_mip_pass());
         pyramid::install(app);
         composition::install(app);
     }
 }
 
+/// Every capture camera carrying a `BlurCapture` (the workspace's, the Mystic
+/// plates' background) reduces its image into its pyramid when it renders.
 /// The capture camera draws into its intermediate view target; `upscaling` is
 /// what blits that frame into the capture image, after every post-process
 /// pass. Copying any earlier read the PREVIOUS frame's capture: one frame of
@@ -133,24 +142,19 @@ pub(crate) fn workspace_blur_mip_pass() -> ScheduleConfigs<bevy::ecs::system::Sc
 }
 
 fn generate_workspace_blur_mips(
-    _capture_view: ViewQuery<(), With<AtomeWorkspaceCamera>>,
-    backdrop: Res<AtomeWorkspaceBackdrop>,
+    capture_view: ViewQuery<&pyramid::BlurCapture>,
     pyramid: pyramid::BlurPyramid,
     gpu_images: Res<RenderAssets<GpuImage>>,
     mut context: RenderContext,
 ) -> Result<(), BevyError> {
-    if !backdrop.enabled || !pyramid.ready()? {
+    let capture = capture_view.into_inner();
+    if !pyramid.ready(capture.pyramid.id())? {
         return Ok(());
     }
-    let (Some(capture), Some(target)) =
-        (gpu_images.get(backdrop.capture_image.id()), gpu_images.get(backdrop.image.id()))
-    else {
-        return Ok(());
-    };
-    context.command_encoder().copy_texture_to_texture(
-        capture.texture.as_image_copy(),
-        target.texture.as_image_copy(),
-        capture.texture_descriptor.size,
-    );
-    pyramid.downsample(&mut context)
+    pyramid.reduce_capture(
+        &mut context,
+        &gpu_images,
+        capture.capture.id(),
+        capture.pyramid.id(),
+    )
 }

@@ -3,13 +3,13 @@ set -eu
 
 REPO_ROOT="$SRCROOT/../../.."
 CRATE_MANIFEST="$REPO_ROOT/platforms/ios/bevy-renderer/Cargo.toml"
-PROFILE_DIR=release
-CARGO_PROFILE_FLAG=--release
+# Workspace profiles (root Cargo.toml): ios, and ios-dev for native Rust debugging.
+PROFILE_DIR=ios
 
 export PATH="$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 # Keep the existing device cache path across configurations, targets and SDKs.
 # Cargo separates architectures inside it; Debug and Release both normally use
-# the Rust release profile. TestFlight must not create another Rust cache.
+# the Rust ios profile. TestFlight must not create another Rust cache.
 DERIVED_CACHE_ROOT="${PROJECT_TEMP_DIR%%/Build/*}"
 if [ "$DERIVED_CACHE_ROOT" = "$PROJECT_TEMP_DIR" ]; then
   echo "[IOS_BEVY_BUILD] fatal unsupported Xcode intermediate layout" >&2
@@ -22,14 +22,13 @@ else
   export RUSTFLAGS="-C force-unwind-tables=no"
 fi
 
-# The linked iOS crate is part of every app/AUv3 process even while the native
-# presenter is unavailable. A Rust dev archive made each Xcode Debug binary
-# roughly 180 MiB and increased launch/dyld pressure without helping JavaScript
-# debugging. Keep normal Debug installs optimized; native Rust debugging remains
+# The linked iOS crate (the audio engine and the local server; the historical
+# name is kept for the Xcode link) is part of every app/AUv3 process. A Rust dev
+# archive made each Xcode Debug binary roughly 180 MiB and increased launch/dyld
+# pressure without helping JavaScript debugging. Keep normal Debug installs optimized; native Rust debugging remains
 # available as an explicit diagnostic launch.
 if [ "${CONFIGURATION:-Debug}" = "Debug" ] && [ "${ATOME_IOS_RUST_DEV:-0}" = "1" ]; then
-  CARGO_PROFILE_FLAG=
-  PROFILE_DIR=debug
+  PROFILE_DIR=ios-dev
 fi
 
 echo "[IOS_BEVY_BUILD] env sdk=${SDK_NAME:-unknown} archs=${ARCHS:-arm64} configuration=${CONFIGURATION:-Debug} rust_profile=$PROFILE_DIR"
@@ -102,7 +101,7 @@ for ARCH in ${ARCHS:-arm64}; do
   esac
 
   echo "[IOS_BEVY_BUILD] cargo build target=$RUST_TARGET arch=$ARCH"
-  "$CARGO_BIN" build --manifest-path "$CRATE_MANIFEST" --target "$RUST_TARGET" $CARGO_PROFILE_FLAG $FEATURE_FLAGS
+  "$CARGO_BIN" build --manifest-path "$CRATE_MANIFEST" --target "$RUST_TARGET" --profile "$PROFILE_DIR" $FEATURE_FLAGS
 
   BUILT_LIB="$CARGO_TARGET_DIR/$RUST_TARGET/$PROFILE_DIR/libatome_ios_bevy_renderer.a"
   if [ ! -f "$BUILT_LIB" ]; then

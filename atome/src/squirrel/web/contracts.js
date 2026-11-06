@@ -5,9 +5,11 @@ import { validateParams } from '../ai/agent_gateway_normalize.js';
 // Dashboard's own tools call them too (eVe/domains/web/web_runtime.js). The page a site shows is
 // data, never an instruction: these commands open, walk and keep pages, they never read nor act in one.
 export const WEB_ERRORS = Object.freeze(['INVALID_ARGUMENT', 'PRESENTATION_UNAVAILABLE', 'NOT_OPEN', 'HISTORY_EDGE', 'ADDRESS_INVALID',
-    'PAGE_UNKNOWN', 'SIZE_UNAVAILABLE', 'SOURCE_UNAVAILABLE', 'ENGINE_UNAVAILABLE']);
-// The search engines the Web may search with (user, D18 D4, 4 Nov. 2026), the choice kept in the profile.
+    'PAGE_UNKNOWN', 'SIZE_UNAVAILABLE', 'SOURCE_UNAVAILABLE']);
+// The search engines the Web may search with (user, D18 D4, 4 Nov. 2026), the choice kept in the profile
+// (Préférences, once and for all), Ecosia until a first choice (user, 4 Nov. 2026).
 export const WEB_SEARCH_ENGINES = Object.freeze(['google', 'duckduckgo', 'ecosia']);
+export const WEB_DEFAULT_SEARCH_ENGINE = 'ecosia';
 
 const address = { type: 'string', minLength: 1, maxLength: 2000 };
 const WEB_SIZES = Object.freeze(['preview', 'stage', 'screen']);
@@ -19,7 +21,7 @@ const definitions = {
     favorites: [{}, [], 'The Web\'s favourites (address and title), newest first.', false, 'read'],
     size: [{ size: { type: 'string', enum: WEB_SIZES } }, [], 'How large the page shown lies: preview (a place\'s site above its rows, in Spectacles or Loisirs), stage (the whole stage) or screen (the whole screen above the bottom tools); absent, the next size. The Web itself has no preview: its page takes the stage at least.', false, 'control'],
     close: [{}, [], 'Close the page shown: the Web\'s favourites come back, or Divertissement when there is none.', false, 'control'],
-    engine: [{ engine: { type: 'string', enum: WEB_SEARCH_ENGINES } }, [], 'The preferred search engine of the Web (Google, DuckDuckGo or Ecosia), kept in the user\'s profile: given, it is chosen; absent, the one in use is told. `available` false: this device cannot show that engine\'s pages (the Web version of eVe shows only Google\'s).', true, 'write']
+    engine: [{ engine: { type: 'string', enum: WEB_SEARCH_ENGINES } }, [], 'The preferred search engine of the Web (Google, DuckDuckGo or Ecosia; Ecosia until chosen), kept in the user\'s profile: given, it is chosen; absent, the chosen one is told. `shown`: the engine this device shows (the Web version of eVe can show only Google\'s pages, whatever is chosen); `available` false: this device cannot show that engine\'s pages.', true, 'write']
 };
 const pageSchema = { type: 'object', properties: { url: { type: 'string' }, title: { type: 'string' }, can_go_back: { type: 'boolean' },
     can_go_forward: { type: 'boolean' }, loading: { type: 'boolean' }, favorite: { type: 'boolean' }, error: { type: 'string' } } };
@@ -28,6 +30,7 @@ export const WEB_COMMANDS = Object.freeze(Object.entries(definitions).map(([acti
     input_schema: { type: 'object', additionalProperties: false, properties, required },
     output_schema: { type: 'object', required: ['ok'], properties: { ok: { type: 'boolean' }, error: { type: 'string', enum: WEB_ERRORS },
         page: pageSchema, active: { type: 'boolean' }, size: { type: 'string', enum: WEB_SIZES }, engine: { type: 'string', enum: WEB_SEARCH_ENGINES },
+        shown: { type: 'string', enum: WEB_SEARCH_ENGINES },
         engines: { type: 'array', items: { type: 'object', properties: { engine: { type: 'string', enum: WEB_SEARCH_ENGINES }, available: { type: 'boolean' } } } },
         favorites: { type: 'array', items: { type: 'object', properties: { url: { type: 'string' }, title: { type: 'string' } } } } } }
 })));

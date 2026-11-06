@@ -4,15 +4,15 @@ use crate::workspace_backdrop::resize_workspace_backdrop;
 use crate::workspace_blur::refresh_backdrop_blur_metrics;
 use crate::{
     backdrop_blur::apply_scene_effects,
-    backdrop_surface::{
-        refresh_workspace_backdrop_enabled, resize_backdrop_surface,
-    },
+    backdrop_surface::{refresh_workspace_backdrop_enabled, resize_backdrop_surface},
     background::{apply_surface_background, resize_surface_background},
     clip::apply_entity_clip,
     procedural_sdf::resize_procedural_sdf,
     render_math::{atome_camera_projection, atome_rect_transform_with_local, depth_for_layer},
     resource_ops::texture_sprite_color,
-    selection_overlay::{rebuild_selection_overlay, remove_selection_overlay, translate_selection_overlay},
+    selection_overlay::{
+        rebuild_selection_overlay, remove_selection_overlay, translate_selection_overlay,
+    },
     shape_shadow_overlay::{
         rebuild_shape_shadow_overlay, remove_shape_shadow_overlay,
         sync_shape_shadow_overlay_transform,
@@ -21,19 +21,28 @@ use crate::{
     texture::image_handle_from_texture,
     types::*,
     video_external_texture::insert_video_quad_mesh,
-    waveform_playback_overlay::{rebuild_waveform_playback_overlay, remove_waveform_playback_overlay},
+    waveform_playback_overlay::{
+        rebuild_waveform_playback_overlay, remove_waveform_playback_overlay,
+    },
 };
 
-pub use crate::resource_ops::apply_resource;
 pub use crate::render_style_ops::apply_style;
 use crate::render_style_ops::refresh_shape_surface;
+pub use crate::resource_ops::apply_resource;
 
 fn entity_for(world: &World, id: &str) -> Result<Entity, String> {
-    world.resource::<AtomeEntityTable>().by_id.get(id).copied().ok_or_else(|| format!("bevy_atome_entity_missing:{id}"))
+    world
+        .resource::<AtomeEntityTable>()
+        .by_id
+        .get(id)
+        .copied()
+        .ok_or_else(|| format!("bevy_atome_entity_missing:{id}"))
 }
 
 fn sync_global_transform(world: &mut World, entity: Entity, transform: Transform) {
-    world.entity_mut(entity).insert(GlobalTransform::from(transform));
+    world
+        .entity_mut(entity)
+        .insert(GlobalTransform::from(transform));
 }
 
 fn transform_for_rect(
@@ -64,7 +73,11 @@ pub fn apply_spawn(world: &mut World, node: AtomeRenderNode) -> Result<Entity, S
     if node.id.trim().is_empty() {
         return Err("bevy_spawn_id_required".to_string());
     }
-    if world.resource::<AtomeEntityTable>().by_id.contains_key(&node.id) {
+    if world
+        .resource::<AtomeEntityTable>()
+        .by_id
+        .contains_key(&node.id)
+    {
         return Err(format!("bevy_spawn_duplicate_id:{}", node.id));
     }
     spawn_node_in_world(world, node)
@@ -88,15 +101,25 @@ pub fn apply_despawn(world: &mut World, id: &str) -> Result<(), String> {
 
 pub fn apply_transform(world: &mut World, patch: AtomeTransformPatch) -> Result<(), String> {
     let entity = entity_for(world, &patch.id)?;
-    let previous_clip_rect =
-        world.get::<AtomeClipRect>(entity).ok_or_else(|| format!("bevy_transform_clip_missing:{}", patch.id))?.0;
-    let previous_clip_rotation = world.get::<AtomeClipRotation>(entity).map(|value| value.0).unwrap_or(0.0);
-    let clip_changed = previous_clip_rect != patch.clip_rect || previous_clip_rotation != patch.clip_rotation
-        || world.get::<AtomeClipRoundedRects>(entity).map(|value| &value.0) != Some(&patch.clip_rounded_rects);
+    let previous_clip_rect = world
+        .get::<AtomeClipRect>(entity)
+        .ok_or_else(|| format!("bevy_transform_clip_missing:{}", patch.id))?
+        .0;
+    let previous_clip_rotation = world
+        .get::<AtomeClipRotation>(entity)
+        .map(|value| value.0)
+        .unwrap_or(0.0);
+    let clip_changed = previous_clip_rect != patch.clip_rect
+        || previous_clip_rotation != patch.clip_rotation
+        || world
+            .get::<AtomeClipRoundedRects>(entity)
+            .map(|value| &value.0)
+            != Some(&patch.clip_rounded_rects);
     let width = patch.logical_size[0].max(1.0);
     let height = patch.logical_size[1].max(1.0);
-    let previous_size =
-        *world.get::<AtomeLogicalSize>(entity).ok_or_else(|| format!("bevy_transform_size_missing:{}", patch.id))?;
+    let previous_size = *world
+        .get::<AtomeLogicalSize>(entity)
+        .ok_or_else(|| format!("bevy_transform_size_missing:{}", patch.id))?;
     let previous_position = *world
         .get::<AtomeLogicalPosition>(entity)
         .ok_or_else(|| format!("bevy_transform_position_missing:{}", patch.id))?;
@@ -104,25 +127,38 @@ pub fn apply_transform(world: &mut World, patch: AtomeTransformPatch) -> Result<
         .get::<AtomeLocalTransform>(entity)
         .copied()
         .ok_or_else(|| format!("bevy_transform_local_missing:{}", patch.id))?;
-    let layer = world.get::<AtomeLayer>(entity).map(|value| value.0).unwrap_or(0);
+    let layer = world
+        .get::<AtomeLayer>(entity)
+        .map(|value| value.0)
+        .unwrap_or(0);
     let (surface_width, surface_height) = {
         let config = world.resource::<AtomeBevyRendererConfig>();
         (config.width, config.height)
     };
-    *world.get_mut::<AtomeLogicalSize>(entity).ok_or_else(|| format!("bevy_transform_size_missing:{}", patch.id))? =
+    *world
+        .get_mut::<AtomeLogicalSize>(entity)
+        .ok_or_else(|| format!("bevy_transform_size_missing:{}", patch.id))? =
         AtomeLogicalSize { width, height };
     *world
         .get_mut::<AtomeLogicalPosition>(entity)
         .ok_or_else(|| format!("bevy_transform_position_missing:{}", patch.id))? =
-        AtomeLogicalPosition { x: patch.logical_position[0], y: patch.logical_position[1] };
+        AtomeLogicalPosition {
+            x: patch.logical_position[0],
+            y: patch.logical_position[1],
+        };
     let local_transform = AtomeLocalTransform::new(patch.scale, patch.rotation, patch.origin);
     *world
         .get_mut::<AtomeLocalTransform>(entity)
         .ok_or_else(|| format!("bevy_transform_local_missing:{}", patch.id))? = local_transform;
-    *world.get_mut::<AtomeClipRect>(entity).ok_or_else(|| format!("bevy_transform_clip_missing:{}", patch.id))? =
+    *world
+        .get_mut::<AtomeClipRect>(entity)
+        .ok_or_else(|| format!("bevy_transform_clip_missing:{}", patch.id))? =
         AtomeClipRect(patch.clip_rect);
-    world.entity_mut(entity).insert((AtomeClipRotation(patch.clip_rotation), AtomeClipRoundedRects(patch.clip_rounded_rects),
-        AtomeClipFades(patch.clip_fades)));
+    world.entity_mut(entity).insert((
+        AtomeClipRotation(patch.clip_rotation),
+        AtomeClipRoundedRects(patch.clip_rounded_rects),
+        AtomeClipFades(patch.clip_fades),
+    ));
     let next_transform = transform_for_rect(
         patch.logical_position[0],
         patch.logical_position[1],
@@ -138,13 +174,17 @@ pub fn apply_transform(world: &mut World, patch: AtomeTransformPatch) -> Result<
     }
     world.entity_mut(entity).insert(next_transform);
     sync_global_transform(world, entity, next_transform);
-    let dimensions_changed = (previous_size.width - width).abs() > 0.01 || (previous_size.height - height).abs() > 0.01;
+    let dimensions_changed =
+        (previous_size.width - width).abs() > 0.01 || (previous_size.height - height).abs() > 0.01;
     let local_transform_changed = previous_local_transform != local_transform;
     if dimensions_changed {
         if let Some(mut sprite) = world.get_mut::<Sprite>(entity) {
             sprite.custom_size = Some(Vec2::new(width, height));
         }
-        if world.get::<crate::video_external_texture::AtomeVideoExternalTexture>(entity).is_some() {
+        if world
+            .get::<crate::video_external_texture::AtomeVideoExternalTexture>(entity)
+            .is_some()
+        {
             let uv_rect = world
                 .get::<crate::video_external_texture::AtomeVideoExternalTexture>(entity)
                 .map(|video| video.uv_rect)
@@ -152,7 +192,10 @@ pub fn apply_transform(world: &mut World, patch: AtomeTransformPatch) -> Result<
             insert_video_quad_mesh(world, entity, [width, height], uv_rect)?;
         }
         // A media window follows the Atome's size (pinch, resize) like a video.
-        if world.get::<crate::media_window::AtomeMediaWindow>(entity).is_some() {
+        if world
+            .get::<crate::media_window::AtomeMediaWindow>(entity)
+            .is_some()
+        {
             insert_video_quad_mesh(world, entity, [width, height], [0.0, 0.0, 1.0, 1.0])?;
         }
         resize_procedural_sdf(world, entity, [width, height])?;
@@ -197,13 +240,19 @@ pub fn apply_transform(world: &mut World, patch: AtomeTransformPatch) -> Result<
 pub fn apply_surface(world: &mut World, patch: AtomeSurfacePatch) -> Result<(), String> {
     let width = normalize_surface_logical(patch.width);
     let height = normalize_surface_logical(patch.height);
-    let current_dpr =
-        world.get_resource::<AtomeBevyRendererConfig>().map(|config| config.device_pixel_ratio).unwrap_or(1.0);
+    let current_dpr = world
+        .get_resource::<AtomeBevyRendererConfig>()
+        .map(|config| config.device_pixel_ratio)
+        .unwrap_or(1.0);
     let device_pixel_ratio = normalize_surface_dpr(patch.device_pixel_ratio.unwrap_or(current_dpr));
-    let pixel_width =
-        normalize_surface_pixel(patch.pixel_width.unwrap_or(width * device_pixel_ratio), width * device_pixel_ratio);
-    let pixel_height =
-        normalize_surface_pixel(patch.pixel_height.unwrap_or(height * device_pixel_ratio), height * device_pixel_ratio);
+    let pixel_width = normalize_surface_pixel(
+        patch.pixel_width.unwrap_or(width * device_pixel_ratio),
+        width * device_pixel_ratio,
+    );
+    let pixel_height = normalize_surface_pixel(
+        patch.pixel_height.unwrap_or(height * device_pixel_ratio),
+        height * device_pixel_ratio,
+    );
     {
         let mut config = world.resource_mut::<AtomeBevyRendererConfig>();
         config.width = width;
@@ -212,38 +261,77 @@ pub fn apply_surface(world: &mut World, patch: AtomeSurfacePatch) -> Result<(), 
         config.pixel_height = pixel_height;
         config.device_pixel_ratio = device_pixel_ratio;
     }
-    let resized_window = world.query::<(Entity, &mut Window)>().iter_mut(world).next().map(|(entity, mut window)| {
-        window.resolution.set_scale_factor(device_pixel_ratio);
-        window.resolution.set_physical_resolution(pixel_width, pixel_height);
-        entity
-    });
+    let resized_window = world
+        .query::<(Entity, &mut Window)>()
+        .iter_mut(world)
+        .next()
+        .map(|(entity, mut window)| {
+            window.resolution.set_scale_factor(device_pixel_ratio);
+            window
+                .resolution
+                .set_physical_resolution(pixel_width, pixel_height);
+            entity
+        });
     // The cameras (and the UI viewport they give) recompute their target only on this
     // message: set silently, the resolution waited for the platform's own resize event
     // (frames later on the web), and the UI pass drew stretched to the former viewport.
-    if let Some(window) = resized_window {
-        if world.contains_resource::<Messages<WindowResized>>() {
-            world.write_message(WindowResized { window, width, height });
-        }
+    if let Some(window) = resized_window
+        && world.contains_resource::<Messages<WindowResized>>()
+    {
+        world.write_message(WindowResized {
+            window,
+            width,
+            height,
+        });
     }
-    for mut projection in world.query_filtered::<&mut Projection, With<Camera2d>>().iter_mut(world) {
+    for mut projection in world
+        .query_filtered::<&mut Projection, With<Camera2d>>()
+        .iter_mut(world)
+    {
         *projection = atome_camera_projection(width, height);
     }
-    resize_workspace_backdrop(world, Vec2::new(width, height), UVec2::new(pixel_width, pixel_height))?;
+    resize_workspace_backdrop(
+        world,
+        Vec2::new(width, height),
+        UVec2::new(pixel_width, pixel_height),
+    )?;
     // Touching every glass material re-prepares its bind group: during a window
     // drag that ran on every resized frame although only a DPR change moves the LOD.
     if (device_pixel_ratio - current_dpr).abs() > f32::EPSILON {
         refresh_backdrop_blur_metrics(world, device_pixel_ratio);
     }
-    let ids: Vec<String> = world.resource::<AtomeEntityTable>().by_id.keys().cloned().collect();
+    let ids: Vec<String> = world
+        .resource::<AtomeEntityTable>()
+        .by_id
+        .keys()
+        .cloned()
+        .collect();
     for id in ids {
         let entity = entity_for(world, &id)?;
-        let position =
-            *world.get::<AtomeLogicalPosition>(entity).ok_or_else(|| format!("bevy_surface_position_missing:{id}"))?;
-        let size = *world.get::<AtomeLogicalSize>(entity).ok_or_else(|| format!("bevy_surface_size_missing:{id}"))?;
-        let layer = world.get::<AtomeLayer>(entity).map(|value| value.0).unwrap_or(0);
-        let local_transform = world.get::<AtomeLocalTransform>(entity).copied().unwrap_or_default();
-        let next_transform =
-            transform_for_rect(position.x, position.y, size.width, size.height, width, height, layer, local_transform);
+        let position = *world
+            .get::<AtomeLogicalPosition>(entity)
+            .ok_or_else(|| format!("bevy_surface_position_missing:{id}"))?;
+        let size = *world
+            .get::<AtomeLogicalSize>(entity)
+            .ok_or_else(|| format!("bevy_surface_size_missing:{id}"))?;
+        let layer = world
+            .get::<AtomeLayer>(entity)
+            .map(|value| value.0)
+            .unwrap_or(0);
+        let local_transform = world
+            .get::<AtomeLocalTransform>(entity)
+            .copied()
+            .unwrap_or_default();
+        let next_transform = transform_for_rect(
+            position.x,
+            position.y,
+            size.width,
+            size.height,
+            width,
+            height,
+            layer,
+            local_transform,
+        );
         if world.get::<Transform>(entity).is_none() {
             return Err(format!("bevy_surface_transform_missing:{id}"));
         }
@@ -272,16 +360,20 @@ pub fn apply_reparent(world: &mut World, patch: AtomeParentPatch) -> Result<(), 
     let entity = entity_for(world, &patch.id)?;
     *world
         .get_mut::<AtomeParentEntityId>(entity)
-        .ok_or_else(|| format!("bevy_parent_component_missing:{}", patch.id))? = AtomeParentEntityId(patch.parent_id);
+        .ok_or_else(|| format!("bevy_parent_component_missing:{}", patch.id))? =
+        AtomeParentEntityId(patch.parent_id);
     Ok(())
 }
 
 pub fn apply_layer(world: &mut World, patch: AtomeLayerPatch) -> Result<(), String> {
     let entity = entity_for(world, &patch.id)?;
-    *world.get_mut::<AtomeLayer>(entity).ok_or_else(|| format!("bevy_layer_component_missing:{}", patch.id))? =
+    *world
+        .get_mut::<AtomeLayer>(entity)
+        .ok_or_else(|| format!("bevy_layer_component_missing:{}", patch.id))? =
         AtomeLayer(patch.layer);
-    let mut next_transform =
-        *world.get::<Transform>(entity).ok_or_else(|| format!("bevy_layer_transform_missing:{}", patch.id))?;
+    let mut next_transform = *world
+        .get::<Transform>(entity)
+        .ok_or_else(|| format!("bevy_layer_transform_missing:{}", patch.id))?;
     next_transform.translation.z = depth_for_layer(patch.layer);
     world.entity_mut(entity).insert(next_transform);
     sync_global_transform(world, entity, next_transform);
@@ -289,7 +381,9 @@ pub fn apply_layer(world: &mut World, patch: AtomeLayerPatch) -> Result<(), Stri
     if let Some(mut mesh) = world.get_mut::<Mesh2d>(entity) {
         mesh.set_changed();
     }
-    if let Some(mut video) = world.get_mut::<crate::video_external_texture::AtomeVideoExternalTexture>(entity) {
+    if let Some(mut video) =
+        world.get_mut::<crate::video_external_texture::AtomeVideoExternalTexture>(entity)
+    {
         video.layer = patch.layer;
     }
     if world.get::<AtomeSelectionOverlay>(entity).is_some() {
@@ -307,8 +401,13 @@ pub fn apply_visibility(world: &mut World, patch: AtomeVisibilityPatch) -> Resul
     // Une source de masque ne se rallume jamais : sa peinture cacherait le
     // contenu qu'elle decoupe.
     let visible = patch.visible && world.get::<AtomeMaskSource>(entity).is_none();
-    *world.get_mut::<Visibility>(entity).ok_or_else(|| format!("bevy_visibility_component_missing:{}", patch.id))? =
-        if visible { Visibility::Visible } else { Visibility::Hidden };
+    *world
+        .get_mut::<Visibility>(entity)
+        .ok_or_else(|| format!("bevy_visibility_component_missing:{}", patch.id))? = if visible {
+        Visibility::Visible
+    } else {
+        Visibility::Hidden
+    };
     if visible {
         rebuild_selection_overlay(world, entity)?;
         rebuild_shape_shadow_overlay(world, entity)?;
@@ -323,15 +422,18 @@ pub fn apply_visibility(world: &mut World, patch: AtomeVisibilityPatch) -> Resul
 
 pub fn apply_text(world: &mut World, patch: AtomeTextPatch) -> Result<(), String> {
     let entity = entity_for(world, &patch.id)?;
-    *world.get_mut::<AtomeTextMetadata>(entity).ok_or_else(|| format!("bevy_text_component_missing:{}", patch.id))? =
+    *world
+        .get_mut::<AtomeTextMetadata>(entity)
+        .ok_or_else(|| format!("bevy_text_component_missing:{}", patch.id))? =
         AtomeTextMetadata(patch.text.clone());
     if let Some(mut text) = world.get_mut::<Text2d>(entity) {
         text.0 = patch.text.unwrap_or_default();
     }
     if patch.texture.is_some() {
         let handle = {
-            let mut images =
-                world.get_resource_mut::<Assets<Image>>().ok_or_else(|| "bevy_image_assets_required".to_string())?;
+            let mut images = world
+                .get_resource_mut::<Assets<Image>>()
+                .ok_or_else(|| "bevy_image_assets_required".to_string())?;
             image_handle_from_texture(&mut images, &patch.texture, &patch.id)?
         };
         let color = texture_sprite_color(world, entity);
@@ -346,19 +448,23 @@ pub fn apply_text(world: &mut World, patch: AtomeTextPatch) -> Result<(), String
 
 pub fn apply_render_op(world: &mut World, op: AtomeRenderOp) -> Result<(), String> {
     match op {
-        AtomeRenderOp::Spawn(node) => apply_spawn(world, node).map(|_| ()),
+        AtomeRenderOp::Spawn(node) => apply_spawn(world, *node).map(|_| ()),
         AtomeRenderOp::Despawn(id) => apply_despawn(world, &id),
         AtomeRenderOp::Transform(patch) => apply_transform(world, patch),
-        AtomeRenderOp::Style(patch) => apply_style(world, patch),
+        AtomeRenderOp::Style(patch) => apply_style(world, *patch),
         AtomeRenderOp::Reparent(patch) => apply_reparent(world, patch),
         AtomeRenderOp::Layer(patch) => apply_layer(world, patch),
         AtomeRenderOp::Visibility(patch) => apply_visibility(world, patch),
         AtomeRenderOp::Text(patch) => apply_text(world, patch),
         AtomeRenderOp::Resource(patch) => apply_resource(world, patch),
         AtomeRenderOp::Surface(patch) => apply_surface(world, patch),
-        AtomeRenderOp::SurfaceBackground(patch) => apply_surface_background(world, patch).map(|_| ()),
+        AtomeRenderOp::SurfaceBackground(patch) => {
+            apply_surface_background(world, patch).map(|_| ())
+        }
         AtomeRenderOp::SceneEffects(patch) => apply_scene_effects(world, patch),
         AtomeRenderOp::ProjectView(patch) => crate::project_view::apply_project_view(world, patch),
-        AtomeRenderOp::ProjectSpace(patch) => crate::project_view::apply_project_space(world, patch),
+        AtomeRenderOp::ProjectSpace(patch) => {
+            crate::project_view::apply_project_space(world, patch)
+        }
     }
 }

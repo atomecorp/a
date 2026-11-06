@@ -83,12 +83,17 @@ pub fn rms(buffer: &[Frame]) -> f32 {
     if buffer.is_empty() {
         return 0.0;
     }
-    let sum: f32 = buffer.iter().map(|frame| frame.left * frame.left + frame.right * frame.right).sum();
+    let sum: f32 = buffer
+        .iter()
+        .map(|frame| frame.left * frame.left + frame.right * frame.right)
+        .sum();
     (sum / (2 * buffer.len()) as f32).sqrt()
 }
 
 pub fn peak(buffer: &[Frame]) -> f32 {
-    buffer.iter().fold(0.0f32, |acc, frame| acc.max(frame.left.abs()).max(frame.right.abs()))
+    buffer.iter().fold(0.0f32, |acc, frame| {
+        acc.max(frame.left.abs()).max(frame.right.abs())
+    })
 }
 
 // Fixed delay used for latency compensation of parallel routes.
@@ -99,7 +104,10 @@ pub struct DelayLine {
 
 impl DelayLine {
     pub fn new(frames: usize) -> Self {
-        Self { ring: vec![Frame::ZERO; frames], position: 0 }
+        Self {
+            ring: vec![Frame::ZERO; frames],
+            position: 0,
+        }
     }
 
     pub fn frames(&self) -> usize {
@@ -111,9 +119,7 @@ impl DelayLine {
             return;
         }
         for frame in buffer {
-            let delayed = self.ring[self.position];
-            self.ring[self.position] = *frame;
-            *frame = delayed;
+            std::mem::swap(&mut self.ring[self.position], &mut *frame);
             self.position = (self.position + 1) % self.ring.len();
         }
     }

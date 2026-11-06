@@ -27,6 +27,18 @@ class NodeImapClient {
         if (!/^\* OK/i.test(greeting)) {
             throw new Error(`imap_bad_greeting:${greeting}`);
         }
+        // STARTTLS before any credential: a server that does not offer it is refused, never logged in to in clear.
+        if (normalizeText(this.config.imap.security).toLowerCase() === 'starttls') {
+            if (!(await this.capabilities()).has('STARTTLS')) {
+                throw new Error('imap_starttls_not_supported');
+            }
+            await this.command('STARTTLS');
+            await this.socket.upgradeToTls({
+                ...(resolveServername(this.config.imap) ? { servername: resolveServername(this.config.imap) } : {}),
+                rejectUnauthorized: this.config.imap.reject_unauthorized !== false && this.config.imap.rejectUnauthorized !== false
+            });
+            await this.capabilities();
+        }
         await this.command(`LOGIN ${quoteImapString(this.config.auth.username)} ${quoteImapString(this.config.auth.password)}`);
         await this.selectMailbox(this.config.mailbox);
     }
@@ -40,6 +52,13 @@ class NodeImapClient {
         }
         await this.socket.end();
         this.socket = null;
+    }
+
+    // `CAPABILITY`: the server's capabilities, upper-cased.
+    async capabilities() {
+        const response = await this.command('CAPABILITY');
+        const line = response.lines.find((entry) => /^\* CAPABILITY /i.test(entry)) || '';
+        return new Set(line.replace(/^\* CAPABILITY /i, '').trim().toUpperCase().split(/\s+/).filter(Boolean));
     }
 
     nextTag() {

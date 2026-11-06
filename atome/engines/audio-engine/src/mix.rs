@@ -4,8 +4,12 @@
 use super::playback::ENGINE;
 use atome_mix_graph::{Program, StripLevel};
 
-fn with_engine<T>(action: impl FnOnce(&mut super::playback::PlaybackEngine) -> Result<T, String>) -> Result<T, String> {
-    let mut guard = ENGINE.write().map_err(|error| format!("Lock error: {error}"))?;
+fn with_engine<T>(
+    action: impl FnOnce(&mut super::playback::PlaybackEngine) -> Result<T, String>,
+) -> Result<T, String> {
+    let mut guard = ENGINE
+        .write()
+        .map_err(|error| format!("Lock error: {error}"))?;
     let engine = guard.as_mut().ok_or("Audio engine not initialized")?;
     action(engine)
 }
@@ -32,7 +36,10 @@ pub fn devices() -> serde_json::Value {
 
 // A `.nam` capture or a WAV impulse response, decoded once for every `dsp`
 // module that names it.
-pub fn load_asset(asset_id: &str, asset: atome_mix_graph::dsp_module::StoredAsset) -> Result<(), String> {
+pub fn load_asset(
+    asset_id: &str,
+    asset: atome_mix_graph::dsp_module::StoredAsset,
+) -> Result<(), String> {
     // The direct path's graph gets the same decoded asset (shared, not copied).
     super::direct::load_asset(asset_id, asset.clone())?;
     with_engine(|engine| {

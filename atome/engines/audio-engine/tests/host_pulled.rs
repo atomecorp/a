@@ -44,21 +44,36 @@ fn a_plugin_host_pulls_exact_frames_on_its_own_clock() {
         let mut host_ns: i64 = 1_000_000_000;
         loop {
             let popped = host_output::render(&mut left, &mut right, host_ns);
-            host_heard.lock().unwrap().extend_from_slice(&left[..popped]);
-            host_ns += (128 * 1_000_000_000 / RATE as i64) as i64;
+            host_heard
+                .lock()
+                .unwrap()
+                .extend_from_slice(&left[..popped]);
+            host_ns += 128 * 1_000_000_000 / RATE as i64;
             std::thread::sleep(Duration::from_micros(600));
         }
     });
     commands::load_clip_from_bytes("host_impulse", impulse_wav()).expect("load");
     let clock = commands::render_clock().expect("clock")["clock"].clone();
-    assert!(clock["anchor_host_ns"].as_i64().unwrap_or(0) >= 1_000_000_000, "anchored on the host's clock: {clock}");
+    assert!(
+        clock["anchor_host_ns"].as_i64().unwrap_or(0) >= 1_000_000_000,
+        "anchored on the host's clock: {clock}"
+    );
     let target = clock["frames_rendered"].as_u64().unwrap() + 4096 + 41;
-    let scheduled = commands::dispatch("audio_schedule_instances", &json!({ "voices": [{
+    let scheduled = commands::dispatch(
+        "audio_schedule_instances",
+        &json!({ "voices": [{
         "assetId": "host_impulse", "voiceId": "host_voice", "startRenderFrame": target, "gain": 1.0
-    }] }), None).expect("schedule");
+    }] }),
+        None,
+    )
+    .expect("schedule");
     assert_eq!(scheduled["start_render_frames"][0].as_u64(), Some(target));
     std::thread::sleep(Duration::from_millis(1200));
     let heard = heard.lock().unwrap();
     let onset = heard.iter().position(|sample| sample.abs() > 0.0);
-    assert_eq!(onset.map(|index| index as u64), Some(target + IMPULSE_AT as u64), "the impulse comes out on its exact rendered frame");
+    assert_eq!(
+        onset.map(|index| index as u64),
+        Some(target + IMPULSE_AT as u64),
+        "the impulse comes out on its exact rendered frame"
+    );
 }

@@ -10,6 +10,8 @@ the established solution before attempting a new implementation.
 
 | Symptom | Folder |
 | --- | --- |
+| A drag on a roller (Sport values, medication Heure/Dose, a date or time) scrolls the panel instead of turning the roller | [roller-drag-scrolls-panel](roller-drag-scrolls-panel/README.md) |
+| Web stack: some mutations of a burst fail at once with `SQLITE_BUSY` (database is locked); a probe keeps 11–13 of 20 messages | [central-db-busy-between-two-servers](central-db-busy-between-two-servers/README.md) |
 | Android update stays on its launch cover; native ADOLE initialization reports `no such column: thread_ref` | [native-news-schema-upgrade](native-news-schema-upgrade/README.md) |
 | A menu (rail, ribbon) opens a tool after a swipe or a slow exploration; the next tap is swallowed; the grown tool is cut at the bar's edge | [menu-swipe-runs-a-tool](menu-swipe-runs-a-tool/README.md) |
 | A Dashboard list's cover keeps its old words after an action (« Confirmée » after « Annul. ») although its projected record is new; no repaint fixes it | [scene-render-request-lost](scene-render-request-lost/README.md) |
@@ -59,12 +61,14 @@ the established solution before attempting a new implementation.
 | Dashboard wallpaper returns to a default or previous choice; project default greys diverge | [wallpaper-selection-races](wallpaper-selection-races/README.md) |
 | Nested User accordions shift or lose their open anchor; List Play covers the hierarchy cap | [nested-panel-anchor-and-row-seams](nested-panel-anchor-and-row-seams/README.md) |
 | Native builds repeatedly fill the disk with Rust objects and per-run Xcode caches | [build-cache-disk-exhaustion](build-cache-disk-exhaustion/README.md) |
+| A Dashboard rubric's plates show blurred pieces of the home (the V logo, a tile's disc) under their glass | [rubric-glass-blurs-previous-home](rubric-glass-blurs-previous-home/README.md) |
 | Edges between adjacent blurred glass cards flicker over an animated wallpaper; the row above a selected panel row flickers | [coplanar-glass-flicker](coplanar-glass-flicker/README.md) |
 | Logout loses the welcome screen; Billing actions stall; Dashboard restoration flashes gray | [first-launch-logout-and-restore](first-launch-logout-and-restore/README.md) |
 | Guest project rail remains absent and a browser update retains the old reader | [guest-contextual-access](guest-contextual-access/README.md) |
 | Expert List opens without its main menu while catalog registration replaces the first render | [main-menu-projection-admission](main-menu-projection-admission/README.md) |
 | Opaque floating Bevy panels interleave rails, text, commands and footers | [panel-window-stack](panel-window-stack/README.md) |
 | Assistant appears before connection, loses voice on token refresh, or its input covers ribbon tools | [assistant-connection-ribbon](assistant-connection-ribbon/README.md) |
+| The assistant never says she is ready (« Attends, je prépare tes documents », then « Salut »); she has to be asked « tu es là ? » | [assistant-ready-sentence-missing](assistant-ready-sentence-missing/README.md) |
 | Nested media cannot crop, images stretch, or trimmed waveforms deform | [source-space-media-crop](source-space-media-crop/README.md) |
 | SVG double-click has no WebGPU handles or Color targets an old layer | [svg-vector-edit-webgpu](svg-vector-edit-webgpu/README.md) |
 | Matrix cumulative selection toggles the wrong cell after a store reload | [structured-selection-reload-order](structured-selection-reload-order/README.md) |

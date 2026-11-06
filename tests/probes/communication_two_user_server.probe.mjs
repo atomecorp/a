@@ -86,7 +86,7 @@ const child = spawn(process.execPath, ['server/server.js'], {
         JWT_SECRET: 'communication-test-secret-long-enough', GITHUB_AUTO_SYNC: 'false',
         SYNC_REMOTE_ENABLED: 'false', SERVER_INFO_ENABLED: 'false',
         SQUIRREL_AUTH_TEST_MODE: '1', SQUIRREL_AUTH_OTP_BYPASS: '1',
-        SQUIRREL_DISABLE_WATCHER: '1', SQUIRREL_VAULT_ROOT: path.join(workRoot, 'vaults')
+        SQUIRREL_VAULT_ROOT: path.join(workRoot, 'vaults')
     },
     stdio: ['ignore', 'pipe', 'pipe']
 });

@@ -41,3 +41,12 @@ export const naturalReachableValue = (value, step) => {
 // A world-bound quantity's next value above `value`: one step, or two when only the second is natural.
 export const nextNaturalReachableValue = (value, step) => (isNaturalNumber(value + step) || !isNaturalNumber(value + 2 * step)
     ? value + step : value + 2 * step);
+
+// A duration counts in sixties (rule 19): from 30 s on, 30, 45, 60, 90 and 120 s are natural, then whole minutes; below,
+// the natural numbers. The first natural duration above `seconds`.
+const SIXTIES = Object.freeze([30, 45, 60, 90, 120]);
+export const nextNaturalSeconds = (seconds) => {
+    const value = Number(seconds);
+    if (value < SIXTIES[0]) return Math.min(SIXTIES[0], nextNaturalNumber(value));
+    return SIXTIES.find(item => item > value) ?? (Math.floor(value / 60) + 1) * 60;
+};

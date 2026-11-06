@@ -156,8 +156,8 @@ test('removals inside one import pass read the origins once and suppress each re
     expect([...f.records.values()].filter(row=>row.type==='contact'&&!row.deleted_at).length).toBe(0);
 });
 
-// The iOS read projection adds `type` to `properties` and a `set` merges into the stored
-// record (AiSRuntimeStateCurrent `serializeStateCurrentRow`): an unchanged pass must not write.
+// A read projection may add `type` to `properties` (the retired iOS Swift host did) and a `set`
+// merges into the stored record: an unchanged pass must not write.
 test('an unchanged pass writes nothing when reads project the record type into its properties',async()=>{
     const f=fixture(),api=f.api(),list=api.listStateCurrent,commit=api.commit;
     api.listStateCurrent=async(...args)=>(await list(...args)).map(row=>({...row,properties:{type:row.type,...row.properties}}));

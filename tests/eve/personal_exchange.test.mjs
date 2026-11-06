@@ -1,4 +1,4 @@
-import { test, expect } from 'vitest';
+import { test, expect, beforeAll } from 'vitest';
 import ICAL from 'ical.js';
 import { parseCalendarData, buildIcs, expandCalendarOccurrences, canonicalCalendarDate, calendarDate, calendarOccurrenceEnd } from '../../atome/src/squirrel/calendar/icalendar.js';
 import { parseVcards, buildWritableVcard } from '../../atome/src/squirrel/contacts/carddav_vcard.js';
@@ -10,6 +10,15 @@ import { PERSONAL_IMPORT_TOOLS, personalImportToolResult } from '../../atome/src
 import { resolveAccessPolicy } from '../../atome/src/squirrel/atome/mcp_security_policy.js';
 import { persistContactPhoto } from '../../atome/src/squirrel/contacts/photo_media.js';
 import { CommandBusV2 } from '../../eVe/intuition/runtime/command_bus.js';
+import { readFileSync } from 'node:fs';
+import { loadCalendarEngine as loadEngine } from '../../atome/src/squirrel/calendar/icalendar.js';
+
+// The calendar's occurrences are the Rust engine's (squirrel_audio_wasm): loaded once from its files,
+// as the page loads it from /wasm/.
+beforeAll(() => loadEngine({
+    moduleUrl: new URL('../../atome/src/wasm/squirrel_audio_wasm.js', import.meta.url).href,
+    binary: readFileSync(new URL('../../atome/src/wasm/squirrel_audio_wasm_bg.wasm', import.meta.url))
+}));
 const ics = lines => ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Test//EN',...lines,'END:VCALENDAR',''].join('\r\n');
 const event = lines => ['BEGIN:VEVENT','UID:series',...lines,'END:VEVENT'];
 const card = lines => ['BEGIN:VCARD','VERSION:4.0','UID:contact-a',...lines,'END:VCARD',''].join('\r\n');

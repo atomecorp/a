@@ -39,10 +39,18 @@ pub enum StripSource {
 }
 
 impl StripSource {
-    pub fn pull(&self, capture: &CaptureSlot, offset: usize, feeds: &[SourceBus], out: &mut [Frame]) {
+    pub fn pull(
+        &self,
+        capture: &CaptureSlot,
+        offset: usize,
+        feeds: &[SourceBus],
+        out: &mut [Frame],
+    ) {
         match self {
             StripSource::Track => capture.read_at(offset, out),
-            StripSource::Bus { feed, output } => out.copy_from_slice(&feeds[*feed].buses[*output][..out.len()]),
+            StripSource::Bus { feed, output } => {
+                out.copy_from_slice(&feeds[*feed].buses[*output][..out.len()])
+            }
         }
     }
 }
@@ -63,22 +71,38 @@ pub struct Feeds {
 impl Feeds {
     // Control thread, at apply: `live(device)` and `instruments` give the shared
     // inputs and slots, which outlive the graph.
-    pub fn plan(program: &Program, live: &mut dyn FnMut(&str) -> Arc<LiveInput>, instruments: &mut Instruments, sample_rate: u32) -> Result<Self, String> {
+    pub fn plan(
+        program: &Program,
+        live: &mut dyn FnMut(&str) -> Arc<LiveInput>,
+        instruments: &mut Instruments,
+        sample_rate: u32,
+    ) -> Result<Self, String> {
         let mut wanted: Vec<(FeedKey, usize)> = Vec::new();
-        let mut want = |key: FeedKey, output: usize| match wanted.iter_mut().find(|(known, _)| *known == key) {
+        let mut want = |key: FeedKey, output: usize| match wanted
+            .iter_mut()
+            .find(|(known, _)| *known == key)
+        {
             Some((_, outputs)) => *outputs = (*outputs).max(output + 1),
             None => wanted.push((key, output + 1)),
         };
         for strip in &program.strips {
             match &strip.input {
                 InputSpec::LiveAudio { device_id } => want(FeedKey::Live(device_id.clone()), 0),
-                InputSpec::Instrument { instrument_id, output } => want(FeedKey::Instrument(instrument_id.clone()), *output),
+                InputSpec::Instrument {
+                    instrument_id,
+                    output,
+                } => want(FeedKey::Instrument(instrument_id.clone()), *output),
                 InputSpec::Track => {}
             }
             for module in &strip.chain {
                 match &module.source {
-                    Some(MixSource::LiveAudio { device_id }) => want(FeedKey::Live(device_id.clone()), 0),
-                    Some(MixSource::Instrument { instrument_id, output }) => want(FeedKey::Instrument(instrument_id.clone()), *output),
+                    Some(MixSource::LiveAudio { device_id }) => {
+                        want(FeedKey::Live(device_id.clone()), 0)
+                    }
+                    Some(MixSource::Instrument {
+                        instrument_id,
+                        output,
+                    }) => want(FeedKey::Instrument(instrument_id.clone()), *output),
                     _ => {}
                 }
             }
@@ -94,17 +118,23 @@ impl Feeds {
                 }
             };
             index.insert(key, buses.len());
-            buses.push(SourceBus { feed, buses: (0..outputs).map(|_| vec![Frame::ZERO; MAX_BLOCK]).collect() });
+            buses.push(SourceBus {
+                feed,
+                buses: (0..outputs).map(|_| vec![Frame::ZERO; MAX_BLOCK]).collect(),
+            });
         }
         Ok(Self { index, buses })
     }
 
     // The outputs read per instrument (what its later descriptions must keep).
     pub fn routed(&self) -> HashMap<String, usize> {
-        self.index.iter().filter_map(|(key, at)| match key {
-            FeedKey::Instrument(id) => Some((id.clone(), self.buses[*at].buses.len())),
-            FeedKey::Live(_) => None,
-        }).collect()
+        self.index
+            .iter()
+            .filter_map(|(key, at)| match key {
+                FeedKey::Instrument(id) => Some((id.clone(), self.buses[*at].buses.len())),
+                FeedKey::Live(_) => None,
+            })
+            .collect()
     }
 
     pub fn devices(&self) -> impl Iterator<Item = &str> {
@@ -117,16 +147,33 @@ impl Feeds {
     pub fn strip_source(&self, input: &InputSpec) -> StripSource {
         match input {
             InputSpec::Track => StripSource::Track,
-            InputSpec::LiveAudio { device_id } => StripSource::Bus { feed: self.index[&FeedKey::Live(device_id.clone())], output: 0 },
-            InputSpec::Instrument { instrument_id, output } => StripSource::Bus { feed: self.index[&FeedKey::Instrument(instrument_id.clone())], output: *output },
+            InputSpec::LiveAudio { device_id } => StripSource::Bus {
+                feed: self.index[&FeedKey::Live(device_id.clone())],
+                output: 0,
+            },
+            InputSpec::Instrument {
+                instrument_id,
+                output,
+            } => StripSource::Bus {
+                feed: self.index[&FeedKey::Instrument(instrument_id.clone())],
+                output: *output,
+            },
         }
     }
 
     // The bus an IN module reads; a strip source travels on a lane (graph.rs).
     pub fn module_bus(&self, source: &MixSource) -> Option<(usize, usize)> {
         match source {
-            MixSource::LiveAudio { device_id } => Some((self.index[&FeedKey::Live(device_id.clone())], 0)),
-            MixSource::Instrument { instrument_id, output } => Some((self.index[&FeedKey::Instrument(instrument_id.clone())], *output)),
+            MixSource::LiveAudio { device_id } => {
+                Some((self.index[&FeedKey::Live(device_id.clone())], 0))
+            }
+            MixSource::Instrument {
+                instrument_id,
+                output,
+            } => Some((
+                self.index[&FeedKey::Instrument(instrument_id.clone())],
+                *output,
+            )),
             MixSource::Strip { .. } => None,
         }
     }

@@ -1,9 +1,16 @@
 // Volume (the strip's fader module) and stereo pan.
 
-use crate::{db_to_amplitude, ParamSpec, Processor, Smoothed, StereoBlock, Unit};
+use crate::{ParamSpec, Processor, Smoothed, StereoBlock, Unit, db_to_amplitude};
 
 pub const VOLUME_DB: u32 = 0;
-pub const VOLUME_PARAMS: [ParamSpec; 1] = [ParamSpec::new(VOLUME_DB, "volume_db", -120.0, 12.0, 0.0, Unit::Decibels)];
+pub const VOLUME_PARAMS: [ParamSpec; 1] = [ParamSpec::new(
+    VOLUME_DB,
+    "volume_db",
+    -120.0,
+    12.0,
+    0.0,
+    Unit::Decibels,
+)];
 
 pub struct Volume {
     gain: Smoothed,
@@ -11,7 +18,9 @@ pub struct Volume {
 
 impl Volume {
     pub fn new(volume_db: f32) -> Self {
-        Self { gain: Smoothed::new(db_to_amplitude(volume_db), 10.0) }
+        Self {
+            gain: Smoothed::new(db_to_amplitude(volume_db), 10.0),
+        }
     }
 }
 
@@ -30,7 +39,8 @@ impl Processor for Volume {
 
     fn set_param(&mut self, id: u32, value: f32) {
         if id == VOLUME_DB {
-            self.gain.set(db_to_amplitude(VOLUME_PARAMS[0].clamp(value)));
+            self.gain
+                .set(db_to_amplitude(VOLUME_PARAMS[0].clamp(value)));
         }
     }
 
@@ -54,7 +64,9 @@ pub struct Pan {
 
 impl Pan {
     pub fn new(pan: f32) -> Self {
-        Self { position: Smoothed::new(pan.clamp(-1.0, 1.0), 10.0) }
+        Self {
+            position: Smoothed::new(pan.clamp(-1.0, 1.0), 10.0),
+        }
     }
 }
 

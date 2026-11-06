@@ -1,0 +1,64 @@
+// The JavaScript gate (npm run check:js, voie 1 of the Rust-first plan): the
+// browser glue stays plain JavaScript, checked by Biome; Rust owns the types.
+// Formatting stays out: the tree keeps its own layout.
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "includes": [
+      "eVe/**/*.js",
+      "eVe/**/*.mjs",
+      "atome/src/**/*.js",
+      "server/**/*.js",
+      "server/**/*.mjs",
+      "scripts/**/*.js",
+      "scripts/**/*.mjs",
+      "tests/**/*.js",
+      "tests/**/*.mjs",
+      // Third-party bundles and generated glue are not ours to lint.
+      "!atome/src/js",
+      "!atome/src/wasm",
+      "!atome/src/assets/vendor"
+    ]
+  },
+  "formatter": { "enabled": false },
+  "assist": { "enabled": false },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      // House idioms, not defects: compact expressions and arrow callbacks.
+      "style": {
+        "useTemplate": "off"
+      },
+      "complexity": {
+        "useArrowFunction": "off",
+        "useOptionalChain": "off",
+        "noCommaOperator": "off"
+      },
+      "performance": {
+        // Small literal lists merged once; no measured cost.
+        "noAccumulatingSpread": "off"
+      },
+      "suspicious": {
+        // `(ns.x = ns.x || {})` namespaces and `forEach(x => f(x))` are the tree's idiom.
+        "noAssignInExpressions": "off",
+        "useIterableCallbackReturn": "off",
+        // `Object.prototype.hasOwnProperty.call` is correct; Object.hasOwn is a later modernisation.
+        "noPrototypeBuiltins": "off",
+        // Sanitisers strip control characters on purpose.
+        "noControlCharactersInRegex": "off",
+        // Local helpers named valueOf/escape shadow nothing used in their scope.
+        "noShadowRestrictedNames": "off",
+        // `fit` is the layout helper of the Dashboard, not Jasmine's focused test.
+        "noFocusedTests": "off"
+      },
+      "correctness": {
+        // Callback signatures keep their documented parameters.
+        "noUnusedFunctionParameters": "off",
+        // Reported, not yet blocking: the backlog is in todo/REGISTRE_DEMANDES.md.
+        "noUnusedVariables": "warn"
+      }
+    }
+  }
+}

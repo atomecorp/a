@@ -6,8 +6,8 @@
 // small buffers. The timeline keeps its own graph, rendered ahead.
 
 use super::{live_input, output_idle};
-use atome_mix_graph::direct_render::{DirectRender, LIVE_RING_FRAMES};
 pub use atome_mix_graph::direct_render::BUFFER_FRAMES;
+use atome_mix_graph::direct_render::{DirectRender, LIVE_RING_FRAMES};
 use atome_mix_graph::dsp_module::StoredAsset;
 use atome_mix_graph::round_trip;
 use atome_mix_graph::{MixGraph, Program, StripLevel};
@@ -42,9 +42,15 @@ pub(crate) fn note_input_quantum(frames: usize) {
 // A started backend's direct path: an empty graph and the render its device callback owns.
 pub(crate) fn install(sample_rate: u32) -> SharedDirect {
     let graph = MixGraph::with_live_capacity(sample_rate, LIVE_RING_FRAMES);
-    let render = Arc::new(Mutex::new(DirectRender::new(graph.effect_builder().into_effect(), sample_rate)));
+    let render = Arc::new(Mutex::new(DirectRender::new(
+        graph.effect_builder().into_effect(),
+        sample_rate,
+    )));
     if let Ok(mut slot) = GRAPH.lock() {
-        *slot = Some(DirectGraph { graph, program: Program::default() });
+        *slot = Some(DirectGraph {
+            graph,
+            program: Program::default(),
+        });
     }
     ACTIVE.store(false, Ordering::Release);
     render
@@ -71,17 +77,23 @@ pub(crate) fn buffer_size(_supported: &cpal::SupportedBufferSize) -> cpal::Buffe
 #[cfg(not(any(target_os = "ios", target_os = "windows")))]
 pub(crate) fn buffer_size(supported: &cpal::SupportedBufferSize) -> cpal::BufferSize {
     match supported {
-        cpal::SupportedBufferSize::Range { min, max } if is_active() => cpal::BufferSize::Fixed(BUFFER_FRAMES.clamp(*min, *max)),
+        cpal::SupportedBufferSize::Range { min, max } if is_active() => {
+            cpal::BufferSize::Fixed(BUFFER_FRAMES.clamp(*min, *max))
+        }
         _ => cpal::BufferSize::Default,
     }
 }
 
 fn with_direct<T>(action: impl FnOnce(&mut DirectGraph) -> Result<T, String>) -> Result<T, String> {
-    let mut guard = GRAPH.lock().map_err(|error| format!("Lock error: {error}"))?;
+    let mut guard = GRAPH
+        .lock()
+        .map_err(|error| format!("Lock error: {error}"))?;
     action(guard.as_mut().ok_or("Audio engine not initialized")?)
 }
 
-pub(crate) fn with_graph<T>(action: impl FnOnce(&mut MixGraph) -> Result<T, String>) -> Result<T, String> {
+pub(crate) fn with_graph<T>(
+    action: impl FnOnce(&mut MixGraph) -> Result<T, String>,
+) -> Result<T, String> {
     with_direct(|direct| action(&mut direct.graph))
 }
 
@@ -148,7 +160,10 @@ pub fn measure_round_trip(device_id: &str, sample_rate: u32) -> Result<serde_jso
     // The frames waiting in the input ring between two output callbacks.
     let mut backlog = 0;
     let results = loop {
-        backlog = inputs.iter().map(|(_, input)| input.available()).fold(backlog, usize::max);
+        backlog = inputs
+            .iter()
+            .map(|(_, input)| input.available())
+            .fold(backlog, usize::max);
         if let Some(results) = round_trip::results() {
             break Ok(results);
         }

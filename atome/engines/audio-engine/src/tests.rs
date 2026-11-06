@@ -102,27 +102,24 @@ mod audio_engine_tests {
     #[test]
     fn test_record_mic() {
         let _lock = TEST_LOCK.lock().unwrap();
-        let _metering_lock = crate::metering_scope::METERING_TEST_LOCK
-            .lock()
-            .unwrap();
+        let _metering_lock = crate::metering_scope::METERING_TEST_LOCK.lock().unwrap();
 
         let dir = test_dir();
         let rec_path = dir.join("test_recording.wav");
         let rec_str = rec_path.to_str().unwrap();
 
         let result = crate::recorder::start("test_rec", rec_str, 44100, 1);
-        if let Err(ref e) = result {
-            if e.contains("No default input") {
-                println!("SKIP: No microphone available on this machine");
-                return;
-            }
+        if let Err(ref e) = result
+            && e.contains("No default input")
+        {
+            println!("SKIP: No microphone available on this machine");
+            return;
         }
         result.expect("record start failed");
 
         std::thread::sleep(std::time::Duration::from_secs(2));
 
-        let rec_result =
-            crate::recorder::stop("test_rec").expect("record stop failed");
+        let rec_result = crate::recorder::stop("test_rec").expect("record stop failed");
 
         println!("Recording result: {:?}", rec_result);
         assert!(
@@ -160,9 +157,7 @@ mod audio_engine_tests {
 
     #[test]
     fn test_metering() {
-        let _metering_lock = crate::metering_scope::METERING_TEST_LOCK
-            .lock()
-            .unwrap();
+        let _metering_lock = crate::metering_scope::METERING_TEST_LOCK.lock().unwrap();
         // Reset and verify zeros
         crate::metering::reset();
         let levels = crate::metering::get_levels();

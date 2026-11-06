@@ -16,7 +16,15 @@ export const openR108Session = async ({ out }) => {
         '--enable-unsafe-webgpu', '--ignore-gpu-blocklist', '--disable-gpu-sandbox', '--enable-unsafe-swiftshader', '--use-webgpu-adapter=swiftshader',
         '--disable-gpu-watchdog', '--disable-gpu-process-crash-limit', ...(process.env.PW_EXTRA ? process.env.PW_EXTRA.split(' ') : []),
         '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', '--autoplay-policy=no-user-gesture-required'] });
-    const page = await (await browser.newContext({ viewport: { width: 402, height: 874 }, deviceScaleFactor: 1, hasTouch: true })).newPage();
+    const context = await browser.newContext({ viewport: { width: 402, height: 874 }, deviceScaleFactor: 1, hasTouch: true });
+    // The app reaches Fastify on the port server_config.json names: the page announces the test server it was served
+    // by (an isolated one, temp/comm/comm_harness.mjs, never the developer's 3001), and the product's switch keeps a
+    // loopback page off the local native server route.
+    const appUrl = new URL(APP_URL);
+    await context.route('**/server_config.json', (route) => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ fastify: {
+        host: appUrl.hostname, port: Number(appUrl.port || 80), serverInfoPath: '/api/server-info', syncWsPath: '/ws/sync', apiWsPath: '/ws/api' } }) }));
+    await context.addInitScript(() => { window.__SQUIRREL_FORCE_FASTIFY__ = true; });
+    const page = await context.newPage();
     page.on('console', (message) => { if (message.type() === 'error') report.console_errors.push(message.text().slice(0, 400)); });
     page.on('pageerror', (error) => report.page_errors.push(String(error.message).slice(0, 400)));
     report.http_errors = [];
@@ -45,7 +53,9 @@ export const openR108Session = async ({ out }) => {
     }, null, 180000);
     const signIn = async () => {
         await page.goto(APP_URL, { waitUntil: 'commit', timeout: 45000 });
-        await page.waitForFunction(() => !!window.AdoleAPI?.auth?.startPhoneLogin && window.__authCheckComplete === true, null, { timeout: 120000 });
+        // Signed in only once the app has read the test server's configuration (it reaches Fastify through it).
+        await page.waitForFunction((port) => !!window.AdoleAPI?.auth?.startPhoneLogin && window.__authCheckComplete === true
+            && Number(window.__SQUIRREL_SERVER_CONFIG__?.fastify?.port) === port, Number(appUrl.port || 80), { timeout: 120000 });
         const started = await page.evaluate(async () => {
             const result = await window.AdoleAPI.auth.startPhoneLogin(`+1555${`${Date.now()}`.slice(-7)}`);
             const paid = result?.paymentRequired === true ? await window.AdoleAPI.auth.payPhoneLogin({ method: 'paypal' }) : null;

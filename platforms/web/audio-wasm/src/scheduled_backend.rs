@@ -9,11 +9,11 @@
 // context clock freezing with it, so every rendered frame keeps its context
 // frame; the next demand (`wake`) resumes both.
 
-use kira::backend::{Backend, Renderer};
 use atome_mix_graph::voice::VoiceSound;
+use kira::backend::{Backend, Renderer};
 use std::cell::{Cell, RefCell};
-use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
+use wasm_bindgen::prelude::*;
 use web_sys::{AudioContext, AudioContextOptions};
 
 const BLOCK_FRAMES: usize = 512;
@@ -77,7 +77,7 @@ struct PendingStart {
     frame: u64,
 }
 
-type StartHook = fn(&str, VoiceSound);
+type StartHook = fn(&str, VoiceSound) -> Result<(), JsValue>;
 type SoundingHook = fn() -> bool;
 
 thread_local! {
@@ -107,9 +107,20 @@ pub fn install_sounding_hook(hook: SoundingHook) {
     SOUNDING_HOOK.with(|cell| cell.set(Some(hook)));
 }
 
+// A due voice that cannot start is reported: the render loop runs on and the
+// other voices keep their frames.
 fn start_now(voice_id: &str, sound: VoiceSound) {
-    if let Some(hook) = START_HOOK.with(|cell| cell.get()) {
-        hook(voice_id, sound);
+    let started = match START_HOOK.with(Cell::get) {
+        Some(hook) => hook(voice_id, sound),
+        None => Err(JsValue::from_str("no start hook installed")),
+    };
+    if let Err(error) = started {
+        web_sys::console::error_2(
+            &JsValue::from_str(&format!(
+                "[squirrel-audio-wasm] voice {voice_id} failed to start:"
+            )),
+            &error,
+        );
     }
 }
 
@@ -119,7 +130,13 @@ fn start_now(voice_id: &str, sound: VoiceSound) {
 pub fn schedule(voice_id: &str, sound: VoiceSound, frame: u64) -> u64 {
     cancel_scheduled(voice_id);
     let start = frame.max(next_render_frame().max(0.0) as u64);
-    PENDING.with(|pending| pending.borrow_mut().push(PendingStart { voice_id: voice_id.to_string(), sound, frame: start }));
+    PENDING.with(|pending| {
+        pending.borrow_mut().push(PendingStart {
+            voice_id: voice_id.to_string(),
+            sound,
+            frame: start,
+        })
+    });
     start
 }
 
@@ -134,10 +151,14 @@ pub fn cancel_scheduled(voice_id: &str) -> bool {
 
 // Frames inside [from, to) where scheduled voices are due (missed ones are due at `from`).
 fn due_frames(from: u64, to: u64) -> Vec<u64> {
-    let mut frames: Vec<u64> = PENDING.with(|pending| pending.borrow().iter()
-        .filter(|entry| entry.frame < to)
-        .map(|entry| entry.frame.max(from))
-        .collect());
+    let mut frames: Vec<u64> = PENDING.with(|pending| {
+        pending
+            .borrow()
+            .iter()
+            .filter(|entry| entry.frame < to)
+            .map(|entry| entry.frame.max(from))
+            .collect()
+    });
     frames.sort_unstable();
     frames.dedup();
     frames
@@ -146,7 +167,8 @@ fn due_frames(from: u64, to: u64) -> Vec<u64> {
 fn start_due(at: u64) {
     let due: Vec<PendingStart> = PENDING.with(|pending| {
         let mut list = pending.borrow_mut();
-        let (due, rest): (Vec<PendingStart>, Vec<PendingStart>) = list.drain(..).partition(|entry| entry.frame <= at);
+        let (due, rest): (Vec<PendingStart>, Vec<PendingStart>) =
+            list.drain(..).partition(|entry| entry.frame <= at);
         *list = rest;
         due
     });
@@ -192,7 +214,11 @@ impl Backend for ScheduledContextBackend {
         }
         let pairs = (channels / 2).saturating_sub(1);
         AUX_PAIRS.with(|cell| cell.set(pairs));
-        AUX.with(|slot| if let Some(aux) = slot.borrow().as_ref() { aux.configure(pairs as u16, BLOCK_FRAMES * 4) });
+        AUX.with(|slot| {
+            if let Some(aux) = slot.borrow().as_ref() {
+                aux.configure(pairs as u16, BLOCK_FRAMES * 4)
+            }
+        });
         CLOCK.with(|cell| {
             *cell.borrow_mut() = Some(RenderClock {
                 context,
@@ -215,9 +241,12 @@ impl Backend for ScheduledContextBackend {
     fn start(&mut self, renderer: Renderer) -> Result<(), Self::Error> {
         CLOCK.with(|cell| {
             let mut guard = cell.borrow_mut();
-            let clock = guard.as_mut().ok_or_else(|| ScheduledBackendError("render_clock_missing".into()))?;
+            let clock = guard
+                .as_mut()
+                .ok_or_else(|| ScheduledBackendError("render_clock_missing".into()))?;
             // Whole frames: every block starts exactly on a context frame.
-            clock.base_context_frame = ((clock.context.current_time() + LOOKAHEAD_SECONDS) * clock.sample_rate).round();
+            clock.base_context_frame =
+                ((clock.context.current_time() + LOOKAHEAD_SECONDS) * clock.sample_rate).round();
             clock.segments = vec![(0, clock.base_context_frame)];
             clock.renderer = Some(renderer);
             clock.pump = Some(Closure::<dyn FnMut()>::new(pump));
@@ -234,8 +263,16 @@ fn pump() {
 
 fn start_pump(clock: &mut RenderClock) -> Result<(), JsValue> {
     let window = web_sys::window().ok_or_else(|| JsValue::from_str("window_unavailable"))?;
-    let pump = clock.pump.as_ref().ok_or_else(|| JsValue::from_str("render_pump_missing"))?;
-    clock.interval = Some(window.set_interval_with_callback_and_timeout_and_arguments_0(pump.as_ref().unchecked_ref(), PUMP_INTERVAL_MS)?);
+    let pump = clock
+        .pump
+        .as_ref()
+        .ok_or_else(|| JsValue::from_str("render_pump_missing"))?;
+    clock.interval = Some(
+        window.set_interval_with_callback_and_timeout_and_arguments_0(
+            pump.as_ref().unchecked_ref(),
+            PUMP_INTERVAL_MS,
+        )?,
+    );
     Ok(())
 }
 
@@ -245,7 +282,9 @@ fn start_pump(clock: &mut RenderClock) -> Result<(), JsValue> {
 pub fn wake() -> Result<Option<js_sys::Promise>, JsValue> {
     CLOCK.with(|cell| {
         let mut guard = cell.borrow_mut();
-        let Some(clock) = guard.as_mut() else { return Ok(None) };
+        let Some(clock) = guard.as_mut() else {
+            return Ok(None);
+        };
         clock.quiet_frames = 0;
         if !clock.asleep {
             return Ok(None);
@@ -278,8 +317,14 @@ fn settle(clock: &mut RenderClock, rendered: u64, loud: bool) {
     let busy = loud
         || PENDING.with(|pending| !pending.borrow().is_empty())
         || HOLDS.with(|holds| !holds.borrow().is_empty())
-        || SOUNDING_HOOK.with(Cell::get).is_some_and(|sounding| sounding());
-    clock.quiet_frames = if busy { 0 } else { clock.quiet_frames + rendered };
+        || SOUNDING_HOOK
+            .with(Cell::get)
+            .is_some_and(|sounding| sounding());
+    clock.quiet_frames = if busy {
+        0
+    } else {
+        clock.quiet_frames + rendered
+    };
     if (clock.quiet_frames as f64) < IDLE_SECONDS * clock.sample_rate {
         return;
     }
@@ -304,20 +349,31 @@ fn render_ahead() {
     CLOCK.with(|cell| {
         let mut guard = cell.borrow_mut();
         let Some(clock) = guard.as_mut() else { return };
-        let Some(mut renderer) = clock.renderer.take() else { return };
+        let Some(mut renderer) = clock.renderer.take() else {
+            return;
+        };
         let now_frame = clock.context.current_time() * clock.sample_rate;
         let next_frame = clock.base_context_frame + clock.frames_rendered as f64;
         if next_frame < now_frame {
-            clock.base_context_frame += ((now_frame - next_frame) + LOOKAHEAD_SECONDS * clock.sample_rate).ceil();
+            clock.base_context_frame +=
+                ((now_frame - next_frame) + LOOKAHEAD_SECONDS * clock.sample_rate).ceil();
             clock.discontinuities += 1;
-            clock.segments.push((clock.frames_rendered, clock.base_context_frame));
+            clock
+                .segments
+                .push((clock.frames_rendered, clock.base_context_frame));
             if clock.segments.len() > 64 {
                 clock.segments.remove(0);
             }
         }
         let horizon = now_frame + LOOKAHEAD_SECONDS * clock.sample_rate;
         let (rendered_from, mut heard) = (clock.frames_rendered, false);
-        let Scratch { interleaved, left, right, aux, aux_frames } = &mut clock.scratch;
+        let Scratch {
+            interleaved,
+            left,
+            right,
+            aux,
+            aux_frames,
+        } = &mut clock.scratch;
         while clock.base_context_frame + (clock.frames_rendered as f64) < horizon {
             // The block is rendered in pieces split at the frames where scheduled
             // voices are due: each starts exactly on its frame.
@@ -341,9 +397,15 @@ fn render_ahead() {
                 right[frame] = interleaved[frame * CHANNELS + 1];
             }
             interleaved.fill(0.0);
-            let when = (clock.base_context_frame + clock.frames_rendered as f64) / clock.sample_rate;
+            let when =
+                (clock.base_context_frame + clock.frames_rendered as f64) / clock.sample_rate;
             drain_aux(aux, aux_frames);
-            heard = heard || loud(left) || loud(right) || aux.iter().any(|(aux_left, aux_right)| loud(aux_left) || loud(aux_right));
+            heard = heard
+                || loud(left)
+                || loud(right)
+                || aux
+                    .iter()
+                    .any(|(aux_left, aux_right)| loud(aux_left) || loud(aux_right));
             if schedule_block(&clock.context, clock.sample_rate, left, right, aux, when).is_err() {
                 break;
             }
@@ -384,7 +446,11 @@ fn schedule_block(
     aux: &mut [(Vec<f32>, Vec<f32>)],
     when: f64,
 ) -> Result<(), JsValue> {
-    let buffer = context.create_buffer((CHANNELS + aux.len() * 2) as u32, BLOCK_FRAMES as u32, sample_rate as f32)?;
+    let buffer = context.create_buffer(
+        (CHANNELS + aux.len() * 2) as u32,
+        BLOCK_FRAMES as u32,
+        sample_rate as f32,
+    )?;
     buffer.copy_to_channel(left, 0)?;
     buffer.copy_to_channel(right, 1)?;
     for (index, (aux_left, aux_right)) in aux.iter_mut().enumerate() {
@@ -401,7 +467,12 @@ fn schedule_block(
 // The frame the next started voice will begin on (a voice started now is
 // mixed from the first frame of the next rendered block).
 pub fn next_render_frame() -> f64 {
-    CLOCK.with(|cell| cell.borrow().as_ref().map(|clock| clock.frames_rendered as f64).unwrap_or(-1.0))
+    CLOCK.with(|cell| {
+        cell.borrow()
+            .as_ref()
+            .map(|clock| clock.frames_rendered as f64)
+            .unwrap_or(-1.0)
+    })
 }
 
 pub fn shared_context() -> Option<AudioContext> {
@@ -414,13 +485,21 @@ pub fn shared_context() -> Option<AudioContext> {
 // Whoever follows the clock (a playhead, a session's beeps) keeps the engine
 // rendering, and reads it caught up; an engine asleep is woken by `wake` first.
 pub fn render_clock() -> js_sys::Object {
-    CLOCK.with(|cell| if let Some(clock) = cell.borrow_mut().as_mut() { clock.quiet_frames = 0 });
+    CLOCK.with(|cell| {
+        if let Some(clock) = cell.borrow_mut().as_mut() {
+            clock.quiet_frames = 0
+        }
+    });
     render_ahead();
     let snapshot = js_sys::Object::new();
     CLOCK.with(|cell| {
         if let Some(clock) = cell.borrow().as_ref() {
             let set = |key: &str, value: f64| {
-                let _ = js_sys::Reflect::set(&snapshot, &JsValue::from_str(key), &JsValue::from_f64(value));
+                let _ = js_sys::Reflect::set(
+                    &snapshot,
+                    &JsValue::from_str(key),
+                    &JsValue::from_f64(value),
+                );
             };
             set("frames_rendered", clock.frames_rendered as f64);
             set("base_context_frame", clock.base_context_frame);

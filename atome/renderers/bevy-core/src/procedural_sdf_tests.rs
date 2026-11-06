@@ -4,11 +4,11 @@ use crate::{
     apply_despawn, apply_spawn, apply_style,
     procedural_sdf::ProceduralSdfMaterial,
     types::{
-        AtomeBevyRendererConfig, AtomeEntityTable, AtomeProceduralSdf, AtomeRenderNode, AtomeRenderScene,
-        AtomeStylePatch,
+        AtomeBevyRendererConfig, AtomeEntityTable, AtomeProceduralSdf, AtomeRenderNode,
+        AtomeRenderScene, AtomeStylePatch,
     },
     workspace_backdrop::{AtomePresentationCamera, AtomeWorkspaceBackdrop},
-    workspace_blur::{backdrop_blur_lod, AssistantOpticsSettings},
+    workspace_blur::{AssistantOpticsSettings, backdrop_blur_lod},
 };
 
 fn contract() -> AtomeProceduralSdf {
@@ -39,7 +39,11 @@ fn contract() -> AtomeProceduralSdf {
 fn world() -> World {
     let mut world = World::new();
     world.insert_resource(AtomeEntityTable::default());
-    world.insert_resource(AtomeBevyRendererConfig::new(1280.0, 720.0, AtomeRenderScene::default()));
+    world.insert_resource(AtomeBevyRendererConfig::new(
+        1280.0,
+        720.0,
+        AtomeRenderScene::default(),
+    ));
     world.insert_resource(Assets::<Image>::default());
     world.insert_resource(Assets::<Mesh>::default());
     world.insert_resource(Assets::<ProceduralSdfMaterial>::default());
@@ -71,7 +75,9 @@ fn procedural_sdf_spawns_and_patches_one_full_surface_material_quad() {
             logical_position: [430.0, 150.0],
             logical_size: [420.0, 420.0],
             clip_rect: None,
-            clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
+            clip_rotation: 0.0,
+            clip_rounded_rects: vec![],
+            clip_fades: vec![],
             scale: [1.0, 1.0],
             rotation: 0.0,
             origin: [0.0, 0.0],
@@ -106,18 +112,44 @@ fn procedural_sdf_spawns_and_patches_one_full_surface_material_quad() {
         },
     )
     .unwrap();
-    let handle = world.get::<MeshMaterial2d<ProceduralSdfMaterial>>(entity).unwrap().0.clone();
+    let handle = world
+        .get::<MeshMaterial2d<ProceduralSdfMaterial>>(entity)
+        .unwrap()
+        .0
+        .clone();
     assert!(world.get::<Mesh2d>(entity).is_some());
     let backdrop_state = world.resource::<AtomeWorkspaceBackdrop>().clone();
     assert!(backdrop_state.enabled);
-    assert!(world.get::<Camera>(backdrop_state.camera).unwrap().is_active);
-    assert_eq!(world.resource::<Assets<ProceduralSdfMaterial>>().get(&handle).unwrap().backdrop, backdrop_state.image);
+    assert!(
+        world
+            .get::<Camera>(backdrop_state.camera)
+            .unwrap()
+            .is_active
+    );
     assert_eq!(
-        world.resource::<Assets<ProceduralSdfMaterial>>().get(&handle).unwrap().uniform.morph.to_array(),
+        world
+            .resource::<Assets<ProceduralSdfMaterial>>()
+            .get(&handle)
+            .unwrap()
+            .backdrop,
+        backdrop_state.image
+    );
+    assert_eq!(
+        world
+            .resource::<Assets<ProceduralSdfMaterial>>()
+            .get(&handle)
+            .unwrap()
+            .uniform
+            .morph
+            .to_array(),
         contract().morph
     );
 
-    let patched = AtomeProceduralSdf { phase: 2.0, intensity: 0.25, ..contract() };
+    let patched = AtomeProceduralSdf {
+        phase: 2.0,
+        intensity: 0.25,
+        ..contract()
+    };
     apply_style(
         &mut world,
         AtomeStylePatch {
@@ -143,15 +175,27 @@ fn procedural_sdf_spawns_and_patches_one_full_surface_material_quad() {
         },
     )
     .unwrap();
-    let uniform = world.resource::<Assets<ProceduralSdfMaterial>>().get(&handle).unwrap().uniform;
+    let uniform = world
+        .resource::<Assets<ProceduralSdfMaterial>>()
+        .get(&handle)
+        .unwrap()
+        .uniform;
     assert_eq!(uniform.dynamics.x, 2.0);
     assert_eq!(uniform.dynamics.w, 0.25);
     assert_eq!(uniform.geometry.to_array(), [1280.0, 720.0, 640.0, 360.0]);
     assert_eq!(uniform.shape.x, 420.0);
-    assert_eq!(uniform.shape.w, backdrop_blur_lod(contract().background_blur_px, 1.0));
+    assert_eq!(
+        uniform.shape.w,
+        backdrop_blur_lod(contract().background_blur_px, 1.0)
+    );
     apply_despawn(&mut world, "assistant_sdf").unwrap();
     assert!(!world.resource::<AtomeWorkspaceBackdrop>().enabled);
-    assert!(!world.get::<Camera>(backdrop_state.camera).unwrap().is_active);
+    assert!(
+        !world
+            .get::<Camera>(backdrop_state.camera)
+            .unwrap()
+            .is_active
+    );
 }
 
 #[test]
@@ -174,7 +218,9 @@ fn procedural_sdf_keeps_clear_glass_and_a_continuous_shadow_free_aura() {
     assert!(shader.contains("frag_coord_to_uv(mesh.position.xy, view.viewport)"));
     assert!(!shader.contains("mesh.world_position.x / surface_size.x + 0.5"));
     assert!(!shader.contains("mesh.position.xy / max(screen_dimensions"));
-    assert!(shader.contains("let glass_color = mix(original_color, blurred_color, material.optics.y)"));
+    assert!(
+        shader.contains("let glass_color = mix(original_color, blurred_color, material.optics.y)")
+    );
     assert!(shader.contains("fn gaussian_tail"));
     assert!(shader.contains("let halo_near = gaussian_tail"));
     assert!(shader.contains("let halo_diffuse = gaussian_tail"));
@@ -189,9 +235,15 @@ fn procedural_sdf_mystic_mode_is_one_isolated_turning_tile_branch() {
     // The branch exists, and it is reachable: the dispatch walks from the most
     // specific mode to the most general one, so mode 3 can never fall through
     // into the liquid glass and mode 2 can never fall into the corolla.
-    assert!(shader.contains("fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>)"));
-    let mystic = shader.find("material.surface_style.x > 2.5").expect("mystic dispatch");
-    let liquid = shader.find("material.surface_style.x > 1.5").expect("liquid dispatch");
+    assert!(
+        shader.contains("fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>)")
+    );
+    let mystic = shader
+        .find("material.surface_style.x > 2.5")
+        .expect("mystic dispatch");
+    let liquid = shader
+        .find("material.surface_style.x > 1.5")
+        .expect("liquid dispatch");
     assert!(mystic < liquid);
     assert!(!shader.contains("fn flower_liquid("));
     // Both plates are rounded rectangles, so the SDF is shared instead of
@@ -207,29 +259,39 @@ fn procedural_sdf_mystic_mode_is_one_isolated_turning_tile_branch() {
     // The contact shadow fades over the distance to the PLATE, never over a
     // distance that reads as zero off the plate: that is what turned the whole
     // `reach` of a turning tile into one dark rectangle.
-    assert!(shader.contains("let shadow_value = (1.0 - smoothstep(0.0, shadow_blur, max(contact_distance, 0.0)))"));
+    assert!(shader.contains(
+        "let shadow_value = (1.0 - smoothstep(0.0, shadow_blur, max(contact_distance, 0.0)))"
+    ));
     assert!(!shader.contains("smoothstep(0.0, shadow_blur, max(box_distance, 0.0))"));
     // The tile turns around a real perspective divide, and its two faces are the
     // same rectangle: the workspace side reads the plate coordinate as its own
     // source offset, the menu side reads the shared system glass.
     assert!(shader.contains("let candidate_aside = along * eye / denominator"));
     assert!(shader.contains("let candidate_bside = across * depth / eye"));
-    assert!(shader.contains("let source = select(tile.xy + vec2(aside, bside), tile.xy + vec2(bside, aside), turning_y)"));
+    assert!(shader.contains(
+        "let source = select(tile.xy + vec2(aside, bside), tile.xy + vec2(bside, aside), turning_y)"
+    ));
     assert!(shader.contains("mix(plate, mix(tint.rgb, family.rgb, family.a), tint.a)"));
     assert!(shader.contains("material.mystic_tile_colors[index]"));
     assert!(shader.contains("material.mystic_tile_motion[index]"));
     // The back face carries the workspace WHOLE — no fade gating its opacity — and
     // the cell it leaves behind shows the surface background alone: the hole
     // reveals the wallpaper, never the tile nor a flat menu colour.
-    assert!(shader.contains("let previous = textureSampleLevel(menu_front, menu_front_sampler, source_uv, 0.0);"));
+    assert!(shader.contains(
+        "let previous = textureSampleLevel(menu_front, menu_front_sampler, source_uv, 0.0);"
+    ));
     assert!(shader.contains("plate_color = previous.rgb;"));
     assert!(!shader.contains("back_alpha"));
     assert!(shader.contains("let hole_distance = sd_mystic_tile(delta, half_side,"));
-    assert!(shader.contains("let hole_color = textureSampleLevel(menu_back, menu_back_sampler, back_uv, 0.0).rgb"));
+    assert!(shader.contains(
+        "let hole_color = textureSampleLevel(menu_back, menu_back_sampler, back_uv, 0.0).rgb"
+    ));
     // A palette tile's top-right corner is folded: `mystic_tile_motion.w` is the
     // fold's side, and the plate, its contact shadow and its hole are all cut
     // along the same diagonal.
-    assert!(shader.contains("fn sd_mystic_tile(point: vec2<f32>, half_side: f32, corner: f32, fold: f32) -> f32"));
+    assert!(shader.contains(
+        "fn sd_mystic_tile(point: vec2<f32>, half_side: f32, corner: f32, fold: f32) -> f32"
+    ));
     assert!(shader.contains("let fold = clamp(motion.w, 0.0, half_side);"));
     assert!(shader.contains("let footprint_distance = sd_mystic_tile(delta, half_side,"));
     assert!(shader.contains("contact_distance = sd_mystic_tile(face_point, half_side,"));
@@ -241,19 +303,27 @@ fn procedural_sdf_mystic_mode_is_one_isolated_turning_tile_branch() {
     assert!(shader.contains("let lifted = max(abs(sine), clamp(material.mystic_style.y, 0.0, 1.0) * select(0.0, 1.0, cosine < 0.0 || level_turn));"));
     // A tile that has not started turning paints nothing at all, except in a
     // level turn, where it still shows the level it carried.
-    assert!(shader.contains("if progress <= 0.0 && (!level_turn || previous_absent) { continue; }"));
+    assert!(
+        shader.contains("if progress <= 0.0 && (!level_turn || previous_absent) { continue; }")
+    );
     // A level turn (`mystic_style.z`) turns from the previous level's face, on the
     // same glass, never from the workspace; `|motion.z|` names what the cell showed.
     assert!(shader.contains("let level_turn = material.mystic_style.z > 0.5;"));
-    assert!(shader.contains("let previous_kind = select(0.0, round(abs(motion.z)) - 1.0, level_turn);"));
-    assert!(shader.contains("plate_color = intuition_mystic_plate(box_distance, source_uv, family, glass_mix, tint);"));
+    assert!(
+        shader.contains("let previous_kind = select(0.0, round(abs(motion.z)) - 1.0, level_turn);")
+    );
+    assert!(shader.contains(
+        "plate_color = intuition_mystic_plate(box_distance, source_uv, family, glass_mix, tint);"
+    ));
     // An empty grid cell (`motion.w < 0`, never a folded palette) is invisible on
     // its menu face: no plate at all, so its hole shows the background alone, like
     // the seams between tiles (never the tile beneath) — no outline, no frost, no
     // shadow. The same holds, in a level turn, for a cell that showed nothing or
     // an empty one.
     assert!(shader.contains("let ghost = motion.w < -0.5;"));
-    assert!(shader.contains("let faceless = select(ghost, previous_ghost || previous_absent, cosine >= 0.0);"));
+    assert!(shader.contains(
+        "let faceless = select(ghost, previous_ghost || previous_absent, cosine >= 0.0);"
+    ));
     assert!(shader.contains("if faceless { plate_mask = 0.0; }"));
     assert!(shader.contains("* lifted * select(1.0, 0.0, faceless)"));
     // Its hole covers the tile under it edge included: the edge band lies outside
@@ -261,9 +331,22 @@ fn procedural_sdf_mystic_mode_is_one_isolated_turning_tile_branch() {
     assert!(shader.contains("let hole_edge = select(0.0, 2.0 * softness, ghost);"));
     assert!(!shader.contains("intuition_mystic_back_blur"));
     // Every mystic uniform is declared, and in the bind group order.
-    let mut order = vec![shader.find("liquid_drop_count: vec4<f32>").expect("liquid drop count")];
-    for field in ["mystic_tiles", "mystic_tile_motion", "mystic_tile_colors", "mystic_count", "mystic_style"] {
+    let mut order = vec![
+        shader
+            .find("liquid_drop_count: vec4<f32>")
+            .expect("liquid drop count"),
+    ];
+    for field in [
+        "mystic_tiles",
+        "mystic_tile_motion",
+        "mystic_tile_colors",
+        "mystic_count",
+        "mystic_style",
+    ] {
         order.push(shader.find(&format!("{field}:")).expect("mystic uniform"));
     }
-    assert!(order.windows(2).all(|pair| pair[0] < pair[1]), "mystic uniforms follow liquid_drop_count in order");
+    assert!(
+        order.windows(2).all(|pair| pair[0] < pair[1]),
+        "mystic uniforms follow liquid_drop_count in order"
+    );
 }

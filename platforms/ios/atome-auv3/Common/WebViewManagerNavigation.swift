@@ -56,7 +56,7 @@ extension WebViewManager {
     log.debug("didFinish; frame=\(String(describing: webView.frame.debugDescription)) bounds=\(String(describing: webView.bounds.debugDescription))")
         // Keep post-navigation work limited to product initialization. The
         // historical red-div smoke-test IPC must never run in an installed app.
-        if FeatureFlags.startLocalHTTPServer, let p = LocalHTTPServer.shared.port {
+        if FeatureFlags.startLocalHTTPServer, let p = LocalServer.shared.port {
             WebViewManager.announceLocalHTTPPort(p, to: webView)
         }
     // Inject AUv3 / App context flag early for JS platform detection

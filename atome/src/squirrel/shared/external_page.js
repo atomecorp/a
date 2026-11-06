@@ -43,3 +43,28 @@ export async function openExternalPage(url, reserved = null) {
     if (target === reserved) target.location.href = url;
     return { ok: true, via: 'web' };
 }
+
+// A shop's cart filled by its own links (register R-119 L4, decision Q5 A): the addresses are opened one after the other in
+// one window, each given `stepMs` to load (its session and cart are the shop's cookies), the last one left showing (its cart).
+// The Web keeps the window it reserved during the gesture; the native hosts open each in the system browser, whose cookies
+// the shop's tabs share. Only the shops of the catalogue are opened so (#shared/web_shop_catalogue.js).
+export async function openExternalSequence(urls, reserved = null, { stepMs = 3000, wait = ms => new Promise(done => setTimeout(done, ms)) } = {}) {
+    if (!urls.length || !urls.every(isExternalPageUrl)) {
+        reserved?.close?.();
+        return { ok: false, error: 'external_page_invalid' };
+    }
+    if (iosOpenUrl() || tauriInvoke() || !reserved) {
+        for (const [index, url] of urls.entries()) {
+            const opened = await openExternalPage(url, index === 0 ? reserved : null);
+            if (!opened.ok) return opened;
+            if (index < urls.length - 1) await wait(stepMs);
+        }
+        return { ok: true, via: iosOpenUrl() ? 'ios' : tauriInvoke() ? 'tauri' : 'web', steps: urls.length };
+    }
+    for (const [index, url] of urls.entries()) {
+        if (reserved.closed) return { ok: false, error: 'external_page_closed', steps: index };
+        reserved.location.href = url;
+        if (index < urls.length - 1) await wait(stepMs);
+    }
+    return { ok: true, via: 'web', steps: urls.length };
+}

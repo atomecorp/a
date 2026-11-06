@@ -6,6 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { verifyDeployedSource, verifyRuntimeDependencies } from './verify_deployed_source.js';
 import { backupServerIdentity, ensureProductionSecureConfig, readEnvValue } from './server_secure_config.js';
+import { checkVaultConfinement } from './check_vault_confinement.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -220,10 +221,10 @@ function ensureEnvFile({ envDir, envFile, appEnvExample, appEnvFallback }) {
 
 function ensureSystemdUnit({ serviceName, envFile }) {
     const unitPath = `/etc/systemd/system/${serviceName}.service`;
-    const nodeExec = '/usr/bin/node';
+    // atome-server serves alone: the public port, every route, the clocks and the vaults.
     const unit = [
         '[Unit]',
-        'Description=Squirrel Node.js Server',
+        'Description=atome server (Axum, vault supervisor)',
         'After=network.target',
         '',
         '[Service]',
@@ -231,7 +232,7 @@ function ensureSystemdUnit({ serviceName, envFile }) {
         'User=root',
         'Group=root',
         `WorkingDirectory=${projectRoot}`,
-        `ExecStart=${nodeExec} ${path.join(projectRoot, 'server/server.js')}`,
+        `ExecStart=${path.join(projectRoot, 'target/release/atome-server')}`,
         'Restart=always',
         'RestartSec=5',
         `EnvironmentFile=${envFile}`,
@@ -292,9 +293,25 @@ function ensureNodeModules() {
     // normalizes served videos (HEVC/.mov takes, server/server_media.js).
     // This is safe and idempotent on Debian/Ubuntu.
     run('apt-get update');
-    run('apt-get install -y ca-certificates curl git build-essential python3 make g++ pkg-config libsqlite3-dev ffmpeg');
+    // python3-pip: the mediasoup crate builds the visio worker (C++, meson and ninja installed by pip into its own
+    // build folder, its subprojects fetched over the network).
+    run('apt-get install -y ca-certificates curl git build-essential python3 python3-pip make g++ pkg-config libsqlite3-dev ffmpeg');
 
     run('npm ci --omit=dev');
+}
+
+function buildRustServer() {
+    if (!readCommand('command -v cargo', { allowFailure: true })) {
+        die('cargo is missing: atome-server and atome-vault are built on this host (install the Rust toolchain first).');
+    }
+    // The visio SFU's worker (the mediasoup crate) is C++ built by meson, which pip installs for it.
+    if (!readCommand('command -v c++', { allowFailure: true })) {
+        die('c++ is missing: the visio worker (mediasoup) is compiled on this host (apt-get install build-essential).');
+    }
+    if (!readCommand('python3 -m pip --version', { allowFailure: true })) {
+        die('python3 pip is missing: the visio worker (mediasoup) builds with meson installed by pip (apt-get install python3-pip).');
+    }
+    run('cargo build --release --locked -p atome-server -p atome-vault', { cwd: projectRoot });
 }
 
 function gitUpdate({ mode }) {
@@ -414,6 +431,13 @@ async function main() {
     } else {
         skipPhase('npm-ci', '--no-deps');
     }
+
+    phase('rust-build', () => buildRustServer());
+
+    // A vault this host cannot confine stops the update before the restart.
+    phase('vault-confinement', () => checkVaultConfinement({
+        vaultRoot: readEnvValue(readText(opts.envFile), 'SQUIRREL_VAULT_ROOT') || undefined
+    }));
 
     phase('verify-runtime-dependencies', () => verifyRuntimeDependencies(projectRoot));
 

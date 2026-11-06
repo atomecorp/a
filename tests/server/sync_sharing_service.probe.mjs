@@ -3,15 +3,16 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
+import { startVaultSupervisor } from './vault_supervisor_support.mjs';
 
 test('linked realtime, manual linked and detached sharing remain distinct', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'atome-sync-sharing-'));
-    const socketRoot = path.join('/tmp', `atome-sync-sharing-${process.pid}-${Date.now()}`);
+    const supervisor = await startVaultSupervisor({ root: path.join(root, 'vaults'), centralDatabase: path.join(root, 'orchestrator.db') });
     process.env.SQLITE_PATH = path.join(root, 'orchestrator.db');
     const db = await import(`../../database/adole.js?sharing=${Date.now()}`);
     const { createUserVaultRouter } = await import(`../../server/userVaultRouter.js?sharing=${Date.now()}`);
     const { createSyncSharingService } = await import(`../../server/syncSharingService.js?sharing=${Date.now()}`);
-    const router = createUserVaultRouter({ root: path.join(root, 'vaults'), socketRoot });
+    const router = createUserVaultRouter({ root: path.join(root, 'vaults'), socketPath: supervisor.socketPath });
     const replayed = [];
     const granted = [];
     const revoked = [];
@@ -212,9 +213,9 @@ test('linked realtime, manual linked and detached sharing remain distinct', asyn
         assert.deepEqual(revoked, [{ principal: recipient, stream: initial.event.stream_id }]);
     } finally {
         await router.stopAll();
+        await supervisor.stop();
         await db.closeDatabase().catch(() => {});
         fs.rmSync(root, { recursive: true, force: true });
-        fs.rmSync(socketRoot, { recursive: true, force: true });
         delete process.env.SQLITE_PATH;
     }
 });

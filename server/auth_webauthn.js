@@ -20,7 +20,7 @@ function decodeCbor(buffer, offset = 0, depth = 0) {
     if (depth > 8 || offset >= buffer.length) reject('auth_webauthn_invalid');
     const initial = buffer[offset];
     const major = initial >> 5;
-    let info = initial & 0x1f;
+    const info = initial & 0x1f;
     let position = offset + 1;
     let length;
     if (info < 24) length = info;

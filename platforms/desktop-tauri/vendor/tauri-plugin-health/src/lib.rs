@@ -7,12 +7,12 @@
 //! is registered, so page code has no direct path to Health Connect.
 
 use serde_json::Value;
-use tauri::{
-    plugin::{Builder, TauriPlugin},
-    AppHandle, Runtime,
-};
 #[cfg(target_os = "android")]
 use tauri::Manager;
+use tauri::{
+    AppHandle, Runtime,
+    plugin::{Builder, TauriPlugin},
+};
 
 #[cfg(target_os = "android")]
 struct HealthPluginHandle<R: Runtime>(tauri::plugin::PluginHandle<R>);
@@ -57,7 +57,11 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
 }
 
 /// Blocking call into Health Connect; run it off the async runtime.
-pub fn call<R: Runtime>(_app: &AppHandle<R>, method: &str, _payload: Value) -> Result<Value, String> {
+pub fn call<R: Runtime>(
+    _app: &AppHandle<R>,
+    method: &str,
+    _payload: Value,
+) -> Result<Value, String> {
     if !METHODS.contains(&method) {
         return Err("health_command_unknown".into());
     }

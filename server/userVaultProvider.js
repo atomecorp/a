@@ -1,172 +1,129 @@
 import crypto from 'node:crypto';
-import { fork } from 'node:child_process';
-import fs from 'node:fs';
 import net from 'node:net';
-import os from 'node:os';
 import path from 'node:path';
+
+// Fastify reaches each person's vault through the Rust supervisor (atome-server),
+// which runs one `atome-vault` process per person, the only writer of that vault.
+// One connection carries every request, in the supervisor's binary frames
+// (atome/servers/atome-vault/src/frame.rs): a u32 big-endian length of what
+// follows, a u64 request id, a one-byte tag, the body. SERVICE frames ask the
+// supervisor's own vault router (atome/servers/atome-server/src/vault_router).
+const ROUTED = 4;
+const SERVICE = 5;
+const RESULT = 2;
+const FAILURE = 3;
+const HEAD_BYTES = 9;
 
 const principalKey = (principalId) => crypto
     .createHash('sha256')
     .update(String(principalId))
     .digest('hex');
 
-const requestSocket = ({ socketPath, secret, operation, payload, timeoutMs }) => new Promise((resolve, reject) => {
-    const connection = net.createConnection(socketPath);
-    const chunks = [];
-    const timer = setTimeout(() => {
-        connection.destroy();
-        reject(new Error('vault_request_timeout'));
-    }, timeoutMs);
-    const finish = (handler) => (value) => {
-        clearTimeout(timer);
-        handler(value);
-    };
-    connection.setEncoding('utf8');
-    connection.once('error', finish(reject));
-    connection.on('data', (chunk) => {
-        const newline = chunk.indexOf('\n');
-        chunks.push(newline < 0 ? chunk : chunk.slice(0, newline));
-        if (newline < 0) return;
-        connection.end();
-        try {
-            const response = JSON.parse(chunks.join(''));
-            if (!response.ok) throw new Error(response.error || 'vault_request_failed');
-            finish(resolve)(response.result);
-        } catch (error) {
-            finish(reject)(error);
-        }
-    });
-    connection.once('connect', () => {
-        connection.write(`${JSON.stringify({
-            requestId: crypto.randomUUID(), secret, operation, payload
-        })}\n`);
-    });
-});
+const prefixed = (text) => {
+    const bytes = Buffer.from(text, 'utf8');
+    const length = Buffer.alloc(2);
+    length.writeUInt16BE(bytes.length);
+    return [length, bytes];
+};
+
+const encodeFrame = (id, tag, body) => {
+    const head = Buffer.alloc(4 + HEAD_BYTES);
+    head.writeUInt32BE(HEAD_BYTES + body.reduce((size, part) => size + part.length, 0), 0);
+    head.writeBigUInt64BE(id, 4);
+    head.writeUInt8(tag, 12);
+    return Buffer.concat([head, ...body]);
+};
+
+const requestBody = (operation, payload) => [...prefixed(operation), Buffer.from(JSON.stringify(payload ?? {}), 'utf8')];
 
 export class UserVaultProvider {
     constructor(options = {}) {
         this.root = path.resolve(options.root || process.env.SQUIRREL_VAULT_ROOT || 'database_storage/vaults');
-        const unixSocketBase = process.platform === 'darwin' ? '/tmp' : os.tmpdir();
-        this.socketRoot = path.resolve(
-            options.socketRoot
-            || process.env.SQUIRREL_VAULT_SOCKET_ROOT
-            || path.join(unixSocketBase, `atome-vault-${process.pid}`)
-        );
-        this.timeoutMs = Math.max(1000, Number(options.timeoutMs) || 10_000);
-        this.idleMs = Math.max(1, Number(options.idleMs) || 180_000);
-        this.children = new Map();
-        fs.mkdirSync(this.root, { recursive: true, mode: 0o700 });
-        fs.mkdirSync(this.socketRoot, { recursive: true, mode: 0o700 });
+        this.socketPath = options.socketPath || process.env.ATOME_VAULT_SUPERVISOR_SOCKET;
+        if (!this.socketPath) throw new Error('vault_supervisor_socket_missing');
+        this.pending = new Map();
+        this.nextId = 1n;
+        this.connection = null;
     }
 
+    // The person's vault directory; the supervisor starts the vault on its first request.
     async ensure(principalId) {
         const id = String(principalId || '').trim();
         if (!id) throw new Error('vault_principal_required');
-        const existing = this.children.get(id);
-        if (existing?.stopping) { await existing.stopping; return this.ensure(id); }
-        if (existing?.ready === true && existing.child.exitCode == null) {
-            this.scheduleIdle(existing);
-            return existing;
-        }
-        if (existing?.startPromise && existing.child.exitCode == null) {
-            await existing.startPromise;
-            return existing;
-        }
-        const key = principalKey(id);
-        const vaultRoot = path.join(this.root, key);
-        const socketPath = path.join(this.socketRoot, `${key.slice(0, 24)}.sock`);
-        const secret = crypto.randomBytes(32).toString('hex');
-        fs.mkdirSync(vaultRoot, { recursive: true, mode: 0o700 });
-        const child = fork(new URL('./userVaultProcess.js', import.meta.url), [id, vaultRoot, socketPath], {
-            env: { ...process.env, SQUIRREL_VAULT_IPC_SECRET: secret },
-            execArgv: [],
-            stdio: ['ignore', 'ignore', 'pipe', 'ipc']
-        });
-        const record = { child, principalId: id, vaultRoot, socketPath, secret, ready: false };
-        let stderr = '';
-        child.stderr?.on('data', (chunk) => { stderr += chunk.toString(); });
-        this.children.set(id, record);
-        record.startPromise = new Promise((resolve, reject) => {
-            const timer = setTimeout(() => reject(new Error('vault_start_timeout')), this.timeoutMs);
-            child.once('error', (error) => { clearTimeout(timer); reject(error); });
-            child.once('exit', (code) => {
-                if (record.ready) return;
-                clearTimeout(timer);
-                reject(new Error(`vault_exit_${code}:${stderr}`));
-            });
-            child.on('message', (message) => {
-                if (message?.type !== 'vault-ready' || message.principalId !== id) return;
-                clearTimeout(timer);
-                record.ready = true;
-                resolve();
-            });
-        });
-        await record.startPromise;
-        record.startPromise = null;
-        this.scheduleIdle(record);
-        return record;
+        return { principalId: id, vaultRoot: path.join(this.root, principalKey(id)) };
     }
 
-    scheduleIdle(record) {
-        clearTimeout(record.idleTimer);
-        if (record.requests || record.stopping) return;
-        record.idleTimer = setTimeout(() => {
-            // A new request clears this timer before opening its IPC socket.
-            if (!record.requests && this.children.get(record.principalId) === record) {
-                void this.stop(record.principalId);
+    connect() {
+        if (this.connection) return this.connection;
+        const connection = net.createConnection(this.socketPath);
+        const chunks = [];
+        let buffered = 0;
+        let expected = 4;
+        connection.on('data', (chunk) => {
+            chunks.push(chunk);
+            buffered += chunk.length;
+            while (buffered >= expected) {
+                const bytes = chunks.length === 1 ? chunks[0] : Buffer.concat(chunks, buffered);
+                chunks.length = 0;
+                const length = bytes.readUInt32BE(0);
+                if (bytes.length < 4 + length) {
+                    chunks.push(bytes);
+                    expected = 4 + length;
+                    return;
+                }
+                this.answer(bytes.subarray(4, 4 + length));
+                const rest = bytes.subarray(4 + length);
+                if (rest.length) chunks.push(rest);
+                buffered = rest.length;
+                expected = 4;
             }
-        }, this.idleMs);
-        record.idleTimer.unref();
+        });
+        const closed = (error) => {
+            if (this.connection === connection) this.connection = null;
+            const failure = new Error(error?.code ? `vault_supervisor_unreachable:${error.code}` : 'vault_supervisor_closed');
+            for (const waiting of this.pending.values()) waiting.reject(failure);
+            this.pending.clear();
+        };
+        connection.once('error', closed);
+        connection.once('close', () => closed(null));
+        this.connection = connection;
+        return connection;
     }
 
-    async request(principalId, operation, payload = {}) {
-        const record = await this.ensure(principalId);
-        clearTimeout(record.idleTimer);
-        record.requests = (record.requests || 0) + 1;
-        try { return await requestSocket({
-            socketPath: record.socketPath,
-            secret: record.secret,
-            operation,
-            payload,
-            timeoutMs: this.timeoutMs
-        }); } finally {
-            record.requests -= 1;
-            if (this.children.get(record.principalId) === record) this.scheduleIdle(record);
-        }
+    answer(content) {
+        const id = content.readBigUInt64BE(0);
+        const waiting = this.pending.get(id);
+        if (!waiting) return;
+        this.pending.delete(id);
+        const tag = content.readUInt8(8);
+        const body = content.subarray(HEAD_BYTES);
+        if (tag === RESULT) waiting.resolve(JSON.parse(body.toString('utf8')));
+        else waiting.reject(new Error(tag === FAILURE ? body.toString('utf8') : 'vault_frame_invalid'));
     }
 
-    async stop(principalId) {
+    send(tag, body) {
+        const requestId = this.nextId;
+        this.nextId += 1n;
+        return new Promise((resolve, reject) => {
+            this.pending.set(requestId, { resolve, reject });
+            this.connect().write(encodeFrame(requestId, tag, body));
+        });
+    }
+
+    request(principalId, operation, payload = {}) {
         const id = String(principalId || '').trim();
-        const record = this.children.get(id);
-        if (!record) return;
-        if (record.stopping) return record.stopping;
-        clearTimeout(record.idleTimer);
-        record.stopping = (async () => {
-          if (record.child.exitCode == null) {
-            await new Promise((resolve) => {
-                let settled = false;
-                const finish = () => {
-                    if (settled) return;
-                    settled = true;
-                    clearTimeout(forceTimer);
-                    clearTimeout(fallbackTimer);
-                    resolve();
-                };
-                const forceTimer = setTimeout(() => {
-                    if (record.child.exitCode == null) record.child.kill('SIGKILL');
-                }, 3000);
-                const fallbackTimer = setTimeout(finish, 4000);
-                record.child.once('exit', finish);
-                record.child.kill('SIGTERM');
-            });
-          }
-          if (this.children.get(id) === record) this.children.delete(id);
-        })();
-        return record.stopping;
+        if (!id) return Promise.reject(new Error('vault_principal_required'));
+        return this.send(ROUTED, [...prefixed(id), ...requestBody(operation, payload)]);
     }
 
-    async stopAll() {
-        await Promise.all(Array.from(this.children.keys()).map((id) => this.stop(id)));
+    // An operation of the vault router (`router:<name>`), which reads the central registries and shares.
+    service(operation, payload = {}) {
+        return this.send(SERVICE, requestBody(operation, payload));
+    }
+
+    // The supervisor keeps the vaults; Fastify only leaves its connection.
+    async close() {
+        this.connection?.end();
     }
 }
 

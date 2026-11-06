@@ -1,0 +1,9 @@
+# Workspace-wide Cargo configuration (every build run from this tree).
+
+[env]
+# macOS builds (Tauri, its C/Objective-C objects and every crate it links) target macOS 11.
+MACOSX_DEPLOYMENT_TARGET = "11.0"
+
+[target.wasm32-unknown-unknown]
+# web-sys gates the standard WebCodecs VideoFrame binding (browser Bevy renderer).
+rustflags = ["--cfg=web_sys_unstable_apis"]

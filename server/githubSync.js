@@ -56,7 +56,7 @@ async function readDirtyWorkingTree() {
 let lastCommitSha = null;
 let pollIntervalId = null;
 let githubToken = null;
-let connectedClients = new Map(); // clientId -> { ws, type: 'tauri'|'browser', lastSeen }
+const connectedClients = new Map(); // clientId -> { ws, type: 'tauri'|'browser', lastSeen }
 let syncInProgress = false;
 let githubRateLimitUntil = 0;
 let githubRateLimitLoggedAt = 0;
@@ -418,7 +418,7 @@ async function handleClientMessage(clientId, message) {
         const data = JSON.parse(message);
 
         switch (data.type) {
-            case 'register':
+            case 'register': {
                 // Client announces itself
                 const client = connectedClients.get(clientId);
                 if (client) {
@@ -438,6 +438,7 @@ async function handleClientMessage(clientId, message) {
                     capabilities: ['events', 'sync_request', 'file-events', 'atome-events', 'account-events'],
                     timestamp: new Date().toISOString()
                 };
+            }
 
             case 'sync_request':
                 // Client requests sync
@@ -446,12 +447,13 @@ async function handleClientMessage(clientId, message) {
                 }
                 return { type: 'sync_started' };
 
-            case 'ping':
+            case 'ping': {
                 const clientInfo = connectedClients.get(clientId);
                 if (clientInfo) {
                     clientInfo.lastSeen = Date.now();
                 }
                 return { type: 'pong' };
+            }
 
             default:
                 return { type: 'error', message: 'Unknown message type' };

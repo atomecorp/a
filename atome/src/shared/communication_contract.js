@@ -16,7 +16,7 @@ export const COMMUNICATION_MESSAGE_TYPE = Object.freeze({ type: 'message', kind:
     to_user_id: { type: 'string' }, timestamp: { type: 'string' }, subject: { type: 'string' }, message: { type: 'string' },
     atome_ids: { type: 'array', items: { type: 'string' } }, kind: { type: 'string' }, request_atome_id: { type: 'string' },
     request_id: { type: 'string' }, mode: { type: 'string' }, share_type: { type: 'string' }, unread: { type: 'boolean' },
-    box: { type: 'string', enum: ['inbox', 'sent'] }, priority: { type: 'string', enum: COMMUNICATION_PRIORITIES, default: 'normal' },
+    listing_id: { type: 'string' }, box: { type: 'string', enum: ['inbox', 'sent'] }, priority: { type: 'string', enum: COMMUNICATION_PRIORITIES, default: 'normal' },
     action: COMMUNICATION_ACTION_SCHEMA
 } });
 

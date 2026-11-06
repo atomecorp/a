@@ -1,25 +1,46 @@
 fn main() {
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("android") {
-        let status = std::process::Command::new("node").arg("package_tauri_engines.mjs")
-            .status().expect("Engine packaging requires the existing Node build runtime");
+        let status = std::process::Command::new("node")
+            .arg("package_tauri_engines.mjs")
+            .status()
+            .expect("Engine packaging requires the existing Node build runtime");
         assert!(status.success(), "Canonical engine packaging failed");
         println!("cargo:rerun-if-changed=package_tauri_engines.mjs");
     }
     tauri_build::build();
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
-        let status = std::process::Command::new("node").arg("../../scripts/build_gps_native_engine.mjs")
-            .status().expect("GPS engine packaging requires the existing Node build runtime");
+        let status = std::process::Command::new("node")
+            .arg("../../scripts/build_gps_native_engine.mjs")
+            .status()
+            .expect("GPS engine packaging requires the existing Node build runtime");
         assert!(status.success(), "Canonical GPS engine packaging failed");
-        for source in ["../../scripts/build_gps_native_engine.mjs", "../../atome/src/squirrel/gps/navigation_engine.js", "../../atome/src/squirrel/gps/route_geometry.js"] {
+        for source in [
+            "../../scripts/build_gps_native_engine.mjs",
+            "../../atome/src/squirrel/gps/navigation_engine.js",
+            "../../atome/src/squirrel/gps/route_geometry.js",
+        ] {
             println!("cargo:rerun-if-changed={source}");
         }
-        cc::Build::new().file("native/personal_import.m")
+        cc::Build::new()
+            .file("native/personal_import.m")
             .file("../ios/atome-auv3/Common/AtomeContactHistory.m")
             .file("../ios/atome-auv3/Common/AtomeGPSHost.m")
             .file("../ios/atome-auv3/Common/AtomeStreamingView.m")
-            .file("native/clipboard.m").file("native/file_selection.m")
-            .flag("-fobjc-arc").compile("atome_personal_import");
-        for framework in ["Foundation", "Contacts", "EventKit", "AppKit", "UniformTypeIdentifiers", "CoreLocation", "JavaScriptCore", "AVFoundation", "WebKit"] {
+            .file("native/clipboard.m")
+            .file("native/file_selection.m")
+            .flag("-fobjc-arc")
+            .compile("atome_personal_import");
+        for framework in [
+            "Foundation",
+            "Contacts",
+            "EventKit",
+            "AppKit",
+            "UniformTypeIdentifiers",
+            "CoreLocation",
+            "JavaScriptCore",
+            "AVFoundation",
+            "WebKit",
+        ] {
             println!("cargo:rustc-link-lib=framework={framework}");
         }
         println!("cargo:rerun-if-changed=native/personal_import.m");
@@ -79,10 +100,21 @@ fn main() {
 
         // The voice engine links libvosk.so: the official vosk-android 0.3.75 build (com.alphacephei,
         // Maven Central), vendored per ABI; gen/android/app/build.gradle.kts packages the same directory.
-        let abi = match std::env::var("CARGO_CFG_TARGET_ARCH").as_deref() { Ok("aarch64") => "arm64-v8a", Ok("x86_64") => "x86_64", _ => "" };
+        let abi = match std::env::var("CARGO_CFG_TARGET_ARCH").as_deref() {
+            Ok("aarch64") => "arm64-v8a",
+            Ok("x86_64") => "x86_64",
+            _ => "",
+        };
         let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
-        let vosk_dir = std::path::Path::new(&manifest_dir).join("native").join("lib").join("android").join(abi);
-        println!("cargo:rerun-if-changed={}", vosk_dir.join("libvosk.so").display());
+        let vosk_dir = std::path::Path::new(&manifest_dir)
+            .join("native")
+            .join("lib")
+            .join("android")
+            .join(abi);
+        println!(
+            "cargo:rerun-if-changed={}",
+            vosk_dir.join("libvosk.so").display()
+        );
         println!("cargo:rustc-link-search=native={}", vosk_dir.display());
     }
 
@@ -93,7 +125,6 @@ fn main() {
             .join("lib");
         let local_vosk_dylib = local_vosk_dir.join("libvosk.dylib");
 
-        std::env::set_var("MACOSX_DEPLOYMENT_TARGET", "11.0");
         println!("cargo:rustc-env=MACOSX_DEPLOYMENT_TARGET=11.0");
         println!("cargo:rerun-if-changed={}", local_vosk_dylib.display());
 

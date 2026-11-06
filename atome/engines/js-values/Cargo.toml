@@ -1,0 +1,18 @@
+[package]
+name = "atome-js-values"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "The JavaScript readings of a JSON value the ports from JS keep (truthiness, String(), Number(), new Date()), shared by atome-server and atome-calendar"
+
+[dependencies]
+chrono = "0.4"
+serde_json.workspace = true
+
+# In the browser a local wall time is read by the browser's own Date.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys.workspace = true
+
+[lints]
+workspace = true

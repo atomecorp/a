@@ -1,5 +1,5 @@
 import db from '../database/adole.js';
-import { getABoxEventBus } from './aBoxServer.js';
+import { getSyncEventBus } from './sync/syncEventBus.js';
 import {
     atomeOwnerIdOf,
     atomeTypeOf
@@ -278,7 +278,7 @@ function permissionToFlags(level) {
 }
 
 function emitPermissionChange(action, permission) {
-    const eventBus = getABoxEventBus();
+    const eventBus = getSyncEventBus();
     if (!eventBus) return;
     eventBus.emit('event', {
         type: 'permission-change',

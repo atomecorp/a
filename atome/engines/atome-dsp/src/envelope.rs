@@ -10,10 +10,31 @@ pub const SUSTAIN: u32 = 3;
 pub const RELEASE_MS: u32 = 4;
 pub const PARAMS: [ParamSpec; 5] = [
     ParamSpec::new(GATE, "gate", 0.0, 1.0, 0.0, Unit::Plain),
-    ParamSpec::new(ATTACK_MS, "attack_ms", 0.1, 10000.0, 5.0, Unit::Milliseconds),
-    ParamSpec::new(DECAY_MS, "decay_ms", 1.0, 10000.0, 144.0, Unit::Milliseconds),
+    ParamSpec::new(
+        ATTACK_MS,
+        "attack_ms",
+        0.1,
+        10000.0,
+        5.0,
+        Unit::Milliseconds,
+    ),
+    ParamSpec::new(
+        DECAY_MS,
+        "decay_ms",
+        1.0,
+        10000.0,
+        144.0,
+        Unit::Milliseconds,
+    ),
     ParamSpec::new(SUSTAIN, "sustain", 0.0, 1.0, 0.6, Unit::Percent),
-    ParamSpec::new(RELEASE_MS, "release_ms", 1.0, 20000.0, 233.0, Unit::Milliseconds),
+    ParamSpec::new(
+        RELEASE_MS,
+        "release_ms",
+        1.0,
+        20000.0,
+        233.0,
+        Unit::Milliseconds,
+    ),
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,7 +56,13 @@ pub struct Envelope {
 
 impl Envelope {
     pub fn new() -> Self {
-        Self { sample_rate: 48000.0, values: PARAMS.map(|spec| spec.default), stage: Stage::Idle, level: 0.0, release_step: 0.0 }
+        Self {
+            sample_rate: 48000.0,
+            values: PARAMS.map(|spec| spec.default),
+            stage: Stage::Idle,
+            level: 0.0,
+            release_step: 0.0,
+        }
     }
 
     fn frames(&self, id: u32) -> f32 {
@@ -98,7 +125,9 @@ impl Processor for Envelope {
     }
 
     fn set_param(&mut self, id: u32, value: f32) {
-        let Some(spec) = PARAMS.get(id as usize) else { return };
+        let Some(spec) = PARAMS.get(id as usize) else {
+            return;
+        };
         let value = spec.clamp(value);
         if id == GATE {
             if value >= 0.5 {

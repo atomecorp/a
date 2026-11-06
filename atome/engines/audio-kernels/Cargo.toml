@@ -1,0 +1,20 @@
+[package]
+name = "atome-audio-kernels"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "eVe's offline audio kernels: waveform peaks, attacks, loops, edit renders, takes, WAV and FLAC, cue tones (step 7, measured faster than the JS they replace)"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+serde.workspace = true
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+# The tests decode what the encoders write with the engines' own decoder.
+symphonia = { workspace = true, features = ["flac", "wav", "pcm"] }

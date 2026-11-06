@@ -11,7 +11,7 @@ export async function showEditorLoadDialog({ position, size, loadFile, updateSta
             updateStatus('Loading files...');
 
             // Collect files from all sources
-            let allFiles = [];
+            const allFiles = [];
 
             // Get local files first (always available)
             try {

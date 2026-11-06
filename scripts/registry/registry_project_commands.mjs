@@ -24,6 +24,7 @@ export async function projectContracts() {
 export async function projectMcpMethods(contractIds) {
     const owner = 'atome/src/squirrel/atome/mcp_handlers.js';
     const { atomeMCPHandlers } = await at(owner);
+    const { isMcpInfrastructureMethod } = await at('atome/src/squirrel/atome/mcp_core.js');
     const { resolveAccessPolicy } = await at('atome/src/squirrel/atome/mcp_security_policy.js');
     const { PERSONAL_IMPORT_TOOLS } = await at('atome/src/shared/personal_import_tools.js');
     const entries = [];
@@ -31,7 +32,7 @@ export async function projectMcpMethods(contractIds) {
         if (contractIds.has(entryId('action_contract', name))) continue;
         const policy = resolveAccessPolicy(name, {});
         entries.push({ id: entryId('action_contract', name), kind: 'action_contract', native_id: name, origin: 'projected', owner,
-            surface: 'mcp_method', family: name.split('.').slice(0, -1).join('.') || name, capability: policy.required_capabilities?.[0] || null,
+            surface: 'mcp_method', infrastructure: isMcpInfrastructureMethod(name), family: name.split('.').slice(0, -1).join('.') || name, capability: policy.required_capabilities?.[0] || null,
             access: policy.access, effect: null, confirmed: policy.confirmation_required === true,
             description: PERSONAL_IMPORT_TOOLS.find(tool => tool.name === name)?.description || null });
     }

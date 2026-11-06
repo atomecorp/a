@@ -15,21 +15,19 @@ pub enum Target {
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
+#[derive(Default)]
 pub enum InputSpec {
+    #[default]
     Track,
-    LiveAudio { device_id: String },
+    LiveAudio {
+        device_id: String,
+    },
     // One of the instrument's outputs (D-S2), 0 unless named.
     Instrument {
         instrument_id: String,
         #[serde(default)]
         output: usize,
     },
-}
-
-impl Default for InputSpec {
-    fn default() -> Self {
-        InputSpec::Track
-    }
 }
 
 // One destination of a module's port; a port may have several.
@@ -54,8 +52,12 @@ pub enum KeySource {
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum MixSource {
-    LiveAudio { device_id: String },
-    Strip { id: String },
+    LiveAudio {
+        device_id: String,
+    },
+    Strip {
+        id: String,
+    },
     Instrument {
         instrument_id: String,
         #[serde(default)]

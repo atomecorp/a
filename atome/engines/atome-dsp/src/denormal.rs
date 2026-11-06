@@ -9,6 +9,10 @@ pub struct FlushDenormals {
 }
 
 #[cfg(target_arch = "x86_64")]
+#[allow(
+    unsafe_code,
+    reason = "reads and writes the CPU floating-point control register"
+)]
 mod mode {
     // MXCSR: flush-to-zero (bit 15) and denormals-are-zero (bit 6).
     pub const FLUSH: u64 = (1 << 15) | (1 << 6);
@@ -28,6 +32,10 @@ mod mode {
 }
 
 #[cfg(target_arch = "aarch64")]
+#[allow(
+    unsafe_code,
+    reason = "reads and writes the CPU floating-point control register"
+)]
 mod mode {
     // FPCR: flush-to-zero (bit 24).
     pub const FLUSH: u64 = 1 << 24;

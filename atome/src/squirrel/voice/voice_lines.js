@@ -1,3 +1,4 @@
+import { audioKernels, loadAudioKernels } from '../../application/audio_runtime/audio_kernels.js';
 import { createTtsRuntime } from './tts_runtime.js';
 
 // Every sentence eVe speaks on her own — startup, ready, assistant and
@@ -9,19 +10,6 @@ import { createTtsRuntime } from './tts_runtime.js';
 // by another voice.
 export const VOICE_LINES_ROOT = 'assets/voice/lines_fr';
 const LINE_SESSION = '__eve_voice_line';
-
-// The generator writes canonical PCM16 WAV: walk the chunks to `data`.
-const decodeWav = (buffer) => {
-    const view = new DataView(buffer);
-    for (let offset = 12; offset + 8 <= view.byteLength;) {
-        const size = view.getUint32(offset + 4, true);
-        if (view.getUint32(offset, false) === 0x64617461) {
-            return Float32Array.from({ length: size / 2 }, (_, index) => view.getInt16(offset + 8 + index * 2, true) / 32768);
-        }
-        offset += 8 + size + (size % 2);
-    }
-    throw new Error('voice_line_audio_invalid');
-};
 
 export const createVoiceLinePlayer = ({ env = globalThis, audio, fetchImpl = (url) => env.fetch(url) } = {}) => {
     const base = `/src/${VOICE_LINES_ROOT}/`;
@@ -37,7 +25,10 @@ export const createVoiceLinePlayer = ({ env = globalThis, audio, fetchImpl = (ur
         if (!line) throw new Error('voice_line_missing');
         const response = await fetchImpl(base + line.file);
         if (!response.ok) throw new Error('voice_line_audio_unavailable');
-        return { pcm: decodeWav(await response.arrayBuffer()), sampleRate, phonemes: [...line.phonemes] };
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        await loadAudioKernels();
+        // The generator writes a mono PCM16 WAV.
+        return { pcm: audioKernels().decodeWav(bytes)[0], sampleRate, phonemes: [...line.phonemes] };
     };
     const runtime = createTtsRuntime({ env, audio, provider: 'voice_line',
         synthesize: text => prepared.get(text) || load(text) });

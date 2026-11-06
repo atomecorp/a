@@ -295,8 +295,8 @@ const run = async () => {
         ...(Array.isArray(result?.fastify?.projects) ? result.fastify.projects : [])
       ];
       await api.projects.create(secondName);
-      let projectsResult = await api.projects.list();
-      let projects = projectList(projectsResult);
+      const projectsResult = await api.projects.list();
+      const projects = projectList(projectsResult);
       const secondProject = projects.find((entry) => readProjectName(entry) === secondName) || null;
       const secondId = readProjectId(secondProject);
       if (!secondId) return { ok: false, error: 'second_project_missing', projectsResult };

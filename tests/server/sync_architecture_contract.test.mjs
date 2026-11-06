@@ -16,21 +16,20 @@ test('one realtime owner delivers canonical events and the ws/api console bridge
     assert.doesNotMatch(client, /command\.command\s*===\s*['"]share-sync['"]/);
 });
 
-test('Tauri uses ws/api sync:push outbound and a persistent ws/sync inbound stream without polling', () => {
-    const source = read('platforms/desktop-tauri/src/server/local_atome_sync_worker.rs');
+test('the local host (Tauri, iOS) uses ws/api sync:push outbound and a persistent ws/sync inbound stream without polling', () => {
+    const source = read('atome/servers/atome-server/src/local/local_atome_sync_worker.rs');
     assert.match(source, /"type"\s*:\s*"sync"[\s\S]*"action"\s*:\s*"push"/);
     assert.match(source, /\/ws\/sync/);
     assert.doesNotMatch(source, /"type"\s*:\s*"state-current"/);
     assert.doesNotMatch(source, /"action"\s*:\s*"pull"/);
 });
 
-test('iOS authenticates and subscribes before relaying canonical sync events', () => {
-    // The client and its subscription extension (FastifySyncSubscriptions.swift) form one owner.
-    const source = ['FastifySyncClient.swift', 'FastifySyncSubscriptions.swift']
-        .map(name => read(`platforms/ios/atome-auv3/Common/${name}`)).join('\n');
+test('the local host authenticates and subscribes before projecting canonical sync events, iOS included', () => {
+    const source = read('atome/servers/atome-server/src/local/local_atome_ws_sync.rs');
     assert.match(source, /"type"\s*:\s*"auth"/);
     assert.match(source, /"type"\s*:\s*"subscribe"/);
-    assert.doesNotMatch(source, /func send\(text: String\)/);
+    // The iOS app runs this same host in process (no Swift sync client of its own).
+    assert.match(read('platforms/ios/bevy-renderer/src/local_server.rs'), /local::prepare\(/);
 });
 
 test('the open SyncEngine owner exists and implements replay controls', () => {
@@ -43,9 +42,9 @@ test('the open SyncEngine owner exists and implements replay controls', () => {
 });
 
 test('manual linked sharing remains linked and detached copy stays explicit', () => {
-    const source = read('server/sharing_requests.js');
+    const source = read('server/syncSharingService.js');
     assert.doesNotMatch(source, /shareMode\s*===\s*['"]real-time['"]\s*\?\s*shareType\s*:\s*['"]copy['"]/);
-    assert.match(source, /shareMode\s*===\s*['"]manual['"]/);
+    assert.match(source, /share_mode\s*!==\s*['"]manual['"]/);
     assert.match(source, /publication_cursor/);
 });
 

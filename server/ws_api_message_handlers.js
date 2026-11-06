@@ -1,44 +1,11 @@
-// /ws/api typed requests for news, contacts, sharing and the restricted shell.
+// /ws/api typed requests for contacts, sharing and the restricted shell (the News, communities and forums are
+// the Rust front's: atome/servers/atome-server/src/ws_api/news_ops.rs).
 // Each handler answers its own '<type>-response' frame.
 import db from '../database/adole.js';
 import { findUserById } from './auth_users.js';
 import { isWsApiPrincipalProvisioned } from './wsApiIdentity.js';
 import { handleShareMessage } from './sharing_message_api.js';
 import { executeShellCommand } from './shell.js';
-
-export async function handleWsNewsRequest({ data, connection, safeSend, newsBroadcast, newsPublishRateAllowed }) {
-  const requestId = data.requestId || data.request_id;
-  const userId = connection?._wsApiUserId ? String(connection._wsApiUserId) : null;
-  if (!userId || !await isWsApiPrincipalProvisioned(userId)) {
-    safeSend({ type: 'news-response', requestId, success: false, error: 'news_auth_required' });
-    return;
-  }
-  try {
-    if (String(data.action || '').toLowerCase() === 'publish' && !newsPublishRateAllowed(userId)) {
-      throw new Error('news_rate_limited');
-    }
-    const result = await newsBroadcast.handle(data, userId);
-    safeSend({ type: 'news-response', requestId, success: result.ok !== false, ...result });
-  } catch (error) {
-    safeSend({ type: 'news-response', requestId, success: false, error: error.message });
-  }
-}
-
-// A community's or a forum's request (`kind`: its frame type), answered by its service's `handle`.
-export async function handleWsMembershipRequest({ data, connection, safeSend, service, kind }) {
-  const requestId = data.requestId || data.request_id;
-  const userId = connection?._wsApiUserId ? String(connection._wsApiUserId) : null;
-  if (!userId || !await isWsApiPrincipalProvisioned(userId)) {
-    safeSend({ type: `${kind}-response`, requestId, success: false, error: `${kind}_auth_required` });
-    return;
-  }
-  try {
-    const result = await service.handle(data, userId);
-    safeSend({ type: `${kind}-response`, requestId, success: result.ok !== false, ...result });
-  } catch (error) {
-    safeSend({ type: `${kind}-response`, requestId, success: false, error: error.message });
-  }
-}
 
 export async function handleWsContactRequest({ data, connection, safeSend, communicationRelations }) {
   const requestId = data.requestId || data.request_id;

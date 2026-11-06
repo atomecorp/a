@@ -1,6 +1,6 @@
 // CPAL-based audio recorder
 // Pure Rust replacement for the Obj-C AVAudioEngine recorder.
-// Records input audio to WAV files via CPAL + hound (on Windows, the exclusive
+// Records input audio to WAV files via CPAL and the kernels' WAV codec (on Windows, the exclusive
 // input of the output's thread: recorder_capture.rs).
 // The input lives on a dedicated thread to avoid Send issues.
 //
@@ -11,19 +11,19 @@
 // - Sample rate validation with explicit warnings
 // - Batch sample writes to reduce per-sample overhead
 
-use cpal::traits::{DeviceTrait, HostTrait};
 use super::recorder_capture::{self, TakeSink};
 use super::scheduled_backend::CaptureClock;
-use ringbuf::{traits::*, HeapRb};
+use cpal::traits::{DeviceTrait, HostTrait};
+use ringbuf::{HeapRb, traits::*};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{mpsc, Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar, Mutex, mpsc};
 
 use super::metering;
-use super::recorder_wav::{create_wav_writer, spawn_wav_writer_thread, written_channels};
 pub use super::recorder_wav::{BufferSizeHint, OutputFormat};
+use super::recorder_wav::{create_wav_writer, spawn_wav_writer_thread, written_channels};
 
 macro_rules! eprintln {
     ($($arg:tt)*) => {
@@ -99,7 +99,10 @@ pub struct RecordResult {
 }
 
 pub fn has_active_sessions() -> bool {
-    SESSIONS.lock().map(|sessions| !sessions.is_empty()).unwrap_or(true)
+    SESSIONS
+        .lock()
+        .map(|sessions| !sessions.is_empty())
+        .unwrap_or(true)
 }
 
 pub fn start(
@@ -127,12 +130,31 @@ pub fn start_on_device(
     channels: u16,
     device_name: Option<String>,
 ) -> Result<(), String> {
-    start_with_options(session_id, abs_wav_path, sample_rate, channels, OutputFormat::default(), BufferSizeHint::default(), device_name)
+    start_with_options(
+        session_id,
+        abs_wav_path,
+        sample_rate,
+        channels,
+        OutputFormat::default(),
+        BufferSizeHint::default(),
+        device_name,
+    )
 }
 
 // The format a running session records at (the device's when 0 was requested).
 pub fn session_format(session_id: &str) -> Option<(u32, u16)> {
-    SESSIONS.lock().ok()?.get(session_id).map(|session| (session.sample_rate, session.channels))
+    SESSIONS
+        .lock()
+        .ok()?
+        .get(session_id)
+        .map(|session| (session.sample_rate, session.channels))
+}
+
+// A device's name: inputs are listed, chosen and saved by it.
+pub(crate) fn device_name(device: &cpal::Device) -> Result<String, cpal::Error> {
+    device
+        .description()
+        .map(|description| description.name().to_string())
 }
 
 // The chosen input by name, else the default one. A chosen input that is gone
@@ -140,13 +162,20 @@ pub fn session_format(session_id: &str) -> Option<(u32, u16)> {
 pub(super) fn input_device(name: Option<&str>) -> Result<cpal::Device, String> {
     let host = cpal::default_host();
     if let Some(wanted) = name.map(str::trim).filter(|value| !value.is_empty()) {
-        let devices = host.input_devices().map_err(|e| format!("audio_input_devices_unavailable: {e}"))?;
+        let devices = host
+            .input_devices()
+            .map_err(|e| format!("audio_input_devices_unavailable: {e}"))?;
         return devices
             .into_iter()
-            .find(|device| device.name().map(|candidate| candidate == wanted).unwrap_or(false))
+            .find(|device| {
+                device_name(device)
+                    .map(|candidate| candidate == wanted)
+                    .unwrap_or(false)
+            })
             .ok_or_else(|| format!("audio_input_device_not_found: {wanted}"));
     }
-    host.default_input_device().ok_or_else(|| "No default input (microphone) device found".to_string())
+    host.default_input_device()
+        .ok_or_else(|| "No default input (microphone) device found".to_string())
 }
 
 pub fn start_with_options(
@@ -165,8 +194,16 @@ pub fn start_with_options(
     }
 
     let (input_rate, input_channels) = recorder_capture::input_format(device_name.as_deref())?;
-    let actual_sample_rate = if sample_rate > 0 { sample_rate } else { input_rate };
-    let actual_channels = if channels > 0 { channels } else { input_channels };
+    let actual_sample_rate = if sample_rate > 0 {
+        sample_rate
+    } else {
+        input_rate
+    };
+    let actual_channels = if channels > 0 {
+        channels
+    } else {
+        input_channels
+    };
 
     // Ensure parent directory exists
     if let Some(parent) = Path::new(abs_wav_path).parent() {
@@ -214,7 +251,7 @@ pub fn start_with_options(
             let (producer, consumer) = HeapRb::<f32>::new(rb_capacity).split();
             let writer_stop = Arc::new(AtomicBool::new(false));
             let writer_handle =
-                spawn_wav_writer_thread(consumer, writer, fmt, Arc::clone(&writer_stop), ch);
+                spawn_wav_writer_thread(consumer, writer, Arc::clone(&writer_stop), ch);
             let sink = TakeSink {
                 producer,
                 stop: Arc::clone(&stop_atomic_cb),

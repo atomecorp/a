@@ -1,24 +1,25 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { encodeWav16Mono, inspectPcmWav } from '../../eVe/domains/media/api/audio_core_helpers.js';
+import { readFileSync } from 'node:fs';
+import { audioKernels, loadAudioKernels } from '../../atome/src/application/audio_runtime/audio_kernels.js';
 import {
     buildBrowserVideoRecordingResult,
     buildBrowserVideoTerminalCapture
 } from '../../eVe/domains/media/api/video_api_record_finalize.js';
 import { sanitizeFileName } from '../../eVe/domains/media/api/video_api_helpers.js';
 
-test('WAV validation proves signature, byte size, channels, rate, frames and duration', () => {
-    const wav = encodeWav16Mono(Int16Array.of(1, -1, 32767, -32768), 48_000);
-    assert.deepEqual(inspectPcmWav(wav), {
-        byteSize: 52,
-        channels: 1,
-        sampleRate: 48_000,
-        frameCount: 4,
-        durationSec: 4 / 48_000
+test('a recording\'s WAV says its rate, channels and frames, and a false signature is refused', async () => {
+    await loadAudioKernels({
+        moduleUrl: new URL('../../atome/src/wasm/squirrel_audio_wasm.js', import.meta.url).href,
+        binary: readFileSync(new URL('../../atome/src/wasm/squirrel_audio_wasm_bg.wasm', import.meta.url))
     });
-    const corrupted = wav.slice(0);
-    new Uint8Array(corrupted)[0] = 0;
-    assert.throws(() => inspectPcmWav(corrupted), /audio_recording_wav_signature_invalid/);
+    const kernels = audioKernels();
+    const wav = kernels.encodeWav([Float32Array.of(0.5, -0.5, 1, -1)], 48_000, 16);
+    const info = kernels.wavInfo(wav);
+    assert.deepEqual([wav.byteLength, info.format, info.channels, info.sample_rate, info.bits, info.frames], [52, 1, 1, 48_000, 16, 4]);
+    const corrupted = wav.slice();
+    corrupted[0] = 0;
+    assert.throws(() => kernels.wavInfo(corrupted), (error) => error.code === 'bank/unreadable');
 });
 
 test('browser video validation rejects a false container and normalizes technical metadata', async () => {

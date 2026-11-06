@@ -17,7 +17,7 @@ final class AppBackgroundLifecycle {
         // before the identifier was even returned.
         func begin() -> Bool {
             let task = UIApplication.shared.beginBackgroundTask(withName: "atome.database") { [weak self] in
-                AiSRuntime.interruptActiveWork()
+                atome_ios_local_server_interrupt()
                 self?.expire()
             }
             guard task != .invalid else { return false }
@@ -60,8 +60,7 @@ final class AppBackgroundLifecycle {
     func install() {
         dispatchPrecondition(condition: .onQueue(.main))
         // A launch for a push, a call or a location update starts in the background.
-        setBackgrounded(UIApplication.shared.applicationState == .background)
-        AiSRuntime.activityAssertion = { [unowned self] in self.databaseActivityAssertion() }
+        if UIApplication.shared.applicationState == .background { enterBackground() }
         WebViewManager.presentedPageTerminationHandler = { [unowned self] in self.reloadTerminatedPage() }
         let center = NotificationCenter.default
         center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [unowned self] _ in
@@ -71,8 +70,7 @@ final class AppBackgroundLifecycle {
             self.enterForeground()
         }
         center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { _ in
-            LocalHTTPServer.shared.resumeFromBackground()
-            FastifySyncClient.shared.connectIfConfigured()
+            LocalServer.shared.resumeFromBackground()
             AppNativeCommunication.shared.resume()
         }
     }
@@ -91,13 +89,36 @@ final class AppBackgroundLifecycle {
 
     private func enterBackground() {
         setBackgrounded(true)
-        LocalHTTPServer.shared.noteBackgrounded()
-        AiSRuntime.coverQueuedWork()
-        // The sync socket dies with the suspension. Closing it now ends the replays
-        // and pushes that would keep the database busy in background time; events
-        // still to push stay in the durable outbox and leave on reconnection
-        // (`connectIfConfigured` on every activation).
-        FastifySyncClient.shared.disconnect()
+        // The vault's units under way end under background time, never suspended holding the
+        // app group's lock; a later one starts only under its own (`beginUnitTime`), and past
+        // that time it is interrupted (rolled back).
+        let assertion = Assertion()
+        _ = assertion.begin()
+        LocalServer.shared.enterBackground(begin: beginVaultUnitTime, end: endVaultUnitTime) {
+            assertion.end()
+        }
+    }
+
+    // The background time of one unit of work on the vault, asked by the local server.
+    private let unitLock = NSLock()
+    private var nextUnit: Int64 = 0
+    private var unitTimes: [Int64: Assertion] = [:]
+
+    fileprivate func beginUnitTime() -> Int64 {
+        let assertion = Assertion()
+        guard assertion.begin() else { return -1 }
+        unitLock.lock()
+        defer { unitLock.unlock() }
+        nextUnit += 1
+        unitTimes[nextUnit] = assertion
+        return nextUnit
+    }
+
+    fileprivate func endUnitTime(_ identifier: Int64) {
+        unitLock.lock()
+        let assertion = unitTimes.removeValue(forKey: identifier)
+        unitLock.unlock()
+        assertion?.end()
     }
 
     private func enterForeground() {
@@ -124,10 +145,8 @@ final class AppBackgroundLifecycle {
         lastAutomaticReload = Date()
         WebViewManager.reloadMainPage(reason: "reclaimed_page_reload")
     }
-
-    private func databaseActivityAssertion() -> AiSRuntime.ActivityAssertion {
-        guard isBackgrounded else { return .notNeeded }
-        let assertion = Assertion()
-        return assertion.begin() ? .held(release: assertion.end) : .refused
-    }
 }
+
+// The local server's C callbacks for a vault unit's background time (no context: the shared owner).
+private func beginVaultUnitTime() -> Int64 { AppBackgroundLifecycle.shared.beginUnitTime() }
+private func endVaultUnitTime(_ identifier: Int64) { AppBackgroundLifecycle.shared.endUnitTime(identifier) }

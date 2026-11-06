@@ -327,6 +327,11 @@ export const createContactsService = ({
         deleteLocalContact(contactId, options = {}) {
             return deleteLocalContact(contactId, options);
         },
+        contactGroups() {
+            const primary = getPrimarySource();
+            if (typeof primary?.listGroups !== 'function') return Promise.resolve({ ok: false, error: 'contacts_groups_unavailable' });
+            return primary.listGroups();
+        },
         mergeDuplicateContacts() {
             return mergeDuplicateContacts();
         },

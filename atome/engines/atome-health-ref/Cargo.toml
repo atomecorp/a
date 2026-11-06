@@ -1,0 +1,29 @@
+[package]
+name = "atome-health-ref"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "The health reference bundle: the monthly server build of the public medicine base (BDPM), the ANSM interaction thesaurus, the SmPC sections 4.2-4.8, the supplement ingredients and the sourced food rules, as versioned JSON parts every device searches and checks on its own"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "atome-health-ref"
+path = "src/main.rs"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+# The thesaurus PDF: its objects, content streams and fonts (pure Rust); the text runs are read in pdf_layout.rs.
+lopdf = { version = "0.47", default-features = false }
+regex = "1"
+# Each part is written gzipped (already in the workspace lock).
+flate2 = "1"
+# The monthly fetch: the same HTTP stack and TLS roots as atome-server, blocking (a batch job, no runtime).
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls-native-roots"] }
+
+[lints]
+workspace = true

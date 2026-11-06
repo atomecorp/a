@@ -5,7 +5,7 @@
 // its weekly hours and unavailabilities, less its own timed events (any agenda: their titles never leave the vault)
 // and the bookings holding a slot (server/coach_bookings.js).
 import { COACH_DEFAULTS, COACH_HOLDING_STATES, coachFreeSlots, coachingError, normalizeCoaching } from '../atome/src/shared/coach_contract.js';
-import { calendarRangeOccurrences } from '../atome/src/squirrel/calendar/icalendar.js';
+import { calendarRangeOccurrences } from './calendar_engine.js';
 
 const CALENDAR_TYPE = 'calendar', EVENT_TYPE = 'calendar_event';
 const PAGE_SIZE = 34, DAY = 86400000;

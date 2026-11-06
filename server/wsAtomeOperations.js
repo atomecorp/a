@@ -49,7 +49,7 @@ function rememberMutation(connection, message, result) {
     while (cache.size > 200) cache.delete(cache.keys().next().value);
     return result;
 }
-async function requirePrincipal(connection, message, type) {
+export async function requirePrincipal(connection, message, type) {
     try {
         const userId = resolveWsApiPrincipal(connection, message);
         if (userId && await isWsApiPrincipalProvisioned(userId)) return { userId };
@@ -99,27 +99,35 @@ async function projectStateForRead(state, userId) {
     );
     return { ...state, properties, property_versions: propertyVersions, capabilities };
 }
-async function conditionAuthorityFor(userId) {
+// The candidates are the asker's states as state-current lists them: from the vaults when the
+// server has them (the central tables hold none of a vault's objects).
+async function conditionAuthorityFor(userId, connection) {
+    const vaultRouter = connection?._wsApiVaultRouter || null;
     const loadStates = async (scope = {}, request = {}) => {
         const projectId = scope.projectId || scope.project_id || request.projectId || request.project_id || null;
-        const rawStates = await db.listStateCurrent(projectId, {
+        const options = {
             ownerId: userId,
             includeShared: scope.includeShared === true || request.includeShared === true,
             excludeSystem: request.excludeSystem === true,
             limit: request.candidateLimit || 10000
-        });
+        };
+        const rawStates = vaultRouter
+            ? await vaultRouter.listStates(userId, { ...options, project_id: projectId })
+            : await db.listStateCurrent(projectId, options);
         const projected = (await Promise.all(rawStates.map((state) => projectStateForRead(state, userId)))).filter(Boolean);
         const allowedTypes = new Set((scope.types || []).map((entry) => String(entry).toLowerCase()));
         return allowedTypes.size
             ? projected.filter((state) => allowedTypes.has(String(state.type || state.atome_type || '').toLowerCase()))
             : projected;
     };
-    const readState = async (id) => projectStateForRead(await db.getStateCurrent(id), userId);
+    const readState = async (id) => projectStateForRead(vaultRouter
+        ? await vaultRouter.getState(userId, id)
+        : await db.getStateCurrent(id), userId);
     return createServerConditionAuthority({ loadStates, readState });
 }
-async function handleConditions(message, userId) {
+async function handleConditions(message, userId, connection) {
     const action = actionOf(message);
-    const authority = await conditionAuthorityFor(userId);
+    const authority = await conditionAuthorityFor(userId, connection);
     const request = message.request && typeof message.request === 'object' ? message.request : message;
     if (action === 'properties-discover') {
         return response('conditions', message, true, { items: await authority.discover(request) });
@@ -128,31 +136,6 @@ async function handleConditions(message, userId) {
         return response('conditions', message, true, await authority.once(request));
     }
     return errorResponse('conditions', message, `Unknown conditions action: ${action || 'missing'}`);
-}
-async function handleDirectory(message, connection, userId) {
-    const service = connection?._wsApiDirectoryService;
-    if (!service) return errorResponse('directory', message, 'directory_service_unavailable');
-    const action = actionOf(message);
-    if (action === 'meet') {
-        const entries = await service.meet({ goal: message.goal, theme: message.theme, scope: message.scope, query: message.query,
-            limit: message.limit, requesterId: userId });
-        return response('directory', message, true, { entries });
-    }
-    if (action === 'meet_card') {
-        const card = await service.meetCard({ principalId: message.principalId, goal: message.goal, theme: message.theme, scope: message.scope,
-            requesterId: userId });
-        return card ? response('directory', message, true, { card }) : errorResponse('directory', message, 'meeting_card_unavailable');
-    }
-    if (action !== 'list' && action !== 'search') {
-        return errorResponse('directory', message, `Unknown directory action: ${action || 'missing'}`);
-    }
-    const entries = await service.list({
-        query: action === 'search' ? message.query : null,
-        limit: message.limit,
-        offset: message.offset,
-        requesterId: userId
-    });
-    return response('directory', message, true, { entries });
 }
 async function handleEvents(message, connection, userId) {
     const action = actionOf(message);
@@ -440,7 +423,6 @@ export async function handleWsAtomeOperation(message, connection) {
         || type === 'sync'
         || type === 'history'
         || type === 'conditions'
-        || type === 'directory'
         || (type === 'atome' && action === 'history');
     if (!supported) return null;
     const cached = cachedMutation(connection, message);
@@ -454,8 +436,7 @@ export async function handleWsAtomeOperation(message, connection) {
         else if (type === 'snapshot') result = await handleSnapshot(message, auth.userId, connection);
         else if (type === 'user-data') result = await handleUserData(message, auth.userId);
         else if (type === 'sync') result = await handleSync(message, auth.userId, connection);
-        else if (type === 'conditions') result = await handleConditions(message, auth.userId);
-        else if (type === 'directory') result = await handleDirectory(message, connection, auth.userId);
+        else if (type === 'conditions') result = await handleConditions(message, auth.userId, connection);
         else if (type === 'history') result = await handleAtomeHistoryCommand(message, auth.userId, connection);
         else result = await handleAtomeHistory(message, auth.userId);
         return rememberMutation(connection, message, result);

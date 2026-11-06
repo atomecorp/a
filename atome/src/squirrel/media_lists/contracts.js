@@ -5,7 +5,9 @@ import { MEDIA_LIST_ENTRIES_MAX, MEDIA_LIST_ENTRY_SCHEMA, MEDIA_LIST_KINDS, MEDI
 // run by eVe/domains/media/media_list_runtime.js — the same owner as Médias › Listes, the rubrics' Listes tools and
 // a media's hold « Ajouter à une liste ».
 export const MEDIA_LIST_ERRORS = Object.freeze(['INVALID_ARGUMENT', 'AUTH_REQUIRED', 'NOT_FOUND', 'NAME_TAKEN', 'LIST_FULL',
-    'VERSION_CONFLICT', 'PRESENTATION_UNAVAILABLE', 'WRITE_FAILED']);
+    'VERSION_CONFLICT', 'PRESENTATION_UNAVAILABLE', 'NOT_PLAYING', 'WRITE_FAILED']);
+// What a picture's touches do, by voice or MCP (D23): films.control and projects.media share these words.
+export const MEDIA_CONTROL_ACTIONS = Object.freeze(['play', 'pause', 'rewind', 'forward', 'next', 'previous', 'fullscreen', 'exit_fullscreen', 'controls', 'hide_controls']);
 
 const id = { type: 'string', minLength: 1, maxLength: 200 };
 const name = { type: 'string', minLength: 1, maxLength: MEDIA_LIST_NAME_MAX, pattern: '\\S' };
@@ -25,7 +27,10 @@ const definitions = {
     remove: [{ list_id: id, entry_ids: { type: 'array', minItems: 1, maxItems: MEDIA_LIST_ENTRIES_MAX, items: { type: 'string', minLength: 1, maxLength: 400 } } },
         ['list_id', 'entry_ids'], 'Take entries out of a media list (the media themselves stay).', true, 'write'],
     delete: [{ list_id: id }, ['list_id'], 'Delete a media list (its media stay where they are).', true, 'write'],
-    open: [{ media: shown, list_id: id }, [], 'Show the media lists on the current presentation surface (media filters them), or one list.', false, 'control']
+    open: [{ media: shown, list_id: id }, [], 'Show the media lists on the current presentation surface (media filters them), or one list.', false, 'control'],
+    control: [{ action: { type: 'string', enum: MEDIA_CONTROL_ACTIONS } }, ['action'], 'Control what plays in the media lists shown, as its picture\'s touches do: '
+        + 'resume, pause, ten seconds back (rewind) or ahead (forward), the next or previous entry of the list, the whole screen or back, its controls over '
+        + 'the picture shown (controls) or hidden (hide_controls). NOT_PLAYING: nothing plays.', false, 'control']
 };
 const entrySchema = { type: 'object', properties: MEDIA_LIST_ENTRY_SCHEMA.properties };
 const listSchema = { type: 'object', properties: { id: { type: 'string' }, name: { type: 'string' }, kind: { type: 'string' }, count: { type: 'integer' }, holds: { type: 'boolean' },
@@ -43,4 +48,5 @@ export const validateMediaListInput = (action, input) => {
 export const mediaListError = error => (MEDIA_LIST_ERRORS.includes(error?.code || error?.message || error) ? (error?.code || error?.message || error) : 'WRITE_FAILED');
 export const MEDIA_LIST_ASSISTANT_INSTRUCTIONS = 'Media lists (eVe\'s own, mixing sounds, songs and videos): « montre mes listes » calls media_lists.open; '
     + '« crée une liste Soirée » media_lists.create; « renomme la liste… » media_lists.rename; « ajoute cette vidéo à ma liste Sport » media_lists.add with the entry; '
-    + '« enlève… de la liste » media_lists.remove; « supprime la liste… » media_lists.delete (confirmed). media_lists.list gives the ids; never invent one.';
+    + '« enlève… de la liste » media_lists.remove; « supprime la liste… » media_lists.delete (confirmed); « plein écran », « le suivant », « montre les commandes » '
+    + 'while a list\'s media plays: media_lists.control. media_lists.list gives the ids; never invent one.';

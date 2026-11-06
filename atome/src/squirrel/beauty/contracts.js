@@ -22,6 +22,7 @@ const definitions = {
     list_photos: [{ pose, zone }, [], 'List the Beauté photos (newest first), of one pose and zone when given: id (a media Atome of the person), pose, zone, at.', false],
     shoot: [{ pose, zone }, [], 'Take a Beauté photo now with the camera on the Beauté card (opened on its guided shot first, pose and zone chosen when given): it joins the person\'s media and the Beauté photos. Returns photo.', true],
     add_photo: [{ media, pose, zone }, ['media', 'pose', 'zone'], 'File one of the person\'s media (a photo just taken by the one capture path, or chosen from their media) as a Beauté photo of pose and zone.', true],
+    remove_photo: [{ photo_id: id }, ['photo_id'], 'Take one Beauté photo out of the Beauté photos (its media stays in the person\'s media).', true],
     read_reminder: [{}, [], 'Read the Beauté reminder: its weekly event in the personal calendar (event_id, weekday 0 = Monday, hour), or null.', false],
     set_reminder: [{ on: { type: 'boolean' }, weekday: { type: 'integer', minimum: 0, maximum: 6 }, hour: { type: 'integer', minimum: 5, maximum: 22 } }, ['on'],
         'Turn the Beauté reminder on (a weekly event with its alarm in the personal calendar, on weekday, 0 = Monday, today\'s by default, at hour, 9 by default) or off (its event removed).', true]

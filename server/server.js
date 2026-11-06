@@ -13,7 +13,6 @@ import { registerOfflineAppAssets } from './offline_app_assets.js';
 import { loadServerEnvFiles, resolveHttpsOptions } from './server_boot_config.js';
 import { createServerServices } from './server_services.js';
 import { registerSiteHttp } from './site_http.js';
-import { startABoxMonitoring, stopABoxMonitoring } from './aBoxServer.js';
 import { ensureOpaquePrincipalIdentity } from './auth_identity.js';
 import { createWsPhoneLinkHandler } from './wsPhoneLinkAuth.js';
 import { registerServerIdentityRoutes } from './auth_routes_server.js';
@@ -22,7 +21,6 @@ import { requiredJwtSecret as getRequiredJwtSecret } from './wsApiIdentity.js';
 import { registerMailRoutes } from './mailRoutes.js';
 import { registerSocialRoutes } from './social/social_oauth.js';
 import { registerBillingRoutes } from './billing/billing_routes.js';
-import { initUserFiles } from './user_files_message_api.js';
 import { startPolling as startGitHubPolling } from './githubSync.js';
 import { createVisioService } from './visio.js';
 import { SERVER_VERSION, EVE_VERSION, refreshVersionCache, startVersionWatchers } from './server_version.js';
@@ -56,14 +54,10 @@ registerCoreAtomeTypes();
 const {
   userVaultRouter,
   wsSyncRuntime,
+  wsSyncFront,
   deliverCommNotification,
   communicationRelations,
-  directMessageRateAllowed,
   syncSharingService,
-  newsBroadcast,
-  newsPublishRateAllowed,
-  communities,
-  forums,
   directoryPublicService,
   publicEvents,
   objectiveNetwork,
@@ -98,7 +92,6 @@ try {
 }
 
 const SERVER_TYPE = 'Fastify';
-let fileSyncWatcherHandle = null;
 
 // HTTPS Configuration
 const httpsOptions = resolveHttpsOptions(projectRoot);
@@ -177,22 +170,6 @@ async function startServer() {
     }
 
     registerHttpDevRoutes(server, { replyJson, SERVER_CONFIG_FILE, BROWSER_LOG_FILE, SNAPSHOT_DIR });
-
-    // Initialize user files tracking
-    await initUserFiles(uploadsDir || 'per-user Downloads');
-
-    if (process.env.SQUIRREL_DISABLE_WATCHER === '1') {
-      console.log('🛑 File sync watcher disabled via SQUIRREL_DISABLE_WATCHER=1');
-    } else {
-      try {
-        fileSyncWatcherHandle = startABoxMonitoring({
-          projectRoot
-        });
-        console.log('👀 File sync watcher ready:', fileSyncWatcherHandle.config);
-      } catch (error) {
-        console.warn('⚠️  Unable to start file sync watcher:', error?.message || error);
-      }
-    }
 
     // ===========================
     // 0. DATABASE INITIALIZATION (SQLite/LibSQL - ADOLE v3.0)
@@ -332,12 +309,7 @@ async function startServer() {
       wsSyncRuntime,
       directoryPublicService,
       communicationRelations,
-      directMessageRateAllowed,
       syncSharingService,
-      newsBroadcast,
-      newsPublishRateAllowed,
-      communities,
-      forums,
       publicEvents,
       objectiveNetwork,
       shop,
@@ -346,12 +318,9 @@ async function startServer() {
       site
     });
 
-    // Route WebSocket unifiée pour sync (inclut file events, atome events, version sync)
+    // /ws/sync is the Rust front's runtime: this route answers only its own connections (ws_sync_front.js).
     server.register(async function (fastify) {
-      // Route WebSocket pour sync GitHub et gestion clients Tauri/Browser
-      fastify.get('/ws/sync', { websocket: true }, async (connection, request) => {
-        await wsSyncRuntime.attach(connection, request);
-      });
+      fastify.get('/ws/sync', { websocket: true }, (connection, request) => wsSyncFront.attach(connection, request));
     });
 
     // ===========================
@@ -376,27 +345,10 @@ async function startServer() {
     console.log(`✅ Fastify server v${server.version} started on http://localhost:${PORT} (Atome ${SERVER_VERSION}, eVe ${EVE_VERSION})`);
     console.log(`🔄 Sync WebSocket at ws://localhost:${PORT}/ws/sync`);
     console.log(`🌐 Frontend served from: http://localhost:${PORT}/`);
-    void directoryPublicService.rebuild()
-      .then((result) => console.log(`[directory.public] startup rebuild complete profiles=${result.profiles}`))
-      .catch((error) => console.warn('[directory.public] startup rebuild failed:', error?.message || error));
 
   } catch (error) {
     console.error('❌ Error starting server:', error);
     process.exit(1);
-  }
-}
-
-async function stopFileWatcher() {
-  if (!fileSyncWatcherHandle) {
-    return;
-  }
-  try {
-    await stopABoxMonitoring();
-    console.log('✅ File sync watcher stopped');
-  } catch (error) {
-    console.warn('⚠️  Error while stopping file watcher:', error?.message || error);
-  } finally {
-    fileSyncWatcherHandle = null;
   }
 }
 
@@ -408,8 +360,6 @@ const shutdownOn = (signal, message) => process.on(signal, async () => {
   console.log(message);
   try {
     await server.close();
-    wsSyncRuntime.stop();
-    await stopFileWatcher();
     await userVaultRouter.stopAll();
     console.log('✅ Server stopped cleanly');
     process.exit(0);

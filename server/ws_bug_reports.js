@@ -17,8 +17,10 @@
 // (`{ resolved_at, note, fixed_in }`) into it with scripts/bug_reports_admin.mjs. A
 // `bug-report-status` frame asks which of a device's sent reports are resolved, by
 // their id and day (the ids are random, a report is only known to who filed it): the
-// device then shows those as fixed, and the user removes them from their list.
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+// device then shows those as fixed, and the user removes them from their list. For a
+// feature request (kind `request`, server/ws_feature_requests.js) it answers its review
+// and its Roadmap state.
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAddressRateLimit } from './public_source_fetch.js';
@@ -46,21 +48,41 @@ export const readBugReportFile = async (file) => {
     }
 };
 
+// Every report file under `root`, oldest day first: `[{ file, report }]`.
+export const listBugReportFiles = async (root = BUG_REPORTS_ROOT) => {
+    const entries = await readdir(root, { withFileTypes: true }).catch(error => (error.code === 'ENOENT' ? [] : Promise.reject(error)));
+    const days = entries.filter(entry => entry.isDirectory() && /^\d{4}-\d{2}-\d{2}$/.test(entry.name)).map(entry => entry.name).sort();
+    const files = [];
+    for (const day of days) {
+        for (const name of (await readdir(path.join(root, day))).filter(name => name.endsWith('.json')).sort()) {
+            const file = path.join(root, day, name);
+            files.push({ file, report: await readBugReportFile(file) });
+        }
+    }
+    return files;
+};
+
+// What the requester's device learns of its feature request.
+export const featureRequestStateOf = report => ({ id: report.id, review: report.review?.state || '', reason: report.review?.reason || '',
+    reviewed_at: report.review?.at || '', roadmap: report.roadmap?.state || '', roadmap_at: report.roadmap?.at || '' });
+
 const handleStatus = async (message, address, root, now) => {
     if (statusLimited(address, now())) return reply(message, { ok: false, error: 'bug_report_rate_limited' });
     const normalized = normalizeBugReportRefs(message.refs);
     if (!normalized.ok) return reply(message, normalized);
-    const resolved = [];
+    const resolved = [], requests = [];
     try {
         for (const ref of normalized.refs) {
             const stored = await readBugReportFile(bugReportFilePath(root, ref));
-            if (stored?.id === ref.id && stored.resolution?.resolved_at) resolved.push({ id: ref.id, ...stored.resolution });
+            if (stored?.id !== ref.id) continue;
+            if (stored.resolution?.resolved_at) resolved.push({ id: ref.id, ...stored.resolution });
+            if (stored.kind === 'request') requests.push(featureRequestStateOf(stored));
         }
     } catch (error) {
         console.error('[bug_reports] status read failed', error);
         return reply(message, { ok: false, error: 'bug_report_status_failed' });
     }
-    return reply(message, { ok: true, resolved });
+    return reply(message, { ok: true, resolved, requests });
 };
 
 export async function handleWsBugReport(message, connection, address, { root = BUG_REPORTS_ROOT, now = Date.now } = {}) {

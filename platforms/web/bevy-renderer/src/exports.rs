@@ -1,12 +1,26 @@
 use super::*;
 use atome_bevy_renderer_core::{
-    AtomeLayerPatch, AtomeParentPatch, AtomeRenderNode, AtomeRenderOp, AtomeRenderScene,
-    AtomeResourcePatch, AtomeSceneEffectsPatch, AtomeStylePatch, AtomeSurfaceBackgroundPatch,
-    AtomeSurfacePatch, AtomeTextPatch, AtomeTransformPatch, AtomeUiOp, AtomeVisibilityPatch,
-    AtomeProjectSpacePatch, AtomeProjectViewPatch,
+    AtomeLayerPatch, AtomeParentPatch, AtomeProjectSpacePatch, AtomeProjectViewPatch,
+    AtomeRenderNode, AtomeRenderOp, AtomeRenderScene, AtomeResourcePatch, AtomeSceneEffectsPatch,
+    AtomeStylePatch, AtomeSurfaceBackgroundPatch, AtomeSurfacePatch, AtomeTextPatch,
+    AtomeTransformPatch, AtomeUiOp, AtomeVisibilityPatch,
 };
 use serde::Deserialize;
 use wasm_bindgen::prelude::*;
+
+/// A text painted by the browser crosses as its `ImageBitmap`, staged for the GPU copy (bevy-core
+/// `browser_texture.rs`) before the payload is decoded.
+#[cfg(target_arch = "wasm32")]
+fn stage_browser_images(payload: &JsValue) -> Result<(), JsValue> {
+    atome_bevy_renderer_core::browser_texture::stage_browser_images(payload)
+        .map_err(|error| JsValue::from_str(&error))
+}
+
+/// A JavaScript payload only exists in a browser: the native test build has none to stage.
+#[cfg(not(target_arch = "wasm32"))]
+fn stage_browser_images(_payload: &JsValue) -> Result<(), JsValue> {
+    Err(JsValue::from_str("bevy_browser_payload_requires_wasm"))
+}
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct WebSurfaceMetrics {
@@ -18,10 +32,10 @@ pub struct WebSurfaceMetrics {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum WebAtomeRenderOp {
-    Spawn { node: AtomeRenderNode },
+    Spawn { node: Box<AtomeRenderNode> },
     Despawn { id: String },
     Transform { patch: AtomeTransformPatch },
-    Style { patch: AtomeStylePatch },
+    Style { patch: Box<AtomeStylePatch> },
     Reparent { patch: AtomeParentPatch },
     Layer { patch: AtomeLayerPatch },
     Visibility { patch: AtomeVisibilityPatch },
@@ -108,6 +122,7 @@ fn run_atome_bevy_renderer_with_transparency(
     if canvas_selector.trim().is_empty() {
         return Err(JsValue::from_str("bevy_canvas_selector_required"));
     }
+    stage_browser_images(&initial_scene)?;
     let scene: AtomeRenderScene = serde_wasm_bindgen::from_value(initial_scene)
         .map_err(|error| JsValue::from_str(&format!("bevy_projection_decode_failed:{error}")))?;
     let metrics: WebSurfaceMetrics =
@@ -143,6 +158,7 @@ fn run_atome_bevy_renderer_with_transparency(
 
 #[wasm_bindgen]
 pub fn apply_atome_bevy_ops(ops: JsValue) -> Result<(), JsValue> {
+    stage_browser_images(&ops)?;
     let parsed: Vec<WebAtomeRenderOp> = serde_wasm_bindgen::from_value(ops)
         .map_err(|error| JsValue::from_str(&format!("bevy_ops_decode_failed:{error}")))?;
     queue_web_ops(parsed.into_iter().map(AtomeRenderOp::from).collect());
@@ -179,7 +195,8 @@ pub fn queue_atome_bevy_ui_events(events: JsValue) -> Result<(), JsValue> {
 
 #[wasm_bindgen]
 pub fn apply_atome_bevy_spawn(node: JsValue) -> Result<(), JsValue> {
-    let parsed: AtomeRenderNode = serde_wasm_bindgen::from_value(node)
+    stage_browser_images(&node)?;
+    let parsed: Box<AtomeRenderNode> = serde_wasm_bindgen::from_value(node)
         .map_err(|error| JsValue::from_str(&format!("bevy_spawn_decode_failed:{error}")))?;
     queue_web_op(AtomeRenderOp::Spawn(parsed));
     Ok(())
@@ -204,7 +221,7 @@ pub fn apply_atome_bevy_transform(patch: JsValue) -> Result<(), JsValue> {
 
 #[wasm_bindgen]
 pub fn apply_atome_bevy_style(patch: JsValue) -> Result<(), JsValue> {
-    let parsed: AtomeStylePatch = serde_wasm_bindgen::from_value(patch)
+    let parsed: Box<AtomeStylePatch> = serde_wasm_bindgen::from_value(patch)
         .map_err(|error| JsValue::from_str(&format!("bevy_style_decode_failed:{error}")))?;
     queue_web_op(AtomeRenderOp::Style(parsed));
     Ok(())
@@ -236,6 +253,7 @@ pub fn apply_atome_bevy_visibility(patch: JsValue) -> Result<(), JsValue> {
 
 #[wasm_bindgen]
 pub fn apply_atome_bevy_text_metadata(patch: JsValue) -> Result<(), JsValue> {
+    stage_browser_images(&patch)?;
     let parsed: AtomeTextPatch = serde_wasm_bindgen::from_value(patch)
         .map_err(|error| JsValue::from_str(&format!("bevy_text_decode_failed:{error}")))?;
     queue_web_op(AtomeRenderOp::Text(parsed));
@@ -244,6 +262,7 @@ pub fn apply_atome_bevy_text_metadata(patch: JsValue) -> Result<(), JsValue> {
 
 #[wasm_bindgen]
 pub fn apply_atome_bevy_resource(patch: JsValue) -> Result<(), JsValue> {
+    stage_browser_images(&patch)?;
     let parsed: AtomeResourcePatch = serde_wasm_bindgen::from_value(patch)
         .map_err(|error| JsValue::from_str(&format!("bevy_resource_decode_failed:{error}")))?;
     queue_web_op(AtomeRenderOp::Resource(parsed));
@@ -337,4 +356,22 @@ pub fn reset_atome_bevy_video_copy_diagnostics() -> Result<JsValue, JsValue> {
     serde_wasm_bindgen::to_value(&atome_bevy_renderer_core::reset_video_copy_diagnostics()).map_err(
         |error| JsValue::from_str(&format!("bevy_video_copy_diagnostics_reset_failed:{error}")),
     )
+}
+
+pub(crate) fn read_web_renderer_diagnostics() -> WebRendererDiagnostics {
+    WEB_DIAGNOSTICS.with(|cell| {
+        let mut diagnostics = cell.borrow().clone();
+        diagnostics.running_apps =
+            WEB_RUNNING_APPS.with(|apps_cell| apps_cell.borrow().len() as u32);
+        diagnostics.render_error = render_error::recorded_render_error();
+        diagnostics
+    })
+}
+
+pub(crate) fn reset_web_renderer_diagnostics() -> WebRendererDiagnostics {
+    WEB_DIAGNOSTICS.with(|cell| {
+        let previous = cell.borrow().clone();
+        *cell.borrow_mut() = WebRendererDiagnostics::default();
+        previous
+    })
 }

@@ -58,8 +58,9 @@ pub fn apply_frame_demand(
     };
     let now = time.elapsed_secs_f64();
     if let Some(deadline) = demand.deadlines.values().copied().reduce(f64::min) {
-        let (focused, unfocused) =
-            *demand.saved_modes.get_or_insert((settings.focused_mode, settings.unfocused_mode));
+        let (focused, unfocused) = *demand
+            .saved_modes
+            .get_or_insert((settings.focused_mode, settings.unfocused_mode));
         let interval = Duration::from_secs_f64((deadline - now).clamp(0.001, 1.0));
         settings.focused_mode = with_frame_deadline(focused, interval);
         settings.unfocused_mode = with_frame_deadline(unfocused, interval);

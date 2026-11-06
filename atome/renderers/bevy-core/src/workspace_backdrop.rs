@@ -1,9 +1,8 @@
 use bevy::{
-    camera::{visibility::RenderLayers, ClearColorConfig, RenderTarget},
+    camera::{ClearColorConfig, RenderTarget, visibility::RenderLayers},
     image::{ImageSampler, ImageSamplerDescriptor},
     prelude::*,
     render::{
-        extract_component::ExtractComponent,
         extract_resource::ExtractResource,
         render_resource::{TextureFormat, TextureUsages},
     },
@@ -12,7 +11,7 @@ use bevy::{
 use crate::{
     render_math::atome_camera_projection,
     types::AtomeBevyRendererConfig,
-    workspace_blur::{backdrop_capture_pixel_size, backdrop_mip_level_count},
+    workspace_blur::{backdrop_capture_pixel_size, backdrop_mip_level_count, pyramid::BlurCapture},
 };
 
 /// The only layer sampled by the backdrop capture camera.
@@ -25,9 +24,6 @@ pub const MENU_PRESENTATION_LAYER: usize = 1;
 
 #[derive(Component)]
 pub struct AtomePresentationCamera;
-
-#[derive(Component, Clone, Copy, ExtractComponent)]
-pub struct AtomeWorkspaceCamera;
 
 #[derive(Resource, Clone, ExtractResource)]
 pub struct AtomeWorkspaceBackdrop {
@@ -44,21 +40,18 @@ pub struct AtomeWorkspaceBackdrop {
 /// the two shaders that sample it all speak the same colour space, linear
 /// `Rgba8Unorm`: nothing encodes, nothing decodes, and the downsample passes
 /// average real light instead of encoded bytes.
-fn capture_image(width: u32, height: u32) -> Image {
-    let mut image = Image::new_target_texture(
-        width.max(1),
-        height.max(1),
-        TextureFormat::Rgba8Unorm,
-        None,
-    );
+pub(crate) fn capture_image(width: u32, height: u32) -> Image {
+    let mut image =
+        Image::new_target_texture(width.max(1), height.max(1), TextureFormat::Rgba8Unorm, None);
     image.texture_descriptor.usage |= TextureUsages::COPY_SRC;
     image.data = None;
     image
 }
 
-fn blur_pyramid_image(width: u32, height: u32) -> Image {
+pub(crate) fn blur_pyramid_image(width: u32, height: u32) -> Image {
     let mut image = capture_image(width, height);
-    image.texture_descriptor.mip_level_count = backdrop_mip_level_count(UVec2::new(width.max(1), height.max(1)));
+    image.texture_descriptor.mip_level_count =
+        backdrop_mip_level_count(UVec2::new(width.max(1), height.max(1)));
     // Every level is a colour attachment of the downsample chain: no storage
     // binding, which A12-class WebGPU adapters cannot provide in sufficient number.
     image.texture_descriptor.usage =
@@ -81,17 +74,31 @@ pub fn spawn_workspace_backdrop(
     let camera = commands
         .spawn((
             Camera2d,
-            Camera { order: -3, is_active: false, clear_color: ClearColorConfig::Custom(Color::NONE), ..default() },
+            Camera {
+                order: -3,
+                is_active: false,
+                clear_color: ClearColorConfig::Custom(Color::NONE),
+                ..default()
+            },
             // The capture is only ever read back by the blur passes, which
             // average it anyway: multisampling it is pure wasted bandwidth.
             Msaa::Off,
             RenderTarget::Image(capture_image.clone().into()),
             atome_camera_projection(config.width, config.height),
             RenderLayers::layer(WORKSPACE_CAPTURE_LAYER),
-            AtomeWorkspaceCamera,
+            BlurCapture {
+                capture: capture_image.clone(),
+                pyramid: image.clone(),
+            },
         ))
         .id();
-    AtomeWorkspaceBackdrop { capture_image, image, camera, enabled: false, pixel_size }
+    AtomeWorkspaceBackdrop {
+        capture_image,
+        image,
+        camera,
+        enabled: false,
+        pixel_size,
+    }
 }
 
 pub fn set_workspace_backdrop_enabled(world: &mut World, enabled: bool) -> Result<(), String> {
@@ -105,7 +112,9 @@ pub fn set_workspace_backdrop_enabled(world: &mut World, enabled: bool) -> Resul
         .get_mut::<Camera>(state.camera)
         .ok_or_else(|| "bevy_workspace_backdrop_camera_missing".to_string())?
         .is_active = enabled;
-    let presentation = RenderLayers::layer(WORKSPACE_CAPTURE_LAYER).with(MENU_PRESENTATION_LAYER).with(crate::mystic_capture::MENU_OVERLAY_LAYER);
+    let presentation = RenderLayers::layer(WORKSPACE_CAPTURE_LAYER)
+        .with(MENU_PRESENTATION_LAYER)
+        .with(crate::mystic_capture::MENU_OVERLAY_LAYER);
     let presentation_camera = world
         .query_filtered::<Entity, With<AtomePresentationCamera>>()
         .iter(world)
@@ -116,7 +125,11 @@ pub fn set_workspace_backdrop_enabled(world: &mut World, enabled: bool) -> Resul
     Ok(())
 }
 
-pub fn resize_workspace_backdrop(world: &mut World, _logical_size: Vec2, pixel_size: UVec2) -> Result<(), String> {
+pub fn resize_workspace_backdrop(
+    world: &mut World,
+    _logical_size: Vec2,
+    pixel_size: UVec2,
+) -> Result<(), String> {
     let Some(state) = world.get_resource::<AtomeWorkspaceBackdrop>().cloned() else {
         return Ok(());
     };
@@ -132,7 +145,13 @@ pub fn resize_workspace_backdrop(world: &mut World, _logical_size: Vec2, pixel_s
         if world.get_entity(state.camera).is_err() {
             return Err("bevy_workspace_backdrop_camera_missing".to_string());
         }
-        world.entity_mut(state.camera).insert(RenderTarget::Image(capture_handle.clone().into()));
+        world.entity_mut(state.camera).insert((
+            RenderTarget::Image(capture_handle.clone().into()),
+            BlurCapture {
+                capture: capture_handle.clone(),
+                pyramid: pyramid_handle.clone(),
+            },
+        ));
         if let Some(mut materials) =
             world.get_resource_mut::<Assets<crate::backdrop_surface::BackdropSurfaceMaterial>>()
         {

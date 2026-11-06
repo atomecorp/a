@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import db from '../database/adole.js';
-import { getABoxEventBus } from './aBoxServer.js';
+import { getSyncEventBus } from './sync/syncEventBus.js';
 import {
     formatAtome,
     resolveSyncAtomeType,
@@ -38,7 +38,7 @@ const normalizeSyncOperation = (operation, atome, properties) => {
 
 function syncAtomeViaWebSocket(atome, operation = 'create') {
     try {
-        const eventBus = getABoxEventBus();
+        const eventBus = getSyncEventBus();
         if (!eventBus) {
             syncDebugLog('EventBus not available for sync');
             return;

@@ -53,6 +53,20 @@ export function orphanPlacements(map) {
     return placements.filter(placement => entries[placement.parent] && !ROOT_ROLES.has(entries[placement.parent].role) && !placedTargets.has(placement.parent));
 }
 
+// A tool MCP cannot reach as the interface does (UI_only, needs_adapter) is an error unless annotations.json names it
+// with its class and reason; an exception that no longer matches its tool is stale.
+const UNREACHED_EXPOSURES = ['UI_only', 'needs_adapter'];
+function exposureErrors(entries, exceptions) {
+    const errors = [];
+    for (const entry of Object.values(entries).filter(item => item.kind === 'tool_definition' && UNREACHED_EXPOSURES.includes(item.exposure))) {
+        if (!exceptions[entry.id]) errors.push(`exposure_unexcepted:${entry.id} ${entry.exposure} (registered by ${entry.owner})`);
+    }
+    for (const [id, exception] of Object.entries(exceptions)) {
+        if (entries[id]?.exposure !== exception.exposure) errors.push(`stale_exposure_exception:${id} declared ${exception.exposure}, classified ${entries[id]?.exposure || 'no entry'}`);
+    }
+    return errors;
+}
+
 export function integrityErrors(map, sources, findings) {
     const errors = [], entries = map.entries, has = id => Boolean(entries[id]);
     findings.filter(finding => finding.type === 'duplicate_owner').forEach(finding => errors.push(`duplicate_owner:${finding.id} (${finding.owners.join(' | ')})`));
@@ -76,6 +90,7 @@ export function integrityErrors(map, sources, findings) {
         const owners = Object.values(entries).filter(entry => entry.native_id === alias && entry.id !== target).map(entry => entry.id);
         if (owners.length) errors.push(`alias_collision:${alias} is the native id of ${owners.join(', ')}`);
     }
+    errors.push(...exposureErrors(entries, sources.annotations.exposure_exceptions));
     for (const type of ACYCLIC) cycles(map.relations, type).forEach(cycle => errors.push(`forbidden_cycle:${type} ${cycle}`));
     const codeAliased = new Set(map.relations.filter(relation => relation.type === 'aliases' && relation.status === 'code_declared').map(relation => relation.from));
     for (const brick of Object.values(entries).filter(entry => entry.kind === 'doc_brick')) {

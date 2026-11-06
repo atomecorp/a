@@ -1,0 +1,24 @@
+[package]
+name = "atome-store"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "The one Atome store: schema, commit, projection, history, ACL and type gate on SQLite"
+
+[dependencies]
+rusqlite = { workspace = true }
+serde.workspace = true
+# Correctly rounded number parsing, as JavaScript: an intent hashed here equals
+# Fastify's for every number a client sends. Objects keep their keys in insertion
+# order, as a JavaScript object does: a value stored here reads back as Fastify's.
+serde_json = { workspace = true, features = ["float_roundtrip", "preserve_order"] }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.8", features = ["v4", "serde"] }
+sha2.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

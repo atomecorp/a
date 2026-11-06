@@ -1,12 +1,15 @@
 // Split modules whose ports leave for other strips, keys taken on a strip or
 // on a port, and modules that keep their state across graph swaps.
 
-use crate::tests::{program, rig, BLOCK};
 use crate::MixGraph;
+use crate::tests::{BLOCK, program, rig};
 use kira::Frame;
 
 fn close(actual: Frame, left: f32, right: f32) {
-    assert!((actual.left - left).abs() < 1e-3 && (actual.right - right).abs() < 1e-3, "expected ({left}, {right}), got {actual:?}");
+    assert!(
+        (actual.left - left).abs() < 1e-3 && (actual.right - right).abs() < 1e-3,
+        "expected ({left}, {right}), got {actual:?}"
+    );
 }
 
 #[test]
@@ -47,11 +50,25 @@ fn a_key_on_a_strip_or_on_a_port_drives_its_module() {
         {"id":"voice","output":null},
         {"id":"music","chain":[{"id":"d","type":"dsp","effect":"ducker","params":{"amount_db":12,"attack_ms":0.1},"key":{"kind":"strip","id":"voice"}}],"output":{"kind":"main"}}]}"#;
     let mut rig_duck = rig(duck);
-    close(rig_duck.settle(&[("music", Frame::new(0.5, 0.5))]), 0.5, 0.5);
+    close(
+        rig_duck.settle(&[("music", Frame::new(0.5, 0.5))]),
+        0.5,
+        0.5,
+    );
     for _ in 0..40 {
-        rig_duck.block(&[("music", Frame::new(0.5, 0.5)), ("voice", Frame::new(0.5, 0.5))]);
+        rig_duck.block(&[
+            ("music", Frame::new(0.5, 0.5)),
+            ("voice", Frame::new(0.5, 0.5)),
+        ]);
     }
-    close(rig_duck.settle(&[("music", Frame::new(0.5, 0.5)), ("voice", Frame::new(0.5, 0.5))]), 0.1256, 0.1256);
+    close(
+        rig_duck.settle(&[
+            ("music", Frame::new(0.5, 0.5)),
+            ("voice", Frame::new(0.5, 0.5)),
+        ]),
+        0.1256,
+        0.1256,
+    );
     // Gate keyed on the right band of another strip: open while it sounds,
     // and the band still plays in its own strip.
     let gate = r#"{"strips":[
@@ -59,13 +76,33 @@ fn a_key_on_a_strip_or_on_a_port_drives_its_module() {
         {"id":"pad","chain":[{"id":"g","type":"dsp","effect":"gate","params":{"release_ms":5,"hold_ms":0},"key":{"kind":"port","module_id":"lr","port":1}}],"output":{"kind":"main"}}]}"#;
     let mut rig_gate = rig(gate);
     for _ in 0..40 {
-        rig_gate.block(&[("pad", Frame::new(0.5, 0.5)), ("drums", Frame::new(0.0, 0.5))]);
+        rig_gate.block(&[
+            ("pad", Frame::new(0.5, 0.5)),
+            ("drums", Frame::new(0.0, 0.5)),
+        ]);
     }
-    close(rig_gate.settle(&[("pad", Frame::new(0.5, 0.5)), ("drums", Frame::new(0.0, 0.5))]), 0.5, 0.5);
+    close(
+        rig_gate.settle(&[
+            ("pad", Frame::new(0.5, 0.5)),
+            ("drums", Frame::new(0.0, 0.5)),
+        ]),
+        0.5,
+        0.5,
+    );
     for _ in 0..40 {
-        rig_gate.block(&[("pad", Frame::new(0.5, 0.5)), ("drums", Frame::new(0.5, 0.0))]);
+        rig_gate.block(&[
+            ("pad", Frame::new(0.5, 0.5)),
+            ("drums", Frame::new(0.5, 0.0)),
+        ]);
     }
-    close(rig_gate.settle(&[("pad", Frame::new(0.5, 0.5)), ("drums", Frame::new(0.5, 0.0))]), 0.0005, 0.0005);
+    close(
+        rig_gate.settle(&[
+            ("pad", Frame::new(0.5, 0.5)),
+            ("drums", Frame::new(0.5, 0.0)),
+        ]),
+        0.0005,
+        0.0005,
+    );
 }
 
 #[test]
@@ -75,19 +112,46 @@ fn a_key_from_later_in_the_order_comes_through_a_return() {
     let mut rig = rig(json);
     for _ in 0..40 {
         let out = rig.block(&[("pad", Frame::new(0.5, 0.5))]);
-        assert!(out.iter().all(|frame| frame.left.is_finite() && frame.left.abs() <= 0.5));
+        assert!(
+            out.iter()
+                .all(|frame| frame.left.is_finite() && frame.left.abs() <= 0.5)
+        );
     }
-    assert!(rig.settle(&[("pad", Frame::new(0.5, 0.5))]).left < 0.1, "compressed by its own level");
+    assert!(
+        rig.settle(&[("pad", Frame::new(0.5, 0.5))]).left < 0.1,
+        "compressed by its own level"
+    );
 }
 
 #[test]
 fn wrong_ports_and_keys_are_refused() {
-    let no_port = program(r#"{"strips":[{"id":"a","chain":[{"id":"lr","type":"dsp","effect":"left_right","outputs":[{"port":2,"target":{"kind":"main"}}]}]}]}"#);
-    assert!(MixGraph::new(48_000).apply(no_port).unwrap_err().contains("no port 2"));
-    let no_key = program(r#"{"strips":[{"id":"a","chain":[{"id":"e","type":"dsp","effect":"echo","key":{"kind":"strip","id":"a"}}]}]}"#);
-    assert!(MixGraph::new(48_000).apply(no_key).unwrap_err().contains("takes no key"));
-    let missing = program(r#"{"strips":[{"id":"a","chain":[{"id":"c","type":"dsp","effect":"compressor","key":{"kind":"port","module_id":"zz","port":0}}]}]}"#);
-    assert!(MixGraph::new(48_000).apply(missing).unwrap_err().contains("zz"));
+    let no_port = program(
+        r#"{"strips":[{"id":"a","chain":[{"id":"lr","type":"dsp","effect":"left_right","outputs":[{"port":2,"target":{"kind":"main"}}]}]}]}"#,
+    );
+    assert!(
+        MixGraph::new(48_000)
+            .apply(no_port)
+            .unwrap_err()
+            .contains("no port 2")
+    );
+    let no_key = program(
+        r#"{"strips":[{"id":"a","chain":[{"id":"e","type":"dsp","effect":"echo","key":{"kind":"strip","id":"a"}}]}]}"#,
+    );
+    assert!(
+        MixGraph::new(48_000)
+            .apply(no_key)
+            .unwrap_err()
+            .contains("takes no key")
+    );
+    let missing = program(
+        r#"{"strips":[{"id":"a","chain":[{"id":"c","type":"dsp","effect":"compressor","key":{"kind":"port","module_id":"zz","port":0}}]}]}"#,
+    );
+    assert!(
+        MixGraph::new(48_000)
+            .apply(missing)
+            .unwrap_err()
+            .contains("zz")
+    );
 }
 
 #[test]
@@ -100,6 +164,9 @@ fn a_module_keeps_its_state_across_edits_even_before_the_render_takes_them() {
     rig.graph.apply(program(with_bus)).unwrap();
     rig.graph.apply(program(echo)).unwrap();
     let ringing = rig.block(&[]);
-    assert!(crate::dsp::peak(&ringing) > 0.1, "the echo in flight survives the swap");
+    assert!(
+        crate::dsp::peak(&ringing) > 0.1,
+        "the echo in flight survives the swap"
+    );
     assert_eq!(BLOCK, ringing.len());
 }

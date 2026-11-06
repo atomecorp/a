@@ -1,0 +1,54 @@
+# cargo-deny policy of the Rust workspace (scripts/rust/check.sh runs it).
+
+[graph]
+all-features = false
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "aarch64-apple-ios",
+    "aarch64-linux-android",
+    "x86_64-pc-windows-msvc",
+    "wasm32-unknown-unknown",
+]
+
+[advisories]
+# Every RustSec advisory fails the check unless it is listed here with its reason.
+ignore = [
+    # All three come only through mediasoup 0.21 (pinned for byte parity with Node mediasoup 3.19); drop them when it moves.
+    { id = "RUSTSEC-2024-0375", reason = "atty unmaintained: build-time only, via planus-translation (mediasoup-sys build script)" },
+    { id = "RUSTSEC-2024-0384", reason = "instant unmaintained: via fastrand 1 / futures-lite 1 in mediasoup, no known vulnerability" },
+    { id = "RUSTSEC-2024-0436", reason = "paste 0.1 unmaintained: proc-macro via bitpattern / h264-profile-level-id in mediasoup" },
+]
+
+[licenses]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "MPL-2.0",
+    "CC0-1.0",
+    "BSL-1.0",
+    "0BSD",
+    "MIT-0",
+    # The Mozilla root certificates as data (webpki-root-certs, downloaded by ort-sys at build time).
+    "CDLA-Permissive-2.0",
+]
+confidence-threshold = 0.9
+# The first-party crates carry `publish = false`: they ship inside the apps only.
+private = { ignore = true }
+
+[bans]
+# Two versions of one crate are reported; the list shrinks as the graph converges.
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

@@ -51,6 +51,14 @@ export function flushPendingConsoleMessages(connection, userId) {
     return sent;
 }
 
+// The Rust front keeps its own registry of live connections (atome-server src/social/live.rs):
+// each attach and detach of a front connection is told to it, by the secret it handed Fastify.
+function tellFront(connection, principal) {
+    if (connection?._wsApiFrontSecret) {
+        wsSendJson(connection, { type: 'front-live', secret: connection._wsApiFrontSecret, principal }, { scope: 'ws/api', op: 'front-live' });
+    }
+}
+
 export function attachWsApiClientToUser(connection, userId) {
     if (!userId) return;
 
@@ -64,6 +72,7 @@ export function attachWsApiClientToUser(connection, userId) {
     connection._wsApiUserId = userId;
     if (!wsApiClientsByUserId.has(userId)) wsApiClientsByUserId.set(userId, new Set());
     wsApiClientsByUserId.get(userId).add(connection);
+    tellFront(connection, String(userId));
 
     try {
         const flushed = flushPendingConsoleMessages(connection, userId);
@@ -81,6 +90,7 @@ export function detachWsApiClient(connection) {
     }
     const userId = connection && connection._wsApiUserId;
     if (!userId) return;
+    tellFront(connection, null);
     detachWsApiSurface(connection);
     const set = wsApiClientsByUserId.get(userId);
     if (set) {

@@ -8,7 +8,8 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Manager, Runtime, Url};
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-const REQUEST_EVENT_SCRIPT: &str = "window.dispatchEvent(new CustomEvent('eve:assistant-request'));";
+const REQUEST_EVENT_SCRIPT: &str =
+    "window.dispatchEvent(new CustomEvent('eve:assistant-request'));";
 
 #[derive(Default)]
 pub struct AssistantRequestInbox(Mutex<Option<serde_json::Value>>);
@@ -46,6 +47,12 @@ pub fn receive_urls<R: Runtime>(app: &AppHandle<R>, urls: &[Url]) {
 }
 
 #[tauri::command]
-pub fn assistant_request_take(inbox: tauri::State<'_, AssistantRequestInbox>) -> Option<serde_json::Value> {
-    inbox.0.lock().expect("assistant request inbox poisoned").take()
+pub fn assistant_request_take(
+    inbox: tauri::State<'_, AssistantRequestInbox>,
+) -> Option<serde_json::Value> {
+    inbox
+        .0
+        .lock()
+        .expect("assistant request inbox poisoned")
+        .take()
 }

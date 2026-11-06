@@ -2,15 +2,17 @@ use bevy::{image::Image, prelude::*, sprite_render::MeshMaterial2d};
 
 use crate::{
     backdrop_surface::crop_backdrop_surface,
-    clip_fade::{apply_faded_clip, FadeFrame},
+    clip_fade::{FadeFrame, apply_faded_clip},
     clip_polygon::{
-        clip_convex_polygon, clip_is_axis_aligned, polygon_bounds, polygon_mesh, remove_sprite_polygon_proxy,
-        upsert_sprite_polygon_proxy, visible_polygon_in_atom_frame, write_polygon_into_entity_mesh,
-        AtomeClipPolygonMesh,
+        AtomeClipPolygonMesh, clip_convex_polygon, clip_is_axis_aligned, polygon_bounds,
+        polygon_mesh, remove_sprite_polygon_proxy, upsert_sprite_polygon_proxy,
+        visible_polygon_in_atom_frame, write_polygon_into_entity_mesh,
     },
     components::*,
     render_math::{atome_rect_transform_with_local, depth_for_layer},
-    video_external_texture::{insert_clipped_video_quad_mesh, AtomeVideoExternalTexture, AtomeVideoQuad},
+    video_external_texture::{
+        AtomeVideoExternalTexture, AtomeVideoQuad, insert_clipped_video_quad_mesh,
+    },
 };
 
 /// Derniere decoupe posee sur le quad video : taille visible + sous-rectangle UV.
@@ -24,9 +26,18 @@ pub struct AtomeVideoClipMesh(pub [f32; 6]);
 #[cfg(target_arch = "wasm32")]
 fn trace_video_clip(stage: &str) {
     use wasm_bindgen::{JsCast, JsValue};
-    let Some(window) = web_sys::window() else { return };
-    let Ok(callback) = js_sys::Reflect::get(window.as_ref(), &JsValue::from_str("__EVE_BEVY_PERF_RECORD__")) else { return };
-    let Ok(function) = callback.dyn_into::<js_sys::Function>() else { return };
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    let Ok(callback) = js_sys::Reflect::get(
+        window.as_ref(),
+        &JsValue::from_str("__EVE_BEVY_PERF_RECORD__"),
+    ) else {
+        return;
+    };
+    let Ok(function) = callback.dyn_into::<js_sys::Function>() else {
+        return;
+    };
     let detail = js_sys::Object::new();
     let _ = function.call2(window.as_ref(), &JsValue::from_str(stage), detail.as_ref());
 }
@@ -107,8 +118,16 @@ pub(crate) fn clip_corners_in_atom_frame(
     let origin = Vec2::new(local.origin[0] * size[0], local.origin[1] * size[1]);
     let pivot = Vec2::new(position[0], position[1]) + origin;
     let scale = Vec2::new(
-        if local.scale[0].abs() > f32::EPSILON { local.scale[0] } else { 1.0 },
-        if local.scale[1].abs() > f32::EPSILON { local.scale[1] } else { 1.0 },
+        if local.scale[0].abs() > f32::EPSILON {
+            local.scale[0]
+        } else {
+            1.0
+        },
+        if local.scale[1].abs() > f32::EPSILON {
+            local.scale[1]
+        } else {
+            1.0
+        },
     );
     [
         Vec2::new(clip[0], clip[1]),
@@ -133,8 +152,12 @@ pub(crate) fn clip_in_atom_frame(
     clip_rotation: f32,
 ) -> [f32; 4] {
     let corners = clip_corners_in_atom_frame(position, size, local, clip, clip_rotation);
-    let min = corners.iter().fold(Vec2::splat(f32::INFINITY), |acc, value| acc.min(*value));
-    let max = corners.iter().fold(Vec2::splat(f32::NEG_INFINITY), |acc, value| acc.max(*value));
+    let min = corners
+        .iter()
+        .fold(Vec2::splat(f32::INFINITY), |acc, value| acc.min(*value));
+    let max = corners
+        .iter()
+        .fold(Vec2::splat(f32::NEG_INFINITY), |acc, value| acc.max(*value));
     [min.x, min.y, max.x - min.x, max.y - min.y]
 }
 
@@ -155,8 +178,10 @@ fn visible_polygon_for_clip(
     let polygon = visible_polygon_in_atom_frame(size, &corners);
     let whole = polygon.len() == 4 && {
         let bounds = polygon_bounds(&polygon);
-        bounds[0].abs() < 0.01 && bounds[1].abs() < 0.01
-            && (bounds[2] - size[0]).abs() < 0.01 && (bounds[3] - size[1]).abs() < 0.01
+        bounds[0].abs() < 0.01
+            && bounds[1].abs() < 0.01
+            && (bounds[2] - size[0]).abs() < 0.01
+            && (bounds[3] - size[1]).abs() < 0.01
     };
     (!whole).then_some(polygon)
 }
@@ -165,7 +190,8 @@ fn visible_polygon_for_clip(
 // error is 0.05 renderer pixels; straight edges and the central body stay exact.
 fn rounded_clip_outline(rect: [f32; 8]) -> Vec<Vec2> {
     let [x, y, w, h, tl, tr, br, bl] = rect;
-    let [tl, tr, br, bl] = [tl, tr, br, bl].map(|radius| crate::texture::clamp_corner_radius(radius, w, h));
+    let [tl, tr, br, bl] =
+        [tl, tr, br, bl].map(|radius| crate::texture::clamp_corner_radius(radius, w, h));
     let mut points = Vec::new();
     for (cx, cy, radius, angle) in [
         (x + tl, y + tl, tl, std::f32::consts::PI),
@@ -188,24 +214,48 @@ fn rounded_clip_outline(rect: [f32; 8]) -> Vec<Vec2> {
 }
 
 fn visible_polygon_for_rounded_clips(
-    position: [f32; 2], size: [f32; 2], local: AtomeLocalTransform,
-    clip: Option<[f32; 4]>, clip_rotation: f32, rounded: &[[f32; 8]],
+    position: [f32; 2],
+    size: [f32; 2],
+    local: AtomeLocalTransform,
+    clip: Option<[f32; 4]>,
+    clip_rotation: f32,
+    rounded: &[[f32; 8]],
 ) -> Vec<Vec2> {
-    let mut polygon = vec![Vec2::ZERO, Vec2::new(size[0], 0.0), Vec2::new(size[0], size[1]), Vec2::new(0.0, size[1])];
+    let mut polygon = vec![
+        Vec2::ZERO,
+        Vec2::new(size[0], 0.0),
+        Vec2::new(size[0], size[1]),
+        Vec2::new(0.0, size[1]),
+    ];
     if let Some(rect) = clip {
-        polygon = clip_convex_polygon(&polygon, &clip_corners_in_atom_frame(position, size, local, rect, clip_rotation));
+        polygon = clip_convex_polygon(
+            &polygon,
+            &clip_corners_in_atom_frame(position, size, local, rect, clip_rotation),
+        );
     }
     let origin = Vec2::new(local.origin[0] * size[0], local.origin[1] * size[1]);
     let pivot = Vec2::new(position[0], position[1]) + origin;
     let scale = Vec2::new(
-        if local.scale[0].abs() > f32::EPSILON { local.scale[0] } else { 1.0 },
-        if local.scale[1].abs() > f32::EPSILON { local.scale[1] } else { 1.0 },
+        if local.scale[0].abs() > f32::EPSILON {
+            local.scale[0]
+        } else {
+            1.0
+        },
+        if local.scale[1].abs() > f32::EPSILON {
+            local.scale[1]
+        } else {
+            1.0
+        },
     );
     for rect in rounded {
-        let boundary: Vec<Vec2> = rounded_clip_outline(*rect).into_iter()
-            .map(|p| origin + rotate_screen(p - pivot, -local.rotation) / scale).collect();
+        let boundary: Vec<Vec2> = rounded_clip_outline(*rect)
+            .into_iter()
+            .map(|p| origin + rotate_screen(p - pivot, -local.rotation) / scale)
+            .collect();
         polygon = clip_convex_polygon(&polygon, &boundary);
-        if polygon.is_empty() { break; }
+        if polygon.is_empty() {
+            break;
+        }
     }
     polygon
 }
@@ -218,12 +268,18 @@ pub fn apply_entity_clip(world: &mut World, entity: Entity) -> Result<(), String
         .get::<AtomeLogicalSize>(entity)
         .ok_or_else(|| "bevy_clip_size_missing".to_string())?;
     let clip = world.get::<AtomeClipRect>(entity).and_then(|value| value.0);
-    let clip_rotation = world.get::<AtomeClipRotation>(entity).map(|value| value.0).unwrap_or(0.0);
+    let clip_rotation = world
+        .get::<AtomeClipRotation>(entity)
+        .map(|value| value.0)
+        .unwrap_or(0.0);
     let local = world
         .get::<AtomeLocalTransform>(entity)
         .copied()
         .unwrap_or_default();
-    let layer = world.get::<AtomeLayer>(entity).map(|value| value.0).unwrap_or(0);
+    let layer = world
+        .get::<AtomeLayer>(entity)
+        .map(|value| value.0)
+        .unwrap_or(0);
     let (surface_width, surface_height) = {
         let config = world.resource::<AtomeBevyRendererConfig>();
         (config.width, config.height)
@@ -233,23 +289,62 @@ pub fn apply_entity_clip(world: &mut World, entity: Entity) -> Result<(), String
     // position logique : les fractions UV ci-dessous restent valables telles quelles.
     // Angles differents : la decoupe exacte est un polygone ; son rectangle
     // englobant reste la « piece visible » du chemin rectangle (taille, pose, UV).
-    let rounded = world.get::<AtomeClipRoundedRects>(entity).map(|value| value.0.as_slice()).unwrap_or(&[]);
+    let rounded = world
+        .get::<AtomeClipRoundedRects>(entity)
+        .map(|value| value.0.as_slice())
+        .unwrap_or(&[]);
     let polygon = if rounded.is_empty() {
-        clip.and_then(|value| visible_polygon_for_clip([position.x, position.y], [size.width, size.height], local, value, clip_rotation))
+        clip.and_then(|value| {
+            visible_polygon_for_clip(
+                [position.x, position.y],
+                [size.width, size.height],
+                local,
+                value,
+                clip_rotation,
+            )
+        })
     } else {
-        let points = visible_polygon_for_rounded_clips([position.x, position.y], [size.width, size.height], local, clip, clip_rotation, rounded);
-        let whole = points.len() == 4 && [Vec2::ZERO, Vec2::new(size.width, 0.0),
-            Vec2::new(size.width, size.height), Vec2::new(0.0, size.height)]
-            .iter().all(|corner| points.iter().any(|point| point.distance(*corner) < 0.001));
+        let points = visible_polygon_for_rounded_clips(
+            [position.x, position.y],
+            [size.width, size.height],
+            local,
+            clip,
+            clip_rotation,
+            rounded,
+        );
+        let whole = points.len() == 4
+            && [
+                Vec2::ZERO,
+                Vec2::new(size.width, 0.0),
+                Vec2::new(size.width, size.height),
+                Vec2::new(0.0, size.height),
+            ]
+            .iter()
+            .all(|corner| points.iter().any(|point| point.distance(*corner) < 0.001));
         (!whole).then_some(points)
     };
     let intersection = match &polygon {
         Some(points) => (!points.is_empty()).then(|| polygon_bounds(points)),
         None => clip
-            .map(|value| clip_in_atom_frame([position.x, position.y], [size.width, size.height], local, value, clip_rotation))
+            .map(|value| {
+                clip_in_atom_frame(
+                    [position.x, position.y],
+                    [size.width, size.height],
+                    local,
+                    value,
+                    clip_rotation,
+                )
+            })
             .and_then(|value| intersection([0.0, 0.0, size.width, size.height], value)),
     }
-    .map(|value| [position.x + value[0], position.y + value[1], value[2], value[3]]);
+    .map(|value| {
+        [
+            position.x + value[0],
+            position.y + value[1],
+            value[2],
+            value[3],
+        ]
+    });
     let clipped_out = polygon.as_ref().is_some_and(|points| points.is_empty())
         || (clip.is_some() && intersection.is_none());
     let visible = intersection.unwrap_or(original);
@@ -269,8 +364,12 @@ pub fn apply_entity_clip(world: &mut World, entity: Entity) -> Result<(), String
         };
     }
     if clipped_out {
-        if let Some(proxy) = world.get::<crate::clip_polygon::AtomeClipPolygonProxy>(entity).map(|value| value.0) {
-            if let Some(mut visibility) = world.get_mut::<Visibility>(proxy) { *visibility = Visibility::Hidden; }
+        if let Some(proxy) = world
+            .get::<crate::clip_polygon::AtomeClipPolygonProxy>(entity)
+            .map(|value| value.0)
+            && let Some(mut visibility) = world.get_mut::<Visibility>(proxy)
+        {
+            *visibility = Visibility::Hidden;
         }
         return Ok(());
     }
@@ -322,18 +421,51 @@ pub fn apply_entity_clip(world: &mut World, entity: Entity) -> Result<(), String
         }
     }
     // A scroll area's edge fade (clip_fade.rs) draws the faded part of a sprite or a glass surface as its own mesh.
-    let local_visible = [visible[0] - original[0], visible[1] - original[1], visible[2], visible[3]];
-    let faded = polygon.clone().unwrap_or_else(|| vec![Vec2::new(local_visible[0], local_visible[1]),
-        Vec2::new(local_visible[0] + visible[2], local_visible[1]), Vec2::new(local_visible[0] + visible[2], local_visible[1] + visible[3]),
-        Vec2::new(local_visible[0], local_visible[1] + visible[3])]);
+    let local_visible = [
+        visible[0] - original[0],
+        visible[1] - original[1],
+        visible[2],
+        visible[3],
+    ];
+    let faded = polygon.clone().unwrap_or_else(|| {
+        vec![
+            Vec2::new(local_visible[0], local_visible[1]),
+            Vec2::new(local_visible[0] + visible[2], local_visible[1]),
+            Vec2::new(local_visible[0] + visible[2], local_visible[1] + visible[3]),
+            Vec2::new(local_visible[0], local_visible[1] + visible[3]),
+        ]
+    });
     let sprite_uv = sprite_uv_of(image_size, source_rect, Vec2::new(original[2], original[3]));
-    let frame = FadeFrame::new([position.x, position.y], [size.width, size.height], local, clip_rotation);
+    let frame = FadeFrame::new(
+        [position.x, position.y],
+        [size.width, size.height],
+        local,
+        clip_rotation,
+    );
     let sprite = world.get::<Sprite>(entity).is_some();
-    if apply_faded_clip(world, entity, &faded, frame, original, visible, sprite.then_some(&sprite_uv as &dyn Fn(Vec2) -> [f32; 2]), transform)? {
+    if apply_faded_clip(
+        world,
+        entity,
+        &faded,
+        frame,
+        original,
+        visible,
+        sprite.then_some(&sprite_uv as &dyn Fn(Vec2) -> [f32; 2]),
+        transform,
+    )? {
         return Ok(());
     }
     if let Some(points) = polygon.as_deref() {
-        return apply_polygon_clip(world, entity, points, original, visible, image_size, source_rect, transform);
+        return apply_polygon_clip(
+            world,
+            entity,
+            points,
+            original,
+            visible,
+            image_size,
+            source_rect,
+            transform,
+        );
     }
     remove_sprite_polygon_proxy(world, entity);
     world.entity_mut(entity).remove::<AtomeClipPolygonMesh>();
@@ -353,7 +485,11 @@ pub fn apply_entity_clip(world: &mut World, entity: Entity) -> Result<(), String
 }
 
 /// A sprite's UV at an atom-frame point (its box `size`): within its source rectangle of its texture, if any.
-fn sprite_uv_of(image_size: Option<Vec2>, source_rect: Option<Rect>, size: Vec2) -> impl Fn(Vec2) -> [f32; 2] {
+fn sprite_uv_of(
+    image_size: Option<Vec2>,
+    source_rect: Option<Rect>,
+    size: Vec2,
+) -> impl Fn(Vec2) -> [f32; 2] {
     let size = Vec2::new(size.x.max(f32::EPSILON), size.y.max(f32::EPSILON));
     move |p| {
         let fraction = p / size;
@@ -382,15 +518,28 @@ fn apply_polygon_clip(
     transform: Transform,
 ) -> Result<(), String> {
     let size = Vec2::new(original[2].max(f32::EPSILON), original[3].max(f32::EPSILON));
-    let local_visible = [visible[0] - original[0], visible[1] - original[1], visible[2], visible[3]];
+    let local_visible = [
+        visible[0] - original[0],
+        visible[1] - original[1],
+        visible[2],
+        visible[3],
+    ];
     if world.get::<Sprite>(entity).is_some() {
-        let (mesh, key) = polygon_mesh(polygon, local_visible, sprite_uv_of(image_size, source_rect, size));
+        let (mesh, key) = polygon_mesh(
+            polygon,
+            local_visible,
+            sprite_uv_of(image_size, source_rect, size),
+        );
         return upsert_sprite_polygon_proxy(world, entity, mesh, key, transform);
     }
     let video_uv = world
         .get::<AtomeVideoQuad>(entity)
         .map(|quad| quad.0)
-        .or_else(|| world.get::<AtomeVideoExternalTexture>(entity).map(|video| video.uv_rect));
+        .or_else(|| {
+            world
+                .get::<AtomeVideoExternalTexture>(entity)
+                .map(|video| video.uv_rect)
+        });
     let is_backdrop = world
         .get::<MeshMaterial2d<crate::backdrop_surface::BackdropSurfaceMaterial>>(entity)
         .is_some();
@@ -400,7 +549,10 @@ fn apply_polygon_clip(
     let base = video_uv.unwrap_or([0.0, 0.0, 1.0, 1.0]);
     let (mesh, key) = polygon_mesh(polygon, local_visible, |p| {
         let fraction = p / size;
-        [base[0] + base[2] * fraction.x, base[1] + base[3] * fraction.y]
+        [
+            base[0] + base[2] * fraction.x,
+            base[1] + base[3] * fraction.y,
+        ]
     });
     write_polygon_into_entity_mesh(world, entity, mesh, key)
 }

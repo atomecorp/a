@@ -6,7 +6,7 @@ import { THALASSO_CARE_IDS, THALASSO_STAY_MAX_DAYS } from '../../shared/thalasso
 // Ending a stay (its cares with it) is the user's to confirm.
 export const THALASSO_ERRORS = Object.freeze(['INVALID_ARGUMENT', 'AUTH_REQUIRED', 'THALASSO_STAY_INVALID', 'THALASSO_STAY_NOT_FOUND',
     'THALASSO_CARE_NOT_FOUND', 'THALASSO_CARES_OUTSIDE_STAY', 'THALASSO_STAY_WRITE_FAILED', 'THALASSO_SCREEN_UNAVAILABLE']);
-export const THALASSO_CONFIRMED_COMMANDS = Object.freeze(['thalasso.stay_clear']);
+export const THALASSO_CONFIRMED_COMMANDS = Object.freeze(['thalasso.stay_clear', 'thalasso.care_remove']);
 const day = { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' };
 const entry = { type: 'string', minLength: 1, maxLength: 80 };
 const care_id = { type: 'string', enum: THALASSO_CARE_IDS };

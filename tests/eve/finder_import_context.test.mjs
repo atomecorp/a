@@ -15,7 +15,7 @@ import { buildPanelTreeForDefinition } from '../../eVe/intuition/runtime/bevy_pa
 import { bevyPanelRuntimeState } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js';
 import { hitTestBevyUiNode } from '../../eVe/domains/rendering/bevy_ui_hit_test_runtime.js';
 
-export const catalog = () => createMainMenuContentRuntime(new Proxy({
+const catalog = () => createMainMenuContentRuntime(new Proxy({
     mainToolIdByKey: createMainToolCatalogRuntime({ normalizeMainToolKey: key => key }).mainToolIdByKey,
     directionValues: [], translate: (key, fallback) => fallback || key
 }, { get: (target, key) => key in target ? target[key] : () => ({}) }));
@@ -72,7 +72,7 @@ test('Finder virtualizes a long list, reaches its last result and imports checke
 });
 
 test('shared drag hides only after real movement and restores on cancel', async () => {
-    const state = {}; let project = 'p';
+    const state = {}; const project = 'p';
     const transfer = createSelectableListTransferRuntime({ state, resolveProjectId: () => project });
     const drag = createSelectableListDragSession({ state, resolvePayload: () => ({ ok: true, projectId: project }),
         onStart: transfer.start, onCancel: () => transfer.restore(), onDrop: async () => ({ ok: true }) });

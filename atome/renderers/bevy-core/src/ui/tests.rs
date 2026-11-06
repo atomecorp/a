@@ -4,7 +4,7 @@ use bevy::camera::Viewport;
 use bevy::input::touch::TouchPhase;
 use bevy::prelude::*;
 use bevy::text::FontSource;
-use bevy::ui::{widget::ImageNode, IsDefaultUiCamera};
+use bevy::ui::{IsDefaultUiCamera, widget::ImageNode};
 
 fn sample_tree() -> AtomeUiTree {
     AtomeUiTree {
@@ -74,7 +74,8 @@ fn image_tree() -> AtomeUiTree {
                     opacity: Some(1.0),
                     tint: Some([1.0, 1.0, 1.0, 1.0]),
                     texture: Some(AtomeTexture {
-            animation: None,
+                        external: None,
+                        animation: None,
                         width: 2,
                         height: 2,
                         rgba: vec![

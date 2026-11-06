@@ -1,6 +1,6 @@
 // RBJ biquad (transposed direct form II): filters, shelves and bells.
 
-use crate::{db_to_amplitude, ParamSpec, Processor, Smoothed, StereoBlock, Unit};
+use crate::{ParamSpec, Processor, Smoothed, StereoBlock, Unit, db_to_amplitude};
 use std::f32::consts::PI;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -31,11 +31,32 @@ impl Coefficients {
         let alpha = sin / (2.0 * q.max(0.05));
         let a = db_to_amplitude(gain_db * 0.5).max(1.0e-6);
         let (b0, b1, b2, a0, a1, a2) = match shape {
-            Shape::LowPass => ((1.0 - cos) / 2.0, 1.0 - cos, (1.0 - cos) / 2.0, 1.0 + alpha, -2.0 * cos, 1.0 - alpha),
-            Shape::HighPass => ((1.0 + cos) / 2.0, -(1.0 + cos), (1.0 + cos) / 2.0, 1.0 + alpha, -2.0 * cos, 1.0 - alpha),
+            Shape::LowPass => (
+                (1.0 - cos) / 2.0,
+                1.0 - cos,
+                (1.0 - cos) / 2.0,
+                1.0 + alpha,
+                -2.0 * cos,
+                1.0 - alpha,
+            ),
+            Shape::HighPass => (
+                (1.0 + cos) / 2.0,
+                -(1.0 + cos),
+                (1.0 + cos) / 2.0,
+                1.0 + alpha,
+                -2.0 * cos,
+                1.0 - alpha,
+            ),
             Shape::BandPass => (alpha, 0.0, -alpha, 1.0 + alpha, -2.0 * cos, 1.0 - alpha),
             Shape::Notch => (1.0, -2.0 * cos, 1.0, 1.0 + alpha, -2.0 * cos, 1.0 - alpha),
-            Shape::Bell => (1.0 + alpha * a, -2.0 * cos, 1.0 - alpha * a, 1.0 + alpha / a, -2.0 * cos, 1.0 - alpha / a),
+            Shape::Bell => (
+                1.0 + alpha * a,
+                -2.0 * cos,
+                1.0 - alpha * a,
+                1.0 + alpha / a,
+                -2.0 * cos,
+                1.0 - alpha / a,
+            ),
             Shape::LowShelf | Shape::HighShelf => {
                 let root = 2.0 * a.sqrt() * alpha;
                 let sign = if shape == Shape::LowShelf { 1.0 } else { -1.0 };
@@ -49,7 +70,13 @@ impl Coefficients {
                 )
             }
         };
-        Self { b0: b0 / a0, b1: b1 / a0, b2: b2 / a0, a1: a1 / a0, a2: a2 / a0 }
+        Self {
+            b0: b0 / a0,
+            b1: b1 / a0,
+            b2: b2 / a0,
+            a1: a1 / a0,
+            a2: a2 / a0,
+        }
     }
 
     // Second-order all-pass: at Q = 1/√2 it equals a Linkwitz-Riley low-pass
@@ -60,7 +87,13 @@ impl Coefficients {
         let (sin, cos) = w.sin_cos();
         let alpha = sin / (2.0 * q.max(0.05));
         let a0 = 1.0 + alpha;
-        Self { b0: (1.0 - alpha) / a0, b1: -2.0 * cos / a0, b2: 1.0, a1: -2.0 * cos / a0, a2: (1.0 - alpha) / a0 }
+        Self {
+            b0: (1.0 - alpha) / a0,
+            b1: -2.0 * cos / a0,
+            b2: 1.0,
+            a1: -2.0 * cos / a0,
+            a2: (1.0 - alpha) / a0,
+        }
     }
 }
 

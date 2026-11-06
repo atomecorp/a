@@ -12,12 +12,12 @@ use super::aux_outputs::{self, SharedAuxConsumers};
 use super::direct::{self, SharedDirect};
 use super::output_fill::OutputFill;
 use super::{host_output, output_idle};
+use atome_mix_graph::voice::VoiceSound;
 #[cfg(not(target_os = "windows"))]
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use kira::backend::{Backend, Renderer};
-use atome_mix_graph::voice::VoiceSound;
-use ringbuf::traits::{Observer, Producer, Split};
 use ringbuf::HeapRb;
+use ringbuf::traits::{Observer, Producer, Split};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
@@ -65,9 +65,9 @@ static GENERATION: AtomicU64 = AtomicU64::new(0);
 #[cfg(not(target_os = "windows"))]
 pub fn host_ns(instant: &cpal::StreamInstant) -> i64 {
     let epoch = *EPOCH.get_or_init(|| *instant);
-    match instant.duration_since(&epoch) {
+    match instant.checked_duration_since(epoch) {
         Some(after) => after.as_nanos() as i64,
-        None => -(epoch.duration_since(instant).map(|before| before.as_nanos() as i64).unwrap_or(0)),
+        None => -(epoch.saturating_duration_since(*instant).as_nanos() as i64),
     }
 }
 
@@ -85,17 +85,26 @@ pub fn schedule(voice_id: &str, sound: VoiceSound, frame: u64) -> u64 {
     cancel_scheduled(voice_id);
     let start = frame.max(FRAMES_RENDERED.load(Ordering::Acquire));
     if let Ok(mut pending) = PENDING.lock() {
-        pending.push(PendingStart { voice_id: voice_id.to_string(), sound, frame: start });
+        pending.push(PendingStart {
+            voice_id: voice_id.to_string(),
+            sound,
+            frame: start,
+        });
     }
     start
 }
 
 pub fn has_pending() -> bool {
-    PENDING.lock().map(|pending| !pending.is_empty()).unwrap_or(false)
+    PENDING
+        .lock()
+        .map(|pending| !pending.is_empty())
+        .unwrap_or(false)
 }
 
 pub fn cancel_scheduled(voice_id: &str) -> bool {
-    let Ok(mut pending) = PENDING.lock() else { return false };
+    let Ok(mut pending) = PENDING.lock() else {
+        return false;
+    };
     let before = pending.len();
     pending.retain(|entry| entry.voice_id != voice_id);
     before != pending.len()
@@ -136,7 +145,9 @@ pub fn render_clock() -> Option<RenderClock> {
         discontinuities: DISCONTINUITIES.load(Ordering::Acquire),
         anchor_frame: anchor.map(|value| value.frame),
         anchor_host_ns: anchor.map(|value| value.host_ns),
-        played_frame_now: anchor.map(|value| value.frame as f64 + value.at.elapsed().as_secs_f64() * sample_rate as f64),
+        played_frame_now: anchor.map(|value| {
+            value.frame as f64 + value.at.elapsed().as_secs_f64() * sample_rate as f64
+        }),
     })
 }
 
@@ -175,8 +186,13 @@ pub fn note_capture_start(slot: &Mutex<Option<CaptureClock>>, info: &cpal::Input
     note_capture_start_at(slot, capture_host_ns(info));
 }
 
-pub(crate) fn note_capture_start_at(slot: &Mutex<Option<CaptureClock>>, first_capture_host_ns: i64) {
-    let Ok(mut clock) = slot.try_lock() else { return };
+pub(crate) fn note_capture_start_at(
+    slot: &Mutex<Option<CaptureClock>>,
+    first_capture_host_ns: i64,
+) {
+    let Ok(mut clock) = slot.try_lock() else {
+        return;
+    };
     if clock.is_some() {
         return;
     }
@@ -192,8 +208,14 @@ pub(crate) fn note_capture_start_at(slot: &Mutex<Option<CaptureClock>>, first_ca
 
 // Frames inside [from, to) where scheduled voices are due (missed ones are due at `from`).
 fn due_frames(from: u64, to: u64) -> Vec<u64> {
-    let Ok(pending) = PENDING.lock() else { return Vec::new() };
-    let mut frames: Vec<u64> = pending.iter().filter(|entry| entry.frame < to).map(|entry| entry.frame.max(from)).collect();
+    let Ok(pending) = PENDING.lock() else {
+        return Vec::new();
+    };
+    let mut frames: Vec<u64> = pending
+        .iter()
+        .filter(|entry| entry.frame < to)
+        .map(|entry| entry.frame.max(from))
+        .collect();
     frames.sort_unstable();
     frames.dedup();
     frames
@@ -202,7 +224,8 @@ fn due_frames(from: u64, to: u64) -> Vec<u64> {
 fn start_due(at: u64) {
     let due: Vec<PendingStart> = match PENDING.lock() {
         Ok(mut pending) => {
-            let (due, rest): (Vec<PendingStart>, Vec<PendingStart>) = pending.drain(..).partition(|entry| entry.frame <= at);
+            let (due, rest): (Vec<PendingStart>, Vec<PendingStart>) =
+                pending.drain(..).partition(|entry| entry.frame <= at);
             *pending = rest;
             due
         }
@@ -234,11 +257,11 @@ fn render_block(renderer: &mut Renderer, block: &mut [f32]) {
     renderer.on_start_processing();
     renderer.process(&mut block[from..], CHANNELS as u16);
     #[cfg(test)]
-    if let Ok(mut tap) = RENDER_TAP.lock() {
-        if let Some((base, samples)) = tap.as_mut() {
-            base.get_or_insert(block_start);
-            samples.extend(block.iter().step_by(CHANNELS));
-        }
+    if let Ok(mut tap) = RENDER_TAP.lock()
+        && let Some((base, samples)) = tap.as_mut()
+    {
+        base.get_or_insert(block_start);
+        samples.extend(block.iter().step_by(CHANNELS));
     }
 }
 
@@ -272,7 +295,11 @@ fn default_output() -> Result<(cpal::Device, cpal::StreamConfig), ScheduledBacke
     let mut config = supported.config();
     config.buffer_size = direct::buffer_size(supported.buffer_size());
     // The mixer may route strips to this device's extra channel pairs.
-    aux_outputs::note_output_device(device.name().unwrap_or_else(|_| "default".into()), config.channels, BLOCK_FRAMES);
+    aux_outputs::note_output_device(
+        super::recorder::device_name(&device).unwrap_or_else(|_| "default".into()),
+        config.channels,
+        BLOCK_FRAMES,
+    );
     Ok((device, config))
 }
 
@@ -283,7 +310,11 @@ pub(crate) type SharedConsumer = Arc<Mutex<ringbuf::HeapCons<f32>>>;
 pub(crate) fn note_output_quantum(host_ns: i64, frames: usize, popped: usize) {
     let first = FRAMES_PLAYED.load(Ordering::Acquire);
     if let Ok(mut slot) = ANCHOR.try_lock() {
-        *slot = Some(Anchor { frame: first, host_ns, at: Instant::now() });
+        *slot = Some(Anchor {
+            frame: first,
+            host_ns,
+            at: Instant::now(),
+        });
     }
     FRAMES_PLAYED.fetch_add(popped as u64, Ordering::AcqRel);
     if popped < frames {
@@ -316,17 +347,21 @@ fn build_stream(
     let mut fill = OutputFill::new(consumer, aux, direct);
     let stream = device
         .build_output_stream(
-            config,
-            move |data: &mut [f32], info: &cpal::OutputCallbackInfo| fill.fill(data, device_channels, host_ns(&info.timestamp().callback)),
+            *config,
+            move |data: &mut [f32], info: &cpal::OutputCallbackInfo| {
+                fill.fill(data, device_channels, host_ns(&info.timestamp().callback))
+            },
             move |error| {
-                if matches!(error, cpal::StreamError::DeviceNotAvailable) {
+                if error.kind() == cpal::ErrorKind::DeviceNotAvailable {
                     lost.store(true, Ordering::Release);
                 }
             },
             None,
         )
         .map_err(|error| ScheduledBackendError(format!("build_output_stream: {error}")))?;
-    stream.play().map_err(|error| ScheduledBackendError(format!("stream_play: {error}")))?;
+    stream
+        .play()
+        .map_err(|error| ScheduledBackendError(format!("stream_play: {error}")))?;
     Ok(stream)
 }
 
@@ -337,14 +372,24 @@ impl Backend for ScheduledCpalBackend {
     fn setup(_settings: (), _internal_buffer_size: usize) -> Result<(Self, u32), Self::Error> {
         if let Some(rate) = host_output::host_rate() {
             SAMPLE_RATE.store(rate, Ordering::Release);
-            return Ok((Self { stop: Arc::new(AtomicBool::new(false)) }, rate));
+            return Ok((
+                Self {
+                    stop: Arc::new(AtomicBool::new(false)),
+                },
+                rate,
+            ));
         }
         #[cfg(target_os = "windows")]
         let rate = super::wasapi_duplex::output_rate().map_err(ScheduledBackendError)?;
         #[cfg(not(target_os = "windows"))]
-        let rate = default_output()?.1.sample_rate.0;
+        let rate = default_output()?.1.sample_rate;
         SAMPLE_RATE.store(rate, Ordering::Release);
-        Ok((Self { stop: Arc::new(AtomicBool::new(false)) }, rate))
+        Ok((
+            Self {
+                stop: Arc::new(AtomicBool::new(false)),
+            },
+            rate,
+        ))
     }
 
     fn start(&mut self, renderer: Renderer) -> Result<(), Self::Error> {
@@ -377,19 +422,43 @@ impl Backend for ScheduledCpalBackend {
 
 // On Windows the device thread is the WASAPI exclusive duplex one (wasapi_duplex.rs).
 #[cfg(target_os = "windows")]
-fn start_device_thread(consumer: SharedConsumer, aux: SharedAuxConsumers, direct: SharedDirect, stop: Arc<AtomicBool>, wake: std::sync::mpsc::Receiver<()>) -> Result<(), ScheduledBackendError> {
-    super::wasapi_duplex::start(OutputFill::new(consumer, aux, direct), stop, wake).map_err(ScheduledBackendError)
+fn start_device_thread(
+    consumer: SharedConsumer,
+    aux: SharedAuxConsumers,
+    direct: SharedDirect,
+    stop: Arc<AtomicBool>,
+    wake: std::sync::mpsc::Receiver<()>,
+) -> Result<(), ScheduledBackendError> {
+    super::wasapi_duplex::start(OutputFill::new(consumer, aux, direct), stop, wake)
+        .map_err(ScheduledBackendError)
 }
 
 // The device thread owns the cpal stream (a cpal Stream is not Send),
 // rebuilds it on the default device when the device goes away, and pauses it
 // while the output rests (`output_idle`).
 #[cfg(not(target_os = "windows"))]
-fn start_device_thread(consumer: SharedConsumer, aux: SharedAuxConsumers, direct: SharedDirect, stop: Arc<AtomicBool>, wake: std::sync::mpsc::Receiver<()>) -> Result<(), ScheduledBackendError> {
+fn start_device_thread(
+    consumer: SharedConsumer,
+    aux: SharedAuxConsumers,
+    direct: SharedDirect,
+    stop: Arc<AtomicBool>,
+    wake: std::sync::mpsc::Receiver<()>,
+) -> Result<(), ScheduledBackendError> {
     let (ready_tx, ready_rx) = std::sync::mpsc::channel::<Result<(), String>>();
     crate::engine_thread::spawn(move || {
         let lost = Arc::new(AtomicBool::new(false));
-        let open = || default_output().and_then(|(device, config)| build_stream(&device, &config, Arc::clone(&consumer), Arc::clone(&aux), Arc::clone(&direct), Arc::clone(&lost)));
+        let open = || {
+            default_output().and_then(|(device, config)| {
+                build_stream(
+                    &device,
+                    &config,
+                    Arc::clone(&consumer),
+                    Arc::clone(&aux),
+                    Arc::clone(&direct),
+                    Arc::clone(&lost),
+                )
+            })
+        };
         let mut stream = match open() {
             Ok(stream) => {
                 let _ = ready_tx.send(Ok(()));
@@ -410,7 +479,9 @@ fn start_device_thread(consumer: SharedConsumer, aux: SharedAuxConsumers, direct
                 stream = open().ok();
                 playing = stream.is_some();
             }
-            let Some(current) = stream.as_ref() else { continue };
+            let Some(current) = stream.as_ref() else {
+                continue;
+            };
             if output_idle::is_active() && !playing {
                 playing = current.play().is_ok();
             } else if playing && output_idle::should_rest() {
@@ -421,18 +492,25 @@ fn start_device_thread(consumer: SharedConsumer, aux: SharedAuxConsumers, direct
         }
         drop(stream);
     });
-    ready_rx.recv().map_err(|_| ScheduledBackendError("output_thread_failed".into()))?.map_err(ScheduledBackendError)
+    ready_rx
+        .recv()
+        .map_err(|_| ScheduledBackendError("output_thread_failed".into()))?
+        .map_err(ScheduledBackendError)
 }
 
 // The render thread keeps LOOKAHEAD_FRAMES rendered ahead of what is played.
 fn spawn_render_thread(
-    mut renderer: Renderer, mut producer: ringbuf::HeapProd<f32>, mut aux_feeder: aux_outputs::AuxFeeder,
-    stop: Arc<AtomicBool>, generation: u64,
+    mut renderer: Renderer,
+    mut producer: ringbuf::HeapProd<f32>,
+    mut aux_feeder: aux_outputs::AuxFeeder,
+    stop: Arc<AtomicBool>,
+    generation: u64,
 ) -> std::thread::JoinHandle<()> {
     crate::engine_thread::spawn(move || {
         let mut block = vec![0.0f32; BLOCK_FRAMES * CHANNELS];
         while !stop.load(Ordering::Acquire) && GENERATION.load(Ordering::Acquire) == generation {
-            while FRAMES_RENDERED.load(Ordering::Acquire) - FRAMES_PLAYED.load(Ordering::Acquire) < LOOKAHEAD_FRAMES
+            while FRAMES_RENDERED.load(Ordering::Acquire) - FRAMES_PLAYED.load(Ordering::Acquire)
+                < LOOKAHEAD_FRAMES
                 && producer.vacant_len() >= block.len()
             {
                 block.iter_mut().for_each(|sample| *sample = 0.0);

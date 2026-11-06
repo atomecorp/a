@@ -10,7 +10,7 @@
 // it just before it renders, so the direct path plays it in the same quantum.
 
 use super::direct::{self, SharedDirect};
-use super::scheduled_backend::{note_output_quantum, SharedConsumer, CHANNELS};
+use super::scheduled_backend::{CHANNELS, SharedConsumer, note_output_quantum};
 use atome_mix_graph::shared::LiveInput;
 use kira::Frame;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -35,7 +35,9 @@ pub fn host_rate() -> Option<u32> {
 
 // The strips that now listen to the host's input (live_input.rs#reconcile).
 pub(crate) fn listen_host_input(inputs: Vec<Arc<LiveInput>>) -> Result<(), String> {
-    *HOST_LISTENERS.lock().map_err(|error| format!("Lock error: {error}"))? = inputs;
+    *HOST_LISTENERS
+        .lock()
+        .map_err(|error| format!("Lock error: {error}"))? = inputs;
     Ok(())
 }
 
@@ -43,7 +45,9 @@ pub(crate) fn listen_host_input(inputs: Vec<Arc<LiveInput>>) -> Result<(), Strin
 // listens to it (the dry input is then the chain's to play, not the unit's to
 // copy through). Real-time safe: a busy list drops the quantum.
 pub fn push_host_input(left: &[f32], right: &[f32]) -> bool {
-    let Ok(listeners) = HOST_LISTENERS.try_lock() else { return false };
+    let Ok(listeners) = HOST_LISTENERS.try_lock() else {
+        return false;
+    };
     if listeners.is_empty() {
         return false;
     }
@@ -53,7 +57,9 @@ pub fn push_host_input(left: &[f32], right: &[f32]) -> bool {
         for frame in 0..count {
             frames[frame] = Frame::new(left[frame], right[frame]);
         }
-        listeners.iter().for_each(|input| input.push(&frames[..count]));
+        listeners
+            .iter()
+            .for_each(|input| input.push(&frames[..count]));
     }
     true
 }
@@ -80,7 +86,9 @@ pub fn render(left: &mut [f32], right: &mut [f32], host_ns: i64) -> usize {
         let mut scratch = [0.0f32; CHUNK_FRAMES * CHANNELS];
         while popped < frames {
             let wanted = (frames - popped).min(CHUNK_FRAMES);
-            let got = ringbuf::traits::Consumer::pop_slice(&mut *fifo, &mut scratch[..wanted * CHANNELS]) / CHANNELS;
+            let got =
+                ringbuf::traits::Consumer::pop_slice(&mut *fifo, &mut scratch[..wanted * CHANNELS])
+                    / CHANNELS;
             for frame in 0..got {
                 left[popped + frame] = scratch[frame * CHANNELS];
                 right[popped + frame] = scratch[frame * CHANNELS + 1];
@@ -91,10 +99,10 @@ pub fn render(left: &mut [f32], right: &mut [f32], host_ns: i64) -> usize {
             }
         }
     }
-    if direct::is_active() {
-        if let Some(Ok(mut direct)) = slot.as_ref().map(|(_, direct)| direct.try_lock()) {
-            direct.mix_planar(&mut left[..frames], &mut right[..frames]);
-        }
+    if direct::is_active()
+        && let Some(Ok(mut direct)) = slot.as_ref().map(|(_, direct)| direct.try_lock())
+    {
+        direct.mix_planar(&mut left[..frames], &mut right[..frames]);
     }
     note_output_quantum(host_ns, frames, popped);
     popped

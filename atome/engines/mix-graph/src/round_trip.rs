@@ -39,20 +39,31 @@ pub struct RoundTrip {
 
 pub fn arm() {
     COUNT.store(0, Ordering::Release);
-    RESULTS.iter().for_each(|result| result.store(u32::MAX, Ordering::Relaxed));
+    RESULTS
+        .iter()
+        .for_each(|result| result.store(u32::MAX, Ordering::Relaxed));
     DONE.store(false, Ordering::Release);
     ARMED.store(true, Ordering::Release);
 }
 
 // The frames each impulse took to come back (`None`: never heard), once done.
 pub fn results() -> Option<Vec<Option<u32>>> {
-    DONE.load(Ordering::Acquire).then(|| RESULTS.iter()
-        .map(|result| Some(result.load(Ordering::Relaxed)).filter(|frames| *frames != u32::MAX)).collect())
+    DONE.load(Ordering::Acquire).then(|| {
+        RESULTS
+            .iter()
+            .map(|result| Some(result.load(Ordering::Relaxed)).filter(|frames| *frames != u32::MAX))
+            .collect()
+    })
 }
 
 impl RoundTrip {
     pub fn new(sample_rate: u32) -> Self {
-        Self { frame: 0, phase: Phase::Idle, noise: 0.0, sample_rate: u64::from(sample_rate.max(1)) }
+        Self {
+            frame: 0,
+            phase: Phase::Idle,
+            noise: 0.0,
+            sample_rate: u64::from(sample_rate.max(1)),
+        }
     }
 
     // A square burst starting at its onset, `elapsed` frames in.
@@ -61,19 +72,28 @@ impl RoundTrip {
         if elapsed >= period * BURST_PERIODS {
             return 0.0;
         }
-        if elapsed % period < period / 2 { BURST_LEVEL } else { -BURST_LEVEL }
+        if elapsed % period < period / 2 {
+            BURST_LEVEL
+        } else {
+            -BURST_LEVEL
+        }
     }
 
     fn record(&mut self, frames: Option<u64>) {
         let index = COUNT.fetch_add(1, Ordering::AcqRel);
         if let Some(slot) = RESULTS.get(index) {
-            slot.store(frames.map_or(u32::MAX, |frames| frames as u32), Ordering::Relaxed);
+            slot.store(
+                frames.map_or(u32::MAX, |frames| frames as u32),
+                Ordering::Relaxed,
+            );
         }
         self.phase = if index + 1 >= IMPULSES {
             DONE.store(true, Ordering::Release);
             Phase::Idle
         } else {
-            Phase::Pause { until: self.frame + self.sample_rate / 4 }
+            Phase::Pause {
+                until: self.frame + self.sample_rate / 4,
+            }
         };
     }
 
@@ -86,7 +106,9 @@ impl RoundTrip {
                 return;
             }
             self.noise = 0.0;
-            self.phase = Phase::Noise { until: self.frame + self.sample_rate / 5 };
+            self.phase = Phase::Noise {
+                until: self.frame + self.sample_rate / 5,
+            };
         }
         for (left, right) in left.iter_mut().zip(right.iter_mut()) {
             let heard = left.abs().max(right.abs());
@@ -95,7 +117,9 @@ impl RoundTrip {
                 Phase::Noise { until } => {
                     self.noise = self.noise.max(heard);
                     if self.frame >= until {
-                        self.phase = Phase::Waiting { sent_at: self.frame };
+                        self.phase = Phase::Waiting {
+                            sent_at: self.frame,
+                        };
                         out = self.burst(0);
                     }
                 }
@@ -110,7 +134,9 @@ impl RoundTrip {
                 }
                 Phase::Pause { until } => {
                     if self.frame >= until {
-                        self.phase = Phase::Waiting { sent_at: self.frame };
+                        self.phase = Phase::Waiting {
+                            sent_at: self.frame,
+                        };
                         out = self.burst(0);
                     }
                 }

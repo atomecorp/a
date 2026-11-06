@@ -19,10 +19,17 @@ pub struct SileroVad {
 impl SileroVad {
     pub fn load(environment: &Environment, model_path: &str) -> Result<Self, VoiceError> {
         let fail = |error: String| VoiceError::Vad(error);
-        let session = Session::builder(environment).map_err(|error| fail(error.to_string()))?
-            .with_intra_threads(1).map_err(|error| fail(error.to_string()))?
-            .commit_from_file(model_path).map_err(|error| fail(error.to_string()))?;
-        Ok(Self { session, state: vec![0.0; STATE_SIZE], context: vec![0.0; CONTEXT_SAMPLES] })
+        let session = Session::builder(environment)
+            .map_err(|error| fail(error.to_string()))?
+            .with_intra_threads(1)
+            .map_err(|error| fail(error.to_string()))?
+            .commit_from_file(model_path)
+            .map_err(|error| fail(error.to_string()))?;
+        Ok(Self {
+            session,
+            state: vec![0.0; STATE_SIZE],
+            context: vec![0.0; CONTEXT_SAMPLES],
+        })
     }
 
     /// The audio stream was cut (eVe spoke): the recurrent state no longer matches it.
@@ -42,9 +49,18 @@ impl SileroVad {
             "state" => Tensor::from_array(([2usize, 1, 128], self.state.clone())).map_err(fail)?,
             "sr" => Tensor::from_array(([1usize], vec![16000i64])).map_err(fail)?
         ]).map_err(fail)?;
-        self.state.copy_from_slice(outputs["stateN"].try_extract_tensor::<f32>().map_err(fail)?.1);
-        let probability = outputs["output"].try_extract_tensor::<f32>().map_err(fail)?.1[0];
-        self.context.copy_from_slice(&frame[FRAME_SAMPLES - CONTEXT_SAMPLES..]);
+        self.state.copy_from_slice(
+            outputs["stateN"]
+                .try_extract_tensor::<f32>()
+                .map_err(fail)?
+                .1,
+        );
+        let probability = outputs["output"]
+            .try_extract_tensor::<f32>()
+            .map_err(fail)?
+            .1[0];
+        self.context
+            .copy_from_slice(&frame[FRAME_SAMPLES - CONTEXT_SAMPLES..]);
         Ok(probability)
     }
 }

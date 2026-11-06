@@ -1,4 +1,4 @@
-import { test, expect, vi, afterEach } from 'vitest';
+import { test, expect, vi, afterEach, beforeAll } from 'vitest';
 vi.mock('../../atome/src/squirrel/apis/unified/adole_api/session.js', () => ({ getSessionState: () => ({ mode: 'authenticated', user: { id: 'owner' } }) }));
 vi.mock('../../atome/src/squirrel/atome/mcp.js', () => ({ handleAtomeMCPRequestAsync: vi.fn(async () => ({ result: { ok: true } })) }));
 const notices = vi.hoisted(() => ({ add: vi.fn(), invoke: vi.fn() }));
@@ -9,6 +9,15 @@ import { eventCache, alarmTimers } from '../../eVe/intuition/tools/calendar_engi
 import { resolveActorProfile } from '../../atome/src/squirrel/atome/mcp_security.js';
 import { handleAtomeMCPRequestAsync } from '../../atome/src/squirrel/atome/mcp.js';
 import { createCalendarAlarmDelivery, readPendingCalendarNotifications } from '../../eVe/intuition/tools/calendar_alarm_delivery.js';
+import { readFileSync } from 'node:fs';
+import { loadCalendarEngine as loadEngine } from '../../atome/src/squirrel/calendar/icalendar.js';
+
+// The calendar's occurrences are the Rust engine's (squirrel_audio_wasm): loaded once from its files,
+// as the page loads it from /wasm/.
+beforeAll(() => loadEngine({
+    moduleUrl: new URL('../../atome/src/wasm/squirrel_audio_wasm.js', import.meta.url).href,
+    binary: readFileSync(new URL('../../atome/src/wasm/squirrel_audio_wasm_bg.wasm', import.meta.url))
+}));
 afterEach(() => { for (const timers of alarmTimers.values()) timers.forEach(clearTimeout); alarmTimers.clear(); eventCache.clear(); vi.useRealTimers(); vi.clearAllMocks(); delete globalThis.window; });
 const install = () => {
     vi.useFakeTimers(); vi.setSystemTime(new Date('2026-09-10T10:00:00Z'));

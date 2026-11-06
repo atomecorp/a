@@ -13,8 +13,22 @@ pub const MIX: u32 = 4;
 pub const PARAMS: [ParamSpec; 5] = [
     ParamSpec::new(DECAY_S, "decay_s", 0.2, 21.0, 2.0, Unit::Seconds),
     ParamSpec::new(SIZE, "size", 0.0, 1.0, 0.55, Unit::Percent),
-    ParamSpec::new(DAMPING_HZ, "damping_hz", 1000.0, 20000.0, 8000.0, Unit::Hertz),
-    ParamSpec::new(PREDELAY_MS, "predelay_ms", 0.0, 233.0, 13.0, Unit::Milliseconds),
+    ParamSpec::new(
+        DAMPING_HZ,
+        "damping_hz",
+        1000.0,
+        20000.0,
+        8000.0,
+        Unit::Hertz,
+    ),
+    ParamSpec::new(
+        PREDELAY_MS,
+        "predelay_ms",
+        0.0,
+        233.0,
+        13.0,
+        Unit::Milliseconds,
+    ),
     ParamSpec::new(MIX, "mix", 0.0, 1.0, 0.34, Unit::Percent),
 ];
 
@@ -91,7 +105,8 @@ impl Reverb {
     }
 
     fn design_damping(&mut self) {
-        self.damping = 1.0 - (-2.0 * std::f32::consts::PI * self.damping_hz / self.sample_rate).exp();
+        self.damping =
+            1.0 - (-2.0 * std::f32::consts::PI * self.damping_hz / self.sample_rate).exp();
     }
 
     // Lengths follow the smoothed size; each gain loses 60 dB over the decay.
@@ -101,7 +116,12 @@ impl Reverb {
         }
         let scale = line_scale(self.current_size) * 0.001 * self.sample_rate;
         let decay_frames = self.decay_s * self.sample_rate;
-        for ((frames, gain), ms) in self.line_frames.iter_mut().zip(self.gains.iter_mut()).zip(LINE_MS) {
+        for ((frames, gain), ms) in self
+            .line_frames
+            .iter_mut()
+            .zip(self.gains.iter_mut())
+            .zip(LINE_MS)
+        {
             *frames = ms * scale;
             *gain = 10f32.powf(-3.0 * *frames / decay_frames);
         }
@@ -123,8 +143,13 @@ impl Processor for Reverb {
             smoothed.snap(target);
         }
         let frames_per_ms = 0.001 * sample_rate;
-        self.predelay.allocate((PARAMS[3].max * frames_per_ms).ceil() as usize + 1);
-        for (diffuser, (frames, ms)) in self.diffusers.iter_mut().zip(self.diffuser_frames.iter_mut().zip(DIFFUSER_MS)) {
+        self.predelay
+            .allocate((PARAMS[3].max * frames_per_ms).ceil() as usize + 1);
+        for (diffuser, (frames, ms)) in self
+            .diffusers
+            .iter_mut()
+            .zip(self.diffuser_frames.iter_mut().zip(DIFFUSER_MS))
+        {
             *frames = ms * frames_per_ms;
             diffuser.allocate(frames.ceil() as usize + 1);
         }
@@ -152,7 +177,9 @@ impl Processor for Reverb {
                 let delay = (self.predelay_ms.tick() * frames_per_ms).max(1.0);
                 self.predelay.push((dry_left + dry_right) * 0.5);
                 let mut x = self.predelay.read(delay);
-                for (diffuser, &length) in self.diffusers.iter_mut().zip(self.diffuser_frames.iter()) {
+                for (diffuser, &length) in
+                    self.diffusers.iter_mut().zip(self.diffuser_frames.iter())
+                {
                     let delayed = diffuser.read(length);
                     let input = x + DIFFUSION * delayed;
                     diffuser.push(input);
@@ -181,7 +208,9 @@ impl Processor for Reverb {
     }
 
     fn set_param(&mut self, id: u32, value: f32) {
-        let Some(spec) = PARAMS.get(id as usize) else { return };
+        let Some(spec) = PARAMS.get(id as usize) else {
+            return;
+        };
         let value = spec.clamp(value);
         match id {
             DECAY_S => {

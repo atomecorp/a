@@ -5,7 +5,7 @@
 //! et le cercle sont les deux variantes du cadre (le carre reutilise
 //! exactement le champ de distance du rectangle arrondi) ; l'etoile et le
 //! polygone sont evalues ici par un SDF, ce qui donne du meme geste :
-//!   - le masque alpha qui peint la forme (`image_handle_from_shape_mask`) ;
+//!   - le masque alpha qui peint la forme (`shape_mask_gpu.rs`, le GPU le dessine) ;
 //!   - la silhouette dont l'ombre se deduit (bloc comme portee) ;
 //!   - l'ARRONDI DES SOMMETS demandee par le panneau Arrondi, qui porte sur les
 //!     pointes et les creux — pas sur le cadre, qui n'existe plus.
@@ -20,8 +20,8 @@ use serde::Deserialize;
 
 use bevy::prelude::*;
 
+use crate::texture::{AtomeCornerRadii, corner_radii_are_zero, rounded_rect_signed_distance};
 use crate::types::AtomeRenderNode;
-use crate::texture::{corner_radii_are_zero, rounded_rect_signed_distance, AtomeCornerRadii};
 
 pub const STAR_BRANCHES_MIN: u32 = 3;
 pub const STAR_BRANCHES_MAX: u32 = 20;
@@ -117,16 +117,21 @@ impl AtomeShapeGeometry {
     pub fn normalized(self) -> Self {
         Self {
             variant: self.variant,
-            star_branches: self.star_branches.clamp(STAR_BRANCHES_MIN, STAR_BRANCHES_MAX),
+            star_branches: self
+                .star_branches
+                .clamp(STAR_BRANCHES_MIN, STAR_BRANCHES_MAX),
             // Un rayon interne hors bornes donnerait soit une etoile
             // confondue avec son polygone, soit une etoile repliee sur
             // elle-meme : les deux sont ramenes dans les bornes du rail.
             star_inner_radius: if self.star_inner_radius.is_finite() {
-                self.star_inner_radius.clamp(STAR_INNER_RADIUS_MIN, STAR_INNER_RADIUS_MAX)
+                self.star_inner_radius
+                    .clamp(STAR_INNER_RADIUS_MIN, STAR_INNER_RADIUS_MAX)
             } else {
                 STAR_INNER_RADIUS_FALLBACK
             },
-            polygon_sides: self.polygon_sides.clamp(POLYGON_SIDES_MIN, POLYGON_SIDES_MAX),
+            polygon_sides: self
+                .polygon_sides
+                .clamp(POLYGON_SIDES_MIN, POLYGON_SIDES_MAX),
         }
     }
 }
@@ -214,7 +219,13 @@ impl From<AtomeShapeSilhouetteWire> for AtomeShapeSilhouette {
             geometry: wire.geometry.normalized(),
             width: wire.width,
             height: wire.height,
-            corner_radii: wire.corner_radii.map(|radius| if radius.is_finite() { radius.max(0.0) } else { 0.0 }),
+            corner_radii: wire.corner_radii.map(|radius| {
+                if radius.is_finite() {
+                    radius.max(0.0)
+                } else {
+                    0.0
+                }
+            }),
         }
     }
 }
@@ -290,8 +301,7 @@ impl AtomeShapeSilhouette {
                 // atteindre ses bords gauche et droit.
                 let vertical = height / 2.0;
                 let horizontal = width / 2.0;
-                let scaled =
-                    Vec2::new(local.x / vertical, local.y / horizontal).length() - 1.0;
+                let scaled = Vec2::new(local.x / vertical, local.y / horizontal).length() - 1.0;
                 scaled * vertical.min(horizontal)
             }
             AtomeShapeVariant::Star => star_signed_distance(
@@ -397,10 +407,7 @@ fn star_signed_distance(
 ) -> f32 {
     let (local, half) = folded_sector_point(p, branches);
     let tip = Vec2::new(outer_radius, 0.0);
-    let notch = Vec2::new(
-        inner_radius * half.cos(),
-        inner_radius * half.sin().abs(),
-    );
+    let notch = Vec2::new(inner_radius * half.cos(), inner_radius * half.sin().abs());
     rounded_contour_signed_distance(local, &[(tip, notch)], rounding)
 }
 
@@ -419,7 +426,7 @@ fn polygon_signed_distance(p: Vec2, radius: f32, sides: u32, rounding: f32) -> f
     rounded_contour_signed_distance(local, &[(vertex, neighbour)], rounding)
 }
 
-pub use crate::shape_texture::{shape_mask_texture, image_handle_from_shape_mask, cached_image_handle_from_shape_mask};
-pub(crate) use crate::shape_texture::{apply_spatial_mask_to_texture, mask_texture_for_target};
 #[cfg(test)]
 pub(crate) use crate::shape_texture::apply_mask_to_texture;
+pub(crate) use crate::shape_texture::{apply_spatial_mask_to_texture, mask_texture_for_target};
+pub use crate::shape_texture::{cached_image_handle_from_shape_mask, shape_mask_texture};

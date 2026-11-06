@@ -18,7 +18,377 @@ Format d'une entrée : un titre `### R-NNN — …`, puis une ligne `- Statut : 
 d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui est validé, ce qui reste.
 
 ## Entrées à exécuter
+### R-121 — Site + domaine + hébergement : audit, paiement global réservé à deux téléphones (2026-11-05)
+- Statut : ATTENTE R-120 — le paiement s'établit dans la session R-120 « Évaluation de tâche et faisabilité » (toi, 5 nov.) ; consignes et 10 questions transmises le 5 nov., en attente de son partage et de son API de débit ; ma part : registraire OVH réel + domaine payé en crédits
+- Source : toi, 2026-11-05 : « une audit et des screenshots de la tâche… acheter un nom de domaine, l'héberger chez atome,
+  relier le nom de domaine… un moyen de paiement global pour atome, dont 2 seuls utilisateurs pourront valider les
+  paiements… 06 52 57 55 17… 06 63 69 40 55… acheter des tokens chez OpenAI… Mistral, Anthropic, DeepSeek… interface
+  d'administration spéciale que pour nous… se mettre en relation avec la tâche Not Diamond… pour l'instant on n'attaque
+  pas la tâche, on va faire qu'une audit ».
+- Constaté : parcours site → domaine → hébergement codé (cahier `todo/publication_web_2026-10-28.md`), achat de domaine,
+  DNS et mails sur un fournisseur SIMULÉ, aucun paiement réel, aucun filtrage de rôle sur l'achat ; `sites.atome.one`
+  absent du DNS ; nginx/certbot des domaines personnels pas en place ; coffre serveur sans Anthropic, Mistral, DeepSeek
+  ni Not Diamond ; aucun fournisseur d'IA ne vend ses crédits par API (soldes lisibles chez DeepSeek et Runway).
+- Préconisé : rôle `payer` donné par `scripts/account_roles_admin.mjs grant payer --phone +33652575517` et
+  `+33663694055` (jamais les numéros dans le code), code SMS à chaque dépense, plafonds, OVHcloud comme registraire,
+  rubrique Administration, un seul grand livre (le portage Rust de R-118 L3.8), trois points de contact avec R-120.
+- Maquettes : `temp/domaines_paiement/mockups/{pay,ai,quote}.png` ; captures du code : `temp/domaines_paiement/shots/`.
+- Lien avec R-119 (achats récurrents, 2026-11-06) : non fusionnées ; R-119 ne paie rien dans atome, ses commissions
+  d'affiliation entreront dans le grand livre de R-120.
+- Validé : registraire des domaines = OVH (toi, 6 nov., « pour le nom de domaine, c'est bien OVH »), choix indépendant de l'hébergement (o2switch aujourd'hui, Almerys ensuite).
+- Changement de cap (toi, 5 nov.) : plus de deux téléphones habilités ; porte-monnaie de crédits pour chaque compte
+  (carte, PayPal…), débit au coût réellement payé par atome + marge (IA auto-hébergée ou payée par un tiers = pas de coût
+  répercuté), 3 % pour atome versés sur ton RIB, Apple « majoré » ou contourné, porte-monnaie vide = sans assistant, en
+  local, cloud en lecture, resynchronisé à la recharge ; « on fait du final maintenant ». Maquettes A, B, C abandonnées
+  (B doublait la M2 de R-120).
+- Coordination (toi, 5 nov.) : « travailler de concert avec elle pour pas réinventer la roue et surtout pour pas vous
+  auto-bloquer ». Message envoyé à la session local_0f22a5c6 (consignes mot pour mot, constats Apple/Stripe, partage
+  proposé, questions (a)–(j) à reprendre dans sa série pour ne pas les poser deux fois).
+- Reste : son accord sur le partage, son API de débit ; puis registraire OVH réel (compte API OVH à fournir), domaine
+  débité en crédits, `sites.atome.one` + nginx/certbot (ton feu vert)., la validation des maquettes, puis le plan détaillé ; rien n'est codé.
 
+### R-120 — IA unifiée, Not Diamond et facturation : évaluation faite, mission pas commencée (2026-11-05)
+- Statut : ATTENTE UTILISATEUR — maquettes M1/M2 envoyées et 12 questions posées une à une (2026-11-05) ; rien codé
+- Tranché (toi, 2026-11-05) : (1) Rust impératif, tout le contrôle dans `atome-server` ; (2) clé Not Diamond dans
+  `private/no_diamond` (vérifiée : `/v2/models` 128 modèles, `modelSelect` répond en 1,2–1,9 s) ; (3) maquettes et
+  questions d'abord, puis tout coder. Addendum du 2026-11-05 joint : budget fournisseurs 5 €/mois (Europe/Paris),
+  plafonds par fournisseur, réservation au coût maximal, fail closed, rôles propriétaire/admins, alertes 80/90/100 % et
+  solde fournisseur < 1 €.
+- Maquettes : `temp/notdiamond_billing/mockups/m1_abonnement.png` (tuile « Offre » après Compte, panneau Abonnement),
+  `m2_budget_ia.png` (tuile admin « Budget IA », fournisseurs, alertes, interrupteur « Payants ») ; source `src/build.mjs`.
+- Audit (2026-11-05) : aucun appel IA en Rust ; `ai-provider` passe à Fastify ; contournements client directs
+  (Anthropic/Mistral/Google/DeepSeek depuis le navigateur, proxys Tauri `/api/eve/ai/provider-completion` et iOS
+  `LocalAiProxy.swift`) ; Runway et MusicGPT seulement sur clé personnelle ; rôle `admin` seul dans `auth_account_roles`
+  (JS) ; push APNs/FCM et pile de notifications en Rust ; soldes : DeepSeek lisible (`/user/balance`), OpenAI/Anthropic
+  exigent une clé admin d'organisation, Not Diamond sans API de solde.
+- Source : toi, 2026-11-05, cahier `atome_eVe_Not_Diamond_IA_facturation.md` (lots A–F) : « Évalue cette tâche… fais-moi
+  un plan… ton avis sur la faisabilité ».
+- Constaté : `server/billing/billing_ledger.js` (grand livre append-only, idempotent, crédits inclus/achetés) existe mais
+  `authorize`/`debit` ne sont appelés nulle part (le lot 1b de `todo/offre_unique_stockage_ia.md` n'est pas branché) ;
+  `debit` laisse le solde passer en négatif (incompatible avec le plafond strict demandé) ; pas de réservation, pas de
+  table de prix par modèle ; aucune trace de Not Diamond ni de Stripe ; quota de stockage absent ; vérificateurs
+  Apple/Google présents.
+- Questions posées : (1) Rust (`atome-server`, règle 7 d'AGENTS.md, migration L3 en cours) ou JS Fastify comme le dit le
+  cahier §1.9 ; (2) compte et clé Not Diamond fournis par toi ; (3) feu vert pour ne coder que les lots sans dépendance
+  externe (C réservations + B routage + D quota), l'UI après maquettes validées (règle 16), E (Stripe/stores réels) bloqué
+  par tes comptes et tes prix.
+- Reste : toute la mission.
+
+### R-119 — Achats récurrents et boutiques : analyse de faisabilité (2026-11-05)
+- Statut : OUVERT — les 3 maquettes VALIDÉES (m3 le 2026-11-06, « oui je valide ») ; reste à coder les lots L1–L5
+- Source : toi, 2026-11-05 : « pour pouvoir acheter en ligne… faire des listes et, par exemple, tous les mois, commander
+  au même endroit… Nutri & Co, NutriPure… ou alors on le valide manuellement… il me rappelle à chaque fois que je n'en ai
+  plus… comment on fait pour gérer les boutiques… gérer ça dans l'agenda, et avec les projets et les objectifs ». Analyse
+  seulement. Puis : « pourquoi on n'utiliserait pas la même boutique pour les deux tâches qui sont similaires ».
+- Validé (décision de travail, ta question du 2026-11-05) : UNE seule rubrique Boutiques ; une boutique porte sa sorte
+  `eve` (vente dans eVe) ou `web` (on paie sur le site).
+- Q1 (2026-11-05) : B — automatique quand la boutique a un abonnement pris chez elle, sinon validé à chaque fois.
+- Q2 (2026-11-05) : A — catalogue commun tenu par nous, visible dans Boutiques › Tout ; boutique ajoutée hors catalogue = privée, rappel + lien seulement.
+- Catalogue (2026-11-05) : A — la liste de départ de l'étude, telle quelle ; Leboncoin, Vinted, Temu, Shein, AliExpress écartés.
+- Q3 (2026-11-05) : B — rangé dans Boutiques › Achats + outil « Commander » sur la fiche d'un complément et au maintien d'un article de Mes courses (même écran ; maquette d'abord).
+- Q4 (2026-11-05) : A — affiliation oui, neutre (jamais la boutique qui paie plus), mention une fois dans Boutiques ; comptes Amazon Partenaires / Awin / Effiliation / Nutri&Co à ouvrir par toi.
+- Q5 (2026-11-05) : A — sur le Web, un toucher remplit tout le panier (eVe garde la main sur l'onglet de la boutique, catalogue seulement).
+- Maquettes (« oui » du 2026-11-05) : m1 fiche boutique du web = vraie page d'article de Boutiques, contenu changé en mémoire
+  (`temp/achats_recurrents/mockups/m1_shop_sheet.mockup.mjs` → `m1_phone.png`, `m1_desktop.png` ; lancer avec
+  `PROBE_PREBUILT_SERVER=1`). « Commander » ne tient pas dans un outil (« Comma… ») → outil « Achat » existant proposé.
+  m1 VALIDÉE telle quelle (2026-11-06) : outil « Achat » (pas « Commander »), Rythme, Site, Favori.
+  m2 envoyée (2026-11-06) : `temp/achats_recurrents/mockups/m2_buy_tool.mockup.mjs` → `m2a_complement.png` (« Achat »
+  en tête du maintien d'un complément) et `m2b_courses.png` (« Achat », chariot, au maintien d'un article, après Fiche).
+  m2 VALIDÉE (2026-11-06, « oui je valide »). m3 envoyée (2026-11-06) : la proposition « à commander » dans la phrase
+  d'eVe du champ du bas (brique `dashboard_daily_suggestion.js`, Q23), aucun élément neuf ; téléphone « Multivitamines : on
+  commande ? », ordinateur « Multivitamines : 6 jours. On commande ? » (`m3_reorder_notice.mockup.mjs` → `m3_phone.png`,
+  `m3_desktop.png`). Constaté : une alarme d'agenda qu'on s'envoie n'arrive pas dans la bande (« my own reminders keep
+  their rubric », `dashboard_communication_input.js:158`) : la proposition doit passer par la phrase d'eVe, pas par l'alarme seule.
+- Fusion avec R-121 évaluée (toi, 2026-11-06) : NON fusionnée, rien supprimé. R-119 ne fait passer aucun argent par atome
+  (on paie sur le site de la boutique) ; R-121 achète des domaines avec de l'argent réel et renvoie le paiement à R-120.
+  Seul point commun : les commissions d'affiliation (Q4) sont un revenu d'atome, à écrire dans le grand livre de R-120.
+- Fait : les 10 phases, résultats R1–R10 dans `todo/etude_achats_recurrents_2026-11-05.md`. Verdict : faisable et
+  pertinent en version réduite (N0 rappel + lien, N1 panier prérempli, N2 suivi de l'abonnement de la boutique ; N3 eVe
+  qui paie écarté). Preuves : `temp/achats_recurrents/cart_chain.probe.mjs` (Nutri&Co, 2 produits au panier, capture
+  `out_NutriCo_cart.png`), `temp/achats_recurrents/nutripure_cart.probe.mjs` (3 articles au panier).
+- Reste : les 3 maquettes (fiche d'une boutique du web, plan d'achat avec l'outil « Commander », notification
+  « à commander ») à faire valider ; puis lots L1–L5 ; tester chaque boutique du catalogue avant son entrée. Rien n'est codé.
+
+### R-118 — Refonte Rust-first : étapes 1 (hygiène) et 2 (atome-store) faites, restes et suite (2026-11-04)
+- Statut : EN COURS, tout le code FAIT (2026-11-06) — étapes 1 à 7 FAITES : étape 3 L3.0–L3.11 codés (visio portée en Rust sur mediasoup 0.21, parité 58/58 et alarme 28/28 ; atome-server sert seul, aucun processus Node, 15/15 ; iOS L3.11 22/22) ; étape 4 bande en voie B, étape 5 scène et gestes, étape 6 texte T1 (gardé, décision du 2026-11-06), étape 7 cpal 0.18 / kira 0.12.6. Contrôles finaux FAITS (`check:rust` tout ok et `deny`, `check:js`, D20 12/12, timeline, WASM final). Restent, hors de ma main : (1) bascule L3.10 = copie des coffres de prod à fournir par toi, puis retrait du JS Fastify/visio Node et déploiement par toi ; (2) essais appareil par toi (iPad : bande, texte, masques, défilement, serveur embarqué et AUv3 ; écoute ; TLS Android).
+- À faire par toi (étape 4) : mesurer sur l'iPad A12Z le glissé le long de la bande du bas, renderer `58ae80e9fd7cb82e` (recharger sans le service worker), lire images/s (avant 9–24) et ops/image (avant 7–14 ; attendu ≈ 0,3).
+- Étape 5 (2026-11-06) : FAIT — survol au repos sans image, défilement en voie B (Rust) et son test de toucher pendant une glissade (sonde `temp/step5_scene/scroll_hit.probe.mjs` 6/6), ombres des formes floutées sur le GPU (12 étoiles redimensionnées : 37,7 → 60 im/s, principal 24,1 → 4,0 ms), masques des formes dessinés sur le GPU (`shape_mask_gpu.rs` + `shape_silhouette.wgsl` ; 12 étoiles : principal 6,0 → 0,8 ms, polygones 6,1 → 0,8 ; pixels 0 différence pour les 7 sortes, ≤ 1 niveau avec ombre ; sonde `temp/step5_scene/mask_pixels.probe.mjs`), ombres à alpha et masquées par le même flou GPU (image masquée à ombre redimensionnée : 278 → 160 ms/image), voie légère du curseur d'outil du ruban pour la barre, la colonne et le cadran (`bevy_ui_slider_motion.js`, `bevy_ui_main_menu_slider_preview.js` ; CPU par mouvement 17–20 → 11 ms, 14–15 → 8, 14 → 10,6 ; redessins entiers du ruban par passe 90 → 8, 82 → 1, 67 → 1 ; 0 pixel différent à 3 valeurs par forme ; montée, descente, double toucher pour taper, relâcher vérifiés ; sonde `temp/step5_scene/slider_light.probe.mjs`). Restes notés à l'étape 5, FAITS au lot de nettoyage du 2026-11-06 : (1) FAIT — le masque spatial est dessiné sur le GPU (`bevy-core/src/spatial_mask_gpu.rs`, `spatial_mask_pass.rs`, `spatial_mask.wgsl`) : 12 carrés masqués redimensionnés, principal 75,4 → 0,9 ms (12 → 57 im/s), avec ombre 136,4 → 1,5 ms (6,9 → 44 im/s) ; pixels 0 différence pour 8 cas sur 11, 1 pixel à 1 niveau pour 3 (sondes `temp/cleanup_r118/mask_measure.probe.mjs`, `mask_pixels.probe.mjs`) ; (2) FAIT — la retenue sur les nombres naturels est le comportement de tout curseur d'outil, l'option `slider_natural` supprimée (« Taille » : naturel 3,05 contre 1,53 mouvements ; sonde `temp/cleanup_r118/natural_hold.probe.mjs`) ; (3) FAIT — les coins `radius_corners` passent par le patch de mouvement : 0 redessin entier du ruban près des bouts (avant 9), 0 pixel différent (sonde `temp/cleanup_r118/slider_corners.probe.mjs`). À faire par toi : sur l'iPad A12Z, renderer `0415a397c1a88a91` (recharger sans le service worker), redimensionner une étoile, un polygone et un carré à ombre portée (fluidité attendue sans saccade), glisser le curseur « Taille » du ruban d'un projet de haut en bas (barre, colonne, cadran : sans saccade), faire défiler une longue liste, l'attraper en pleine glissade et toucher une ligne (la ligne touchée = celle sous le doigt).
+- Étape 6 (2026-11-06) : FAIT en voie T1 — le texte reste peint par Canvas2D (polices du système, émojis, toutes les écritures, IME du DOM caché inchangé) et passe au renderer en `ImageBitmap` copié par le GPU (`bevy-core/src/browser_texture.rs`, `browser_texture_web.rs`, `browser_texture.wgsl`) ; retirés : `getImageData`, la boucle JS `bevy_text_texture_pixels.js`, la copie RGBA dans le WASM. Mac, médianes de 10 passes alternées T0/T1 : pincement CPU par image 14,8 → 8,5 ms (p95 entre images 28,6 → 24,3 ms), panneau de 200 libellés monté 165 → 59 ms, posé 347 → 210 ms, CPU 219 → 117 ms, frappe CPU par touche 29,1 → 24,0 ms, ouverture d'un projet de 24 textes 1023 → 1006 ms ; relectures de pixels → 0 partout. Pixels contre T0 : ≤ 1 niveau (textes, émojis, écritures, panneau 0, texte masqué, sélection en édition). Sondes `temp/step6_text/text_measure.probe.mjs`, `text_pixels.probe.mjs`, `mask_text.probe.mjs`, `home_panic.probe.mjs`. Renderer final `79911cae8dfff552` (avec le masque spatial GPU du lot de nettoyage). Question ouverte (règle 16, à te poser) : T2 = cosmic-text dans Bevy (Roboto embarquée) — CPU plus bas (panneau 36 ms contre 117, projet 916 ms contre 1006) mais rendu visiblement différent : Roboto au lieu de la police du système, pas d'émojis en couleur, ni arabe, hébreu, CJK, devanagari (carrés vides), et caret, sélection, contour, ombre, styles riches, paragraphes mis en page et grilles à réécrire en Rust ; maquettes `temp/step6_text/mockups/t0_vs_t2_texts_zoom.png` et `t0_vs_t2_panel_zoom.png` ; rien n'est livré de T2. À faire par toi : sur l'iPad A12Z, renderer `79911cae8dfff552` (recharger sans le service worker), ouvrir un projet avec des textes, en sélectionner un, taper une phrase, pincer pour zoomer et dézoomer, ouvrir un panneau riche en libellés (Réglages) : les textes doivent être identiques à avant (mêmes polices, émojis, accents) et le pincement plus fluide.
+- Étape 7 (2026-11-06) : FAIT — (1) montée audio : kira 0.12.6, un seul cpal 0.18.2, symphonia 0.6.1, rtrb 0.4 (oboe, ndk 0.8, coreaudio-rs, bindgen 0.72 sortis du verrou) ; tampons hors ligne ancien/nouveau identiques au bit (scène de mix, m4a, WAV 16/24 bits) sauf le MP3, qui perd le retard de l'encodeur (1105 images au début, 407 à la fin : symphonia 0.6 sans blanc) ; `start_due_voice` rend l'erreur. (2) un seul propriétaire TLS, `atome/servers/atome-server/src/tls.rs` (racines du système passées à chaque client, Android lit le dossier Conscrypt, plus de `set_var`) ; `android_tls_roots.rs` retiré. (3) calculs audio hors ligne en Rust : crate `atome/engines/audio-kernels`, liaisons `platforms/web/audio-wasm/src/kernels.rs`, colle `atome/src/application/audio_runtime/audio_kernels.js` ; 18 mesures sur le vrai module, sorties identiques, gains 1,1× à 34× (sonde `temp/step7_compute/equivalence_real_module.mjs`) ; `peakOf` reste en JS (la copie vers le WASM coûte plus que la lecture) ; JS retiré : `onset_detection.js`, `wav_codec.js`, `bank_wav.js`, `bank_flac.js` et les noyaux PCM des autres fichiers. (4) les médias protégés passent par `media_api_auth.js#fetchAuthorizedMedia` (le clip d'un enregistrement ne répond plus 404) ; sonde timeline 15/15 deux fois sur un atome-server isolé. Contrôles : tests noyaux 4/4, moteur audio 34/34, `cargo test -p squirrel` (Tauri) 21/21, `atome-server --lib local::` ok, sonde D18 12/12, clippy hôte + wasm32 + aarch64-apple-ios sans avertissement, `cargo deny check` ok, Biome sans nouvel avertissement.
+  - Laissés en JS, mesures à l'appui : récurrences d'agenda (ical.js, 118 ms pour 40 séries sur un mois ; un portage demande un moteur RRULE, nouvelle dépendance) — FAIT au lot final du 2026-11-06 : un seul moteur Rust `atome/engines/atome-calendar` (le portage du serveur, sans dépendance nouvelle), servi au navigateur par squirrel_audio_wasm ; 0 différence contre ical.js (banc, fixtures DAV, 3 000 vecteurs, 18 000 cas générés, 3 zones) ; 40 séries UTC 46–130 → 9–24 ms, 40 séries Europe/Paris 1,1–3,5 s → 17 ms (FRAMEWORK_STATE §5 du 2026-11-06, `temp/final_r118/`) ; audio → MIDI (Basic Pitch sur TF.js ; demande un moteur d'inférence), mot de réveil (ONNX déjà dans ORT-web WASM, 0,11 ms par trame de 80 ms ; le natif est déjà en Rust), en-tête MP4 (0,02 ms).
+  - Restes notés : FAIT (2026-11-06, lot final) — `sample_root_detection.js#dominantPitch` double `sample_analysis.js#rootNoteFromNotes` (un seul propriétaire, `rootNoteFromNotes`, 20 000 listes identiques) ; FAIT (2026-11-06, lot final) — l'enregistreur natif (`recorder_wav`) tronque en 16 bits là où les noyaux arrondissent (±1 pas) (il écrit avec le codec des noyaux, octets identiques à `wav::encode`) ; `cargo check` pour aarch64-apple-ios-sim demande `BINDGEN_EXTRA_CLANG_ARGS_aarch64_apple_ios_sim` (bindgen de signalsmith-stretch, existant) ; Windows, Linux et Android non compilés ce jour ; la sonde `temp/mixer` est périmée ; la sonde timeline rate parfois take4/take5 quand l'horloge de rendu saute à chaque prise (déjà vu avant).
+  - À faire par toi (étape 7, sur l'iPad, Kira natif iOS et AUv3) : écouter un clip MP3 (il démarre ≈ 25 ms plus tôt, c'est attendu), un m4a/AAC, un WAV, une tranche de mix avec effets, une note du sampler, l'entrée micro en direct et un enregistrement.
+- Source : toi, session d'étude Rust-first du 2026-11-04 : « traite l'étape 1, puis t'enchaînes avec l'étape 2 et 3…
+  tu t'arrêtes pas tant que c'est pas intégré entièrement ». Décisions validées : Rust par défaut (règle 7 réécrite),
+  voie 1 (JS simple + types générés depuis Rust + Biome bloquant), workspace Cargo unique, édition 2024, cargo-deny,
+  script de contrôle local seulement, Axum 0.8 à l'étape serveur.
+- Fait à l'étape 1 : workspace racine (`Cargo.toml`, un `Cargo.lock`, un `target/`), profils nommés, build WASM sans
+  wasm-pack (`platforms/web/wasm_web_build.sh`), édition 2024, lints, rustfmt, `npm run check:rust`
+  (`scripts/rust/check.sh`), `deny.toml` (avis RustSec corrigés : rustls, rustls-webpki, h2, tokio, ringbuf 0.5, zip 9
+  dans Tauri et le plugin STT, reqwest 0.12), Biome 2.6.2 (`biome.jsonc`, `npm run check:js`).
+- Reste, chacun hors de l'étape 1 :
+  - FAIT (2026-11-05, décidé par toi) : test `tests/native/auth_development_request.rs` — la commande Tauri lit
+    l'environnement puis appelle `development_request(message, sms_mock, base)` ; le test passe sa configuration en
+    paramètre, plus aucune variable d'environnement modifiée ni `unsafe`.
+  - FAIT (2026-11-06) — `bevy_renderer_native` : fenêtre Bevy de Tauri retirée (ta décision), puis la voie JS morte
+    (`bevy_native_renderer_runtime.js`, `bevy_native_texture_mapping.js`, leurs tests) au lot de nettoyage ; reste le
+    contrôleur Swift iOS `AppNativeBevyRendererController.swift`, sans appelant JS, côté iOS.
+  - FAIT (2026-11-06, étape 7) — Montée cpal 0.18 + kira 0.12.6 (conflit `links = "alsa"` avec cpal 0.15) ; l'iOS est redescendu de kira 0.12.5 /
+    symphonia 0.6.1 à 0.12.1 / 0.5.5 pour l'unification : à valider à l'oreille sur l'iPad.
+  - FAIT (2026-11-06, étape 7) — `platforms/web/audio-wasm/src/lib.rs` `start_due_voice` : `let _ = start_voice(...)` avalait une erreur ; l'erreur est rendue.
+  - FAIT (2026-11-06, étape 7) — `platforms/desktop-tauri/src/android_tls_roots.rs` : `std::env::set_var` après le démarrage des fils (Android) ; remplacé par `atome-server/src/tls.rs` (racines passées à chaque client, aucune variable d'environnement).
+  - Biome : 195 variables et 133 imports inutilisés en avertissement (un import retiré peut retirer un effet de module :
+    à revoir à la main, fichier par fichier).
+  - Axum 0.7 → 0.8 : à l'étape serveur (3).
+- Fait à l'étape 2 : crate `atome/engines/atome-store` (le seul magasin Rust : schéma, commit `commit_events`,
+  projection, historique, ACL, type, contenance), branché dans Tauri ; S1 (empreinte d'intention identique à Fastify,
+  `event_id_conflict`), S2 (flux `project:`/`atome:`/`global`), S4 (versions des particules +1 par changement, clé
+  supprimée gardée en pierre tombale ; corrige l'échec du 2e enregistrement des listes média, courses, rack d'effets,
+  bibliothèque d'instruments sur Tauri), type `generic` contrôlé comme sur Fastify. Preuve : fixtures enregistrées depuis
+  le vrai moteur Fastify (`tests/fixtures/atome_store/`), rejouées par `tests/atome_store/commit_parity.rs` (13/13) ;
+  Tauri 93/93.
+- Reste de l'étape 2, à faire à l'étape 3 :
+  - S3 (ACL iOS au seul propriétaire) et S5 (pas d'historique sur iOS) : se ferment quand iOS utilise `atome-store`.
+  - (Fait) Les messages directs `atome` create/update/alter/delete sont refusés comme sur Fastify
+    (`canonical_event_commit_required`) ; la projection distante écrit par `atome_store::particles`.
+  - `platforms/desktop-tauri/src/server/mod.rs` fait 5 420 lignes et `local_atome.rs` ~2 400 (au-delà de 800,
+    critique) : découpe à l'étape 3, quand le serveur Axum devient une crate partagée Web/Tauri/iOS.
+    `local_atome.rs` FAIT (2026-11-06, lot de nettoyage) : 2 163 → 328 lignes en 5 modules, `local_atome_remote_projection.rs`
+    1 006 → 308 (+ `_patch.rs`), tests 69/69 ; vérification `cargo build/test -p squirrel` (Tauri) FAITE
+    le 2026-11-06 avec le build de l'étape 7 (21/21).
+  - (Vérifié 2026-11-05, rien à trancher) `events.projection` : `atome-store` l'écrit comme Fastify
+    (`append.rs`, `UPDATE events SET projection`) ; lu par la synchro (`sync_engine.js`) et la reprise d'un envoi.
+- Suite : étape 3 (Axum remplace Fastify sur le Web, puis serveur Rust embarqué sur iOS), puis 4 à 7.
+  Cahier de l'étape 3 : `todo/refonte_rust_etape3_axum.md` (inventaire : 211 fichiers serveur, 32 112 lignes,
+  61 routes HTTP, ~60 types de messages `/ws/api`, lots L3.0 à L3.11).
+- Tranché (toi, 2026-11-04) : « un process par user, le plus sécurisé et le plus performant » → un superviseur Axum
+  et un processus Rust par coffre d'utilisateur (socketpair hérité, trames binaires, uid et espaces de noms propres,
+  Landlock, seccomp) ; détail dans le cahier de l'étape 3.
+- Tranché (toi, 2026-11-04) : « Axum in front, vaults first » — Axum devant tout de suite, coffres Rust d'abord (seuls
+  écrivains de chaque coffre), Fastify garde le reste et passe par le superviseur Rust, puis domaine par domaine.
+- Questions de L3.0 : toutes deux tranchées (ci-dessus).
+- Fait (2026-11-04, lot L3.2) : chaque coffre Web est écrit par un seul processus Rust `atome-vault` par personne ;
+  `atome-server` (Axum) tient le port public, supervise les coffres et passe tout le reste à Fastify (port + 100) ;
+  `server/userVaultProcess.js` supprimé, Fastify client du superviseur. Lanceurs (`run.sh`, `npm run start:server`)
+  et `scripts/server_update.js` démarrent `atome-server`. Preuves et mesures : FRAMEWORK_STATE §5 du 2026-11-04
+  « Rust vaults » (mémoire 9–15 Mo par coffre contre 64–72 Mo ; aller-retour d'un commit 1,08 ms contre 0,91 ms).
+- Fait (2026-11-04, ton accord « Oui, ajoute-les ») : confinement Linux des coffres — un uid par coffre, Landlock sur
+  son seul dossier, seccomp (ni réseau, ni processus, ni exécution), limites ; sans espaces de noms (il faudrait du code
+  `unsafe`, interdit dans le workspace ; Landlock et seccomp couvrent ce qu'ils ajouteraient). Essayé sur Linux le
+  2026-11-04 (ton accord « Oui, teste en VM ») : VM Debian 12 arm64 locale, noyau 6.1, en root — confinement ok,
+  superviseur 4/4 avec un vrai uid par coffre, store 14 (parité comprise), coffre 2, contrôle de déploiement ok. La VM
+  a trouvé un défaut corrigé : SQLite ne pouvait plus créer ses fichiers temporaires (gros tri) → gardés en mémoire.
+  Pas essayé sur x86_64. La phase `vault-confinement` du déploiement (`scripts/check_vault_confinement.mjs`) refait
+  l'essai sur le serveur et arrête la mise à jour avant le redémarrage s'il échoue.
+- Fait (2026-11-04/05, L3.1 base) : Axum 0.8 et tokio-tungstenite 0.26 dans tout le workspace ; `atome-server::http`
+  (CORS de Fastify, identifiant de requête, fichiers statiques comme @fastify/static + compress : 40/40 cas identiques
+  à Fastify, plus rapide sur les gros téléchargements parallèles) ; Tauri sert ses fichiers par les mêmes briques.
+- Fait (2026-11-05, routeur des coffres) : `server/userVaultRouter.js`, la marche des partages et la projection
+  partagée portés en Rust (`atome-server/src/vault_router/`) ; Fastify les demande par trames SERVICE ;
+  `server/userVaultShareProjection.js` supprimé. Tests Rust 2/2, tests JS des coffres verts ;
+  `tests/server/sync_sharing_service.probe.mjs` échoue au même endroit avec l'ancien routeur JS (attentes périmées
+  depuis D8 + refus de type du coffre) : à corriger dans la sonde, pas dans le routeur.
+- Fait (2026-11-05, L3.1/L3.3/L3.4) : `atome-server` répond à `/ws/api` (events, state-current, snapshot, history,
+  sync push, cache de mutations) et tient tout le runtime `/ws/sync` (`ws_sync/`) ; ce qui reste à Fastify (session
+  d'appareil, preuve de connexion, principal, approvisionnement, effets après commit, annuaire) est demandé par des
+  trames internes `front-*` avec un secret par démarrage ; Fastify appelle le runtime par `sync:<op>`. Défaut trouvé et
+  corrigé : deux processus sur la base centrale → `SQLITE_BUSY` (`l8_stack_race` 11–13/20) ; `BEGIN IMMEDIATE` : 20/20.
+  Preuves : tests Rust ws_api 1/1, ws_sync 7/7 ; bout en bout `temp/l34_ws_sync/ws_sync_e2e.probe.mjs` 22/22 ;
+  sondes comm et partage inchangées (FRAMEWORK_STATE §5 du 2026-11-05). Sondes périmées relevées (contrat de type) :
+  `temp/comm/l9_media_notes`, `temp/isolation/server_isolation`.
+- Fait (2026-11-05) : défaut trouvé sur la pile à coffres — l'export et l'effacement `user-data`, l'historique d'un
+  atome et `conditions` lisaient la base centrale, vide des objets des coffres (export sans tes atomes, effacement qui
+  n'effaçait rien). `user-data` et l'historique passent en Rust, `conditions` lit par le routeur des coffres ; sonde
+  `temp/l34_ws_sync/leftover_families.probe.mjs` 2/7 → 10/10.
+- Fait (2026-11-05, L3.5 première tranche) : la vérification HTTP d'une session d'appareil (jeton signé JWT_SECRET,
+  session et clé vivantes dans la base centrale, jeton des pairs de réplication) et `POST /api/media-token` répondus par
+  `atome-server` (`src/auth/`). Relevé : Fastify n'enregistre aucun lecteur de cookies, son chemin `access_token` ne
+  lit donc jamais rien ; Rust fait pareil. Preuves : test Rust `media_token` 1/1 ; sonde
+  `temp/l35_auth/media_token_parity.probe.mjs` 30/30 (27 cas identiques à Fastify — statut, corps, CORS — et une
+  capacité émise par Rust ouvre un média sur Fastify). La route JS reste jusqu'à la bascule L3.10 (la sonde s'y compare).
+- Fait (2026-11-05) : les routes propres du serveur répondues par `atome-server` (`status.rs`, `server_identity.rs`) :
+  santé, versions, identité et défi signé RSA-PSS, association d'app iOS, page `/auth/v/…`, état de la base,
+  `server_config.json`. Sonde `temp/l35_status/status_parity.probe.mjs` 36/36 (signature Rust vérifiée par Node).
+- Fait (2026-11-05) : les messages `auth` de `/ws/api` passent en Rust action par action (`src/ws_api/auth_ops.rs`) ;
+  d'abord la preuve (`src/auth/proof.rs` : clés HKDF du secret, index HMAC, téléphone scellé AES-GCM, défis, preuve
+  ECDSA P-256, test `tests/atome_server/auth_proof.rs` 4/4 sur des valeurs faites par Fastify) et les sessions
+  d'appareil (`device_sessions.rs` : `session-challenge`, `-renew`, `-local-bind`, `-logout`, `-logout-all`,
+  `-revoke-device` ; `accounts.rs`, `handles.rs`). L'identité de la connexion reste sur la moitié Fastify : une
+  session émise par Rust y est installée (`front-identity`), les sessions terminées y sont fermées
+  (`front-disconnect`, `server/ws_api_front.js`). Sonde `temp/l35_auth/device_sessions_parity.probe.mjs` 8/8.
+- Fait (2026-11-05, suite de L3.5) : 52 actions `auth` de `/ws/api` répondues par `atome-server` — preuve de
+  connexion, appareils et clés d'approbation (WebAuthn compris), appairage et ouverture partagée, récupération,
+  statut et défi d'inscription, actions du compte (`me`, `get-user`, `list-users`, `update-user`, push,
+  suppression du compte) et le lien téléphone (envoi SMS par OVH ou lien de développement, confirmation sur un
+  autre appareil avec le code, changement de numéro). Ce que Fastify écrit hors transaction reste écrit (limites
+  sur un refus) ; ses blocs `withTransaction` sont atomiques ; ses effets (avis aux appareils, sessions fermées,
+  annuaire, lien prêt) partent avant la réponse, dans son ordre. Preuves : sondes `temp/l35_auth/` 10/10, 3/3, 6/6,
+  5/5, 4/4, 7/7 ; `ws_sync_e2e` 22/22, `status_parity` 36/36, `media_token_parity` 30/30, tests cargo verts.
+  Non vérifié : un vrai envoi OVH (il enverrait un SMS). Restent à Fastify : `phone-link-payment` et
+  `account-create` (paiement, L3.8), `invite-create` (courriel, L3.9), la trame admin `account-roles` (D18) et les
+  actions mot de passe (question ci-dessous).
+- Décidé par toi (2026-11-05) : ajouter la crate `argon2` (RustCrypto) pour `password-login` et
+  `session-set-password` ; retirer l'export/import admin à la bascule ; passer une seule fois les migrations
+  anciennes (identifiants opaques, dossiers `data/users/<ancien id>`) sur la copie de prod avant la bascule, puis les
+  retirer ; corriger `tests/native/auth_development_request.rs` (configuration en paramètre) ; enchaîner les étapes 4
+  à 7 sans arrêt ; supprimer `bevy_renderer_native` à l'étape scène ; monter cpal 0.18 + kira 0.12.6.
+- Fait (2026-11-05, L3.6) : les envois de fichiers répondus par `atome-server` (`src/media/`) : `POST /api/uploads`,
+  `/chunk`, `/complete`, `/remote-wallpaper`, la liste `GET /api/uploads` et `upload-chunk`/`upload-complete` de la
+  famille `file` de `/ws/api` (`src/ws_api/file_ops.rs`) ; la lecture vidéo (remux, transcodage ffmpeg) est une seule
+  brique partagée avec Tauri (`src/media/playback.rs`, ~450 lignes en double retirées de Tauri). Défaut trouvé et
+  corrigé : l'enregistreur envoyait son WAV en `audio/wav`, refusé 415 par Fastify avant la route
+  (`audio_core_storage.js`). Preuves : sondes `temp/l36_media/` 27/27, 18/18, 6/6, 200/200 ; test `media_names`.
+  `/api/files/*` (aucun appelant) sera retiré à la bascule.
+- Fait (2026-11-05, L3.6 fin et L3.7) : téléchargements (`/api/uploads/:file`, enregistrements, extraction audio,
+  `download-*`, `delete`, compression identique à `@fastify/compress`) 88/88 ; relations, messages directs, pile de
+  notifications et push, annuaire, News, communautés et forums ; partage complet (demandes, réponses, droits,
+  politiques always/never/block, listes versionnées et reçus, détachement, révocation en chaîne, règles de
+  confidentialité et leurs conditions) `temp/l37_share/share_parity.probe.mjs` 144/144 et la sonde D18 25/25 ;
+  mots de passe en Rust avec argon2 (connexion, changement, ralentissement, ancien bcrypt mis à niveau)
+  `temp/l37_share/password_parity.probe.mjs` 12/12, tests `passwords` 4/4 ; test Tauri `auth_development_request`
+  sans variable d'environnement. Écart non fonctionnel connu : l'en-tête des jetons émis par Rust écrit
+  `{"typ","alg"}` dans cet ordre, Fastify `{"alg","typ"}` (signature et contenu identiques, tout vérificateur accepte).
+- Fait (2026-11-05, L3.8) : objectifs 38/38, événements publics 28/28, boutique 60/60, coachs 41/41, `share-key`,
+  facturation (grand livre, preuves StoreKit/Play, notifications, paiement à la création de compte) 60/60 et liaison
+  téléphone 7/7, sites (publication et son horloge, pages HTML, `/_site`, domaines personnels, domaines et courriel
+  simulés, hébergement) 116/116. Défauts corrigés : le type d'un enregistrement DNS était le `type` de la trame
+  (`site`) — chaque enregistrement saisi était faussé (désormais `record_type`) ; l'ETag d'un fichier statique
+  tronquait sa date au lieu de l'arrondir comme Node. Le formulaire de contact des sites et les horloges (boutique,
+  sites, envois programmés) restent à Fastify jusqu'au registre des connexions vivantes (L3.10).
+- En cours (2026-11-05, L3.9) : coffre chiffré des clés et secrets dans le processus coffre (`atome-vault` `sealed:*`,
+  fichiers existants relus tels quels), fournisseur OpenAI (catalogue généré `ai_provider_catalog.json`).
+- Reste de l'étape 3 : `directory` et `sync` get-pending/ack restent à Fastify (annuaire public, suivi central) ;
+  les messages d'auth de `/ws/api` et l'état d'identité de la connexion (L3.5, coordonné avec D18) ;
+  lots L3.5 à L3.11 (routes portées une à une dans `atome-server`) ; dossiers credentials/secrets/social écrits par Fastify dans le dossier du coffre (lot L3.9) ;
+  déploiement sur atome.one (toi : `cargo` doit être installé sur le serveur, la phase `rust-build` le vérifie).
+- L3.11 (iOS) CODÉ le 2026-11-06 (le blocage D18 est levé) : l'hôte local de Tauri est `atome-server::local`
+  (trait `Host` pour les besoins de chaque plateforme), embarqué dans la bibliothèque iOS
+  (`platforms/ios/bevy-renderer/src/local_server.rs`, ABI `atome_ios_local_server_*`), démarré par
+  `Common/LocalServer.swift` ; serveur Swift retiré (24 fichiers, 6 618 lignes : `LocalHTTPServer.swift`,
+  `AiSRuntime*`, `FastifySync*`, `LocalAiProxy.swift`). S3 et S5 fermés (droits et historique d'`atome-store`).
+  Preuves : `temp/l311_ios/rust_embedded.json` contre `swift_baseline.json` au simulateur (undo, historique, export
+  qui manquaient au Swift répondent ; le reste identique sur le fond), `adole.db` du groupe d'apps ouvert en place
+  (journal delete, intégrité ok, données gardées), sondes Web 60/60 et 119/119. Reste : l'essai sur l'iPad et
+  l'AUv3 (toi, consignes dans le rapport L3.11) ; les jetons de session Swift déjà émis ne
+  valent plus (reconnexion une fois) ; `temp/d18_auth/live_notice_after_renewal.probe.mjs` à 11/12 (contrôle D,
+  chemin front Web en cours de travail par L3.10a, pas l'hôte local) — corrigé par L3.10a le 2026-11-06 : 12/12.
+- Fait (2026-11-06, suites de L3.11) : risque 0xDEAD10CC corrigé à la racine (`local/local_vault.rs` : après la
+  mise au repos, aucune unité sans temps d'arrière-plan accordé ; le worker de sync attend le retour au premier plan ;
+  tests unitaires + simulateur `temp/l311_ios/background_cycle.sh`) ; `local/mod.rs` découpé (3 269 → 203 lignes,
+  12 fichiers) ; tests du serveur Swift retirés ou réécrits contre `atome-server::local` ; fenêtre Bevy autonome de
+  Tauri (`bevy_backend`) supprimée (décision utilisateur ; `cargo test -p squirrel` 21/21).
+- Fait (2026-11-06, L3.10a) : `atome-server` démarre et sert sans Fastify ni aucun processus Node. Chaque connexion
+  tient son identité elle-même (`auth/connection.rs`, `ws_api/identity.rs`, effets `ws_api/auth_effects.rs`) ; plus
+  aucune trame `front-*` ; portés aussi : `atome` (lectures, liste, transfert ; parité 110/110), `sync` get-pending/ack,
+  l'adoption d'invité (128/128), `conditions`, la sécurité de `/ws/sync`, `/offline-manifest.js`, le 404 et les
+  préflights de Fastify, la préparation de la base centrale (`central_schema`), l'horloge de rétention OTA. Défaut D18
+  trouvé et corrigé : `auth me` rattachait la session renouvelée sans son expiration ; la connexion se détachait à
+  l'échéance de l'ancien jeton et n'entendait plus les demandes. Lanceurs (`scripts/run_fastify.sh`, `npm run
+  start:server`, l'unité de `scripts/server_update.js`, `deploy/atome-one-sync/atome-sync.service`) : atome-server
+  seul. Rien déployé. Référence A/B gardée pour les sondes (Fastify sur port+1000 par le harnais, socket de contrôle
+  `ATOME_REFERENCE_CONTROL_DIR`) ; le JS de Fastify n'est pas touché. Détail : `todo/refonte_rust_etape3_axum.md` § L3.10a.
+- Tranché par toi le 2026-11-06 (réponses au lot de questions) :
+  1. Visio : portée en Rust avec le crate `mediasoup` (nouvelle dépendance acceptée) ; « la visio est une partie très
+     importante, ne casse rien » → parité stricte avec `server/visio*.js`, prouvée avant de retirer le JS. FAIT
+     (2026-11-06, L3.10b) — `atome/servers/atome-server/src/visio/` sur `mediasoup` =0.21.0 (capacités du routeur
+     identiques à Node 3.19.14), fonction `visio` par défaut (Tauri et iOS sans) ; le travailleur démarre une fois avec le
+     serveur, son échec est une erreur de démarrage ; `visio_unavailable` ne reste que pour une construction sans la
+     fonction. Preuve `temp/visio_r118/visio_parity.probe.mjs` 58/58 dans les deux ordres (3 pages Chromium, caméra et
+     micro factices, le vrai `visio_call_runtime.js` et mediasoup-client 3.18, A/B contre Fastify) : 131 trames et réponses
+     normalisées identiques, médias réellement reçus à 2 et 3, coupés en sourdine, repris après, après une reconnexion ;
+     `temp/l310_no_fastify/no_fastify.probe.mjs` 16/16. Production : `scripts/server_update.js` installe et vérifie `g++`
+     et `python3-pip`, `atome/documentations/server_installation.md` § Visio. Le JS Node de la visio reste la référence
+     A/B jusqu'à la bascule (liste des retraits : `todo/refonte_rust_etape3_axum.md` § L3.10b). Rien déployé.
+     ATTENTE UTILISATEUR (bloquant pour `cargo deny check`) : le crate apporte trois avis RustSec « non maintenu » (aucune
+     faille) sans version corrigée : `atty` (construction seule), `instant`, `paste` 0.1 ; `deny.toml` exige de les
+     lister avec leur raison (`ignore`), modification refusée à l'agent — à toi de décider : les lister, ou chercher une
+     autre version du crate (0.33.2 existe, travailleur plus récent que Node 3.19, parité à refaire).
+     FAIT (2026-11-06) — l'alarme d'agenda d'une visio planifiée (`eVe/intuition/tools/calendar_alarm_visio.js`) : deux
+     causes. Côté client (corrigé par le coordinateur) : le propriétaire entrait par `joinCall` → `accept`, refusé au
+     propriétaire ; il entre maintenant par `visio.js#openVisioRoom` → `visio_call_runtime.js#openRoom` (`state`, puis
+     `join` dans le mode de la salle). Côté serveur, dans les deux (Rust et Node) : une salle planifiée n'a pas de statut
+     d'appel ; `state` la disait `live`, mais `invite` et `accept` la refusaient (`visio_call_ended`), si bien qu'aucun
+     invité n'était appelé ni ne pouvait répondre. Une seule lecture désormais (sans statut = `live`) :
+     `atome-server/src/visio/state.rs#Meta::status`, utilisée par `calls.rs` et `rights.rs` ; `server/visio_commands.js#statusOf`.
+     Preuve `temp/visio_r118/calendar_alarm.probe.mjs` 28/28 (avant correction serveur : 14/28 sur les deux) : les vrais
+     modules dans des pages Chromium (seul `openPanel` retiré de `visio.js`, le panneau Bevy n'ayant pas de WebGPU ici) ;
+     la salle planifiée avec deux invités, l'alarme du propriétaire l'ouvre (`ok`, en appel), chaque invité reçoit
+     `call-invitation`, l'accepte par `joinVisioCall` et rejoint ; médias reçus à trois (2 audio, 2 vidéo chacun) ;
+     réponses et événements identiques Rust/Node. `visio_parity.probe.mjs` toujours 58/58. L'alarme d'un invité sur une
+     salle qu'il ne possède pas : il entre (`openRoom`, il est invité), appelle les autres, et se refuse lui-même
+     (`visio_target_unavailable`, d'où `calendar_visio_guests_not_called`), pareil sur les deux. `joinCall` y marche
+     aussi, mais c'est la réponse à une sonnerie : il lie la salle à cet appareil (un autre appareil de l'invité est
+     ensuite refusé) ; pour une alarme, `openRoom` est le bon chemin. Le « Rejoindre » de la carte
+     d'événement (`bevy_panel_calendar_runtime.js`, intention `calendar.visio.join`), qui passait par `joinVisioCall` →
+     `accept` (refusé au propriétaire), entre aussi par `openVisioRoom` : FAIT (2026-11-06), même chemin que l'alarme prouvé 28/28.
+  2. Miroir aBox (`server/aBoxServer.js`) : vieux code, retiré. FAIT (2026-11-06) — `aBoxServer.js` et le veilleur
+     chokidar qu'il lançait seul (`server/sync/fileSyncWatcher.js`) retirés, le bus gardé dans `server/sync/syncEventBus.js`,
+     réglages `SQUIRREL_MONITORED_DIR`/`SQUIRREL_SYNC_*`/`SQUIRREL_DISABLE_WATCHER` et `atome/documentations/aBox.md` retirés,
+     aucun reste dans atome-server ; preuve `temp/r118_abox_mail/imports.probe.mjs` 5/5, FRAMEWORK_STATE §5 du 2026-11-06. (La synchro GitHub automatique n'a pas été
+     tranchée : elle reste refusée explicitement au démarrage, `github_auto_sync_unsupported`.)
+  3. Mail en clair (sécurité `none`) : interdit. FAIT (2026-11-06) — `mail_security_cleartext_refused` côté Rust
+     (`mail/socket.rs`, `gateway.rs`, `mod.rs`) et JS (`mail_socket.js`, `icloud_live_credentials.mjs`, `system_mailer.js`),
+     choix `none` retiré des réglages mail d'eVe ; preuves `cargo test -p atome-server --test mail` 2/2,
+     `temp/l39_mail/mail_gateway_parity.probe.mjs` 47/47, `system_mailer_invites_parity.probe.mjs` 48/48.
+  4. Clé privée de test dans `tests/atome_server/mail_vectors.json` : « le plus sécurisé et le plus optimisé », à mon
+     choix. FAIT (2026-11-06) — la fixture ne garde ni clé ni certificat : une AC et son certificat localhost (EC P-256,
+     un jour) sont créés à chaque passage par `openssl` (`tests/atome_server/mail.rs#mint`, `temp/l39_mail/fresh_certs.mjs`) ;
+     transcription régénérée (sessions identiques hors `Date:`) ; aucune clé dans les fichiers suivis (git grep) ; restent
+     dans l'historique git `certs/key.pem` (nov. 2025) et une clé de test mail (mars–juil. 2026) : réécrire l'historique
+     serait à ta demande seulement.
+  5. Texte : T1 gardé, T2 abandonné (rendu cassé pour les emojis et les écritures non latines). FAIT.
+- Questions ouvertes de L3.10a (à te poser ; rien n'est tranché) :
+  - (Tranché le 2026-11-06, FAIT : portée en Rust, voir ci-dessus, L3.10b) Visio (`server/visio.js`, mediasoup).
+  - (Tranché le 2026-11-06, FAIT : retiré, voir ci-dessus) Miroir aBox (`server/aBoxServer.js`, chokidar).
+  - Synchro GitHub automatique (`server/githubSync.js`, `GITHUB_AUTO_SYNC=true`) : `atome-server` refuse de démarrer
+    avec ce réglage (`github_auto_sync_unsupported`). La porter, ou la retirer ?
+  - (Tranché par toi le 2026-11-05) Réparations héritées (`ensureOpaquePrincipalIdentity`,
+    `repairGlobalStateCurrentScopes`) : lancées une fois sur la copie de production avant la bascule, puis retirées.
+  - FAIT (2026-11-06, défaut corrigé à la racine) : la migration des conditions faisait d'une condition vide `''`
+    (« aucune condition ») le texte `'null'`, puis au démarrage suivant un document invalide qui refuse. Elle écrit
+    maintenant NULL, des deux côtés (`central_schema/mod.rs#migrate_permission_conditions`,
+    `database/adole_schema_migrations.js#migratePermissionConditions`) ; preuve `tests/atome_server/central_schema.rs`
+    3/3 (parité Fastify + la condition vide reste NULL après deux démarrages). Les lignes déjà `'null'` en production
+    ne sont pas touchées (les lire « aucune condition » ouvrirait des accès) : à compter sur la copie de prod.
+  - À la bascule : retirer le socket de contrôle de référence (`ATOME_REFERENCE_CONTROL_DIR`) et la référence du
+    harnais, le contrôle du marqueur `server/server.js` dans `main.rs`, puis le JS de Fastify.
+- Contrôles finaux R-118 à faire (relevés le 2026-11-06, en fin de refonte) :
+  - FAIT (2026-11-06, étape 7) — `cargo build/test -p squirrel` (Tauri) après la montée cpal du plugin STT (`vendor/tauri-plugin-stt/src/desktop.rs`) : build ok, tests 21/21.
+  - FAIT (2026-11-06, lot final) — Swift `AppNativeBevyRendererController.swift` (iOS) répond encore à `bevy_native_*`, sans appelant JS : à retirer. Retiré avec ses deux aiguillages (app, AUv3) ; build simulateur OK. Reste : l'ABI `atome_ios_bevy_*` de la bibliothèque iOS n'a plus d'appelant Swift.
+  - FAIT (2026-11-06, lot final) — Tests JS dérivés : charges `clip_fades`/`clip_rounded_rects` (étape 5), 4 assertions de source Swift de la sonde iOS
+    (L3.11), budget brut du WASM 13,1 Mo (déjà dépassé le 4 nov. : 13,44 Mo ; Brotli +2 %, garde-fou +10 %). Charges mises à jour,
+    `ios_native_bevy_contract.probe.mjs` 9/9, budget sur la copie Brotli servie (3,36 Mo × 1,10). Restes relevés : le renderer
+    compte 76 920 fonctions pour un budget de 76 000 dans la même sonde (build finale du renderer = étape 6) ;
+    `calendar_footer_interactions.test.mjs` importe `bevy_panel_calendar_footer.js`, retiré le 2026-10-24 ;
+    `calendar_alarm_actions.test.mjs` 3 échecs anciens (le faux `Atome` sans `listStateCurrent`, `resolveActorProfile` disparu) ;
+    3 cas médias/texte de `bevy_web_renderer_runtime_media_failure.test.mjs`.
+    - FAIT (2026-11-06, suite du lot final) — l'ABI `atome_ios_bevy_*` sans appelant : retirée avec son en-tête et la dépendance
+      `atome-bevy-renderer-core` de la bibliothèque iOS ; build propre simulateur 516 → 323 unités, 1202 → 626 s, archive 119,5 → 37,1 Mo
+      (lipo Xcode 237,2 → 75,3 Mo) ; `cargo check`/clippy aarch64-apple-ios propres ; xcodebuild simulateur app + AUv3 BUILD SUCCEEDED ;
+      sonde L3.11 22/22 (`temp/r118_followup/parity_compare.mjs`) ; `ios_native_bevy_contract.probe.mjs` 9/9.
+    - FAIT (2026-11-06, suite du lot final) — budget de fonctions : 76 000 déjà dépassé par le renderer du 4 nov. (76 440) ; la croissance
+      jusqu'à 76 920 = voies GPU/Rust mesurées (lentille +82, scroll/survol/slider +170, masques et ombres GPU +79, texte T1 +76, masque
+      spatial GPU +73) ; budget 76 920 × 1,1, décision citée dans la sonde (8/8) ; `check_final_wasm.sh` 0 pixel différent, p50 ≤ 1,1 ms ;
+      `home_panic.probe.mjs` sans panique.
+    - FAIT (2026-11-06, suite du lot final) — `calendar_footer_interactions.test.mjs` réécrit sur la bande du calendrier
+      (`bevy_panel_calendar_band.js`) : 12/12.
+  - FAIT (2026-11-06) — `temp/timeline/timeline_sync_real_app.probe.mjs` relancée : toutes les prises OK (prise 4 comprise), 0 échec
+    (`temp/final_r118/timeline.log`).
+  - FAIT (2026-11-06) — `./temp/cleanup_r118/check_final_wasm.sh` sur le `atome/src/wasm` final : 0 pixel différent sur 11 cas,
+    p50 0,6–0,9 ms, 57,8–60 i/s (`temp/final_r118/wasm.log`).
+  - FAIT (2026-11-06) — sonde D20 12/12 (`temp/final_r118/d20.log`) ; `npm run check:js` exit 0 (les 19 « panic » Biome viennent du
+    lien `eVe/R&D/fonds-simulation-20261008` vers `~/Documents/Codex/…`, hors dépôt, préexistant, laissé) ;
+    `npm run check:rust` (`temp/final_r118/check_rust_2.log`) : fmt, host, wasm_bevy, wasm_audio, wasm_direct, ios, linux_confine,
+    test ok. Cause de l'échec host/test précédent : l'extraction OpenSSL du worker mediasoup laissée à moitié par deux builds
+    simultanés (`~/.cargo/registry/src/.../mediasoup-sys-0.11.0/subprojects/openssl-3.0.8` sans son `meson.build`), supprimée et
+    réextraite par meson. Reste `deny` : les 3 avis « non maintenu » (RUSTSEC-2024-0375 atty, -0384 instant, -0436 paste), FAIT (2026-11-06,
+    ton accord) : les 3 ignorés avec leur raison dans `deny.toml` (tous via mediasoup 0.21, à retirer quand il monte) ; `cargo deny check` ok.
+  - FAIT (2026-11-06) — `chokidar` retiré (`npm uninstall`, absent de `package.json` et du verrou, aucun import restant).
+  - À te dire à la fin : deux anciennes clés privées restent dans l'historique git d'atome (`certs/key.pem` 2025-11-21→26, une clé dans
+    `src/squirrel/mail/node_protocol_transport.integration.test.mjs` 2026-03-14→07-03) : les considérer comme
+    publiques si elles ont servi ; les effacer = réécrire l'historique (ta demande explicite seulement).
+- Défaut relevé, gardé tel quel (comportement Fastify, décision 5) : un undo rejoué avec le même `requestId` répond
+  `event_id_conflict` au lieu de rendre le résultat du premier (fixture étape 56).
 ### R-117 — Écran guidé « deux façons » : textes superposés, prononciation d'eVe (2026-11-04)
 - Statut : FAIT (2026-11-04) — prononciation corrigée et phrases régénérées ; le chevauchement ne vient que du chemin de test
 - Source : toi, pendant les prises R-013 sur « Ipad atomic » : « les textes se chevauchent… le texte et même les logos sont
@@ -56,14 +426,519 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 - Reste : vérifier sur l'iPad après la prochaine build. Calendrier reste `intermediate` (rien demandé).
 
 ### R-115 — Cahier D18 : améliorations 1–15 et débogages D1–D21 (2026-11-04)
-- Statut : EN COURS (2026-11-04, session D18) — agents par lot en cours ; état par point dans
+- Statut : ATTENTE UTILISATEUR (2026-11-04, session D18) — tous les lots codés et prouvés sur Web/Node, publiés (eVe
+  `f189ef7f`, atome `fad2f55d2`, demande de push de l'utilisateur) ; questions ci-dessous posées le 4 nov. ; tests appareil à faire ; état par point dans
   `todo/ameliorations_debogages_D18_2026-11-04.md` (copie du cahier fourni + D19–D21 ajoutés oralement le 4 nov.).
 - Source : fichier `atome-eVe_ameliorations_debogages_D18.md` donné le 2026-11-04 ; D19 (glisser sur le V en paysage),
   D20 (code du second appareil introuvable, aucune notification app ouverte), D21 (rafraîchissement transversal) dits
   oralement le même jour.
 - Fait, prouvé (Web) : D17/D18 (`temp/d18_rail/probe_rail_palette.mjs` 62/62 sur le vrai modèle + défilement), D11
   (seuil 115 px ; accueil réel : libellés 120 à 15,6 px, `temp/d18_rail/ui.probe.mjs`), D10 (commit eVe `c774fce4`, revérifié par le lot Activités).
+- Réponses de l'utilisateur (2026-11-04, après le push) — VALIDÉ, à coder :
+  - D1 « Décrocher » (version A codée) : validé. D4 « Moteur » : validé, mais le choix vit dans les préférences de
+    l'utilisateur (une fois pour toutes), jamais à chaque ouverture du Web ; moteur par défaut Ecosia.
+  - 1–3 Sport : maquettes m1/m2 validées. 5 Aléatoire : validé ; vérifier que le point repère suit le ruban quand il
+    s'agrandit (loupe), sur tout ruban, pas seulement Musique.
+  - 6 : rien perdu à la déconnexion ; Android : pas d'historique au-delà de 30 jours pour l'instant.
+  - Règle 21 (AGENTS.md) : le serveur est la seule source de vérité, tout y est (santé, photo de profil…), ne plus demander.
+  - 7 CarPlay démarre l'assistant : comportement voulu, rien à faire.
+  - 9 : assouplir la règle 14 si plusieurs couleurs sont nécessaires, avec des couleurs de référence.
+  - 10 A : le retournement suit le doigt et revient en arrière ; vers le haut, les autres tuiles ne tournent pas, elles
+    sont repoussées / compressées, éjectées si la tuile prend toute la place ; une plaque du Mystic suit le sens du
+    mouvement, comme la majorité de sa ligne (horizontal préféré) ; la vague part du point exact du doigt. B : règle 13 ;
+    sur l'accueil vers le haut ouvre la rubrique comme ailleurs ; vers le bas = réglages (comme aujourd'hui) ; sur une
+    tuile autre que le V, gauche/droite = panneau suivant / retour jusqu'au Dashboard, rien avant le Dashboard principal.
+    C : V vers la droite = profils, vers la gauche = choix de la vue (plaque au logo eVe, « eVe Basic » / « eVe Pro ») ;
+    le changement se fait au lâcher, revenir au centre et lâcher referme ; un toucher demande un second toucher.
+  - 11 : aperçu HTML isolé et sécurisé, nouvelle surface hors Bevy : validé.
+  - 12 : « Feature request » dans Réglages › Avancé, à côté du relevé de bugs ; validation par l'administrateur
+    (l'utilisateur), ce qui est validé alimente la roadmap.
+  - Nouvelle demande : la planète du filtre « partout » de la recherche → un autre symbole (pas une planète, on croit
+    que c'est Internet).
+  - D9 validé (carte des Lieux, groupes de contacts). D19 paysage : même comportement qu'en portrait (corrigé par R-114,
+    à revoir sur l'appareil). D20 : cacher les demandes aux appareils dans leurs 72 premières heures.
+  - Suite des réponses (2026-11-04) : 13 C/D fiches validées, glyphes Patrimoine (colonne à fronton) et Thermes (vagues)
+    validés ; défaut à corriger : l'aperçu de la fiche passe sous la date et la météo, doit aller jusqu'au bord et
+    rester dans la grille des tuiles. D14 m1–m4 validés mais le déroulé n'est pas clair : après le bip, montrer la photo
+    du produit (petite), dessous un texte clair (bon / pas bon / recommandation / ce qui ne va pas), puis valider —
+    nouvelle maquette à proposer. 6 : ne pas afficher la source des séances importées ; une séance effacée dans Santé
+    reste dans eVe (pas bidirectionnel, tout ce qui est dans eVe y reste et va au serveur). Agenda › « Sorties » (eVe
+    Basic) renommé « Loisirs » (ou restructuré, décision laissée à la session). Paliers : proposition acceptée
+    (Bien-être palier 2, palier 1 pour sommeil/stress ; Trajets palier 3 ; Compléments palier 3 pour nutrition ;
+    Boutique fermée tant qu'elle est vide). D13 Live Activity : maquette à faire. D4 : Ecosia partout, Google sur Web où
+    Ecosia refuse de s'afficher. Sport : les 4 recommandations acceptées (progression actuelle par défaut, pas choisi
+    exact, nombre naturel suivant par défaut, Perso et Record reprennent). Point 5 : la bulle blanche d'un curseur reste
+    parfois à sa place d'origine quand le curseur s'agrandit (loupe du ruban) — défaut à corriger, sur tout ruban.
+  - Maquettes à faire puis à valider : D14 déroulé du résultat, D13 Live Activity, glyphe « partout » de la recherche,
+    12 « Feature request » (Réglages › Avancé), 11 aperçu HTML isolé, 9 préférences visuelles (transparence, flou,
+    arrondi, couleurs de référence ; joint et rapport des textes pris par R-114).
+  - Maquette D13 prête (`temp/d18_native/mockups/d13_live_activity_1_ecran_verrouille.png`, `_2_dynamic_island.png`,
+    zooms) ; questions : conteneur iOS hors grille/rayon, disque Sport réduit (plafond Apple 160 pt), Pause/Arrêt sur la
+    carte (pas de bande), marque Atome absente.
+  - Maquettes D14 m5 prêtes (`temp/d18_scanner/mockups/m5_a_result_limit.png`, `m5_a_result_good.png` recommandée ;
+    `m5_b_result_tile.png` variante) ; questions : « Au panier »/« Éviter » sur une 2e rangée de la bande au-dessus du
+    champ (ou champ replié en loupe), rangées de raisons, rangée « Code », formulation des phrases.
+  - 10 codé (vraie app `bbis.probe.mjs abc` 35/35) : retournement qui suit le doigt et revient, rotation dans le sens du
+    doigt, vague depuis le doigt, V gauche = plaque de vue au lâcher, V droite = profils, toucher = les quatre. Restent :
+    ouverture vers le haut (tuiles repoussées/iconisées) contre la règle 12 → maquette A3 en préparation ; « vers le bas =
+    réglages » : seulement sur le V (actuel) ou sur toute tuile de l'accueil ?
+  - Maquettes 9 prêtes (`temp/d18_visual/mockups/m1_panneau_visuel.png`, `m2_couleurs_reference.png`,
+    `m3_accueil_avant_apres.png`, README) : Opacité 0–100 % (33), Flou 0–34 px (9), Arrondi 0–15 px (3), six couleurs de
+    référence ; amendement de la règle 14 proposé mot pour mot. Questions : les six couleurs et leurs surfaces ; 6 choix
+    ou roue libre ; opacité/flou aussi sur la dalle des panneaux ; plages. Défauts vus (contrôle de couleur
+    `bevy_panel_color_control.js`) : noms R/V/B sous la bulle, « rgba(… » coupé sans « … », Luminosité/Opacité pas en
+    ligne de curseur — à corriger au codage.
+  - 1–3 écran codé (vraie app `temp/d18_sport/resume_ui.probe.mjs` 12/12, moteur 33/33) : Mode, Progresse, Pas, Adapt. sur
+    les rouleaux du Détail, « par côté ». Question : valeur « Auto » ajoutée en tête de Progresse (= pas de progression
+    choisie), ou la retirer et prendre Maintien par défaut ?
+  - D9 : carte des Lieux codée (vraie app `temp/d18_search/map.probe.mjs` OK). Maquettes : glyphe de l'outil « Global »
+    (`temp/d18_search/mockups/m_tout_glyph.png`, A recommandé ; le mot « Global » à revoir ?) ; vue d'un groupe de contacts
+    (`m_groupe_contacts.png`).
+  - Maquettes A3 prêtes (`temp/d18_gestures/mockups/A3_ouverture_option1_sortie.png` recommandée, `_option2_icones.png`).
+  - Défaut du verre (2026-11-04) corrigé pour une rubrique ouverte depuis une tuile : les tuiles de l'accueil restaient
+    sous les plaques de verre et s'y voyaient floutées (`temp/d18_glass/fix.probe.mjs` Δ 0, fiche
+    `known-bug-solutions/rubric-glass-blurs-previous-home/`) ; autres passages (Pro↔Basic, projet → Dashboard) en cours. Ordre voulu : maquettes envoyées, validation, puis tout le code.
+  - D4 suite FAIT (vraie app `temp/d18_webview/web_engine_pref.probe.mjs` 17/17, Node `engine_host.probe.mjs` 9/9) :
+    Ecosia par défaut partout, Préférences › Moteur de recherche (brique Réglages « Moteur »), Google montré sur Web seul
+    (Ecosia/DuckDuckGo refusent l'iframe), le choix gardé dans le profil serveur. Appareils : non vérifié (à l'utilisateur).
+    Défaut vu : `bevy_panel_home_actions.js#persistHomeProfile` réécrit toute la section `preferences.dashboard` avec la
+    copie du panneau ouvert (écrase un changement fait ailleurs pendant ce temps) — à corriger au codage.
+  - Maquettes 11 et 12 prêtes (`temp/d18_mockups_11_12/out/`, README et TECH_NOTE). Questions 11 : entrées (projet de
+    code, objet de projet, les deux) ; un `.html` importé devient l'objet page ? ; ligne « Réseau refusé » ; réseau
+    bloqué ou liste permise ; atomes convertis à côté ou à la place ; « Fermer » dans la case du lecteur Web. Questions
+    12 : Bug/Demande choisi dans le formulaire ; reconnaître l'admin (id de compte dans la config serveur) ; refus avec
+    motif, glyphe de « Refuser » ; états et qui les déplace ; Roadmap visible de tous.
+  - 2026-11-04 : TOUTES les maquettes envoyées en PNG (D13, D14 m5, A3, 9 m1–m3, recherche glyphe + groupe, 11, 12) et
+    les questions posées → ATTENTE UTILISATEUR. Défaut vu : le détail d'un rapport (Avancé) coupe sa dernière ligne.
+  - Activités suite FAIT (vraie app `temp/d18_activities/cards_real.probe.mjs` 30/30, `progression_and_agenda.probe.mjs`
+    12/12, `lodging_and_registry.probe.mjs` 29/29) : aperçu jusqu'au bord (`dashboard_stage_list_view.js#previewListBoxes`),
+    fiches C/D (lignes réelles, crédit OSM daté, Thermes = vagues + « À proximité » 3 tuiles), Agenda › Sorties → Loisirs,
+    paliers Bien-être 2 (1 pour sommeil, méditation, santé mentale), Trajets 3, Compléments 3 (objectifs nutrition/poids),
+    Boutique fermée. Appareils et paysage : non vérifiés.
+    Question 28 (ATTENTE UTILISATEUR) : l'accueil eVe Basic (Contacts, Agenda, Objectifs) n'a pas d'Activité, donc les
+    briques gagnées (Bien-être, Trajets, Compléments, Sport) ne se montrent nulle part : (a) la plaque Agenda ouvre le
+    niveau Activité, (b) elles vont dans Objectifs, (c) une tuile Activité apparaît une fois gagnée.
+    Question 29 : « stress » n'existe pas comme objectif ; pris = méditation + santé mentale.
+  - Verre suite FAIT (vraie app `temp/d18_glass/transitions.probe.mjs`, `page_turn.probe.mjs`) : projet → Dashboard Δ 0,
+    Pro ↔ Basic identique à un démarrage neuf, niveau ouvert, rubriques Basic, tour de page : plaques Δ 0. Non couvert :
+    geste V-gauche (passé par les préférences), iPad. Question 30 (ATTENTE UTILISATEUR) : pendant les 0,6 s de fermeture,
+    le verre peut encore montrer l'accueil ; seul remède = le shader des plaques floute la capture d'arrière-plan
+    (`procedural_sdf.wgsl`, `mystic_capture.rs`, chaîne mip de `workspace_blur_pyramid.rs`) ; coût : un fond vidéo figé
+    sous les plaques pendant une cascade. Réponse (4 nov.) : « Yes, do it » → FAIT : les plaques floutent la capture d'arrière-plan
+    (`atome/renderers/bevy-core/src/mystic_capture.rs`, `workspace_blur_pyramid.rs` multi-pyramide, `procedural_sdf.wgsl`),
+    WASM 6afa45b4a7478790 ; preuve `temp/d18_glass/closing_cascade.probe.mjs` Δ 0 à 7 instants (360k px), fix/transitions/
+    page_turn Δ 0, cargo test 16/16. Masquage JS `covered` gardé (interstices au repos). Non vérifié : iPad, fond vidéo.
+    Effet visible signalé : le verre des menus Mystic d'un projet floute désormais l'arrière-plan, plus les objets. Validé par l'utilisateur (4 nov., « Yes, keep it »).
+  - Questions une par une (4 nov., soir ; l'utilisateur : poser toutes les questions une à une, puis tout coder sans
+    s'arrêter). Réponses : 1 D13 validé tel quel ; 2 D14 version A ; 3 « Au panier »/« Éviter » sur une 2e rangée
+    au-dessus de la bande ; 4 rangées de raisons et « Code » gardées ; 5 ton validé (tutoiement, phrase courte, produit
+    conseillé). 6 : A3 ABANDONNÉ. Nouvelle règle (écrite dans AGENTS.md règles 13 et 20) : navigation sur un
+    seul axe ; droite ou haut sur une tuile = Suivant (flèche →) = ouvre son contenu dans le sens du doigt (dashboard :
+    ses tuiles se retournent une à une en vague ; panneau : s'ouvre dans ce sens) ; gauche ou bas = Précédent (flèche ←)
+    = retour ; suit le doigt, coup sec = passe ; revenu avant de lâcher = rien ; page suivante d'une grille = flèches ou
+    glissé sur le fond entre les tuiles. À vérifier partout : tuiles qui ne tournent pas, geste rapide qui ne passe pas.
+    L'ancienne question « vers le bas = réglages » tombe (bas = Précédent).
+    Suite des réponses : 9 couleurs = les six (fond + cinq pastels) ; 6 propositions seulement (pas de roue) ; opacité
+    et flou aussi sur la dalle des panneaux ; bornes Opacité 0–100 (33), Flou 0–34 (9), Arrondi 0–15 (3). Sport : « Auto »
+    gardé en tête de Progresse. Recherche : glyphe A, outil renommé « Partout ». Groupe de contacts validé. 11 : les deux
+    entrées ; un .html importé devient l'objet page ; ligne « Réseau refusé » affichée ; réseau = liste d'adresses
+    permises, demandée à la 1re fois (outil Autoriser) ET modifiable dans Avancé ; atomes convertis à côté ; rangée
+    d'outils de l'aperçu validée. 12 : Bug/Demande choisi dans le formulaire ; admin = un vrai rôle admin sur le compte ;
+    refus avec motif facultatif, glyphe pouce baissé. 24 : états changés par l'utilisateur dans l'app et par les agents
+    (En cours puis Faite) ; demandes validées par l'utilisateur et les admins. 25 : Roadmap visible de tous. 26 : une
+    tuile Activité apparaît sur l'accueil eVe Basic dès la 1re activité gagnée. 27 : Méditation + Santé mentale validés.
+    TOUTES LES QUESTIONS SONT RÉPONDUES (4 nov., soir) → codage de tout, sans s'arrêter.
+  - Ajout de l'utilisateur (4 nov., soir), « à ajouter à la tâche en cours quand tu auras fini » : trois évolutions —
+    (1) Activité › Médicaments (BDPM / API médicaments, prises, rappels, historique, données de santé à part),
+    (2) Navigation : une seule ligne en bas « Atom | Input | ← | Dashboard | → », (3) Vidéo : clic simple = contrôles,
+    double-clic = plein écran, clic long = plein écran (normal) / contrôles (plein écran) — à vérifier si déjà fait.
+    Consigne : analyse de l'existant, plan, texte exact pour le suivi, PUIS validation de l'utilisateur avant toute
+    modification. Analyse en cours (`temp/d18_plan/`).
+  - D13 Live Activity CODÉ (4 nov. soir) : `eVe/domains/live_activity/live_activity_link.js`, cible iOS `atomeLiveActivity`
+    (`platforms/ios/atome-auv3/liveactivitywidget/`, `LiveActivityHost.swift`) ; widget xcodebuild OK, typecheck app OK,
+    sonde pont `temp/d18_native/d13/live_activity_bridge.probe.mjs` OK. NON VÉRIFIÉ : build complet de l'app (phase Rust
+    évitée pendant la refonte), signature de l'extension, rendu sur appareil (Live Activities : iPhone ; iPad à vérifier).
+    Écarts à valider : glyphes SF Symbols au lieu des SVG eVe ; île minimale « 0:42 » au lieu de « 42 » ; un toucher
+    ouvre eVe (pas la carte) ; rien pendant le 3-2-1.
+    VALIDÉ (5 nov.) : garder « 0:42 », le toucher qui ouvre la séance, rien pendant le 3-2-1 ; les icônes restent les
+    SVG d'eVe (copiés tels quels dans le catalogue d'images du widget, vectoriel préservé) — FAIT (5 nov.) :
+    liveactivitywidget/Assets.xcassets (eve_play, eve_pause, eve_stop, eve_heart, template + vectoriel), EveSessionViews.swift
+    `EveGlyph` ; xcodebuild : appex compilé, Assets.car avec 4 vecteurs en mode template (assetutil) ; le build de l'app
+    échoue sur la dépendance Rust signalsmith-stretch pour le simulateur (sans rapport). Non vérifié sur appareil.
+  - Navigation sur une ligne — réponses (5 nov.) : seules les captures Sport `← ⌂ →`, Réglages `< >` (droitier),
+    Réglages gaucher `< ⌂`, paysage sont valides (`temp/d18_plan/out/`), mais elles ne couvrent pas tout. Règle : les
+    flèches toujours sur la ligne du bas, jamais sur la rangée du dessus ; sans Dashboard (premier niveau) les deux
+    flèches sont ACCOLÉES, sans case vide entre elles ; le Retour toujours à gauche de l'Avance quand les deux sont là
+    (gaucher compris) ; Dashboard entre les deux quand il est là. Précédent et Retour fusionnés en une seule ← (page d'avant, niveau au-dessus,
+    accueil). → = page ou étape suivante, absente s'il n'y a rien après. Une rubrique de premier niveau n'affiche
+    JAMAIS le Dashboard, à aucune page (« un simple clic sur la flèche y retourne »). Maquettes de tous les cas demandées
+    avant validation (`temp/d18_plan/out2/`). Maquettes 6 et 7 (`← ⌂` avec l'outil Dashboard au bord) REFUSÉES : l'outil
+    Dashboard est toujours plus à l'intérieur de l'écran que les flèches, jamais au bord, sauf quand aucune flèche n'est
+    présente (dans un projet, il peut alors être au bord). Cas « 2e niveau sans → » = `⌂ | ←` (← au bord). Le reste des maquettes
+    out2 est VALIDÉ (5 nov.). Navigation sur une ligne : FAIT sur Web (5 nov., lot D22) —
+    `dashboard_footer_navigation.js#footerCornerOrder`, `bandLayout`, `pagerRect` retiré, ⌂ seulement en profondeur > 0,
+    premier lancement aligné (Atome dans son coin selon la main, ✕ et flèches en face), tuile Agenda sans feuilletage ;
+    sondes `temp/d18_nav_line/nav_line.probe.mjs` (121/121 : droitier, gaucher, paysage, micro) et
+    `first_launch.probe.mjs` (82/82, vrai premier lancement, deux mains, 430×932 et 390×667). Reste : essai sur l'iPad USB (utilisateur).
+  - Vidéo — réponses (5 nov.) : 1 l'image d'une vidéo devient place nommée de ses contrôles (règle 13, à écrire).
+    Gestes (correction de l'utilisateur) : MAINTIEN = toujours le menu Mystic, en lecture comme à l'arrêt (plein écran
+    compris) ; DOUBLE CLIC = plein écran (et en sortir) ; CLIC = affiche / masque les contrôles.
+    CORRECTION de l'utilisateur (5 nov.) : les gestes ci-dessus valent en CONSULTATION (le Dashboard en est proche).
+    Le mode ÉDITION d'un projet ne change pas : clic = sélection de l'objet, lecture par la bande latérale (rail),
+    double clic = edit / recadrage (crop), jamais plein écran. Trois modes de projet : édition, consultation, exécution
+    (en EXÉCUTION : comme en consultation — validé 5 nov.).
+    5 plein écran : rien que la vidéo (aucun outil, aucune ✕). Un clic fait apparaître les contrôles, et avec eux la ✕
+    dans la bande du bas à la place de Retour ; un nouveau clic les cache. On sort par un double clic (toujours) ou
+    par la ✕ quand les contrôles sont visibles.
+    6 portée (5 nov., message) : étendre aux PHOTOS et aux SONS (pochette si musique, sinon forme d'onde) ; en plein
+    écran un glissement passe au média suivant. L'utilisateur demande D'ABORD une étude (recherche web) : quel axe pour
+    « suivant » (haut-bas façon TikTok ou droite-gauche façon Tinder/galeries), et pour les usages avancés (réseaux,
+    fils, discussions) un axe = dans le sujet, l'autre = sujet suivant ? Étude : temp/d18_plan/swipe_axes_study.md.
+    Étude rendue ; VALIDÉ (5 nov.) : plein écran d'une collection = glissement horizontal, DOIGT VERS LA GAUCHE =
+    média suivant (le contenu suit le doigt, comme Photos et la règle 13) ; règle 20 à préciser (tuile : droite =
+    ouvrir ; média plein écran : gauche = suivant). Flux futurs (réseaux, fils) : VERTICAL = dans le sujet (doigt vers
+    le haut = suivant), HORIZONTAL = sujet voisin. Vidéo : questions closes.
+    D23 CODÉ ET PROUVÉ sur Web (5 nov.) : sonde `temp/d18_media_gestures/media_gestures.probe.mjs` (Dashboard liste mixte,
+    projet en Consultation et en Édition ; état par point dans `todo/ameliorations_debogages_D18_2026-11-04.md` § D23).
+    Suite D23 FAITE (5 nov.) : marque « V » retirée du plein écran du Dashboard (rendue à la sortie) ; prises, prises de
+    l'entraînement et vidéos de la conversation : même ✕ en case de Retour et même glissé latéral ; `captures.fullscreen` ;
+    son d'un projet plein écran : sa pochette (`poster_source`) sinon sa forme d'onde (`media_cover.js`) ; Exécution essayé
+    à part ; `media_lists.control` pilote la Médiathèque ouverte. Règles 13 et 20 d'AGENTS.md vérifiées (texte de
+    l'utilisateur présent). Preuve : même sonde, parties L A E B C D.
+    Suite 2 D23 FAITE (5 nov.) : ✕ du plein écran peinte sur tous les hôtes (collision d'identifiant d'arbre avec l'hôte,
+    profondeur sous l'image ; `createMediaCloseOverlay({ hostTreeId })`, `mediaControlsToolsLayer()`), sol média en jeton
+    (`EVE_COMMON_SKIN_TOKENS.mediaGround`), vidéo de conversation finie en plein écran → fil rendu, son téléversé depuis le
+    Dashboard réparé (`asset_box_media.js`). Preuves : `temp/d18_media_gestures/media_gestures.probe.mjs` LAEBCD 68/68,
+    `training_takes.probe.mjs` 11/11, `conversation_takes.probe.mjs` (deux comptes) tout OK, `list_share_ui.probe.mjs` S7.
+    Reste : essai sur l'iPad USB (utilisateur).
+  - Médicaments — VALIDÉ (5 nov.) : Q1 BDPM importée chaque mois par le serveur (binaire Rust natif), index poussé aux
+    appareils, recherche sur l'appareil, aucune requête vers un tiers ; Q2 tuile visible d'emblée dans Activité juste
+    après Compléments, eVe Pro et eVe Basic. Q3 VALIDÉ : chiffrement de bout en bout (clé du compte), jamais lu par les IA ; lot à part
+    codé dans cette tâche après les écrans.
+    NOUVELLE DEMANDE (5 nov., message) — listes médicamenteuses partagées : un « + » crée une liste (médicaments,
+    posologie, horaires) POUR SOI ou POUR UN TIERS. Pour soi : affichée au Dashboard, prises planifiées, horaires
+    ajoutés à l'Agenda. Pour un tiers : gardée dans la liste des médicaments de l'auteur avec le nom de la personne
+    (et le nombre), jamais affichée au Dashboard ni ajoutée à l'Agenda ; envoyée par un partage ; le tiers DOIT la
+    valider (confiance) et reçoit alors posologies et horaires d'office. Cas type : un médecin vers son patient ; pas
+    de certification des médecins ; s'appuie sur la notion d'admin existante (auth_account_roles). Les IA pourront
+    faire de même à partir d'une ordonnance lue. À questionner puis maquetter (règle 16).
+    Listes 1 VALIDÉ : tout le monde peut envoyer une liste à l'un de ses contacts ; la validation du destinataire fait
+    la confiance (pas de rôle, pas de certification). Listes 2 (liste modifiée après envoi : nouvelle version à
+    valider, ou liste figée) posée, réponse non reçue ; restent 3 (IA et ordonnance), 4 (sortie d'une liste pour un tiers).
+    EXTENSION (5 nov., message) : l'envoi d'une liste à un tiers vaut pour TOUTES les listes (musique, compléments,
+    activités, tout média et tout type d'atome dès qu'il y a une liste ou un protocole), pour la viralité, aussi par
+    le réseau social intégré. Transverse, implémenté partout. Recherche de l'existant puis maquette à valider
+    (« c'est assez important »). Audit : temp/d18_plan/list_share_audit.md.
+    Q4 HDS RÉGLÉ (5 nov.) : phase de test, tout coder et ouvrir dès que codé, sans garde juridique ; hébergement
+    futur chez Almerys (HDS), OVH ne sert qu'aux SMS.
+    Partage VALIDÉ (5 nov.) : 1 après accord, la liste reste LIÉE à l'auteur, chaque nouvelle version (changements
+    marqués) s'applique seulement une fois validée, l'ancienne continue entre-temps, le destinataire peut se détacher
+    et garder sa copie (modèle protocol_template) ; 2 les programmes d'activité/objectif sont partageables (blocage
+    shares.rs levé) : seul le plan est partagé, séances et mesures restent au destinataire.
+    Listes 3 VALIDÉ : l'IA lit une ordonnance donnée (photo) et en tire un BROUILLON de liste reçu comme une liste
+    envoyée, à valider ; elle ne lit jamais le traitement enregistré ni les prises. Questions closes → maquettes.
+    Maquettes Médicaments M1, M1b, M1c, M2, M2b, M3, M4, M4b, M5, M6 VALIDÉES (5 nov.). Maquettes S1–S7 du partage
+    de listes VALIDÉES (5 nov., temp/d18_plan/share_mockups/out/) : S1 outil « Envoi » dans la rangée d'outils de
+    toute liste ; S2 carte Publier = nom + nombre ; S3 Pour moi / Pour un tiers + personne ; S4 tuile coin plié
+    « Marie (3) » hors Dashboard/Agenda ; S5 mots « Valider / Refuser » sur TOUTES les cartes de partage (remplacent
+    Oui / Refus) ; S6 version marquée + Détacher ; S7 brouillon IA AVEC vignette de l'ordonnance (toucher = plein écran).
+    Demandes : outils de la Roadmap (b3b) et motif de refus (b4) VALIDÉS (5 nov.).
+    AJOUTS (5 nov., message) : (a) supprimer une liste ou un protocole entier, ou un médicament seul ; mettre en pause,
+    arrêter, supprimer, comme les autres listes ; arrêt automatique complet à la fin d'un protocole ; un traitement a une
+    date de fin OU est au long cours (les deux cas). (b) ORDONNANCE DICTÉE : le médecin dicte (speech to text), une IA
+    analyse, le médecin valide le texte, eVe met en forme un document au format ordonnance, transmis au patient (la liste
+    avec posologies, pré-remplie ou non selon la dictée) ET au médecin, qui n'a plus qu'à la signer.
+    D24 + D29 CODÉS (5 nov., écrans) — FAIT, prouvé Web : tuile Médicaments (Pro et Basic), M1–M6, Pause/Arrêter/Supprimer
+    (liste et médicament), arrêt automatique, parité Compléments ; commandes MCP `health_products.*` (refusées aux IA) ;
+    sondes temp/d18_meds/meds.probe.mjs, basic.probe.mjs, model.probe.mjs ; coffre serveur lu. RESTE : l'import BDPM et son
+    contrat JS (agent Rust ; index lu en `assets/health/bdpm_index.json`, fixture de sonde), le chiffrement de bout en bout
+    (Q3, lot à part), le scan DataMatrix sur l'iPad (compilé seulement).
+    ÉCARTS RÉGLÉS (5 nov., coordinateur) — FAIT, prouvé Web : doses = recommandations pré-remplies selon la posologie et tous
+    les paramètres connus de la personne (person_parameters.js ; inconnu jamais deviné), fiche « à valider » sans prise ni
+    rappel jusqu'à « Valider » (✓) ; roller « Max/jour » ; Supprimer au second toucher gardé ; eVe Basic : un médicament fait
+    gagner la tuile Activité ; cartes CODEMAP/API_MAP. Puis (5 nov.) FAIT : le DFG en mL/min/1,73m² lu par le lecteur de
+    résultats (lab_reader.probe.mjs), l'Allaitement ligne du profil de santé après Grossesse, lu par person_parameters.
+    RESTE : la posologie portée par le contrat Rust (fixture d'ici là ; posologyOf déplacé par l'agent Rust).
+    (a) VALIDÉ : Pause = suspend prises et rappels jusqu'à reprise ; Arrêter = finit aujourd'hui (comme la fin auto),
+    garde l'historique ; Supprimer = efface tout, prises comprises, après confirmation dans la bande.
+    (b) Ordonnance 1/3 VALIDÉ : signature au doigt dans eVe, ET outils Imprimer (commande d'impression à l'hôte) et
+    Exporter (PDF hors d'eVe, un des rares exports permis) ; 2/3 VALIDÉ : identité de l'auteur
+    dans un volet « Ordonnances » de Réglages › Profil (nom, qualité, RPPS, cabinet), patient tiré du contact, pas de
+    vérification RPPS. Rappel de l'utilisateur : LES DEUX choix, au doigt ET impression/export. 3/3 VALIDÉ : « + » Pour un tiers,
+    micro de la bande, dictée analysée par l'IA qui remplit les lignes, relecture et correction, validation → liste au
+    patient + ordonnance à signer ; aussi par l'assistant (« fais une ordonnance pour Marie ») ; aussi à la main comme
+    tout le monde ; aussi depuis une PHOTO analysée par l'IA ; quand l'IA est là, elle corrige d'office (voix et image).
+    Maquettes O1–O5 en cours (temp/d18_plan/ordonnance_mockups/out/). Restent aussi : écarts D13, feuilletage de l'Agenda Pro (VALIDÉ 5 nov. : la règle à un axe s'applique, plus de défilement latéral, droite = ouvrir l'Agenda),
+    placement de la vue Groupe (VALIDÉ 5 nov. : grille de l'accueil depuis le bas, code gardé), nouveaux éléments (Roadmap, refus : VALIDÉS ; aperçu de page : VALIDÉ 5 nov. — nom du site refusé,
+    outil Autoriser (globe), accordéon « Réseau des pages » dans Avancé, l'outil s'appelle « Lancer » partout),
+    admin natif (VALIDÉ 5 nov. : partout, les serveurs locaux iOS/Tauri relaient les trames d'admin vers atome.one).
+    Toutes les questions sont closes sauf les maquettes O1–O6 de l'ordonnance (en préparation).
+    CONSIGNE (5 nov.) : ne RIEN coder tant que tout n'est pas établi. Collection du plein écran VALIDÉE : les médias de
+    la vue d'origine, dans son ordre et son filtre (grille/liste de Média, playlist, médias du projet dans l'ordre de la
+    scène), tous types ensemble ; une liste hétérogène est respectée et lue en entier ; au bout rien ne bouge.
+    Maquettes O1–O5 VALIDÉES (5 nov.) ; deux couleurs du papier (encre, gris) en jetons. Identité du praticien (nom,
+    qualité, RPPS, cabinet) lue d'office dans sa fiche/contact personnel en base ; si elle manque, saisie sur
+    l'ordonnance même, qui remplit sa fiche (bidirectionnel, renseigné une seule fois) ; liée aux profils de vie :
+    profil professionnel s'il existe, sinon le profil de base. O6 VALIDÉE : toutes les maquettes de l'ordonnance sont validées.
+    AJOUT (5 nov., message) — AIDE À LA PRESCRIPTION : pré-diagnostic établi par l'assistant à partir des symptômes
+    (renseignés par le patient ou le médecin), qui aide le médecin ; suggestion de traitement et PRÉ-ORDONNANCE, validées
+    par le praticien ; vérification et prévention de TOUTES les interactions médicament–médicament et
+    médicament–alimentation (en rapport avec la liste de courses et les repas préconisés par les objectifs et activités) ;
+    vérification des antécédents et allergies du Carnet de santé ; horaires de prise optimisés selon tous ces paramètres.
+    VALIDÉ (5 nov.) : 1 Thésaurus ANSM + RCP §4.3/4.4/4.5 importés par le serveur (binaire Rust, avec la BDPM) en
+    règles ; contrôle par règles, sans IA ; l'assistant explique et propose. 2 contrôles sur l'appareil ; l'assistant ne
+    reçoit symptômes et éléments du carnet que le temps d'une demande lancée par la personne, ne garde rien. 3 le patient
+    voit AUSSI le pré-diagnostic et le traitement suggéré, marqués « à valider par le médecin », avant l'envoi à un
+    médecin choisi parmi ses contacts ; le médecin valide, corrige ou refuse ; quand le médecin décrit lui-même les
+    symptômes il voit tout. 4 ligne en cause marquée (raison + source : Thésaurus, RCP, carnet), alternative ou écart
+    d'horaire proposé ; une contre-indication bloque Valider tant que le médecin ne l'a ni changée ni confirmée ; un
+    aliment à éviter est signalé aussi sur la liste de courses et les repas proposés. 5 horaires optimisés proposés,
+    ajustables par le médecin puis le patient dans les marges des règles ; un horaire hors règle est marqué.
+    Maquettes P1–P4 VALIDÉES (5 nov.) ; lever un blocage : toucher la ligne → Remplacer (l'alternative) ou Confirmer.
+    P5a/P5b VALIDÉES : toutes les maquettes de l'aide à la prescription sont validées.
+    AJOUT (5 nov., message) — CONSEILS ALIMENTAIRES SELON LA SANTÉ, transverse à tout le framework (pas seulement
+    l'ordonnance) : pour une allergie ou une pathologie (ex. diabète), conseils culinaires (des pâtes peu cuites…),
+    aliments à éviter mis dans les « déconseillés » avec la raison, contre les idées reçues dépassées ; validés par le
+    médecin. VALIDÉ (5 nov.) : 1 base de règles tenue dans eVe, par pathologie et allergie (aliments déconseillés,
+    conseils de cuisson/préparation, raison, source HAS, ANSES/PNNS, FFD…), appliquée par règles sans IA, expliquée par
+    l'assistant ; 2 s'applique d'office dès qu'une pathologie ou allergie est au carnet ; le médecin du patient peut en
+    ajouter, retirer, nuancer par une liste envoyée (validée par le patient), ses ajouts portent son nom.
+    RAPPEL (5 nov.) : COMPLÉMENTS ALIMENTAIRES = exactement la même chose que les médicaments (partage de liste,
+    interactions, optimisation des horaires, selon la pathologie ou l'objectif) ; règles enrichies des avis de
+    nutrivigilance ANSES et des ingrédients Compl'Alim (même motif, validé d'office).
+    Conseils 3 VALIDÉ : partout où il y a un aliment (verdict du scanner, liste de courses, repas et recettes des
+    objectifs, fiche d'aliment ou de complément, assistant) ; déconseillé = marque « à éviter » + raison (comme P5a) ;
+    conseil de cuisson sur la fiche et le repas. Maquettes F1–F4 VALIDÉES (5 nov., temp/d18_plan/food_advice_mockups/out/) ; le verdict
+    principal suit la santé de la personne (« À éviter » dès qu'une règle de santé le dit).
+    TOUT EST ÉTABLI (5 nov.) : codage lancé, lots A–J (navigation, médias, médicaments+compléments, import Rust BDPM/
+    Thésaurus/RCP/règles nutrition, partage de listes, chiffrement, ordonnance, aide à la prescription, conseils
+    alimentaires, petits points validés).
+    ÉCARTS DU LOT D24/D29 À TRANCHER (5 nov., posés à l'utilisateur) : 1 eVe Basic — la tuile Activité n'apparaît
+    qu'une fois une activité gagnée (Médicaments y est d'emblée) : un médicament fait-il gagner Activité, ou Activité
+    d'emblée ? VALIDÉ : un médicament (déclaré, scanné, ou reçu puis validé) fait gagner Activité ; 2 « Par prise » démarre à « — » (aucune dose remplie) au lieu de 1 sur M2 ;
+    3 Supprimer confirmé par un second toucher (motif existant) au lieu d'une confirmation dans la bande ;
+    4 « max par jour » du si-besoin : imposé par le modèle mais sans réglage à l'écran — ma description de M2b le
+    mentionnait à tort (la maquette montre « 2 comprimés au plus par prise », pas de maximum par jour).
+    AJOUT (5 nov.) : préconisations, interactions et posologies tiennent compte de l'ÂGE, du POIDS et des autres
+    paramètres de la personne (grossesse, fonction rénale…), au cahier des charges (D24/D27/D28/D29).
+    PRÉCISÉ (5 nov.) : en plus des allergies, intolérances, interactions et espacements, TOUS les paramètres
+    physiologiques et biologiques de la personne : âge, poids, taille/IMC, sexe, grossesse et allaitement, fonction
+    rénale (DFG/clairance) et hépatique, glycémie/HbA1c, tension, résultats biologiques du Carnet.
+    FEU VERT de l'utilisateur (5 nov.) : « tu peux tout coder ».
+    AJOUT (5 nov.) — ACTIVITÉS, disque orange (ex. les pompes) : pendant une séance, toucher le disque = PAUSE (et un
+    nouveau toucher reprend), jamais la phase suivante ; dans les outils du bas : « Suivant » (phase suivante) et
+    « Stop ». Pour toutes les activités au disque orange.
+    AJOUT (5 nov.) — D31 se filmer : choisir la caméra (frontale/arrière) en filmant ; plus de blocage après l'arrêt
+    d'une prise. Même motif que l'outil Caméra de la capture du Dashboard : codé sans maquette.
+    AJOUT (5 nov.) — D32 : tuile « Récent » dans Activité. Elle remplit une page avec les dernières activités, et
+    toucher une tuile reprend où on en était. Même motif qu'une plate de rubrique : codé sans maquette.
+    AJOUT (5 nov.) — D33 fin d'activité : maquettes temp/d18_plan/done_mockups/out/. VALIDÉ : C (pouce orange à côté de
+    « Terminé », ligne « Points » cumulée dans le compte) ; trois bips rapides à la fin de CHAQUE série.
+    BASE SANTÉ RUST (5 nov.) : crate atome-health-ref et contrat regénéré. Posologie extraite du RCP (sections 4.2 à 4.6)
+    avec la source et la phrase exacte de chaque règle ; 15 paramètres de la personne ; les quatre posologies
+    d'exemple prouvées. cargo test : 29/29. Bundle réel : 3,9 Mo gzip (15 845 médicaments, 1 623 interactions,
+    1 988 compléments, 69 règles alimentaires). Côté eVe : health_reference_client.js, et posologyOf lit le bundle.
+    Sondes : modèle 39/39, médicaments 57/58 (l'échec vient de la case Allaitement, en cours chez l'agent médicaments).
+    cargo deny refusait lopdf 0.36 (RUSTSEC-2026-0187) : choix fait sans exception dans deny.toml, on retire
+    pdf-extract pour lopdf 0.47 et notre propre extraction (en cours). Restent : les relais Tauri/iOS pour
+    health-reference (en cours), la couverture RCP complète au fil des passages mensuels (2 000 pages chacun),
+    et les résultats de labo structurés dans le Carnet.
+    FAIT (5 nov., suite) : pdf-extract est remplacé par lopdf 0.47 et notre propre lecteur (pdf_layout.rs). Les
+    23 220 morceaux de texte sont identiques à l'octet et les 1 623 interactions sont inchangées. cargo deny passe sans
+    aucune exception. health-reference est relayé sur Tauri et iOS. Ajouts : condition.thesaurus (AVK, statines),
+    food_item.categories (Open Food Facts) et l'aliment « Fruit entier » avec sa règle prefer. cargo test 31/31. Le
+    fmt de check:rust échoue seulement sur les fichiers auth/ws_api de la session Rust en cours.
+    D30 FAIT (5 nov., Web) : le disque pause/reprend (mot « En pause », chiffre et anneau figés), bande Suivant · Stop (Filmer
+    gardé entre eux), Live Activity `paused`, aucun bip en pause ; MCP card_action next / resume (training et brick_session).
+    Preuve `temp/d18_disc_pause/disc_pause.probe.mjs` 37/37. Reste : le disque de la MONTRE envoie toujours `done` (Swift non touché).
+    D31 FAIT pour la caméra (5 nov., Web) : outil « Caméra » (Suivant · Caméra · Filmer · Stop, seulement avec plus d'une caméra),
+    comme la capture : la prise vidéo en cours est gardée (liée à la séance) et la suivante démarre sur l'autre caméra ; MCP
+    `training.card_action camera`. Preuve `temp/d18_disc_pause/film_camera.probe.mjs` 37/37. Blocage après l'arrêt d'une prise :
+    FAIT (5 nov., Web) : la séance d'une carte refusait tout geste touché pendant une autre écriture (départ, pause, fin de pas) — le
+    Stop était perdu, la séance restait en cours sans sortie. Désormais une écriture à la fois dans l'ordre des touchers
+    (`dashboard_training_session.js#record`) ; double Suivant = une seule validation. Preuves `temp/d18_disc_pause/move_in_flight.probe.mjs`
+    4/4 et `temp/d18_disc_pause/back_freeze.probe.mjs` 82/82 ×2. Essai iPad : utilisateur.
+    Live Activity : son thème (couleurs, tailles) passe des attributs à l'état, envoyé à chaque mise à jour et sur
+    `eve:profile-preferences-updated` ; Swift (ContentState.theme, widget) vérifié par `swiftc -typecheck` (iOS 17). Preuve
+    `temp/d18_disc_pause/live_theme.probe.mjs` 4/4 (pont enregistreur). Essai appareil : utilisateur.
+    D32 FAIT (5 nov., Web) : plate « Récent » (glyphe `recent`, l'horloge des Récents de Mes courses) dans Activité, eVe Pro
+    et eVe Basic, juste après Médicaments (même ordre 6, l'id la place après) ; elle n'apparaît qu'une fois une activité faite
+    (fait `data:recent_activities`). Touchée : un niveau de tuiles d'UNE page (option `onePage` de la grille du Mystic,
+    `mystic_grid_layout.js`) : ses cases libres remplies (la case « en cours » restant libre), le reste laissé de côté, jamais
+    de flèche Suivant. Choix faits (charte + motif le plus proche, sans question) : 1 « activité » = un exercice de Sport
+    (muscu, gainage, souplesse, cardio et son programme) ou une brique minutée (sieste, méditation, respiration, relaxation)
+    ayant une séance vraiment lancée, lue au Programme (`programs/activity_recent.js`), chaque activité UNE fois à sa
+    dernière séance, la plus récente en premier par le dernier geste enregistré (départ, pause, fin) ; une séance
+    seulement préparée ne compte pas ; pas de seconde liste. 2 la tuile est la plate même de l'activité ailleurs (mots,
+    glyphe, teinte de la rubrique, appui long) ; l'ordre « la plus récente en premier » suit la règle de la grille (la
+    première près de la tuile ouverte). 3 toucher = reprendre : une séance en cours ou en pause revient sur sa carte
+    vivante (si sa carte ne la tient pas encore, `resumeTrainingSession` / `resumeBrickSession` la reprennent d'abord) ;
+    sinon la carte s'ouvre comme laissée (niveau, valeurs reprises de la dernière séance, jour du programme ; durée
+    propre d'une brique). Une séance ARRÊTÉE ne se poursuit pas (le modèle de séance l'interdit) : sa carte s'ouvre.
+    4 « Programmes » = le programme cardio d'un exercice (sa carte en montre le jour) ; « Mon programme » de Sport et les
+    disciplines ne sont pas listés (pas de séance propre). 5 au plus 34 lues ; la page en montre ce qu'elle tient.
+    6 MCP dans la famille `dashboard_progression` (celle de `dashboard.ongoing.open`) : `dashboard.activity.recent`
+    (lecture) et `dashboard.activity.resume { key? }`. Preuve `temp/d18_recent/recent.probe.mjs` 31/31, captures
+    `temp/d18_recent/out/`. Vu en passant (hors lot) : `training.card_action back` / `brick_session.card_action back`
+    sur une carte arrêtée ouverte depuis une plate a semblé laisser le Mystic « hébergé » (touchers suivants perdus ; non isolé)
+    tant que la carte n'est pas fermée par son ✕ — VU (5 nov.) : voulu, Back ramène la carte ouverte à son départ, son ✕ la ferme et
+    l'accueil répond (back_freeze.probe 82/82) ; la vraie perte de touchers était le Stop refusé pendant une écriture (D31, corrigé).
+    Essai appareil : utilisateur.
+    D33 FAIT (5 nov., Web) : pouce orange 36 px (`atome/src/assets/images/icons/thumbs_up.svg`, teinte du disque) à côté de
+    « Terminé », jamais sur « Arrêté » ; ligne « Points +N » sous « Durée active » (Sport, cardio, séances-briques). RÈGLE DES
+    POINTS : N = n-ième de 1, 2, 3, 5, 8, 13, 21… (Fibonacci), n = séries, tours ou efforts confirmés ; une séance d'une seule
+    étape (sieste, méditation, respiration, course libre) compte ses tranches entières de 5 min d'activité, au moins 1 ;
+    « Arrêté » = 0. Total cumulé dans le profil (`preferences.activity.points`, pipeline de commit, une fois par séance), lu par
+    MCP `training.read_points`, affiché nulle part ailleurs. Trois bips « tick » (0,06 s, 1760 Hz, 0,6 s après la fin puis tous
+    les 0,15 s) à la fin de CHAQUE série, avec le réglage de son de la carte ; l'annonce vocale du pas suivant vient après eux ;
+    une pause retire ceux à venir. Preuve `temp/d18_disc_pause/done_points.probe.mjs` 18/18, captures `out_done/` conformes à C.
+    Écarts VALIDÉS (5 nov.) : 2 eVe PRÉCONISE la dose (RCP/notice selon l'âge, le poids…) en pré-remplissant, jamais en
+    validant : la fiche reste une préconisation à valider par la personne ou le médecin (décision d'application : le
+    médicament proposé n'a ni prises ni rappels tant qu'il n'est pas validé par « Valider » ; sans posologie connue,
+    « — ») ; 3 Supprimer = second toucher, comme ailleurs ; 4 ajouter un rouleau « Max/jour » pour le si-besoin, même
+    motif, pré-rempli par la notice / le médecin / l'ordonnance, sinon « — ».
+    CONSIGNE (5 nov.) : une fois le codage lancé, plus aucune question en cours de route ; décider seul. Écrits déjà : AGENTS.md
+    règles 13 et 20 (ligne unique, médias), cahier D22–D26.
+    EN ATTENTE : questions sur les listes, Q4 HDS, revue des maquettes M1–M6 (temp/d18_plan/med_mockups/).
+  - (Ancienne liste) Restent à reposer : 6 (séances importées, séance supprimée dans Santé), 13 C/D et D14 (maquettes à renvoyer en
+    image), eVe Basic Sorties/Sortie, paliers de progression, D13 Live Activity, glyphes Patrimoine/Thermes, D4 Ecosia
+    sur Web, Sport (4 sous-questions), point repère du ruban (précision).
 - Partage : § 8 « Elastic Design » confié à la session R-114 (accord du 2026-11-04) ; § 9 reste ici.
+- D26 Ordonnance FAIT (Web de bout en bout, 5 nov. ; `PROBE_PREBUILT_SERVER=1 node temp/d18_ordonnance/ordonnance.probe.mjs` 57/57,
+  `node temp/d18_ordonnance/unit.mjs` 16/16, captures `temp/d18_ordonnance/out/`). Famille `ordonnance.*` (15 commandes,
+  `atome/src/squirrel/prescription/contracts.js`, exécuteur `eVe/domains/prescription/ordonnance_commands.js`), écrans
+  O1–O5 `eVe/domains/dashboard/ordonnance_screens.js`, papier `ordonnance_page.js` / PDF `ordonnance_pdf.js`, identité
+  `prescriber_identity.js`, volet O6 `bevy_panel_home_prescriber_view.js`. Choix faits seul (consigne « décider seul ») :
+  1 l'ordonnance = la liste `medications` pour un tiers du moteur D25 (`share.list_create`, `for_person`) + son papier,
+  un `health_record_entry` `entry_kind: 'prescription'` sous la liste (types du serveur inchangés), statut
+  brouillon/signée, « envoyée » lu de `share.sent` ; 2 identité au chemin `profile.prescriber` de la fiche, ou du profil
+  de vie professionnel (pro, travail, cabinet…) quand il existe ; carte d'identité au-dessus du papier pour les champs
+  manquants, écrite dans la fiche ; 3 la dictée par l'outil « Dicter » de la bande (micro, allumé pendant l'écoute, lignes
+  en direct), pas le micro de l'assistant : celui-ci est la conversation, acteur `voice` refusé par la garde santé
+  (`humanHealthActor`) ; 4 l'assistant et le MCP n'ont que `new` (« fais une ordonnance pour Marie ») et `open`, sans
+  valeur de santé ; 5 entrée : l'outil « Rédiger » (glyphe ordonnance) d'une liste de médicaments pour un tiers, et la
+  création « Pour un tiers » ouvre directement O1 ; 6 toucher une ligne ouvre la fiche médicament (mêmes rouleaux),
+  pas de rouleaux en ligne ; 7 le papier blanc (jetons `EVE_PAPER_SKIN_TOKENS`) posé sur la dalle du panneau ; 8 Imprimer
+  sur Web = l'image A4 dans un cadre caché imprimé par l'hôte ; en natif `ordonnance_print_unavailable` (pas de pont
+  d'impression) ; Imprimer et Exporter permis avant la signature (signature à la main sur papier) ; 9 Envoi de la bande
+  = Publier (`openListSend({ atome_id })`), `ordonnance.send` = au compte du patient ; 10 une ligne modifiée après la
+  signature la défait (à re-signer) ; 11 côté patient, la liste scellée ne porte que ses lignes (sceau D25 de la seule
+  racine) : ses ordonnances reçues sont les listes validées, regroupées par `received_from` + liste d'origine, nommées
+  par leur auteur ; papier sans signature chez le patient.
+  12 Imprimer natif (demande du coordinateur, 5 nov.) : pas de second chemin — le pont d'export existant gagne
+  `export_file_print` à côté de `export_file_save`/`export_file_share` (`file_export.js#printExportFile`, la page A4 en
+  JPEG) : iOS `NativePersonalImport.swift` (`UIPrintInteractionController`, popover sur iPad ; listes de commandes de
+  `WebViewManagerIPC.swift` et `WebViewManagerScriptMessages.swift`), Tauri `native_file_export.rs` (fenêtre de la page
+  seule, `print()` de la webview sur macOS — WKWebView ignore `window.print()` —, `window.print()` ailleurs ; permission
+  `allow-export-file-print`), Android et l'AUv3 sans impression → `ordonnance_print_unavailable` ; Annuler n'est pas une
+  erreur. Prouvé par un pont factice dans la sonde ; Swift typecheck et clippy propres ; jamais lancé sur appareil.
+  13 Conseils du médecin (décision du coordinateur, même motif, sans maquette) : une phrase « Conseil : … » dictée
+  (« Dicter ») ou tapée dans le champ devient une ligne « Conseil » de la même brique, un `food_advice_tip` D28 sous la
+  liste (signé du nom du praticien, aliments lus par `foodKeysOf` ; aucun aliment reconnu → `ordonnance_tip_no_food`),
+  imprimé sous les médicaments et figé à la signature. Écart choisi seul : pas de choix Médicament/Conseil derrière
+  « Ajouter » (ce serait un élément nouveau, règle 16) — « Ajouter » garde la fiche médicament, le conseil entre par la
+  dictée ou le champ. Retrait : toucher la ligne la marque, la toucher encore la retire (motif du second toucher), MCP
+  `ordonnance.tip_remove`. `food_advice.tip_save` accepte désormais une liste `medications` (ajout dans
+  `food_advice_commands.js`, `TIP_LIST_KINDS`). Prouvé de bout en bout : Marie valide, son papier porte le conseil et
+  sa fiche d'aliment montre « Conseil · Dr Claire Martin ».
+  Le papier signé arrive chez le patient par le sceau de la session Médicaments (`list_share_sealed.js#apply`, entrée
+  `received`) ; ses ordonnances reçues sont ce papier, sans doublon de la liste.
+- D25 A + B listes de santé scellées (5 nov., session Médicaments, demande du coordinateur ; maquettes s1a–s7 validées) — FAIT
+  (Web) : `temp/d18_meds/share.probe.mjs` 32/32 (trois comptes, vrais touchers S1a/S2/S4/S5, coffres serveur lus : aucun
+  nom de médicament hors des produits de chacun, aucune clé privée en clair), `share_keys.probe.mjs` 10/10,
+  `temp/d18_ordonnance/ordonnance.probe.mjs` 57/57, `temp/d18_list_share/server_lists.probe.mjs` 25/25.
+  A : écrans Médicaments/Compléments branchés (Envoi `openListSend`, Créer `openNewList`, tuiles « Marie (n) » coin plié,
+  liste gardée pour un tiers hors Dashboard, Agenda et prises — aucune occurrence de calendrier —, `announceProductChange`
+  après chaque déclaration/modification/suppression, `received_from`/`received_entry` sur les copies reçues : une liste
+  reçue validée fait gagner Activité en Basic) ; « 2 comprimés » par `Intl.PluralRules`.
+  B (choix faits seul) : une paire ECDH P-256 par compte (WebCrypto seul, aucune dépendance), enregistrement
+  `share_key:<compte>` du coffre, moitié privée scellée par les clés de sauvegarde du compte (trousseau d'appairage
+  existant), moitié publique lue par la trame `/ws/api` `share-key` ; une liste `medications`, `supplements` ou
+  `atome_list` part scellée sur l'appareil (clé de contenu AES-GCM, enveloppée par destinataire en ECDH éphémère + HKDF),
+  la racine ne porte que le chiffré et un nom à clé (HMAC) qui marque les versions ; le sceau porte les lignes, le papier
+  de l'ordonnance (identité, signature) et les enfants de la liste (`food_advice_tip`) ; l'appareil du destinataire
+  ouvre, montre, et à « Valider » pose ses médicaments, sa copie des conseils (`list_link`, comptée appliquée par
+  `food_advice_runtime.js`) et son ordonnance signée (`received`). Destinataire sans clé (décision du coordinateur,
+  « jamais en clair ») : partage en attente, invitation existante, carte qui attend (`waiting`, rien à valider) ; dès sa
+  clé publiée, l'appareil de l'auteur scelle et envoie (`sealWaiting` à l'ouverture du Dashboard et à chaque lecture
+  d'Envoi). Causes réelles : `AUTH_REQUIRED` = la sonde lisait par sa propre instance de module (sans preuve de
+  connexion) et l'appli n'assurait pas la session distante (`ensureRemoteSession` + jeton, comme le client
+  d'appairage) ; `SHARE_KEY_UNAVAILABLE` = le type `share_key` n'était pas déclaré (refusé par le serveur, gardé sur
+  l'appareil seul) — déclaré dans `core_atome_types.js`, registre reconstruit, serveurs Rust recompilés ; la publication
+  vide ensuite la file d'envoi ; `ws_api_connection.js` n'attache plus la sentinelle `'anonymous'` à l'ouverture.
+  Fiche médicament/complément : interactions produit–produit et espacements (`food_advice.products`) en lignes du motif F
+  (`foodAdviceCardNode`, Pourquoi / Source au toucher) ; `food.probe.mjs` : vrai partage médecin → patient.
+  Trame `share-key` : portée par la session Rust (`atome/servers/atome-server/src/ws_api/projection_ops.rs#share_key`,
+  vue le 5 nov.) ; RESTE à cette session : l'Axum de Tauri et le serveur Swift d'iOS.
+  Flux temps réel d'une liste scellée — FAIT (5 nov.) : chaque partage d'une liste scellée est fait (ou resserré par
+  `updateRights`) avec les propriétés lisibles `SEALED_LIST_READABLE` (`list_share_contract.js`, `list_share_runtime.js#send`) :
+  le moteur ne laisse passer, de tout atome de son flux, que le sceau de la racine. Constat : le moteur actuel n'accorde que
+  le flux de la racine et chaque atome a le sien, donc un conseil sous la liste ne partait pas vers le destinataire (la
+  sonde témoin `CONTROL_UNNARROWED=1` le montre aussi) ; le resserrement ferme le cas d'un atome qui partage le flux de la
+  racine. Preuve `temp/d18_meds/share.probe.mjs` 36/36 : trames /ws/api et /ws/sync reçues par Marie, de l'envoi à sa
+  validation puis pendant la v2 et la modification du conseil, sans nom de médicament ni texte du conseil hors ses
+  propres enregistrements.
+  Aide à la prescription (D27) scellée — FAIT (5 nov., demande du coordinateur) : l'atome `prescription_aid` est scellé
+  entier à chaque écriture pour la patiente, son auteur et, une fois envoyé, le médecin (`list_share_sealed.js#sealValue`
+  / `openValue`, la même clé par compte) ; chacun l'ouvre sur son appareil ; un destinataire sans clé publiée ne peut
+  recevoir ni écrire (`prescription_aid_doctor_unreachable`). Schéma : `sealed` remplace `prescription_aid`
+  (`health_protocol_contract.js`, registre reconstruit, serveurs Rust recompilés). Preuve
+  `temp/d18_rx_aid/rx_aid.probe.mjs` 66/66 : coffres et base du serveur sans symptôme ni médicament d'une aide,
+  chaque aide n'y tenant que sa boîte, 106 trames d'aide reçues par les deux comptes, toutes scellées. Une aide écrite
+  avant ce sceau (en clair) ne s'ouvre plus : aucune reprise (phase de test).
+  PROPOSITION (non demandée) : chiffrer au repos les traitements de la personne dans son propre coffre.
+  Défaut d'ordre de toucher (panneau de l'accueil sur une rubrique ouverte, `temp/d18_meds/profile_tap.probe.mjs`) :
+  confié à un autre agent par le coordinateur.
+  BLOCAGE externe (5 nov., 14 h 45) : `list_share_ui.probe.mjs` 56/57 — le programme (projet, partage lié, non scellé)
+  accepté par Marie n'apparaît plus dans son `state-current` (passait à 14 h 18 sur le même arbre figé) depuis que la
+  session Rust a porté `state-current` dans `atome/servers/atome-server/src/ws_api/atome_ops.rs` (binaire recompilé
+  14 h 47) ; à vérifier par cette session (projection des atomes partagés, `include_shared`), puis rejouer la sonde.
+  RÉSOLU (5 nov.) : la session Rust a rejoué la sonde sur l'arbre actuel et obtient list_share_ui 57/57. Cause probable :
+  un binaire construit entre deux de ses modifications. Le portage de share-key est noté chez elle (atome-server, puis Tauri et iOS).
+- D27 Aide à la prescription rendu (Web, 5 nov. ; `PROBE_PREBUILT_SERVER=1 node temp/d18_rx_aid/rx_aid.probe.mjs` 56/56,
+  `NSAID='Ibuprofene 400 mg' node temp/d18_rx_aid/rules_unit.mjs temp/d18_rx_aid/bundle` 14/14, `node temp/d18_rx_aid/hours_check.mjs`
+  (indépendant de l'ordre, 40/40), captures `temp/d18_rx_aid/out/` p1–p5b ; base de sonde `temp/d18_rx_aid/bundle` = celle de D24 + un AINS).
+  Famille `prescription_aid.*` (14 commandes, `atome/src/squirrel/prescription/prescription_aid_contracts.js`, exécuteur
+  `eVe/domains/prescription/prescription_aid_commands.js`), règles `prescription_aid_rules.js`, heures `prescription_aid_hours.js`,
+  assistant `prescription_aid_ai.js`, runtime `prescription_aid_runtime.js`, écrans `eVe/domains/dashboard/prescription_aid_screens.js`
+  et `prescription_aid_hours_screen.js` ; type d'Atome `prescription_aid` déclaré (`#shared/health_protocol_contract.js`, registre
+  régénéré, annotations hors ligne ; le serveur Rust embarque les types à la compilation : release reconstruite le 5 nov.).
+  Choix faits seul : 1 les règles lisent la base de référence (thésaurus, RCP, compléments, aliments), jamais l'assistant ;
+  « majeur » = contre-indication ou « déconseillé » (bloquant), un complément « à éviter » (ANSES) bloque aussi, le pire niveau
+  d'une règle à plusieurs niveaux est pris ; 2 allergies par classe (pénicillines, céphalosporines, sulfamides, AINS, macrolides),
+  source « Carnet · RCP 4.3 » ; 3 un paramètre absent (poids, DFG, clairance…) est écrit « inconnu : … » en tête du détail de la
+  ligne, jamais deviné ; 4 la ligne bloquée touchée dit sa raison, la citation de la source et d'où elle vient, puis « eVe propose :
+  X » (alternative de l'assistant passée par les règles) ; tant qu'elle est choisie la bande porte Remplacer · Confirmer · Retirer
+  (dans les cases de Heures · Refuser · Corriger) ; le cadenas de Valider, touché, choisit la première ligne bloquée ; Confirmer est
+  consigné avec ses raisons ; toucher « eVe propose » remplace aussi ; 5 l'aide est un Atome privé du patient partagé en direct
+  (lecture + écriture) avec le médecin choisi dans Publier (une seule personne) ; le médecin répond dans l'Atome de la patiente
+  (serveur, règle 21) ; ses aides reçues sont acceptées quand il les liste ; le Carnet utile voyage dans l'aide à l'envoi ; la
+  patiente est nommée comme le carnet du médecin la nomme (`inboxSenderLabel`), jamais par un identifiant de compte ; 6 le médecin
+  peut dire les symptômes d'un contact (`patient`) : l'aide est la sienne, lue sur son carnet de ce contact ; 7 Corriger allume la
+  lecture des lignes par le champ de la bande (lecteur de l'ordonnance) ; Retirer sur une ligne choisie ; 8 Valider =
+  `ordonnance.new` → `dictate` (lignes vérifiées, heures choisies) → `validate` (API publique de D26), puis le papier
+  `ordonnance_document` (Signer, Envoi de D26) ; 9 heures : planificateur canonique, la prise la plus contrainte d'abord (à jeun,
+  heure dite, autres, repas libre), espacements du thésaurus et des RCP, une prise « pendant le repas » non dite passe au repas
+  suivant quand l'espacement manque ; une ligne bloquée n'a pas d'heure ; une heure déplacée hors des règles est marquée (règle +
+  source sous la ligne choisie), rouleaux Heure (demi-heures) · Repas ; 10 l'assistant n'a que `symptoms` et `open` (aucune valeur
+  de santé) ; `analyse` part de l'écran de la personne, l'assistant reçoit symptômes et faits du Carnet pour cette seule demande.
+  RESTES fermés le 5 nov. (même sonde, `run23.log` 66/66 ; `temp/d18_meds/meds.probe.mjs` 58/58, `temp/d18_food/food.probe.mjs` 51/51 ; unités
+  `rules_unit.mjs` 15/15, `hours_check.mjs`, `breakfast_only.mjs`) : a « Sympt. » dans la bande de Médicaments (sa propre liste ; une ligne
+  dans `health_products_screens.js`, capture `p0_medicaments_sympt`) ; b P5a : D28 (`food_advice_runtime.js#readFoodAdviceContext`) compte
+  les médicaments des pré-ordonnances validées de la personne parmi ses produits (`readPrescriptionAidTreatment`, un même CIS déclaré pris
+  une fois) : liste de courses, repas et fiches les marquent comme un médicament déclaré ; `prescription_aid.food_flags` et ses règles
+  propres supprimés (un seul propriétaire, D28) ; c pas d'écran de journée : lever et coucher lus dans le programme Sommeil (celui du
+  premier lancement, `sleep_preferences`), chaque repas à l'heure médiane des repas tenus dans le programme nutrition (trois semaines,
+  au quart d'heure), lus à l'analyse et à l'envoi ; un fait absent reste « inconnu : lever, petit-déjeuner… » sur la prise, dont l'heure
+  ne suit plus que son moment, les espacements et les interactions (planificateur : temps `{ around, span_min }`, une demi-journée) ;
+  une prise « pendant le repas » sans repas suivant connu passe aussi ainsi ; une aide écrite par le médecin pour un contact n'a pas de
+  journée (inconnue) ; `prescription_aid.day` supprimé ; d les aides reçues par le médecin sont des rangées de Ma fiche › Profil ›
+  Ordonnances (« Pré-ordonnance · patiente · date »), touchée l'aide s'ouvre et le panneau Moi lui laisse la place (les rangées
+  d'ordonnances de D26 aussi) ; l'écran « Reçues » supprimé ; e antécédents du Carnet confrontés aux RCP 4.3 (contre-indication,
+  bloque) et 4.4 (précaution) : l'antécédent, ou la pathologie de la base qu'il nomme, cherché dans les phrases de la section, la
+  phrase citée, même marque et source « RCP 4.3/4.4 » ; g la ligne bloquée choisie (cadenas ou toucher) est amenée en vue par le
+  défilement du panneau (`repaintHealthRecord({ revealNodeId })`). RESTENT : f sceau du partage de l'aide (agent médicaments, en
+  cours) ; h jamais lancé sur appareil.
 - Rendus (Web prouvé, appareil non vérifié) : D1–D3 (`temp/d18_comms/`, appel audio/visio accepté par la bande rouge
   de l'accueil, aperçu visio au-dessus, fil gardé en place) ; D4 (`temp/d18_webview/web_d4.probe.mjs` 21/21 ; Web
   ouvre la page d'accueil du moteur, `web.engine`) ; D6 (`temp/d18_delete/` 19/19 + 3/3 + 6/6 ; 4 causes dont la
@@ -128,7 +1003,7 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   en période d'essai de 72 h qui ne peut pas l'approuver — aligner sur l'avis en direct (le cacher) ?
 - Questions à poser (règle 16), maquettes prêtes : D1 outil « Décrocher » (`temp/d18_comms/mockups/d1_decrocher_bande_accueil.png`,
   A codé = champ rouge, B proposé) ; D4 outil « Moteur » (`temp/d18_webview/mockups/m1_moteur_panel.png`) ; § 9 réglages
-  contre la règle 14 (`temp/d18_visual/AUDIT.md`) ; D19 place de « Se déconnecter » sur téléphone couché (forme L1) ;
+  contre la règle 14 (`temp/d18_visual/AUDIT.md`) ; D19 réglé par R-114 (forme L1 : le V garde ses quatre voisins, Se déconnecter au-dessus, `temp/r114_tile_norm/l1_v.probe.mjs`) ;
   D13 Live Activity (nouvel élément) ; 12 propositions de roadmap absentes (place dans l'UI) ; 11 aperçu HTML local
   (nouvelle surface DOM, à arbitrer) ; D14 fiche verdict par axes, confirmation « Au panier », déjà présent, prise
   figée (`temp/d18_scanner/mockups/m1`–`m4`).
@@ -144,6 +1019,449 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   pas (glyphe manquant) corrigées. Sonde rail R-114 : attente de case périmée (70 → 55 en paysage), relancée OK.
 - Tous les lots sont rendus (dossiers `temp/d18_<lot>/`). Audits 11 et 12 rendus : `temp/d18_audits/HTML_AUDIT.md`,
   `FEEDBACK_CHAIN_AUDIT.md` (11 : aperçu isolé et conversion absents ; 12 : chaîne des bugs OK, propositions absentes).
+- D25 envoi d'une liste (5 nov., Web : `temp/d18_list_share/list_share_ui.probe.mjs` 43/43, `server_lists.probe.mjs`
+  25/25, captures `temp/d18_list_share/out/`) : moteur de partage de liste (`server/sync_share_lists.js`, reçu
+  `list_receipt_<share>`), famille `share.*`, Envoi → Publier (S1b/S2), carte reçue Valider/Refuser + liste entière
+  (S5), version liée marquée « (avant : …) » + Détacher (S6), panneau « + » (S3), tuiles « Marie (n) » (S4), brouillon
+  d'eVe (S7), relais natifs `account-roles` / `feature-request-admin` / `share`. RESTE (non bloqué, fichiers d'autres
+  sessions) : brancher aux écrans Médicaments/Compléments les crochets de `eVe/domains/sharing/list_share_health.js`
+  (Envoi, « + », tuiles, exclusion Dashboard/Agenda, `announceProductChange` après chaque modification) ; outil Envoi
+  d'un programme ; vignette photo du brouillon S7 ; « 2 comprimés » au pluriel (le texte de dose vient de
+  `health_products_days.js#productQuantity`, propriétaire santé) ; `shopping.share` et `template_share` encore propres à
+  leur domaine ; porter le partage de liste dans atome-server (`vault_router/shares.rs`, « router:program-interior »)
+  — session Rust ; tuile en double livre + compte dans Publier (préexistant) ; essai appareil (utilisateur).
+  Suite (5 nov., demande du coordinateur) — FAIT (Web, `list_share_ui.probe.mjs` sur arbre figé `PROBE_FROZEN_ROOT`) :
+  outil Envoi d'un programme (maintien dans Projets) ; vignette S7 (touchée = photo seule, retouchée = retour) ;
+  `shopping.share/unshare/shares` et `health_protocol.template_share/unshare` retirés, tout par `share.*` (courses
+  `live`, `share.sent { list_kind }`, `share.revoke`) ; Publier fusionne fiche du carnet + compte du même numéro.
+  Plein écran S7 (5 nov., 2e demande du coordinateur) — FAIT : le vrai plein écran média de D23 (règle 20) : la
+  scène prend tout l'écran (`hostFullscreen` du panneau, ni bande ni pied), la photo seule, gestes
+  `dashboard_media_scrub.js#handlers` (toucher = ✕ dans la case de Retour par `createMediaCloseOverlay`, double toucher
+  = retour), sans `setBevyPanelFullscreen` ; sonde : photo [10,10,410,912] sur 430×932, ✕ seulement après un toucher
+  [356,858,64,64], ✕ et double toucher rendent la carte. DÉFAUT (propriétaire D23, `media_controls_overlay.js#
+  createMediaCloseOverlay`) : la ✕ est montée et prend le toucher mais n'est PAS peinte — `s7b`/`s7c` identiques
+  octet pour octet, comme `temp/d18_media_gestures/shots/L1_fullscreen.png`/`L2_controls.png` (liste des prises) ;
+  le chemin `mediaFullscreenCloseNodes` (B3) la peint. Fond noir de D23 (`[0,0,0,1]` en ligne) sans jeton : non repris.
+  RESTE : ✕ non peinte (ci-dessus). Écrans de santé et listes scellées : faits (entrée « D25 A + B ») ; la sonde UI attend
+  désormais l'annonce faite par la déclaration elle-même et, pour une liste scellée, la copie de sa seule racine.
+- Défauts connus D18 (5 nov., Web ; sondes `temp/d18_defects/*.probe.mjs`, rapports `temp/d18_defects/out_*/`, détail
+  dans le cahier « Défauts connus du 5 novembre ») :
+  - FAIT 1 accueil couché qui défile (cases non vues sous la bande qui allongeaient la zone) : le cadre de l'accueil est
+    un panneau découpé, jamais une zone de défilement (`frame.fixed`, `matrix_template_runtime.js`,
+    `dashboard_mystic_geometry.js`) — `landscape_scroll.probe.mjs` 33/33 (8 tailles × Pro/Basic, glisser réel).
+  - FAIT 2 vignette d'un projet chargée sur 127.0.0.1:3000 : la fenêtre de capture (même origine) lit la configuration
+    serveur de l'hôte (`loadServerConfigOnce`, `bevy_project_preview_capture_frame.js`) — `capture.probe.mjs` (sans le
+    correctif : ERR_CONNECTION_REFUSED ; avec : origine de l'app, serveur isolé).
+  - FAIT 4 couleurs lues une fois : COMBO_RAIL, film/carte des panneaux, badge de téléportation, marque des profils, Carnet
+    (`CARNET_RUBRIC`) suivent Réglages › Visuel — `live_colours.probe.mjs` 8/8.
+  - FAIT 5 `dashboard_capture_project_missing` sur un compte neuf : un projet vide est créé pour les prises
+    (`dashboard_work_projects.js#captureProjectId`) — `capture.probe.mjs`. FAIT 6 caméra `stream://` demandée au décodeur
+    vidéo caché : source vivante écartée (`isLiveVideoStreamSource`) — `capture.probe.mjs` 10/10.
+  - FAIT 7 rail contextuel sur la fin de la timeline : la vue projet s'arrête avant la colonne du rail, lue dans la grille
+    d'écran unique (`atome_contextual_edit_model.js#contextualRailColumn`) — `rail_timeline.probe.mjs` 6/6.
+  - 8 tests périmés (pagerRect, createDashboardAgendaBrowse, boxUnits, navigate('previous')) : aucun test ne les cite
+    (seulement cartes et cahiers) ; rien à changer.
+  - FAIT 3 course Basic/Pro (reproduite : appareil sans copie du profil — navigateur neuf, espace local pas encore
+    importé — lectures distantes retenues 6 s : accueil Pro à 2,9 s puis Basic à 28 s,
+    `temp/d18_defects/run_basic_slow_before_fix.log`). Cause : `waitForHomePreferences` attendait 3 s au plus puis
+    présentait l'accueil ; un style inconnu (ou `auto` sans niveau connu) devenait Pro par le niveau par défaut
+    « advanced ». Correctif : `dashboard_home_style.js#readDashboardStyle` ne devine plus (`undefined` sans style ni
+    niveau connus ; `visual_level_cache.js#readKnownMasteryLevel`, par principal) ; `workspace_surface_preference.js#waitForHomePreferences`
+    sans délai : publié, sinon dernier connu du compte, sinon la copie locale du profil (`loadUserProfile` : espace du
+    navigateur / serveur local), relue à chaque page importée jusqu'à l'arrivée du profil ; profil présent sans style,
+    ou espace synchronisé sans profil = erreur `dashboard_style_unknown` (`reportRuntimeError`, `eve:home-style`) et
+    accueil non présenté ; `registryStyle` lève la même erreur au lieu de rendre « eve ». Le niveau par défaut
+    « advanced » est gardé : il sert aussi la taxonomie des menus (R3), plus le style. Preuve :
+    `basic_slow_profile.probe.mjs` 7/7 (A copie locale : Basic à 1,1–4,7 s ; B sans copie : écran vide puis Basic à
+    7,4 s, aucun échantillon Pro sur ~600, captures `temp/d18_defects/shots_basic_slow_profile/`) ; invité
+    `first_launch_style.probe.mjs` sans bascule ; `landscape_scroll` 33/33, `capture` 10/10 sans
+    `dashboard_style_unknown` ; `tests/eve/first_launch_workspace_restore.test.mjs` 5/5 (maquette au nouveau contrat).
+    Non vérifié : appareils (serveur local iOS/Tauri, profil en route depuis le cloud).
+    Suite (risque fermé, 5 nov.) : déconnexion → connexion sur la même page, lectures distantes retenues 6 s —
+    C1 même compte Basic, C2 autre compte eVe Pro (niveau débutant : le style choisi l'emporte), C3 retour au compte
+    Basic après une déconnexion depuis un projet (ruban affiché) ; écran de connexion, recherche, menus, accueil.
+    Lecteur trouvé avant correction : les lectures des rubriques de l'accueil (`dashboard:prefetch`, `dashboard:fun`)
+    se terminaient après la déconnexion et plaçaient leurs niveaux par `registryStyle` → `dashboard_style_unknown`.
+    Correctif : `dashboard_mystic_rubric_reads.js#read` ne pose rien pour un accueil fermé (`isCurrent` avant de placer,
+    à la réponse locale comme à `update`), sans capture de l'erreur. Le style publié est celui du profil
+    (`readDashboardStyle` : choisi, sinon celui de son niveau, R3 sans niveau) ; seul « rien de publié ni connu » est
+    inconnu. Preuve : `basic_slow_profile.probe.mjs` 17/17 (A, B, C1–C3 : jamais Pro pour le compte Basic, jamais
+    Basic pour le compte Pro, aucun `dashboard_style_unknown` dans les erreurs de page, la console ni l'anneau
+    `reportRuntimeError`), `capture.probe.mjs` 10/10. Captures `temp/d18_defects/shots_basic_slow_profile/`.
+  - NOTÉ, transmis par le coordinateur à la session Sport (propriétaire Live Activity) : `live_activity_skin` est une fonction, mais les attributs ActivityKit sont
+    figés au démarrage (`live_activity_link.js#liveActivityAttributes` theme) : une activité en cours ne suit pas un
+    changement de couleur de Réglages › Visuel.
+  - FAIT profil lu sans section visuelle (5 nov., risque trouvé par la session Sport : comptes faits avant la section
+    `visual`, premier lancement terminé — `registryStyle` levait `dashboard_style_unknown` dans toute géométrie de panneau,
+    `bevy_panel_layout.js#toolboxReservedHeight`, la carte ne dessinait que sa bande). Règle du coordinateur : une fois le
+    profil lu, le style est connu ; sans section visuelle ou sans niveau, le défaut R3 ; inconnu SEULEMENT avant toute
+    lecture. Correctif : `profile_api.js#loadUserProfile` note la lecture du profil de la personne connectée
+    (`visual_level_cache.js#rememberProfileRead` / `isProfileRead`, par principal ; une publication partielle des
+    préférences — fond, météo, espace — n'en est pas une) ; `dashboard_home_style.js#readDashboardStyle` répond alors
+    `normalizeDashboardStyle` (R3). Aucune capture de l'exception. Preuve : `temp/d18_defects/profile_no_visual.probe.mjs`
+    6/6 (compte `app_session.mjs` sans section visuelle : style « eve », accueil ouvert, `training.open_exercise` ok, carte
+    Chaise au mur dessinée entière — `out_profile_no_visual/2_training_card.png` —, aucun `dashboard_style_unknown`) ;
+    `basic_slow_profile.probe.mjs` 17/17.
+  - FAIT panneau ouvert sur une rubrique (5 nov., trouvé par la session Médicaments : Préférences › Santé dessiné devant
+    Activité, le toucher allait à la rubrique). Cause : l'ordre du toucher (`bevy_ui_runtime.js#hitTestTrees`, bandes
+    strictes `couche × 100000 + z`) n'était pas l'ordre du dessin (bande + z des enregistrements : panneaux à 2350, au-dessus
+    de la bande Mystic) ; et le sol du Mystic, relevé au-dessus de tout enregistrement plus bas à CHAQUE repeinte
+    (`menu_surface_record_runtime.js#surfaceLocalDepth`), passait par-dessus un panneau ouvert après lui au premier survol.
+    Correctif : un seul calcul de profondeur (`workspace_scene_layers.js#workspaceSceneDrawDepth`, lu par la projection et
+    par le toucher) ; le toucher trie les arbres par profondeur de dessin, sans mémo (`invalidateHitTestOrder` retiré) ; un
+    arbre peint à travers un sol (`drawn_through`, l'arbre Mystic → `MYSTIC_SURFACE_RECORD_ID`) est touché à la profondeur de
+    ce sol dans la scène, et pas du tout sans lui ; le sol du Mystic couvre les panneaux ouverts à son ouverture
+    (`opening`, premier rendu de l'arbre), jamais ceux ouverts après — le dernier ouvert est dessus, au dessin comme au
+    toucher ; un appui sur un arbre dessiné sur le menu n'est plus un « appui dehors » qui le fermait
+    (`bevy_ui_mystic_runtime.js#resolveButtonFromPoint` → `hosted`). Suite (5 nov., demande du coordinateur : le dernier
+    ouvert dessus) : l'ouverture qui relève le sol est l'ouverture elle-même — `openAt` (rubrique ouverte ou rouverte depuis
+    sa tuile, menu tenu) arme `openingPaint`, lu par le premier rendu, même sol monté ; aucun second mécanisme. Preuve :
+    `temp/d18_meds/profile_tap.probe.mjs` « touch ticks Allaitement » et 0 échec (note posologie gardée sur une réponse sans
+    `known`) ; `temp/d18_defects/panel_over_rubric.probe.mjs` 12/12 — 1 Santé sur Activité : toucher et coche réels ; 2
+    « Ouvrir un panneau » sur Activité : 367 points sur les plaques au panneau, ✕ réel, rubrique intacte ; 3 (vue bureau, où
+    Santé laisse la tuile visible ; sur un téléphone il couvre les tuiles et le toucher lui revient) Santé ouvert puis
+    Activité ouverte par sa tuile : sol à 2360 au-dessus de Santé (2359), 234 points sur 234 à la rubrique, fermée par un
+    vrai toucher sur ← de la bande, puis Santé de nouveau utilisable (un vrai toucher sur « Allaitement » le change).
+    Non-régression : profile_no_visual 6/6, landscape_scroll 33/33, capture 10/10, done_points 18/18, disc_pause 37/37,
+    film_camera 37/37, profile_tap 2/2.
+    Non vérifié : appareils.
+- FAIT D34 rouleaux (5 nov., Web ; `temp/d18_rollers/rollers.probe.mjs` 72/72 après, 41/71 avant ; captures et rapports
+  `temp/d18_rollers/out/before|after/`) : cause prouvée par le test d'impact — la fenêtre d'un rouleau (`<id>_value`) était
+  une rangée inerte et le champ de valeur qu'elle porte n'est large que de son texte ; un appui à côté de la valeur tombait
+  sur la zone de défilement (`scroll_area`), qui prenait le glisser (28 glissers sur 28 aux marges de la fenêtre faisaient
+  défiler, valeur inchangée). Correction en UN endroit, la brique du rouleau (`bevy_panel_numeric_field.js#numericRollerFieldNode`) :
+  la fenêtre est une surface `pointer_capture` (même fond, même taille, rangée) qui porte le glisser du rouleau et son
+  double toucher, comme ses voisins ; vaut pour tous les rouleaux (Sport, Médicament Heure/Dose/Max/jour, dates, heures,
+  alarmes, rail contextuel). Choix : aucun changement du moteur de pointeur ni de `bevy_ui_scroll_runtime.js` (l'arbitrage
+  « la cible possède son glisser → pas de défilement » y était déjà juste) ; le nom d'un rouleau et le sol entre les
+  rouleaux font toujours défiler (prouvé, souris et toucher). Essai appareil : utilisateur.
+- FAIT D28 + D29 conseils alimentaires selon la santé (5 nov., Web ; `temp/d18_food/food.probe.mjs` 51/51, captures
+  `temp/d18_food/out/` f1–f4 à côté des maquettes F1–F4). Base `food` du bundle (69 règles sourcées) appliquée sur
+  l'appareil par règles (`eVe/domains/health_protocol/food_advice_{rules,products,runtime,commands}.js`), famille MCP
+  `food_advice.*`. Prouvé : rien au Carnet → diabète « inconnu » (glycémie à jeun non relevée), aucun verdict ; glycémie
+  à jeun 1,32 g/L vérifiée → diabète tenu → pâtes « al dente » avec raison et source FFD ; allergie arachides/noisettes
+  du Carnet → ligne rouge « À éviter » et verdict « À éviter » (F2) ; SINTROM → épinards (vitamine K), millepertuis
+  (à éviter) ; simvastatine → pamplemousse ; levure de riz rouge (complément) → mêmes lignes qu'un médicament, et
+  food_advice.products : levure × simvastatine, Lévothyrox × fer (espacement 2 h, RCP § 4.5) ; conseil du médecin
+  « Conseil · Dr Martin » appliqué seulement une fois validé ; drapeau rouge de la liste de courses ; repas de l'objectif
+  (F3) : triangle rouge en fin de ligne, une carte par aliment ; « Pourquoi » / « Source » au toucher (food_advice.reason) ;
+  MCP : rules ouvert, verdicts/profile/products/tips/tip_save refusés.
+  CHOIX (sans question, d'après maquettes, charte, motif voisin) : 1 données de santé fermées à l'IA/MCP comme
+  health_products ; seule `food_advice.rules` (base publique) est ouverte : l'assistant explique quand on le lui demande ;
+  2 la raison et la source se déplient en lignes « Pourquoi » / « Source » sous la ligne touchée (même brique, même
+  fiche), toucher = `food_advice.reason` ; 3 verdict principal « À éviter » dès qu'une règle de santé le dit ; une
+  allergie remplace la ligne de sélection (F2) ; 4 « eVe propose » : produit scanné → première alternative OFF que la
+  santé permet ; aliment → règle « prefer » de la MÊME condition ET de la MÊME source (pas de mélange de sources) ; le
+  base porte désormais `whole_fruit` et `diabetes_t2_whole_fruit` (bundle e09b26ddb403451e) : le jus d'orange reçoit
+  « eVe propose : Fruit entier » (F3, prouvé) ;
+  5 lignes prefer/préparation/idée reçue = « Conseil · <condition> » ; 6 une ligne par médicament et par aliment (le
+  thésaurus prime sur la phrase RCP du même médicament) ; 7 un produit dont l'emballage n'est pas en français est
+  reconnu par ses catégories OFF, lues dans la base (`food_item.categories`, ex. Spaghetti Nº5) ; `categories_tags` gardé sur l'article de
+  courses (`SHOPPING_PRODUCT_SCHEMA`) ; 8 les cartes du repas réutilisent `calendarCard` (cartes du panneau) ;
+  9 traitement → condition (AVK, statine) lu dans la base (`condition.thesaurus` contre les classes thésaurus des
+  substances du médicament) ; les copies JS `TREATMENT_CLASSES` / `FOOD_OF_CATEGORY` sont retirées (coordinateur, 5 nov.).
+  Depuis (5 nov., autres agents, même sonde) : le conseil du médecin passe par un vrai `share.send` / `share.accept`
+  entre deux comptes (liste scellée), et la fiche médicament montre « Interaction · <produit> », l'écart en heures et
+  « Pourquoi » / « Source » au toucher (`health_products_views.js` réutilise `foodAdviceCardNode`).
+  Sonde (bundle e09b26ddb403451e) : `temp/d18_food/food.probe.mjs` 51/51, dont « eVe propose : Fruit entier » sur le
+  jus (calcul et carte F3). Écran de saisie du médecin : FAIT dans D26. Une ligne « Conseil : … », dictée ou tapée sur
+  l'écran des lignes de l'ordonnance, avec la même brique de ligne : même motif, donc sans maquette. Elle se retire au
+  second toucher et s'imprime sous les médicaments. Essai appareil : utilisateur.
+- FAIT D35 l'assistante dit qu'elle est prête (5 nov., Web ; demande de l'utilisateur : « elle ne dit jamais qu'elle est
+  prête », il doit demander « tu es là ? »). Cause : le micro anticipé s'ouvrait pendant « Attends, je prépare tes
+  documents » sans être rendu sourd à sa phrase (`state.earlyInput` encore nul quand elle commençait) ; sa voix comptait
+  comme parole entendue (`heard`), la phrase prête était sautée et le modèle répondait à sa propre phrase rejouée
+  (« Salut ») ; hors ligne, la session locale disait « Salut, que veux-tu ? » par ONNX ; un rappel ne disait rien ; un
+  échec de la phrase restait muet. Correction : micro sourd à sa phrase en cours, `heard` = une tirade de 300 ms (plus de
+  bruit additionné), phrase prête à chaque ouverture (rappel compris, le modèle parle ensuite), session locale par
+  l'annonceur, échec = erreur visible. Sonde `PROBE_PREBUILT_SERVER=1 node temp/d18_assistant_ready/ready_sentence.probe.mjs`
+  9/9 deux fois (avant, modules HEAD : 4/9, le rapport reproduit). Fiche `known-bug-solutions/assistant-ready-sentence-missing/`.
+  Reste (utilisateur) : sur l'iPad USB, entendre « C'est bon, je suis prête » à l'arrivée (route audio iOS à l'ouverture du micro).
+
+- FAIT D36, lignes 1 et 2 (5 nov., Web). Demande : « si je crée un complément, si je fais un clic long dessus, je peux pas
+  le supprimer. Ça doit être transverse… Dès qu'on crée quelque chose, on puisse l'effacer. »
+  - Inventaire : `temp/d18_delete/inventory.md`.
+  - Sonde : `temp/d18_delete/d36/hold_delete.probe.mjs`, vrais appuis longs sur le canevas. Avant : copie figée
+    `temp/d36_before`. Après : 17/17 objets.
+  - Déjà OK avant : complément, médicament, liste de médias, et le texte de Créer par son bandeau.
+  - Manques prouvés puis corrigés : rendez-vous, projet, instrument, effacés au 1er toucher ; aucun appui long sur la liste
+    pour autrui, l'ordonnance, l'entrée du Carnet, l'annonce, la vente, le profil de vie, le contact du carnet ; série gardée
+    sans Supprimer ; trajet GPS (l'appui long ne montrait que ✕ : `dashboard_disc_icon_required`, la plaque passait
+    `item.icon` au lieu de `item.glyph`) ; MCP sans `projects.delete` ni `creation.delete`.
+  - Choix faits sans demander :
+    1. Une seule rangée Supprimer, `dashboard_hold_options.js#dashboardDeleteAction`. `open` confirme tout `action_delete`,
+       donc aucun appui long n'efface au 1er toucher.
+    2. Les listes à cases gardent leur geste validé : Créer et prises (Suppr. coche puis efface), carnet de contacts
+       (l'appui long coche la ligne, puis Suppr., puis confirmer).
+    3. Les courses gardent leur vue tenue M3 ; leur Suppr. s'allume au 1er toucher.
+    4. Machines : « Retir. » (archiver), désormais en deux touchers.
+    5. Les effacements de santé restent fermés à MCP et à l'IA, par conception.
+    6. Nouvelles commandes, toutes dans la liste `confirmed` : `projects.delete`, `creation.delete`, `share.list_delete`
+       (refuse la liste « à moi » intégrée ; une liste de santé passe par `health_products.list_remove` en source ui, comme
+       `applyDraft`), `dashboard.objective.delete`.
+    7. Il n'existe pas de corbeille : l'effacement reste le `kind: 'delete'` canonique.
+  - Éditions additives dans les fichiers d'autres agents : `health_products_screens.js` (heldList), `list_share_runtime.js` et
+    `sharing/contracts.js` (`share.list_delete`), `dashboard_training.js` (Supprimer d'une série), `dashboard_training_machines.js`
+    (confirmation).
+  - Reste, choix noté :
+    - Média importé de la Médiathèque : pas d'effacement de bout en bout. Seuls les octets côté serveur s'effacent
+      (`files.remove`) ; les copies de l'appareil (Tauri, iOS : Rust et Swift, hors de ce lot JS) le feraient revenir.
+      Il faut un propriétaire qui efface sur chaque magasin.
+    - Objectif : corrigé (2 touchers et `dashboard.objective.delete`), mais non sondé sur le canevas, faute d'en créer un sur un
+      compte neuf.
+    - Effets et machines : corrigés par la même brique, non sondés.
+    - Ligne 3 du cahier (revue adverse) : à faire par un autre agent.
+  - FAIT les trois restes (5 nov., Web ; Tauri et iOS compilés, non lancés). Sonde `temp/d18_delete/d36/hold_delete.probe.mjs`,
+    lancée par `temp/d18_delete/d36/run.sh` (`run_after5.log` effets et Loisirs, `run_after11.log` média et Loisirs,
+    `run_after12.log` objectif avec `STYLE=eve_basic`).
+    - Média de la Médiathèque : appui long réel sur sa ligne (Médias › Images) → Insérer, Favori, Supprimer ; 1er toucher
+      arme, 2e efface ; absent de l'écran, de `media_import.list`, du coffre (`deleted`), des octets du serveur, du magasin
+      de fichiers du navigateur ; absent après rechargement ; une 2e session (copie de travail IndexedDB effacée avant le
+      démarrage) liste le média témoin gardé et aucun des effacés. `media_import.delete` par MCP : OK.
+    - Loisirs : appui long réel sur Cinéma → « Ajouter aux favoris », sans `dashboard_disc_icon_required`. Deux causes :
+      `item.icon` → `item.glyph`, et le 2e affichage du niveau (réponse du serveur, DATAtourisme) relayait les plaques sans
+      leur appui long (`dashboard_activity_bricks.js`, `update` les tient aussi). Les autres appelants de `plateActions`
+      relus : ils passent tous un glyphe.
+    - Objectif : le niveau vide sur un compte neuf est voulu (eVe Pro cache la tuile Objectifs ; « Nouvel objectif » crée
+      le projet guidé). Sur eVe Basic : appui long réel → Fait, Clore, Régler, Définir la cible, Supprimer ; deux touchers ;
+      absent après rechargement ; `dashboard.objective.delete` par MCP : OK. L'appui long passe par `dashboardDeleteAction`.
+    - Chaîne d'effets et effet enregistré : appui long réel, deux touchers, absent après rechargement, MCP
+      (`audio_fx.stop` d'une chaîne, `audio_fx.delete`) OK. Les machines sont laissées à l'agent A.
+  - Choix faits sans demander (média) :
+    1. Commande `media_import.delete { media_id }` (la clé de `media_import.list`), dans la liste `confirmed` de sa famille.
+    2. Les octets partent côté serveur à tout `delete` committé, dans `VaultRouter::commit` (Rust,
+       `atome-server/src/media/removal.rs`), quel que soit le chemin (appui long, MCP, synchro d'un appareil) ; le client
+       n'appelle plus `files.remove`.
+    3. Chaque magasin d'appareil lâche sa copie au `delete` : Tauri (Rust, `local_atome_media_removal.rs`, commit local et
+       synchro entrante), iOS (Swift, `AiSRuntimeMediaRemoval.swift`), navigateur (`guest_workspace_store.js`).
+    4. L'effacement retire aussi le média des favoris et de toutes les listes de médias.
+    5. La Médiathèque n'a que des lignes ; l'aperçu de la scène utilise le même `holdRow`.
+  - FAIT, effacement venu d'un autre appareil (`temp/d18_delete/d36/sync_delete.probe.mjs`, `sync_delete.log`) : l'appareil B
+    (2e connexion /ws/api prouvée par la clé de A) committe le `delete` d'un média importé par A. Les octets du serveur
+    partent (`VaultRouter::commit`), le coffre le dit `deleted`, le média témoin reste. Chez A, par sa synchro, avant
+    tout rechargement : le magasin de fichiers le lâche et `media_import.list` ne le montre plus. Après rechargement :
+    absent de la liste et de l'écran (Médias › Images), le témoin présent. Aucune correction n'a été nécessaire.
+  - Contrôle du 5 nov. après les changements de l'agent A (armement partagé, `observeTouches`). Le média repasse :
+    `run_after13.log` seul, `run_after14.log` en lancement complet, `sync_delete2.log`. L'échec de `run_fix.log`
+    (`controlListed` faux, `listed: 0`) venait de la sonde : la 2e session lisait sa liste une seule fois, après 15 s fixes,
+    avant que sa copie de travail ne se remplisse. Elle attend maintenant que le média témoin arrive (jusqu'à 120 s) et
+    note le délai.
+  - Non vérifié : Tauri et iOS non lancés (cargo check et test unitaire Tauri OK, `swiftc -parse` OK).
+  - FAIT revue adverse, constats 2–6, 9–13, 15–18 (5 nov., Web ; rapport `temp/d18_delete/challenge/report.md`).
+    Sondes : `temp/d18_delete/d36/hold_delete.probe.mjs` (`run_fix.log` 23 objets verts avec toucher à côté et témoin gardé, `run_fix2.log` carte de l'Agenda et appui long sur une prise de Créer 2/2 ; objectif non atteint sur eVe Pro par conception, prouvé avant sur eVe Basic ; contrôle « 2e session » du média rouge sur le témoin `controlListed`, hors de ce lot), `temp/d18_delete/challenge/series.probe.mjs`
+    (`series.log`, 9/9), `temp/d18_delete/challenge/stray.probe.mjs` (`stray.log` + `stray2.log`, 3/3 : en-tête, sol à côté, plaque tenue), `own_sync.probe.mjs`.
+    - Une seule confirmation partout (10, 17). Un seul état armé, `bevy_ui_tools_band.js#toolsBandDeleteArming`, partagé par
+      la rangée Supprimer de l'appui long (`dashboardDeleteAction`, signature inchangée) et par tout « Suppr. » de bandeau
+      (`toolsBandDeleteTool` : allumé tant qu'il est armé, 1er toucher arme, 2e efface). Retirés : le « Non / Oui » du profil
+      de vie, la confirmation propre du carnet de contacts, la question de la brique liste à cases, l'invite de la
+      Réception, l'état armé privé des courses, de la carte de consentement aux capteurs et des rapports de Réglages › Avancé.
+    - Toucher à côté (11) : tout toucher hors de la rangée ou de l'outil armé désarme, dans la brique, par l'observateur de
+      touchers du runtime BevyUI (`observeTouches`). Prouvé : armer, toucher l'en-tête, un seul toucher n'efface plus.
+    - Un toucher n'efface plus rien (2–6, 12) : série gardée (Favori ne fait que retirer des favoris), carte et éditeur de
+      l'Agenda, publication planifiée (et son appui long dans l'Agenda : `publish.cancel`), `video_train_retire`, annulation
+      d'une réservation de coach (avec appui long), suppression d'un message reçu, d'une interaction, d'un fond enregistré
+      (chacun avec appui long), « Retirer » de l'annonce.
+    - Annonces et ventes : « Supprimer » efface l'enregistrement (annonce : `events.unpublish` puis `calendar.delete_event` ;
+      vente : nouvelle commande `shop.delete`, rembourse comme `withdraw` puis `kind: 'delete'`) ; « Retirer » reste à part, armé.
+    - Machines (13) : Supprimer efface (nouvelle commande `training.delete_machine`) ; les séances passées restent telles
+      qu'enregistrées (histoire en ajout seul, rien ne relit le `machine_id` d'une séance passée).
+    - Séries gardées (15) : la sonde a montré qu'un ancien écrit de profil d'un autre appareil faisait revenir une série
+      effacée (elles vivaient dans `preferences.training.series`, dernier écrit gagnant). Correction : chaque série est son
+      propre Atome privé `training_series` (`training_series_records.js`) ; celles encore dans le profil y passent une fois
+      (sauf celles dont l'Atome a déjà existé), puis la liste du profil est vidée. Prouvé : après rechargement et après les
+      écrits périmés d'un 2e appareil, la série effacée reste partie, la série non favorite reste gardée et listée.
+      Cause annexe corrigée : `training.set_favorite` refusait un `series:<id>` (INVALID_ARGUMENT).
+    - `calendar.delete_event` (16) : `calendar_event_not_found` sur un id inconnu ou d'un autre type d'Atome
+      (`calendar_api.js#isLiveEventRecord`, aussi pour lire et modifier).
+    - `dashboard_duo.js:85` (18) : l'appui long n'est pas vide, il porte sa vraie option, « Duo » allumé qui ferme la
+      zone (ajouté par l'appui long standard) ; commentaire posé, rien d'autre.
+    - Choix faits sans demander : la réservation d'un coach se « supprime » en l'annulant (`coaches.cancel`) ; dans les
+      panneaux de projet sans appui long de scène, l'appui long coche la ligne (Réception), déplie la carte (Interactions)
+      ou arme Supprimer (Fonds) ; le carnet de contacts garde son appui long qui coche ; les courses gardent leur vue tenue
+      M3 ; le texte armé d'un fond peut être coupé dans sa colonne de 80 px ; le « Conseil » d'une ordonnance (retrait
+      d'une ligne proposée, pas d'un objet créé) garde ses deux touchers propres.
+    - FAIT sondé sur le canevas (5 nov., suite du coordinateur) : `temp/d18_delete/d36/rest.probe.mjs` → 8/8
+      (`rest_run.log`, `rest_run2.log`, `rest_run3.log`, `out/rest_run.json`). Chaque élément semé par sa vraie commande
+      (MCP ou voix), un frère semé avec lui, puis : 1er toucher arme, toucher ailleurs désarme, un toucher après garde
+      l'élément, le suivant l'efface, rien ne revient au rechargement, le frère reste.
+      Coach : `coaches.become` puis deux demandes d'un 2e compte ; appui long sur la ligne « Demandes », Supprimer.
+      Publication planifiée : `publish.send` avec `due_at` ; appui long sur la tuile Agenda, Supprimer.
+      Train vidéo : `video_train.share` à un contact ; appui long sur la ligne du fil, « Retir. ».
+      Réception : message direct d'un contact ; la ligne dépliée, Supprimer.
+      Interactions : `projects.create`, `ui.text.create`, `interactions.create` ; le panneau du projet, carte tenue, Supprimer.
+      Fonds : le Enreg. du panneau, nom tapé dans son champ ; le Supprimer de la ligne.
+      Avancé : `debug.report` de l'assistant. Chemin d'une personne : tuile Session › Réglages › page suivante › Avancé,
+      accordéon Debug, case cochée, Suppr. de la bande.
+      Consentement capteurs : `sensors.set_consent` puis `training.open_exercise`, « Infos ». Sur le Web il n'y a aucun
+      enregistrement (fichiers natifs .asr), donc rien à recharger ni de frère. La preuve est l'armement, le désarmement
+      et le résultat « Mouvements supprimés » au seul 2e toucher. Le compteur d'appels `sensors.delete` du bus est resté
+      à 0 : l'abonnement de la sonde ne voit pas ce chemin, ce n'est pas une preuve d'absence.
+    - FAIT clés i18n devenues inutiles retirées (toutes langues) : `profile_delete_ask`, `answer_yes`, `answer_no`
+      (`languages_dashboard_mystic.js`), `eve.comm.inbox.delete_prompt`, `eve.contact.delete_prompt_one`,
+      `eve.contact.delete_prompt` (`languages_fr_core.js`, `languages_en_core.js`), `eve.conversation.delete_all_prompt`
+      (`languages_fr_comm_inbox.js`, `languages_en_comm_inbox.js`), les `delete_prompt*` de `languages_bug_reports.js`
+      et `eve.finder.delete_prompt*` (`languages_finder.js`). Grep : plus aucun consommateur.
+  - FAIT revue adverse, constats 1, 7, 8, 14, 19 (5 nov., Web ; rapport `temp/d18_delete/challenge/report.md`).
+    Sondes (serveur Rust de la sonde construit à part, `PROBE_SERVER_BIN`, cible `temp/d18_delete/d36b/target`, supprimée ensuite) :
+    `temp/d18_delete/d36b/items.probe.mjs` → 24/24 (`items5.log`), `temp/d18_delete/d36b/lists_forums.probe.mjs`, deux comptes → 16/16 (`lf9.log`), `anchor.probe.mjs` → 3/3 (`anchor4.log`) ; `items6.log` 24/24 après les corrections.
+    Téléphone 430×932, `--use-angle=metal`, vrais appuis longs : le 1er toucher arme, le 2e efface.
+    - Constat 1. Effacer un projet efface son contenu : la portée `project_id` plus la descendance `parent_id`, en un seul lot
+      (`adole_api/projects.js#delete_project`). Prouvé : enfant et petit-enfant effacés, l'autre projet gardé, rien ne revient
+      quand un 2e appareil rejoue ses écrits périmés.
+    - Constat 7. Effacement par commande et appui long : préréglages d'effet, livres (avec leurs fichiers), disciplines
+      à soi (avec leurs pratiques et le choix gardé), pratiques du journal, prises, ressenti du jour (carte Résultats),
+      résultats de laboratoire (valeurs, document d'origine et fichier avec), photos Beauté, imports Strava.
+      Le ressenti et les résultats sont refusés à MCP (`health_access_denied_for_actor`).
+      Santé, fichiers touchés : ressenti `atome/src/squirrel/health/health_feeling.js`, `feeling_contracts.js` ;
+      résultats seulement `eVe/domains/health_record/health_record_runtime.js`, `health_record_commands.js`,
+      `atome/src/squirrel/health/health_record_contracts.js`, `eVe/domains/dashboard/health_record_result_views.js`,
+      `health_record_results.js` ; magasin santé `atome/src/squirrel/health/index.js` et `health_imports.js`.
+    - Constat 8. Appui long branché sur les commandes existantes : soin et séjour Thalasso, boîte et alias du courrier
+      du site, forum (« Quitter » pour un membre, « Supprimer » pour son fondateur, nouvelles commandes `forum.delete` et
+      `forum.remove_post`, en Rust dans `forums.rs`), message d'un forum (le sien, ou tout message pour le fondateur),
+      liste reçue (« Quitter » = `share.detach`).
+    - Constat 14. Une liste faite pour soi est une tuile parmi les autres ; son appui long l'efface, l'autre reste.
+    - Constat 19. Une liste partagée effacée par son auteur : chaque partage est révoqué ; chez le destinataire, en direct,
+      la copie, ses lignes, son papier et son reçu partent ; la liste sœur et sa ligne restent ; rien ne revient après
+      rechargement. L'écoute de `squirrel:share-revoked` est posée dès l'import du module (`list_share_commands.js`).
+    - Choix faits sans demander :
+      - le contenu d'un projet, c'est la portée `project_id` et la descendance `parent_id` ;
+      - une photo Beauté ou une prise retire la référence seulement, le média reste dans la Médiathèque ;
+      - un livre part avec ses fichiers ;
+      - le ressenti d'un jour et un jour Strava sont vidés, jamais effacés : un id effacé est une pierre tombale sur le
+        serveur, et un ressenti saisi ensuite le même jour serait ignoré ;
+      - un résultat part avec son document d'origine et son fichier ;
+      - pas de `qr.remove` : un QR gardé est un média de la Médiathèque, déjà effaçable par `media_import.delete` ;
+      - Strava : la commande seule, aucun écran ne liste les imports (levé le 6 nov. : Sport › Journal) ;
+      - une copie détachée reste au destinataire ; une liste scellée reçue peut s'ouvrir vide.
+      - un forum est une tuile, pas un outil du niveau : ses maquettes f1–f3 le voulaient (« une tuile au nom du forum »)
+        et la règle des niveaux garde les données en tuiles ; son glyphe l'avait fait passer pour un outil (`tile: true`
+        dans `dashboard_circle_items.js`).
+    - Restes, avec leur raison :
+      - `script.remove` : bloqué, aucun écran ne liste les scripts. Un nouveau contrôle demande une maquette (règle 16).
+        Levé le 6 nov. : Créer › Texte › Calc › « Scripts ».
+      - Appui long du préréglage d'effet : branché, mais non atteint par la sonde (aucune commande n'ouvre ce panneau).
+        Commande prouvée.
+      - Appui long du courrier du site : non sondé sur le canevas (il faut un domaine). Vérifié par Biome.
+      - FAIT (5 nov., demande du coordinateur) les trois défauts trouvés en route :
+        - « Quitter » : l'appareil qui quitte prend la réponse de sa propre commande. `list_share_runtime.js#detach` écrit
+          le reçu `detached` (avec ses copies) dans sa copie de travail, et la tuile redevient aussitôt une liste à soi.
+          Prouvé sans attente.
+        - Retrait manqué hors ligne : à chaque reconnexion (`squirrel:auth-transport-open`) et à chaque restauration
+          (`squirrel:workspace-synchronized`), `list_share_runtime.js#reconcile` compare les reçus encore liés aux partages
+          vivants du serveur (`AdoleAPI.sharing.inbox`, l'action `inbox` déjà servie). Un partage qui n'est plus vivant
+          part comme le fait `withdrawn`. Les vérifications passent une à une (`list_share_commands.js`). Prouvé : l'app de Marie fermée,
+          Julien efface ; sa copie reste vivante dans son coffre. Elle rouvre l'app dans la même session (sa reconnexion) ;
+          aucun `share-revoked` ne lui parvient, et sa copie, sa ligne et son reçu partent (effacés dans son coffre par son
+          appareil) ; les autres listes restent. Fermer le socket ou passer hors ligne dans Playwright ne coupait pas la
+          poussée en direct : seule la fermeture de l'app la coupe.
+        - Appui long sur un outil du niveau de la rangée la plus basse : `dashboard_mystic_item_actions.js#open` tient
+          la plaque comme elle-même (`heldItself`, le dessin de l'appui standard des rangées) quand aucune case d'accueil
+          n'est sous elle. Sans ancre possible, l'erreur est explicite (`dashboard_item_actions_anchor_missing` levée).
+          Sans actions ou hors contexte, la raison est nommée. `dashboard_hold_options.js` n'est pas touché. Prouvé par
+          `temp/d18_delete/d36b/anchor.probe.mjs` 3/3 : les vrais articles du niveau Contacts sont reposés avec un forum
+          en outil, qui tombe sur la rangée la plus basse ; un vrai appui long dessine l'outil au-dessus de « Supprimer »,
+          qui arme puis efface le forum. Aucun outil du niveau ne porte aujourd'hui un tel appui en production : le
+          défaut était latent depuis que les forums sont des tuiles.
+- FAIT recoupement de tout ce que la personne prend et est (5 nov. 2026, Web ; demande du coordinateur, D24/D27/D28/D29).
+  - 2026-11-05 Matrice avant/après : `temp/d18_cross_check/matrix.md`.
+  - 2026-11-05 Sondes. FAIT, prouvé par `PROBE_PREBUILT_SERVER=1 node temp/d18_cross_check/cross.probe.mjs` → 35/35 (`run4.log`).
+    Un cas positif et un négatif pour chaque croisement : complément × médicament, complément × complément, ordonnance,
+    sport, sommeil et coucher, grossesse et allaitement, aliment acheté ou mangé, fiche d'aliment.
+    La pré-ordonnance est prouvée par `temp/d18_rx_aid/rx_aid.probe.mjs` → 68/68 (2 contrôles ajoutés).
+    Les autres sondes restent vertes : meds 58/58, food 51/51, share 36/36, `rules_unit.mjs` 15/15.
+  - 2026-11-05 Référence. FAIT : le binaire Rust (`atome-health-ref`) extrait les phrases des RCP 4.2 à 4.8 qui nomment
+    une part de la vie, en règles `context_rule` citées telles quelles.
+    - Les facteurs : conduite, somnolence, soleil, effort, déshydratation, hypoglycémie, alcool, sommeil, prise au
+      coucher, tendons.
+    - Une phrase qui dit seulement « aucun effet » ne donne aucune règle, sauf si elle continue par « mais », « toutefois »…
+    - Le 4.8 n'est gardé qu'en règles, jamais en texte de document.
+    - Fixture b2113cb1d8f056f7 (47 règles de contexte ; les règles de profil, de prise et de dose sont inchangées).
+    - Test `the_smpc_sentences_about_the_person_s_life_are_quoted_as_written` ; fmt, clippy -D warnings, tests et
+      cargo deny verts.
+  - 2026-11-05 Un seul lecteur. FAIT : `food_advice_runtime.js#readFoodAdviceContext` lit tout.
+    - Il lit les produits, ce qui exclut les produits en pause et inclut les pré-ordonnances validées.
+    - Il lit le Carnet (allergies, antécédents), les paramètres et la vie (`person_lifestyle.js#readPersonLifestyle`).
+    - `person_id` donne la liste et le Carnet d'un patient, jamais la vie du titulaire.
+    - L'aide (`prescription_aid_commands.js#carnet`) et l'ordonnance passent par lui ; il n'y a pas de moteur parallèle.
+  - 2026-11-05 Fiche médicament et complément. FAIT : ses lignes disent les interactions, la règle ANSES lue dans les
+    deux sens, les allergies, les antécédents (RCP 4.3/4.4), le profil (4.3/4.4/4.6, précautions comprises), la vie
+    (4.2–4.8) et les aliments achetés ou mangés. Ce qui n'est pas connu est écrit « Inconnu · … ».
+  - 2026-11-05 Ordonnance. FAIT : chaque ligne est vérifiée contre le Carnet du patient ; une ligne contre-indiquée
+    prend la marque « avoid ». Sans référence (hors ligne), `checks_error` est rendu et aucune marque n'est mise.
+  - 2026-11-05 Aide à la prescription. FAIT : ses lignes lisent aussi le sport, le sommeil et l'heure de coucher, et les
+    précautions du profil.
+  - 2026-11-05 Aliments. FAIT : la phrase RCP sur l'alcool marque la boisson « À limiter » ; le thésaurus garde la
+    priorité.
+  - CHOIX (sans question, d'après la charte et le motif voisin) :
+    1. Une ligne de vie n'est jamais bloquante. Présente, c'est une précaution (« limit ») ; inconnue, elle est
+       « à considérer », sans marque.
+    2. Le sport compte comme présent s'il y a au moins une séance en 28 jours. Il est absent (aucune ligne) s'il y a
+       0 séance alors que la personne en a déjà fait, et inconnu si elle n'en a jamais fait.
+    3. Une séance est intense à partir de 6 MET (OMS 2020, Compendium 2024, `TRAINING_VIGOROUS_MET`).
+    4. « Dehors » veut dire `outdoor_run` seulement. Le soleil est inconnu autrement.
+    5. Une prise est « au coucher » si elle tombe à 30 min ou moins de l'heure de coucher du programme Sommeil.
+    6. Conduite, alcool et soleil : déclarés dans Préférences › Santé (suite du coordinateur, 5 nov., même motif que
+       « Allaitement », validé d'office). Jamais déclaré = inconnu ; « Rien à déclarer » ou 0 verre = absent ; une ligne
+       seulement décochée, sans autre ligne déclarée, redevient inconnue (même règle que la grossesse).
+    7. Pour un patient, toute sa vie est inconnue.
+    8. Une ligne d'ordonnance seulement nommée est résolue par son nom dans la référence (`medicineNamed`, comme l'aide).
+    9. Déploiement : le bundle du serveur doit être reconstruit avec le nouveau binaire AVANT le JS, car le contrat
+       refuse un bundle sans `context_rules`.
+  - 2026-11-05 Conduite, soleil et alcool déclarés. FAIT : deux lignes cochées de la même brique dans « Ce que eVe doit
+    savoir » (« Je conduis », « Exposition au soleil », juste après Allaitement), et « Alcool » en verres par semaine sur le
+    rouleau des nombres (0 par défaut, nombre entier), sous les lignes.
+    - Propriétaires : `health_profile_contract.js` (catégories `driving` et `sun`, `alcohol_week`,
+      `healthProfileAlcohol`), `health_profile.declare { category: 'alcohol', glasses }`, `bevy_panel_home_health.js`.
+    - Lecture : `person_lifestyle.js#declaredOf`, puis `prescription_aid_rules.js#contextFindings`. « Je conduis » tient
+      aussi la vigilance soutenue de l'ANSES (mélatonine).
+    - Preuve : `cross.probe.mjs` → 44/44 (`run5.log`), par de vrais touchers sur les lignes et sur le rouleau, positif et
+      négatif pour chacun ; captures `temp/d18_cross_check/out/profil_*.png`.
+    - Restent verts : meds 58/58, food 51/51, rx_aid 68/68, share 36/36. Un premier passage de share a donné 33/36 (section K,
+      clé de Paul publiée trop tôt) ; il est repassé à 36/36 sans changement de code (instable, hors de ce lot).
+  - Reste : rien du lot sur le Web. Appareils (iOS, Tauri) : à l'utilisateur.
+  - 2026-11-05 Règle 21 contre Q70 : profil Santé sur le serveur, scellé pour la personne seule. FAIT (Web).
+    - Décision : la règle 21 (« le serveur est le seul point de vérité », utilisateur, 4 nov. 2026, « Nothing is kept only on
+      a device ») l'emporte sur Q70 (« stockage cet appareil seulement », 31 oct.). La raison de Q70, la vie privée, est gardée
+      par le sceau : le profil est sur le serveur, scellé pour la clé de la personne, et aucun mot n'y est en clair.
+    - Stockage : la déclaration `health_profile:<personne>` et les allergies et intolérances `health_preference:<personne>:<clé>`,
+      type `health_profile`, ne portent que `sealed` (`eVe/domains/programs/health_profile_store.js`). À la première lecture,
+      les copies Q70 `device:` et les anciennes copies en clair `program_preference:` y sont scellées une fois, puis
+      supprimées dans le même lot par le pipeline. Le mécanisme `device:` reste pour ses autres usages.
+    - Partage (CHOIX, sans question) : le profil scellé ne s'ouvre que sur les appareils de la personne. Le chemin du médecin
+      (`readPersonParameters({ person_id })`, ordonnance, aide) garde son contrat : il n'a jamais lu le profil, la vie d'un
+      patient reste « inconnu ». Ce que le patient veut faire savoir lui parvient par ce qu'il envoie : l'aide D27 scellée
+      pour les deux, avec les faits de son Carnet.
+    - Défauts trouvés par la preuve à deux navigateurs, corrigés à leur propriétaire. Ils touchaient tout ce qui est scellé
+      pour le compte : les listes D25, l'aide D27, les copies des capteurs.
+      1. `adole_websocket_message.js` : `backupKeys` manquait dans `auth-response`. Un appareil appairé ou restauré ne
+         recevait donc jamais les clés de secours.
+      2. `auth_pairing_client.js` : la session s'ouvrait avant que l'anneau reçu soit gardé. Un `ensure()` au démarrage
+         pouvait le remplacer ; désormais l'anneau passe d'abord, à l'appairage comme à la restauration.
+      3. `share_keys.js#make` : un appareil fraîchement connecté qui n'avait pas encore la fiche de clé en publiait une
+         nouvelle, à la place de celle du compte. Il demande désormais au serveur (`published`).
+    - Preuve : `PROBE_PREBUILT_SERVER=1 node temp/d18_cross_check/profile_server.probe.mjs` → 30/30.
+      - A : copies Q70 déplacées ; « Je conduis », « Grossesse » et 3 verres touchés pour de vrai.
+      - Serveur : base, coffres et journaux sans déclaration ni allergène en clair.
+      - Trames de A et B, dans les deux sens, sans valeur en clair.
+      - B, appairé par le nombre, retrouve tout ; déconnecté, sa copie locale vidée, puis reconnecté, il retrouve tout du
+        serveur.
+      - C, navigateur neuf ouvert par le seul code de secours, retrouve la même déclaration et la même allergie.
+    - Autres vérifications :
+      - `temp/reco_sante/device_ui.probe.mjs` → 40/40, ses vérifications Q70 passées à la règle 21.
+      - `temp/reco_sante/device.probe.mjs` → 23/23.
+      - `temp/account_restore/account_restore.probe.mjs` s'arrête avant toute restauration (rechargement de A au-delà de
+        30 s, sur machine calme aussi) : non attribué, la restauration est prouvée par C ci-dessus.
+      - `temp/d18_meds/share_keys.probe.mjs` → 12/12, dont l'appareil frais qui ne remplace pas la clé.
+      - cross 44/44, share 36/36, rx_aid 68/68, meds 58/58, food 51/51 (journaux `temp/d18_cross_check/r21/`).
+      - Tests du dépôt : `program_allergens` et `program_collection_contract`, 14 réussis ; les 5 tests de contrôle en échec
+        échouent pareil sur HEAD propre (antérieurs). `auth_phone_link_client` 7/7.
+      - Natif : `cargo check -p squirrel` passe (avertissements d'atome-server seulement, autre session) ; `swiftc -parse`
+        des 82 fichiers Common passe. Les filtres natifs sont par préfixe `device:` (Tauri, iOS) : rien à retirer. Le type
+        `health_profile` est dans `eVe/registry/generated/atome_types.json`, que lisent Axum et la porte de types iOS.
+    - Non vérifié : Tauri et iOS en marche (à l'utilisateur).
+
+- FAIT (2026-11-06, D36 ; ouvert ATTENTE UTILISATEUR le 2026-11-05) — seules restes du lot, bloqués par la règle 16 (une nouvelle place à l'écran demande une maquette validée) : (1) les scripts ne sont listés par aucun écran, donc `script.remove` n'est atteignable que par MCP/voix ; (2) les imports Strava se suppriment par commande seulement, aucun écran ne les montre. Question posée à l'utilisateur le 5 nov. : faut-il un écran de liste pour chacun (où), avec maquette avant code. Réponse 6 nov. : « Oui, maquette d'abord ». Maquettes aux vrais jetons : `temp/d18_lists_mockup/out/` (constats `findings.md`, questions `questions.md`). Scripts — A (recommandé) : outil « Scripts » dans Créer › Texte › Calc, les scripts du texte sur la scène, appui long → Supprimer ; B : ligne « Scripts » dans Préférences › Assistant, tous les scripts. Strava — A (recommandé) : chaque activité importée devient une ligne de Sport › Journal, appui long du Journal ; B : ligne du bloc Strava de Préférences › Santé ouvrant les activités en tuiles ou en liste. À coder après le choix : `strava.remove_import {source_id}` (une activité ; aujourd'hui seul `strava.remove_imports` supprime tout). Questions posées le 6 nov. — VALIDÉ par l'utilisateur le 6 nov. : Scripts = A (outil « Scripts » dans Créer › Texte › Calc), Strava = A (activités dans Sport › Journal). FAIT le 6 nov. (Web) : Scripts A et Strava A codés comme leurs maquettes. Scripts : outil « Scripts » après « Grille » dans Calc, montré seulement quand le texte a un script (zen, même règle que l'outil « Liste ») ; les scripts du texte en tuiles sur la scène (`eVe/domains/dashboard/dashboard_create_scripts.js`, brique des cellules de scène, « Liste »/« Tuiles » au-delà d'une page), appui long → Supprimer (`dashboardDeleteAction`) → `script.remove` ; le dernier effacé rend le texte. Strava : chaque activité importée est une ligne de Sport › Journal (glyphe de la discipline, durée, distance, pouls max ou « — »), lue par `getHealthOwner().imports.list({source})` ; appui long du Journal → Supprimer → nouvelle commande `strava.remove_import {source_id}` (liste `confirmed` de la famille strava), qui retire l'activité de son jour par le commit canonique ; un jour vide est vidé, jamais effacé ; MCP refusé (`health_access_denied_for_actor`). Preuve : `temp/d18_lists_mockup/proof.probe.mjs` 26/26, 0 erreur de page (`proof_run1.log`, captures `temp/d18_lists_mockup/proof/`) : 1er toucher arme, toucher à côté désarme, 2e toucher efface, absent après rechargement, voisins gardés, moniteur `workout_duration` 120 → 60 ce jour-là. `bevy_scroll_exports_missing` (vu pendant les maquettes, 08:19–08:30) ne vient pas de ces écrans : le moteur de rendu servi alors n'avait pas encore `press_atome_bevy_scroll` (passage du défilement en Rust par une autre session, WASM reconstruit à 14:04) ; absent de la preuve. Tout le reste de D36, D24/D29 (croisements, conduite/soleil/alcool), règle 21 contre Q70 est FAIT avec preuves (voir les blocs datés du 5 nov. ci-dessus). Tests appareil (iPad, Tauri) : à faire par l'utilisateur.
 
 ### R-112 — Publish the remaining version and Framework State changes on main (2026-11-03)
 - Statut : FAIT — eVe main `0e9acd42` and Atome main `170775861` published and independently verified with `git ls-remote` on 2026-11-03 after the user's explicit one-operation exception.
@@ -338,6 +1656,7 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   - FAIT le 2026-11-04 : la molette des souffles de la carte Respiration suit le contexte d'eau : pendant un séjour Thalasso (`thalasso.stay_read`, `today.in_stay`) elle n'offre plus le Kapalabhati, sauf s'il est déjà le souffle choisi par la personne, qui reste le sien (`dashboard_brick_session_card.js#breathsFor`, brique `breath_pattern.js#breathPatternIds`). Preuve : `PROBE_ISOLATED=1 node temp/reco_sante/breath_water.probe.mjs` (journal `temp/reco_sante/breath_water.log`) : hors séjour Alternée a Kapalabhati pour voisin ; en séjour Perso ; Kapalabhati choisi en séjour reste affiché ; aucune erreur. eVe Pro n'a pas de bulle sur son accueil : hors décision (Q23 vise la bulle d'eVe Basic).
 - FAIT le 2026-10-31 (reco partout) : Q67 Duo (= Q19, code et preuves du 2026-11-04) : deux outils du Dashboard à l'écran ensemble. Au maintien d'une plaque consultée (un exercice, une liste de médias), ligne « Duo » sous « Favori » et « Progr. » ; touchée, sa page s'ouvre et la zone du haut avec elle (téléphone : l'une sur l'autre, découpe 4:3 de la V6.1, l'outil tenu en bas avec sa bande inchangée ; tablette et ordinateur : côte à côte, l'outil tenu à droite). La zone offre les tuiles de l'accueil (la dernière choisie en premier, pages tournées d'un glisser de côté), puis le niveau de la tuile ; une plaque y ouvre sa page ; une vidéo touchée y joue seule à sa proportion, au pied de la zone, sans les pastilles de la liste, un toucher sur l'image rendant les lignes. Le « Duo » allumé d'un maintien fait sur la zone la ferme ; le ✕ de l'outil tenu ferme les deux ; jamais proposé par l'assistant de lui-même. MCP `dashboard.duo.open { tile? }`, `dashboard.duo.choose { tile }`, `dashboard.duo.close`. Propriétaire `eVe/domains/dashboard/dashboard_duo.js`. Preuves : `temp/reco_duo/duo_phone.probe.mjs` 32/32 (430 × 932), `temp/reco_duo/duo_wide.probe.mjs` 8/8 (1280 × 860), captures `temp/reco_duo/shots/phone_*.png` et `wide_*.png`. Non vérifié : image vidéo réelle en Chromium sans écran (nœud et boîte seulement), iOS, Tauri, Android. Reste hors lot : sur téléphone, la carte Sport n'a que 399 px dans la découpe 4:3 et son disque orange passe sous sa propre bande (mise en page de la carte dans une pièce courte, `dashboard_training_card_view.js`).
 - FAIT le 2026-11-04 (Q70 à Q73, « Oui, reco partout » du 2026-10-31) : Q70 stockage « cet appareil seulement » : un atome `device:` (`atome/src/shared/device_scope_contract.js`) passe par `window.Atome.commit` comme les autres, n'est jamais envoyé ni synchronisé (Web : pas de ligne dans la file d'envoi, jamais adopté ; Fastify le refuse, `device_only_atome` ; Tauri `is_device_local_atome_id` ; iOS `enqueueSyncEvent`) ; tout le profil santé y vit (`device:health_profile:<personne>`, allergies et intolérances `device:program_preference:…`), l'ancienne copie synchronisée déplacée une fois puis supprimée par le pipeline (`eVe/domains/programs/health_profile_store.js`). Q71 lignes à case standard (case à gauche), « Rien à déclarer » en tête, cocher une autre la décoche (`health_profile.declare`). Q72 écran du séjour Thalasso selon m2 (lieu et dates sur molettes en haut, une carte par jour, « Soin » variante B), rangé dans Santé › Thalasso et ouvert par `thalasso.open` (`dashboard_thalasso_card.js`, `dashboard_thalasso_view.js`). Q73 maintien sur la phrase d'eVe → une seule ligne « Ne plus proposer » (`dashboard_daily_suggestion.js`). Preuves : `node temp/reco_sante/device.probe.mjs` 23/23 ; `PROBE_ISOLATED=1 node temp/reco_sante/device_ui.probe.mjs` (vraie page, Fastify isolé, compte neuf) 32/32 vérifications Q70 à Q73 (`temp/reco_sante/device_ui_full_2026-11-04.txt`, captures `temp/reco_sante/shots_device_full/`, seule ligne en échec : le rechargement coupé par la limite de 10 min, machine à charge 430) puis `RECO_ONLY=q70` 20/20 avec le rechargement (`temp/reco_sante/device_ui_q70_reload_2026-11-04.txt`) ; Tauri `cargo test --lib local_atome_sync_worker` 8 réussis ; iOS `swiftc -parse` seulement. Écart : « Ne plus proposer » est dans la dalle standard du maintien (✕ à gauche), pas nue sous la phrase comme la maquette. Non vérifié : Tauri et iOS en marche.
+- 2026-11-05 Q70 remplacée par la règle 21 (AGENTS.md, « le serveur est le seul point de vérité ») : le profil Santé, les allergies et les intolérances ne vivent plus sous `device:`. Ils sont sur le serveur, scellés pour la seule personne (`health_profile:` et `health_preference:`, type `health_profile`, `eVe/domains/programs/health_profile_store.js`) ; les copies `device:` sont scellées une fois puis supprimées. Détail et preuves : R-115, « Règle 21 contre Q70 ». Le mécanisme `device:` reste pour ses autres usages.
 
 ### R-007 — Finder du projet : maquette à six états jamais validée
 - Statut : FAIT (2026-10-31) — Finder A–F (`temp/reco_finder/r007.probe.mjs` 46 OK, `r007_ef.probe.mjs` 30/30) et Q75 cœur blanc sans fond partout (Finder, Contacts : `heart_contacts.probe.mjs`). Seul échec : l'étape « grille posee » du harnais. Non vérifié : PeerTube, clavier iOS, cœur du Train vidéo.
@@ -874,6 +2193,25 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 
 ## Attentes de ton côté (aucune session ne peut les faire seule)
 
+### R-122 — Convertisseur de trousseaux vers CXF : essai à la main et sur tes vrais exports (2026-11-05)
+- Statut : ATTENTE UTILISATEUR — l'outil est codé et vérifié sur des données fictives. Le compte rendu de fin de
+  session du 2026-11-05 te demande deux essais.
+- Source : ton prompt « Convertisseur autonome de trousseaux pour atome » (session `8fc5b5d1`) : 1PUX, CSV Apple et
+  autres, 1PIF, vers CXF 1.0 ; chiffré par défaut ; app macOS en cinq étapes ; tests ; spécification ; exemple
+  pour atome.
+- Fait :
+  - Code : `tools/keychain-converter/` et sa spécification `FORMATS.md`.
+  - App : `tools/keychain-converter/dist/atome keychain converter.app`, construite par `build_macos_app.sh`.
+  - Tests : `tests/keychain_converter/`, 38 au vert ; clippy, rustfmt et cargo deny OK.
+  - Annexe A du standard : 0 violation (`temp/keychain_converter/appendix_probe`).
+  - Exemple : `tests/fixtures/keychain_converter/expected/`.
+- Reste, de ton côté (une session ne peut pas le faire seule) :
+  - ouvrir l'app et suivre les cinq dialogues jusqu'au bout. Seuls le lancement et le premier dialogue ont été
+    vérifiés ; les cinq autres scripts de dialogue compilent ;
+  - convertir un vrai export 1Password `.1pux` et un vrai CSV Apple Passwords ; le rapport `.report.json` dira
+    s'il reste des clés non reconnues (`source_keys_only_in_fidelity`) ou des avertissements.
+- Hors tâche : il n'existe pas encore d'importateur CXF dans atome (première tâche : ne pas toucher au stockage).
+
 ### R-101 — Inscrire l'iPhone 13 Pro de Sylvain
 - Statut : ATTENTE UTILISATEUR
 - Question posée le 2026-10-30 (session `e6d257bf`) : l'UDID de son iPhone 13 Pro, pour l'inscrire au compte
@@ -903,7 +2241,7 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 - Reste : ton essai sur la montre avec le dernier build TestFlight (46 au 2026-11-04).
 
 ### R-114 — Tuiles de l'accueil adaptées à l'écran (iPhone, Android, iPad)
-- Statut : FAIT (2026-11-04) — accueil, ruban d'un projet et rail contextuel sur la même case de la norme (50–80 px) ; L1 en paysage téléphone ; rangées vides entières en trop ; D19 (propositions du V en paysage) corrigé avec D18. Preuves : `temp/r114_tile_norm/{matrix,neighbours,rail}.probe.mjs` (tout OK), app réelle `home_real.probe.mjs` 25/25 et `ribbon_real.probe.mjs` 6/6. Non vérifié : appareils iOS/Android, zones sûres natives. Correction du 4 nov. (reproche de l'utilisateur : V sans case au-dessus, Basic couché sans Heure/Météo et ordre changé) : L1 = la matrice debout gardée case pour case, ses quatre rangées aplaties à 1,5, Heure/Météo/Agenda en colonne à gauche, pour Pro comme pour Basic ; le V garde ses quatre voisins du portrait (Déconnecter dessus, Réglages dessous). Preuves : `temp/r114_tile_norm/l1_v.probe.mjs` (app réelle, tout OK), `matrix`/`neighbours` (ordre et voisins = portrait), planche `temp/r114_tile_norm/out/r114_L1_corrige.png`. Android 640×360 couché : case 49 (plus petit écran, sous la norme d'un px). Le contenu des panneaux garde l'unité de 60. Plafond de 9 caractères gardé (règle 11). Partage : § 9 de D18 (joint réglable → `SYSTEM_UI_GRID_JOINT_PX`, rapport des textes).
+- Statut : FAIT (2026-11-04) — accueil, ruban d'un projet et rail contextuel sur la même case de la norme (50–80 px) ; L1 en paysage téléphone ; rangées vides entières en trop ; D19 (propositions du V en paysage) corrigé avec D18. Preuves : `temp/r114_tile_norm/{matrix,neighbours,rail}.probe.mjs` (tout OK), app réelle `home_real.probe.mjs` 25/25 et `ribbon_real.probe.mjs` 6/6. Non vérifié : appareils iOS/Android, zones sûres natives. Correction du 4 nov. (reproche de l'utilisateur : V sans case au-dessus, Basic couché sans Heure/Météo et ordre changé) : L1 = la matrice debout gardée case pour case, ses quatre rangées aplaties à 1,5, Heure/Météo/Agenda en colonne à gauche, pour Pro comme pour Basic ; le V garde ses quatre voisins du portrait (Déconnecter dessus, Réglages dessous). Preuves : `temp/r114_tile_norm/l1_v.probe.mjs` (app réelle, tout OK), `matrix`/`neighbours` (ordre et voisins = portrait), planche `temp/r114_tile_norm/out/r114_L1_corrige.png`. Android 640×360 couché : case 49 (plus petit écran, sous la norme d'un px). Le contenu des panneaux garde l'unité de 60. Plafond de 9 caractères gardé (règle 11). Joint et rapport des textes (repris de D18 § 9 sur décision de l'utilisateur, 4 nov. : choix personnel, valeurs de la charte par défaut) : FAIT — Réglages › Visuel, deux lignes du slider standard « Rapport des textes » 1,1–1,3 et « Joint des tuiles » 0–6 px, lus en direct (`system_ui_tokens.js` `textRatio` / `gridJointPx`, `system_ui_grid.js#systemUiGridJointPx`) ; l'accueil ne lit plus le `gap` enregistré du modèle. Preuve : `temp/r114_tile_norm/visual_settings.probe.mjs` (vrais glissements, accueil, étiquette et bande suivent), régressions `home_real`/`l1_v`/`ribbon_real`/`matrix`/`neighbours`/`rail` OK. Planche portrait `temp/r114_tile_norm/out/r114_portrait_reglages.png` envoyée pour vérification de conformité. Planche validée par l'utilisateur (4 nov., « le design est impeccable »). Contour des tuiles (demande du 4 nov. : taille et opacité, pouvoir le supprimer) : FAIT — Réglages › Visuel « Contour des tuiles » 0–3 px physiques (0 = aucun) et « Opacité du contour » 0–100 %, défauts 1 px / 28 % (`dashboard_skin.js` `tileDisc.edgeWidths`/`edgeOpacities`, `dashboard_mystic_colors.js#plateMaterial`). Preuve : `temp/r114_tile_edge` via `temp/r114_tile_norm/tile_edge.probe.mjs` (vrais glissements, panneau défilé au doigt ; opacité suivie, largeur 0 = aucun contour, pixels du bord égaux au fond : `edge_pixels.mjs`), régressions `visual_settings`/`home_real` OK. Non vérifié sur appareil.
 - Source : prompt collé du 2026-11-04 « Adaptation automatique des tuiles atome/eVe » (grille 4:3 / 3:4, 3 × 4 tuiles
   debout, taille maximale, joints 1 pt, zones sûres, textes proportionnels, recalcul à la rotation).
 - Réponses de l'utilisateur (2026-11-04, outil de questions) :

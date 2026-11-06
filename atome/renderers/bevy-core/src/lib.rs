@@ -1,34 +1,46 @@
-pub mod mystic_capture;
-pub mod media_window;
 pub mod backdrop_blur;
 pub mod backdrop_surface;
 pub mod background;
+pub mod browser_texture;
+#[cfg(target_arch = "wasm32")]
+mod browser_texture_web;
 pub mod clip;
 mod clip_fade;
 pub mod clip_polygon;
 pub mod components;
+pub mod frame_demand;
+pub mod linear_lens;
+pub mod linear_lens_band;
+mod login_light;
+pub mod media_window;
+pub mod mystic_capture;
+pub mod node_texture;
 pub mod plugin;
 pub mod procedural_sdf;
 pub mod progress_ring;
-pub mod frame_demand;
 pub mod project_view;
+pub mod record_pose;
 pub mod render_math;
 pub mod render_ops;
+mod render_style_ops;
 pub mod resource_ops;
+pub mod scroll_area;
+pub mod scroll_motion;
 pub mod selection_overlay;
 pub mod shadow_texture;
+pub mod shape_mask_gpu;
 pub mod shape_sdf;
-mod shape_texture;
-pub mod surface_paint;
-mod render_style_ops;
 mod shape_shadow_cache;
+pub mod shape_shadow_gpu;
 pub mod shape_shadow_overlay;
+mod shape_texture;
+pub mod spatial_mask_gpu;
 pub mod spawn;
+pub mod surface_paint;
 pub mod texture;
-mod login_light;
 pub mod types;
-mod types_procedural;
 mod types_ops;
+mod types_procedural;
 pub mod ui;
 pub mod video_diagnostics;
 pub mod video_external_texture;
@@ -38,7 +50,7 @@ pub mod waveform_playback_overlay;
 pub mod workspace_backdrop;
 pub mod workspace_blur;
 
-pub use plugin::{apply_render_ops, AtomeBevyRendererPlugin};
+pub use plugin::{AtomeBevyRendererPlugin, apply_render_ops};
 pub use project_view::{AtomeProjectSpacePatch, AtomeProjectView, AtomeProjectViewPatch};
 pub use render_math::{atome_rect_transform, color_from_rgba, depth_for_layer};
 pub use render_ops::*;
@@ -46,12 +58,20 @@ pub use types::*;
 pub use ui::*;
 pub use video_diagnostics::*;
 
+pub mod animated_png;
+mod animated_png_pixels;
 #[cfg(test)]
 mod backdrop_blur_tests;
 #[cfg(test)]
-mod procedural_sdf_tests;
+mod linear_lens_tests;
 #[cfg(test)]
 mod mask_rounding_live_tests;
+#[cfg(test)]
+mod media_window_tests;
+#[cfg(test)]
+mod procedural_sdf_tests;
+#[cfg(test)]
+mod scroll_tests;
 #[cfg(test)]
 mod shadow_style_tests;
 #[cfg(test)]
@@ -63,13 +83,9 @@ mod tests;
 #[cfg(test)]
 mod texture_sprite_color_tests;
 #[cfg(test)]
-mod media_window_tests;
-#[cfg(test)]
 mod video_external_texture_tests;
 #[cfg(test)]
 mod workspace_blur_tests;
-pub mod animated_png;
-mod animated_png_pixels;
 
 #[cfg(test)]
 #[path = "../../../../tests/rendering/panel_surface_paint.rs"]

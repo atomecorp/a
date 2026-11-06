@@ -1,8 +1,8 @@
 use serde::Deserialize;
 
 pub use crate::components::*;
-pub use crate::types_procedural::AtomeProceduralSdf;
 pub use crate::types_ops::*;
+pub use crate::types_procedural::AtomeProceduralSdf;
 
 pub fn default_opacity() -> f32 {
     1.0
@@ -89,7 +89,7 @@ pub struct AtomeMaskStyle {
 
 impl AtomeMaskStyle {
     pub fn normalized(mut self) -> Option<Self> {
-        if self.source_id.trim().is_empty() || self.mode.trim().to_ascii_lowercase() != "alpha" {
+        if self.source_id.trim().is_empty() || !self.mode.trim().eq_ignore_ascii_case("alpha") {
             return None;
         }
         if !self.silhouette.is_usable() {
@@ -100,7 +100,11 @@ impl AtomeMaskStyle {
         if !self.alpha.is_empty() && self.alpha.len() != expected {
             self.alpha.clear();
         }
-        self.layers = self.layers.into_iter().filter_map(AtomeMaskStyle::normalized).collect();
+        self.layers = self
+            .layers
+            .into_iter()
+            .filter_map(AtomeMaskStyle::normalized)
+            .collect();
         Some(self)
     }
 }
@@ -136,11 +140,7 @@ pub fn default_filter_unit() -> f32 {
 }
 
 fn finite_or(value: f32, fallback: f32) -> f32 {
-    if value.is_finite() {
-        value
-    } else {
-        fallback
-    }
+    if value.is_finite() { value } else { fallback }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Deserialize)]
@@ -236,11 +236,7 @@ pub fn normalize_transform_scale(scale: [f32; 2]) -> [f32; 2] {
 }
 
 pub fn normalize_transform_rotation(rotation: f32) -> f32 {
-    if rotation.is_finite() {
-        rotation
-    } else {
-        0.0
-    }
+    if rotation.is_finite() { rotation } else { 0.0 }
 }
 
 pub fn normalize_transform_origin(origin: [f32; 2]) -> [f32; 2] {
@@ -471,6 +467,10 @@ pub struct AtomeTexture {
     pub rgba: Vec<u8>,
     #[serde(default)]
     pub animation: Option<crate::animated_png::PngAnimationSource>,
+    /// A browser image (a text's Canvas2D raster) staged by the web glue under this slot: the GPU copies it
+    /// straight into the texture and `rgba` stays empty (`browser_texture.rs`).
+    #[serde(default)]
+    pub external: Option<u32>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
@@ -485,14 +485,25 @@ pub struct AtomeBackdropStyle {
 
 impl AtomeBackdropStyle {
     pub fn normalized(self) -> Option<Self> {
-        if !self.blur_px.is_finite() || self.blur_px <= 0.0 || self.tint.iter().any(|value| !value.is_finite()) {
+        if !self.blur_px.is_finite()
+            || self.blur_px <= 0.0
+            || self.tint.iter().any(|value| !value.is_finite())
+        {
             return None;
         }
         Some(Self {
             blur_px: self.blur_px.clamp(0.0, 32.0),
             tint: self.tint.map(|value| value.clamp(0.0, 1.0)),
-            tint_fade: if self.tint_fade.is_finite() { self.tint_fade.clamp(0.0, 1.0) } else { 0.0 },
-            corner_cut_px: if self.corner_cut_px.is_finite() { self.corner_cut_px.max(0.0) } else { 0.0 },
+            tint_fade: if self.tint_fade.is_finite() {
+                self.tint_fade.clamp(0.0, 1.0)
+            } else {
+                0.0
+            },
+            corner_cut_px: if self.corner_cut_px.is_finite() {
+                self.corner_cut_px.max(0.0)
+            } else {
+                0.0
+            },
         })
     }
 }

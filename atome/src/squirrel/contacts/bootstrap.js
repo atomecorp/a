@@ -292,6 +292,10 @@ export const createGlobalContactsApi = ({
             if (result?.ok === true) dispatchPeopleDirectoryUpdated(env, { action: 'merge', merges: result.merges });
             return result;
         },
+        // The book's groups: `{ ok, items: [{ id, name, members }] }`, members as contact ids.
+        groups() {
+            return getOrCreateService(env).contactGroups();
+        },
         search(query, options = {}) {
             return getOrCreateService(env).contactsSearch(query, options);
         },

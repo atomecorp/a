@@ -225,6 +225,4 @@ export async function resolveDownloadTarget(fileParam, userId) {
     }
     throw error;
   }
-
-  return null;
 }

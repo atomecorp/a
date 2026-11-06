@@ -47,7 +47,7 @@ const child = spawn(process.execPath, ['server/server.js'], {
         ...process.env,
         HOST: '127.0.0.1', PORT: String(port), SQLITE_PATH: path.join(workRoot, 'adole.db'),
         JWT_SECRET: 'molecule-session-contract-secret-long-enough', GITHUB_AUTO_SYNC: 'false',
-        SYNC_REMOTE_ENABLED: 'false', SERVER_INFO_ENABLED: 'false', SQUIRREL_DISABLE_WATCHER: '1',
+        SYNC_REMOTE_ENABLED: 'false', SERVER_INFO_ENABLED: 'false',
         SQUIRREL_VAULT_ROOT: path.join(workRoot, 'vaults')
     },
     stdio: ['ignore', 'pipe', 'pipe']

@@ -67,16 +67,9 @@ run_bootstrap_if_needed() {
 run_bootstrap_if_needed "${1:-}"
 
 # --- Editable defaults -------------------------------------------------------
-# Change DEFAULT_UPLOADS_PATH to point legacy uploads elsewhere (sync watcher).
+# Change DEFAULT_UPLOADS_PATH to point the shared uploads folder elsewhere.
 # Per-user uploads now live in each user's Downloads folder.
 DEFAULT_UPLOADS_PATH="data/users/anonymous/Downloads"
-# Change DEFAULT_MONITORED_PATH to pick the folder watched by chokidar.
-# Absolute paths are supported; relative values are resolved from the project root.
-if [[ "$(uname -s 2>/dev/null || true)" == "Darwin" ]]; then
-    DEFAULT_MONITORED_PATH="/Users/Shared/monitored"
-else
-    DEFAULT_MONITORED_PATH="$PROJECT_ROOT/monitored"
-fi
 
 # =============================================================================
 # DATABASE SETUP FUNCTION (SQLite)
@@ -234,87 +227,6 @@ prepare_uploads_dir() {
     fi
 }
 
-compute_watch_glob() {
-    local absolute="$1"
-    local pattern=""
-
-    if [[ -z "$absolute" ]]; then
-        return 1
-    fi
-
-    if [[ "$absolute" == "$PROJECT_ROOT" ]]; then
-        pattern="./**/*"
-    elif [[ "$absolute" == "$PROJECT_ROOT"/* ]]; then
-        local relative="${absolute#$PROJECT_ROOT/}"
-        if [[ -z "$relative" ]]; then
-            pattern="./**/*"
-        else
-            pattern="$relative/**/*"
-        fi
-    else
-        pattern="$absolute/**/*"
-    fi
-
-    printf '%s' "$pattern"
-}
-
-prepare_monitored_dir() {
-    local raw="${SQUIRREL_MONITORED_DIR:-$DEFAULT_MONITORED_PATH}"
-    local absolute
-
-    if [[ -z "$raw" ]]; then
-        echo "ERROR: DEFAULT_MONITORED_PATH is empty. Set it or export SQUIRREL_MONITORED_DIR before running ./run.sh."
-        exit 1
-    fi
-
-    if [[ "$raw" != /* ]]; then
-        absolute="$PROJECT_ROOT/$raw"
-    else
-        absolute="$raw"
-    fi
-
-    if ! mkdir -p "$absolute" 2>/dev/null; then
-        echo "ERROR: Unable to create monitored directory at $absolute"
-        exit 1
-    fi
-
-    export SQUIRREL_MONITORED_DIR="$absolute"
-
-    if [[ -z "${SQUIRREL_SYNC_WATCH:-}" ]]; then
-        local watch_patterns=()
-        local monitored_pattern
-        monitored_pattern="$(compute_watch_glob "$absolute")"
-        watch_patterns+=("$monitored_pattern")
-
-        if [[ -n "${SQUIRREL_UPLOADS_DIR:-}" ]]; then
-            local uploads_pattern
-            uploads_pattern="$(compute_watch_glob "$SQUIRREL_UPLOADS_DIR")"
-            local duplicate=false
-            for existing in "${watch_patterns[@]}"; do
-                if [[ "$existing" == "$uploads_pattern" ]]; then
-                    duplicate=true
-                    break
-                fi
-            done
-            if [[ "$duplicate" == false ]]; then
-                watch_patterns+=("$uploads_pattern")
-            fi
-        fi
-
-        local watch_pattern="${watch_patterns[0]}"
-        if [[ ${#watch_patterns[@]} -gt 1 ]]; then
-            for pattern in "${watch_patterns[@]:1}"; do
-                watch_pattern+=",$pattern"
-            done
-        fi
-
-        export SQUIRREL_SYNC_WATCH="$watch_pattern"
-    fi
-
-    echo "👀 Monitored directory: $SQUIRREL_MONITORED_DIR"
-    echo "👀 SQUIRREL_SYNC_WATCH=$SQUIRREL_SYNC_WATCH"
-}
-
 # Setup SQLite database
 if [[ -z "${SQLITE_PATH:-}" ]]; then
     echo "INFO: No SQLITE_PATH detected in environment."
@@ -338,7 +250,6 @@ fi
 echo ""
 
 prepare_uploads_dir
-prepare_monitored_dir
 
 update_hot_manifest() {
     echo "🧾 Vérification du manifest de mise à jour à chaud..."
@@ -576,7 +487,7 @@ if [ "$TAURI_ONLY" = true ]; then
         TAURI_SKIP_BUNDLE_OPEN=1 npm run tauri build
         echo ""
 
-        app_dir="$PROJECT_ROOT/platforms/desktop-tauri/target/release/bundle/macos"
+        app_dir="$PROJECT_ROOT/target/release/bundle/macos"
         if [ -d "$app_dir" ]; then
             latest_app=$(ls -td "$app_dir"/*.app 2>/dev/null | head -n 1 || true)
             if [ -n "${latest_app:-}" ] && [ -d "$latest_app" ]; then
@@ -589,7 +500,7 @@ if [ "$TAURI_ONLY" = true ]; then
             echo "WARN: macOS bundle directory not found: $app_dir"
         fi
 
-        dmg_dir="$PROJECT_ROOT/platforms/desktop-tauri/target/release/bundle/dmg"
+        dmg_dir="$PROJECT_ROOT/target/release/bundle/dmg"
         if [ -d "$dmg_dir" ]; then
             latest_dmg=$(ls -t "$dmg_dir"/*.dmg 2>/dev/null | head -n 1 || true)
             if [ -n "${latest_dmg:-}" ] && [ -f "$latest_dmg" ]; then
@@ -667,7 +578,7 @@ if [ "$PROD_BUILD" = true ]; then
     echo ""
 
     echo "🗂️  Recherche du dernier DMG généré..."
-    dmg_dir="$PROJECT_ROOT/platforms/desktop-tauri/target/release/bundle/dmg"
+    dmg_dir="$PROJECT_ROOT/target/release/bundle/dmg"
     if [ -d "$dmg_dir" ]; then
         latest_dmg=$(ls -t "$dmg_dir"/*.dmg 2>/dev/null | head -n 1 || true)
         if [ -n "${latest_dmg:-}" ] && [ -f "$latest_dmg" ]; then

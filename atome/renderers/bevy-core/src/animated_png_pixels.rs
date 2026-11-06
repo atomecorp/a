@@ -1,5 +1,5 @@
 use crate::{animated_png::PngAnimationSource, texture::rounded_rect_signed_distance};
-use image::{imageops, RgbaImage};
+use image::{RgbaImage, imageops};
 
 pub fn frame_pixels(
     mut frame: RgbaImage,
@@ -53,10 +53,10 @@ pub fn frame_pixels(
     imageops::replace(&mut output, &resized, dx.round() as i64, dy.round() as i64);
     for (x, y, pixel) in output.enumerate_pixels_mut() {
         let alpha = u16::from(pixel[3]);
-        if alpha > 0 {
-            for channel in 0..3 {
-                pixel[channel] =
-                    ((u16::from(pixel[channel]) * 255 + alpha / 2) / alpha).min(255) as u8;
+        for channel in 0..3 {
+            // A transparent pixel (alpha 0) keeps its colour.
+            if let Some(value) = (u16::from(pixel[channel]) * 255 + alpha / 2).checked_div(alpha) {
+                pixel[channel] = value.min(255) as u8;
             }
         }
         if let Some(tint) = source.tint {

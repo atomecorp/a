@@ -1,23 +1,23 @@
 use super::{
-    remote_audio_analyze_handler, remote_audio_playback_load_handler,
+    AppState, RemoteAudioAnalyzeRequest, RemoteAudioPlaybackLoadRequest,
+    RemoteAudioPlaybackPlayRequest, RemoteAudioPlaybackStopRequest, RemoteAudioRecordStartRequest,
+    RemoteAudioRecordStopRequest, remote_audio_analyze_handler, remote_audio_playback_load_handler,
     remote_audio_playback_play_handler, remote_audio_playback_stop_handler,
-    remote_audio_record_start_handler, remote_audio_record_stop_handler, remote_control, AppState,
-    RemoteAudioAnalyzeRequest, RemoteAudioPlaybackLoadRequest, RemoteAudioPlaybackPlayRequest,
-    RemoteAudioPlaybackStopRequest, RemoteAudioRecordStartRequest, RemoteAudioRecordStopRequest,
+    remote_audio_record_start_handler, remote_audio_record_stop_handler, remote_control,
 };
 use axum::{
+    Json,
     body::to_bytes,
     extract::{
-        ws::{Message, WebSocket, WebSocketUpgrade},
         State,
+        ws::{Message, WebSocket, WebSocketUpgrade},
     },
     http::{HeaderMap, HeaderValue},
     response::{IntoResponse, Response},
-    Json,
 };
 use futures_util::StreamExt;
 use serde::de::DeserializeOwned;
-use serde_json::{json, Value as JsonValue};
+use serde_json::{Value as JsonValue, json};
 
 fn request_headers(message: &JsonValue) -> Result<HeaderMap, String> {
     let mut headers = HeaderMap::new();
@@ -177,17 +177,15 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
                     }),
                 };
                 if socket
-                    .send(Message::Text(response.to_string()))
+                    .send(Message::Text(response.to_string().into()))
                     .await
                     .is_err()
                 {
                     break;
                 }
             }
-            Ok(Message::Ping(data)) => {
-                if socket.send(Message::Pong(data)).await.is_err() {
-                    break;
-                }
+            Ok(Message::Ping(data)) if socket.send(Message::Pong(data.clone())).await.is_err() => {
+                break;
             }
             Ok(Message::Close(_)) | Err(_) => break,
             _ => {}

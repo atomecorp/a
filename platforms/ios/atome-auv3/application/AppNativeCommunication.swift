@@ -45,12 +45,10 @@ final class AppNativeCommunication: NSObject, PKPushRegistryDelegate, CXProvider
     static func canHandle(_ command: String) -> Bool { command.hasPrefix("notifications_") }
     private func principal() -> String? {
         // Read the actual unlocked local grant on every delivery, including cold start.
-        return AiSRuntime.queue.sync {
-            guard let db = try? AiSRuntime.openDatabase(), let descriptor = try? AiSRuntime.localAuthDescriptor([:], db: db),
-                  let grant = descriptor["localGrant"] as? [String: Any], grant["locked"] as? Bool != true,
-                  let remote = grant["remoteSession"] as? [String: Any] else { return nil }
-            return remote["userId"] as? String
-        }
+        let descriptor = LocalServer.shared.answer(["type": "auth", "action": "local-session-describe"])
+        guard let grant = descriptor["localGrant"] as? [String: Any], grant["locked"] as? Bool != true,
+              let remote = grant["remoteSession"] as? [String: Any] else { return nil }
+        return remote["userId"] as? String
     }
     private func notify() {
         WebViewManager.evaluateJS("window.dispatchEvent(new Event('atome:notifications-available'));", label: "notifications.available")

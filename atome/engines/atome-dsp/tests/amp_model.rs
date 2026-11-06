@@ -4,14 +4,18 @@ use atome_dsp::{Processor, StereoBlock};
 // One linear WaveNet layer (a leaky ReLU of slope 1): its head is the input,
 // so the whole capture is a pure gain of `scale`.
 fn gain_capture(scale: f32, rate: u32, loudness: Option<f32>) -> String {
-    let metadata = loudness.map_or(String::new(), |l| format!(r#","metadata":{{"loudness":{l}}}"#));
+    let metadata = loudness.map_or(String::new(), |l| {
+        format!(r#","metadata":{{"loudness":{l}}}"#)
+    });
     format!(
         r#"{{"version":"0.5.4","architecture":"WaveNet","config":{{"layers":[{{"input_size":1,"condition_size":1,"channels":1,"head_size":1,"kernel_size":1,"dilations":[1],"activation":{{"type":"LeakyReLU","negative_slope":1.0}},"gated":false,"head_bias":false}}],"head":null,"head_scale":{scale}}},"weights":[1,1,0,0,0,0,1,{scale}],"sample_rate":{rate}{metadata}}}"#
     )
 }
 
 fn sine(frames: usize, frequency: f32, rate: f32) -> Vec<f32> {
-    (0..frames).map(|i| (i as f32 * frequency * std::f32::consts::TAU / rate).sin() * 0.5).collect()
+    (0..frames)
+        .map(|i| (i as f32 * frequency * std::f32::consts::TAU / rate).sin() * 0.5)
+        .collect()
 }
 
 fn run(amp: &mut AmpModel, input: &[f32], block: usize) -> Vec<f32> {
@@ -27,7 +31,11 @@ fn run(amp: &mut AmpModel, input: &[f32], block: usize) -> Vec<f32> {
 }
 
 fn max_error(expected: &[f32], actual: &[f32]) -> f32 {
-    expected.iter().zip(actual).map(|(e, a)| (e - a).abs()).fold(0.0, f32::max)
+    expected
+        .iter()
+        .zip(actual)
+        .map(|(e, a)| (e - a).abs())
+        .fold(0.0, f32::max)
 }
 
 #[test]
@@ -50,7 +58,10 @@ fn another_device_rate_is_resampled_in_and_out() {
         let mut amp = AmpModel::from_json_str(&gain_capture(0.5, 48000, None)).unwrap();
         amp.prepare(device_rate, 37);
         let latency = amp.latency_frames() as usize;
-        assert!(latency > 0 && latency < 32, "latency {latency} at {device_rate}");
+        assert!(
+            latency > 0 && latency < 32,
+            "latency {latency} at {device_rate}"
+        );
         let input = sine(device_rate as usize / 2, 997.0, device_rate);
         // Odd, uneven block sizes: the conversion must never run dry.
         let mut output = Vec::new();
@@ -64,7 +75,10 @@ fn another_device_rate_is_resampled_in_and_out() {
             start = end;
         }
         let settled = device_rate as usize / 10;
-        let expected: Vec<f32> = input[settled - latency..input.len() - latency].iter().map(|x| x * 0.5).collect();
+        let expected: Vec<f32> = input[settled - latency..input.len() - latency]
+            .iter()
+            .map(|x| x * 0.5)
+            .collect();
         let error = max_error(&expected, &output[settled..]);
         assert!(error < 0.01, "error {error} at {device_rate}");
     }
@@ -107,7 +121,9 @@ fn a2_size_dial_switches_the_submodel() {
 #[test]
 fn a_recurrent_capture_runs_and_stays_finite() {
     // One-layer LSTM, hidden size 2: 4h(1+h) + 4h + h + h weights, then the head (h + 1).
-    let weights: Vec<String> = (0..39).map(|i| format!("{}", ((i * 7 % 11) as f32 - 5.0) * 0.1)).collect();
+    let weights: Vec<String> = (0..39)
+        .map(|i| format!("{}", ((i * 7 % 11) as f32 - 5.0) * 0.1))
+        .collect();
     let json = format!(
         r#"{{"version":"0.5.4","architecture":"LSTM","config":{{"input_size":1,"hidden_size":2,"num_layers":1}},"weights":[{}],"sample_rate":48000}}"#,
         weights.join(",")

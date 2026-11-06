@@ -100,12 +100,24 @@ pub struct AtomeProceduralSdf {
     pub mystic_style: [f32; 4],
 }
 
-fn default_reveal() -> f32 { 1.0 }
-fn default_surface_size() -> [f32; 2] { [1.0, 1.0] }
-fn default_assistant_size() -> f32 { 1.0 }
-fn default_assistant_blur() -> f32 { 48.0 }
-fn default_assistant_refraction() -> f32 { 24.0 }
-fn default_surface_edge_softness() -> f32 { 1.0 }
+fn default_reveal() -> f32 {
+    1.0
+}
+fn default_surface_size() -> [f32; 2] {
+    [1.0, 1.0]
+}
+fn default_assistant_size() -> f32 {
+    1.0
+}
+fn default_assistant_blur() -> f32 {
+    48.0
+}
+fn default_assistant_refraction() -> f32 {
+    24.0
+}
+fn default_surface_edge_softness() -> f32 {
+    1.0
+}
 fn finite_or(value: f32, fallback: f32) -> f32 {
     if value.is_finite() { value } else { fallback }
 }
@@ -152,7 +164,9 @@ impl AtomeProceduralSdf {
             assistant_size: finite_or(self.assistant_size, 1.0).max(1.0),
             background_blur_px: finite_or(self.background_blur_px, 48.0).clamp(0.0, 128.0),
             lens_refraction_px: finite_or(self.lens_refraction_px, 24.0).clamp(0.0, 128.0),
-            assistant_background_tint: self.assistant_background_tint.map(|value| finite_or(value, 0.0).clamp(0.0, 1.0)),
+            assistant_background_tint: self
+                .assistant_background_tint
+                .map(|value| finite_or(value, 0.0).clamp(0.0, 1.0)),
             // 0 = assistant, 1 = unused (the retired Flower menu), 2 = water drop,
             // 3 = mystic tiles; 4 = restored login SVG/light (login_light.wgsl).
             mode: finite_or(self.mode, 0.0).clamp(0.0, 4.0),
@@ -166,40 +180,54 @@ impl AtomeProceduralSdf {
                 finite_or(self.surface_tint[2], 0.0).clamp(0.0, 1.0),
                 finite_or(self.surface_tint[3], 0.0).clamp(0.0, 1.0),
             ],
-            liquid_drops: self.liquid_drops.map(|drop| [
-                finite_or(drop[0], 0.0),
-                finite_or(drop[1], 0.0),
-                finite_or(drop[2], 0.0).max(0.0),
-                finite_or(drop[3], 0.0).clamp(0.0, 1.0),
-            ]),
-            liquid_drop_shapes: self.liquid_drop_shapes.map(|shape| [
-                finite_or(shape[0], 0.0).max(0.0),
-                finite_or(shape[1], 0.0).max(0.0),
-                finite_or(shape[2], 0.0).clamp(0.0, 1.0),
-                finite_or(shape[3], 0.0),
-            ]),
+            liquid_drops: self.liquid_drops.map(|drop| {
+                [
+                    finite_or(drop[0], 0.0),
+                    finite_or(drop[1], 0.0),
+                    finite_or(drop[2], 0.0).max(0.0),
+                    finite_or(drop[3], 0.0).clamp(0.0, 1.0),
+                ]
+            }),
+            liquid_drop_shapes: self.liquid_drop_shapes.map(|shape| {
+                [
+                    finite_or(shape[0], 0.0).max(0.0),
+                    finite_or(shape[1], 0.0).max(0.0),
+                    finite_or(shape[2], 0.0).clamp(0.0, 1.0),
+                    finite_or(shape[3], 0.0),
+                ]
+            }),
             liquid_drop_count: finite_or(self.liquid_drop_count, 0.0).clamp(0.0, 24.0),
             // One mystic tile: its box, its flip and its family. The cap
             // is the same as the shader's, so an extra tile is ignored
             // rather than written past the array.
-            mystic_tiles: self.mystic_tiles.map(|tile| [
-                finite_or(tile[0], 0.0),
-                finite_or(tile[1], 0.0),
-                finite_or(tile[2], 0.0).max(0.0),
-                finite_or(tile[3], 0.0).max(0.0),
-            ]),
-            mystic_tile_motion: self.mystic_tile_motion.map(|motion| [
-                finite_or(motion[0], 0.0).clamp(0.0, 1.0),
-                finite_or(motion[1], 0.0).clamp(0.0, 1.0),
-                if finite_or(motion[2], 1.0) < 0.0 { -1.0 } else { 1.0 },
-                finite_or(motion[3], 0.0),
-            ]),
-            mystic_tile_colors: self.mystic_tile_colors.map(|color| [
-                finite_or(color[0], 0.0).clamp(0.0, 1.0),
-                finite_or(color[1], 0.0).clamp(0.0, 1.0),
-                finite_or(color[2], 0.0).clamp(0.0, 1.0),
-                finite_or(color[3], 0.0).clamp(0.0, 1.0),
-            ]),
+            mystic_tiles: self.mystic_tiles.map(|tile| {
+                [
+                    finite_or(tile[0], 0.0),
+                    finite_or(tile[1], 0.0),
+                    finite_or(tile[2], 0.0).max(0.0),
+                    finite_or(tile[3], 0.0).max(0.0),
+                ]
+            }),
+            mystic_tile_motion: self.mystic_tile_motion.map(|motion| {
+                [
+                    finite_or(motion[0], 0.0).clamp(0.0, 1.0),
+                    finite_or(motion[1], 0.0).clamp(0.0, 1.0),
+                    if finite_or(motion[2], 1.0) < 0.0 {
+                        -1.0
+                    } else {
+                        1.0
+                    },
+                    finite_or(motion[3], 0.0),
+                ]
+            }),
+            mystic_tile_colors: self.mystic_tile_colors.map(|color| {
+                [
+                    finite_or(color[0], 0.0).clamp(0.0, 1.0),
+                    finite_or(color[1], 0.0).clamp(0.0, 1.0),
+                    finite_or(color[2], 0.0).clamp(0.0, 1.0),
+                    finite_or(color[3], 0.0).clamp(0.0, 1.0),
+                ]
+            }),
             mystic_count: [
                 finite_or(self.mystic_count[0], 0.0).clamp(0.0, 24.0),
                 finite_or(self.mystic_count[1], 0.0).clamp(0.0, 1.0),
@@ -212,12 +240,14 @@ impl AtomeProceduralSdf {
                 finite_or(self.mystic_style[2], 0.5).clamp(0.0, 1.0),
                 finite_or(self.mystic_style[3], 0.6).clamp(0.25, 8.0),
             ],
-            surface_parameters: self.surface_parameters.map(|petal| [
-                finite_or(petal[0], 0.0),
-                finite_or(petal[1], 0.0),
-                finite_or(petal[2], 0.0).max(0.0),
-                finite_or(petal[3], 0.0).clamp(0.0, 1.0),
-            ]),
+            surface_parameters: self.surface_parameters.map(|petal| {
+                [
+                    finite_or(petal[0], 0.0),
+                    finite_or(petal[1], 0.0),
+                    finite_or(petal[2], 0.0).max(0.0),
+                    finite_or(petal[3], 0.0).clamp(0.0, 1.0),
+                ]
+            }),
         }
     }
 }

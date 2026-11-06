@@ -4,18 +4,19 @@ use crate::{
         sync_backdrop_surface_corner_radius, sync_backdrop_surface_opacity,
     },
     clip::apply_entity_clip,
-    media_window::{refresh_media_window_mask, AtomeMediaWindow},
+    media_window::{AtomeMediaWindow, refresh_media_window_mask},
     procedural_sdf::patch_procedural_sdf,
     render_math::color_from_rgba,
     selection_overlay::rebuild_selection_overlay,
     shape_sdf::{
-        cached_image_handle_from_shape_mask, AtomeShapeGeometry, AtomeShapeSilhouette,
-        AtomeShapeVariant,
+        AtomeShapeGeometry, AtomeShapeSilhouette, AtomeShapeVariant,
+        cached_image_handle_from_shape_mask,
     },
     shape_shadow_overlay::{rebuild_shape_shadow_overlay, sync_shape_shadow_overlay_opacity},
+    spatial_mask_gpu::{queue_masked_silhouette, queue_masked_texture},
     texture::uniform_corner_radii,
     types::*,
-    video_external_texture::{apply_video_mask_style, AtomeVideoExternalTexture},
+    video_external_texture::{AtomeVideoExternalTexture, apply_video_mask_style},
     waveform_playback_overlay::rebuild_waveform_playback_overlay,
 };
 use bevy::prelude::*;
@@ -33,7 +34,7 @@ fn entity_for(world: &World, id: &str) -> Result<Entity, String> {
 pub(crate) fn entity_shape_silhouette(world: &World, entity: Entity) -> AtomeShapeSilhouette {
     let size = world
         .get::<AtomeLogicalSize>(entity)
-        .map(|value| *value)
+        .copied()
         .unwrap_or(AtomeLogicalSize {
             width: 1.0,
             height: 1.0,
@@ -53,7 +54,8 @@ pub(crate) fn entity_shape_silhouette(world: &World, entity: Entity) -> AtomeSha
 }
 
 /// The alpha coverage of an unpainted silhouette cut by the Atome's resolved
-/// mask. `None` when it covers its whole box (a square without mask).
+/// mask (drawn on the GPU, `spatial_mask_gpu.rs`). `None` when it covers its
+/// whole box (a square without mask).
 pub(crate) fn silhouette_mask_handle(
     world: &mut World,
     silhouette: &AtomeShapeSilhouette,
@@ -61,18 +63,12 @@ pub(crate) fn silhouette_mask_handle(
     id: &str,
 ) -> Result<Option<Handle<Image>>, String> {
     if let Some(mask) = mask {
-        let texture = crate::shape_sdf::apply_spatial_mask_to_texture(
-            &crate::shape_sdf::shape_mask_texture(silhouette),
-            &mask,
-        );
-        return Ok(Some(crate::texture::image_handle_from_texture(
-            &mut world.resource_mut::<Assets<Image>>(),
-            &Some(texture),
-            id,
-        )?));
+        return Ok(Some(queue_masked_silhouette(world, silhouette, &mask)?));
     }
     if silhouette.requires_mask() {
-        return Ok(Some(cached_image_handle_from_shape_mask(world, silhouette, id)?));
+        return Ok(Some(cached_image_handle_from_shape_mask(
+            world, silhouette, id,
+        )?));
     }
     Ok(None)
 }
@@ -116,13 +112,10 @@ pub(crate) fn refresh_shape_surface(
             .get::<AtomeResolvedMask>(entity)
             .and_then(|v| v.0.clone())
         {
-            let texture = crate::shape_sdf::apply_spatial_mask_to_texture(
+            Some(queue_masked_texture(
+                world,
                 &paint.texture(&silhouette, fill),
                 &mask,
-            );
-            Some(crate::texture::image_handle_from_texture(
-                &mut world.resource_mut::<Assets<Image>>(),
-                &Some(texture),
                 id,
             )?)
         } else {
@@ -256,19 +249,17 @@ pub fn apply_style(world: &mut World, patch: AtomeStylePatch) -> Result<(), Stri
             refresh_workspace_backdrop_enabled(world)?;
         }
     }
-    if let Some(filters) = patch.filters {
-        if let Some(mut video) =
+    if let Some(filters) = patch.filters
+        && let Some(mut video) =
             world.get_mut::<crate::video_external_texture::AtomeVideoExternalTexture>(entity)
-        {
-            video.filters = filters.normalized();
-        }
+    {
+        video.filters = filters.normalized();
     }
-    if let Some(transition) = patch.transition {
-        if let Some(mut video) =
+    if let Some(transition) = patch.transition
+        && let Some(mut video) =
             world.get_mut::<crate::video_external_texture::AtomeVideoExternalTexture>(entity)
-        {
-            video.transition = transition.normalized();
-        }
+    {
+        video.transition = transition.normalized();
     }
     if let Some(procedural) = patch.procedural {
         patch_procedural_sdf(world, entity, procedural)?;

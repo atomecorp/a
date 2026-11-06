@@ -16,14 +16,13 @@ const installRecordingCanvas = (windowRef) => {
     const draws = [];
     const fills = [];
     windowRef.HTMLCanvasElement.prototype.getContext = function getContext() {
-        const canvas = this;
         return {
             font: '10px sans-serif',
             beginPath: () => {}, clearRect: () => {}, clip: () => {}, rect: () => {},
             restore: () => {}, save: () => {}, scale: () => {}, strokeText: () => {},
             fillRect(x, y, width, height) { fills.push({ x, y, width, height }); },
             fillText(text, x, y) { draws.push({ text, x, y, font: this.font }); },
-            getImageData: () => ({ data: new Uint8ClampedArray(Math.max(1, canvas.width * canvas.height * 4)) }),
+            getImageData: () => ({ data: new Uint8ClampedArray(Math.max(1, this.width * this.height * 4)) }),
             measureText(text) {
                 const size = Number(/([0-9.]+)px/.exec(this.font)?.[1] || 10);
                 const familyScale = /Georgia/.test(this.font) ? 1.5 : 1;

@@ -4,13 +4,17 @@
 // quieter the longer it was held. A keyswitch key chooses which switched zones
 // sound and plays nothing unless a zone covers it; a one-shot zone ignores the
 // key let go; a zone's filter is set on each voice it starts.
-use super::{Sampler, VoiceMode, HELD_NOTES, POLYPHONY, TUNE_CENTS};
-use crate::keymap::{Pick, NO_PICK};
-use crate::zone::{midi_velocity, MAX_PLAYERS};
+use super::{HELD_NOTES, POLYPHONY, Sampler, TUNE_CENTS, VoiceMode};
+use crate::keymap::{NO_PICK, Pick};
+use crate::zone::{MAX_PLAYERS, midi_velocity};
 
 impl Sampler {
     pub(super) fn note_on(&mut self, note: u8, velocity: f32) {
-        if self.keymap.switches().is_some_and(|switches| switches.contains(note)) {
+        if self
+            .keymap
+            .switches()
+            .is_some_and(|switches| switches.contains(note))
+        {
             self.switch = note;
             if !self.sounds(note, Some(velocity)) {
                 return;
@@ -35,7 +39,12 @@ impl Sampler {
     }
 
     pub(super) fn note_off(&mut self, note: u8) {
-        if self.keymap.switches().is_some_and(|switches| switches.contains(note)) && !self.sounds(note, None) {
+        if self
+            .keymap
+            .switches()
+            .is_some_and(|switches| switches.contains(note))
+            && !self.sounds(note, None)
+        {
             return;
         }
         if self.mode() != VoiceMode::Poly && self.held_count > 0 {
@@ -79,14 +88,29 @@ impl Sampler {
 
     // A release take sounds quieter the longer the key was held.
     pub(super) fn trigger_release(&mut self, zone: usize, note: u8, level: f32, held_seconds: f32) {
-        let Some(take) = self.keymap.pick_release(zone) else { return };
+        let Some(take) = self.keymap.pick_release(zone) else {
+            return;
+        };
         let decay = self.keymap.zone(zone).release_decay_s.max(0.001);
-        let picks = [Pick { zone, take, level: 1.0 }];
+        let picks = [Pick {
+            zone,
+            take,
+            level: 1.0,
+        }];
         let shape = self.shape();
         let index = self.pool.take(self.values[POLYPHONY as usize] as usize);
         let transpose = self.bend + self.values[TUNE_CENTS as usize] / 100.0;
         let voice = &mut self.pool.voices_mut()[index];
-        voice.start(&mut context!(self), &picks, note, 1.0, level * (-held_seconds / decay).exp(), shape, true, transpose);
+        voice.start(
+            &mut context!(self),
+            &picks,
+            note,
+            1.0,
+            level * (-held_seconds / decay).exp(),
+            shape,
+            true,
+            transpose,
+        );
         voice.set_filter(self.keymap.zone(zone).filter, note, 1.0);
         self.primes += voice.is_stretching() as usize;
         voice.zone = zone;
@@ -101,22 +125,50 @@ impl Sampler {
         let midi = midi_velocity(velocity);
         let transpose = self.bend + self.values[TUNE_CENTS as usize] / 100.0;
         for zone in 0..self.keymap.len() {
-            if !self.keymap.zone(zone).contains(note, midi) || self.keymap.zone(zone).switch.is_some_and(|key| key != self.switch) {
+            if !self.keymap.zone(zone).contains(note, midi)
+                || self
+                    .keymap
+                    .zone(zone)
+                    .switch
+                    .is_some_and(|key| key != self.switch)
+            {
                 continue;
             }
             for cut in 0..self.keymap.zone(zone).cuts.len() {
                 let target = self.keymap.zone(zone).cuts[cut];
-                for voice in self.pool.voices_mut().iter_mut().filter(|voice| voice.active && voice.zone == target && !voice.choking) {
+                for voice in self
+                    .pool
+                    .voices_mut()
+                    .iter_mut()
+                    .filter(|voice| voice.active && voice.zone == target && !voice.choking)
+                {
                     voice.choke();
                 }
             }
             let index = self.pool.take(polyphony);
             if self.keymap.zone(zone).composed.is_some() {
-                self.pool.voices_mut()[index].start_composed(&mut context!(self), zone, note, velocity, level, shape, transpose);
+                self.pool.voices_mut()[index].start_composed(
+                    &mut context!(self),
+                    zone,
+                    note,
+                    velocity,
+                    level,
+                    shape,
+                    transpose,
+                );
             } else {
                 let mut picks = [NO_PICK; MAX_PLAYERS];
                 let count = self.keymap.pick(zone, velocity, &mut picks);
-                self.pool.voices_mut()[index].start(&mut context!(self), &picks[..count], note, velocity, level, shape, false, transpose);
+                self.pool.voices_mut()[index].start(
+                    &mut context!(self),
+                    &picks[..count],
+                    note,
+                    velocity,
+                    level,
+                    shape,
+                    false,
+                    transpose,
+                );
             }
             let voice = &mut self.pool.voices_mut()[index];
             let played = self.keymap.zone(zone);
@@ -135,7 +187,12 @@ impl Sampler {
     pub(super) fn glide_held(&mut self, note: u8) -> bool {
         let trigger = self.triggers;
         let mut glided = false;
-        for voice in self.pool.voices_mut().iter_mut().filter(|voice| voice.active && voice.key_down && voice.trigger == trigger) {
+        for voice in self
+            .pool
+            .voices_mut()
+            .iter_mut()
+            .filter(|voice| voice.active && voice.key_down && voice.trigger == trigger)
+        {
             voice.glide_to(note);
             glided = true;
         }
@@ -143,21 +200,32 @@ impl Sampler {
     }
 
     pub(super) fn cut_held(&mut self) {
-        for voice in self.pool.voices_mut().iter_mut().filter(|voice| voice.active && !voice.one_shot && !voice.choking) {
+        for voice in self
+            .pool
+            .voices_mut()
+            .iter_mut()
+            .filter(|voice| voice.active && !voice.one_shot && !voice.choking)
+        {
             voice.choke();
         }
     }
 
     // Some zone (for the current keyswitch) plays this note, at this velocity or at any.
     fn sounds(&self, note: u8, velocity: Option<f32>) -> bool {
-        self.keymap.zones().iter().any(|zone| zone.switch.is_none_or(|key| key == self.switch) && match velocity {
-            Some(velocity) => zone.contains(note, midi_velocity(velocity)),
-            None => (zone.key_low..=zone.key_high).contains(&note),
+        self.keymap.zones().iter().any(|zone| {
+            zone.switch.is_none_or(|key| key == self.switch)
+                && match velocity {
+                    Some(velocity) => zone.contains(note, midi_velocity(velocity)),
+                    None => (zone.key_low..=zone.key_high).contains(&note),
+                }
         })
     }
 
     pub(super) fn forget(&mut self, note: u8) {
-        if let Some(at) = self.held[..self.held_count].iter().position(|&held| held == note) {
+        if let Some(at) = self.held[..self.held_count]
+            .iter()
+            .position(|&held| held == note)
+        {
             self.held.copy_within(at + 1..self.held_count, at);
             self.held_count -= 1;
         }

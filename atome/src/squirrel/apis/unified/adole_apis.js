@@ -178,6 +178,16 @@ export const AdoleAPI = {
       writable_properties: payload.writableProperties }, 'sharing_auth_unavailable'),
     revoke: (shareId) => fastifyCall({ type: 'share', action: 'revoke', share_id: shareId }, 'sharing_auth_unavailable'),
     withPeer: (peerUserId) => fastifyCall({ type: 'share', action: 'with-peer', peer_user_id: peerUserId }, 'sharing_auth_unavailable'),
+    // A list sent (server/sync_share_lists.js): read it, decide its new version, keep a copy, tell its recipients it changed.
+    pending: () => fastifyCall({ type: 'share', action: 'pending' }, 'sharing_auth_unavailable'),
+    sent: () => fastifyCall({ type: 'share', action: 'sent' }, 'sharing_auth_unavailable'),
+    // The shares made to this account, every status (a recipient's received lists checked again after being away).
+    inbox: () => fastifyCall({ type: 'share', action: 'inbox' }, 'sharing_auth_unavailable'),
+    listView: (shareId) => fastifyCall({ type: 'share', action: 'list-view', share_id: shareId }, 'sharing_auth_unavailable'),
+    acceptVersion: (shareId) => fastifyCall({ type: 'share', action: 'accept-version', share_id: shareId }, 'sharing_auth_unavailable'),
+    refuseVersion: (shareId) => fastifyCall({ type: 'share', action: 'refuse-version', share_id: shareId }, 'sharing_auth_unavailable'),
+    detach: (shareId) => fastifyCall({ type: 'share', action: 'detach', share_id: shareId }, 'sharing_auth_unavailable'),
+    announce: (atomeId) => fastifyCall({ type: 'share', action: 'announce', atome_id: atomeId }, 'sharing_auth_unavailable'),
     grantPermission: grant_share_permission,
     setPrivacyRule: set_property_privacy_rule,
     listPrivacyRules: list_property_privacy_rules

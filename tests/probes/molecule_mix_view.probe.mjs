@@ -108,7 +108,7 @@ test('tap, swipe, hold-move, hold-delete, + and OUT map to canonical operations'
     const at = (x, y) => ({ x, y, client_x: x, client_y: y });
     await send('tile.activate', { stripId: 'voice:audio', target: 'add' });
     await send('picker.choose', { key: 'dsp_reverb' });
-    let chain = strip('voice:audio').chain;
+    const chain = strip('voice:audio').chain;
     assert.deepEqual(chain.map((module) => module.type), ['volume', 'pan', 'dsp']);
     const fx = chain[2].module_id;
     // The effect added is open: its panel welded to its tool, the strip widened by it (D18, D24).

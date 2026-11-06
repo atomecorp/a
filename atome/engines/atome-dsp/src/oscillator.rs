@@ -1,7 +1,7 @@
 // Band-limited oscillator (polyBLEP), the first generator brick. It writes the
 // block instead of processing it: a generator is an input node of a strip.
 
-use crate::{db_to_amplitude, ParamSpec, Processor, Smoothed, StereoBlock, Unit};
+use crate::{ParamSpec, Processor, Smoothed, StereoBlock, Unit, db_to_amplitude};
 use std::f32::consts::TAU;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -110,7 +110,9 @@ impl Processor for Oscillator {
     }
 
     fn set_param(&mut self, id: u32, value: f32) {
-        let Some(spec) = PARAMS.get(id as usize) else { return };
+        let Some(spec) = PARAMS.get(id as usize) else {
+            return;
+        };
         let value = spec.clamp(value);
         match id {
             FREQUENCY => self.frequency.set(value),

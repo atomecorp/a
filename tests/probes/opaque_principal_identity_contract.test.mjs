@@ -10,9 +10,9 @@ describe('opaque principal identity contract', () => {
         const identity = read('server/auth_identity.js');
         const crypto = read('server/auth_crypto.js');
         const server = read('server/wsPhoneLinkAuth.js');
-        const tauri = read('platforms/desktop-tauri/src/server/local_auth_device.rs');
-        const ios = read('platforms/ios/atome-auv3/Common/AiSRuntimeAuth.swift');
-        const iosMigration = read('platforms/ios/atome-auv3/Common/LocalHTTPServer.swift');
+        // The one local host of Tauri and iOS (`atome-server::local`); the iOS app runs it in process.
+        const local = read('atome/servers/atome-server/src/local/local_auth_device.rs');
+        const ios = read('platforms/ios/bevy-renderer/src/local_server.rs');
 
         expect(schema).toContain('principal_phone_credentials');
         expect(schema).toContain('principal_identity_aliases');
@@ -23,12 +23,10 @@ describe('opaque principal identity contract', () => {
         expect(identity).not.toMatch(/UPDATE\s+snapshots/i);
         expect(crypto).toContain('crypto.randomUUID()');
         expect(server).toContain('generateOpaquePrincipalId');
-        expect(tauri).toContain('Uuid::new_v4()');
-        expect(ios).toContain('UUID().uuidString.lowercased()');
-        expect(iosMigration).toContain('principal_identity_aliases');
-        expect(iosMigration).toContain('principal_identity_migrations');
+        expect(local).toContain('Uuid::new_v4()');
+        expect(ios).toContain('local::prepare(');
 
-        for (const source of [crypto, server, tauri, ios]) {
+        for (const source of [crypto, server, local]) {
             expect(source).not.toMatch(/generateDeterministicUserId|Uuid::new_v5|uuidv5|SQUIRREL_USER_NAMESPACE|userNamespace/);
         }
     });

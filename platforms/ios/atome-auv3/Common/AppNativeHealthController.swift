@@ -19,7 +19,7 @@ import CoreMotion
 // - `health_channel_open` issues ONE channel token per page load; every other
 //   command must carry it. A navigation of the main frame resets it.
 // - Identity comes from the local session token, verified here with
-//   `AiSRuntime.verifyToken`; a JavaScript user id is never trusted. Guests
+//   the local server (`LocalServer.verifiedUser`); a JavaScript user id is never trusted. Guests
 //   (no `grant` claim) cannot use health.
 // - The device store is associated to an account only by an explicit
 //   `health_link`, stored in this device's keychain (not synchronizable).
@@ -180,17 +180,11 @@ final class AppNativeHealthController {
         return Array(Set(ids)).sorted()
     }
 
-    // Verified on the canonical database queue, like every protected local API.
-    // The principal is a signed-in account or the active local guest (both
-    // checked by `verifyToken`): health values stay on this device.
+    // Verified by the local server, like every protected local API. The principal is a
+    // signed-in account or the active local guest: health values stay on this device.
     private static func verifiedAccount(_ auth: Any?) -> String? {
         guard let token = auth as? String, !token.isEmpty else { return nil }
-        let verified: [String: Any]? = AiSRuntime.queue.sync {
-            guard let result = try? AiSRuntime.verifyToken(token) else { return nil }
-            return result
-        }
-        guard let claims = verified, let subject = claims["sub"] as? String, !subject.isEmpty else { return nil }
-        return subject
+        return LocalServer.shared.verifiedUser(token)
     }
 
     private func current(_ generation: UInt64) -> Bool { !channelClosed && generation == self.generation }

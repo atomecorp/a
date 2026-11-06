@@ -3,9 +3,11 @@ use super::*;
 #[test]
 fn development_authority_is_an_exact_loopback_origin() {
     for origin in ["http://127.0.0.1:3001", "http://localhost:3001/"] {
-        assert!(development_auth_authority(origin)
-            .unwrap()
-            .ends_with(":3001/ws/api"));
+        assert!(
+            development_auth_authority(origin)
+                .unwrap()
+                .ends_with(":3001/ws/api")
+        );
     }
     for origin in [
         "https://atome.one",
@@ -28,8 +30,6 @@ async fn development_transport_covers_payment_cancel_and_session_lifecycle() {
     use tokio_tungstenite::{accept_async, tungstenite::Message};
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
-    let saved_mock = std::env::var_os("SQUIRREL_AUTH_SMS_MOCK");
-    let saved_base = std::env::var_os("SQUIRREL_FASTIFY_URL");
     let actions = [
         "phone-link-start",
         "phone-link-challenge",
@@ -53,35 +53,31 @@ async fn development_transport_covers_payment_cancel_and_session_lifecycle() {
                 .send(Message::Text(
                     json!({"requestId":message["requestId"],
                 "ok":true,"action":message["action"]})
-                    .to_string(),
+                    .to_string()
+                    .into(),
                 ))
                 .await
                 .unwrap();
         }
     });
-    std::env::set_var("SQUIRREL_AUTH_SMS_MOCK", "0");
-    let disabled = auth_development_request(json!({"action":"phone-link-start"})).await;
-    std::env::set_var("SQUIRREL_AUTH_SMS_MOCK", "1");
-    std::env::set_var("SQUIRREL_FASTIFY_URL", base);
-    let forbidden = auth_development_request(json!({"action":"session-delete-account"})).await;
+    let disabled = development_request(json!({"action":"phone-link-start"}), false, None).await;
+    let missing = development_request(json!({"action":"phone-link-start"}), true, None).await;
+    let forbidden = development_request(
+        json!({"action":"session-delete-account"}),
+        true,
+        Some(base.clone()),
+    )
+    .await;
     let mut responses = Vec::new();
     for action in actions {
         responses.push((
             action,
-            auth_development_request(json!({"action":action})).await,
+            development_request(json!({"action":action}), true, Some(base.clone())).await,
         ));
-    }
-    for (name, saved) in [
-        ("SQUIRREL_AUTH_SMS_MOCK", saved_mock),
-        ("SQUIRREL_FASTIFY_URL", saved_base),
-    ] {
-        match saved {
-            Some(value) => std::env::set_var(name, value),
-            None => std::env::remove_var(name),
-        }
     }
     server.abort();
     assert_eq!(disabled.unwrap_err(), "auth_development_mode_disabled");
+    assert_eq!(missing.unwrap_err(), "auth_development_server_missing");
     assert_eq!(forbidden.unwrap_err(), "auth_development_action_forbidden");
     for (action, response) in responses {
         assert_eq!(response.unwrap()["action"], action);

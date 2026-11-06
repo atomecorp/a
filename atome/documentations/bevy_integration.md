@@ -2,7 +2,7 @@
 
 ## Status
 
-Bevy is integrated as an official, feature-gated Tauri Rust dependency, as the active browser/WASM project renderer entry point for visible WebView project projections, and as a native command target for diagnostics or hosts that explicitly provide a presentable native renderer.
+Bevy is the browser/WASM project renderer of every visible WebView project projection (Web, Tauri, iOS/AUv3), built from the shared Atome Bevy core. Tauri has no native Bevy renderer: its standalone Bevy window (`bevy_renderer_native`, `platforms/desktop-tauri/src/bevy_backend/`) was never presented and was removed on 2026-11-06 (user decision).
 
 The browser project rendering path is:
 
@@ -16,39 +16,23 @@ The Tauri and iOS visible WebView project rendering path is:
 canonical Atome record -> RenderAtom / Virtual Scene -> Bevy projection adapter -> Bevy WASM renderer -> WebGPU canvas
 ```
 
-When a host declares `window.__ATOME_NATIVE_BEVY_PRESENTABLE__ === true`, the native project rendering path is:
-
-```text
-canonical Atome record -> RenderAtom / Virtual Scene -> Bevy projection adapter -> native Bevy commands -> shared Atome Bevy core -> host-owned presentation surface
-```
-
-The Bevy backend consumes the existing renderer-agnostic virtual scene contract instead of becoming a parallel Atome state model. WebView project rendering starts one Bevy app on the existing shared project canvas and applies Virtual Scene diffs through explicit WASM exports. Native project rendering dispatches the same scene and diff contract through `bevy_native_start`, `bevy_native_apply_ops`, and `bevy_native_resize` only after the host declares a presentable native renderer.
-
-The Tauri IPC bridge uses the embedded native Bevy App builder. That path installs the shared Atome Bevy core and runs the Startup scene schedule, but it intentionally does not install Bevy `WindowPlugin` or run a nested winit/render loop from a Tauri command. It reports `presentable:false`; the JavaScript runtime must not select it for the visible WebView project canvas unless the host explicitly declares `window.__ATOME_NATIVE_BEVY_PRESENTABLE__ === true`. Standalone Bevy window presentation remains owned by `bevy_renderer_native` and `run_atome_bevy_native(...)`.
+The Bevy backend consumes the existing renderer-agnostic virtual scene contract instead of becoming a parallel Atome state model. WebView project rendering starts one Bevy app on the existing shared project canvas and applies Virtual Scene diffs through explicit WASM exports.
 
 ## Version
 
-The Bevy version is declared in:
+The Bevy version is declared once, in the root workspace manifest:
 
 ```text
-platforms/desktop-tauri/Cargo.toml
+Cargo.toml   [workspace.dependencies]
 ```
 
 Current pinned dependency:
 
 ```toml
-bevy = { version = "0.18.1", default-features = false, optional = true }
+bevy = { version = "0.19.0", default-features = false }
 ```
 
-The dependency is exposed through the Cargo feature:
-
-```toml
-bevy_backend = ["dep:bevy"]
-```
-
-`default-features = false` keeps setup progressive: Cargo resolves Bevy and the ECS/transform contract used by the backend without enabling a second active audio stack.
-
-`bevy_renderer_core` enables the shared native Bevy scene/ops bridge used by Tauri IPC. Because that feature activates `bevy_winit`, it also enables Bevy's Linux `x11` and `wayland` Winit backends so Linux and WSL builds do not require the standalone native-window feature to satisfy Winit's compile-time backend selection. `bevy_renderer_native` additionally enables the standalone native Bevy window-loop entry point and native-window extras such as `bevy/multi_threaded`. The Tauri command bridge must not call the standalone window-loop path from IPC, because Bevy window resources are created by the Bevy/winit event loop rather than by a single command update.
+`default-features = false` keeps setup progressive: the wrapper (`platforms/web/bevy-renderer`) and the shared core enable only the Bevy features they use, without a second active audio stack.
 
 ## Setup
 
@@ -68,7 +52,7 @@ The setup wrapper delegates to the existing bootstrap flow in `scripts/setup/boo
 - local Tauri CLI;
 - Tauri Cargo metadata resolution.
 
-No global Bevy binary is installed. Bevy is resolved by Cargo from the Tauri crate manifest.
+No global Bevy binary is installed. Bevy is resolved by Cargo from the root workspace manifest.
 
 For a non-launching audit path, run:
 
@@ -78,88 +62,18 @@ For a non-launching audit path, run:
 
 ## Validation
 
-Use these commands to validate the Bevy integration:
-
-```bash
-npm run cargo:metadata
-npm run cargo:bevy:check
-npm run cargo:bevy:test
-```
-
-`npm run cargo:bevy:check` proves that the Bevy dependency resolves and the feature-gated backend compiles.
-On Linux and WSL, this check must pass with `bevy_renderer_core` alone because that feature owns the Winit display backend selection required by `bevy_winit`.
-
-For the native command bridge used by Tauri project rendering, run:
-
-```bash
-cargo check --manifest-path platforms/desktop-tauri/Cargo.toml --features bevy_renderer_core
-```
-
-`npm run cargo:bevy:test` proves the Atome-to-Bevy mapping contract compiles, decodes native render ops, and starts the embedded Tauri command bridge scene without requiring a Bevy window resource. `bevy_backend` alone is an ECS/core dependency boundary and must not be used as the Tauri project-surface native command feature.
-
-## Power Policy
-
-The Bevy preparation backend must behave like a professional desktop application, not a continuously ticking game loop.
-
-Primary source:
-
-```text
-platforms/desktop-tauri/src/bevy_backend/power.rs
-```
-
-Profiles are selected by:
-
-```bash
-ATOME_POWER_PROFILE=eco|balanced|performance
-```
-
-Default profile:
-
-```text
-eco
-```
-
-Profile policy:
-
-- `eco`: focused reactive low-power updates every 5 seconds; unfocused reactive low-power updates every 60 seconds.
-- `balanced`: mirrors Bevy `WinitSettings::desktop_app()`.
-- `performance`: mirrors Bevy `WinitSettings::game()` and is opt-in only.
-
-Present policy:
-
-- `eco` and `balanced` use a capped/vsync-style `AutoVsync` policy.
-- `performance` may use `AutoNoVsync`.
-
-Redraw policy:
-
-- Idle does not write transforms.
-- Redraw requests are explicit and counted.
-- Interaction, animation, resize, and external state changes may request redraw.
-- Interaction temporarily raises the focused update budget to about 60 updates per second, then returns to the selected idle profile.
-- Transform writes without dirty interaction/state causes are treated as ghost idle mutations.
-
-The Rust tests verify:
-
-- default profile is not continuous;
-- idle update budgets stay low;
-- performance continuous mode is opt-in;
-- default present mode is capped;
-- interaction temporarily raises the budget and returns to idle;
-- redraw requests are explicit;
-- idle transform writes are rejected without a dirty cause;
-- unexpected idle position changes are detectable.
+`npm run check:rust` checks the shared core and its wrapper: clippy on `atome-bevy-renderer-core` and `squirrel-bevy-renderer` for `wasm32-unknown-unknown` (and on `atome-ios-bevy-renderer`, the iOS audio and local-server staticlib, for iOS), and the core's own tests (`cargo test -p atome-bevy-renderer-core`).
 
 ## Update
 
 To update Bevy:
 
 ```bash
-cargo update --manifest-path platforms/desktop-tauri/Cargo.toml -p bevy
-npm run cargo:bevy:check
-npm run cargo:bevy:test
+cargo update -p bevy
+npm run check:rust
 ```
 
-If the intended Bevy version changes, update `platforms/desktop-tauri/Cargo.toml`, then regenerate `platforms/desktop-tauri/Cargo.lock` through Cargo.
+If the intended Bevy version changes, update `[workspace.dependencies]` in the root `Cargo.toml`, then regenerate the root `Cargo.lock` through Cargo.
 
 The broader repository update flow still runs through:
 
@@ -167,7 +81,7 @@ The broader repository update flow still runs through:
 npm run update:libs
 ```
 
-That flow invokes the existing dependency refresh script, which includes Rust dependency updates for the Tauri crate when Cargo is available.
+That flow invokes the existing dependency refresh script, which includes the workspace's Rust dependency updates when Cargo is available.
 
 ## Contract
 
@@ -183,28 +97,17 @@ It defines:
 - `AtomeRenderNode`: a disposable projection node derived from canonical Atome data;
 - `AtomeRenderOp`: the shared diff/update contract for spawn, despawn, transform, style, layer, resource, and surface changes;
 - `AtomeEntityId`, `AtomeLogicalSize`, `AtomeLogicalPosition`, `AtomeLayer`, and related ECS components;
-- `AtomeBevyRendererPlugin`: the shared Bevy plugin installed by the browser/WASM and Tauri/native wrappers.
+- `AtomeBevyRendererPlugin`: the shared Bevy plugin installed by the browser/WASM wrapper.
 
-Platform wrappers live in:
+The platform wrapper lives in:
 
 ```text
 platforms/web/bevy-renderer/
-platforms/desktop-tauri/src/bevy_backend/
-platforms/ios/bevy-renderer/
 ```
 
-They own canvas/window/runtime setup only. They must not duplicate projection, spawn, texture, render-op, or selection-overlay logic that belongs in the shared Atome crate.
+It owns canvas/window/runtime setup only. It must not duplicate projection, spawn, texture, render-op, or selection-overlay logic that belongs in the shared Atome crate.
 
-Native command ownership:
-
-```text
-platforms/desktop-tauri/src/bevy_backend/bridge.rs
-platforms/ios/atome-auv3/Common/AppNativeBevyRendererController.swift
-platforms/ios/atome-auv3/Common/AtomeIosBevyRendererBridge.h
-eVe/domains/rendering/bevy_native_renderer_runtime.js
-```
-
-The JavaScript renderer selects the visible Bevy WebGPU canvas for Tauri and iOS unless the host explicitly declares `window.__ATOME_NATIVE_BEVY_PRESENTABLE__ === true`. iOS still exposes the native command boundary through `AppNativeBevyRendererController`; Xcode builds and links the `platforms/ios/bevy-renderer` Rust staticlib so Swift can call `atome_ios_bevy_renderer_status(...)` and `atome_ios_bevy_scene_probe(...)`. Until the real Rust/Metal Bevy presenter is connected to the project surface, that boundary returns `ios_bevy_native_not_presentable` with `rust_linked=1`, `bevy_core_linked=1`, `presentable=0`, and `renderer_mode=linked_no_presenter`, while the visible project rendering path remains the Bevy WASM/WebGPU canvas.
+The JavaScript renderer always uses the visible Bevy WebGPU canvas, on Tauri and iOS too: its native route (`bevy_native_renderer_runtime.js`, `bevy_native_texture_mapping.js`), never selected because no host declared a presentable native renderer, was removed on 2026-11-06, and Tauri no longer answers the native commands. iOS and the AUv3 draw through the same Web renderer WASM inside their WebView. Their Swift native command boundary (`AppNativeBevyRendererController.swift`, `bevy_native_*`) was removed on 2026-11-06, and so was the iOS staticlib's Bevy probe ABI (`atome_ios_bevy_renderer_status`, `atome_ios_bevy_scene_probe`, `Common/AtomeIosBevyRendererBridge.h`) with its `atome-bevy-renderer-core` dependency: `platforms/ios/bevy-renderer` (crate and library names kept for the Xcode link) now holds only the native audio engine and the local server, and links no Bevy.
 
 The source of truth remains outside Bevy:
 
@@ -225,7 +128,7 @@ This integration does not:
 - enable `bevy_audio`;
 - keep video, SVG, text, image, and waveform display on the browser Bevy texture route without reactivating a legacy project renderer.
 
-The browser bridge from `eVe/domains/rendering/virtual_scene_contract.js` into the Bevy WASM payload now lives in `eVe/domains/rendering/bevy_projection_adapter.js`. Browser startup and diff dispatch against the generated `atome/src/wasm/squirrel_bevy_renderer.js` module lives in `eVe/domains/rendering/bevy_web_renderer_runtime.js` and is limited to one Bevy app per shared canvas. Native startup and diff dispatch for Tauri and iOS/AUv3 lives in `eVe/domains/rendering/bevy_native_renderer_runtime.js`.
+The browser bridge from `eVe/domains/rendering/virtual_scene_contract.js` into the Bevy WASM payload now lives in `eVe/domains/rendering/bevy_projection_adapter.js`. Browser startup and diff dispatch against the generated `atome/src/wasm/squirrel_bevy_renderer.js` module lives in `eVe/domains/rendering/bevy_web_renderer_runtime.js` and is limited to one Bevy app per shared canvas. No JavaScript native dispatch remains (removed 2026-11-06).
 
 The web renderer now exposes wasm-bindgen diff exports for spawn, despawn, transform, style, reparent, layer, visibility, text metadata, and resource updates. `project_scene_runtime.js` consumes those exports through `diffVirtualSceneTrees(...)` so project Atome projection enters Bevy without restarting the app for each mutation.
 

@@ -42,6 +42,7 @@ const definitions = {
     favorite: [{ effect: key, favorite: { type: 'boolean' } }, ['effect', 'favorite'], 'Mark an effect as a favourite (its tile comes first in Capture › Effets), or no longer.', true, 'write'],
     save_preset: [{ effect: key, name: text, params: { type: 'object', additionalProperties: { type: 'number' } } }, ['effect', 'name'],
         'Save the effect\'s values as a preset under its name (the same name replaces it): its values as they play, or params (a project console module\'s).', true, 'write'],
+    delete_preset: [{ effect: key, name: text }, ['effect', 'name'], 'Delete a preset the person saved for an effect (audio_fx.save_preset), by its name. Ask the user before calling it.', true, 'write'],
     tone3000_search: [{ query: { type: 'string', maxLength: 200 }, page: { type: 'integer', minimum: 1, maximum: 999 } }, [],
         'Search the TONE3000 amp captures (an empty query lists the most downloaded): tones with id, title, author, image.', false, 'read'],
     tone3000_models: [{ tone_id: { type: 'integer', minimum: 1 } }, ['tone_id'], 'The models (sizes) of one TONE3000 tone: id, name, size.', false, 'read'],

@@ -1,0 +1,309 @@
+{
+  "schema": 1,
+  "version": "b2113cb1d8f056f7",
+  "built_on": "2026-11-05",
+  "sources": [
+    {
+      "id": "bdpm",
+      "publisher": "ANSM, HAS, UNCAM",
+      "title": "Base de données publique des médicaments",
+      "licence": "Licence de réutilisation de la BDPM : citer la source et sa date, ne pas altérer les données",
+      "url": "https://base-donnees-publique.medicaments.gouv.fr/telechargement",
+      "version": "2026-11-05",
+      "retrieved": "2026-11-05"
+    },
+    {
+      "id": "bdpm_rcp",
+      "publisher": "ANSM",
+      "title": "Résumés des caractéristiques du produit (rubriques 4.2 à 4.8), base de données publique des médicaments",
+      "licence": "Licence de réutilisation de la BDPM : citer la source et sa date, ne pas altérer les données",
+      "url": "https://base-donnees-publique.medicaments.gouv.fr/affichageDoc.php?typedoc=R",
+      "version": null,
+      "retrieved": "2026-11-05"
+    },
+    {
+      "id": "ansm_thesaurus",
+      "publisher": "ANSM",
+      "title": "Thesaurus des interactions médicamenteuses (dernière édition ; en ligne jusqu'au 15 juin 2027, le RCP de chaque médicament fait référence)",
+      "licence": "Citation de la source, contenu non altéré",
+      "url": "https://ansm.sante.fr/uploads/2024/06/07/20230915-thesaurus-interactions-medicamenteuses-septembre-2023.pdf",
+      "version": "2023-09-15",
+      "retrieved": "2026-11-05"
+    },
+    {
+      "id": "complalim",
+      "publisher": "Ministère de l'Agriculture et de la Souveraineté alimentaire (DGAL)",
+      "title": "Déclarations de compléments alimentaires (Compl'Alim)",
+      "licence": "Licence Ouverte / Open Licence 2.0",
+      "url": "https://www.data.gouv.fr/fr/datasets/declarations-de-complements-alimentaires/",
+      "version": "2026-10-22",
+      "retrieved": "2026-11-05"
+    },
+    {
+      "id": "ffd_feculents",
+      "publisher": "Fédération Française des Diabétiques",
+      "title": "Plan alimentaire — Les féculents",
+      "licence": "Citation, contenu non reproduit",
+      "url": "https://planalimentaire.federationdesdiabetiques.org/familles-aliment/les-feculents/",
+      "version": null,
+      "retrieved": "2026-11-05"
+    },
+    {
+      "id": "ffd_produits_sucres",
+      "publisher": "Fédération Française des Diabétiques",
+      "title": "Plan alimentaire — Les produits sucrés",
+      "licence": "Citation, contenu non reproduit",
+      "url": "https://planalimentaire.federationdesdiabetiques.org/familles-aliment/les-produits-sucres/",
+      "version": null,
+      "retrieved": "2026-11-05"
+    },
+    {
+      "id": "ffd_boissons",
+      "publisher": "Fédération Française des Diabétiques",
+      "title": "Plan alimentaire — Les boissons",
+      "licence": "Citation, contenu non reproduit",
+      "url": "https://planalimentaire.federationdesdiabetiques.org/familles-aliment/les-boissons/",
+      "version": null,
+      "retrieved": "2026-11-05"
+    },
+    {
+      "id": "ffd_fruits_legumes",
+      "publisher": "Fédération Française des Diabétiques",
+      "title": "Plan alimentaire — Les fruits et les légumes",
+      "licence": "Citation, contenu non reproduit",
+      "url": "https://planalimentaire.federationdesdiabetiques.org/familles-aliment/les-fruits-et-les-legumes/",
+      "version": null,
+      "retrieved": "2026-11-05"
+    },
+    {
+      "id": "ffd_matieres_grasses",
+      "publisher": "Fédération Française des Diabétiques",
+      "title": "Plan alimentaire — Les matières grasses",
+      "licence": "Citation, contenu non reproduit",
+      "url": "https://planalimentaire.federationdesdiabetiques.org/familles-aliment/les-matieres-grasses/",
+      "version": null,
+      "retrieved": "2026-11-05"
+    },
+    {
+      "id": "ameli_diabete_alimentation",
+      "publisher": "Assurance Maladie (ameli.fr)",
+      "title": "Diabète et alimentation au quotidien : les fondamentaux",
+      "licence": "Citation, contenu non reproduit",
+      "url": "https://www.ameli.fr/assure/sante/themes/diabete-adulte/diabete-vivre-quotidien/equilibre-alimentaire/diabete-alimentation-fondamentaux",
+      "version": null,
+      "retrieved": "2026-11-05"
+    },
+    {
+      "id": "ameli_hta_alimentation",
+      "publisher": "Assurance Maladie (ameli.fr)",
+      "title": "HTA et alimentation",
+      "licence": "Citation, contenu non reproduit",
+      "url": "https://www.ameli.fr/assure/sante/themes/hypertension-arterielle-hta/alimentation-et-hta",
+      "version": null,
+      "retrieved": "2026-11-05"
+    },
+    {
+      "id": "ameli_risque_cardiovasculaire",
+      "publisher": "Assurance Maladie (ameli.fr)",
+      "title": "Réduire mon risque cardiovasculaire — L'alimentation",
+      "licence": "Citation, contenu non reproduit",
+      "url": "https://www.ameli.fr/assure/sante/assurance-maladie/comment-reduire-mon-risque-cardiovasculaire/mieux-prevenir-le-risque-cardiovasculaire/les-conseils-pour-reduire-mon-risque-cardiovasculaire-au-quo/alimentation",
+      "version": null,
+      "retrieved": "2026-11-05"
+    },
+    {
+      "id": "ameli_goutte",
+      "publisher": "Assurance Maladie (ameli.fr)",
+      "title": "Qu'est-ce que la goutte et quelles sont ses causes ?",
+      "licence": "Citation, contenu non reproduit",
+      "url": "https://www.ameli.fr/assure/sante/themes/goutte/definition-facteurs-favorisants",
+      "version": null,
+      "retrieved": "2026-11-05"
+    },
+    {
+      "id": "ameli_grossesse_aliments",
+      "publisher": "Assurance Maladie (ameli.fr)",
+      "title": "Les aliments à éviter et les précautions d'hygiène pendant la grossesse",
+      "licence": "Citation, contenu non reproduit",
+      "url": "https://www.ameli.fr/assure/sante/devenir-parent/grossesse/grossesse-en-bonne-sante/grossesse-alimentation/les-aliments-eviter-et-les-precautions-d-hygiene-pendant-la-grossesse",
+      "version": null,
+      "retrieved": "2026-11-05"
+    },
+    {
+      "id": "who_sugars_2015",
+      "publisher": "Organisation mondiale de la santé",
+      "title": "Guideline: Sugars intake for adults and children (free sugars include those naturally present in honey, syrups and fruit juices)",
+      "licence": "CC BY-NC-SA 3.0 IGO",
+      "url": "https://www.who.int/publications/i/item/9789241549028",
+      "version": "2015",
+      "retrieved": "2026-11-05"
+    },
+    {
+      "id": "eu_1169_2011",
+      "publisher": "Union européenne",
+      "title": "Règlement (UE) n° 1169/2011, annexe II — Substances ou produits provoquant des allergies ou intolérances",
+      "licence": "Réutilisation autorisée (décision 2011/833/UE)",
+      "url": "https://eur-lex.europa.eu/legal-content/FR/TXT/?uri=CELEX:32011R1169",
+      "version": "2011-10-25",
+      "retrieved": "2026-11-05"
+    },
+    {
+      "id": "afdiag_maladie_coeliaque",
+      "publisher": "AFDIAG",
+      "title": "La maladie cœliaque",
+      "licence": "Citation, contenu non reproduit",
+      "url": "https://afdiag.fr/pathologies/maladie-coeliaque/",
+      "version": null,
+      "retrieved": "2026-11-05"
+    },
+    {
+      "id": "afdiag_regime_sans_gluten",
+      "publisher": "AFDIAG",
+      "title": "Conseils pour suivre un régime sans gluten",
+      "licence": "Citation, contenu non reproduit",
+      "url": "https://afdiag.fr/au-quotidien/conseils-pour-suivre-un-regime-sans-gluten/",
+      "version": null,
+      "retrieved": "2026-11-05"
+    },
+    {
+      "id": "france_rein_fiche_104",
+      "publisher": "France Rein",
+      "title": "Fiche pratique #104 — Phosphore, Potassium, Sel, décryptez les étiquetages",
+      "licence": "Citation, contenu non reproduit",
+      "url": "https://www.francerein.org/wp-content/uploads/2022/07/fiche-pratique-france-rein-104-phospho-potass-sel-decryptez-etiquetages.pdf",
+      "version": "v1, juin 2022",
+      "retrieved": "2026-11-05"
+    },
+    {
+      "id": "ameli_diabete_definition",
+      "publisher": "Assurance Maladie (ameli.fr)",
+      "title": "Diabète : définition",
+      "licence": "Citation, contenu non reproduit",
+      "url": "https://www.ameli.fr/assure/sante/themes/diabete/diabete-comprendre/definition",
+      "version": null,
+      "retrieved": "2026-11-05"
+    },
+    {
+      "id": "ameli_hta_definition",
+      "publisher": "Assurance Maladie (ameli.fr)",
+      "title": "Hypertension artérielle : définition et facteurs favorisants",
+      "licence": "Citation, contenu non reproduit",
+      "url": "https://www.ameli.fr/assure/sante/themes/hypertension-arterielle/definition-facteurs-favorisants",
+      "version": null,
+      "retrieved": "2026-11-05"
+    },
+    {
+      "id": "ameli_mrc_diagnostic",
+      "publisher": "Assurance Maladie (ameli.fr)",
+      "title": "Maladie rénale chronique : symptômes, diagnostic et évolution",
+      "licence": "Citation, contenu non reproduit",
+      "url": "https://www.ameli.fr/assure/sante/themes/maladie-renale-chronique/symptomes-diagnostic-evolution",
+      "version": null,
+      "retrieved": "2026-11-05"
+    },
+    {
+      "id": "off_categories",
+      "publisher": "Open Food Facts",
+      "title": "Taxonomie des catégories de produits",
+      "licence": "Open Database License (ODbL)",
+      "url": "https://world.openfoodfacts.org/categories",
+      "version": null,
+      "retrieved": "2026-11-05"
+    },
+    {
+      "id": "anses_2012_sa_0228",
+      "publisher": "Anses",
+      "title": "Avis relatif aux risques liés à la présence de « levure de riz rouge » dans les compléments alimentaires (saisine 2012-SA-0228)",
+      "licence": "Citation, contenu non reproduit",
+      "url": "https://www.anses.fr/fr/system/files/NUT2012sa0228.pdf",
+      "version": "2014-02-14",
+      "retrieved": "2026-11-05"
+    },
+    {
+      "id": "anses_2016_sa_0209",
+      "publisher": "Anses",
+      "title": "Avis relatif aux risques liés à la consommation de compléments alimentaires contenant de la mélatonine (saisine 2016-SA-0209)",
+      "licence": "Citation, contenu non reproduit",
+      "url": "https://www.anses.fr/fr/system/files/NUT2016SA0209.pdf",
+      "version": "2018-02-23",
+      "retrieved": "2026-11-05"
+    },
+    {
+      "id": "anses_2019_sa_0111",
+      "publisher": "Anses",
+      "title": "Avis relatif à l'évaluation des risques liés à la consommation de compléments alimentaires contenant du curcuma (saisine 2019-SA-0111)",
+      "licence": "Citation, contenu non reproduit",
+      "url": "https://www.anses.fr/fr/system/files/NUT2019SA0111.pdf",
+      "version": "2022-05-12",
+      "retrieved": "2026-11-05"
+    },
+    {
+      "id": "anses_2014_sa_0096",
+      "publisher": "Anses",
+      "title": "Avis relatif aux risques liés à la consommation de compléments alimentaires contenant de la spiruline (saisine 2014-SA-0096)",
+      "licence": "Citation, contenu non reproduit",
+      "url": "https://www.anses.fr/fr/system/files/NUT2014SA0096.pdf",
+      "version": "2017-08-04",
+      "retrieved": "2026-11-05"
+    },
+    {
+      "id": "anses_2012_sa_0200",
+      "publisher": "Anses",
+      "title": "Avis relatif aux risques liés à la présence dans les compléments alimentaires de p-synéphrine ou d'ingrédients obtenus à partir de fruits de Citrus spp. en contenant (saisine 2012-SA-0200)",
+      "licence": "Citation, contenu non reproduit",
+      "url": "https://www.anses.fr/fr/system/files/NUT2012sa0200.pdf",
+      "version": "2014-03-14",
+      "retrieved": "2026-11-05"
+    }
+  ],
+  "parts": [
+    {
+      "name": "medicines",
+      "file": "medicines.json.gz",
+      "bytes": 49305,
+      "sha256": "3337fb3760511adab71f2356d8dda7f0d0c2a4320cdcc9c112031035f3c3a56c",
+      "json_bytes": 536164,
+      "records": 357
+    },
+    {
+      "name": "substances",
+      "file": "substances.json.gz",
+      "bytes": 1375,
+      "sha256": "82c4335bc6912ff49b32e1de2868567d0beaea203b1f1143d00f3feb6f83c564",
+      "json_bytes": 5237,
+      "records": 31
+    },
+    {
+      "name": "interactions",
+      "file": "interactions.json.gz",
+      "bytes": 26067,
+      "sha256": "50c19ba9bbc33372a869dd3ece6dfcde54fc6474cbfa18b48b16cb69a5188370",
+      "json_bytes": 160487,
+      "records": 471
+    },
+    {
+      "name": "rcp",
+      "file": "rcp.json.gz",
+      "bytes": 121343,
+      "sha256": "b1ccdcffb20ab2feb002b0f8c3a954de483866909ff94965e3aad5be51f86fd6",
+      "json_bytes": 533500,
+      "records": 18
+    },
+    {
+      "name": "supplements",
+      "file": "supplements.json.gz",
+      "bytes": 5521,
+      "sha256": "7cfa242fe18dd252a3148a4fcf0f1289cd99af8c794fc4ab3fb95a3173ac396e",
+      "json_bytes": 29946,
+      "records": 325
+    },
+    {
+      "name": "food",
+      "file": "food.json.gz",
+      "bytes": 8913,
+      "sha256": "3654d765b79d18d872620a16cfde7a16130fe54afbee494a5dd4eafe646e6cee",
+      "json_bytes": 38189,
+      "records": 70
+    }
+  ]
+}

@@ -80,3 +80,13 @@ CREATE TABLE IF NOT EXISTS billing_credit_ledger (
     recorded_ms INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_billing_credit_ledger_principal ON billing_credit_ledger(principal_id, bucket, period_ref);
+-- An account's roles (server/auth_account_roles.js): `admin` validates the feature
+-- requests (server/ws_feature_requests.js). Given and taken back only on the server
+-- (scripts/account_roles_admin.mjs), never by a commit: not an Atome property.
+CREATE TABLE IF NOT EXISTS auth_account_roles (
+    principal_id TEXT NOT NULL,
+    role TEXT NOT NULL CHECK(role IN ('admin')),
+    granted_ms INTEGER NOT NULL,
+    granted_by TEXT NOT NULL,
+    PRIMARY KEY (principal_id, role)
+);

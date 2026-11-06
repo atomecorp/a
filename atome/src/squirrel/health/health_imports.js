@@ -19,7 +19,7 @@ const ALONE = new Set(['health_host_unsupported']);
 const combinable = reading => COMBINED.has(reading?.state) && reading.reasonCode !== 'health_access_sealed' && healthAccessAllowedNow();
 const failed = code => Object.assign(new Error(code), { code });
 
-// `store`: { read(id) → record | null, commit(event) → { ok } }; `actor()`: the device's principal, null without one.
+// `store`: { read(id) → record | null, commit(event) → { ok }, list(type) → live records }; `actor()`: the device's principal, null without one.
 export function createHealthImports({ owner, store, actor, now = () => Date.now(), createId = () => globalThis.crypto.randomUUID() }) {
     const listeners = new Set(); // (days: ['YYYY-MM-DD']) => void
     let queue = Promise.resolve();
@@ -131,8 +131,48 @@ export function createHealthImports({ owner, store, actor, now = () => Date.now(
         queue = run.catch(() => null);
         return run;
     };
+    // The person's day records of imported activities, each `{ id, value }` (its validated `activity_import`).
+    const allDays = async (person) => {
+        const prefix = activityImportId(person, '');
+        return (await store.list('record')).map(row => ({ id: String(row.atome_id || row.id || ''), props: row.properties || row.props || {} }))
+            .filter(row => row.id.startsWith(prefix) && row.props.activity_import)
+            .map(row => ({ id: row.id, value: validateActivityImport(row.props.activity_import, healthDeclarationDay) }));
+    };
+    // One source's activities as they were imported, newest first (Sport › Journal's rows, R-115); none to an actor kept from health values.
+    const list = async ({ source }) => {
+        if (!healthAccessAllowedNow()) throw failed('health_access_denied_for_actor');
+        return (await allDays(principal())).flatMap(day => day.value.entries.filter(entry => entry.source === source))
+            .sort((a, b) => Date.parse(b.start) - Date.parse(a.start));
+    };
+    // One source's activities taken out (D36), or only its activity `source_id` (R-115): every day it gave some loses them (a
+    // day left empty stays, empty, to take that day's next import: a deleted atome is never written again), and a session kept
+    // as a duplicate of a removed one stands alone again; one commit per day changed, one after the other.
+    const remove = ({ source, source_id: sourceId = null }) => {
+        const run = queue.then(async () => {
+            const person = principal(), at = new Date(now()).toISOString(), days = await allDays(person);
+            const leaves = entry => entry.source === source && (sourceId === null || entry.source_id === sourceId);
+            const gone = new Set(days.flatMap(day => day.value.entries.filter(leaves).map(activityImportKey)));
+            if (!gone.size && sourceId !== null) throw failed('NOT_FOUND');
+            if (!gone.size) return { ok: true, removed: 0, days: [] };
+            const written = [];
+            for (const day of days) {
+                const next = day.value.entries.filter(entry => !leaves(entry))
+                    .map(({ duplicate_of: twin, ...entry }) => (twin && !gone.has(twin) ? { ...entry, duplicate_of: twin } : entry));
+                if (next.length === day.value.entries.length && next.every((entry, index) => entry.duplicate_of === day.value.entries[index].duplicate_of)) continue;
+                const changeId = `${day.id}:${createId()}`;
+                const result = await store.commit({ kind: 'set', id: changeId, tx_id: changeId, actor: person, atome_id: day.id, type: 'record', scope: 'global',
+                    props: { source_domain: 'activity_import', activity_import: validateActivityImport({ version: 1, day: day.value.day, entries: next }, healthDeclarationDay), updated_iso: at } });
+                if (result?.ok === false) throw failed('IMPORT_WRITE_FAILED');
+                written.push(day.value.day);
+            }
+            if (written.length) listeners.forEach(listener => listener(written));
+            return { ok: true, removed: gone.size, days: written };
+        });
+        queue = run.catch(() => null);
+        return run;
+    };
     // `listener(days)`: the civil days whose imported activities changed.
     const onChange = listener => { listeners.add(listener); return () => listeners.delete(listener); };
 
-    return Object.freeze({ ...owner, subscribe, readHistory, imports: Object.freeze({ apply, subscribe: onChange }) });
+    return Object.freeze({ ...owner, subscribe, readHistory, imports: Object.freeze({ apply, list, remove, subscribe: onChange }) });
 }

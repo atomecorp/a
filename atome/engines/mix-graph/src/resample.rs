@@ -15,7 +15,11 @@ pub struct LinearResampler {
 
 impl LinearResampler {
     pub fn new(input_rate: u32, output_rate: u32) -> Self {
-        Self { step: f64::from(input_rate.max(1)) / f64::from(output_rate.max(1)), position: 0.0, previous: Frame::ZERO }
+        Self {
+            step: f64::from(input_rate.max(1)) / f64::from(output_rate.max(1)),
+            position: 0.0,
+            previous: Frame::ZERO,
+        }
     }
 
     pub fn is_identity(&self) -> bool {
@@ -31,7 +35,11 @@ impl LinearResampler {
         while self.position < count && out.len() < out.capacity() {
             let index = self.position.floor() as usize;
             let fraction = (self.position - index as f64) as f32;
-            let from = if index == 0 { self.previous } else { input[index - 1] };
+            let from = if index == 0 {
+                self.previous
+            } else {
+                input[index - 1]
+            };
             let to = input[index];
             out.push(from + (to - from) * fraction);
             self.position += self.step;
@@ -47,7 +55,11 @@ mod tests {
     use kira::Frame;
 
     fn sine(rate: f64, hz: f64, frames: usize, offset: usize) -> Vec<Frame> {
-        (offset..offset + frames).map(|i| Frame::from_mono((2.0 * std::f64::consts::PI * hz * i as f64 / rate).sin() as f32)).collect()
+        (offset..offset + frames)
+            .map(|i| {
+                Frame::from_mono((2.0 * std::f64::consts::PI * hz * i as f64 / rate).sin() as f32)
+            })
+            .collect()
     }
 
     #[test]
@@ -58,11 +70,23 @@ mod tests {
         for block in 0..100 {
             resampler.process(&sine(44_100.0, 440.0, 441, block * 441), &mut out);
         }
-        assert!((out.len() as i64 - 48_000).abs() <= 1, "one second in, one second out: {}", out.len());
+        assert!(
+            (out.len() as i64 - 48_000).abs() <= 1,
+            "one second in, one second out: {}",
+            out.len()
+        );
         // Compare with the ideal 48 kHz sine, one frame behind (the `previous` slot).
         let ideal = sine(48_000.0, 440.0, out.len(), 0);
-        let worst = out.iter().skip(1).zip(&ideal).map(|(got, want)| (got.left - want.left).abs()).fold(0.0f32, f32::max);
-        assert!(worst < 0.01, "linear interpolation of a 440 Hz sine stays within 1 %: {worst}");
+        let worst = out
+            .iter()
+            .skip(1)
+            .zip(&ideal)
+            .map(|(got, want)| (got.left - want.left).abs())
+            .fold(0.0f32, f32::max);
+        assert!(
+            worst < 0.01,
+            "linear interpolation of a 440 Hz sine stays within 1 %: {worst}"
+        );
     }
 
     #[test]

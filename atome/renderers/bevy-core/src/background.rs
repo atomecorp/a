@@ -7,20 +7,22 @@ use bevy::{
 };
 
 use crate::{
-    render_math::{color_from_rgba, BEVY_LAYER_DEPTH_LIMIT},
+    mystic_capture::MENU_BACKGROUND_LAYER,
+    render_math::{BEVY_LAYER_DEPTH_LIMIT, color_from_rgba},
     texture::image_handle_from_texture,
     types::{
-        AtomeColorFilters, AtomeSurfaceBackground, AtomeSurfaceBackgroundCover,
-        AtomeSurfaceBackgroundPatch, AtomeSurfaceBackgroundVideo, AtomeSurfaceBackgroundVisual,
-        AtomeBevyRendererConfig, AtomeTransition,
+        AtomeBevyRendererConfig, AtomeColorFilters, AtomeSurfaceBackground,
+        AtomeSurfaceBackgroundCover, AtomeSurfaceBackgroundPatch, AtomeSurfaceBackgroundVideo,
+        AtomeSurfaceBackgroundVisual, AtomeTransition,
     },
     video_external_texture::AtomeVideoExternalTexture,
-    mystic_capture::MENU_BACKGROUND_LAYER,
 };
 
 // Every background entity is drawn like before (layer 0) AND captured alone by the
 // Mystic background target, which is what a turning plate reveals.
-fn background_layers() -> RenderLayers { RenderLayers::layer(0).with(MENU_BACKGROUND_LAYER) }
+fn background_layers() -> RenderLayers {
+    RenderLayers::layer(0).with(MENU_BACKGROUND_LAYER)
+}
 
 const BACKGROUND_DEPTH: f32 = -BEVY_LAYER_DEPTH_LIMIT - 1.0;
 // The video sits above its base colour, below every atome layer.
@@ -32,9 +34,7 @@ pub(crate) fn cover_source_rect(
     surface_height: f32,
     texture_size: Option<[u32; 2]>,
 ) -> Option<Rect> {
-    let Some([texture_width, texture_height]) = texture_size else {
-        return None;
-    };
+    let [texture_width, texture_height] = texture_size?;
     if texture_width == 0 || texture_height == 0 {
         return None;
     }
@@ -56,7 +56,10 @@ pub(crate) fn video_background_geometry(
     video: &AtomeSurfaceBackgroundVideo,
 ) -> (Vec2, [f32; 4]) {
     let surface = Vec2::new(surface_width.max(1.0), surface_height.max(1.0));
-    let texture = Vec2::new(video.video_size[0].max(1) as f32, video.video_size[1].max(1) as f32);
+    let texture = Vec2::new(
+        video.video_size[0].max(1) as f32,
+        video.video_size[1].max(1) as f32,
+    );
     let crop = cover_source_rect(surface.x, surface.y, Some(video.video_size))
         .unwrap_or(Rect::from_corners(Vec2::ZERO, texture));
     let origin = crop.min / texture;
@@ -68,7 +71,10 @@ fn video_background_mesh(size: Vec2, uv: [f32; 4]) -> Mesh {
     let half = size * 0.5;
     let [left, top, width, height] = uv;
     let (right, bottom) = (left + width, top + height);
-    let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    );
     mesh.insert_attribute(
         Mesh::ATTRIBUTE_POSITION,
         vec![
@@ -145,7 +151,11 @@ fn background_sprite(
         sprite.color = Color::WHITE;
         Ok((sprite, Some(handle), Some([texture.width, texture.height])))
     } else {
-        Ok((Sprite::from_color(color_from_rgba(patch.color), Vec2::ONE), None, None))
+        Ok((
+            Sprite::from_color(color_from_rgba(patch.color), Vec2::ONE),
+            None,
+            None,
+        ))
     }
 }
 
@@ -173,10 +183,14 @@ pub fn apply_surface_background(
     };
     let cover_entity = world
         .query_filtered::<Entity, With<AtomeSurfaceBackgroundCover>>()
-        .iter(world).next();
+        .iter(world)
+        .next();
     let cover = (
         AtomeSurfaceBackgroundCover,
-        Sprite::from_color(color_from_rgba(patch.cover), Vec2::new(surface_width, surface_height)),
+        Sprite::from_color(
+            color_from_rgba(patch.cover),
+            Vec2::new(surface_width, surface_height),
+        ),
         Transform::from_translation(Vec3::new(0.0, 0.0, BACKGROUND_COVER_DEPTH)),
         background_layers(),
     );
@@ -186,11 +200,12 @@ pub fn apply_surface_background(
         world.spawn(cover);
     }
     // Cover-only updates must not recreate the resident texture or video quad.
-    if let Some(entity) = existing {
-        if world.get::<AtomeSurfaceBackgroundVisual>(entity)
-            .is_some_and(|visual| visual.signature == patch.signature) {
-            return Ok(entity);
-        }
+    if let Some(entity) = existing
+        && world
+            .get::<AtomeSurfaceBackgroundVisual>(entity)
+            .is_some_and(|visual| visual.signature == patch.signature)
+    {
+        return Ok(entity);
     }
     let (sprite, fill_handle, fill_size) = {
         let mut images = world
@@ -233,7 +248,10 @@ pub fn resize_surface_background(world: &mut World) {
         sprite.custom_size = Some(Vec2::new(surface_width, surface_height));
         sprite.rect = cover_source_rect(surface_width, surface_height, visual.texture_size);
     }
-    for mut sprite in world.query_filtered::<&mut Sprite, With<AtomeSurfaceBackgroundCover>>().iter_mut(world) {
+    for mut sprite in world
+        .query_filtered::<&mut Sprite, With<AtomeSurfaceBackgroundCover>>()
+        .iter_mut(world)
+    {
         sprite.custom_size = Some(Vec2::new(surface_width, surface_height));
     }
     // Rebuild the video quad with the centred crop for the new surface size.
@@ -245,6 +263,8 @@ pub fn resize_surface_background(world: &mut World) {
     for (handle, video) in videos {
         let mut meshes = world.resource_mut::<Assets<Mesh>>();
         let (size, uv) = video_background_geometry(surface_width, surface_height, &video);
-        if let Some(mut mesh) = meshes.get_mut(&handle) { *mesh = video_background_mesh(size, uv); };
+        if let Some(mut mesh) = meshes.get_mut(&handle) {
+            *mesh = video_background_mesh(size, uv);
+        };
     }
 }

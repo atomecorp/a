@@ -8,11 +8,12 @@ function getNextStateIndex(current, total, mode, direction = 1) {
   switch (mode) {
     case 'backward':
       return (current - 1 + total) % total;
-    case 'ping-pong':
+    case 'ping-pong': {
       const next = current + direction;
       if (next >= total) return total - 2;
       if (next < 0) return 1;
       return next;
+    }
     default: // 'forward'
       return (current + 1) % total;
   }

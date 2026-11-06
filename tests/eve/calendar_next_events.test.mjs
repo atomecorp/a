@@ -1,9 +1,18 @@
-import { test, expect, vi, afterEach } from 'vitest';
+import { test, expect, vi, afterEach, beforeAll } from 'vitest';
 import { createCalendarService } from '../../atome/src/squirrel/calendar/service.js';
 import { createCalendarApiSource } from '../../atome/src/squirrel/calendar/calendar_api_source.js';
 import { parseCalendarData } from '../../atome/src/squirrel/calendar/icalendar.js';
 import { CalendarAPI } from '../../eVe/intuition/tools/calendar_api.js';
 import { eventCache, alarmTimers } from '../../eVe/intuition/tools/calendar_engine_state.js';
+import { readFileSync } from 'node:fs';
+import { loadCalendarEngine as loadEngine } from '../../atome/src/squirrel/calendar/icalendar.js';
+
+// The calendar's occurrences are the Rust engine's (squirrel_audio_wasm): loaded once from its files,
+// as the page loads it from /wasm/.
+beforeAll(() => loadEngine({
+    moduleUrl: new URL('../../atome/src/wasm/squirrel_audio_wasm.js', import.meta.url).href,
+    binary: readFileSync(new URL('../../atome/src/wasm/squirrel_audio_wasm_bg.wasm', import.meta.url))
+}));
 
 afterEach(() => { eventCache.clear(); for (const timers of alarmTimers.values()) timers.forEach(clearTimeout); alarmTimers.clear(); delete globalThis.window; });
 const reference = new Date('2026-10-11T12:00:00Z');

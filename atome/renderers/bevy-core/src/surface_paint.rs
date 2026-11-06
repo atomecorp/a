@@ -108,7 +108,14 @@ impl LinearGradient {
     }
 
     /// The colour at a logical point of a `width` x `height` surface (CSS angles).
-    fn color_at(&self, x: f32, y: f32, width: f32, height: f32, (axis, extent): ([f32; 2], f32)) -> [f32; 4] {
+    fn color_at(
+        &self,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        (axis, extent): ([f32; 2], f32),
+    ) -> [f32; 4] {
         let t = (((x - width / 2.0) * axis[0] + (y - height / 2.0) * axis[1]) / extent.max(1.0)
             + 0.5)
             .clamp(0.0, 1.0);
@@ -282,6 +289,7 @@ impl SurfacePaint {
             }
         }
         AtomeTexture {
+            external: None,
             width,
             height,
             rgba,
@@ -295,12 +303,8 @@ fn gaussian_cdf(value: f32) -> f32 {
     let x = value.abs();
     let t = 1.0 / (1.0 + 0.2316419 * x);
     let tail = (-0.5 * x * x).exp()
-        * 0.39894228
+        * 0.398_942_3
         * t
         * (0.31938153 + t * (-0.35656378 + t * (1.781478 + t * (-1.821256 + t * 1.3302745))));
-    if value >= 0.0 {
-        1.0 - tail
-    } else {
-        tail
-    }
+    if value >= 0.0 { 1.0 - tail } else { tail }
 }

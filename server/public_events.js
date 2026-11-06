@@ -4,7 +4,7 @@
 // (server/public_events_store.js), after every commit that touches it (server/ws_api_commit_effects.js),
 // and writes its word back on the Atome (`publication_status`: live, refused with a reason, hidden).
 // The base can be rebuilt from the vaults; nothing a client sends is believed without reading the vault.
-import { calendarRangeOccurrences } from '../atome/src/squirrel/calendar/icalendar.js';
+import { calendarRangeOccurrences } from './calendar_engine.js';
 import { PUBLIC_EVENT_HORIZON_DAYS, PUBLIC_EVENT_REPORT_REASONS, distanceKm, normalizePublication, normalizePublicationStatus,
     publicEventCell, publicEventCellsAround, publicationError } from '../atome/src/shared/public_event_contract.js';
 

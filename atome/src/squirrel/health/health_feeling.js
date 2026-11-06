@@ -50,6 +50,23 @@ export function createHealthFeeling({ store, actor, now = () => Date.now(), crea
         return run;
     };
 
+    // A day's feeling deleted (D36): its record emptied through the one pipeline (its history kept), every reader told. Its id is
+    // the day's, so the record stays to take that day's next answer (a deleted atome is never written again).
+    const clear = (day) => {
+        const run = queue.then(async () => {
+            const id = healthFeelingId(principal(), day), current = await readRecord(id, day);
+            if (!current.entries.length) throw failed('HEALTH_FEELING_NOT_FOUND');
+            const changeId = `${id}:${createId()}`, iso = new Date(now()).toISOString();
+            const result = await store.commit({ kind: 'set', id: changeId, tx_id: changeId, actor: principal(), atome_id: id, type: 'record', scope: 'global',
+                props: { source_domain: 'health_feeling', health_feeling: { version: 1, day, entries: [] }, updated_iso: iso } });
+            if (result?.ok === false) throw failed('HEALTH_FEELING_WRITE_FAILED');
+            listeners.forEach(listener => listener(day, NOT_SET));
+            return { ok: true, day };
+        });
+        queue = run.catch(() => null);
+        return run;
+    };
+
     const subscribe = listener => { listeners.add(listener); return () => listeners.delete(listener); };
-    return Object.freeze({ read, set, subscribe });
+    return Object.freeze({ read, set, clear, subscribe });
 }

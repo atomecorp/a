@@ -6,9 +6,9 @@
 // a whole sample is one span covering every frame. Voices refer to a sample by
 // its index in the bank, so the audio thread never touches a reference count.
 
+use crate::ActionQueue;
 use crate::reading::Source;
 use crate::stream::{FrameSource, Streams};
-use crate::ActionQueue;
 use std::sync::{Arc, Mutex, Weak};
 
 // Frames of one channel pair; `right` is empty for a mono sample.
@@ -58,23 +58,47 @@ pub struct SampleData {
 
 impl SampleData {
     pub fn mono(samples: Vec<f32>, sample_rate: f32) -> Self {
-        Self::whole(SpanFrames { left: samples, right: Vec::new() }, true, sample_rate)
+        Self::whole(
+            SpanFrames {
+                left: samples,
+                right: Vec::new(),
+            },
+            true,
+            sample_rate,
+        )
     }
 
     pub fn stereo(left: Vec<f32>, right: Vec<f32>, sample_rate: f32) -> Self {
-        assert_eq!(left.len(), right.len(), "a stereo sample has two channels of one length");
+        assert_eq!(
+            left.len(),
+            right.len(),
+            "a stereo sample has two channels of one length"
+        );
         Self::whole(SpanFrames { left, right }, false, sample_rate)
     }
 
     fn whole(frames: SpanFrames, mono: bool, sample_rate: f32) -> Self {
         let length = frames.left.len();
-        Self { sample_rate, frames: length, mono, spans: Arc::new([Span { start: 0, frames: Arc::new(frames) }]), streamed: None }
+        Self {
+            sample_rate,
+            frames: length,
+            mono,
+            spans: Arc::new([Span {
+                start: 0,
+                frames: Arc::new(frames),
+            }]),
+            streamed: None,
+        }
     }
 
     // A sample read from `source`: whole when it is short, else streamed
     // (its spans are read when an instrument names it, `with_spans`).
     pub fn load(source: Arc<dyn FrameSource>) -> Result<Self, String> {
-        let (frames, sample_rate, mono) = (source.frames(), source.sample_rate(), source.channels() == 1);
+        let (frames, sample_rate, mono) = (
+            source.frames(),
+            source.sample_rate(),
+            source.channels() == 1,
+        );
         if frames == 0 {
             return Err("an empty sample".to_string());
         }
@@ -82,10 +106,22 @@ impl SampleData {
             let span = read_span(source.as_ref(), 0, frames)?;
             return Ok(Self::whole(span, mono, sample_rate));
         }
-        if frames > crate::stream::MAX_STREAMED_FRAMES {
-            return Err(format!("a streamed sample holds {} frames at most", crate::stream::MAX_STREAMED_FRAMES));
+        if u32::try_from(frames).is_err() {
+            return Err(format!(
+                "a streamed sample holds {} frames at most",
+                crate::stream::MAX_STREAMED_FRAMES
+            ));
         }
-        Ok(Self { sample_rate, frames, mono, spans: Arc::new([]), streamed: Some(Arc::new(Streamed { source, read: Mutex::new(Vec::new()) })) })
+        Ok(Self {
+            sample_rate,
+            frames,
+            mono,
+            spans: Arc::new([]),
+            streamed: Some(Arc::new(Streamed {
+                source,
+                read: Mutex::new(Vec::new()),
+            })),
+        })
     }
 
     pub fn frames(&self) -> usize {
@@ -114,7 +150,14 @@ impl SampleData {
         let span = self.span_at(index)?;
         let at = index - span.start;
         let left = span.frames.left[at];
-        Some((left, if self.mono { left } else { span.frames.right[at] }))
+        Some((
+            left,
+            if self.mono {
+                left
+            } else {
+                span.frames.right[at]
+            },
+        ))
     }
 
     // The span holding frame `index`.
@@ -124,18 +167,28 @@ impl SampleData {
     }
 
     pub(crate) fn source(&self) -> Option<Arc<dyn FrameSource>> {
-        self.streamed.as_ref().map(|streamed| streamed.source.clone())
+        self.streamed
+            .as_ref()
+            .map(|streamed| streamed.source.clone())
     }
 
     // The same sample holding `wanted` (sorted, apart) in memory, read off the
     // audio thread; a span already read for another instrument is shared.
     pub fn with_spans(&self, wanted: &[(usize, usize)]) -> Result<Self, String> {
-        let Some(streamed) = &self.streamed else { return Ok(self.clone()) };
-        let mut read = streamed.read.lock().map_err(|error| format!("sample spans lock: {error}"))?;
+        let Some(streamed) = &self.streamed else {
+            return Ok(self.clone());
+        };
+        let mut read = streamed
+            .read
+            .lock()
+            .map_err(|error| format!("sample spans lock: {error}"))?;
         read.retain(|(_, _, frames)| frames.strong_count() > 0);
         let mut spans = Vec::with_capacity(wanted.len());
         for &(start, len) in wanted {
-            let known = read.iter().find(|(at, length, _)| *at == start && *length == len).and_then(|(_, _, frames)| frames.upgrade());
+            let known = read
+                .iter()
+                .find(|(at, length, _)| *at == start && *length == len)
+                .and_then(|(_, _, frames)| frames.upgrade());
             let frames = match known {
                 Some(frames) => frames,
                 None => {
@@ -146,13 +199,20 @@ impl SampleData {
             };
             spans.push(Span { start, frames });
         }
-        Ok(Self { spans: spans.into(), ..self.clone() })
+        Ok(Self {
+            spans: spans.into(),
+            ..self.clone()
+        })
     }
 }
 
 fn read_span(source: &dyn FrameSource, start: usize, len: usize) -> Result<SpanFrames, String> {
     let mut left = vec![0.0; len];
-    let mut right = if source.channels() == 1 { Vec::new() } else { vec![0.0; len] };
+    let mut right = if source.channels() == 1 {
+        Vec::new()
+    } else {
+        vec![0.0; len]
+    };
     let mut scratch = Vec::new();
     let right_out = if right.is_empty() {
         scratch.resize(len, 0.0);
@@ -211,8 +271,14 @@ impl SampleBank {
         if self.streams.is_some() || !self.samples.iter().any(SampleData::is_streamed) {
             return;
         }
-        assert!(self.resided, "a bank with streamed samples is resided against its keymap before its sampler is prepared");
-        self.streams = Some(Streams::new(self.samples.iter().map(SampleData::source).collect(), rings));
+        assert!(
+            self.resided,
+            "a bank with streamed samples is resided against its keymap before its sampler is prepared"
+        );
+        self.streams = Some(Streams::new(
+            self.samples.iter().map(SampleData::source).collect(),
+            rings,
+        ));
     }
 
     // The rings a feeder fills (stream::serve), when a sample streams.
@@ -223,7 +289,11 @@ impl SampleBank {
     // How a player reads sample `sample` through ring `ring` (render thread).
     pub fn source<'a>(&'a self, sample: usize, ring: usize, report: &'a ActionQueue) -> Source<'a> {
         let data = &self.samples[sample];
-        let ring = self.streams.as_ref().filter(|_| data.is_streamed()).map(|streams| streams.ring(ring));
+        let ring = self
+            .streams
+            .as_ref()
+            .filter(|_| data.is_streamed())
+            .map(|streams| streams.ring(ring));
         Source::new(data, sample, ring, report)
     }
 }

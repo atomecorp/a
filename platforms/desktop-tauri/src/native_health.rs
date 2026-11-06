@@ -9,9 +9,10 @@
 //!   session token, never a user id supplied by JavaScript; guests are refused;
 //! - reading requires the explicit local association `health_link`;
 //! - a reply computed for an older generation is dropped.
+//!
 //! Desktop hosts answer `health_host_unsupported` without loading anything.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::Mutex;
 use tauri::{AppHandle, Runtime, WebviewWindow};
 
@@ -43,7 +44,10 @@ fn failure(code: &str) -> Value {
 }
 
 async fn verified_account(auth: &Value) -> Result<String, &'static str> {
-    let token = auth.as_str().filter(|value| !value.is_empty()).ok_or("health_account_required")?;
+    let token = auth
+        .as_str()
+        .filter(|value| !value.is_empty())
+        .ok_or("health_account_required")?;
     let response = crate::auth_device::auth_ws_request(
         "ws://127.0.0.1:3000/ws/api".to_string(),
         json!({ "action": "me", "token": token }),
@@ -53,7 +57,9 @@ async fn verified_account(auth: &Value) -> Result<String, &'static str> {
     .map_err(|_| "health_account_unverifiable")?;
     // A signed-in account or the active local guest (both verified by the local
     // auth `me`): health values stay on this device.
-    let id = response["user"]["id"].as_str().filter(|value| !value.is_empty());
+    let id = response["user"]["id"]
+        .as_str()
+        .filter(|value| !value.is_empty());
     match (response["ok"].as_bool(), id) {
         (Some(true), Some(id)) => Ok(id.to_string()),
         _ => Err("health_account_required"),
@@ -63,7 +69,14 @@ async fn verified_account(auth: &Value) -> Result<String, &'static str> {
 fn monitors_payload(payload: &Value) -> Value {
     let ids: Vec<Value> = payload["monitors"]
         .as_array()
-        .map(|items| items.iter().filter(|item| item.is_string()).take(32).cloned().collect())
+        .map(|items| {
+            items
+                .iter()
+                .filter(|item| item.is_string())
+                .take(32)
+                .cloned()
+                .collect()
+        })
         .unwrap_or_default();
     json!({ "monitors": ids })
 }
@@ -87,7 +100,12 @@ fn requests_payload(payload: &Value) -> Value {
 
 // The training workout: the eVe session id, its kind, its title and its times only.
 fn workout_payload(payload: &Value) -> Value {
-    let text = |key: &str, max: usize| payload[key].as_str().map(|value| value.chars().take(max).collect::<String>()).unwrap_or_default();
+    let text = |key: &str, max: usize| {
+        payload[key]
+            .as_str()
+            .map(|value| value.chars().take(max).collect::<String>())
+            .unwrap_or_default()
+    };
     json!({ "session": text("session", 300), "activity": text("activity", 20), "title": text("title", 200),
         "start": payload["start"].as_f64().unwrap_or(0.0) as i64, "at": payload["at"].as_f64().unwrap_or(0.0) as i64,
         "save": payload["save"].as_bool().unwrap_or(false) })
@@ -95,7 +113,12 @@ fn workout_payload(payload: &Value) -> Value {
 
 // The raw motion recorder: the verified account, the eVe session id and its start, a file name, and switches only.
 fn sensors_payload(account: &str, payload: &Value) -> Value {
-    let text = |key: &str, max: usize| payload[key].as_str().map(|value| value.chars().take(max).collect::<String>()).unwrap_or_default();
+    let text = |key: &str, max: usize| {
+        payload[key]
+            .as_str()
+            .map(|value| value.chars().take(max).collect::<String>())
+            .unwrap_or_default()
+    };
     let mut value = json!({ "account": account, "session": text("session", 300), "file": text("file", 64),
         "at": payload["at"].as_f64().unwrap_or(0.0) as i64, "all": payload["all"].as_bool().unwrap_or(false) });
     if let Some(enabled) = payload["enabled"].as_bool() {
@@ -115,7 +138,14 @@ fn sensors_payload(account: &str, payload: &Value) -> Value {
 fn activities_payload(payload: &Value) -> Value {
     let categories: Vec<Value> = payload["categories"]
         .as_array()
-        .map(|items| items.iter().filter(|item| item.is_string()).take(8).cloned().collect())
+        .map(|items| {
+            items
+                .iter()
+                .filter(|item| item.is_string())
+                .take(8)
+                .cloned()
+                .collect()
+        })
         .unwrap_or_default();
     let mut value = json!({ "categories": categories, "anchor": Value::Null });
     // Its length is checked by the plugin, which refuses a longer one (`health_anchor_invalid`).
@@ -128,7 +158,11 @@ fn activities_payload(payload: &Value) -> Value {
     value
 }
 
-async fn plugin<R: Runtime>(app: &AppHandle<R>, method: &'static str, payload: Value) -> Result<Value, String> {
+async fn plugin<R: Runtime>(
+    app: &AppHandle<R>,
+    method: &'static str,
+    payload: Value,
+) -> Result<Value, String> {
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || tauri_plugin_health::call(&app, method, payload))
         .await
@@ -177,11 +211,26 @@ pub async fn health_invoke<R: Runtime>(
         "health_capabilities" => plugin(&app, "capabilities", monitors_payload(&payload)).await,
         // Opens Health Connect / the app settings; reads nothing.
         "health_open_settings" => plugin(&app, "openSettings", monitors_payload(&payload)).await,
-        "health_link_status" | "health_link" | "health_request_access" | "health_read" | "health_observe"
-        | "health_unobserve" | "health_workout_prepare" | "health_workout_start" | "health_workout_pause"
-        | "health_workout_resume" | "health_workout_end" | "health_sensors_start" | "health_sensors_stop"
-        | "health_sensors_status" | "health_sensors_list" | "health_sensors_delete" | "health_sensors_enable"
-        | "health_sensors_read" | "health_sensors_restore" | "health_activities_read" => {
+        "health_link_status"
+        | "health_link"
+        | "health_request_access"
+        | "health_read"
+        | "health_observe"
+        | "health_unobserve"
+        | "health_workout_prepare"
+        | "health_workout_start"
+        | "health_workout_pause"
+        | "health_workout_resume"
+        | "health_workout_end"
+        | "health_sensors_start"
+        | "health_sensors_stop"
+        | "health_sensors_status"
+        | "health_sensors_list"
+        | "health_sensors_delete"
+        | "health_sensors_enable"
+        | "health_sensors_read"
+        | "health_sensors_restore"
+        | "health_activities_read" => {
             let account = match verified_account(&payload["auth"]).await {
                 Ok(account) => account,
                 Err(code) => return Ok(failure(code)),
@@ -201,7 +250,10 @@ pub async fn health_invoke<R: Runtime>(
             let linked = match sensors {
                 Some(method) => {
                     let result = plugin(&app, method, sensors_payload(&account, &payload)).await;
-                    let current = channel.lock().map(|state| state.generation == generation && !state.closed).unwrap_or(false);
+                    let current = channel
+                        .lock()
+                        .map(|state| state.generation == generation && !state.closed)
+                        .unwrap_or(false);
                     if !current {
                         return Ok(failure("health_context_changed"));
                     }
@@ -212,15 +264,25 @@ pub async fn health_invoke<R: Runtime>(
             match command.as_str() {
                 "health_link_status" => Ok(linked),
                 "health_link" => plugin(&app, "link", json!({ "account": account })).await,
-                _ if linked["linked"].as_bool() != Some(true) => return Ok(failure("health_link_required")),
-                "health_request_access" => plugin(&app, "requestAccess", monitors_payload(&payload)).await,
+                _ if linked["linked"].as_bool() != Some(true) => {
+                    return Ok(failure("health_link_required"));
+                }
+                "health_request_access" => {
+                    plugin(&app, "requestAccess", monitors_payload(&payload)).await
+                }
                 "health_read" => plugin(&app, "read", requests_payload(&payload)).await,
                 "health_observe" => plugin(&app, "observe", monitors_payload(&payload)).await,
                 "health_workout_prepare" => plugin(&app, "workoutPrepare", json!({})).await,
-                "health_workout_start" => plugin(&app, "workoutStart", workout_payload(&payload)).await,
-                "health_workout_pause" | "health_workout_resume" => plugin(&app, "workoutEvent", workout_payload(&payload)).await,
+                "health_workout_start" => {
+                    plugin(&app, "workoutStart", workout_payload(&payload)).await
+                }
+                "health_workout_pause" | "health_workout_resume" => {
+                    plugin(&app, "workoutEvent", workout_payload(&payload)).await
+                }
                 "health_workout_end" => plugin(&app, "workoutEnd", workout_payload(&payload)).await,
-                "health_activities_read" => plugin(&app, "activitiesRead", activities_payload(&payload)).await,
+                "health_activities_read" => {
+                    plugin(&app, "activitiesRead", activities_payload(&payload)).await
+                }
                 _ => plugin(&app, "unobserve", monitors_payload(&payload)).await,
             }
         }
@@ -228,7 +290,10 @@ pub async fn health_invoke<R: Runtime>(
     };
 
     // A reply computed for an older page / account context is never delivered.
-    let current = channel.lock().map(|state| state.generation == generation && !state.closed).unwrap_or(false);
+    let current = channel
+        .lock()
+        .map(|state| state.generation == generation && !state.closed)
+        .unwrap_or(false);
     if !current && command != "health_channel_close" && command != "health_context_reset" {
         return Ok(failure("health_context_changed"));
     }

@@ -2,17 +2,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
 import { test } from 'node:test';
 import { createUserVaultProvider } from '../../server/userVaultProvider.js';
+import { startVaultSupervisor } from './vault_supervisor_support.mjs';
 
-test('one principal owns one isolated vault process, SQLite database, file root and Unix socket', async () => {
+test('one principal owns one isolated vault process, SQLite database and file root', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'atome-vault-provider-'));
-    const socketRoot = path.join('/tmp', `atome-vault-provider-${process.pid}-${Date.now()}`);
-    const provider = createUserVaultProvider({
-        root: path.join(root, 'vaults'),
-        socketRoot
-    });
+    const supervisor = await startVaultSupervisor({ root: path.join(root, 'vaults'), centralDatabase: path.join(root, 'directory.db') });
+    const provider = createUserVaultProvider({ root: path.join(root, 'vaults'), socketPath: supervisor.socketPath });
     const alice = 'vault_alice';
     const bob = 'vault_bob';
     process.env.SQLITE_PATH = path.join(root, 'directory.db');
@@ -30,9 +27,8 @@ test('one principal owns one isolated vault process, SQLite database, file root 
         assert.notEqual(aliceHealth.pid, bobHealth.pid);
         assert.notEqual(aliceHealth.databasePath, bobHealth.databasePath);
         assert.notEqual(aliceHealth.fileRoot, bobHealth.fileRoot);
-        assert.notEqual(aliceHealth.socketPath, bobHealth.socketPath);
-        assert.equal(fs.statSync(aliceHealth.socketPath).mode & 0o777, 0o600);
         assert.equal(fs.statSync(aliceHealth.fileRoot).mode & 0o777, 0o700);
+        assert.equal(fs.statSync(supervisor.socketPath).mode & 0o777, 0o600);
 
         const committed = await provider.request(alice, 'event:commit', {
             source: 'alice-device',
@@ -119,73 +115,34 @@ test('one principal owns one isolated vault process, SQLite database, file root 
             /vault_actor_mismatch/
         );
     } finally {
-        await provider.stopAll();
+        await provider.close();
+        await supervisor.stop();
         await db.closeDatabase();
         fs.rmSync(root, { recursive: true, force: true });
-        fs.rmSync(socketRoot, { recursive: true, force: true });
     }
 });
 
-test('vault worker exits when its owning server IPC channel disappears', async () => {
+test('a vault process does not survive its supervisor', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'atome-vault-disconnect-'));
-    const socketRoot = path.join('/tmp', `atome-vault-disconnect-${process.pid}-${Date.now()}`);
-    const providerUrl = new URL('../../server/userVaultProvider.js', import.meta.url).href;
-    const parentSource = `
-        const { createUserVaultProvider } = await import(${JSON.stringify(providerUrl)});
-        const provider = createUserVaultProvider({
-            root: ${JSON.stringify(path.join(root, 'vaults'))},
-            socketRoot: ${JSON.stringify(socketRoot)}
-        });
-        const health = await provider.request('disconnect-fixture', 'health');
-        process.stdout.write(JSON.stringify({ pid: health.pid }) + '\\n');
-        setInterval(() => {}, 1000);
-    `;
-    const parent = spawn(process.execPath, ['--input-type=module', '--eval', parentSource], {
-        cwd: path.resolve(new URL('../..', import.meta.url).pathname),
-        stdio: ['ignore', 'pipe', 'pipe']
-    });
-    let workerPid = 0;
+    const supervisor = await startVaultSupervisor({ root: path.join(root, 'vaults'), centralDatabase: path.join(root, 'directory.db') });
+    const provider = createUserVaultProvider({ root: path.join(root, 'vaults'), socketPath: supervisor.socketPath });
     try {
-        const line = await new Promise((resolve, reject) => {
-            let stdout = '';
-            let stderr = '';
-            const timer = setTimeout(() => reject(new Error(`vault_parent_fixture_timeout:${stderr}`)), 10_000);
-            parent.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
-            parent.stdout.on('data', (chunk) => {
-                stdout += chunk.toString();
-                const newline = stdout.indexOf('\n');
-                if (newline < 0) return;
-                clearTimeout(timer);
-                resolve(stdout.slice(0, newline));
-            });
-            parent.once('error', (error) => { clearTimeout(timer); reject(error); });
-            parent.once('exit', (code) => {
-                if (!stdout.includes('\n')) {
-                    clearTimeout(timer);
-                    reject(new Error(`vault_parent_fixture_exit_${code}:${stderr}`));
-                }
-            });
-        });
-        workerPid = Number(JSON.parse(line).pid);
-        assert.ok(workerPid > 0);
-        parent.kill('SIGKILL');
-        await new Promise((resolve) => parent.once('exit', resolve));
-        const exited = await new Promise((resolve) => {
-            const startedAt = Date.now();
-            const poll = () => {
-                try { process.kill(workerPid, 0); } catch (_) { resolve(true); return; }
-                if (Date.now() - startedAt > 5000) { resolve(false); return; }
-                setTimeout(poll, 50);
-            };
-            poll();
-        });
-        assert.equal(exited, true, 'the vault worker must not survive its owning server');
-    } finally {
-        if (parent.exitCode == null && parent.signalCode == null) parent.kill('SIGKILL');
-        if (workerPid > 0) {
-            try { process.kill(workerPid, 'SIGKILL'); } catch (_) { /* already stopped */ }
+        const { pid } = await provider.request('disconnect-fixture', 'health');
+        assert.ok(pid > 0);
+        const closed = provider.request('disconnect-fixture', 'health').then(() => null, (error) => error);
+        supervisor.process.kill('SIGKILL');
+        const startedAt = Date.now();
+        for (;;) {
+            try { process.kill(pid, 0); } catch { break; }
+            assert.ok(Date.now() - startedAt < 5000, 'the vault process must not survive its supervisor');
+            await new Promise((resolve) => setTimeout(resolve, 50));
         }
+        const error = await closed;
+        assert.ok(error === null || /vault_supervisor/.test(error.message), String(error));
+    } finally {
+        await provider.close();
+        await supervisor.stop();
         fs.rmSync(root, { recursive: true, force: true });
-        fs.rmSync(socketRoot, { recursive: true, force: true });
     }
 });
+

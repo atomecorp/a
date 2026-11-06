@@ -77,7 +77,11 @@ fn read_input_ports() -> Result<Vec<NativeMidiPort>, String> {
             let name = input
                 .port_name(&port)
                 .map_err(|error| format!("native_midi_input_name_failed:{error}"))?;
-            Ok(NativeMidiPort { id, name, runtime: MIDI_RUNTIME })
+            Ok(NativeMidiPort {
+                id,
+                name,
+                runtime: MIDI_RUNTIME,
+            })
         })
         .collect()
 }
@@ -93,12 +97,19 @@ fn read_output_ports() -> Result<Vec<NativeMidiPort>, String> {
             let name = output
                 .port_name(&port)
                 .map_err(|error| format!("native_midi_output_name_failed:{error}"))?;
-            Ok(NativeMidiPort { id, name, runtime: MIDI_RUNTIME })
+            Ok(NativeMidiPort {
+                id,
+                name,
+                runtime: MIDI_RUNTIME,
+            })
         })
         .collect()
 }
 
-fn connect_inputs(app: &AppHandle, ports: &[NativeMidiPort]) -> Result<Vec<MidiInputConnection<()>>, String> {
+fn connect_inputs(
+    app: &AppHandle,
+    ports: &[NativeMidiPort],
+) -> Result<Vec<MidiInputConnection<()>>, String> {
     ports
         .iter()
         .map(|descriptor| {
@@ -154,7 +165,10 @@ pub fn start_native_midi(app: AppHandle) -> Result<NativeMidiStatus, String> {
 }
 
 #[tauri::command]
-pub fn send_native_midi(bytes: Vec<u8>, output_id: Option<String>) -> Result<NativeMidiSendStatus, String> {
+pub fn send_native_midi(
+    bytes: Vec<u8>,
+    output_id: Option<String>,
+) -> Result<NativeMidiSendStatus, String> {
     if bytes.is_empty() || bytes.len() > 1024 {
         return Err("native_midi_bytes_invalid".to_string());
     }
@@ -181,7 +195,9 @@ pub fn send_native_midi(bytes: Vec<u8>, output_id: Option<String>) -> Result<Nat
         let connection = output
             .connect(&port, "Atome Desktop MIDI output connection")
             .map_err(|error| format!("native_midi_output_connect_failed:{error}"))?;
-        locked.output_connections.insert(resolved_id.clone(), connection);
+        locked
+            .output_connections
+            .insert(resolved_id.clone(), connection);
     }
     locked
         .output_connections

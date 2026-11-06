@@ -5,7 +5,7 @@ use crate::{
     types::{AtomeRendererDiagnostics, AtomeTexture},
 };
 use bevy::{image::Image, prelude::*};
-use image::{codecs::png::PngDecoder, metadata::LoopCount, AnimationDecoder, ImageDecoder, Limits};
+use image::{AnimationDecoder, ImageDecoder, Limits, codecs::png::PngDecoder, metadata::LoopCount};
 use serde::Deserialize;
 use std::{collections::HashMap, io::Cursor};
 

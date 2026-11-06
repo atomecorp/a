@@ -25,28 +25,77 @@ const PUBLIC_ERRORS = new Set(['auth_phone_e164_required', 'auth_rate_limited', 
     'auth_password_too_short', 'auth_password_compromised', 'auth_password_screening_unavailable', 'auth_argon2_unavailable',
     ...ACCOUNT_PUBLIC_ERRORS]);
 
+// The public directory entry of a principal is a projection of its user
+// profile, owned by the Rust front (social/directory/, directory_client.js). This handler is the only
+// server-side writer of that profile outside the client commit pipeline
+// (account creation, `update-user`, account deletion), so it refreshes the
+// projection itself: without it the new user stays invisible in
+// Communication until the next server boot rebuilds the projection.
+export const refreshDirectoryProfile = async (connection, principalId, options = {}) => {
+    const service = connection?._wsApiDirectoryService;
+    const id = String(principalId || '').trim();
+    if (!id || typeof service?.refreshPrincipal !== 'function') return;
+    try {
+        await service.refreshPrincipal(id, options);
+    } catch (error) {
+        console.warn('[auth] directory refresh failed', id, error?.message || error);
+    }
+};
+
+// The account transport of this server (one phone-link handler per server): its notices
+// to an account's devices are asked by the Rust front too (`front-notify`).
+let accountTransport = null;
+
+/** A notice to the live devices of an account (`createWsAccountAuth#notify`). */
+export async function notifyAccount(principalId, notice, options) {
+    if (!accountTransport) throw new Error('auth_account_transport_missing');
+    return accountTransport.notify(principalId, notice, options);
+}
+
+/** Every /ws/api connection of an ended session is detached, then closed. */
+/** `kept`: a connection the Rust front closes itself once its reply is sent (server/ws_api_front.js
+ *  `front-disconnect`); true when it held the session. */
+export async function disconnectSession(sessionId, kept = null) {
+    let held = false;
+    for (const connection of wsApiConnections) {
+        if (connection._wsApiSessionId !== sessionId) continue;
+        detachWsApiClient(connection);
+        if (connection === kept) held = true;
+        else setImmediate(() => connection.close(4001, 'session_revoked'));
+    }
+    return held;
+}
+
+/** The link was opened elsewhere: the connections that resume `attemptId` hear it
+ *  (`phone-link-resume` marks them; asked by the Rust front too, `front-link-ready`). */
+export function announceLinkReady(attemptId) {
+    for (const origin of wsApiConnections) {
+        if (origin._authLinkAttemptId === attemptId && origin.readyState === 1) {
+            origin.send(JSON.stringify({ type: 'phone-link-ready', attemptId }));
+        }
+    }
+}
+
+/** A connection that was issued a device session `token` (here, or by the Rust front:
+ *  server/ws_api_front.js `front-identity`) is that session's from now on. */
+export async function installSessionIdentity(connection, token, secret) {
+    delete connection._authLinkAttemptId;
+    const claims = jwt.verify(token, secret, { algorithms: ['HS256'], issuer: AUTH_LINK_ORIGIN, audience: 'atome-ws' });
+    attachWsApiClientToUser(connection, claims.sub);
+    connection._wsApiSessionId = claims.sid;
+    connection._wsApiDeviceClaims = claims;
+    connection._wsApiAuthExpMs = claims.exp * 1000;
+    // The session was issued to a request this connection signed with that key.
+    connection._wsApiProvenKeyId = claims.cnf.kid;
+    await refreshDirectoryProfile(connection, claims.sub);
+}
+
 export function createWsPhoneLinkHandler({ projectRoot, jwtSecret, sendLink, database = db } = {}) {
     loadLocalSmsConfig(projectRoot);
     const mockSmsRequested = process.env.SQUIRREL_AUTH_SMS_MOCK === '1';
     if (mockSmsRequested && process.env.NODE_ENV === 'production') {
         throw new Error('auth_sms_mock_forbidden_in_production');
     }
-    // The public directory entry of a principal is a projection of its user
-    // profile, owned by `DirectoryPublicService`. This handler is the only
-    // server-side writer of that profile outside the client commit pipeline
-    // (account creation, `update-user`, account deletion), so it refreshes the
-    // projection itself: without it the new user stays invisible in
-    // Communication until the next server boot rebuilds the projection.
-    const refreshDirectoryProfile = async (connection, principalId, options = {}) => {
-        const service = connection?._wsApiDirectoryService;
-        const id = String(principalId || '').trim();
-        if (!id || typeof service?.refreshPrincipal !== 'function') return;
-        try {
-            await service.refreshPrincipal(id, options);
-        } catch (error) {
-            console.warn('[auth] directory refresh failed', id, error?.message || error);
-        }
-    };
     const deliverLink = sendLink || (mockSmsRequested
         ? async (_phone, link) => ({ accepted: true, provider: 'local-development', developmentLink: link })
         : (phone, link) => createOvhSmsProvider().sendValidationLink(phone, link));
@@ -54,13 +103,6 @@ export function createWsPhoneLinkHandler({ projectRoot, jwtSecret, sendLink, dat
     // Notices to an account's devices are owned by the V1 account transport.
     let accountAuth = null;
     const notify = (principalId, notice, options) => accountAuth.notify(principalId, notice, options);
-    const disconnectSession = async (sessionId) => {
-        for (const connection of wsApiConnections) {
-            if (connection._wsApiSessionId !== sessionId) continue;
-            detachWsApiClient(connection);
-            setImmediate(() => connection.close(4001, 'session_revoked'));
-        }
-    };
     const service = createPhoneLinkAuth({
         query: database.query, transaction: database.withTransaction,
         masterSecret: jwtSecret(), dailyLimit: Number(process.env.AUTH_SMS_DAILY_LIMIT || 20),
@@ -81,7 +123,7 @@ export function createWsPhoneLinkHandler({ projectRoot, jwtSecret, sendLink, dat
         notify,
         billing: getStorePurchases()
     });
-    accountAuth = createWsAccountAuth({ service, database, jwtSecret, disconnectSession, billing: getStorePurchases(),
+    accountTransport = accountAuth = createWsAccountAuth({ service, database, jwtSecret, disconnectSession, billing: getStorePurchases(),
         mailer: createSystemMailer(), origin: process.env.ATOME_SITE_ORIGIN || 'https://atome.one',
         findById: (id) => findUserById(dataSource, id),
         // An account without phone, email or password: its first launch runs.
@@ -156,26 +198,8 @@ export function createWsPhoneLinkHandler({ projectRoot, jwtSecret, sendLink, dat
                 case 'session-local-bind': result = await service.sessions.localBind(message); break;
                 default: result = await service.sessions.revoke({ ...message, action: message.action.slice('session-'.length) });
             }
-            if (message.action === 'phone-link-confirm' && result.approved) {
-                for (const origin of wsApiConnections) {
-                    if (origin._authLinkAttemptId === message.attemptId && origin.readyState === 1) {
-                        origin.send(JSON.stringify({ type: 'phone-link-ready', attemptId: message.attemptId }));
-                    }
-                }
-            }
-            if (result.token) {
-                delete connection._authLinkAttemptId;
-                attachWsApiClientToUser(connection, result.user.id);
-                connection._wsApiSessionId = result.session.id;
-                const claims = jwt.verify(result.token, jwtSecret(), {
-                    algorithms: ['HS256'], issuer: AUTH_LINK_ORIGIN, audience: 'atome-ws'
-                });
-                connection._wsApiDeviceClaims = claims;
-                connection._wsApiAuthExpMs = claims.exp * 1000;
-                // The session was issued to a request this connection signed with that key.
-                connection._wsApiProvenKeyId = claims.cnf.kid;
-                await refreshDirectoryProfile(connection, result.user.id);
-            }
+            if (message.action === 'phone-link-confirm' && result.approved) announceLinkReady(message.attemptId);
+            if (result.token) await installSessionIdentity(connection, result.token, jwtSecret());
             return { type: 'auth-response', requestId, success: result.ok === true, ...result };
         } catch (error) {
             if (message.action === 'phone-link-resume') delete connection._authLinkAttemptId;

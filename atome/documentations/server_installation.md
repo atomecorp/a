@@ -68,7 +68,6 @@ PORT=3001
 HOST=127.0.0.1
 SQLITE_PATH=/opt/a/database_storage/adole.db
 SQUIRREL_UPLOADS_DIR=/opt/a/uploads
-SQUIRREL_MONITORED_DIR=/opt/a/monitored
 
 # Optional: For cloud deployment with Turso/libSQL
 # LIBSQL_URL=libsql://your-database.turso.io
@@ -80,7 +79,6 @@ SQUIRREL_MONITORED_DIR=/opt/a/monitored
 
 * **HOST=127.0.0.1**: Ensures the Node.js server is only accessible via Nginx (security).
 * **PORT**: Internal port (default 3001).
-* **SQUIRREL_MONITORED_DIR**: Folder watched for aBox sync. If missing, aBox sync is disabled and the server will log a warning.
 * **JWT_SECRET** and **COOKIE_SECRET**: Required authentication secrets. `install_server.sh` and `update_server.sh` generate strong values in the service environment file when they are missing or too short, and preserve existing valid values.
 
 > ⚠️ Important: On production servers, do not rely on untracked files inside `/opt/a` (like a manually created `.env`). They can be deleted by update operations. Use `/etc/squirrel/squirrel.env`.
@@ -531,9 +529,36 @@ This update command will:
 
 * Keep the server environment file outside the git checkout (so updates cannot wipe it)
 * Reinstall Node.js dependencies deterministically using the lockfile
-* Restart the system service and reload Nginx
+* Build `atome-server` and `atome-vault` (`cargo build --release --locked`; the Rust toolchain must be installed on the host,
+  and the visio worker's build tools, below: the update stops with `c++ is missing` or `python3 pip is missing` otherwise)
+* Run one confined vault on the host (`scripts/check_vault_confinement.mjs`): Linux ≥ 5.19 with Landlock enabled
+  (`landlock` in `/sys/kernel/security/lsm`), and every folder above the vault root crossable (`o+x`); otherwise the
+  update stops before the restart
+* Restart the system service (`atome-server`, which serves alone since L3.10a) and reload Nginx
 
 > ⚠️ Avoid running `git clean -fd` on production unless you also reinstall dependencies and restore your environment files.
+
+### Visio: what the host needs (since 2026-11-06)
+
+The calls' SFU runs inside `atome-server` (`atome/servers/atome-server/src/visio/`, the `mediasoup` crate 0.21.0, the
+same worker generation as Node's mediasoup 3.19); no Node process and no `mediasoup-worker` binary is involved.
+
+* **Build (Debian 12, arm64 or x86_64)**: the crate compiles the C++ worker during `cargo build` (about 8 minutes the
+  first time, then cached in `target/`). It needs a C++17 compiler (`build-essential`, `g++`), `python3` with pip
+  (`python3-pip`; pip installs meson and ninja into the build folder, nothing system-wide) and network access to
+  PyPI and to the meson wraps (abseil, openssl, libuv, libsrtp, usrsctp, flatbuffers, liburing are downloaded and
+  built statically). `scripts/server_update.js` installs both packages and checks them before the build. Two builds
+  of the worker in two target directories at the same moment break each other (they share the crate's
+  `subprojects/` folder in `~/.cargo/registry`): build in the one `target/`.
+* **Settings** (`/etc/squirrel/squirrel.env`), read once at startup; an invalid value stops the server with
+  `<NAME>_invalid` (Fastify fell back to the default silently): `MEDIASOUP_LISTEN_IP` (default `127.0.0.1`; a public
+  server sets `0.0.0.0`), `MEDIASOUP_ANNOUNCED_IP` (the public IP the ICE candidates announce; without it on a
+  loopback listen address the log warns that remote clients exchange no media), `MEDIASOUP_RTC_MIN_PORT` /
+  `MEDIASOUP_RTC_MAX_PORT` (default 40000–49999; staging keeps 50000–50999).
+* **Firewall**: the RTC port range open in UDP and TCP (UDP preferred, TCP when UDP is blocked).
+* **Startup**: the worker starts once, before the server listens; a worker that cannot start is the server's startup
+  error (`visio_worker_start_failed:…`), and a worker that dies ends the process (systemd restarts it), as on Fastify.
+* Tauri and the iOS app build `atome-server` with `default-features = false`: their local servers carry no SFU.
 
 Legacy/manual update (still works if you know what you're doing):
 

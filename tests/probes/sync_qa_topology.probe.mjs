@@ -42,7 +42,6 @@ const child = spawn(process.execPath, ['server/server.js'], {
         GITHUB_AUTO_SYNC: 'false',
         SQUIRREL_AUTH_TEST_MODE: '1',
         SQUIRREL_AUTH_OTP_BYPASS: '1',
-        SQUIRREL_DISABLE_WATCHER: '1',
         SQUIRREL_SYNC_REMOTE: '0',
         SQUIRREL_VAULT_ROOT: path.join(dataRoot, 'vaults'),
         SQUIRREL_UPLOADS_DIR: path.join(dataRoot, 'uploads'),

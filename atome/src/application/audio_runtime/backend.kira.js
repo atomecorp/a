@@ -12,6 +12,7 @@ import {
 } from './runtime_audio_backend.js';
 import { createKiraClipMeta, isAuv3NativeRuntime, postAuv3LocalClipLoad } from './kira_backend_support.js';
 import { createKiraLiveMethods } from './kira_live_methods.js';
+import { loadAudioKernels } from './audio_kernels.js';
 
 // Kira backend for Squirrel.av.audio
 // Routes audio commands to either Tauri invoke (native) or WASM module (web).
@@ -70,23 +71,13 @@ import { createKiraLiveMethods } from './kira_live_methods.js';
       || runtime.playback === 'ios_auv3_native';
   }
 
+  // The one loader of squirrel_audio_wasm, shared with the page's audio kernels.
   function loadWasmModule() {
     if (!wasmModulePromise) {
-      wasmModulePromise = import('/wasm/squirrel_audio_wasm.js')
-        .then(function (mod) {
-          return fetch('/wasm/squirrel_audio_wasm_bg.wasm')
-            .then(function (response) {
-              if (!response.ok) throw new Error('kira_wasm_load_failed:' + response.status);
-              return response.arrayBuffer();
-            })
-            .then(function (bytes) {
-              mod.initSync({ module: bytes });
-            })
-            .then(function () {
-            wasm = mod;
-            return mod;
-            });
-        });
+      wasmModulePromise = loadAudioKernels().then(function (mod) {
+        wasm = mod;
+        return mod;
+      });
     }
     return wasmModulePromise;
   }
@@ -153,7 +144,10 @@ import { createKiraLiveMethods } from './kira_live_methods.js';
         emitError('load_url_requires_local_path(' + id + ')', error);
         return Promise.reject(error);
       }
-      return fetch(url);
+      // A clip URL of the person's media (uploads, recordings) carries the session's media
+      // capability: the one signed fetch of the media owner (media_api_auth.js).
+      return import('../../../../eVe/domains/media/api/media_api_auth.js')
+        .then(function (auth) { return auth.fetchAuthorizedMedia(url); });
     })
       .then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status + ' fetching ' + url);
@@ -162,7 +156,7 @@ import { createKiraLiveMethods } from './kira_live_methods.js';
       .then(function (buf) {
         var bytes = new Uint8Array(buf);
         if (mode === 'wasm' && wasm && typeof wasm.audio_load_clip_from_bytes === 'function') {
-          var durationSeconds = Number(wasm.audio_load_clip_from_bytes(id, bytes));
+          const durationSeconds = Number(wasm.audio_load_clip_from_bytes(id, bytes));
           return {
             success: true,
             duration_seconds: Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds : null
@@ -224,7 +218,7 @@ import { createKiraLiveMethods } from './kira_live_methods.js';
         if ((mode === 'tauri' || mode === 'wasm') && bytes) {
           if (mode === 'wasm' && wasm && typeof wasm.audio_load_clip_from_bytes === 'function') {
             try {
-              var durationSeconds = Number(wasm.audio_load_clip_from_bytes(id, bytes));
+              const durationSeconds = Number(wasm.audio_load_clip_from_bytes(id, bytes));
               return {
                 success: true,
                 duration_seconds: Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds : null
@@ -376,7 +370,7 @@ import { createKiraLiveMethods } from './kira_live_methods.js';
         if (mode !== 'wasm') return invoke('audio_mix_asset_load', { assetId: assetId, path: String(arg.path || '') });
         if (typeof arg.capture === 'string') return wasm.audio_mix_asset_load_capture(assetId, arg.capture);
         if (arg.impulse && arg.impulse.left) {
-          var impulse = arg.impulse;
+          const impulse = arg.impulse;
           return wasm.audio_mix_asset_load_impulse(assetId, Float32Array.from(impulse.left), impulse.right ? Float32Array.from(impulse.right) : undefined, Number(impulse.sampleRate));
         }
         throw new Error('mix_asset_load on the Web needs a capture or an impulse');
@@ -474,8 +468,8 @@ import { createKiraLiveMethods } from './kira_live_methods.js';
       readEngine: () => (mode === 'wasm' && wasmAudioManagerReady ? wasm : null) }),
 
     dispatch_batch(batch) {
-      for (var i = 0; i < batch.length; i++) {
-        var cmd = batch[i];
+      for (let i = 0; i < batch.length; i++) {
+        const cmd = batch[i];
         if (typeof backend[cmd.name] === 'function') {
           backend[cmd.name](cmd.arg);
         }

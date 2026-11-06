@@ -1,17 +1,17 @@
-use super::{composition_ranges, frame, region, rgb, shape, Captured};
+use super::{Captured, composition_ranges, frame, region, rgb, shape};
 use crate::{
-    workspace_backdrop::AtomePresentationCamera, AtomeBevyRendererConfig, AtomeBevyRendererPlugin,
-    AtomeEntityTable, AtomeRenderNode, AtomeRenderScene,
+    AtomeBevyRendererConfig, AtomeBevyRendererPlugin, AtomeEntityTable, AtomeRenderNode,
+    AtomeRenderScene, workspace_backdrop::AtomePresentationCamera,
 };
 use bevy::{
     camera::RenderTarget,
     core_pipeline::core_2d::Transparent2d,
     prelude::*,
     render::{
+        RenderApp,
         render_phase::{PhaseItem, ViewSortedRenderPhases},
         render_resource::TextureFormat,
         view::screenshot::{Screenshot, ScreenshotCaptured},
-        RenderApp,
     },
     window::WindowPlugin,
     winit::WinitPlugin,
@@ -28,7 +28,13 @@ fn disjoint_coplanar_glass_shares_one_capture_without_changing_nested_compositio
         [middle, bottom, top],
     ] {
         assert_eq!(
-            composition_ranges(order.into_iter().enumerate().map(|(i, r)| (i, 10.0, Some(r))), 3),
+            composition_ranges(
+                order
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, r)| (i, 10.0, Some(r))),
+                3
+            ),
             vec![(0..3, true)]
         );
     }
@@ -52,14 +58,24 @@ fn coplanar_glass_shares_one_capture_whatever_other_items_of_its_plane_come_betw
         region(8.0, 64.0, 240.0, 48.0, 18.0),
         region(8.0, 120.0, 240.0, 48.0, 18.0),
     ];
-    let plane = [Some(rows[0]), None, Some(rows[1]), None, Some(rows[2]), None];
+    let plane = [
+        Some(rows[0]),
+        None,
+        Some(rows[1]),
+        None,
+        Some(rows[2]),
+        None,
+    ];
     for rotation in 0..plane.len() {
         let mut order = plane;
         order.rotate_left(rotation);
         let items = std::iter::once((0, 0.0, None))
             .chain(order.into_iter().enumerate().map(|(i, r)| (i + 1, 10.0, r)))
             .chain(std::iter::once((7, 12.0, None)));
-        assert_eq!(composition_ranges(items, 8), vec![(0..1, false), (1..8, true)]);
+        assert_eq!(
+            composition_ranges(items, 8),
+            vec![(0..1, false), (1..8, true)]
+        );
     }
 }
 
@@ -193,21 +209,33 @@ fn equal_depth_glass_remains_pixel_stable_when_transient_content_is_requeued() {
 fn requeued_frame(app: &mut App, target: &Handle<Image>, seed: usize) -> Image {
     let mut step = seed;
     let mut update = |app: &mut App| {
-        let id = if step % 2 == 0 { "top" } else { "middle" };
+        let id = if step.is_multiple_of(2) {
+            "top"
+        } else {
+            "middle"
+        };
         step += 1;
-        crate::apply_layer(app.world_mut(), crate::AtomeLayerPatch { id: id.into(), layer: 10 })
-            .unwrap();
+        crate::apply_layer(
+            app.world_mut(),
+            crate::AtomeLayerPatch {
+                id: id.into(),
+                layer: 10,
+            },
+        )
+        .unwrap();
         app.update();
     };
     for _ in 0..12 {
         update(app);
     }
     app.world_mut().resource_mut::<Captured>().0 = None;
-    app.world_mut().spawn(Screenshot::image(target.clone())).observe(
-        |captured: On<ScreenshotCaptured>, mut pixels: ResMut<Captured>| {
-            pixels.0 = Some(captured.image.clone());
-        },
-    );
+    app.world_mut()
+        .spawn(Screenshot::image(target.clone()))
+        .observe(
+            |captured: On<ScreenshotCaptured>, mut pixels: ResMut<Captured>| {
+                pixels.0 = Some(captured.image.clone());
+            },
+        );
     for _ in 0..120 {
         update(app);
         if let Some(image) = app.world_mut().resource_mut::<Captured>().0.take() {

@@ -12,15 +12,28 @@ use atome_mix_graph::{MixGraph, SampleData};
 use std::path::Path;
 
 fn with_timeline<T>(action: impl FnOnce(&mut MixGraph) -> Result<T, String>) -> Result<T, String> {
-    let mut guard = ENGINE.write().map_err(|error| format!("Lock error: {error}"))?;
-    action(guard.as_mut().ok_or("Audio engine not initialized")?.mix.graph_mut())
+    let mut guard = ENGINE
+        .write()
+        .map_err(|error| format!("Lock error: {error}"))?;
+    action(
+        guard
+            .as_mut()
+            .ok_or("Audio engine not initialized")?
+            .mix
+            .graph_mut(),
+    )
 }
 
 // A sample's planar channels at its own rate (a multichannel file keeps its first two).
 pub fn decode(path: &Path) -> Result<SampleData, String> {
     let label = path.to_string_lossy();
-    let bytes = std::fs::read(path).map_err(|error| format!("instrument sample {label}: {error}"))?;
-    let data = playback::decode_static_sound_data(bytes, playback::clip_extension_hint(&label).as_deref(), &label)?;
+    let bytes =
+        std::fs::read(path).map_err(|error| format!("instrument sample {label}: {error}"))?;
+    let data = playback::decode_static_sound_data(
+        bytes,
+        playback::clip_extension_hint(&label).as_deref(),
+        &label,
+    )?;
     let left = data.frames.iter().map(|frame| frame.left).collect();
     let right = data.frames.iter().map(|frame| frame.right).collect();
     Ok(SampleData::stereo(left, right, data.sample_rate as f32))
@@ -39,7 +52,12 @@ pub fn load_sample(sample_id: &str, path: &Path) -> Result<Loaded, String> {
         Some(data) => data,
         None => decode(path)?,
     };
-    let shape = Loaded { frames: data.frames(), sample_rate: data.sample_rate, channels: if data.is_mono() { 1 } else { 2 }, streamed: data.is_streamed() };
+    let shape = Loaded {
+        frames: data.frames(),
+        sample_rate: data.sample_rate,
+        channels: if data.is_mono() { 1 } else { 2 },
+        streamed: data.is_streamed(),
+    };
     super::direct::with_graph(|graph| {
         graph.instruments().load_sample(sample_id, data.clone());
         Ok(())
@@ -66,7 +84,12 @@ pub fn run(command: InstrumentCommand) -> Result<InstrumentAnswer, String> {
 }
 
 fn run_graphs(command: InstrumentCommand) -> Result<InstrumentAnswer, String> {
-    let shared = matches!(command, InstrumentCommand::Set { .. } | InstrumentCommand::Remove { .. } | InstrumentCommand::UnloadSample { .. });
+    let shared = matches!(
+        command,
+        InstrumentCommand::Set { .. }
+            | InstrumentCommand::Remove { .. }
+            | InstrumentCommand::UnloadSample { .. }
+    );
     let direct = super::direct::with_graph(|graph| instrument_command::run(graph, command.clone()));
     let timeline = with_timeline(|graph| instrument_command::run(graph, command));
     match (direct, timeline) {
@@ -88,11 +111,21 @@ fn run_graphs(command: InstrumentCommand) -> Result<InstrumentAnswer, String> {
 mod tests {
     #[test]
     fn a_wav_sample_decodes_to_its_two_channels_at_its_rate() {
-        let path = std::env::temp_dir().join(format!("atome_instrument_sample_{}.wav", std::process::id()));
-        let spec = hound::WavSpec { channels: 2, sample_rate: 44_100, bits_per_sample: 16, sample_format: hound::SampleFormat::Int };
+        let path = std::env::temp_dir().join(format!(
+            "atome_instrument_sample_{}.wav",
+            std::process::id()
+        ));
+        let spec = hound::WavSpec {
+            channels: 2,
+            sample_rate: 44_100,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        };
         let mut writer = hound::WavWriter::create(&path, spec).unwrap();
         for index in 0..4410 {
-            writer.write_sample(if index % 2 == 0 { 8192i16 } else { -8192 }).unwrap();
+            writer
+                .write_sample(if index % 2 == 0 { 8192i16 } else { -8192 })
+                .unwrap();
             writer.write_sample(0i16).unwrap();
         }
         writer.finalize().unwrap();
@@ -100,7 +133,13 @@ mod tests {
         std::fs::remove_file(&path).unwrap();
         assert_eq!((data.frames(), data.sample_rate), (4410, 44_100.0));
         let (first, second) = (data.frame(0).unwrap(), data.frame(1).unwrap());
-        assert!((first.0 - 0.25).abs() < 1.0e-3 && (second.0 + 0.25).abs() < 1.0e-3, "left keeps its samples");
-        assert!((0..4410).all(|index| data.frame(index).unwrap().1.abs() < 1.0e-6), "right is its own channel");
+        assert!(
+            (first.0 - 0.25).abs() < 1.0e-3 && (second.0 + 0.25).abs() < 1.0e-3,
+            "left keeps its samples"
+        );
+        assert!(
+            (0..4410).all(|index| data.frame(index).unwrap().1.abs() < 1.0e-6),
+            "right is its own channel"
+        );
     }
 }

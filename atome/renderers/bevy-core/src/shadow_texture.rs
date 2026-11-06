@@ -4,11 +4,15 @@ use crate::types::{AtomeShadowKind, AtomeShadowStyle};
 
 /// La silhouette d'un rectangle arrondi : ce que TOUTES les ombres etaient avant
 /// l'outil Shape, et ce que restent celles des medias, du texte et du son.
-fn rect_silhouette(width: f32, height: f32, corner_radii: AtomeCornerRadii) -> AtomeShapeSilhouette {
+fn rect_silhouette(
+    width: f32,
+    height: f32,
+    corner_radii: AtomeCornerRadii,
+) -> AtomeShapeSilhouette {
     AtomeShapeSilhouette::rect(width, height, corner_radii)
 }
 
-const GAUSSIAN_SIGMA_RATIO: f32 = 0.5;
+pub(crate) const GAUSSIAN_SIGMA_RATIO: f32 = 0.5;
 const GAUSSIAN_TAIL_SIGMAS: f32 = 3.0;
 
 pub(crate) fn channel_to_u8(value: f32) -> u8 {
@@ -55,7 +59,13 @@ fn tap_range(index: usize, radius: usize, len: usize) -> Option<(usize, usize)> 
 /// copied. A rounded rectangle — every panel, card and button shadow — is
 /// identical along its straight edges: the work drops from the shadow's area to
 /// its corners and borders (a panel shell stacks three blurs of up to 119 taps).
-fn convolve_axis(source: &[f32], width: usize, height: usize, kernel: &[f32], horizontal: bool) -> Vec<f32> {
+fn convolve_axis(
+    source: &[f32],
+    width: usize,
+    height: usize,
+    kernel: &[f32],
+    horizontal: bool,
+) -> Vec<f32> {
     let radius = kernel.len() / 2;
     let mut result = vec![0.0_f32; source.len()];
     if width == 0 || height == 0 {
@@ -65,11 +75,11 @@ fn convolve_axis(source: &[f32], width: usize, height: usize, kernel: &[f32], ho
         let mut computed: Option<usize> = None;
         for y in 0..height {
             let row = &source[y * width..(y + 1) * width];
-            if let Some(previous) = computed {
-                if same_bits(row, &source[previous * width..(previous + 1) * width]) {
-                    result.copy_within(previous * width..(previous + 1) * width, y * width);
-                    continue;
-                }
+            if let Some(previous) = computed
+                && same_bits(row, &source[previous * width..(previous + 1) * width])
+            {
+                result.copy_within(previous * width..(previous + 1) * width, y * width);
+                continue;
             }
             convolve_row(row, &mut result[y * width..(y + 1) * width], kernel, radius);
             computed = Some(y);
@@ -93,21 +103,37 @@ fn convolve_axis(source: &[f32], width: usize, height: usize, kernel: &[f32], ho
     }
     let compact_width = distinct.len();
     let mut compact = vec![0.0_f32; compact_width * height];
-    for (row, out) in source.chunks_exact(width).zip(compact.chunks_exact_mut(compact_width)) {
+    for (row, out) in source
+        .chunks_exact(width)
+        .zip(compact.chunks_exact_mut(compact_width))
+    {
         for (value, &x) in out.iter_mut().zip(&distinct) {
             *value = row[x];
         }
     }
     let mut compact_result = vec![0.0_f32; compact.len()];
-    convolve_columns(&compact, &mut compact_result, compact_width, height, kernel, radius);
+    convolve_columns(
+        &compact,
+        &mut compact_result,
+        compact_width,
+        height,
+        kernel,
+        radius,
+    );
     let mut next = 0;
-    let owners: Vec<usize> = repeats.iter().map(|&repeat| {
-        if !repeat {
-            next += 1;
-        }
-        next - 1
-    }).collect();
-    for (out, compact_row) in result.chunks_exact_mut(width).zip(compact_result.chunks_exact(compact_width)) {
+    let owners: Vec<usize> = repeats
+        .iter()
+        .map(|&repeat| {
+            if !repeat {
+                next += 1;
+            }
+            next - 1
+        })
+        .collect();
+    for (out, compact_row) in result
+        .chunks_exact_mut(width)
+        .zip(compact_result.chunks_exact(compact_width))
+    {
         for (value, &owner) in out.iter_mut().zip(&owners) {
             *value = compact_row[owner];
         }
@@ -122,7 +148,9 @@ fn same_bits(a: &[f32], b: &[f32]) -> bool {
 fn convolve_row(row: &[f32], out: &mut [f32], kernel: &[f32], radius: usize) {
     let width = row.len();
     for (index, &weight) in kernel.iter().enumerate() {
-        let Some((start, end)) = tap_range(index, radius, width) else { continue };
+        let Some((start, end)) = tap_range(index, radius, width) else {
+            continue;
+        };
         let shifted = &row[start + index - radius..end + index - radius];
         for (value, sample) in out[start..end].iter_mut().zip(shifted) {
             *value += sample * weight;
@@ -130,9 +158,18 @@ fn convolve_row(row: &[f32], out: &mut [f32], kernel: &[f32], radius: usize) {
     }
 }
 
-fn convolve_columns(source: &[f32], result: &mut [f32], width: usize, height: usize, kernel: &[f32], radius: usize) {
+fn convolve_columns(
+    source: &[f32],
+    result: &mut [f32],
+    width: usize,
+    height: usize,
+    kernel: &[f32],
+    radius: usize,
+) {
     for (index, &weight) in kernel.iter().enumerate() {
-        let Some((start, end)) = tap_range(index, radius, height) else { continue };
+        let Some((start, end)) = tap_range(index, radius, height) else {
+            continue;
+        };
         for y in start..end {
             let sample_y = y + index - radius;
             let samples = &source[sample_y * width..(sample_y + 1) * width];
@@ -146,7 +183,11 @@ fn convolve_columns(source: &[f32], result: &mut [f32], width: usize, height: us
 /// How far, in logical px, a shadow built from painted alpha reaches past its
 /// owner's box on each side: its spread, then its blur's gaussian tail.
 pub(crate) fn alpha_shadow_margin(shadow: AtomeShadowStyle) -> f32 {
-    let blur_padding = if shadow.kind == AtomeShadowKind::Drop { shadow_padding(shadow.blur) } else { 0 };
+    let blur_padding = if shadow.kind == AtomeShadowKind::Drop {
+        shadow_padding(shadow.blur)
+    } else {
+        0
+    };
     shadow.spread.max(0.0) + blur_padding as f32
 }
 
@@ -194,17 +235,26 @@ pub(crate) fn build_shadow_texture_rgba_for_alpha(
     scale: [f32; 2],
     shadow: AtomeShadowStyle,
 ) -> Option<(u32, u32, Vec<u8>)> {
-    if source_width == 0 || source_height == 0 || shadow.color[3] <= 0.0
-        || !(scale[0] > 0.0 && scale[1] > 0.0) {
+    if source_width == 0
+        || source_height == 0
+        || shadow.color[3] <= 0.0
+        || !(scale[0] > 0.0 && scale[1] > 0.0)
+    {
         return None;
     }
     let margin = alpha_shadow_margin(shadow);
-    let (margin_x, margin_y) = ((margin * scale[0]).round() as usize, (margin * scale[1]).round() as usize);
+    let (margin_x, margin_y) = (
+        (margin * scale[0]).round() as usize,
+        (margin * scale[1]).round() as usize,
+    );
     let (source_width, source_height) = (source_width as usize, source_height as usize);
     let width = source_width + margin_x * 2;
     let height = source_height + margin_y * 2;
-    let source_alpha = |x: usize, y: usize| source_rgba.get((y * source_width + x) * 4 + 3)
-        .map_or(0.0, |value| *value as f32 / 255.0);
+    let source_alpha = |x: usize, y: usize| {
+        source_rgba
+            .get((y * source_width + x) * 4 + 3)
+            .map_or(0.0, |value| *value as f32 / 255.0)
+    };
     let mut base = vec![0.0; width * height];
     for y in 0..source_height {
         for x in 0..source_width {
@@ -215,7 +265,11 @@ pub(crate) fn build_shadow_texture_rgba_for_alpha(
     let grown = if spread_px > 0.0 {
         let grown = dilate_alpha(&base, width, height, spread_px);
         if shadow.invert {
-            grown.iter().zip(&base).map(|(value, owner)| value * (1.0 - owner)).collect()
+            grown
+                .iter()
+                .zip(&base)
+                .map(|(value, owner)| value * (1.0 - owner))
+                .collect()
         } else {
             grown
         }
@@ -223,12 +277,28 @@ pub(crate) fn build_shadow_texture_rgba_for_alpha(
         base
     };
     let alpha = if shadow.kind == AtomeShadowKind::Drop && shadow.blur > 0.0 {
-        let horizontal = convolve_axis(&grown, width, height, &gaussian_kernel(shadow.blur * scale[0]), true);
-        convolve_axis(&horizontal, width, height, &gaussian_kernel(shadow.blur * scale[1]), false)
+        let horizontal = convolve_axis(
+            &grown,
+            width,
+            height,
+            &gaussian_kernel(shadow.blur * scale[0]),
+            true,
+        );
+        convolve_axis(
+            &horizontal,
+            width,
+            height,
+            &gaussian_kernel(shadow.blur * scale[1]),
+            false,
+        )
     } else {
         grown
     };
-    let rgb = [channel_to_u8(shadow.color[0]), channel_to_u8(shadow.color[1]), channel_to_u8(shadow.color[2])];
+    let rgb = [
+        channel_to_u8(shadow.color[0]),
+        channel_to_u8(shadow.color[1]),
+        channel_to_u8(shadow.color[2]),
+    ];
     let mut rgba = vec![0; width * height * 4];
     for (index, value) in alpha.into_iter().enumerate() {
         let offset = index * 4;
@@ -237,11 +307,18 @@ pub(crate) fn build_shadow_texture_rgba_for_alpha(
             // owner's origin moved by the offset and back by the margin.
             let owner_x = (index % width) as f32 - margin_x as f32 + shadow.offset_x * scale[0];
             let owner_y = (index / width) as f32 - margin_y as f32 + shadow.offset_y * scale[1];
-            if owner_x >= 0.0 && owner_y >= 0.0
-                && owner_x < source_width as f32 && owner_y < source_height as f32 {
+            if owner_x >= 0.0
+                && owner_y >= 0.0
+                && owner_x < source_width as f32
+                && owner_y < source_height as f32
+            {
                 source_alpha(owner_x as usize, owner_y as usize)
-            } else { 0.0 }
-        } else { 0.0 };
+            } else {
+                0.0
+            }
+        } else {
+            0.0
+        };
         rgba[offset..offset + 3].copy_from_slice(&rgb);
         rgba[offset + 3] = channel_to_u8(shadow.color[3] * value * (1.0 - cutout));
     }
@@ -286,7 +363,11 @@ pub(crate) fn build_gaussian_shadow_texture_rgba_for_silhouette(
         // elle est l'antialiasing du contour, exactement comme le bloc.
         mask.clone()
     };
-    let rgb = [channel_to_u8(color[0]), channel_to_u8(color[1]), channel_to_u8(color[2])];
+    let rgb = [
+        channel_to_u8(color[0]),
+        channel_to_u8(color[1]),
+        channel_to_u8(color[2]),
+    ];
     let mut rgba = vec![0; image_width * image_height * 4];
     for (index, value) in alpha.iter().enumerate() {
         let offset = index * 4;
@@ -394,7 +475,10 @@ pub(crate) fn build_gaussian_shadow_texture_rgba(
     blur: f32,
 ) -> Option<(u32, u32, Vec<u8>)> {
     build_gaussian_shadow_texture_rgba_for_silhouette(
-        &rect_silhouette(width, height, corner_radii), color, blur, None,
+        &rect_silhouette(width, height, corner_radii),
+        color,
+        blur,
+        None,
     )
 }
 

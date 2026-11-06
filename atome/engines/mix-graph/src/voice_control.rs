@@ -18,7 +18,10 @@ pub struct VoiceControl {
 
 impl VoiceControl {
     fn new() -> Self {
-        Self { end_frame: AtomicU64::new(u64::MAX), release_frames: AtomicU64::new(0) }
+        Self {
+            end_frame: AtomicU64::new(u64::MAX),
+            release_frames: AtomicU64::new(0),
+        }
     }
 
     pub fn end_frame(&self) -> Option<u64> {
@@ -47,9 +50,14 @@ pub fn register(voice_id: &str) -> Arc<VoiceControl> {
 // The voice ends `end_frame` frames after its first one, fading over the last
 // `release_frames`. Returns whether the voice is still known.
 pub fn set_end(voice_id: &str, end_frame: u64, release_frames: u64) -> bool {
-    let control = REGISTRY.lock().ok().and_then(|registry| registry.as_ref()?.get(voice_id)?.upgrade());
+    let control = REGISTRY
+        .lock()
+        .ok()
+        .and_then(|registry| registry.as_ref()?.get(voice_id)?.upgrade());
     let Some(control) = control else { return false };
-    control.release_frames.store(release_frames, Ordering::Release);
+    control
+        .release_frames
+        .store(release_frames, Ordering::Release);
     control.end_frame.store(end_frame, Ordering::Release);
     true
 }
@@ -62,7 +70,10 @@ mod tests {
     fn an_end_reaches_a_registered_voice_until_it_is_dropped() {
         let control = register("v");
         assert!(set_end("v", 480, 96));
-        assert_eq!((control.end_frame(), control.release_frames()), (Some(480), 96));
+        assert_eq!(
+            (control.end_frame(), control.release_frames()),
+            (Some(480), 96)
+        );
         drop(control);
         assert!(!set_end("v", 1, 0), "a finished voice is gone");
     }

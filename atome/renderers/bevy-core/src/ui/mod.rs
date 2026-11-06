@@ -5,15 +5,15 @@ mod types;
 pub use types::*;
 
 use crate::texture::image_handle_from_texture;
-use bevy::input::mouse::MouseWheel;
+use crate::workspace_backdrop::MENU_PRESENTATION_LAYER;
 use bevy::camera::visibility::RenderLayers;
+use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 use bevy::text::{Font, FontSize, FontSource};
 use bevy::ui::{
-    percent, px, widget::ImageNode, BoxShadow, GlobalZIndex, RelativeCursorPosition,
-    IsDefaultUiCamera, ScrollPosition, ShadowStyle,
+    BoxShadow, GlobalZIndex, IsDefaultUiCamera, RelativeCursorPosition, ScrollPosition,
+    ShadowStyle, percent, px, widget::ImageNode,
 };
-use crate::workspace_backdrop::MENU_PRESENTATION_LAYER;
 
 // Tracks the previous frame's Interaction + node-local cursor position so
 // press/release/drag can be derived without an entity-keyed Local<HashMap>
@@ -59,11 +59,7 @@ impl Plugin for AtomeBevyUiPlugin {
 }
 
 fn finite(value: f32, fallback: f32) -> f32 {
-    if value.is_finite() {
-        value
-    } else {
-        fallback
-    }
+    if value.is_finite() { value } else { fallback }
 }
 
 fn normalized_id(value: &str, error: &str) -> Result<String, String> {
@@ -397,8 +393,14 @@ fn spawn_image_node(
     kind: &str,
     node: &AtomeUiNode,
 ) -> Result<Entity, String> {
-    let image = node.image.as_ref().ok_or_else(|| format!("bevy_ui_image_required:{}", node.id))?;
-    let texture = image.texture.as_ref().ok_or_else(|| format!("bevy_ui_image_texture_required:{}", node.id))?;
+    let image = node
+        .image
+        .as_ref()
+        .ok_or_else(|| format!("bevy_ui_image_required:{}", node.id))?;
+    let texture = image
+        .texture
+        .as_ref()
+        .ok_or_else(|| format!("bevy_ui_image_texture_required:{}", node.id))?;
     let tint = image.tint.or(node.style.color);
     let opacity = image.opacity.unwrap_or(1.0);
     let handle = {
@@ -407,7 +409,8 @@ fn spawn_image_node(
             .ok_or_else(|| "bevy_image_assets_required".to_string())?;
         image_handle_from_texture(&mut images, &Some(texture.clone()), &node.id)?
     };
-    let entity = world.spawn((
+    let entity = world
+        .spawn((
             id_component,
             node_layout(kind, &node.style),
             ImageNode::new(handle).with_color(color(
@@ -421,9 +424,9 @@ fn spawn_image_node(
         ))
         .id();
     if let Err(error) = crate::animated_png::install_animation(world, entity, texture) {
-            world.despawn(entity);
-            return Err(error);
-        }
+        world.despawn(entity);
+        return Err(error);
+    }
     Ok(entity)
 }
 
@@ -514,7 +517,8 @@ fn unmount_tree(world: &mut World, id: &str) -> Result<(), String> {
         .resource::<AtomeUiEntityTable>()
         .by_id
         .iter()
-        .filter_map(|(id, entity)| world.get_entity(*entity).is_err().then(|| id.clone()))
+        .filter(|&(_id, entity)| world.get_entity(*entity).is_err())
+        .map(|(id, _entity)| id.clone())
         .collect();
     let mut table = world.resource_mut::<AtomeUiEntityTable>();
     for id in stale_ids {
@@ -583,7 +587,10 @@ fn update_tree(world: &mut World, tree: AtomeUiTree) -> Result<(), String> {
 pub fn ui_viewport_size(world: &mut World) -> (u32, u32) {
     let default_camera = {
         let mut query = world.query_filtered::<&Camera, With<IsDefaultUiCamera>>();
-        query.iter(world).next().map(|camera| camera.physical_viewport_size())
+        query
+            .iter(world)
+            .next()
+            .map(|camera| camera.physical_viewport_size())
     };
     let size = match default_camera {
         Some(size) => size,
@@ -666,15 +673,15 @@ fn update_node_style(world: &mut World, id: &str, style: AtomeUiStyle) -> Result
                 node.border_radius = BorderRadius::all(px(finite(radius, 0.0).max(0.0)));
             }
         }
-        if let Some(background) = style.background {
-            if let Some(mut current) = entity_mut.get_mut::<BackgroundColor>() {
-                current.0 = color(Some(background), Color::NONE);
-            }
+        if let Some(background) = style.background
+            && let Some(mut current) = entity_mut.get_mut::<BackgroundColor>()
+        {
+            current.0 = color(Some(background), Color::NONE);
         }
-        if let Some(text_color) = style.color {
-            if let Some(mut current) = entity_mut.get_mut::<TextColor>() {
-                current.0 = color(Some(text_color), Color::WHITE);
-            }
+        if let Some(text_color) = style.color
+            && let Some(mut current) = entity_mut.get_mut::<TextColor>()
+        {
+            current.0 = color(Some(text_color), Color::WHITE);
         }
         if let Some(z_index) = style.z_index {
             if let Some(mut current) = entity_mut.get_mut::<ZIndex>() {
@@ -756,16 +763,16 @@ fn set_subtree_opacity(world: &mut World, id: &str, opacity: f32) -> Result<(), 
         {
             current.0 = scaled_alpha(base_color, factor);
         }
-        if let Some(base_color) = base.image {
-            if let Some(mut current) = entity_mut.get_mut::<ImageNode>() {
-                current.color = scaled_alpha(base_color, factor);
-            }
+        if let Some(base_color) = base.image
+            && let Some(mut current) = entity_mut.get_mut::<ImageNode>()
+        {
+            current.color = scaled_alpha(base_color, factor);
         }
-        if let Some(base_shadows) = &base.shadows {
-            if let Some(mut current) = entity_mut.get_mut::<BoxShadow>() {
-                for (shadow, base_color) in current.0.iter_mut().zip(base_shadows) {
-                    shadow.color = scaled_alpha(*base_color, factor);
-                }
+        if let Some(base_shadows) = &base.shadows
+            && let Some(mut current) = entity_mut.get_mut::<BoxShadow>()
+        {
+            for (shadow, base_color) in current.0.iter_mut().zip(base_shadows) {
+                shadow.color = scaled_alpha(*base_color, factor);
             }
         }
     }
@@ -877,7 +884,6 @@ fn collect_ui_interactions(
         if *interaction != Interaction::None && wheel_delta != Vec2::ZERO {
             push("wheel", wheel_delta);
         }
-        drop(push);
         state.interaction = *interaction;
         state.position = position;
     }

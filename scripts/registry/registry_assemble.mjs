@@ -5,7 +5,8 @@ import { projectContracts, projectMcpMethods, projectBootstrapTools, projectAgen
     contractToolRelations } from './registry_project_commands.mjs';
 import { projectPanels, projectMenus } from './registry_project_ui.mjs';
 import { projectTypes, projectHealth, projectActivities, projectMonitorsAndCategories } from './registry_project_domain.mjs';
-import { annotateContract, annotateMcpMethod, annotateTool } from './registry_annotate.mjs';
+import { projectToolExposure } from './registry_project_exposure.mjs';
+import { annotateContract, annotateMcpMethod, annotateTool, annotateExposure } from './registry_annotate.mjs';
 
 export async function runProjections(sources) {
     const contracts = await projectContracts();
@@ -20,10 +21,13 @@ export async function runProjections(sources) {
     };
     projections.bootstrap_tools.relations.push(...contractToolRelations(toolIds, contracts.entries));
     // Every runtime tool the MCP door can call (the assistant's own tools carry their gateway tier): its access facts.
-    const runtimeTools = [...Object.values(projections).flatMap(projection => [...projection.entries, ...(projection.bindings || [])]),
-        ...sources.annotations.declared_entries].filter(entry => entry.kind === 'tool_definition' && entry.registry !== 'agent_gateway')
-        .map(entry => entry.native_id || entry.id.slice('tool_definition:'.length));
-    projections.tool_access = await projectToolAccess(new Set(runtimeTools));
+    const toolEntries = [...Object.values(projections).flatMap(projection => [...projection.entries, ...(projection.bindings || [])]),
+        ...sources.annotations.declared_entries.map(entry => ({ ...entry, native_id: entry.id.slice(entry.kind.length + 1) }))]
+        .filter(entry => entry.kind === 'tool_definition');
+    projections.tool_access = await projectToolAccess(new Set(toolEntries.filter(entry => entry.registry !== 'agent_gateway').map(entry => entry.native_id)));
+    // What the MCP door reaches of every tool and method: the facts of each entry's exposure (annotateExposure).
+    projections.tool_exposure = await projectToolExposure({ tools: toolEntries,
+        methods: new Set([...projections.contracts.entries, ...projections.mcp_methods.entries].filter(entry => !entry.infrastructure).map(entry => entry.native_id)) });
     return projections;
 }
 
@@ -64,6 +68,13 @@ export function assemble(projections, sources) {
         if (entry.kind === 'tool_definition') entries.set(id, annotateTool(entry, annotations, projections.tool_access.access[entry.native_id]));
         if (entry.kind === 'objective_scenario') entries.set(id, { ...entry, status: entry.scenario === 'objective' ? health.objective_status[entry.native_id] : entry.scenario });
     }
+    const doors = {
+        methods: new Set([...entries.values()].filter(entry => entry.kind === 'action_contract' && !entry.infrastructure).map(entry => entry.native_id)),
+        runtime: new Set([...entries.values()].filter(entry => entry.kind === 'tool_definition' && entry.registry !== 'agent_gateway').map(entry => entry.native_id))
+    };
+    for (const [id, entry] of entries) {
+        if (entry.kind === 'action_contract' || entry.kind === 'tool_definition') entries.set(id, annotateExposure(entry, projections.tool_exposure.exposure, doors));
+    }
     for (const placement of [...entries.values()].filter(entry => entry.kind === 'ui_placement' && entry.effect === 'show')) {
         relate({ from: placement.parent, type: 'contains', to: placement.target });
     }
@@ -78,7 +89,7 @@ export function assemble(projections, sources) {
     }
     const inputs = {
         ...Object.fromEntries(Object.entries(projections).map(([name, projection]) => [`owner:${name}`, hashOf({ entries: projection.entries, relations: projection.relations, bindings: projection.bindings || [],
-            ...(projection.access ? { access: projection.access } : {}) })])),
+            ...(projection.access ? { access: projection.access } : {}), ...(projection.exposure ? { exposure: projection.exposure } : {}) })])),
         ...Object.fromEntries(Object.entries(sources).map(([name, source]) => [`source:${name}`, hashOf(source)]))
     };
     const map = {

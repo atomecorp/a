@@ -5,7 +5,7 @@ import { validateParams } from '../ai/agent_gateway_normalize.js';
 // and sees who belongs; a person added is invited and reads nothing before accepting; a person not on eVe gets an
 // e-mail with a link. Every action of the screens runs through these commands (eVe/domains/forum/forum_commands.js).
 export const FORUM_ERRORS = Object.freeze(['INVALID_ARGUMENT', 'AUTH_REQUIRED', 'PRESENTATION_UNAVAILABLE', 'forum_not_found', 'forum_not_member',
-    'forum_name_required', 'forum_owner_stays', 'forum_invite_invalid', 'forum_post_empty', 'publish_recipient_unknown', 'scheduled_due_past', 'FORUM_FAILED']);
+    'forum_name_required', 'forum_owner_stays', 'forum_owner_required', 'forum_post_not_found', 'forum_post_author_required', 'forum_invite_invalid', 'forum_post_empty', 'publish_recipient_unknown', 'scheduled_due_past', 'FORUM_FAILED']);
 const id = { type: 'string', minLength: 1, maxLength: 200 };
 const forum_id = { type: 'string', pattern: '^forum_[a-z0-9-]{8,64}$' };
 const people = { type: 'array', minItems: 1, maxItems: 200, uniqueItems: true, items: id };
@@ -16,6 +16,8 @@ const definitions = {
     invite: [{ forum_id, people }, ['forum_id', 'people'], 'Invite more people (their ids) to a forum the user belongs to, as create does.', true],
     respond: [{ forum_id, accept: { type: 'boolean' } }, ['forum_id', 'accept'], 'Answer an invitation to a forum: accept (the user becomes a member) or refuse.', true],
     leave: [{ forum_id }, ['forum_id'], 'Leave a forum (its maker keeps it).', true],
+    delete: [{ forum_id }, ['forum_id'], 'Delete a forum the user made: the forum, its members, its invitations and every post of it.', true],
+    remove_post: [{ forum_id, post_id: id }, ['forum_id', 'post_id'], 'Delete one post of a forum: the user\'s own, or any post of a forum the user made.', true],
     members: [{ forum_id }, ['forum_id'], 'List who belongs to a forum the user is a member of: id, name, owner. Writes nothing.', false],
     posts: [{ forum_id }, ['forum_id'], 'Read a forum\'s posts, newest first: id, author, text, created_at. Writes nothing.', false],
     post: [{ forum_id, text: { type: 'string', minLength: 1, maxLength: 5000 }, due_at: { type: 'string', format: 'date-time', maxLength: 40 } }, ['forum_id', 'text'],
@@ -29,7 +31,7 @@ export const FORUM_COMMANDS = Object.freeze(Object.entries(definitions).map(([ac
         forums: { type: 'array' }, forum: { type: 'object' }, members: { type: 'array' }, posts: { type: 'array' }, missed: { type: 'array' },
         mailed: { type: 'number' }, scheduled: { type: 'boolean' }, event_id: { type: 'string' }, post_id: { type: 'string' }, status: { type: 'string' } } }
 })));
-export const FORUM_CONFIRMED_COMMANDS = Object.freeze(['forum.create', 'forum.invite', 'forum.respond', 'forum.leave', 'forum.post']);
+export const FORUM_CONFIRMED_COMMANDS = Object.freeze(['forum.create', 'forum.invite', 'forum.respond', 'forum.leave', 'forum.delete', 'forum.remove_post', 'forum.post']);
 export const validateForumInput = (action, input) => {
     const contract = FORUM_COMMANDS.find(command => command.action === action);
     return contract && validateParams(contract.input_schema, input).ok ? null : 'INVALID_ARGUMENT';

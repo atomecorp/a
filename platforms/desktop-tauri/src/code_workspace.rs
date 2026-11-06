@@ -45,7 +45,20 @@ mod enabled {
     const MAX_HITS: usize = 50;
     const MAX_VISITED: usize = 20_000;
     // Never read: history, dependencies, build output, local data, scratch, agent settings.
-    const SKIPPED_DIRS: [&str; 12] = [".git", "node_modules", "target", "data", "temp", "dist", "build", "gen", "DerivedData", ".claude", "certs", "secrets"];
+    const SKIPPED_DIRS: [&str; 12] = [
+        ".git",
+        "node_modules",
+        "target",
+        "data",
+        "temp",
+        "dist",
+        "build",
+        "gen",
+        "DerivedData",
+        ".claude",
+        "certs",
+        "secrets",
+    ];
 
     pub(super) fn repository_root() -> Result<PathBuf, String> {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -57,8 +70,22 @@ mod enabled {
     // A secret is never handed to a model: environment files, keys, certificates, provisioning profiles.
     fn is_secret(name: &str) -> bool {
         let lower = name.to_ascii_lowercase();
-        lower.starts_with(".env") || lower.ends_with(".env") || lower.contains("secret") || lower.contains("credential")
-            || [".pem", ".key", ".p8", ".p12", ".cer", ".mobileprovision", ".keystore", ".jks"].iter().any(|suffix| lower.ends_with(suffix))
+        lower.starts_with(".env")
+            || lower.ends_with(".env")
+            || lower.contains("secret")
+            || lower.contains("credential")
+            || [
+                ".pem",
+                ".key",
+                ".p8",
+                ".p12",
+                ".cer",
+                ".mobileprovision",
+                ".keystore",
+                ".jks",
+            ]
+            .iter()
+            .any(|suffix| lower.ends_with(suffix))
     }
 
     fn refused(name: &str) -> bool {
@@ -82,7 +109,10 @@ mod enabled {
                 _ => return Err("code_path_outside".to_string()),
             }
         }
-        let resolved = root.join(relative).canonicalize().map_err(|_| "code_path_not_found".to_string())?;
+        let resolved = root
+            .join(relative)
+            .canonicalize()
+            .map_err(|_| "code_path_not_found".to_string())?;
         if !resolved.starts_with(root) {
             return Err("code_path_outside".to_string());
         }
@@ -90,7 +120,10 @@ mod enabled {
     }
 
     fn relative_to(root: &Path, path: &Path) -> String {
-        path.strip_prefix(root).unwrap_or(path).to_string_lossy().replace('\\', "/")
+        path.strip_prefix(root)
+            .unwrap_or(path)
+            .to_string_lossy()
+            .replace('\\', "/")
     }
 
     pub(super) fn list_at(root: &Path, relative: &str) -> Result<Vec<RepoEntry>, String> {
@@ -104,16 +137,26 @@ mod enabled {
                     return None;
                 }
                 let kind = if entry.path().is_dir() { "dir" } else { "file" };
-                Some(RepoEntry { name, kind: kind.to_string() })
+                Some(RepoEntry {
+                    name,
+                    kind: kind.to_string(),
+                })
             })
             .collect();
-        entries.sort_by(|a, b| (a.kind != "dir", a.name.to_lowercase()).cmp(&(b.kind != "dir", b.name.to_lowercase())));
+        entries.sort_by_key(|a| (a.kind != "dir", a.name.to_lowercase()));
         Ok(entries)
     }
 
-    pub(super) fn read_at(root: &Path, relative: &str, from_line: usize, lines: usize) -> Result<RepoFile, String> {
+    pub(super) fn read_at(
+        root: &Path,
+        relative: &str,
+        from_line: usize,
+        lines: usize,
+    ) -> Result<RepoFile, String> {
         let path = resolve(root, relative)?;
-        let size = fs::metadata(&path).map_err(|error| format!("code_read_failed:{error}"))?.len();
+        let size = fs::metadata(&path)
+            .map_err(|error| format!("code_read_failed:{error}"))?
+            .len();
         if !path.is_file() {
             return Err("code_path_not_file".to_string());
         }
@@ -124,12 +167,25 @@ mod enabled {
         let all: Vec<&str> = text.lines().collect();
         let start = from_line.max(1);
         let count = lines.clamp(1, MAX_LINES);
-        let shown = all.iter().skip(start - 1).take(count).cloned().collect::<Vec<_>>().join("\n");
-        Ok(RepoFile { path: relative_to(root, &path), text: shown, from_line: start, total_lines: all.len() })
+        let shown = all
+            .iter()
+            .skip(start - 1)
+            .take(count)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
+        Ok(RepoFile {
+            path: relative_to(root, &path),
+            text: shown,
+            from_line: start,
+            total_lines: all.len(),
+        })
     }
 
     fn walk(root: &Path, dir: &Path, needle: &str, hits: &mut Vec<RepoHit>, visited: &mut usize) {
-        let Ok(entries) = fs::read_dir(dir) else { return };
+        let Ok(entries) = fs::read_dir(dir) else {
+            return;
+        };
         for entry in entries.filter_map(|entry| entry.ok()) {
             if hits.len() >= MAX_HITS || *visited >= MAX_VISITED {
                 return;
@@ -140,7 +196,9 @@ mod enabled {
             }
             let path = entry.path();
             // A link could lead out of the repository: it is not followed.
-            let Ok(kind) = entry.file_type() else { continue };
+            let Ok(kind) = entry.file_type() else {
+                continue;
+            };
             if kind.is_symlink() {
                 continue;
             }
@@ -149,13 +207,22 @@ mod enabled {
                 continue;
             }
             *visited += 1;
-            if fs::metadata(&path).map(|meta| meta.len() > MAX_READ_BYTES).unwrap_or(true) {
+            if fs::metadata(&path)
+                .map(|meta| meta.len() > MAX_READ_BYTES)
+                .unwrap_or(true)
+            {
                 continue;
             }
-            let Ok(text) = fs::read_to_string(&path) else { continue };
+            let Ok(text) = fs::read_to_string(&path) else {
+                continue;
+            };
             for (index, line) in text.lines().enumerate() {
                 if line.to_lowercase().contains(needle) {
-                    hits.push(RepoHit { path: relative_to(root, &path), line: index + 1, text: line.trim().chars().take(200).collect() });
+                    hits.push(RepoHit {
+                        path: relative_to(root, &path),
+                        line: index + 1,
+                        text: line.trim().chars().take(200).collect(),
+                    });
                     if hits.len() >= MAX_HITS {
                         return;
                     }
@@ -164,12 +231,23 @@ mod enabled {
         }
     }
 
-    pub(super) fn search_at(root: &Path, text: &str, relative: &str) -> Result<Vec<RepoHit>, String> {
+    pub(super) fn search_at(
+        root: &Path,
+        text: &str,
+        relative: &str,
+    ) -> Result<Vec<RepoHit>, String> {
         let needle = text.trim().to_lowercase();
         if needle.len() < 2 {
             return Err("code_search_too_short".to_string());
         }
-        let dir = resolve(root, if relative.trim().is_empty() { "." } else { relative })?;
+        let dir = resolve(
+            root,
+            if relative.trim().is_empty() {
+                "."
+            } else {
+                relative
+            },
+        )?;
         let mut hits = Vec::new();
         let mut visited = 0;
         walk(root, &dir, &needle, &mut hits, &mut visited);
@@ -177,10 +255,21 @@ mod enabled {
     }
 
     // The plan of a code project, `todo/code_projects/<name>.md`: the name is reduced to a file name of its own.
-    pub(super) fn write_todo_at(root: &Path, name: &str, text: &str) -> Result<TodoWritten, String> {
-        let slug: String = name.trim().to_lowercase().chars()
+    pub(super) fn write_todo_at(
+        root: &Path,
+        name: &str,
+        text: &str,
+    ) -> Result<TodoWritten, String> {
+        let slug: String = name
+            .trim()
+            .to_lowercase()
+            .chars()
             .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
-            .collect::<String>().split('_').filter(|part| !part.is_empty()).collect::<Vec<_>>().join("_");
+            .collect::<String>()
+            .split('_')
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>()
+            .join("_");
         if slug.is_empty() || slug.len() > 80 {
             return Err("code_todo_name_invalid".to_string());
         }
@@ -193,7 +282,10 @@ mod enabled {
             let _ = fs::remove_file(&temporary);
             format!("code_todo_commit_failed:{error}")
         })?;
-        Ok(TodoWritten { path: relative_to(root, &path), bytes: text.len() })
+        Ok(TodoWritten {
+            path: relative_to(root, &path),
+            bytes: text.len(),
+        })
     }
 }
 
@@ -251,11 +343,18 @@ mod tests {
     use std::fs;
 
     fn sandbox(name: &str) -> std::path::PathBuf {
-        let root = std::env::temp_dir().join(format!("atome_code_workspace_{name}_{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!(
+            "atome_code_workspace_{name}_{}",
+            std::process::id()
+        ));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(root.join("eVe/domains")).unwrap();
         fs::create_dir_all(root.join("node_modules/x")).unwrap();
-        fs::write(root.join("eVe/domains/a.js"), "const alpha = 1;\nconst beta = 2;\n").unwrap();
+        fs::write(
+            root.join("eVe/domains/a.js"),
+            "const alpha = 1;\nconst beta = 2;\n",
+        )
+        .unwrap();
         fs::write(root.join(".env"), "KEY=secret").unwrap();
         fs::write(root.join("node_modules/x/a.js"), "const alpha = 3;").unwrap();
         root.canonicalize().unwrap()
@@ -265,20 +364,37 @@ mod tests {
     fn refuses_what_leaves_or_hides_secrets() {
         let root = sandbox("refuse");
         assert_eq!(resolve(&root, "../etc").unwrap_err(), "code_path_outside");
-        assert_eq!(resolve(&root, "/etc/passwd").unwrap_err(), "code_path_absolute");
+        assert_eq!(
+            resolve(&root, "/etc/passwd").unwrap_err(),
+            "code_path_absolute"
+        );
         assert_eq!(resolve(&root, ".env").unwrap_err(), "code_path_refused");
-        assert_eq!(resolve(&root, "node_modules/x/a.js").unwrap_err(), "code_path_refused");
-        assert!(!list_at(&root, ".").unwrap().iter().any(|entry| entry.name == ".env" || entry.name == "node_modules"));
+        assert_eq!(
+            resolve(&root, "node_modules/x/a.js").unwrap_err(),
+            "code_path_refused"
+        );
+        assert!(
+            !list_at(&root, ".")
+                .unwrap()
+                .iter()
+                .any(|entry| entry.name == ".env" || entry.name == "node_modules")
+        );
     }
 
     #[test]
     fn reads_a_window_and_searches_outside_skipped_dirs() {
         let root = sandbox("read");
         let file = read_at(&root, "eVe/domains/a.js", 2, 1).unwrap();
-        assert_eq!((file.text.as_str(), file.total_lines), ("const beta = 2;", 2));
+        assert_eq!(
+            (file.text.as_str(), file.total_lines),
+            ("const beta = 2;", 2)
+        );
         let hits = search_at(&root, "ALPHA", "").unwrap();
         assert_eq!(hits.len(), 1);
-        assert_eq!((hits[0].path.as_str(), hits[0].line), ("eVe/domains/a.js", 1));
+        assert_eq!(
+            (hits[0].path.as_str(), hits[0].line),
+            ("eVe/domains/a.js", 1)
+        );
     }
 
     #[test]
@@ -286,7 +402,13 @@ mod tests {
         let root = sandbox("todo");
         let written = write_todo_at(&root, "Atelier eVe !", "# Plan").unwrap();
         assert_eq!(written.path, "todo/code_projects/atelier_eve.md");
-        assert_eq!(fs::read_to_string(root.join(&written.path)).unwrap(), "# Plan");
-        assert_eq!(write_todo_at(&root, "../..", "x").unwrap_err(), "code_todo_name_invalid");
+        assert_eq!(
+            fs::read_to_string(root.join(&written.path)).unwrap(),
+            "# Plan"
+        );
+        assert_eq!(
+            write_todo_at(&root, "../..", "x").unwrap_err(),
+            "code_todo_name_invalid"
+        );
     }
 }

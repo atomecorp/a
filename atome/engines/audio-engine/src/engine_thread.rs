@@ -3,6 +3,11 @@
 // these threads (stream readiness, shared locks): on Apple platforms a plain
 // `std::thread` runs at Default QoS, a priority inversion, and too low for audio.
 
+#![allow(
+    unsafe_code,
+    reason = "sets the thread QoS class through the C library"
+)]
+
 /// Spawns an engine thread at the audio QoS (user-interactive on Apple platforms).
 pub(crate) fn spawn<F, T>(body: F) -> std::thread::JoinHandle<T>
 where
@@ -19,7 +24,7 @@ where
 fn raise_qos() {
     // <sys/qos.h>: QOS_CLASS_USER_INTERACTIVE; libSystem is always linked.
     const QOS_CLASS_USER_INTERACTIVE: u32 = 0x21;
-    extern "C" {
+    unsafe extern "C" {
         fn pthread_set_qos_class_self_np(qos_class: u32, relative_priority: i32) -> i32;
     }
     // SAFETY: only changes the calling thread's own scheduling class.

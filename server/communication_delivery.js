@@ -1,62 +1,10 @@
 // Livraison et garde des communications pair-a-pair (done/communication_news_broadcast_2026-09-30.md, L2).
 //
-// - `guardDirectMessage` : enveloppe, liste blanche de `kind`, taille, debit. Le serveur
-//   reecrit l'identite de l'expediteur dans l'enveloppe : un client ne peut plus afficher un
-//   nom forge, et le telephone n'est jamais relaye.
+// - The direct messages' guard (envelope, kinds, size, rate) is the Rust front's
+//   (atome/servers/atome-server/src/social/direct_messages.rs).
 // - `deliverNotification` : pousse une notification serveur (contact, News) dans la pile
 //   du destinataire et la livre en direct (ou la met en file s'il est hors ligne), sous la
 //   meme enveloppe `eve-comm-share` que les messages, pour que le client n'ait qu'un chemin.
-
-import { normalizeCommunicationPriority } from '../atome/src/shared/communication_contract.js';
-import { lifeProfilesOf } from '../atome/src/shared/life_profile_contract.js';
-export const DIRECT_MESSAGE_MAX_BYTES = 128 * 1024;
-export const DIRECT_MESSAGE_TEXT_MAX = 8000;
-export const DIRECT_MESSAGE_RATE = { max: 30, windowMs: 10_000 };
-// `publication` n'est PAS un message : seule la diffusion serveur (news/publish) en cree.
-const DIRECT_MESSAGE_KINDS = new Set(['message', 'share-request']);
-
-export function createRateLimiter({ max, windowMs } = DIRECT_MESSAGE_RATE) {
-    const hits = new Map();
-    return (key, now = Date.now()) => {
-        const list = (hits.get(key) || []).filter((ts) => now - ts < windowMs);
-        if (list.length >= max) { hits.set(key, list); return false; }
-        list.push(now);
-        hits.set(key, list);
-        if (hits.size > 10_000) hits.delete(hits.keys().next().value);
-        return true;
-    };
-}
-
-// Retourne { ok, error?, text, params, profiles } : `text` est l'enveloppe reecrite a relayer.
-export function guardDirectMessage(rawText, sender = {}) {
-    const text = typeof rawText === 'string' ? rawText : '';
-    if (!text) return { ok: false, error: 'direct_message_empty' };
-    if (Buffer.byteLength(text, 'utf8') > DIRECT_MESSAGE_MAX_BYTES) return { ok: false, error: 'direct_message_too_large' };
-    let command;
-    try { command = JSON.parse(text); } catch { return { ok: false, error: 'direct_message_envelope_invalid' }; }
-    if (!command || command.command !== 'eve-comm-share' || (command.params && typeof command.params !== 'object')) {
-        return { ok: false, error: 'direct_message_envelope_invalid' };
-    }
-    const params = { ...(command.params || {}) };
-    const kind = String(params.kind || 'message');
-    if (!DIRECT_MESSAGE_KINDS.has(kind)) return { ok: false, error: 'direct_message_kind_forbidden' };
-    const body = params.message ?? params.text ?? '';
-    if (typeof body === 'string' && body.length > DIRECT_MESSAGE_TEXT_MAX) return { ok: false, error: 'direct_message_too_large' };
-    params.kind = kind;
-    try { params.priority = normalizeCommunicationPriority(params.priority); }
-    catch (error) { return { ok: false, error: error.message }; }
-    for (const key of ['action', 'severity', 'priorityAuthorized', 'priority_authorized', 'system']) delete params[key];
-    // The life profiles the sender files it under stay on the sender's side, never relayed.
-    const profiles = lifeProfilesOf(params);
-    delete params.profiles;
-    params.fromId = String(sender.userId || '');
-    params.fromName = sender.username || '';
-    // Never the phone the sender typed: the one of the authenticated account, so the
-    // recipient recognises the person in their own book (contacts are kept by phone).
-    delete params.fromPhone;
-    if (sender.phone) params.fromPhone = String(sender.phone);
-    return { ok: true, kind, params, profiles, text: JSON.stringify({ ...command, params }) };
-}
 
 export function createNotificationDelivery({ pushNotificationToUserStack, wsSendJsonToUser, enqueuePendingConsoleMessage, findUserById }) {
     return async function deliverNotification(targetUserId, senderUserId, { kind, message = '', subject = null, publication = null, id = null, extra = {} } = {}) {

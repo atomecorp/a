@@ -1,0 +1,17 @@
+// The Live Activity widget extension (lot D13, liveactivity/ + liveactivitywidget/); release versions remain in the project ledger.
+CODE_SIGN_IDENTITY = Apple Development
+CODE_SIGN_STYLE = Automatic
+DEVELOPMENT_TEAM = 2W25PVZ57F
+GENERATE_INFOPLIST_FILE = NO
+INFOPLIST_FILE = liveactivitywidget/Info.plist
+IPHONEOS_DEPLOYMENT_TARGET = 17.0
+LD_RUNPATH_SEARCH_PATHS = $(inherited) @executable_path/Frameworks @executable_path/../../Frameworks
+PRODUCT_BUNDLE_IDENTIFIER = one.atome.app.liveactivity
+PRODUCT_NAME = $(TARGET_NAME)
+SDKROOT = iphoneos
+SKIP_INSTALL = YES
+SUPPORTED_PLATFORMS = iphoneos iphonesimulator
+SUPPORTS_MACCATALYST = NO
+SWIFT_EMIT_LOC_STRINGS = YES
+SWIFT_VERSION = 5.0
+TARGETED_DEVICE_FAMILY = 1,2

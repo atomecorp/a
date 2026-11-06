@@ -26,7 +26,8 @@ import { ensureVideoPlaybackCache } from './server_media.js';
 import { sanitizeUploadId, coerceWsChunkSize, resolveUserId } from './server_utils.js';
 import { listUserDownloadsSnapshot, resolveDownloadTarget } from './server_uploads.js';
 import { handleWsApiAtomeRequest } from './ws_api_atome_request.js';
-import { handleWsNewsRequest, handleWsMembershipRequest, handleWsContactRequest, handleWsShareRequest, handleWsShellRequest } from './ws_api_message_handlers.js';
+import { handleWsApiFrontFrame, markFrontConnection } from './ws_api_front.js';
+import { handleWsContactRequest, handleWsShareRequest, handleWsShellRequest } from './ws_api_message_handlers.js';
 
 export function registerWsApiRoute(server, {
   projectRoot,
@@ -38,12 +39,7 @@ export function registerWsApiRoute(server, {
   wsSyncRuntime,
   directoryPublicService,
   communicationRelations,
-  directMessageRateAllowed,
   syncSharingService,
-  newsBroadcast,
-  newsPublishRateAllowed,
-  communities,
-  forums,
   publicEvents,
   objectiveNetwork,
   shop,
@@ -70,6 +66,7 @@ export function registerWsApiRoute(server, {
       try { wsApiConnections.add(connection); } catch (error) {
         console.warn("[server] operation failed", error);
       }
+      markFrontConnection(connection, request);
       // Key-bound tokens need a signed connection proof here (auth_session_validation.js).
       connection._wsApiRequiresProof = true;
       connection._wsApiVaultRouter = userVaultRouter;
@@ -84,9 +81,10 @@ export function registerWsApiRoute(server, {
 
       try {
         const requestUser = await validateToken(request);
-        const requestUserId = resolveUserId(requestUser);
+        // No user on the opening request is no one: resolveUserId's `'anonymous'` sentinel names no account.
+        const requestUserId = requestUser ? resolveUserId(requestUser) : null;
         // A key-bound token proves nothing before the connection proof.
-        if (requestUserId && requestUser?.cnf?.pop !== true) {
+        if (requestUserId && requestUserId !== 'anonymous' && requestUser?.cnf?.pop !== true) {
           attachWsApiClientToUser(connection, requestUserId);
           if (requestUser && typeof requestUser.exp === 'number') {
             connection._wsApiAuthExpMs = requestUser.exp * 1000;
@@ -108,6 +106,8 @@ export function registerWsApiRoute(server, {
           safeSend({ type: 'error', message: 'Invalid JSON' });
           return;
         }
+
+        if (await handleWsApiFrontFrame(data, connection)) return;
 
         const phoneLinkResponse = await phoneLinkAuth?.handle(data, connection, request.ip);
         if (phoneLinkResponse) {
@@ -144,8 +144,7 @@ export function registerWsApiRoute(server, {
 
         // Handle direct messages (targeted, console-only)
         if (['direct-message', 'conversation', 'visio'].includes(data.type)) {
-          await handleWsCommunication({ data, connection, safeSend, relations: communicationRelations,
-            rateAllowed: directMessageRateAllowed, deliver: wsSendJsonToUser,
+          await handleWsCommunication({ data, connection, safeSend, deliver: wsSendJsonToUser,
             enqueue: enqueuePendingConsoleMessage, visio: server.visioService });
           return;
         }
@@ -190,16 +189,6 @@ export function registerWsApiRoute(server, {
         // Handle atome requests (ADOLE v3.0 WebSocket-only)
         if (data.type === 'atome') {
           await handleWsApiAtomeRequest({ data, connection, safeSend });
-          return;
-        }
-
-        if (data.type === 'news') {
-          await handleWsNewsRequest({ data, connection, safeSend, newsBroadcast, newsPublishRateAllowed });
-          return;
-        }
-
-        if (data.type === 'community' || data.type === 'forum') {
-          await handleWsMembershipRequest({ data, connection, safeSend, service: data.type === 'forum' ? forums : communities, kind: data.type });
           return;
         }
 

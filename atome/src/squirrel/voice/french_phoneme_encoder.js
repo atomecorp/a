@@ -171,8 +171,8 @@ export const encodeFrenchPhonemes = (text, phonemeIdMap) => {
     const phonemes = ['^'];
     // A hyphenated compound (`est-ce`, `connecte-toi`) and an elided word
     // (`t'écoute`) are one sound group: no word break inside them.
-    const tokens = normalizedText.match(/[a-zàâäçéèêëîïôöùûüÿœ']+(?:-[a-zàâäçéèêëîïôöùûüÿœ']+)*|[(),.!?:;\-]/g) || [];
-    const isWord = token => Boolean(token) && !/^[(),.!?:;\-]$/.test(token);
+    const tokens = normalizedText.match(/[a-zàâäçéèêëîïôöùûüÿœ']+(?:-[a-zàâäçéèêëîïôöùûüÿœ']+)*|[(),.!?:;-]/g) || [];
+    const isWord = token => Boolean(token) && !/^[(),.!?:;-]$/.test(token);
     tokens.forEach((token, tokenIndex) => {
         if (!isWord(token)) { phonemes.push(token); }
         else {

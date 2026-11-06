@@ -160,17 +160,34 @@ impl MarkerTable {
     pub fn check(&self, span: MarkerSpan, start: usize, end: usize) -> Result<(), String> {
         let range = span.range();
         if range.end > self.markers.len() {
-            return Err(format!("markers {}..{} are not in the table of {}", range.start, range.end, self.markers.len()));
+            return Err(format!(
+                "markers {}..{} are not in the table of {}",
+                range.start,
+                range.end,
+                self.markers.len()
+            ));
         }
         let markers = &self.markers[range];
-        if let Some(marker) = markers.iter().find(|marker| marker.frame < start || marker.frame >= end) {
-            return Err(format!("marker at frame {} lies outside its region {start}..{end}", marker.frame));
+        if let Some(marker) = markers
+            .iter()
+            .find(|marker| marker.frame < start || marker.frame >= end)
+        {
+            return Err(format!(
+                "marker at frame {} lies outside its region {start}..{end}",
+                marker.frame
+            ));
         }
         if markers.windows(2).any(|pair| pair[0].frame > pair[1].frame) {
             return Err("a segment's markers are sorted by frame".to_string());
         }
-        if let Some(marker) = markers.iter().find(|marker| matches!(marker.when, When::Every(0) | When::Nth(0))) {
-            return Err(format!("marker at frame {}: « every » and « at » count from 1", marker.frame));
+        if let Some(marker) = markers
+            .iter()
+            .find(|marker| matches!(marker.when, When::Every(0) | When::Nth(0)))
+        {
+            return Err(format!(
+                "marker at frame {}: « every » and « at » count from 1",
+                marker.frame
+            ));
         }
         Ok(())
     }

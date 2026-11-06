@@ -79,6 +79,7 @@ const definitions = {
             x: { type: 'number', minimum: 0, maximum: 1 }, y: { type: 'number', minimum: 0, maximum: 1 }, width: { type: 'number', minimum: 0.02, maximum: 1 }, height: { type: 'number', minimum: 0.02, maximum: 1 } } } },
         ['atome_id'], 'Frame a picture (Cadre): a ratio (its frame centred), quarter turns, mirror, straighten in degrees, or the frame itself in the turned picture\'s 0..1.', true, 'write'],
     keep: [{}, [], 'Keep what Créer\'s edit on screen holds, as it is (its ✕ and Liste keep it): a new creation is filed in its project, a creation edited is written. Returns its atome_id (none when nothing was made).', true, 'write'],
+    delete: [target, ['atome_id'], 'Delete one of the user\'s creations (its atome_id from creation.list), as Supprimer in its list does. Ask the user before calling it.', true, 'write'],
     export: [target, ['atome_id'], 'The file a creation gives another app (Envoi): an A4 text as PDF, a square or story text as PNG, a screen text as plain text, a drawing as SVG, a picture as its file. Returns file_name, mime_type, size and data_url.', false, 'read'],
     send: [{ ...target, contact_ids: { type: 'array', minItems: 1, maxItems: 20, items: id } }, ['atome_id', 'contact_ids'],
         'Send a creation to people (Envoi), in each one\'s conversation (contacts.search gives their ids).', true, 'send']

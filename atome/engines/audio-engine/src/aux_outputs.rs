@@ -34,12 +34,18 @@ pub fn output_device() -> Option<OutputDevice> {
 
 // The opened device decides how many extra pairs the graph may feed.
 pub(super) fn note_output_device(name: String, channels: u16, block_frames: usize) {
-    let pairs = (usize::from(channels / 2)).saturating_sub(1).min(MAX_AUX_PAIRS) as u16;
+    let pairs = (usize::from(channels / 2))
+        .saturating_sub(1)
+        .min(MAX_AUX_PAIRS) as u16;
     if let Some(aux) = AUX_SOURCE.lock().ok().and_then(|slot| slot.clone()) {
         aux.configure(pairs, block_frames * 4);
     }
     if let Ok(mut slot) = OUTPUT_DEVICE.lock() {
-        *slot = Some(OutputDevice { id: name.clone(), name, channels });
+        *slot = Some(OutputDevice {
+            id: name.clone(),
+            name,
+            channels,
+        });
     }
 }
 
@@ -52,7 +58,10 @@ pub(super) struct AuxFeeder {
     interleaved: Vec<f32>,
 }
 
-pub(super) fn create_aux(fifo_frames: usize, block_frames: usize) -> (AuxFeeder, SharedAuxConsumers) {
+pub(super) fn create_aux(
+    fifo_frames: usize,
+    block_frames: usize,
+) -> (AuxFeeder, SharedAuxConsumers) {
     let (producers, consumers): (Vec<_>, Vec<_>) = (0..MAX_AUX_PAIRS)
         .map(|_| HeapRb::<f32>::new(fifo_frames * 2).split())
         .unzip();
@@ -83,8 +92,16 @@ impl AuxFeeder {
 }
 
 // Device callback: the same `frames` the main FIFO gave, into channels 3...
-pub(super) fn write_aux(consumers: &SharedAuxConsumers, data: &mut [f32], device_channels: usize, frames: usize, scratch: &mut [f32]) {
-    let Ok(mut rings) = consumers.try_lock() else { return };
+pub(super) fn write_aux(
+    consumers: &SharedAuxConsumers,
+    data: &mut [f32],
+    device_channels: usize,
+    frames: usize,
+    scratch: &mut [f32],
+) {
+    let Ok(mut rings) = consumers.try_lock() else {
+        return;
+    };
     let pairs = (device_channels / 2).saturating_sub(1).min(rings.len());
     for (pair, ring) in rings.iter_mut().enumerate() {
         let popped = ring.pop_slice(&mut scratch[..frames * 2]) / 2;
@@ -93,7 +110,11 @@ pub(super) fn write_aux(consumers: &SharedAuxConsumers, data: &mut [f32], device
         }
         let channel = 2 + pair * 2;
         for frame in 0..frames {
-            let (left, right) = if frame < popped { (scratch[frame * 2], scratch[frame * 2 + 1]) } else { (0.0, 0.0) };
+            let (left, right) = if frame < popped {
+                (scratch[frame * 2], scratch[frame * 2 + 1])
+            } else {
+                (0.0, 0.0)
+            };
             data[frame * device_channels + channel] = left;
             data[frame * device_channels + channel + 1] = right;
         }

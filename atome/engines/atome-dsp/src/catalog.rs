@@ -129,7 +129,11 @@ impl ModuleKind {
     }
 
     pub fn from_key(key: &str) -> Result<Self, CatalogError> {
-        KINDS.iter().copied().find(|kind| kind.key() == key).ok_or_else(|| CatalogError::UnknownKind(key.to_string()))
+        KINDS
+            .iter()
+            .copied()
+            .find(|kind| kind.key() == key)
+            .ok_or_else(|| CatalogError::UnknownKind(key.to_string()))
     }
 
     // A generator writes its block instead of processing it: an input node.
@@ -181,12 +185,21 @@ impl ModuleKind {
             (Self::Amp, ModuleAsset::AmpCapture(json)) => {
                 Box::new(AmpModel::from_json_str(&json).map_err(CatalogError::AmpCapture)?)
             }
-            (Self::Convolution, ModuleAsset::Impulse(impulse)) => Box::new(Convolution::new(impulse)),
+            (Self::Convolution, ModuleAsset::Impulse(impulse)) => {
+                Box::new(Convolution::new(impulse))
+            }
             (Self::Amp | Self::Convolution, _) => return Err(CatalogError::AssetRequired(self)),
-            (_, ModuleAsset::AmpCapture(_) | ModuleAsset::Impulse(_)) => return Err(CatalogError::AssetNotExpected(self)),
+            (_, ModuleAsset::AmpCapture(_) | ModuleAsset::Impulse(_)) => {
+                return Err(CatalogError::AssetNotExpected(self));
+            }
             (Self::Volume, ModuleAsset::None) => Box::new(Volume::new(defaults(0))),
             (Self::Pan, ModuleAsset::None) => Box::new(Pan::new(defaults(0))),
-            (Self::Filter(shape), ModuleAsset::None) => Box::new(Biquad::new(shape, defaults(0), defaults(1), crate::biquad::PARAMS[2].default)),
+            (Self::Filter(shape), ModuleAsset::None) => Box::new(Biquad::new(
+                shape,
+                defaults(0),
+                defaults(1),
+                crate::biquad::PARAMS[2].default,
+            )),
             (Self::Compressor, ModuleAsset::None) => Box::new(Compressor::new()),
             (Self::Limiter, ModuleAsset::None) => Box::new(Limiter::new()),
             (Self::Gate, ModuleAsset::None) => Box::new(Gate::new()),
@@ -196,7 +209,9 @@ impl ModuleKind {
             (Self::Drive(clip), ModuleAsset::None) => Box::new(Drive::new(clip)),
             (Self::Echo, ModuleAsset::None) => Box::new(Echo::new()),
             (Self::Reverb, ModuleAsset::None) => Box::new(Reverb::new()),
-            (Self::Oscillator, ModuleAsset::None) => Box::new(Oscillator::new(Waveform::Saw, defaults(0))),
+            (Self::Oscillator, ModuleAsset::None) => {
+                Box::new(Oscillator::new(Waveform::Saw, defaults(0)))
+            }
             (Self::Envelope, ModuleAsset::None) => Box::new(Envelope::new()),
         };
         Ok(processor)

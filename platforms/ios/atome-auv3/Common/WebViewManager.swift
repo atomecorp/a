@@ -117,11 +117,9 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     } else {
         pageReady = true
     }
-        // Start lightweight embedded HTTP server (once) to serve audio via standard stack
+        // The local server of this process (atome_server::local, started once).
         if FeatureFlags.startLocalHTTPServer {
-            if LocalHTTPServer.shared.port == nil {
-                LocalHTTPServer.shared.start()
-            }
+            LocalServer.shared.start()
         }
 
         // If running in main app (not extension), force black backgrounds to avoid white flash
@@ -131,7 +129,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
             webView.scrollView.backgroundColor = .black
         }
 
-        let startupLocalPort = FeatureFlags.startLocalHTTPServer ? (LocalHTTPServer.shared.port ?? 0) : 0
+        let startupLocalPort = FeatureFlags.startLocalHTTPServer ? (LocalServer.shared.port ?? 0) : 0
         let localPortBootstrap = startupLocalPort > 0
             ? """
                 try {
@@ -264,19 +262,6 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                 console.warn("Error sending to Swift:", x);
             }
         });
-        // Early helper: prefer local HTTP server if port present
-        window.__atomePreferHTTP = function(id, filename){
-            try {
-                if(!window.__ATOME_LOCAL_HTTP_PORT__) return false;
-                var el = document.getElementById(id);
-                if(!el) return false;
-                var url = 'http://127.0.0.1:'+window.__ATOME_LOCAL_HTTP_PORT__+'/audio/'+filename;
-                console.log('[atome http] trying', url);
-                el.src = url;
-                return true;
-            } catch(e){ console.warn('atome http helper error', e); }
-            return false;
-        };
         """
 
     let contentController = webView.configuration.userContentController

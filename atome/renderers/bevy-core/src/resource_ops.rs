@@ -39,10 +39,10 @@ pub fn apply_resource(world: &mut World, patch: AtomeResourcePatch) -> Result<()
     if let Some(mut media_source) = world.get_mut::<AtomeMediaSource>(entity) {
         media_source.0 = source.clone();
     }
-    if let Some(peaks) = patch.peaks {
-        if let Some(mut waveform) = world.get_mut::<AtomeWaveformPeaks>(entity) {
-            waveform.0 = peaks;
-        }
+    if let Some(peaks) = patch.peaks
+        && let Some(mut waveform) = world.get_mut::<AtomeWaveformPeaks>(entity)
+    {
+        waveform.0 = peaks;
     }
     let kind = world
         .get::<AtomeRenderKind>(entity)
@@ -90,9 +90,18 @@ pub fn apply_resource(world: &mut World, patch: AtomeResourcePatch) -> Result<()
             logical_position: [0.0, 0.0],
             logical_size: [1.0, 1.0],
             clip_rect: world.get::<AtomeClipRect>(entity).and_then(|clip| clip.0),
-            clip_rotation: world.get::<AtomeClipRotation>(entity).map(|value| value.0).unwrap_or(0.0),
-            clip_rounded_rects: world.get::<AtomeClipRoundedRects>(entity).map(|value| value.0.clone()).unwrap_or_default(),
-            clip_fades: world.get::<AtomeClipFades>(entity).map(|value| value.0.clone()).unwrap_or_default(),
+            clip_rotation: world
+                .get::<AtomeClipRotation>(entity)
+                .map(|value| value.0)
+                .unwrap_or(0.0),
+            clip_rounded_rects: world
+                .get::<AtomeClipRoundedRects>(entity)
+                .map(|value| value.0.clone())
+                .unwrap_or_default(),
+            clip_fades: world
+                .get::<AtomeClipFades>(entity)
+                .map(|value| value.0.clone())
+                .unwrap_or_default(),
             scale: local_transform.scale,
             rotation: local_transform.rotation,
             origin: local_transform.origin,
@@ -148,9 +157,15 @@ pub fn apply_resource(world: &mut World, patch: AtomeResourcePatch) -> Result<()
         let color = texture_sprite_color(world, entity);
         let patched_source_rect = if kind == "image" || kind == "audio_waveform" {
             patch.uv_rect.map(|uv_rect| {
-                uv_rect.and_then(|value| patch.texture.as_ref().and_then(|texture| {
-                    crate::texture::sprite_rect_from_uv(Some(value), texture.width, texture.height)
-                }))
+                uv_rect.and_then(|value| {
+                    patch.texture.as_ref().and_then(|texture| {
+                        crate::texture::sprite_rect_from_uv(
+                            Some(value),
+                            texture.width,
+                            texture.height,
+                        )
+                    })
+                })
             })
         } else {
             None
@@ -163,16 +178,21 @@ pub fn apply_resource(world: &mut World, patch: AtomeResourcePatch) -> Result<()
         if let Some(source_rect) = patched_source_rect {
             sprite.rect = source_rect;
         }
-        drop(sprite);
         if let Some(source_rect) = patched_source_rect {
-            world.entity_mut(entity).insert(AtomeSpriteSourceRect(source_rect));
+            world
+                .entity_mut(entity)
+                .insert(AtomeSpriteSourceRect(source_rect));
         }
         if let Some(texture) = &patch.texture {
             crate::animated_png::install_animation(world, entity, texture)?;
         }
         // A shadow that follows the painted alpha is cut from the texture that
         // just arrived (an icon starts on a transparent pending texture).
-        if world.get::<AtomeShapeShadow>(entity).and_then(|value| value.0).is_some_and(|shadow| shadow.follows_alpha) {
+        if world
+            .get::<AtomeShapeShadow>(entity)
+            .and_then(|value| value.0)
+            .is_some_and(|shadow| shadow.follows_alpha)
+        {
             crate::shape_shadow_overlay::rebuild_shape_shadow_overlay(world, entity)?;
         }
         apply_entity_clip(world, entity)?;

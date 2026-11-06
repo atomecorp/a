@@ -3,7 +3,7 @@
 // the copy keeps `shop_order_id` and its origin). Paid content and a subscription give a reading access, held by the
 // order itself (server/shop_orders.js#hasAccess), never a copy.
 import crypto from 'node:crypto';
-import { stateAtomeId, stateParentId, statesWithinSharedRoot } from './syncShareHierarchy.js';
+import { stateAtomeId, stateParentId } from './syncShareHierarchy.js';
 
 const RESERVED = new Set(['_pending_owner_id', '_pending_parent_id', 'listing', 'listing_status']);
 
@@ -16,7 +16,7 @@ const depthOf = (state, byId, rootId) => {
 
 export function createShopDelivery({ vaultRouter }) {
     const copyProject = async ({ sellerId, buyerId, projectId, orderId }) => {
-        const states = await statesWithinSharedRoot({ provider: vaultRouter.provider, ownerId: sellerId, rootAtomeId: projectId });
+        const states = await vaultRouter.statesWithinSharedRoot(sellerId, projectId);
         if (!states.some(state => String(stateAtomeId(state)) === String(projectId))) throw new Error('shop_project_not_found');
         const byId = new Map(states.map(state => [String(stateAtomeId(state)), state]));
         const mapping = new Map(states.map(state => [String(stateAtomeId(state)), crypto.randomUUID()]));

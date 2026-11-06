@@ -1,8 +1,7 @@
 use atome_bevy_renderer_core::{
-    apply_render_ops, apply_surface, apply_ui_ops, register_ui_font, ui_viewport_size,
     AtomeBevyRendererConfig, AtomeBevyRendererPlugin, AtomeRenderOp, AtomeRenderScene,
     AtomeRendererDiagnostics, AtomeStylePatch, AtomeSurfacePatch, AtomeUiDiagnostics, AtomeUiEvent,
-    AtomeUiOp,
+    AtomeUiOp, apply_render_ops, apply_surface, apply_ui_ops, register_ui_font, ui_viewport_size,
 };
 use bevy::platform::time::Instant;
 use bevy::{
@@ -14,19 +13,23 @@ use bevy::{
 };
 use serde::Serialize;
 use std::cell::{Cell, RefCell};
-
 mod exports;
 mod frame_clock;
+mod linear_lens;
 mod render_error;
+mod scroll_area;
+
+#[cfg(test)]
+use exports::{read_web_renderer_diagnostics, reset_web_renderer_diagnostics};
 
 use frame_clock::{
-    adapt_web_idle_heartbeat, continue_merged_wake, remember_event_loop_proxy, wake_web_renderer, web_winit_settings,
-    WEB_FRAME_REQUESTED,
+    WEB_FRAME_REQUESTED, adapt_web_idle_heartbeat, continue_merged_wake, remember_event_loop_proxy,
+    request_startup_web_frame, wake_web_renderer, web_winit_settings,
 };
 
 thread_local! {
-    static WEB_PENDING_OPS: RefCell<Vec<AtomeRenderOp>> = RefCell::new(Vec::new());
-    static WEB_PENDING_UI_OPS: RefCell<Vec<AtomeUiOp>> = RefCell::new(Vec::new());
+    static WEB_PENDING_OPS: RefCell<Vec<AtomeRenderOp>> = const { RefCell::new(Vec::new()) };
+    static WEB_PENDING_UI_OPS: RefCell<Vec<AtomeUiOp>> = const { RefCell::new(Vec::new()) };
     static WEB_PENDING_UI_FONTS: RefCell<Vec<(u16, Vec<u8>)>> = const { RefCell::new(Vec::new()) };
     static WEB_LAST_UI_DIAGNOSTICS: RefCell<AtomeUiDiagnostics> = RefCell::new(AtomeUiDiagnostics::default());
     static WEB_DRAINED_UI_EVENTS: RefCell<Vec<AtomeUiEvent>> = const { RefCell::new(Vec::new()) };
@@ -278,7 +281,7 @@ fn merge_style_patch_fields(existing: &mut AtomeStylePatch, next: &AtomeStylePat
         existing.color = next.color;
     }
     if next.shadow.is_some() {
-        existing.shadow = next.shadow.clone();
+        existing.shadow = next.shadow;
     }
     if next.backdrop.is_some() {
         existing.backdrop = next.backdrop;
@@ -293,7 +296,7 @@ fn merge_style_patch_fields(existing: &mut AtomeStylePatch, next: &AtomeStylePat
         existing.playback_progress = next.playback_progress;
     }
     if next.filters.is_some() {
-        existing.filters = next.filters.clone();
+        existing.filters = next.filters;
     }
     if next.transition.is_some() {
         existing.transition = next.transition;
@@ -498,6 +501,10 @@ impl Plugin for WebBevyRendererPlugin {
                     remember_event_loop_proxy,
                     apply_browser_window_resize_to_surface,
                     apply_pending_web_ops,
+                    (
+                        linear_lens::present_web_linear_lenses,
+                        scroll_area::present_web_scroll_areas,
+                    ),
                     apply_pending_web_ui_ops,
                     drain_ui_events_for_web,
                     apply_pending_video_frame_notifications,
@@ -505,12 +512,15 @@ impl Plugin for WebBevyRendererPlugin {
                 )
                     .chain(),
             )
-            .add_systems(Last, (web_frame_probe_end, adapt_web_idle_heartbeat).chain());
+            .add_systems(
+                Last,
+                (web_frame_probe_end, adapt_web_idle_heartbeat).chain(),
+            );
     }
 }
 
-fn request_initial_web_redraw(world: &mut World) {
-    world.write_message(RequestRedraw);
+fn request_initial_web_redraw() {
+    request_startup_web_frame();
 }
 
 // The drain systems below never write `RequestRedraw`: the update that drains
@@ -590,19 +600,14 @@ fn apply_browser_window_resize_to_surface(world: &mut World) {
         )
     };
     // No window yet (or none at all): nothing to give back.
-    let window_surface_matches =
-        world
-            .query::<&Window>()
-            .iter(world)
-            .next()
-            .map(|window| {
-                let resolution = &window.resolution;
-                (resolution.width() - width).abs() <= 1.0
-                    && (resolution.height() - height).abs() <= 1.0
-                    && (resolution.physical_width() as f32 - pixel_width).abs() <= 1.0
-                    && (resolution.physical_height() as f32 - pixel_height).abs() <= 1.0
-                    && (resolution.scale_factor() - device_pixel_ratio).abs() <= 0.01
-            });
+    let window_surface_matches = world.query::<&Window>().iter(world).next().map(|window| {
+        let resolution = &window.resolution;
+        (resolution.width() - width).abs() <= 1.0
+            && (resolution.height() - height).abs() <= 1.0
+            && (resolution.physical_width() as f32 - pixel_width).abs() <= 1.0
+            && (resolution.physical_height() as f32 - pixel_height).abs() <= 1.0
+            && (resolution.scale_factor() - device_pixel_ratio).abs() <= 0.01
+    });
     if window_surface_matches != Some(false) {
         return;
     }
@@ -619,7 +624,7 @@ fn apply_browser_window_resize_to_surface(world: &mut World) {
         world.resource_mut::<AtomeRendererDiagnostics>().last_error = Some(error);
         return;
     }
-    world.write_message(RequestRedraw);
+    wake_web_renderer();
 }
 
 fn apply_pending_web_redraw() {
@@ -640,24 +645,6 @@ fn apply_pending_video_frame_notifications() {
         let mut diagnostics = cell.borrow_mut();
         diagnostics.video_frame_redraws = diagnostics.video_frame_redraws.saturating_add(drained);
     });
-}
-
-fn read_web_renderer_diagnostics() -> WebRendererDiagnostics {
-    WEB_DIAGNOSTICS.with(|cell| {
-        let mut diagnostics = cell.borrow().clone();
-        diagnostics.running_apps =
-            WEB_RUNNING_APPS.with(|apps_cell| apps_cell.borrow().len() as u32);
-        diagnostics.render_error = render_error::recorded_render_error();
-        diagnostics
-    })
-}
-
-fn reset_web_renderer_diagnostics() -> WebRendererDiagnostics {
-    WEB_DIAGNOSTICS.with(|cell| {
-        let previous = cell.borrow().clone();
-        *cell.borrow_mut() = WebRendererDiagnostics::default();
-        previous
-    })
 }
 
 fn web_window_for_config(config: &WebBevyRendererConfig) -> Window {
@@ -684,13 +671,10 @@ fn web_window_for_config(config: &WebBevyRendererConfig) -> Window {
 fn build_web_bevy_app(config: WebBevyRendererConfig) -> App {
     let window = web_window_for_config(&config);
     let mut app = App::new();
-    app.add_plugins(
-        DefaultPlugins
-            .set(WindowPlugin {
-                primary_window: Some(window),
-                ..default()
-            }),
-    )
+    app.add_plugins(DefaultPlugins.set(WindowPlugin {
+        primary_window: Some(window),
+        ..default()
+    }))
     .insert_resource(render_error::handler())
     .add_plugins(WebBevyRendererPlugin { config });
     app

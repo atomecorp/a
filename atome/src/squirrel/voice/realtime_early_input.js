@@ -13,7 +13,9 @@ import { voiceRoute } from './voice_route.js';
 const FRAME_MS = 30;
 // A frame louder than this (RMS of the samples, -1..1) is speech.
 const VOICED_RMS = 0.02;
-// Speech heard before the connection counts once it lasts this long (not a click).
+// Speech heard before the connection counts once one stretch of it lasts this long, its
+// inner pauses shorter than PAUSE_MARGIN_S included: clicks and noise scattered over the
+// seconds of the connection never add up to it (they did, and her ready sentence was skipped).
 const HEARD_MS = 300;
 // A pause is jumped only past this margin, so a word's edges are never cut.
 const PAUSE_MARGIN_S = 0.15;
@@ -40,10 +42,15 @@ export const openRealtimeEarlyInput = async ({ env = globalThis, deviceId = '', 
     const startedAt = context.currentTime;
     // One flag per frame since the touch: what the line still has to play is known.
     const frames = [];
-    let live = true, voicedMs = 0, connected = false, lag = 0, closed = false;
+    let live = true, runMs = 0, quietMs = 0, spoke = false, connected = false, lag = 0, closed = false;
     const voicedFrom = (from, to) => frames.some(frame => frame.at >= from && frame.at < to && frame.voiced);
     const setLag = (seconds, at) => { lag = seconds; delay.delayTime.setValueAtTime(seconds, at); };
-    const heard = () => voicedMs >= HEARD_MS;
+    const heard = () => spoke;
+    const listen = voiced => {
+        if (voiced) { runMs += FRAME_MS; quietMs = 0; }
+        else if ((quietMs += FRAME_MS) > PAUSE_MARGIN_S * 1000) runMs = 0;
+        if (runMs >= HEARD_MS) spoke = true;
+    };
     const catchUp = () => {
         const now = context.currentTime;
         if (lag <= 0) { live = true; return; }
@@ -61,7 +68,7 @@ export const openRealtimeEarlyInput = async ({ env = globalThis, deviceId = '', 
         const rms = Math.sqrt(energy / samples.length), voiced = rms > VOICED_RMS;
         frames.push({ at: context.currentTime, voiced });
         while (frames.length && frames[0].at < context.currentTime - MAX_DELAY_S) frames.shift();
-        if (voiced && !connected) voicedMs += FRAME_MS;
+        if (!connected) listen(voiced);
         onLevel(Math.min(1, rms * 5));
         if (connected && !live) catchUp();
     }, FRAME_MS);

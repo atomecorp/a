@@ -2,8 +2,8 @@
 // so the mixer UI and validation can never describe a parameter differently
 // from the processor. `ATOME_DSP_WRITE_CATALOG=1 cargo test` rewrites it.
 
-use atome_dsp::catalog::{ModuleKind, KINDS};
 use atome_dsp::Unit;
+use atome_dsp::catalog::{KINDS, ModuleKind};
 use std::path::PathBuf;
 
 fn unit(unit: Unit) -> (&'static str, &'static str) {
@@ -32,7 +32,10 @@ fn render() -> String {
          const asset = (kind) => Object.freeze({ type: 'asset_ref', asset: kind, default: null });\n\n\
          export const MIX_DSP_EFFECTS = Object.freeze({\n",
     );
-    for kind in KINDS.iter().filter(|kind| !kind.is_generator() && **kind != ModuleKind::Envelope) {
+    for kind in KINDS
+        .iter()
+        .filter(|kind| !kind.is_generator() && **kind != ModuleKind::Envelope)
+    {
         out.push_str(&format!("    {}: Object.freeze({{\n", kind.key()));
         let mut lines: Vec<String> = kind
             .params()
@@ -69,7 +72,14 @@ fn render() -> String {
     let shapes: Vec<String> = KINDS
         .iter()
         .filter(|kind| kind.outputs() > 1 || kind.takes_key())
-        .map(|kind| format!("    {}: Object.freeze({{ outputs: {}, key: {} }})", kind.key(), kind.outputs(), kind.takes_key()))
+        .map(|kind| {
+            format!(
+                "    {}: Object.freeze({{ outputs: {}, key: {} }})",
+                kind.key(),
+                kind.outputs(),
+                kind.takes_key()
+            )
+        })
         .collect();
     out.push_str(&shapes.join(",\n"));
     out.push_str("\n});\n");
@@ -78,11 +88,16 @@ fn render() -> String {
 
 #[test]
 fn the_js_catalog_matches_the_processors() {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../eVe/intuition/tools/molecule/kernel/mix_dsp_catalog.js");
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../eVe/intuition/tools/molecule/kernel/mix_dsp_catalog.js");
     let rendered = render();
     if std::env::var("ATOME_DSP_WRITE_CATALOG").is_ok() {
         std::fs::write(&path, &rendered).unwrap();
     }
     let current = std::fs::read_to_string(&path).unwrap_or_default();
-    assert!(current == rendered, "{} is stale: run ATOME_DSP_WRITE_CATALOG=1 cargo test", path.display());
+    assert!(
+        current == rendered,
+        "{} is stale: run ATOME_DSP_WRITE_CATALOG=1 cargo test",
+        path.display()
+    );
 }

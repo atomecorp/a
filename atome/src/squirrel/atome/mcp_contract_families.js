@@ -8,16 +8,21 @@ import { GPS_ASSISTANT_INSTRUCTIONS, GPS_COMMANDS, validateGpsInput } from '../g
 import { TRAINING_ASSISTANT_INSTRUCTIONS, TRAINING_COMMANDS, validateTrainingInput } from '../training/contracts.js';
 import { BRICK_SESSION_ASSISTANT_INSTRUCTIONS, BRICK_SESSION_COMMANDS, validateBrickSessionInput } from '../brick_sessions/contracts.js';
 import { BEAUTY_ASSISTANT_INSTRUCTIONS, BEAUTY_COMMANDS, validateBeautyInput } from '../beauty/contracts.js';
-import { HEALTH_FEELING_ASSISTANT_INSTRUCTIONS, HEALTH_FEELING_COMMANDS, validateHealthFeelingInput } from '../health/feeling_contracts.js';
+import { HEALTH_FEELING_ASSISTANT_INSTRUCTIONS, HEALTH_FEELING_COMMANDS, HEALTH_FEELING_CONFIRMED_COMMANDS, validateHealthFeelingInput } from '../health/feeling_contracts.js';
 import { HEALTH_PROFILE_ASSISTANT_INSTRUCTIONS, HEALTH_PROFILE_COMMANDS, HEALTH_PROFILE_CONFIRMED_COMMANDS, validateHealthProfileInput } from '../health/profile_contracts.js';
 import { HEALTH_PROTOCOL_ASSISTANT_INSTRUCTIONS, HEALTH_PROTOCOL_COMMANDS, HEALTH_PROTOCOL_CONFIRMED_COMMANDS, HEALTH_PRODUCTS_COMMANDS, validateHealthProductsInput,
     validateHealthProtocolInput, HEALTH_PRODUCTS_CONFIRMED_COMMANDS } from '../health/protocol_contracts.js';
 import { OBJECTIVE_PROGRAM_ASSISTANT_INSTRUCTIONS, OBJECTIVE_PROGRAM_COMMANDS, OBJECTIVE_PROGRAM_CONFIRMED_COMMANDS, validateObjectiveProgramInput } from '../objective_program/contracts.js';
+import { ORDONNANCE_ASSISTANT_INSTRUCTIONS, ORDONNANCE_COMMANDS, ORDONNANCE_CONFIRMED_COMMANDS, validateOrdonnanceInput } from '../prescription/contracts.js';
+import { PRESCRIPTION_AID_ASSISTANT_INSTRUCTIONS, PRESCRIPTION_AID_COMMANDS, PRESCRIPTION_AID_CONFIRMED_COMMANDS, validatePrescriptionAidInput }
+    from '../prescription/prescription_aid_contracts.js';
+import { FOOD_ADVICE_ASSISTANT_INSTRUCTIONS, FOOD_ADVICE_COMMANDS, validateFoodAdviceInput } from '../health/food_advice_contracts.js';
 import { HEALTH_RECORD_ASSISTANT_INSTRUCTIONS, HEALTH_RECORD_COMMANDS, HEALTH_RECORD_CONFIRMED_COMMANDS, validateHealthRecordInput } from '../health/health_record_contracts.js';
 import { THALASSO_ASSISTANT_INSTRUCTIONS, THALASSO_COMMANDS, THALASSO_CONFIRMED_COMMANDS, validateThalassoInput } from '../thalasso/contracts.js';
 import { HEALTH_DECLARATION_ASSISTANT_INSTRUCTIONS, HEALTH_DECLARATION_COMMANDS, validateHealthDeclarationInput } from '../health/declaration_contracts.js';
 import { SHOPPING_ASSISTANT_INSTRUCTIONS, SHOPPING_COMMANDS, validateShoppingInput } from '../shopping/contracts.js';
 import { MEDIA_LIST_ASSISTANT_INSTRUCTIONS, MEDIA_LIST_COMMANDS, validateMediaListInput } from '../media_lists/contracts.js';
+import { SHARE_ASSISTANT_INSTRUCTIONS, SHARE_COMMANDS, SHARE_CONFIRMED_COMMANDS, validateShareInput } from '../sharing/contracts.js';
 import { SHOWS_ASSISTANT_INSTRUCTIONS, SHOWS_COMMANDS, validateShowsInput } from '../shows/contracts.js';
 import { WEB_ASSISTANT_INSTRUCTIONS, WEB_COMMANDS, validateWebInput } from '../web/contracts.js';
 import { EVENTS_ASSISTANT_INSTRUCTIONS, EVENTS_COMMANDS, EVENTS_CONFIRMED_COMMANDS, validateEventsInput } from '../public_events/contracts.js';
@@ -31,7 +36,7 @@ import { SCRIPT_ASSISTANT_INSTRUCTIONS, SCRIPT_COMMANDS, SCRIPT_CONFIRMED_COMMAN
 import { AUDIO_FX_ASSISTANT_INSTRUCTIONS, AUDIO_FX_COMMANDS, validateAudioFxInput } from '../audio_fx/contracts.js';
 import { MEDIA_IMPORT_ASSISTANT_INSTRUCTIONS, MEDIA_IMPORT_COMMANDS, validateMediaImportInput } from '../media_import/contracts.js';
 import { FOOD_ASSISTANT_INSTRUCTIONS, FOOD_COMMANDS, validateFoodInput } from '../food/contracts.js';
-import { BOOKS_ASSISTANT_INSTRUCTIONS, BOOKS_COMMANDS, validateBooksInput } from '../books/contracts.js';
+import { BOOKS_ASSISTANT_INSTRUCTIONS, BOOKS_COMMANDS, BOOKS_CONFIRMED_COMMANDS, validateBooksInput } from '../books/contracts.js';
 import { CAPTURE_ASSISTANT_INSTRUCTIONS, CAPTURE_COMMANDS, validateCaptureInput } from '../capture/contracts.js';
 import { LIFE_PROFILE_ASSISTANT_INSTRUCTIONS, LIFE_PROFILE_COMMANDS, validateLifeProfileInput } from '../life_profiles/contracts.js';
 import { PROJECTS_ASSISTANT_INSTRUCTIONS, PROJECTS_COMMANDS, validateProjectsInput } from '../projects/contracts.js';
@@ -67,16 +72,16 @@ export const MCP_CONTRACT_FAMILIES = Object.freeze([
     { id: 'gps', commands: GPS_COMMANDS, validate: validateGpsInput, noClient: 'HOST_UNSUPPORTED',
         instructions: GPS_ASSISTANT_INSTRUCTIONS, preload: ['gps.navigate_to', 'gps.stop_navigation'] },
     { id: 'training', commands: TRAINING_COMMANDS, validate: validateTrainingInput, noClient: 'AUTH_REQUIRED',
-        confirmed: ['training.schedule_week', 'training.take_ready_program'], instructions: TRAINING_ASSISTANT_INSTRUCTIONS,
+        confirmed: ['training.schedule_week', 'training.take_ready_program', 'training.remove_media', 'training.remove_discipline', 'training.remove_activity'], instructions: TRAINING_ASSISTANT_INSTRUCTIONS,
         preload: ['training.prepare_session', 'training.session_transition', 'training.get_session'] },
     { id: 'brick_session', commands: BRICK_SESSION_COMMANDS, validate: validateBrickSessionInput, noClient: 'AUTH_REQUIRED',
         instructions: BRICK_SESSION_ASSISTANT_INSTRUCTIONS, preload: ['brick_session.prepare', 'brick_session.transition', 'brick_session.get'] },
     // Bien-être › Beauté (R-006 Q68): a photo turns the camera on, the user's to allow.
     { id: 'beauty', commands: BEAUTY_COMMANDS, validate: validateBeautyInput, noClient: 'PRESENTATION_UNAVAILABLE',
-        confirmed: ['beauty.shoot'], instructions: BEAUTY_ASSISTANT_INSTRUCTIONS, preload: ['beauty.open', 'beauty.shoot', 'beauty.set_reminder'] },
+        confirmed: ['beauty.shoot', 'beauty.remove_photo'], instructions: BEAUTY_ASSISTANT_INSTRUCTIONS, preload: ['beauty.open', 'beauty.shoot', 'beauty.set_reminder'] },
     { id: 'health_declaration', commands: HEALTH_DECLARATION_COMMANDS, validate: validateHealthDeclarationInput, noClient: 'AUTH_REQUIRED',
         instructions: HEALTH_DECLARATION_ASSISTANT_INSTRUCTIONS, preload: ['health_declaration.add', 'health_declaration.withdraw'] },
-    { id: 'health_feeling', commands: HEALTH_FEELING_COMMANDS, validate: validateHealthFeelingInput, noClient: 'AUTH_REQUIRED',
+    { id: 'health_feeling', commands: HEALTH_FEELING_COMMANDS, validate: validateHealthFeelingInput, noClient: 'AUTH_REQUIRED', confirmed: HEALTH_FEELING_CONFIRMED_COMMANDS,
         instructions: HEALTH_FEELING_ASSISTANT_INSTRUCTIONS, preload: ['health_feeling.set'] },
     // The health profile read by the assistant or MCP: the user agrees at each question that needs it (decision Q28).
     { id: 'health_profile', commands: HEALTH_PROFILE_COMMANDS, validate: validateHealthProfileInput, noClient: 'AUTH_REQUIRED',
@@ -87,10 +92,20 @@ export const MCP_CONTRACT_FAMILIES = Object.freeze([
         confirmed: HEALTH_PROTOCOL_CONFIRMED_COMMANDS, instructions: HEALTH_PROTOCOL_ASSISTANT_INSTRUCTIONS },
     { id: 'health_products', commands: HEALTH_PRODUCTS_COMMANDS, validate: validateHealthProductsInput, noClient: 'AUTH_REQUIRED',
         confirmed: HEALTH_PRODUCTS_CONFIRMED_COMMANDS },
+    // Food advice from the person's health (R-115 D28/D29): closed to the assistant and MCP but for the public rule base
+    // (`food_advice.rules`), which lets the assistant explain a rule when the person asks; doctor's tips are written, not confirmed.
+    { id: 'food_advice', commands: FOOD_ADVICE_COMMANDS, validate: validateFoodAdviceInput, noClient: 'AUTH_REQUIRED',
+        instructions: FOOD_ADVICE_ASSISTANT_INSTRUCTIONS },
     // The Health record (R-104 D10): closed to the assistant and MCP but for showing its screens; removing an entry and saving a
     // file out are confirmed.
     { id: 'health_record', commands: HEALTH_RECORD_COMMANDS, validate: validateHealthRecordInput, noClient: 'AUTH_REQUIRED',
         confirmed: HEALTH_RECORD_CONFIRMED_COMMANDS, instructions: HEALTH_RECORD_ASSISTANT_INSTRUCTIONS },
+    // An ordonnance dictated, signed, printed, saved and sent (R-115 D26): closed to the assistant and MCP but for showing it.
+    { id: 'ordonnance', commands: ORDONNANCE_COMMANDS, validate: validateOrdonnanceInput, noClient: 'AUTH_REQUIRED',
+        confirmed: ORDONNANCE_CONFIRMED_COMMANDS, instructions: ORDONNANCE_ASSISTANT_INSTRUCTIONS },
+    // The prescription aid (R-115 D27): symptoms, pre-diagnosis, checked pre-ordonnance; closed but for showing it and the symptoms told.
+    { id: 'prescription_aid', commands: PRESCRIPTION_AID_COMMANDS, validate: validatePrescriptionAidInput, noClient: 'AUTH_REQUIRED',
+        confirmed: PRESCRIPTION_AID_CONFIRMED_COMMANDS, instructions: PRESCRIPTION_AID_ASSISTANT_INSTRUCTIONS },
     // An objective composed brick by brick, its programme previewed, planned and launched (R-104 D7): health data, closed
     // to the assistant and MCP but for the library, the sheets, the scenarios and the screens; writing the calendar is confirmed.
     { id: 'objective_program', commands: OBJECTIVE_PROGRAM_COMMANDS, validate: validateObjectiveProgramInput, noClient: 'AUTH_REQUIRED',
@@ -105,12 +120,14 @@ export const MCP_CONTRACT_FAMILIES = Object.freeze([
     { id: 'body_data', commands: BODY_DATA_COMMANDS, validate: validateBodyDataInput, noClient: 'AUTH_REQUIRED',
         confirmed: ['body_data.delete'], instructions: BODY_DATA_ASSISTANT_INSTRUCTIONS, preload: ['body_data.consent', 'body_data.set_consent'] },
     { id: 'shopping', commands: SHOPPING_COMMANDS, validate: validateShoppingInput, noClient: 'AUTH_REQUIRED',
-        confirmed: ['shopping.clear_checked', 'shopping.share'], instructions: SHOPPING_ASSISTANT_INSTRUCTIONS,
+        confirmed: ['shopping.clear_checked'], instructions: SHOPPING_ASSISTANT_INSTRUCTIONS,
         preload: ['shopping.add', 'shopping.check', 'shopping.list', 'shopping.open'] },
     // Deleting a media list is the user's to confirm (its media stay).
     { id: 'media_lists', commands: MEDIA_LIST_COMMANDS, validate: validateMediaListInput, noClient: 'AUTH_REQUIRED',
         confirmed: ['media_lists.delete'], instructions: MEDIA_LIST_ASSISTANT_INSTRUCTIONS,
         preload: ['media_lists.list', 'media_lists.create', 'media_lists.add', 'media_lists.open'] },
+    { id: 'share', commands: SHARE_COMMANDS, validate: validateShareInput, noClient: 'AUTH_REQUIRED',
+        confirmed: SHARE_CONFIRMED_COMMANDS, instructions: SHARE_ASSISTANT_INSTRUCTIONS, preload: ['share.send', 'share.pending', 'share.accept'] },
     { id: 'shows', commands: SHOWS_COMMANDS, validate: validateShowsInput, noClient: 'PRESENTATION_UNAVAILABLE',
         instructions: SHOWS_ASSISTANT_INSTRUCTIONS,
         preload: ['shows.search', 'shows.open', 'shows.set_place', 'shows.add_to_calendar', 'shows.navigate', 'shows.open_site', 'shows.open_tickets'] },
@@ -131,7 +148,7 @@ export const MCP_CONTRACT_FAMILIES = Object.freeze([
     { id: 'films', commands: FILMS_COMMANDS, validate: validateFilmsInput, noClient: 'PRESENTATION_UNAVAILABLE',
         instructions: FILMS_ASSISTANT_INSTRUCTIONS, preload: ['films.search', 'films.play', 'films.open', 'films.control', 'films.set_service'] },
     { id: 'creation', commands: CREATION_COMMANDS, validate: validateCreationInput, noClient: 'PRESENTATION_UNAVAILABLE',
-        confirmed: ['creation.send'], instructions: CREATION_ASSISTANT_INSTRUCTIONS,
+        confirmed: ['creation.send', 'creation.delete'], instructions: CREATION_ASSISTANT_INSTRUCTIONS,
         preload: ['creation.list', 'creation.read', 'creation.new_text', 'creation.open'] },
     // The spreadsheet in a text: cells, formulas, grid — the assistant limited to the text named.
     { id: 'calc', commands: CALC_COMMANDS, validate: validateCalcInput, noClient: 'PRESENTATION_UNAVAILABLE',
@@ -142,7 +159,7 @@ export const MCP_CONTRACT_FAMILIES = Object.freeze([
         confirmed: SCRIPT_CONFIRMED_COMMANDS, instructions: SCRIPT_ASSISTANT_INSTRUCTIONS, preload: ['script.list'] },
     // The camera, turned on and taken from by a command, is the user's to allow.
     { id: 'media_import', commands: MEDIA_IMPORT_COMMANDS, validate: validateMediaImportInput, noClient: 'NOT_OPEN',
-        confirmed: ['media_import.camera', 'media_import.take'], instructions: MEDIA_IMPORT_ASSISTANT_INSTRUCTIONS,
+        confirmed: ['media_import.camera', 'media_import.take', 'media_import.delete'], instructions: MEDIA_IMPORT_ASSISTANT_INSTRUCTIONS,
         preload: ['media_import.state', 'media_import.list', 'media_import.choose'] },
     // A capture turns the camera or the microphone on, a delete takes items out of the project: the user's to allow.
     { id: 'captures', commands: CAPTURE_COMMANDS, validate: validateCaptureInput, noClient: 'PRESENTATION_UNAVAILABLE',
@@ -150,7 +167,7 @@ export const MCP_CONTRACT_FAMILIES = Object.freeze([
         preload: ['captures.state', 'captures.show', 'captures.play', 'captures.stop', 'captures.camera'] },
     // Lighting an effect turns the microphone on, a delete takes an effect or an instrument away for good: the user's to allow.
     { id: 'audio_fx', commands: AUDIO_FX_COMMANDS, validate: validateAudioFxInput, noClient: 'HOST_UNSUPPORTED',
-        confirmed: ['audio_fx.start', 'audio_fx.delete', 'audio_fx.instrument_delete'], instructions: AUDIO_FX_ASSISTANT_INSTRUCTIONS,
+        confirmed: ['audio_fx.start', 'audio_fx.delete', 'audio_fx.instrument_delete', 'audio_fx.delete_preset'], instructions: AUDIO_FX_ASSISTANT_INSTRUCTIONS,
         preload: ['audio_fx.catalog', 'audio_fx.start', 'audio_fx.stop', 'audio_fx.set_param'] },
     // Deleting a profile changes what every list shows: the user's to allow.
     { id: 'profiles', commands: LIFE_PROFILE_COMMANDS, validate: validateLifeProfileInput, noClient: 'AUTH_REQUIRED',
@@ -158,14 +175,14 @@ export const MCP_CONTRACT_FAMILIES = Object.freeze([
         preload: ['profiles.list', 'profiles.activate', 'profiles.create', 'profiles.assign'] },
     { id: 'food', commands: FOOD_COMMANDS, validate: validateFoodInput, noClient: 'HOST_UNSUPPORTED',
         instructions: FOOD_ASSISTANT_INSTRUCTIONS, preload: ['food.search', 'food.alternatives', 'food.scan', 'food.add'] },
-    { id: 'books', commands: BOOKS_COMMANDS, validate: validateBooksInput, noClient: 'PRESENTATION_UNAVAILABLE',
+    { id: 'books', commands: BOOKS_COMMANDS, validate: validateBooksInput, noClient: 'PRESENTATION_UNAVAILABLE', confirmed: BOOKS_CONFIRMED_COMMANDS,
         instructions: BOOKS_ASSISTANT_INSTRUCTIONS, preload: ['books.list', 'books.open', 'books.page', 'books.transport'] },
     { id: 'projects', commands: PROJECTS_COMMANDS, validate: validateProjectsInput, noClient: 'PRESENTATION_UNAVAILABLE',
-        instructions: PROJECTS_ASSISTANT_INSTRUCTIONS, preload: ['projects.list', 'projects.search', 'projects.open', 'projects.create', 'projects.favorite'] },
+        confirmed: ['projects.delete'], instructions: PROJECTS_ASSISTANT_INSTRUCTIONS, preload: ['projects.list', 'projects.search', 'projects.open', 'projects.create', 'projects.favorite'] },
     { id: 'code_project', commands: CODE_PROJECT_COMMANDS, validate: validateCodeProjectInput, noClient: 'PRESENTATION_UNAVAILABLE',
         instructions: CODE_PROJECT_ASSISTANT_INSTRUCTIONS, preload: ['code_project.create', 'code_project.open'] },
     { id: 'dashboard_progression', commands: DASHBOARD_PROGRESSION_COMMANDS, validate: validateDashboardProgressionInput,
-        noClient: 'progression_actor_required', instructions: DASHBOARD_PROGRESSION_ASSISTANT_INSTRUCTIONS },
+        noClient: 'progression_actor_required', confirmed: ['dashboard.objective.delete'], instructions: DASHBOARD_PROGRESSION_ASSISTANT_INSTRUCTIONS },
     // Putting a site online, buying a domain or a mail box is the user's to confirm.
     { id: 'site', commands: SITE_COMMANDS, validate: validateSiteInput, noClient: 'PRESENTATION_UNAVAILABLE',
         confirmed: SITE_CONFIRMED_COMMANDS, instructions: SITE_ASSISTANT_INSTRUCTIONS,
@@ -183,7 +200,7 @@ export const MCP_CONTRACT_FAMILIES = Object.freeze([
         instructions: RESULTS_SEND_ASSISTANT_INSTRUCTIONS, preload: ['results_send.open', 'results_send.read', 'results_send.pick', 'results_send.next'] },
     // Strava (Préférences › Santé): connecting and disconnecting the person's account are the user's to confirm.
     { id: 'strava', commands: STRAVA_COMMANDS, validate: validateStravaInput, noClient: 'AUTH_REQUIRED',
-        confirmed: ['strava.connect', 'strava.disconnect'], instructions: STRAVA_ASSISTANT_INSTRUCTIONS, preload: ['strava.get_state', 'strava.import'] },
+        confirmed: ['strava.connect', 'strava.disconnect', 'strava.remove_imports', 'strava.remove_import'], instructions: STRAVA_ASSISTANT_INSTRUCTIONS, preload: ['strava.get_state', 'strava.import'] },
     // This device's health store as a source of sport sessions (Préférences › Santé): connecting and disconnecting are the user's to confirm.
     { id: 'health_sync', commands: HEALTH_SYNC_COMMANDS, validate: validateHealthSyncInput, noClient: 'health_host_unsupported',
         confirmed: HEALTH_SYNC_CONFIRMED_COMMANDS, instructions: HEALTH_SYNC_ASSISTANT_INSTRUCTIONS, preload: ['health_sync.get_state', 'health_sync.sync'] },

@@ -3,7 +3,7 @@
 // music) and passes its block untouched without a key.
 
 use crate::dynamics::time_coefficient;
-use crate::{amplitude_to_db, db_to_amplitude, KeyBlock, ParamSpec, Processor, StereoBlock, Unit};
+use crate::{KeyBlock, ParamSpec, Processor, StereoBlock, Unit, amplitude_to_db, db_to_amplitude};
 
 #[inline]
 fn level(left: &[f32], right: &[f32], index: usize) -> f32 {
@@ -16,11 +16,39 @@ pub const GATE_ATTACK_MS: u32 = 2;
 pub const GATE_HOLD_MS: u32 = 3;
 pub const GATE_RELEASE_MS: u32 = 4;
 pub const GATE_PARAMS: [ParamSpec; 5] = [
-    ParamSpec::new(GATE_THRESHOLD_DB, "threshold_db", -80.0, 0.0, -45.0, Unit::Decibels),
+    ParamSpec::new(
+        GATE_THRESHOLD_DB,
+        "threshold_db",
+        -80.0,
+        0.0,
+        -45.0,
+        Unit::Decibels,
+    ),
     ParamSpec::new(GATE_RANGE_DB, "range_db", -80.0, 0.0, -60.0, Unit::Decibels),
-    ParamSpec::new(GATE_ATTACK_MS, "attack_ms", 0.1, 50.0, 1.0, Unit::Milliseconds),
-    ParamSpec::new(GATE_HOLD_MS, "hold_ms", 0.0, 500.0, 55.0, Unit::Milliseconds),
-    ParamSpec::new(GATE_RELEASE_MS, "release_ms", 5.0, 2000.0, 144.0, Unit::Milliseconds),
+    ParamSpec::new(
+        GATE_ATTACK_MS,
+        "attack_ms",
+        0.1,
+        50.0,
+        1.0,
+        Unit::Milliseconds,
+    ),
+    ParamSpec::new(
+        GATE_HOLD_MS,
+        "hold_ms",
+        0.0,
+        500.0,
+        55.0,
+        Unit::Milliseconds,
+    ),
+    ParamSpec::new(
+        GATE_RELEASE_MS,
+        "release_ms",
+        5.0,
+        2000.0,
+        144.0,
+        Unit::Milliseconds,
+    ),
 ];
 // It closes 3 dB under where it opened, so a level hovering there never chatters.
 const HYSTERESIS_DB: f32 = 3.0;
@@ -38,7 +66,16 @@ pub struct Gate {
 
 impl Gate {
     pub fn new() -> Self {
-        Self { sample_rate: 48000.0, values: GATE_PARAMS.map(|spec| spec.default), attack: 0.0, release: 0.0, hold_frames: 0, holding: 0, open: false, gain: 1.0 }
+        Self {
+            sample_rate: 48000.0,
+            values: GATE_PARAMS.map(|spec| spec.default),
+            attack: 0.0,
+            release: 0.0,
+            hold_frames: 0,
+            holding: 0,
+            open: false,
+            gain: 1.0,
+        }
     }
 
     fn update(&mut self) {
@@ -66,7 +103,11 @@ impl Gate {
                 }
             }
             let target = if self.open { 1.0 } else { closed };
-            let coefficient = if target > self.gain { self.attack } else { self.release };
+            let coefficient = if target > self.gain {
+                self.attack
+            } else {
+                self.release
+            };
             self.gain = target + coefficient * (self.gain - target);
             block.left[index] *= self.gain;
             block.right[index] *= self.gain;
@@ -122,9 +163,30 @@ pub const DUCK_ATTACK_MS: u32 = 2;
 pub const DUCK_RELEASE_MS: u32 = 3;
 pub const DUCKER_PARAMS: [ParamSpec; 4] = [
     ParamSpec::new(DUCK_AMOUNT_DB, "amount_db", 0.0, 60.0, 12.0, Unit::Decibels),
-    ParamSpec::new(DUCK_THRESHOLD_DB, "threshold_db", -60.0, 0.0, -33.0, Unit::Decibels),
-    ParamSpec::new(DUCK_ATTACK_MS, "attack_ms", 0.1, 200.0, 13.0, Unit::Milliseconds),
-    ParamSpec::new(DUCK_RELEASE_MS, "release_ms", 5.0, 3000.0, 233.0, Unit::Milliseconds),
+    ParamSpec::new(
+        DUCK_THRESHOLD_DB,
+        "threshold_db",
+        -60.0,
+        0.0,
+        -33.0,
+        Unit::Decibels,
+    ),
+    ParamSpec::new(
+        DUCK_ATTACK_MS,
+        "attack_ms",
+        0.1,
+        200.0,
+        13.0,
+        Unit::Milliseconds,
+    ),
+    ParamSpec::new(
+        DUCK_RELEASE_MS,
+        "release_ms",
+        5.0,
+        3000.0,
+        233.0,
+        Unit::Milliseconds,
+    ),
 ];
 // The full amount is reached over a 6 dB knee centred on the threshold.
 const DUCK_KNEE_DB: f32 = 6.0;
@@ -139,7 +201,13 @@ pub struct Ducker {
 
 impl Ducker {
     pub fn new() -> Self {
-        Self { sample_rate: 48000.0, values: DUCKER_PARAMS.map(|spec| spec.default), attack: 0.0, release: 0.0, reduction_db: 0.0 }
+        Self {
+            sample_rate: 48000.0,
+            values: DUCKER_PARAMS.map(|spec| spec.default),
+            attack: 0.0,
+            release: 0.0,
+            reduction_db: 0.0,
+        }
     }
 
     fn update(&mut self) {
@@ -189,9 +257,14 @@ impl Processor for Ducker {
         let amount = self.values[DUCK_AMOUNT_DB as usize];
         let threshold = self.values[DUCK_THRESHOLD_DB as usize];
         for index in 0..block.frames() {
-            let over = amplitude_to_db(level(key.left, key.right, index)) - threshold + DUCK_KNEE_DB * 0.5;
+            let over =
+                amplitude_to_db(level(key.left, key.right, index)) - threshold + DUCK_KNEE_DB * 0.5;
             let target = amount * (over / DUCK_KNEE_DB).clamp(0.0, 1.0);
-            let coefficient = if target > self.reduction_db { self.attack } else { self.release };
+            let coefficient = if target > self.reduction_db {
+                self.attack
+            } else {
+                self.release
+            };
             self.reduction_db = target + coefficient * (self.reduction_db - target);
             let gain = db_to_amplitude(-self.reduction_db);
             block.left[index] *= gain;

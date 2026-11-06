@@ -669,7 +669,7 @@ package-app.js                 test_contracts.mjs
 **Rien d'autre ne porte ce suffixe.** » Or :
 
 - 208 `.test.mjs` existent, **205** sont au manifeste ;
-- les 3 restants (`tests/server/ws_sync_runtime.test.mjs`, `tests/server/server_media.test.mjs`,
+- les 3 restants (`tests/server/ws_sync_runtime.test.mjs` — retiré le 2026-11-05, runtime porté en Rust —, `tests/server/server_media.test.mjs`,
   `tests/eve/lasso_context_action_regression.test.mjs`) utilisent `node:test` et sont exécutés par
   `run_probes.mjs` — un **troisième** régime d'exécution non documenté ;
 - **362 `.probe.mjs`** existent, et `npm run probes` **ne figure dans aucune chaîne `quality:*`** :

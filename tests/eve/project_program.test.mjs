@@ -4,10 +4,18 @@ import { createProjectProgramRuntime } from '../../eVe/domains/programs/project_
 import { readTemplateLink } from '../../eVe/domains/templates/project_template_model.js';
 import { programDiscoveryRecords } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_finder_data.js';
 import { normalizeEvent, buildEventParticles } from '../../eVe/intuition/tools/calendar_model.js';
-import { isWithinSharedRoot, statesWithinSharedRoot, hasPrivateProgramAncestor } from '../../server/syncShareHierarchy.js';
 import { assertIdempotentEventReplay } from '../../atome/src/shared/adole_event_contract.js';
 import { registerCoreAtomeTypes } from '../../atome/src/shared/core_atome_types.js';
 import { normalizeCanonicalAtome } from '../../atome/src/shared/atome_contract.js';
+import { readFileSync } from 'node:fs';
+import { loadCalendarEngine as loadEngine } from '../../atome/src/squirrel/calendar/icalendar.js';
+
+// The calendar's occurrences are the Rust engine's (squirrel_audio_wasm): loaded once from its files,
+// as the page loads it from /wasm/.
+beforeAll(() => loadEngine({
+    moduleUrl: new URL('../../atome/src/wasm/squirrel_audio_wasm.js', import.meta.url).href,
+    binary: readFileSync(new URL('../../atome/src/wasm/squirrel_audio_wasm_bg.wasm', import.meta.url))
+}));
 vi.mock('../../database/adole.js', () => ({ default: { query: async () => { throw new Error('unexpected_database_access'); } } }));
 const involvement = { minutes: 10, basis: 'day', days: [1, 2, 3, 4, 5], rhythm: 3 };
 const start = '2030-01-07T20:00:00Z';
@@ -161,15 +169,6 @@ describe('native boundaries', () => {
         expect(() => validateObservation({ kind: 'benefit', value: 78 })).toThrow();
         expect(validateObservation({ kind: 'measurement', value: null, date: start, provenance: 'synthetic', useInFollowup: false }).value).toBeNull();
     });
-    it('native share hierarchy excludes private programmes and their descendants', async () => {
-        const states = [{ atome_id: 'folder', properties: {} }, { atome_id: 'p', properties: { project_program: initialProgram('sleep'), parent_id: 'folder' } },
-            { atome_id: 'journal', properties: { parent_id: 'p' } }, { atome_id: 'normal', properties: { parent_id: 'folder' } }];
-        const provider = { request: async (_owner, op, input) => op === 'state:list' ? states : states.find(record => record.atome_id === input.atome_id) };
-        expect(await hasPrivateProgramAncestor({ provider, ownerId: 'alice', atomeId: 'journal' })).toBe(true);
-        expect(await isWithinSharedRoot({ provider, ownerId: 'alice', atomeId: 'journal', rootAtomeId: 'folder' })).toBe(false);
-        expect(await isWithinSharedRoot({ provider, ownerId: 'alice', atomeId: 'normal', rootAtomeId: 'folder' })).toBe(true);
-        expect((await statesWithinSharedRoot({ provider, ownerId: 'alice', rootAtomeId: 'folder' })).map(record => record.atome_id)).toEqual(['folder', 'normal']);
-    });
 });
 
 beforeAll(async () => { await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_program_runtime.js'); }, 20000);
@@ -271,13 +270,7 @@ it('blocks programme publication before changing the project or broadcasting pri
             markProjectAsNews: async () => { marked = true; return { ok: true }; } }) });
     await expect(client.publish({ projectId: 'p' })).rejects.toThrow('program_sharing_not_finalized');
     expect(marked).toBe(false);
-    const { createNewsBroadcast } = await import('../../server/news_broadcast.js');
-    const states = new Map([['p', { properties: { project_program: initialProgram('sleep') } }], ['journal', { parent_id: 'p', properties: {} }]]);
-    const broadcast = createNewsBroadcast({ query: async () => null, vaultProvider: { request: async (_owner, _op, input) => states.get(input.atome_id) },
-        relations: {}, deliver: async () => { throw new Error('private_delivery'); }, listUserIds: async () => [] });
-    await expect(broadcast.publish('alice', { publication: { id: 'post', properties: { news_source_project_id: 'p' } } })).rejects.toThrow('program_sharing_not_finalized');
-    await expect(broadcast.publish('alice', { publication: { id: 'post', properties: { news_payload: { members: [{ id: 'journal' }] } } } })).rejects.toThrow('program_sharing_not_finalized');
-    expect((await broadcast.publish('alice', { publication: { id: 'ordinary-post', properties: {} } })).ok).toBe(true);
+    // The News's own refusal is the Rust front's (tests/atome_server/news.rs).
 });
 
 it('retains invocation context for queued commands when the active project changes', async () => {

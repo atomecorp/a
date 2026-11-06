@@ -23,7 +23,9 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         logical_position: [12.0, 24.0],
         logical_size: [120.0, 50.0],
         clip_rect: None,
-        clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
+        clip_rotation: 0.0,
+        clip_rounded_rects: vec![],
+        clip_fades: vec![],
         scale: [1.0, 1.0],
         rotation: 0.0,
         origin: [0.0, 0.0],
@@ -72,7 +74,9 @@ fn transform_op(id: &str) -> AtomeRenderOp {
         logical_position: [64.0, 72.0],
         logical_size: [140.0, 90.0],
         clip_rect: None,
-        clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
+        clip_rotation: 0.0,
+        clip_rounded_rects: vec![],
+        clip_fades: vec![],
         scale: [1.0, 1.0],
         rotation: 0.0,
         origin: [0.0, 0.0],
@@ -98,7 +102,10 @@ fn web_update_systems_do_not_emit_recursive_wakes_after_export_wake() {
     assert_eq!(diagnostics.wake_calls, 1);
     assert_eq!(diagnostics.queued_ops, 2);
     assert_eq!(diagnostics.drained_ops, 2);
-    assert_eq!(diagnostics.redraw_applied, 1, "scene mutations must acknowledge their rendering update to the JS presentation waiter");
+    assert_eq!(
+        diagnostics.redraw_applied, 1,
+        "scene mutations must acknowledge their rendering update to the JS presentation waiter"
+    );
     assert_eq!(
         app.world()
             .resource::<Messages<RequestRedraw>>()
@@ -108,7 +115,11 @@ fn web_update_systems_do_not_emit_recursive_wakes_after_export_wake() {
         "a drain is rendered by the update that drains it"
     );
     app.update();
-    assert_eq!(read_web_renderer_diagnostics().redraw_applied, 1, "an empty update must not acknowledge a second presentation");
+    assert_eq!(
+        read_web_renderer_diagnostics().redraw_applied,
+        1,
+        "an empty update must not acknowledge a second presentation"
+    );
 }
 
 #[test]
@@ -138,19 +149,26 @@ fn explicit_redraw_drain_does_not_emit_recursive_wake() {
 }
 
 #[test]
-fn startup_redraw_request_does_not_emit_export_wake() {
+fn startup_frame_is_announced_without_counting_an_export_wake() {
     let _ = reset_web_renderer_diagnostics();
+    WEB_FRAME_REQUESTED.with(|cell| *cell.borrow_mut() = false);
     let mut app = App::new();
     app.add_message::<RequestRedraw>();
 
-    request_initial_web_redraw(app.world_mut());
+    request_initial_web_redraw();
 
     assert_eq!(read_web_renderer_diagnostics().wake_calls, 0);
+    assert!(
+        crate::frame_clock::WEB_WAKE_PENDING.with(|cell| *cell.borrow()),
+        "with no event loop yet, the startup frame waits for the loop's proxy"
+    );
     assert_eq!(
         app.world()
             .resource::<Messages<RequestRedraw>>()
             .iter_current_update_messages()
             .count(),
-        1
+        0,
+        "the update mode does not react to window redraws: the frame is announced"
     );
+    crate::frame_clock::WEB_WAKE_PENDING.with(|cell| *cell.borrow_mut() = false);
 }

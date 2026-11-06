@@ -24,7 +24,7 @@ function fixture() {
 afterEach(() => roots.splice(0).forEach(root => fs.rmSync(root, { recursive: true, force: true })));
 
 test('startup removes abandoned objects and staging copies while retaining usable libraries and signed app contents', () => {
-    const f = fixture(), profile = 'platforms/desktop-tauri/target/debug';
+    const f = fixture(), profile = 'target/debug';
     f.put(`${profile}/deps/old.rcgu.o`);
     f.put(`${profile}/deps/current.rlib`);
     f.put(`${profile}/deps/current.rmeta`);
@@ -47,14 +47,14 @@ test('startup removes abandoned objects and staging copies while retaining usabl
 
 test('preview is read-only and cleanup is idempotent', () => {
     const f = fixture();
-    const file = 'platforms/desktop-tauri/target/debug/deps/old.rcgu.o'; f.put(file);
+    const file = 'target/debug/deps/old.rcgu.o'; f.put(file);
     expect(cleanBuildCaches(f.options).status).toBe('preview'); expect(f.exists(file)).toBe(true);
     cleanBuildCaches({ ...f.options, apply: true });
     expect(cleanBuildCaches({ ...f.options, apply: true }).removed).toBe(0);
 });
 
 test('compiler activity defers cleanup before scanning or after planning', () => {
-    const f = fixture(); const file = 'platforms/desktop-tauri/target/debug/deps/old.rcgu.o'; f.put(file);
+    const f = fixture(); const file = 'target/debug/deps/old.rcgu.o'; f.put(file);
     expect(cleanBuildCaches({ ...f.options, apply: true, compilerCheck: () => ['rustc'] }).status).toBe('deferred');
     let calls = 0;
     expect(cleanBuildCaches({ ...f.options, apply: true, compilerCheck: () => ++calls === 1 ? [] : ['cargo'] }).status).toBe('deferred');
@@ -63,7 +63,7 @@ test('compiler activity defers cleanup before scanning or after planning', () =>
 
 test('cleanup rejects a cache symlink rather than traversing outside its owner', () => {
     const f = fixture(); f.put('source/keep.rcgu.o');
-    const debug = path.join(f.root, 'platforms/desktop-tauri/target/debug'); fs.mkdirSync(debug, { recursive: true });
+    const debug = path.join(f.root, 'target/debug'); fs.mkdirSync(debug, { recursive: true });
     fs.symlinkSync(path.join(f.root, 'source'), path.join(debug, 'deps'));
     expect(() => cleanBuildCaches({ ...f.options, apply: true })).toThrow('build_cache_symlink_forbidden');
     expect(f.exists('source/keep.rcgu.o')).toBe(true);
@@ -118,14 +118,14 @@ test('Ad Hoc retention preserves its newest export, pending reports and the Test
 test('obsolete Tauri profile is removed only after choosing the newest bundle', () => {
     const f = fixture();
     for (const name of ['debug', 'release']) {
-        const file = f.put(`platforms/desktop-tauri/target/${name}/bundle/macos/atome.app/Contents/Info.plist`);
+        const file = f.put(`target/${name}/bundle/macos/atome.app/Contents/Info.plist`);
         fs.utimesSync(file, 100, name === 'debug' ? 200 : 100);
-        f.put(`platforms/desktop-tauri/target/${name}/deps/current.rlib`);
+        f.put(`target/${name}/deps/current.rlib`);
     }
     cleanBuildCaches({ ...f.options, apply: true });
-    expect(f.exists('platforms/desktop-tauri/target/debug/deps/current.rlib')).toBe(true);
-    expect(f.exists('platforms/desktop-tauri/target/release/deps')).toBe(false);
-    expect(f.exists('platforms/desktop-tauri/target/release/bundle')).toBe(false);
+    expect(f.exists('target/debug/deps/current.rlib')).toBe(true);
+    expect(f.exists('target/release/deps')).toBe(false);
+    expect(f.exists('target/release/bundle')).toBe(false);
 });
 
 test('retention integration uses lifecycle hooks and a shared Xcode DerivedData', () => {
@@ -140,13 +140,13 @@ test('retention integration uses lifecycle hooks and a shared Xcode DerivedData'
 
 test('a later dev build keeps its warm cache even when the latest signed bundle is Release', () => {
     const f = fixture();
-    const app = f.put('platforms/desktop-tauri/target/release/bundle/macos/atome.app/Contents/Info.plist');
-    const executable = f.put('platforms/desktop-tauri/target/debug/atome');
+    const app = f.put('target/release/bundle/macos/atome.app/Contents/Info.plist');
+    const executable = f.put('target/debug/atome');
     fs.utimesSync(app, 100, 100); fs.utimesSync(executable, 200, 200);
-    f.put('platforms/desktop-tauri/target/debug/deps/reusable.rlib');
+    f.put('target/debug/deps/reusable.rlib');
     cleanBuildCaches({ ...f.options, apply: true });
-    expect(f.exists('platforms/desktop-tauri/target/debug/deps/reusable.rlib')).toBe(true);
-    expect(f.exists('platforms/desktop-tauri/target/release/bundle/macos/atome.app/Contents/Info.plist')).toBe(true);
+    expect(f.exists('target/debug/deps/reusable.rlib')).toBe(true);
+    expect(f.exists('target/release/bundle/macos/atome.app/Contents/Info.plist')).toBe(true);
 });
 
 test.skipIf(process.platform !== 'darwin')('native Xcode descriptors containing dates remain readable', () => {
@@ -182,8 +182,8 @@ function age(file, days) {
 }
 
 test('residue removes whole unused Cargo units and superseded incremental configurations', () => {
-    const f = fixture(), profile = 'platforms/desktop-tauri/target/debug', old = '0123456789abcdef', used = 'fedcba9876543210';
-    f.put('platforms/desktop-tauri/target/CACHEDIR.TAG');
+    const f = fixture(), profile = 'target/debug', old = '0123456789abcdef', used = 'fedcba9876543210';
+    f.put('target/CACHEDIR.TAG');
     for (const hash of [old, used]) {
         f.put(`${profile}/.fingerprint/crate-${hash}/lib-crate`);
         f.put(`${profile}/deps/libcrate-${hash}.rlib`);
@@ -226,7 +226,7 @@ test('stale temp work keeps reusable probe sources and retained folders', () => 
 
 test('residue proceeds while a build runs; profile convergence waits', () => {
     const f = fixture(), scratch = path.join(f.root, 'scratch'), symbols = path.join(f.root, 'symbols');
-    f.put('platforms/desktop-tauri/target/debug/deps/old.rcgu.o');
+    f.put('target/debug/deps/old.rcgu.o');
     f.put('temp/old-output/frame.png'); age(path.join(f.root, 'temp/old-output'), 3);
     f.put('scratch/old-session/build.wasm'); age(path.join(scratch, 'old-session'), 3);
     f.put('scratch/current-session/out.txt');
@@ -234,7 +234,7 @@ test('residue proceeds while a build runs; profile convergence waits', () => {
     f.put('symbols/iPad17,1 27.2 (24B5110a)/Symbols/a');
     const report = cleanBuildCaches({ ...f.options, apply: true, compilerCheck: () => ['rustc'], residue: { scratch, deviceSupport: symbols } });
     expect(report).toMatchObject({ status: 'cleaned', convergence: 'deferred', compilers: ['rustc'] });
-    expect(f.exists('platforms/desktop-tauri/target/debug/deps/old.rcgu.o')).toBe(true);
+    expect(f.exists('target/debug/deps/old.rcgu.o')).toBe(true);
     for (const file of ['temp/old-output', 'scratch/old-session', 'symbols/iPad17,1 27.2 (24B5099f)']) expect(f.exists(file)).toBe(false);
     for (const file of ['scratch/current-session/out.txt', 'symbols/iPad17,1 27.2 (24B5110a)/Symbols/a']) expect(f.exists(file)).toBe(true);
 });

@@ -1,7 +1,7 @@
 import { unfoldContentLines, parseContentLine, buildContentLine, foldContentLine,
     escapeContentText, decodeContentText, splitContentValue } from '../shared/content_lines.js';
 import ICAL from '../../assets/vendor/ical/ical.bundle.js';
-import { installIanaZones } from './icalendar_iana.js';
+import { audioKernels, loadAudioKernels } from '../../application/audio_runtime/audio_kernels.js';
 
 const WEEKDAYS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
 const text = (properties, name) => decodeContentText(properties.find(p => p.name === name)?.value || '');
@@ -25,7 +25,7 @@ export function parseCalendarSearchQuery(value = '') {
     const text = String(value).trim();
     const french = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(text);
     const iso = /^\d{4}-\d{2}-\d{2}$/.test(text);
-    if (!french && !iso) return { text, date: null, invalid: /^\d+[\/\-]\d/.test(text) };
+    if (!french && !iso) return { text, date: null, invalid: /^\d+[/-]\d/.test(text) };
     const normalized = french ? `${french[3]}-${french[2]}-${french[1]}` : text;
     const date = canonicalCalendarDate(normalized);
     return { text: '', date, invalid: !date };
@@ -263,70 +263,52 @@ export function buildIcs(events = [], options = {}) {
     return lines.map(foldContentLine).join('\r\n') + '\r\n';
 }
 
+// The occurrences come from the one calendar engine (atome/engines/atome-calendar, the ICAL.js
+// recurrence and time zone arithmetic ported step for step, measured faster than ICAL.js here),
+// compiled into squirrel_audio_wasm and loaded once by audio_kernels.js. Whoever reads events
+// loads it first (`loadCalendarEngine`: calendar_api.js#readAccountEvents, the calendar service,
+// the programmes); the occurrences are then read synchronously. An event crosses as its JSON (a
+// Date as its ISO string, read back to the same instant); ICAL.js above only reads and writes
+// calendar files.
+
+/** Loads the calendar engine once (`moduleUrl`/`binary` name another copy, as in a Node probe). */
+export const loadCalendarEngine = (options) => loadAudioKernels(options);
+
+const engine = () => audioKernels();
+const instant = date => (date == null ? undefined : date.getTime());
+const occurrenceOf = (event, start, end) => ({ ...event, occurrenceId: `${event.id}_${start.toISOString()}`, start, end });
+
+/** The starts of one recurring event from `start` (its own start when none) to `end`, at most `limit`. */
 export function expandCalendarOccurrences(event, start, end, limit = 1000) {
-    const root = new ICAL.Component(ICAL.parse(buildIcs([event]))), release = installIanaZones(root, calendarDate);
-    try {
-        const recurrence = new ICAL.Event(root.getFirstSubcomponent('vevent')).iterator();
-        const output = [], until = end?.getTime() ?? Infinity, from = start?.getTime() ?? canonicalCalendarDate(event.start).getTime();
-        let time, iterations = 0;
-        while ((time = recurrence.next()) && iterations++ < 100000) {
-            const date = time.toJSDate();
-            if (date.getTime() > until) break;
-            if (date.getTime() >= from) output.push(date);
-            if (output.length >= limit) break;
-        }
-        return output;
-    } finally { release(); }
+    return Array.from(engine().calendarExpand(JSON.stringify(event), instant(start), instant(end), limit), ms => new Date(ms));
 }
 
+/** The end of the occurrence of `event` starting at `start`: its DURATION kept, else the event's length. */
 export function calendarOccurrenceEnd(event, start) {
-    const baseStart = canonicalCalendarDate(event.start), baseEnd = canonicalCalendarDate(event.end);
-    if (!baseEnd || !baseStart) return null;
-    const reference = activeReference(event, 'start'), zones = event.icalendar?.timezones || [];
-    const propertyAt = date => ({ value: formatDate(date, reference, event.allDay, zones), params: reference?.params || {} });
-    const duration = event.icalendar?.duration;
-    if (duration && durationEnd(propertyAt(baseStart), duration, zones).getTime() === baseEnd.getTime()) {
-        return durationEnd(propertyAt(start), duration, zones);
-    }
-    if (!event.allDay) return new Date(baseEnd.getTime() + start.getTime() - baseStart.getTime());
-    const day = date => Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
-    const end = new Date(start); end.setDate(end.getDate() + Math.round((day(baseEnd) - day(baseStart)) / 86400000));
-    return end;
+    // No start reads as NaN: an event without its own start or end still has no end (null).
+    const end = engine().calendarOccurrenceEnd(JSON.stringify(event), start == null ? Number.NaN : start.getTime());
+    return end === undefined ? null : new Date(end);
 }
 
 export function calendarOccurrence(event, start) {
-    return { ...event, occurrenceId: `${event.id}_${start.toISOString()}`, start, end: calendarOccurrenceEnd(event, start) };
+    // Its id is read before its end: an invalid start fails there first.
+    const occurrence = occurrenceOf(event, start, null);
+    occurrence.end = calendarOccurrenceEnd(event, start);
+    return occurrence;
 }
 
-// One occurrence owner for agenda projections and next-event queries. Read
-// exceptions before expanding masters, and bound each series, not the input list.
+// One occurrence owner for agenda projections and next-event queries. The engine reads the
+// exceptions before expanding the masters and bounds each series, not the input list; per
+// occurrence it gives its event, its series' master, its start, whether it has an end, and that end.
 export function calendarRangeOccurrences(events, range, limit = 800) {
-    const seriesKey = event => `${event.calendarId || ''}|${event.exchange_uid || event.id}`;
-    const masters = new Map((events || []).filter(event => !event.recurrence_id && (event.recurrence || event.rdates?.length)).map(event => [seriesKey(event), event]));
-    const exceptionKey = (event, date) => `${seriesKey(event)}|${date?.getTime()}`;
-    const exceptions = new Set((events || []).filter(event => event.recurrence_id).map(event => {
-        const date = calendarDate({ value: event.recurrence_id, params: event.icalendar?.recurrence_id?.params || {} }, event.icalendar?.timezones || []);
-        return exceptionKey(event, date);
-    }));
+    const list = events || [];
+    const flat = engine().calendarRangeOccurrences(JSON.stringify(list), instant(range.start), instant(range.end),
+        Boolean(range.futureOnly), Boolean(range.excludeCompleted), limit);
     const occurrences = [];
-    for (const event of events || []) {
-        const baseStart = canonicalCalendarDate(event.start);
-        if (!baseStart || event.status === 'cancelled') continue;
-        if (range.excludeCompleted && event.kind === 'todo' && event.status === 'done') continue;
-        if (event.recurrence_id && !masters.has(seriesKey(event))) continue;
-        if (range.futureOnly && !event.recurrence && !event.rdates?.length && baseStart <= range.start) continue;
-        const starts = event.recurrence || event.rdates?.length
-            ? expandCalendarOccurrences(event, range.futureOnly ? new Date(range.start.getTime() + 1) : range.start, range.end, limit + exceptions.size)
-            : [baseStart];
-        for (const start of starts) {
-            if (!event.recurrence_id && exceptions.has(exceptionKey(event, start))) continue;
-            const occurrence = calendarOccurrence(event, start);
-            occurrence.seriesId = event.recurrence_id ? masters.get(seriesKey(event)).id : event.id;
-            if (range.futureOnly && start <= range.start) continue;
-            if (range.start && (occurrence.end || start) < range.start) continue;
-            if (range.end && start > range.end) continue;
-            occurrences.push(occurrence);
-        }
+    for (let at = 0; at < flat.length; at += 5) {
+        const occurrence = occurrenceOf(list[flat[at]], new Date(flat[at + 2]), flat[at + 3] ? new Date(flat[at + 4]) : null);
+        occurrence.seriesId = list[flat[at + 1]].id;
+        occurrences.push(occurrence);
     }
-    return occurrences.sort((left, right) => left.start - right.start || String(left.occurrenceId).localeCompare(String(right.occurrenceId))).slice(0, limit);
+    return occurrences;
 }

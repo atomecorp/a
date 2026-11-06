@@ -2,7 +2,7 @@
 // ring is sized once in `prepare`; changing the time never reallocates.
 
 use crate::biquad::{Coefficients, Section, Shape};
-use crate::{db_to_amplitude, ParamSpec, Processor, Smoothed, StereoBlock, Unit};
+use crate::{ParamSpec, Processor, Smoothed, StereoBlock, Unit, db_to_amplitude};
 
 pub struct DelayLine {
     ring: Vec<f32>,
@@ -11,7 +11,10 @@ pub struct DelayLine {
 
 impl DelayLine {
     pub fn new() -> Self {
-        Self { ring: Vec::new(), write: 0 }
+        Self {
+            ring: Vec::new(),
+            write: 0,
+        }
     }
 
     pub fn allocate(&mut self, max_frames: usize) {
@@ -58,8 +61,22 @@ pub const DAMPING_HZ: u32 = 2;
 pub const MIX: u32 = 3;
 pub const PARAMS: [ParamSpec; 4] = [
     ParamSpec::new(TIME_MS, "time_ms", 1.0, 2000.0, 377.0, Unit::Milliseconds),
-    ParamSpec::new(FEEDBACK_DB, "feedback_db", -60.0, -0.5, -9.0, Unit::Decibels),
-    ParamSpec::new(DAMPING_HZ, "damping_hz", 500.0, 20000.0, 8000.0, Unit::Hertz),
+    ParamSpec::new(
+        FEEDBACK_DB,
+        "feedback_db",
+        -60.0,
+        -0.5,
+        -9.0,
+        Unit::Decibels,
+    ),
+    ParamSpec::new(
+        DAMPING_HZ,
+        "damping_hz",
+        500.0,
+        20000.0,
+        8000.0,
+        Unit::Hertz,
+    ),
     ParamSpec::new(MIX, "mix", 0.0, 1.0, 0.34, Unit::Percent),
 ];
 const MAX_TIME_MS: f32 = 2000.0;
@@ -90,7 +107,13 @@ impl Echo {
     }
 
     fn design_damping(&mut self) {
-        self.damping = Coefficients::design(Shape::LowPass, self.sample_rate, self.damping_hz, 0.707, 0.0);
+        self.damping = Coefficients::design(
+            Shape::LowPass,
+            self.sample_rate,
+            self.damping_hz,
+            0.707,
+            0.0,
+        );
     }
 }
 
@@ -117,7 +140,10 @@ impl Processor for Echo {
         for index in 0..block.frames() {
             let delay = self.time.tick() * frames_per_ms;
             let mix = self.mix.tick();
-            for (channel, sample) in [&mut block.left[index], &mut block.right[index]].into_iter().enumerate() {
+            for (channel, sample) in [&mut block.left[index], &mut block.right[index]]
+                .into_iter()
+                .enumerate()
+            {
                 let echo = self.lines[channel].read(delay);
                 // Only the repeats are damped, so the first echo lands exactly on time.
                 let repeat = self.filters[channel].tick(&self.damping, echo * self.feedback);
@@ -128,7 +154,9 @@ impl Processor for Echo {
     }
 
     fn set_param(&mut self, id: u32, value: f32) {
-        let Some(spec) = PARAMS.get(id as usize) else { return };
+        let Some(spec) = PARAMS.get(id as usize) else {
+            return;
+        };
         let value = spec.clamp(value);
         match id {
             TIME_MS => self.time.set(value),
@@ -148,7 +176,9 @@ impl Processor for Echo {
 
     // The echo rings until its feedback has fallen 60 dB.
     fn tail_frames(&self) -> u32 {
-        let repeats = (-60.0 / PARAMS[1].clamp(crate::amplitude_to_db(self.feedback))).ceil().max(1.0);
+        let repeats = (-60.0 / PARAMS[1].clamp(crate::amplitude_to_db(self.feedback)))
+            .ceil()
+            .max(1.0);
         (repeats * self.time.target() * 0.001 * self.sample_rate) as u32
     }
 

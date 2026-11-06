@@ -7,27 +7,27 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		6BLIVE000000000000000002 /* atomeLiveActivity.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 6BLIVE000000000000000001 /* atomeLiveActivity.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		6BLIVE00000000000000000B /* Roboto-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 6BLIVE000000000000000009 /* Roboto-Regular.ttf */; };
+		6BLIVE00000000000000000C /* Roboto-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 6BLIVE00000000000000000A /* Roboto-Medium.ttf */; };
 		6BWTCH000000000000000002 /* atomeWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 6BWTCH000000000000000001 /* atomeWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		34960420281861B500E13C15 /* atomeAudioUnit.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 349603FF281861B500E13C15 /* atomeAudioUnit.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		7A1000030000000000000003 /* GuestAdoptionRuntimeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1000010000000000000001 /* GuestAdoptionRuntimeTests.swift */; };
-		7A1000050000000000000005 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7A1000040000000000000004 /* XCTest.framework */; };
-		7A1000120000000000000012 /* RemoteSyncQueueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1000110000000000000011 /* RemoteSyncQueueTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		6BLIVE000000000000000003 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 349603DC2818618F00E13C15 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 6BLIVE000000000000000010;
+			remoteInfo = atomeLiveActivity;
+		};
 		3496041E281861B500E13C15 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 349603DC2818618F00E13C15 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 349603FE281861B500E13C15;
 			remoteInfo = webviewauv3;
-		};
-		7A10000B000000000000000B /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 349603DC2818618F00E13C15 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 349603E32818619000E13C15;
-			remoteInfo = atome;
 		};
 		6BWTCH000000000000000003 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -46,6 +46,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				34960420281861B500E13C15 /* atomeAudioUnit.appex in Embed Foundation Extensions */,
+				6BLIVE000000000000000002 /* atomeLiveActivity.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -64,6 +65,10 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		6BLIVE000000000000000001 /* atomeLiveActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = atomeLiveActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		6BLIVE000000000000000008 /* atomeLiveActivity.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = configuration/atomeLiveActivity.xcconfig; sourceTree = SOURCE_ROOT; };
+		6BLIVE000000000000000009 /* Roboto-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "Roboto-Regular.ttf"; path = "../../../atome/src/assets/fonts/Roboto/Roboto-Regular.ttf"; sourceTree = "<group>"; };
+		6BLIVE00000000000000000A /* Roboto-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "Roboto-Medium.ttf"; path = "../../../atome/src/assets/fonts/Roboto/Roboto-Medium.ttf"; sourceTree = "<group>"; };
 		6BWTCH000000000000000001 /* atomeWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = atomeWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6BWTCH000000000000000017 /* atomeWatch.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = configuration/atomeWatch.xcconfig; sourceTree = SOURCE_ROOT; };
 		349603E42818619000E13C15 /* atome.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = atome.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -73,13 +78,16 @@
 		6BARCH000000000000000002 /* eVe */ = {isa = PBXFileReference; lastKnownFileType = folder; name = eVe; path = ../../../eVe; sourceTree = "<group>"; };
 		6BB7DA3B2D63233600CD6691 /* LICENSE */ = {isa = PBXFileReference; lastKnownFileType = text; path = LICENSE; sourceTree = "<group>"; };
 		6BB7DA3C2D63233600CD6691 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
-		7A1000010000000000000001 /* GuestAdoptionRuntimeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuestAdoptionRuntimeTests.swift; sourceTree = "<group>"; };
-		7A1000020000000000000002 /* atomeGuestAdoptionTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = atomeGuestAdoptionTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		7A1000040000000000000004 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
-		7A1000110000000000000011 /* RemoteSyncQueueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteSyncQueueTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		6BLIVE000000000000000007 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 6BLIVE000000000000000010 /* atomeLiveActivity */;
+		};
 		6B2F4D1A2FA8C70100E7A901 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -128,6 +136,8 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		6BLIVE000000000000000005 /* liveactivity */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = liveactivity; sourceTree = "<group>"; };
+		6BLIVE000000000000000006 /* liveactivitywidget */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (6BLIVE000000000000000007 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = liveactivitywidget; sourceTree = "<group>"; };
 		6B6B458B2D537B7800706498 /* Common */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (6B2F4D1A2FA8C70100E7A901 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, 6B2F4D1B2FA8C70100E7A901 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = Common; sourceTree = "<group>"; };
 		6B864DBD2D5DDA74006DEA72 /* application */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (6B864DC22D5DDA74006DEA72 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = application; sourceTree = "<group>"; };
 		6B864DC82D5DDDD7006DEA72 /* auv3 */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (6B864DCB2D5DDDD7006DEA72 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = auv3; sourceTree = "<group>"; };
@@ -136,6 +146,13 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		6BLIVE000000000000000012 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		349603E12818619000E13C15 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -147,14 +164,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		7A1000090000000000000009 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				7A1000050000000000000005 /* XCTest.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -180,10 +189,14 @@
 				6BWTCH000000000000000005 /* sensors */,
 				6BWTCH000000000000000006 /* watch */,
 				6BWTCH000000000000000017 /* atomeWatch.xcconfig */,
+				6BLIVE000000000000000005 /* liveactivity */,
+				6BLIVE000000000000000006 /* liveactivitywidget */,
+				6BLIVE000000000000000008 /* atomeLiveActivity.xcconfig */,
+				6BLIVE000000000000000009 /* Roboto-Regular.ttf */,
+				6BLIVE00000000000000000A /* Roboto-Medium.ttf */,
 				349603E52818619000E13C15 /* Products */,
 				6BB7DA3B2D63233600CD6691 /* LICENSE */,
 				6BB7DA3C2D63233600CD6691 /* README.md */,
-				7A1000060000000000000006 /* Tests */,
 				6BA9CDD23029B6F900066AE4 /* Recovered References */,
 			);
 			sourceTree = "<group>";
@@ -193,8 +206,8 @@
 			children = (
 				349603E42818619000E13C15 /* atome.app */,
 				349603FF281861B500E13C15 /* atomeAudioUnit.appex */,
-				7A1000020000000000000002 /* atomeGuestAdoptionTests.xctest */,
 				6BWTCH000000000000000001 /* atomeWatch.app */,
+				6BLIVE000000000000000001 /* atomeLiveActivity.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -202,24 +215,34 @@
 		6BA9CDD23029B6F900066AE4 /* Recovered References */ = {
 			isa = PBXGroup;
 			children = (
-				7A1000040000000000000004 /* XCTest.framework */,
 			);
 			name = "Recovered References";
-			sourceTree = "<group>";
-		};
-		7A1000060000000000000006 /* Tests */ = {
-			isa = PBXGroup;
-			children = (
-				7A1000010000000000000001 /* GuestAdoptionRuntimeTests.swift */,
-				7A1000110000000000000011 /* RemoteSyncQueueTests.swift */,
-			);
-			name = Tests;
-			path = ../../../tests/ios;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		6BLIVE000000000000000010 /* atomeLiveActivity */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6BLIVE000000000000000014 /* Build configuration list for PBXNativeTarget "atomeLiveActivity" */;
+			buildPhases = (
+				6BLIVE000000000000000011 /* Sources */,
+				6BLIVE000000000000000012 /* Frameworks */,
+				6BLIVE000000000000000013 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				6BLIVE000000000000000005 /* liveactivity */,
+				6BLIVE000000000000000006 /* liveactivitywidget */,
+			);
+			name = atomeLiveActivity;
+			productName = atomeLiveActivity;
+			productReference = 6BLIVE000000000000000001 /* atomeLiveActivity.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		349603E32818619000E13C15 /* atome */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 349603F82818619200E13C15 /* Build configuration list for PBXNativeTarget "atome" */;
@@ -237,11 +260,13 @@
 			dependencies = (
 				3496041F281861B500E13C15 /* PBXTargetDependency */,
 				6BWTCH000000000000000008 /* PBXTargetDependency */,
+				6BLIVE000000000000000004 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				6B6B458B2D537B7800706498 /* Common */,
 				6B864DBD2D5DDA74006DEA72 /* application */,
 				6BWTCH000000000000000005 /* sensors */,
+				6BLIVE000000000000000005 /* liveactivity */,
 			);
 			name = atome;
 			productName = webview;
@@ -270,24 +295,6 @@
 			productName = webviewauv3;
 			productReference = 349603FF281861B500E13C15 /* atomeAudioUnit.appex */;
 			productType = "com.apple.product-type.app-extension";
-		};
-		7A1000070000000000000007 /* atomeGuestAdoptionTests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 7A10000F000000000000000F /* Build configuration list for PBXNativeTarget "atomeGuestAdoptionTests" */;
-			buildPhases = (
-				7A1000080000000000000008 /* Sources */,
-				7A1000090000000000000009 /* Frameworks */,
-				7A10000A000000000000000A /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				7A10000C000000000000000C /* PBXTargetDependency */,
-			);
-			name = atomeGuestAdoptionTests;
-			productName = atomeGuestAdoptionTests;
-			productReference = 7A1000020000000000000002 /* atomeGuestAdoptionTests.xctest */;
-			productType = "com.apple.product-type.bundle.unit-test";
 		};
 		6BWTCH000000000000000010 /* atomeWatch */ = {
 			isa = PBXNativeTarget;
@@ -344,13 +351,22 @@
 			targets = (
 				349603E32818619000E13C15 /* atome */,
 				349603FE281861B500E13C15 /* atomeAudioUnit */,
-				7A1000070000000000000007 /* atomeGuestAdoptionTests */,
 				6BWTCH000000000000000010 /* atomeWatch */,
+				6BLIVE000000000000000010 /* atomeLiveActivity */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		6BLIVE000000000000000013 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6BLIVE00000000000000000B /* Roboto-Regular.ttf in Resources */,
+				6BLIVE00000000000000000C /* Roboto-Medium.ttf in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		349603E22818619000E13C15 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -359,13 +375,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		349603FD281861B500E13C15 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		7A10000A000000000000000A /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -461,6 +470,13 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		6BLIVE000000000000000011 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		349603E02818619000E13C15 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -475,15 +491,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		7A1000080000000000000008 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				7A1000030000000000000003 /* GuestAdoptionRuntimeTests.swift in Sources */,
-				7A1000120000000000000012 /* RemoteSyncQueueTests.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		6BWTCH000000000000000011 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -494,15 +501,16 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		6BLIVE000000000000000004 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			platformFilter = ios;
+			target = 6BLIVE000000000000000010 /* atomeLiveActivity */;
+			targetProxy = 6BLIVE000000000000000003 /* PBXContainerItemProxy */;
+		};
 		3496041F281861B500E13C15 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 349603FE281861B500E13C15 /* atomeAudioUnit */;
 			targetProxy = 3496041E281861B500E13C15 /* PBXContainerItemProxy */;
-		};
-		7A10000C000000000000000C /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 349603E32818619000E13C15 /* atome */;
-			targetProxy = 7A10000B000000000000000B /* PBXContainerItemProxy */;
 		};
 		6BWTCH000000000000000008 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -512,6 +520,24 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		6BLIVE000000000000000015 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 6BLIVE000000000000000008 /* atomeLiveActivity.xcconfig */;
+			buildSettings = {
+				CURRENT_PROJECT_VERSION = 46;
+				MARKETING_VERSION = 1.48;
+			};
+			name = Debug;
+		};
+		6BLIVE000000000000000016 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 6BLIVE000000000000000008 /* atomeLiveActivity.xcconfig */;
+			buildSettings = {
+				CURRENT_PROJECT_VERSION = 46;
+				MARKETING_VERSION = 1.48;
+			};
+			name = Release;
+		};
 		349603F62818619200E13C15 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -830,46 +856,6 @@
 			};
 			name = Release;
 		};
-		7A10000D000000000000000D /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = "$(RECOMMENDED_IPHONEOS_DEPLOYMENT_TARGET)";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@loader_path/Frameworks",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = one.atome.app.guestadoptiontests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/atome.app/atome";
-			};
-			name = Debug;
-		};
-		7A10000E000000000000000E /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = "$(RECOMMENDED_IPHONEOS_DEPLOYMENT_TARGET)";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@loader_path/Frameworks",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = one.atome.app.guestadoptiontests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/atome.app/atome";
-			};
-			name = Release;
-		};
 		6BWTCH000000000000000015 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 6BWTCH000000000000000017 /* atomeWatch.xcconfig */;
@@ -891,6 +877,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		6BLIVE000000000000000014 /* Build configuration list for PBXNativeTarget "atomeLiveActivity" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6BLIVE000000000000000015 /* Debug */,
+				6BLIVE000000000000000016 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		349603DF2818618F00E13C15 /* Build configuration list for PBXProject "atome" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -914,15 +909,6 @@
 			buildConfigurations = (
 				34960422281861B500E13C15 /* Debug */,
 				34960423281861B500E13C15 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
-		};
-		7A10000F000000000000000F /* Build configuration list for PBXNativeTarget "atomeGuestAdoptionTests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				7A10000D000000000000000D /* Debug */,
-				7A10000E000000000000000E /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

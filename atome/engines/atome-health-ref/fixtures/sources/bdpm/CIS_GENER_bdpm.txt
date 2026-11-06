@@ -1,0 +1,262 @@
+17	PHLOROGLUCINOL (HYDRATE) 80 mg - SPASFON LYOC 80 mg, lyophilisat oral.	62944693	0	1
+33	METFORMINE (CHLORHYDRATE DE) 1000 mg - GLUCOPHAGE 1000 mg, comprimé pelliculé sécable.	67346461	1	8
+55	FUROSEMIDE 20 mg - LASILIX FAIBLE 20 mg, comprimé.	69304938	0	1
+56	FUROSEMIDE 40 mg - LASILIX 40 mg, comprimé sécable	65606743	0	1
+102	SIMVASTATINE 20 mg - ZOCOR 20 mg, comprimé pelliculé sécable - LODALES 20 mg, comprimé pelliculé.	63073499	1	3
+102	SIMVASTATINE 20 mg - ZOCOR 20 mg, comprimé pelliculé sécable - LODALES 20 mg, comprimé pelliculé.	62039768	1	4
+102	SIMVASTATINE 20 mg - ZOCOR 20 mg, comprimé pelliculé sécable - LODALES 20 mg, comprimé pelliculé.	63187944	1	6
+102	SIMVASTATINE 20 mg - ZOCOR 20 mg, comprimé pelliculé sécable - LODALES 20 mg, comprimé pelliculé.	69094525	1	7
+102	SIMVASTATINE 20 mg - ZOCOR 20 mg, comprimé pelliculé sécable - LODALES 20 mg, comprimé pelliculé.	64603769	1	9
+102	SIMVASTATINE 20 mg - ZOCOR 20 mg, comprimé pelliculé sécable - LODALES 20 mg, comprimé pelliculé.	63025508	1	10
+102	SIMVASTATINE 20 mg - ZOCOR 20 mg, comprimé pelliculé sécable - LODALES 20 mg, comprimé pelliculé.	68355730	1	11
+102	SIMVASTATINE 20 mg - ZOCOR 20 mg, comprimé pelliculé sécable - LODALES 20 mg, comprimé pelliculé.	66952723	1	12
+102	SIMVASTATINE 20 mg - ZOCOR 20 mg, comprimé pelliculé sécable - LODALES 20 mg, comprimé pelliculé.	61275694	1	13
+102	SIMVASTATINE 20 mg - ZOCOR 20 mg, comprimé pelliculé sécable - LODALES 20 mg, comprimé pelliculé.	61411685	1	14
+102	SIMVASTATINE 20 mg - ZOCOR 20 mg, comprimé pelliculé sécable - LODALES 20 mg, comprimé pelliculé.	67709496	2	15
+102	SIMVASTATINE 20 mg - ZOCOR 20 mg, comprimé pelliculé sécable - LODALES 20 mg, comprimé pelliculé.	63303256	1	16
+102	SIMVASTATINE 20 mg - ZOCOR 20 mg, comprimé pelliculé sécable - LODALES 20 mg, comprimé pelliculé.	65080738	1	17
+102	SIMVASTATINE 20 mg - ZOCOR 20 mg, comprimé pelliculé sécable - LODALES 20 mg, comprimé pelliculé.	60145580	1	18
+103	SIMVASTATINE 40 mg - ZOCOR 40 mg, comprimé pelliculé - LODALES 40 mg, comprimé pelliculé.	60834807	1	3
+103	SIMVASTATINE 40 mg - ZOCOR 40 mg, comprimé pelliculé - LODALES 40 mg, comprimé pelliculé.	60583269	1	4
+103	SIMVASTATINE 40 mg - ZOCOR 40 mg, comprimé pelliculé - LODALES 40 mg, comprimé pelliculé.	68990181	1	5
+103	SIMVASTATINE 40 mg - ZOCOR 40 mg, comprimé pelliculé - LODALES 40 mg, comprimé pelliculé.	65906484	1	6
+103	SIMVASTATINE 40 mg - ZOCOR 40 mg, comprimé pelliculé - LODALES 40 mg, comprimé pelliculé.	62134458	1	8
+103	SIMVASTATINE 40 mg - ZOCOR 40 mg, comprimé pelliculé - LODALES 40 mg, comprimé pelliculé.	69646557	1	9
+103	SIMVASTATINE 40 mg - ZOCOR 40 mg, comprimé pelliculé - LODALES 40 mg, comprimé pelliculé.	66399710	1	10
+103	SIMVASTATINE 40 mg - ZOCOR 40 mg, comprimé pelliculé - LODALES 40 mg, comprimé pelliculé.	61141019	1	11
+103	SIMVASTATINE 40 mg - ZOCOR 40 mg, comprimé pelliculé - LODALES 40 mg, comprimé pelliculé.	67711814	1	12
+103	SIMVASTATINE 40 mg - ZOCOR 40 mg, comprimé pelliculé - LODALES 40 mg, comprimé pelliculé.	60791672	1	13
+103	SIMVASTATINE 40 mg - ZOCOR 40 mg, comprimé pelliculé - LODALES 40 mg, comprimé pelliculé.	65187416	1	14
+103	SIMVASTATINE 40 mg - ZOCOR 40 mg, comprimé pelliculé - LODALES 40 mg, comprimé pelliculé.	66351224	1	15
+103	SIMVASTATINE 40 mg - ZOCOR 40 mg, comprimé pelliculé - LODALES 40 mg, comprimé pelliculé.	65320254	1	16
+145	AMOXICILLINE 125 mg/5 ml - CLAMOXYL 125 mg/5 ml, poudre pour suspension buvable.	61771313	1	2
+145	AMOXICILLINE 125 mg/5 ml - CLAMOXYL 125 mg/5 ml, poudre pour suspension buvable.	60366319	1	3
+145	AMOXICILLINE 125 mg/5 ml - CLAMOXYL 125 mg/5 ml, poudre pour suspension buvable.	68289554	1	6
+145	AMOXICILLINE 125 mg/5 ml - CLAMOXYL 125 mg/5 ml, poudre pour suspension buvable.	65183581	1	7
+145	AMOXICILLINE 125 mg/5 ml - CLAMOXYL 125 mg/5 ml, poudre pour suspension buvable.	65158724	1	8
+145	AMOXICILLINE 125 mg/5 ml - CLAMOXYL 125 mg/5 ml, poudre pour suspension buvable.	64489810	1	9
+145	AMOXICILLINE 125 mg/5 ml - CLAMOXYL 125 mg/5 ml, poudre pour suspension buvable.	65843571	1	10
+145	AMOXICILLINE 125 mg/5 ml - CLAMOXYL 125 mg/5 ml, poudre pour suspension buvable.	66626147	1	11
+146	AMOXICILLINE 250 mg/5 ml - CLAMOXYL 250 mg/5 ml, poudre pour suspension buvable.	66773446	1	2
+146	AMOXICILLINE 250 mg/5 ml - CLAMOXYL 250 mg/5 ml, poudre pour suspension buvable.	60375058	1	3
+146	AMOXICILLINE 250 mg/5 ml - CLAMOXYL 250 mg/5 ml, poudre pour suspension buvable.	68116292	1	6
+146	AMOXICILLINE 250 mg/5 ml - CLAMOXYL 250 mg/5 ml, poudre pour suspension buvable.	64516894	1	8
+146	AMOXICILLINE 250 mg/5 ml - CLAMOXYL 250 mg/5 ml, poudre pour suspension buvable.	61850771	1	9
+146	AMOXICILLINE 250 mg/5 ml - CLAMOXYL 250 mg/5 ml, poudre pour suspension buvable.	64921693	1	10
+146	AMOXICILLINE 250 mg/5 ml - CLAMOXYL 250 mg/5 ml, poudre pour suspension buvable.	61690110	1	11
+146	AMOXICILLINE 250 mg/5 ml - CLAMOXYL 250 mg/5 ml, poudre pour suspension buvable.	63769738	1	12
+147	AMOXICILLINE 500 mg/5 ml - CLAMOXYL 500 mg/5 ml, poudre pour suspension buvable.	65857681	1	2
+147	AMOXICILLINE 500 mg/5 ml - CLAMOXYL 500 mg/5 ml, poudre pour suspension buvable.	65982400	1	3
+147	AMOXICILLINE 500 mg/5 ml - CLAMOXYL 500 mg/5 ml, poudre pour suspension buvable.	60453197	1	4
+147	AMOXICILLINE 500 mg/5 ml - CLAMOXYL 500 mg/5 ml, poudre pour suspension buvable.	62918531	1	7
+147	AMOXICILLINE 500 mg/5 ml - CLAMOXYL 500 mg/5 ml, poudre pour suspension buvable.	62615559	1	8
+147	AMOXICILLINE 500 mg/5 ml - CLAMOXYL 500 mg/5 ml, poudre pour suspension buvable.	69857586	1	10
+147	AMOXICILLINE 500 mg/5 ml - CLAMOXYL 500 mg/5 ml, poudre pour suspension buvable.	65902977	1	11
+147	AMOXICILLINE 500 mg/5 ml - CLAMOXYL 500 mg/5 ml, poudre pour suspension buvable.	67131754	1	12
+147	AMOXICILLINE 500 mg/5 ml - CLAMOXYL 500 mg/5 ml, poudre pour suspension buvable.	68481782	1	13
+147	AMOXICILLINE 500 mg/5 ml - CLAMOXYL 500 mg/5 ml, poudre pour suspension buvable.	68881399	1	15
+147	AMOXICILLINE 500 mg/5 ml - CLAMOXYL 500 mg/5 ml, poudre pour suspension buvable.	61633586	1	16
+148	AMOXICILLINE 500 mg - CLAMOXYL 500 mg, gélule	68695334	1	5
+148	AMOXICILLINE 500 mg - CLAMOXYL 500 mg, gélule	66082724	1	6
+148	AMOXICILLINE 500 mg - CLAMOXYL 500 mg, gélule	66916798	1	7
+148	AMOXICILLINE 500 mg - CLAMOXYL 500 mg, gélule	67459306	1	9
+148	AMOXICILLINE 500 mg - CLAMOXYL 500 mg, gélule	69118175	1	11
+148	AMOXICILLINE 500 mg - CLAMOXYL 500 mg, gélule	64011803	1	12
+148	AMOXICILLINE 500 mg - CLAMOXYL 500 mg, gélule	64529639	1	14
+148	AMOXICILLINE 500 mg - CLAMOXYL 500 mg, gélule	60055866	1	15
+148	AMOXICILLINE 500 mg - CLAMOXYL 500 mg, gélule	67410088	1	18
+148	AMOXICILLINE 500 mg - CLAMOXYL 500 mg, gélule	66046272	1	19
+148	AMOXICILLINE 500 mg - CLAMOXYL 500 mg, gélule	65171903	1	20
+148	AMOXICILLINE 500 mg - CLAMOXYL 500 mg, gélule	60424338	1	21
+148	AMOXICILLINE 500 mg - CLAMOXYL 500 mg, gélule	63437312	1	22
+148	AMOXICILLINE 500 mg - CLAMOXYL 500 mg, gélule	61096912	1	24
+148	AMOXICILLINE 500 mg - CLAMOXYL 500 mg, gélule	64727464	1	25
+150	AMOXICILLINE 1 g - CLAMOXYL 1 g, comprimé dispersible	60151544	1	3
+150	AMOXICILLINE 1 g - CLAMOXYL 1 g, comprimé dispersible	64882258	1	4
+150	AMOXICILLINE 1 g - CLAMOXYL 1 g, comprimé dispersible	69166540	1	5
+150	AMOXICILLINE 1 g - CLAMOXYL 1 g, comprimé dispersible	66511789	1	6
+150	AMOXICILLINE 1 g - CLAMOXYL 1 g, comprimé dispersible	69489433	1	8
+150	AMOXICILLINE 1 g - CLAMOXYL 1 g, comprimé dispersible	62457618	1	9
+150	AMOXICILLINE 1 g - CLAMOXYL 1 g, comprimé dispersible	68607010	1	10
+150	AMOXICILLINE 1 g - CLAMOXYL 1 g, comprimé dispersible	60101406	1	12
+150	AMOXICILLINE 1 g - CLAMOXYL 1 g, comprimé dispersible	64672103	1	15
+150	AMOXICILLINE 1 g - CLAMOXYL 1 g, comprimé dispersible	68088430	1	16
+150	AMOXICILLINE 1 g - CLAMOXYL 1 g, comprimé dispersible	65253528	1	17
+150	AMOXICILLINE 1 g - CLAMOXYL 1 g, comprimé dispersible	66748343	1	18
+150	AMOXICILLINE 1 g - CLAMOXYL 1 g, comprimé dispersible	67406937	1	19
+150	AMOXICILLINE 1 g - CLAMOXYL 1 g, comprimé dispersible	64470824	1	20
+150	AMOXICILLINE 1 g - CLAMOXYL 1 g, comprimé dispersible	64960301	1	21
+150	AMOXICILLINE 1 g - CLAMOXYL 1 g, comprimé dispersible	66628041	1	23
+150	AMOXICILLINE 1 g - CLAMOXYL 1 g, comprimé dispersible	67587238	1	24
+156	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 100 mg + 12,5 mg par ml NOURRISSONS (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 100 mg/12,50 mg par ml NOURRISSONS, poudre pour suspension buvable (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 100 mg/12,50 mg par ml NOURRISSONS, poudre pour suspension buvable (Rapport amoxicilline/acide clavulanique : 8/1).	69978246	0	1
+156	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 100 mg + 12,5 mg par ml NOURRISSONS (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 100 mg/12,50 mg par ml NOURRISSONS, poudre pour suspension buvable (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 100 mg/12,50 mg par ml NOURRISSONS, poudre pour suspension buvable (Rapport amoxicilline/acide clavulanique : 8/1).	69266996	1	3
+156	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 100 mg + 12,5 mg par ml NOURRISSONS (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 100 mg/12,50 mg par ml NOURRISSONS, poudre pour suspension buvable (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 100 mg/12,50 mg par ml NOURRISSONS, poudre pour suspension buvable (Rapport amoxicilline/acide clavulanique : 8/1).	69033903	1	4
+156	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 100 mg + 12,5 mg par ml NOURRISSONS (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 100 mg/12,50 mg par ml NOURRISSONS, poudre pour suspension buvable (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 100 mg/12,50 mg par ml NOURRISSONS, poudre pour suspension buvable (Rapport amoxicilline/acide clavulanique : 8/1).	67222296	1	5
+156	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 100 mg + 12,5 mg par ml NOURRISSONS (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 100 mg/12,50 mg par ml NOURRISSONS, poudre pour suspension buvable (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 100 mg/12,50 mg par ml NOURRISSONS, poudre pour suspension buvable (Rapport amoxicilline/acide clavulanique : 8/1).	61462480	1	6
+156	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 100 mg + 12,5 mg par ml NOURRISSONS (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 100 mg/12,50 mg par ml NOURRISSONS, poudre pour suspension buvable (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 100 mg/12,50 mg par ml NOURRISSONS, poudre pour suspension buvable (Rapport amoxicilline/acide clavulanique : 8/1).	66335031	1	7
+156	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 100 mg + 12,5 mg par ml NOURRISSONS (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 100 mg/12,50 mg par ml NOURRISSONS, poudre pour suspension buvable (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 100 mg/12,50 mg par ml NOURRISSONS, poudre pour suspension buvable (Rapport amoxicilline/acide clavulanique : 8/1).	67835655	1	8
+156	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 100 mg + 12,5 mg par ml NOURRISSONS (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 100 mg/12,50 mg par ml NOURRISSONS, poudre pour suspension buvable (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 100 mg/12,50 mg par ml NOURRISSONS, poudre pour suspension buvable (Rapport amoxicilline/acide clavulanique : 8/1).	62027883	1	9
+156	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 100 mg + 12,5 mg par ml NOURRISSONS (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 100 mg/12,50 mg par ml NOURRISSONS, poudre pour suspension buvable (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 100 mg/12,50 mg par ml NOURRISSONS, poudre pour suspension buvable (Rapport amoxicilline/acide clavulanique : 8/1).	63435592	1	10
+156	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 100 mg + 12,5 mg par ml NOURRISSONS (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 100 mg/12,50 mg par ml NOURRISSONS, poudre pour suspension buvable (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 100 mg/12,50 mg par ml NOURRISSONS, poudre pour suspension buvable (Rapport amoxicilline/acide clavulanique : 8/1).	64882703	1	11
+156	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 100 mg + 12,5 mg par ml NOURRISSONS (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 100 mg/12,50 mg par ml NOURRISSONS, poudre pour suspension buvable (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 100 mg/12,50 mg par ml NOURRISSONS, poudre pour suspension buvable (Rapport amoxicilline/acide clavulanique : 8/1).	69715252	1	13
+156	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 100 mg + 12,5 mg par ml NOURRISSONS (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 100 mg/12,50 mg par ml NOURRISSONS, poudre pour suspension buvable (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 100 mg/12,50 mg par ml NOURRISSONS, poudre pour suspension buvable (Rapport amoxicilline/acide clavulanique : 8/1).	68144249	1	14
+156	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 100 mg + 12,5 mg par ml NOURRISSONS (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 100 mg/12,50 mg par ml NOURRISSONS, poudre pour suspension buvable (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 100 mg/12,50 mg par ml NOURRISSONS, poudre pour suspension buvable (Rapport amoxicilline/acide clavulanique : 8/1).	68380281	1	16
+157	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 100 mg + 12,5 mg par ml ENFANTS (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 100 mg/12,50 mg par ml ENFANTS, poudre pour suspension buvable en flacon (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 100 mg/12,50 mg par ml ENFANTS, poudre pour suspension buvable en flacon (Rapport amoxicilline/acide clavulanique : 8/1).	66853013	0	1
+157	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 100 mg + 12,5 mg par ml ENFANTS (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 100 mg/12,50 mg par ml ENFANTS, poudre pour suspension buvable en flacon (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 100 mg/12,50 mg par ml ENFANTS, poudre pour suspension buvable en flacon (Rapport amoxicilline/acide clavulanique : 8/1).	64550843	1	3
+157	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 100 mg + 12,5 mg par ml ENFANTS (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 100 mg/12,50 mg par ml ENFANTS, poudre pour suspension buvable en flacon (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 100 mg/12,50 mg par ml ENFANTS, poudre pour suspension buvable en flacon (Rapport amoxicilline/acide clavulanique : 8/1).	69776892	1	4
+157	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 100 mg + 12,5 mg par ml ENFANTS (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 100 mg/12,50 mg par ml ENFANTS, poudre pour suspension buvable en flacon (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 100 mg/12,50 mg par ml ENFANTS, poudre pour suspension buvable en flacon (Rapport amoxicilline/acide clavulanique : 8/1).	61634827	1	5
+157	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 100 mg + 12,5 mg par ml ENFANTS (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 100 mg/12,50 mg par ml ENFANTS, poudre pour suspension buvable en flacon (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 100 mg/12,50 mg par ml ENFANTS, poudre pour suspension buvable en flacon (Rapport amoxicilline/acide clavulanique : 8/1).	60428977	1	6
+157	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 100 mg + 12,5 mg par ml ENFANTS (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 100 mg/12,50 mg par ml ENFANTS, poudre pour suspension buvable en flacon (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 100 mg/12,50 mg par ml ENFANTS, poudre pour suspension buvable en flacon (Rapport amoxicilline/acide clavulanique : 8/1).	61817344	1	7
+157	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 100 mg + 12,5 mg par ml ENFANTS (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 100 mg/12,50 mg par ml ENFANTS, poudre pour suspension buvable en flacon (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 100 mg/12,50 mg par ml ENFANTS, poudre pour suspension buvable en flacon (Rapport amoxicilline/acide clavulanique : 8/1).	68204269	1	8
+157	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 100 mg + 12,5 mg par ml ENFANTS (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 100 mg/12,50 mg par ml ENFANTS, poudre pour suspension buvable en flacon (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 100 mg/12,50 mg par ml ENFANTS, poudre pour suspension buvable en flacon (Rapport amoxicilline/acide clavulanique : 8/1).	66156950	1	9
+157	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 100 mg + 12,5 mg par ml ENFANTS (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 100 mg/12,50 mg par ml ENFANTS, poudre pour suspension buvable en flacon (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 100 mg/12,50 mg par ml ENFANTS, poudre pour suspension buvable en flacon (Rapport amoxicilline/acide clavulanique : 8/1).	62826481	1	10
+157	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 100 mg + 12,5 mg par ml ENFANTS (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 100 mg/12,50 mg par ml ENFANTS, poudre pour suspension buvable en flacon (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 100 mg/12,50 mg par ml ENFANTS, poudre pour suspension buvable en flacon (Rapport amoxicilline/acide clavulanique : 8/1).	69021160	1	13
+157	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 100 mg + 12,5 mg par ml ENFANTS (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 100 mg/12,50 mg par ml ENFANTS, poudre pour suspension buvable en flacon (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 100 mg/12,50 mg par ml ENFANTS, poudre pour suspension buvable en flacon (Rapport amoxicilline/acide clavulanique : 8/1).	62949384	1	14
+157	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 100 mg + 12,5 mg par ml ENFANTS (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 100 mg/12,50 mg par ml ENFANTS, poudre pour suspension buvable en flacon (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 100 mg/12,50 mg par ml ENFANTS, poudre pour suspension buvable en flacon (Rapport amoxicilline/acide clavulanique : 8/1).	60196176	1	15
+157	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 100 mg + 12,5 mg par ml ENFANTS (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 100 mg/12,50 mg par ml ENFANTS, poudre pour suspension buvable en flacon (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 100 mg/12,50 mg par ml ENFANTS, poudre pour suspension buvable en flacon (Rapport amoxicilline/acide clavulanique : 8/1).	63223995	1	17
+157	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 100 mg + 12,5 mg par ml ENFANTS (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 100 mg/12,50 mg par ml ENFANTS, poudre pour suspension buvable en flacon (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 100 mg/12,50 mg par ml ENFANTS, poudre pour suspension buvable en flacon (Rapport amoxicilline/acide clavulanique : 8/1).	63398425	1	18
+158	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 500 mg +  62,5 mg ADULTES (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 500 mg/62,5 mg ADULTES, comprimé pelliculé (rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 500 mg/62,5 mg ADULTES, comprimé pelliculé (rapport amoxicilline/acide clavulanique : 8/1).	63565244	0	1
+158	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 500 mg +  62,5 mg ADULTES (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 500 mg/62,5 mg ADULTES, comprimé pelliculé (rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 500 mg/62,5 mg ADULTES, comprimé pelliculé (rapport amoxicilline/acide clavulanique : 8/1).	60099738	1	3
+158	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 500 mg +  62,5 mg ADULTES (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 500 mg/62,5 mg ADULTES, comprimé pelliculé (rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 500 mg/62,5 mg ADULTES, comprimé pelliculé (rapport amoxicilline/acide clavulanique : 8/1).	69256767	1	4
+158	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 500 mg +  62,5 mg ADULTES (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 500 mg/62,5 mg ADULTES, comprimé pelliculé (rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 500 mg/62,5 mg ADULTES, comprimé pelliculé (rapport amoxicilline/acide clavulanique : 8/1).	66921126	1	5
+158	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 500 mg +  62,5 mg ADULTES (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 500 mg/62,5 mg ADULTES, comprimé pelliculé (rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 500 mg/62,5 mg ADULTES, comprimé pelliculé (rapport amoxicilline/acide clavulanique : 8/1).	60403714	1	6
+158	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 500 mg +  62,5 mg ADULTES (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 500 mg/62,5 mg ADULTES, comprimé pelliculé (rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 500 mg/62,5 mg ADULTES, comprimé pelliculé (rapport amoxicilline/acide clavulanique : 8/1).	61777273	1	7
+158	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 500 mg +  62,5 mg ADULTES (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 500 mg/62,5 mg ADULTES, comprimé pelliculé (rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 500 mg/62,5 mg ADULTES, comprimé pelliculé (rapport amoxicilline/acide clavulanique : 8/1).	62705095	1	8
+158	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 500 mg +  62,5 mg ADULTES (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 500 mg/62,5 mg ADULTES, comprimé pelliculé (rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 500 mg/62,5 mg ADULTES, comprimé pelliculé (rapport amoxicilline/acide clavulanique : 8/1).	63750773	1	10
+158	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 500 mg +  62,5 mg ADULTES (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 500 mg/62,5 mg ADULTES, comprimé pelliculé (rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 500 mg/62,5 mg ADULTES, comprimé pelliculé (rapport amoxicilline/acide clavulanique : 8/1).	64460520	1	11
+158	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 500 mg +  62,5 mg ADULTES (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 500 mg/62,5 mg ADULTES, comprimé pelliculé (rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 500 mg/62,5 mg ADULTES, comprimé pelliculé (rapport amoxicilline/acide clavulanique : 8/1).	61043151	1	12
+158	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 500 mg +  62,5 mg ADULTES (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 500 mg/62,5 mg ADULTES, comprimé pelliculé (rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 500 mg/62,5 mg ADULTES, comprimé pelliculé (rapport amoxicilline/acide clavulanique : 8/1).	65541548	1	13
+158	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 500 mg +  62,5 mg ADULTES (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 500 mg/62,5 mg ADULTES, comprimé pelliculé (rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 500 mg/62,5 mg ADULTES, comprimé pelliculé (rapport amoxicilline/acide clavulanique : 8/1).	60516765	1	15
+158	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 500 mg +  62,5 mg ADULTES (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 500 mg/62,5 mg ADULTES, comprimé pelliculé (rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 500 mg/62,5 mg ADULTES, comprimé pelliculé (rapport amoxicilline/acide clavulanique : 8/1).	60928772	1	16
+159	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 1 g + 125 mg ADULTES (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 1 g/125 mg ADULTES, poudre pour suspension buvable en sachet-dose (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 1 g/125 mg ADULTE, poudre pour suspension buvable en sachet-dose (Rapport amoxicilline/acide clavulanique : 8/1).	66053338	0	1
+159	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 1 g + 125 mg ADULTES (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 1 g/125 mg ADULTES, poudre pour suspension buvable en sachet-dose (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 1 g/125 mg ADULTE, poudre pour suspension buvable en sachet-dose (Rapport amoxicilline/acide clavulanique : 8/1).	60685523	1	3
+159	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 1 g + 125 mg ADULTES (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 1 g/125 mg ADULTES, poudre pour suspension buvable en sachet-dose (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 1 g/125 mg ADULTE, poudre pour suspension buvable en sachet-dose (Rapport amoxicilline/acide clavulanique : 8/1).	64636573	1	4
+159	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 1 g + 125 mg ADULTES (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 1 g/125 mg ADULTES, poudre pour suspension buvable en sachet-dose (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 1 g/125 mg ADULTE, poudre pour suspension buvable en sachet-dose (Rapport amoxicilline/acide clavulanique : 8/1).	66426958	1	5
+159	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 1 g + 125 mg ADULTES (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 1 g/125 mg ADULTES, poudre pour suspension buvable en sachet-dose (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 1 g/125 mg ADULTE, poudre pour suspension buvable en sachet-dose (Rapport amoxicilline/acide clavulanique : 8/1).	64176281	1	6
+159	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 1 g + 125 mg ADULTES (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 1 g/125 mg ADULTES, poudre pour suspension buvable en sachet-dose (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 1 g/125 mg ADULTE, poudre pour suspension buvable en sachet-dose (Rapport amoxicilline/acide clavulanique : 8/1).	65247087	1	7
+159	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 1 g + 125 mg ADULTES (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 1 g/125 mg ADULTES, poudre pour suspension buvable en sachet-dose (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 1 g/125 mg ADULTE, poudre pour suspension buvable en sachet-dose (Rapport amoxicilline/acide clavulanique : 8/1).	62820980	1	8
+159	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 1 g + 125 mg ADULTES (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 1 g/125 mg ADULTES, poudre pour suspension buvable en sachet-dose (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 1 g/125 mg ADULTE, poudre pour suspension buvable en sachet-dose (Rapport amoxicilline/acide clavulanique : 8/1).	64725100	1	9
+159	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 1 g + 125 mg ADULTES (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 1 g/125 mg ADULTES, poudre pour suspension buvable en sachet-dose (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 1 g/125 mg ADULTE, poudre pour suspension buvable en sachet-dose (Rapport amoxicilline/acide clavulanique : 8/1).	65786907	1	11
+159	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 1 g + 125 mg ADULTES (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 1 g/125 mg ADULTES, poudre pour suspension buvable en sachet-dose (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 1 g/125 mg ADULTE, poudre pour suspension buvable en sachet-dose (Rapport amoxicilline/acide clavulanique : 8/1).	63524692	1	12
+159	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 1 g + 125 mg ADULTES (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 1 g/125 mg ADULTES, poudre pour suspension buvable en sachet-dose (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 1 g/125 mg ADULTE, poudre pour suspension buvable en sachet-dose (Rapport amoxicilline/acide clavulanique : 8/1).	61246828	1	13
+159	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 1 g + 125 mg ADULTES (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 1 g/125 mg ADULTES, poudre pour suspension buvable en sachet-dose (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 1 g/125 mg ADULTE, poudre pour suspension buvable en sachet-dose (Rapport amoxicilline/acide clavulanique : 8/1).	60998361	1	14
+159	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 1 g + 125 mg ADULTES (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 1 g/125 mg ADULTES, poudre pour suspension buvable en sachet-dose (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 1 g/125 mg ADULTE, poudre pour suspension buvable en sachet-dose (Rapport amoxicilline/acide clavulanique : 8/1).	60556852	1	16
+159	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE + ACIDE CLAVULANIQUE 1 g + 125 mg ADULTES (Rapport amoxicilline/acide clavulanique : 8/1) - AUGMENTIN 1 g/125 mg ADULTES, poudre pour suspension buvable en sachet-dose (Rapport amoxicilline/acide clavulanique : 8/1) - CIBLOR 1 g/125 mg ADULTE, poudre pour suspension buvable en sachet-dose (Rapport amoxicilline/acide clavulanique : 8/1).	61198803	1	17
+188	CIPROFLOXACINE (CHLORHYDRATE DE) équivalant à CIPROFLOXACINE 250 mg - CIFLOX 250 mg, comprimé pelliculé sécable.	69093245	1	4
+189	CIPROFLOXACINE (CHLORHYDRATE DE) équivalant à CIPROFLOXACINE 500 mg - CIFLOX 500 mg, comprimé pelliculé sécable.	67706265	1	7
+324	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE  + ACIDE CLAVULANIQUE 1 g + 200 mg - LEVMENTIN 1 g/200 mg, poudre pour solution injectable/pour perfusion (IV).	69493182	1	3
+324	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE  + ACIDE CLAVULANIQUE 1 g + 200 mg - LEVMENTIN 1 g/200 mg, poudre pour solution injectable/pour perfusion (IV).	64160423	1	4
+324	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE  + ACIDE CLAVULANIQUE 1 g + 200 mg - LEVMENTIN 1 g/200 mg, poudre pour solution injectable/pour perfusion (IV).	62096413	1	5
+349	SIMVASTATINE 10 mg - ZOCOR 10 mg, comprimé enrobé - LODALES 10 mg, comprimé enrobé.	69389536	1	3
+349	SIMVASTATINE 10 mg - ZOCOR 10 mg, comprimé enrobé - LODALES 10 mg, comprimé enrobé.	69795857	1	4
+349	SIMVASTATINE 10 mg - ZOCOR 10 mg, comprimé enrobé - LODALES 10 mg, comprimé enrobé.	67364616	1	5
+349	SIMVASTATINE 10 mg - ZOCOR 10 mg, comprimé enrobé - LODALES 10 mg, comprimé enrobé.	69095463	1	7
+349	SIMVASTATINE 10 mg - ZOCOR 10 mg, comprimé enrobé - LODALES 10 mg, comprimé enrobé.	65475176	1	8
+349	SIMVASTATINE 10 mg - ZOCOR 10 mg, comprimé enrobé - LODALES 10 mg, comprimé enrobé.	60071190	1	10
+349	SIMVASTATINE 10 mg - ZOCOR 10 mg, comprimé enrobé - LODALES 10 mg, comprimé enrobé.	67709496	1	11
+349	SIMVASTATINE 10 mg - ZOCOR 10 mg, comprimé enrobé - LODALES 10 mg, comprimé enrobé.	62667004	1	12
+349	SIMVASTATINE 10 mg - ZOCOR 10 mg, comprimé enrobé - LODALES 10 mg, comprimé enrobé.	68748502	1	13
+349	SIMVASTATINE 10 mg - ZOCOR 10 mg, comprimé enrobé - LODALES 10 mg, comprimé enrobé.	61510021	1	14
+384	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE  + ACIDE CLAVULANIQUE 2 g + 200 mg ADULTES - LEVMENTIN 2 g/200 mg ADULTES, poudre pour solution pour perfusion	64473140	1	3
+384	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE  + ACIDE CLAVULANIQUE 2 g + 200 mg ADULTES - LEVMENTIN 2 g/200 mg ADULTES, poudre pour solution pour perfusion	68592117	1	4
+384	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE  + ACIDE CLAVULANIQUE 2 g + 200 mg ADULTES - LEVMENTIN 2 g/200 mg ADULTES, poudre pour solution pour perfusion	63327759	1	5
+407	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE  + ACIDE CLAVULANIQUE 500 mg + 50 mg  - AUGMENTIN 500 mg/50 mg, poudre pour solution injectable/pour perfusion (I.V.).	61119706	1	3
+407	AMOXICILLINE + CLAVULANATE DE POTASSIUM équivalant à AMOXICILLINE  + ACIDE CLAVULANIQUE 500 mg + 50 mg  - AUGMENTIN 500 mg/50 mg, poudre pour solution injectable/pour perfusion (I.V.).	65324007	1	4
+457	ALENDRONATE MONOSODIQUE TRIHYDRATE 70 mg - FOSAMAX 70 mg, comprimé.	60365142	1	2
+457	ALENDRONATE MONOSODIQUE TRIHYDRATE 70 mg - FOSAMAX 70 mg, comprimé.	63281774	1	3
+457	ALENDRONATE MONOSODIQUE TRIHYDRATE 70 mg - FOSAMAX 70 mg, comprimé.	67464926	1	4
+457	ALENDRONATE MONOSODIQUE TRIHYDRATE 70 mg - FOSAMAX 70 mg, comprimé.	68229767	1	5
+457	ALENDRONATE MONOSODIQUE TRIHYDRATE 70 mg - FOSAMAX 70 mg, comprimé.	68659822	1	6
+457	ALENDRONATE MONOSODIQUE TRIHYDRATE 70 mg - FOSAMAX 70 mg, comprimé.	63174719	1	7
+457	ALENDRONATE MONOSODIQUE TRIHYDRATE 70 mg - FOSAMAX 70 mg, comprimé.	63525488	1	8
+602	FUROSEMIDE 20 mg/2 ml - LASILIX 20 mg/2 ml, solution injectable en ampoule.	66441419	0	1
+787	LEVOTHYROXINE SODIQUE 100 microgrammes - LEVOTHYROX 100 microgrammes, comprimé sécable.	68416845	0	1
+788	LEVOTHYROXINE SODIQUE 125 microgrammes - LEVOTHYROX 125 microgrammes, comprimé sécable.	65379402	0	1
+789	LEVOTHYROXINE SODIQUE 150 microgrammes - LEVOTHYROX 150 microgrammes, comprimé sécable.	64067524	0	1
+790	LEVOTHYROXINE SODIQUE 175 microgrammes - LEVOTHYROX 175 microgrammes, comprimé sécable.	68283252	0	1
+791	LEVOTHYROXINE SODIQUE 200 microgrammes - LEVOTHYROX 200 microgrammes, comprimé sécable.	65315798	0	1
+792	LEVOTHYROXINE SODIQUE 25 microgrammes - LEVOTHYROX 25 microgrammes, comprimé sécable.	68588503	0	1
+793	LEVOTHYROXINE SODIQUE 50 microgrammes - LEVOTHYROX 50 microgrammes, comprimé sécable.	65143010	0	1
+794	LEVOTHYROXINE SODIQUE 75 microgrammes - LEVOTHYROX 75 microgrammes, comprimé sécable.	62080626	0	1
+913	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 10 mg ATORVASTATINE - TAHOR 10 mg, comprimé pelliculé - TAHOR 10 mg, comprimé à croquer	60519117	1	4
+913	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 10 mg ATORVASTATINE - TAHOR 10 mg, comprimé pelliculé - TAHOR 10 mg, comprimé à croquer	64408331	1	5
+913	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 10 mg ATORVASTATINE - TAHOR 10 mg, comprimé pelliculé - TAHOR 10 mg, comprimé à croquer	69522513	1	7
+913	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 10 mg ATORVASTATINE - TAHOR 10 mg, comprimé pelliculé - TAHOR 10 mg, comprimé à croquer	66933705	1	8
+913	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 10 mg ATORVASTATINE - TAHOR 10 mg, comprimé pelliculé - TAHOR 10 mg, comprimé à croquer	63926641	1	9
+913	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 10 mg ATORVASTATINE - TAHOR 10 mg, comprimé pelliculé - TAHOR 10 mg, comprimé à croquer	63661449	1	10
+913	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 10 mg ATORVASTATINE - TAHOR 10 mg, comprimé pelliculé - TAHOR 10 mg, comprimé à croquer	67059408	1	11
+913	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 10 mg ATORVASTATINE - TAHOR 10 mg, comprimé pelliculé - TAHOR 10 mg, comprimé à croquer	68556498	1	12
+913	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 10 mg ATORVASTATINE - TAHOR 10 mg, comprimé pelliculé - TAHOR 10 mg, comprimé à croquer	66012462	1	13
+913	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 10 mg ATORVASTATINE - TAHOR 10 mg, comprimé pelliculé - TAHOR 10 mg, comprimé à croquer	66279287	1	14
+913	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 10 mg ATORVASTATINE - TAHOR 10 mg, comprimé pelliculé - TAHOR 10 mg, comprimé à croquer	63644599	1	15
+913	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 10 mg ATORVASTATINE - TAHOR 10 mg, comprimé pelliculé - TAHOR 10 mg, comprimé à croquer	60318089	1	16
+913	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 10 mg ATORVASTATINE - TAHOR 10 mg, comprimé pelliculé - TAHOR 10 mg, comprimé à croquer	62866294	1	17
+913	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 10 mg ATORVASTATINE - TAHOR 10 mg, comprimé pelliculé - TAHOR 10 mg, comprimé à croquer	65584300	1	18
+913	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 10 mg ATORVASTATINE - TAHOR 10 mg, comprimé pelliculé - TAHOR 10 mg, comprimé à croquer	69110520	1	19
+914	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 20 mg ATORVASTATINE  - TAHOR 20 mg, comprimé pelliculé.	64308092	1	4
+914	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 20 mg ATORVASTATINE  - TAHOR 20 mg, comprimé pelliculé.	69068936	1	5
+914	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 20 mg ATORVASTATINE  - TAHOR 20 mg, comprimé pelliculé.	68212077	1	7
+914	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 20 mg ATORVASTATINE  - TAHOR 20 mg, comprimé pelliculé.	68666845	1	8
+914	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 20 mg ATORVASTATINE  - TAHOR 20 mg, comprimé pelliculé.	61805662	1	9
+914	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 20 mg ATORVASTATINE  - TAHOR 20 mg, comprimé pelliculé.	61391955	1	10
+914	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 20 mg ATORVASTATINE  - TAHOR 20 mg, comprimé pelliculé.	64176801	1	11
+914	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 20 mg ATORVASTATINE  - TAHOR 20 mg, comprimé pelliculé.	67762488	1	13
+914	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 20 mg ATORVASTATINE  - TAHOR 20 mg, comprimé pelliculé.	60874050	1	14
+914	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 20 mg ATORVASTATINE  - TAHOR 20 mg, comprimé pelliculé.	66331392	1	15
+914	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 20 mg ATORVASTATINE  - TAHOR 20 mg, comprimé pelliculé.	67008260	1	16
+914	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 20 mg ATORVASTATINE  - TAHOR 20 mg, comprimé pelliculé.	61310519	1	17
+914	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 20 mg ATORVASTATINE  - TAHOR 20 mg, comprimé pelliculé.	61482159	1	18
+914	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 20 mg ATORVASTATINE  - TAHOR 20 mg, comprimé pelliculé.	64572537	1	19
+914	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 20 mg ATORVASTATINE  - TAHOR 20 mg, comprimé pelliculé.	62864852	1	20
+915	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 40 mg ATORVASTATINE  - TAHOR 40 mg, comprimé pelliculé.	69942983	1	4
+915	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 40 mg ATORVASTATINE  - TAHOR 40 mg, comprimé pelliculé.	67607954	1	5
+915	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 40 mg ATORVASTATINE  - TAHOR 40 mg, comprimé pelliculé.	65030856	1	7
+915	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 40 mg ATORVASTATINE  - TAHOR 40 mg, comprimé pelliculé.	68228761	1	8
+915	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 40 mg ATORVASTATINE  - TAHOR 40 mg, comprimé pelliculé.	65221637	1	9
+915	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 40 mg ATORVASTATINE  - TAHOR 40 mg, comprimé pelliculé.	65742330	1	10
+915	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 40 mg ATORVASTATINE  - TAHOR 40 mg, comprimé pelliculé.	65149821	1	11
+915	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 40 mg ATORVASTATINE  - TAHOR 40 mg, comprimé pelliculé.	68232578	1	12
+915	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 40 mg ATORVASTATINE  - TAHOR 40 mg, comprimé pelliculé.	66938976	1	13
+915	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 40 mg ATORVASTATINE  - TAHOR 40 mg, comprimé pelliculé.	60007437	1	14
+915	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 40 mg ATORVASTATINE  - TAHOR 40 mg, comprimé pelliculé.	65907376	1	15
+915	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 40 mg ATORVASTATINE  - TAHOR 40 mg, comprimé pelliculé.	60153207	1	16
+915	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 40 mg ATORVASTATINE  - TAHOR 40 mg, comprimé pelliculé.	62977177	1	17
+915	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 40 mg ATORVASTATINE  - TAHOR 40 mg, comprimé pelliculé.	68603720	1	18
+915	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 40 mg ATORVASTATINE  - TAHOR 40 mg, comprimé pelliculé.	68722475	1	19
+917	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 80 mg ATORVASTATINE  - TAHOR 80 mg, comprimé pelliculé.	68118158	1	2
+917	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 80 mg ATORVASTATINE  - TAHOR 80 mg, comprimé pelliculé.	61676897	1	3
+917	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 80 mg ATORVASTATINE  - TAHOR 80 mg, comprimé pelliculé.	61727174	1	4
+917	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 80 mg ATORVASTATINE  - TAHOR 80 mg, comprimé pelliculé.	67737951	1	6
+917	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 80 mg ATORVASTATINE  - TAHOR 80 mg, comprimé pelliculé.	63591367	1	7
+917	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 80 mg ATORVASTATINE  - TAHOR 80 mg, comprimé pelliculé.	65450664	1	8
+917	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 80 mg ATORVASTATINE  - TAHOR 80 mg, comprimé pelliculé.	65168323	1	9
+917	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 80 mg ATORVASTATINE  - TAHOR 80 mg, comprimé pelliculé.	63366057	1	11
+917	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 80 mg ATORVASTATINE  - TAHOR 80 mg, comprimé pelliculé.	62730426	1	12
+917	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 80 mg ATORVASTATINE  - TAHOR 80 mg, comprimé pelliculé.	69780531	1	13
+917	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 80 mg ATORVASTATINE  - TAHOR 80 mg, comprimé pelliculé.	61098183	1	14
+917	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 80 mg ATORVASTATINE  - TAHOR 80 mg, comprimé pelliculé.	60538007	1	15
+917	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 80 mg ATORVASTATINE  - TAHOR 80 mg, comprimé pelliculé.	68689484	1	16
+917	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 80 mg ATORVASTATINE  - TAHOR 80 mg, comprimé pelliculé.	60113814	1	17
+917	ATORVASTATINE CALCIQUE TRIHYDRATEE équivalant à 80 mg ATORVASTATINE  - TAHOR 80 mg, comprimé pelliculé.	62738704	1	18
+1014	FUROSEMIDE 250 mg/25 ml - LASILIX SPECIAL 250 mg/25 ml, solution injectable en ampoule.	67537203	0	1
+1021	FUROSEMIDE 500 mg - LASILIX SPECIAL 500 mg, comprimé sécable.	61547571	0	1
+1030	PHLOROGLUCINOL DIHYDRATE   40 mg/4 ml + TRIMETHYLPHLOROGLUCINOL 0,04 mg/4 ml - SPASFON, solution injectable en ampoule.	62998997	0	1
+1409	ALENDRONATE MONOSODIQUE TRIHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 2800 UI - ALENDRONATE DE SODIUM MONOHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 2800 UI - FOSAVANCE 70 mg/2800 UI, comprimé - ADROVANCE 70 mg/2800 UI, comprimé -	65561390	1	2
+1409	ALENDRONATE MONOSODIQUE TRIHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 2800 UI - ALENDRONATE DE SODIUM MONOHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 2800 UI - FOSAVANCE 70 mg/2800 UI, comprimé - ADROVANCE 70 mg/2800 UI, comprimé -	64272874	1	3
+1409	ALENDRONATE MONOSODIQUE TRIHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 2800 UI - ALENDRONATE DE SODIUM MONOHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 2800 UI - FOSAVANCE 70 mg/2800 UI, comprimé - ADROVANCE 70 mg/2800 UI, comprimé -	65035846	1	4
+1409	ALENDRONATE MONOSODIQUE TRIHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 2800 UI - ALENDRONATE DE SODIUM MONOHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 2800 UI - FOSAVANCE 70 mg/2800 UI, comprimé - ADROVANCE 70 mg/2800 UI, comprimé -	60934017	1	5
+1409	ALENDRONATE MONOSODIQUE TRIHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 2800 UI - ALENDRONATE DE SODIUM MONOHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 2800 UI - FOSAVANCE 70 mg/2800 UI, comprimé - ADROVANCE 70 mg/2800 UI, comprimé -	62300481	1	6
+1409	ALENDRONATE MONOSODIQUE TRIHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 2800 UI - ALENDRONATE DE SODIUM MONOHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 2800 UI - FOSAVANCE 70 mg/2800 UI, comprimé - ADROVANCE 70 mg/2800 UI, comprimé -	63278319	1	7
+1409	ALENDRONATE MONOSODIQUE TRIHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 2800 UI - ALENDRONATE DE SODIUM MONOHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 2800 UI - FOSAVANCE 70 mg/2800 UI, comprimé - ADROVANCE 70 mg/2800 UI, comprimé -	66407826	1	9
+1409	ALENDRONATE MONOSODIQUE TRIHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 2800 UI - ALENDRONATE DE SODIUM MONOHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 2800 UI - FOSAVANCE 70 mg/2800 UI, comprimé - ADROVANCE 70 mg/2800 UI, comprimé -	60648756	1	10
+1409	ALENDRONATE MONOSODIQUE TRIHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 2800 UI - ALENDRONATE DE SODIUM MONOHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 2800 UI - FOSAVANCE 70 mg/2800 UI, comprimé - ADROVANCE 70 mg/2800 UI, comprimé -	65383557	1	11
+1410	ALENDRONATE MONOSODIQUE TRIHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 5600 UI - ALENDRONATE DE SODIUM MONOHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 5600 UI - FOSAVANCE 70 mg/5600 UI, comprimé -  ADROVANCE 70 mg/5600 UI, comprimé	66677946	1	2
+1410	ALENDRONATE MONOSODIQUE TRIHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 5600 UI - ALENDRONATE DE SODIUM MONOHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 5600 UI - FOSAVANCE 70 mg/5600 UI, comprimé -  ADROVANCE 70 mg/5600 UI, comprimé	63001941	1	3
+1410	ALENDRONATE MONOSODIQUE TRIHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 5600 UI - ALENDRONATE DE SODIUM MONOHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 5600 UI - FOSAVANCE 70 mg/5600 UI, comprimé -  ADROVANCE 70 mg/5600 UI, comprimé	69242155	1	4
+1410	ALENDRONATE MONOSODIQUE TRIHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 5600 UI - ALENDRONATE DE SODIUM MONOHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 5600 UI - FOSAVANCE 70 mg/5600 UI, comprimé -  ADROVANCE 70 mg/5600 UI, comprimé	66407096	1	5
+1410	ALENDRONATE MONOSODIQUE TRIHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 5600 UI - ALENDRONATE DE SODIUM MONOHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 5600 UI - FOSAVANCE 70 mg/5600 UI, comprimé -  ADROVANCE 70 mg/5600 UI, comprimé	62999597	1	6
+1410	ALENDRONATE MONOSODIQUE TRIHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 5600 UI - ALENDRONATE DE SODIUM MONOHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 5600 UI - FOSAVANCE 70 mg/5600 UI, comprimé -  ADROVANCE 70 mg/5600 UI, comprimé	64079238	1	7
+1410	ALENDRONATE MONOSODIQUE TRIHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 5600 UI - ALENDRONATE DE SODIUM MONOHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 5600 UI - FOSAVANCE 70 mg/5600 UI, comprimé -  ADROVANCE 70 mg/5600 UI, comprimé	68265101	1	9
+1410	ALENDRONATE MONOSODIQUE TRIHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 5600 UI - ALENDRONATE DE SODIUM MONOHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 5600 UI - FOSAVANCE 70 mg/5600 UI, comprimé -  ADROVANCE 70 mg/5600 UI, comprimé	65079554	1	10
+1410	ALENDRONATE MONOSODIQUE TRIHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 5600 UI - ALENDRONATE DE SODIUM MONOHYDRATE équivalant à ACIDE ALENDRONIQUE 70 mg + CHOLECALCIFEROL 5600 UI - FOSAVANCE 70 mg/5600 UI, comprimé -  ADROVANCE 70 mg/5600 UI, comprimé	60796566	1	11
+1608	PHLOROGLUCINOL (DIHYDRATE) 160 mg - SPASFON LYOC 160 mg, lyophilisat oral	64970338	0	1

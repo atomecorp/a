@@ -22,7 +22,8 @@ const awaitOperation = async (operation) => {
 
 export const createVoiceAssistantSessionController = ({
     voiceApi,
-    openingGreeting,
+    // Her ready sentence, said by the assistant's one announcer (assistant_voice_announcer.js) in her one voice.
+    announceReady,
     touchResponse,
     locale = 'fr-FR',
     actorId = 'eve_voice_assistant',
@@ -38,7 +39,7 @@ export const createVoiceAssistantSessionController = ({
     ].forEach((method) => {
         if (typeof voiceApi[method] !== 'function') throw new Error(`voice_assistant_api_method_required:${method}`);
     });
-    if (!String(openingGreeting || '').trim()) throw new Error('voice_assistant_opening_greeting_required');
+    if (typeof announceReady !== 'function') throw new Error('voice_assistant_ready_announcer_required');
     if (!String(touchResponse || '').trim()) throw new Error('voice_assistant_touch_response_required');
     const listeners = new Set();
     const voiceConfig = resolveHomeVoiceConfig(env);
@@ -269,10 +270,9 @@ export const createVoiceAssistantSessionController = ({
         return true;
     };
 
-    const speak = async (text) => {
+    // One of her sentences: nothing is heard while it is said, nor during the room's echo after it.
+    const sayOwn = async (say) => {
         setPhase('speaking');
-        lastAssistantReply = toText(text);
-        lastAssistantSpokenAt = Date.now();
         listeningAllowedAt = Number.POSITIVE_INFINITY;
         writeVoiceDiagnostic(env, 'voice.duplex.guard', {
             session_id: state.sessionId,
@@ -280,16 +280,18 @@ export const createVoiceAssistantSessionController = ({
             delay_ms: null,
             reason: 'prevent_playback_echo'
         });
-        const startedSpeech = await voiceApi.speak(lastAssistantReply, {
-            session_id: state.sessionId,
-            lang: locale,
-            engine: 'local_onnx'
-        });
-        const speechPromise = Promise.resolve(startedSpeech?.promise || startedSpeech);
-        await speechPromise;
+        await say();
         lastAssistantSpokenAt = Date.now();
         listeningAllowedAt = lastAssistantSpokenAt + voiceConfig.acousticDrainMs;
         return '';
+    };
+    const speak = (text) => {
+        lastAssistantReply = toText(text);
+        lastAssistantSpokenAt = Date.now();
+        return sayOwn(async () => {
+            const startedSpeech = await voiceApi.speak(lastAssistantReply, { session_id: state.sessionId, lang: locale, engine: 'local_onnx' });
+            await Promise.resolve(startedSpeech?.promise || startedSpeech);
+        });
     };
 
     const startListenLoop = (generation) => {
@@ -308,7 +310,8 @@ export const createVoiceAssistantSessionController = ({
             setPhase('opening');
             try {
                 if (!await createSession(generation) || !state.active) return cloneState(state);
-                await speak(openingGreeting);
+                // Ready: she says so in her own sentence, the same as the cloud session's.
+                await sayOwn(announceReady);
                 if (!state.active || state.generation !== generation) return cloneState(state);
                 startListenLoop(generation);
                 return cloneState(state);
@@ -396,8 +399,7 @@ export const bindVoiceAssistantSession = async ({
             onUsage: (usage, model, serviceTier) => conversation.recordUsage(usage, model, 'openai', serviceTier), locale, suspendWhenHidden: !keepWhenHidden,
             announceReady, announceTouch, input, opening
         })
-        : createVoiceAssistantSessionController({ voiceApi,
-            openingGreeting: translate('eve.voice.assistant.opening_greeting'),
+        : createVoiceAssistantSessionController({ voiceApi, announceReady,
             touchResponse: translate('eve.voice.assistant.touch_response'), locale: 'fr-FR'
         });
     const unsubscribeSession = controller.subscribe(onSession);

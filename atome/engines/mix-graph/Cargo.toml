@@ -1,7 +1,9 @@
 [package]
 name = "atome-mix-graph"
 version = "0.1.0"
-edition = "2021"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
 description = "eVe mixer signal graph hosted inside the Kira mixer (strips, modules, sends, buses, tails, latency)"
 
 [lib]
@@ -10,8 +12,17 @@ path = "src/lib.rs"
 [dependencies]
 atome-dsp = { path = "../atome-dsp" }
 atome-instrument = { path = "../atome-instrument" }
-kira = { version = "0.12", default-features = false }
-serde = { version = "1", features = ["derive"] }
+kira.workspace = true
+serde.workspace = true
+symphonia = { workspace = true, optional = true, features = ["aac", "isomp4"] }
+
+[features]
+# The clip decoder of the engines that load files (native and Web playback);
+# the direct path's worklet decodes nothing.
+decode = ["dep:symphonia"]
 
 [dev-dependencies]
-serde_json = "1"
+serde_json.workspace = true
+
+[lints]
+workspace = true

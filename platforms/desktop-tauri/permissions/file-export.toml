@@ -2,12 +2,18 @@
 
 [[set]]
 identifier = "file-export"
-description = "Allows the main webview to save an exported file into the Downloads folder."
+description = "Allows the main webview to save an exported file into the Downloads folder, and to print a page."
 permissions = [
   "allow-export-file-save",
+  "allow-export-file-print",
 ]
 
 [[permission]]
 identifier = "allow-export-file-save"
 description = "Enables the export_file_save command."
 commands.allow = ["export_file_save"]
+
+[[permission]]
+identifier = "allow-export-file-print"
+description = "Enables the export_file_print command."
+commands.allow = ["export_file_print"]

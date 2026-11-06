@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { buildTimeBudgetPreview, activityOccurrenceIds, validateTimeBudget, displayBudget, initialProgram } from '../../eVe/domains/programs/project_program_model.js';
 import { createProjectProgramRuntime } from '../../eVe/domains/programs/project_program_runtime.js';
@@ -8,6 +8,15 @@ import { objectiveEngagementAtoms } from '../../eVe/domains/templates/system_tem
 import { authorizeProjectTool, restoreProjectWorkModeValue } from '../../eVe/domains/rendering/project_work_mode_state.js';
 import { parseExplicitNumericInputValue } from '../../atome/src/squirrel/components/numeric_input_contract.js';
 import { eveT, setEveLocale } from '../../eVe/i18n/i18n.js';
+import { readFileSync } from 'node:fs';
+import { loadCalendarEngine as loadEngine } from '../../atome/src/squirrel/calendar/icalendar.js';
+
+// The calendar's occurrences are the Rust engine's (squirrel_audio_wasm): loaded once from its files,
+// as the page loads it from /wasm/.
+beforeAll(() => loadEngine({
+    moduleUrl: new URL('../../atome/src/wasm/squirrel_audio_wasm.js', import.meta.url).href,
+    binary: readFileSync(new URL('../../atome/src/wasm/squirrel_audio_wasm_bg.wasm', import.meta.url))
+}));
 
 // A committed time budget is followed by its objective's owner (its calendar session and alarm).
 const progression = vi.hoisted(() => ({ execute: vi.fn(async () => ({ ok: true, ignored: 'not_an_objective' })) }));

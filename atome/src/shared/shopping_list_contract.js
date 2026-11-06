@@ -38,6 +38,8 @@ export const SHOPPING_PRODUCT_SCHEMA = Object.freeze({ type: 'object', additiona
     // The Open Food Facts allergens taxonomy tags it names, and those it may hold as traces (the rule `allergen_declared`).
     allergens: { type: 'array', maxItems: 32, items: { type: 'string', minLength: 1, maxLength: 80 } },
     traces: { type: 'array', maxItems: 32, items: { type: 'string', minLength: 1, maxLength: 80 } },
+    // Its Open Food Facts categories (en:pastas…): what it is whatever its pack's language (the food advice, R-115 D28).
+    categories_tags: { type: 'array', maxItems: 32, items: { type: 'string', minLength: 1, maxLength: 120 } },
     // The nutrients above their high level (food_health_assessment.js#highFoodNutrients), reasons of a « limit ».
     nutrients_high: { type: 'array', maxItems: 4, items: { type: 'string', enum: ['fat', 'saturated_fat', 'sugars', 'salt'] } },
     verdict: { type: 'string', enum: SHOPPING_VERDICTS }, fetched_at: { type: 'string' }

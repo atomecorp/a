@@ -2,7 +2,7 @@
 // (soft clip, tanh) or cuts it flat at full scale (hard clip), then mixed
 // with the dry signal.
 
-use crate::{db_to_amplitude, ParamSpec, Processor, Smoothed, StereoBlock, Unit};
+use crate::{ParamSpec, Processor, Smoothed, StereoBlock, Unit, db_to_amplitude};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Clip {
@@ -25,7 +25,11 @@ pub struct Drive {
 
 impl Drive {
     pub fn new(clip: Clip) -> Self {
-        Self { clip, drive: Smoothed::new(db_to_amplitude(PARAMS[0].default), 10.0), mix: Smoothed::new(PARAMS[1].default, 10.0) }
+        Self {
+            clip,
+            drive: Smoothed::new(db_to_amplitude(PARAMS[0].default), 10.0),
+            mix: Smoothed::new(PARAMS[1].default, 10.0),
+        }
     }
 
     #[inline]
@@ -52,7 +56,9 @@ impl Processor for Drive {
     }
 
     fn set_param(&mut self, id: u32, value: f32) {
-        let Some(spec) = PARAMS.get(id as usize) else { return };
+        let Some(spec) = PARAMS.get(id as usize) else {
+            return;
+        };
         match id {
             DRIVE_DB => self.drive.set(db_to_amplitude(spec.clamp(value))),
             MIX => self.mix.set(spec.clamp(value)),

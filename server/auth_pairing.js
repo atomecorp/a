@@ -145,7 +145,9 @@ export function createPairing({ query, transaction, proof, sessions, devices, ha
     }
     // Requests still waiting for this account: a device that was asleep when the
     // notice went out (live sockets only) finds them when it comes back.
+    // Only to a device that hears them live (personal, out of probation: the one that may approve; user, 4 Nov. 2026).
     async function pending(_input, claims) {
+        if (!devices.hearsAccountRequests(await devices.byId(claims.cnf?.kid))) return { ok: true, requests: [] };
         const rows = await query('all', `SELECT * FROM auth_pair_requests WHERE target_principal = ? AND state = 'pending'
             AND expires_ms > ? ORDER BY created_ms DESC LIMIT 5`, [claims.sub, now()]);
         return { ok: true, requests: rows.map(describe) };

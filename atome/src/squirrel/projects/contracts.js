@@ -1,10 +1,11 @@
 import { validateParams } from '../ai/agent_gateway_normalize.js';
+import { MEDIA_CONTROL_ACTIONS } from '../media_lists/contracts.js';
 
 // The user's projects, for runtime V2, AI discovery and direct MCP calls, like books: listed and searched
 // as the Trouver panel lists and searches them, created and opened by the very tools of the interface
 // (`ui.new_project`, `ui.project.open`). Run by eVe/domains/projects/projects_runtime.js.
-export const PROJECTS_ERRORS = Object.freeze(['INVALID_ARGUMENT', 'NOT_FOUND', 'NO_PROJECT', 'CREATE_FAILED', 'OPEN_FAILED', 'FAVORITE_FAILED',
-    'PRESENTATION_UNAVAILABLE', 'BAND_TOOL_UNKNOWN', 'BAND_TOOL_FAILED']);
+export const PROJECTS_ERRORS = Object.freeze(['INVALID_ARGUMENT', 'NOT_FOUND', 'NO_PROJECT', 'CREATE_FAILED', 'OPEN_FAILED', 'FAVORITE_FAILED', 'DELETE_FAILED',
+    'PRESENTATION_UNAVAILABLE', 'BAND_TOOL_UNKNOWN', 'BAND_TOOL_FAILED', 'MEDIA_FAILED']);
 // The Trouver panel's categories that hold a project's objects.
 export const PROJECT_SEARCH_KINDS = Object.freeze(['all', 'images', 'videos', 'sounds']);
 // A project's type, as the Projets rubric's Type tool keeps it (eVe/domains/projects/project_type.js).
@@ -20,8 +21,15 @@ const definitions = {
     open: [{ project_id: id }, ['project_id'], 'Open one of the user\'s projects (its project_id from projects.list).', false],
     favorite: [{ project_id: id, favorite: { type: 'boolean' } }, ['project_id', 'favorite'],
         'Add one of the user\'s projects to the favourites (favorite true) or take it out of them (false), as a hold on its Dashboard tile does.', true],
+    delete: [{ project_id: id }, ['project_id'],
+        'Delete one of the user\'s projects (its project_id from projects.list) with everything it holds, as « Supprimer » in a hold on its Dashboard tile does. Ask the user before calling it.', true],
     band_tool: [{ tool_id: id, project_id: id }, ['tool_id'],
         'Lay a tool in a project\'s bottom tool band (the current project when project_id is not given), as laying it from Trouver › Outils onto the project does; kept once. Returns its band key.', true],
+    media: [{ action: { type: 'string', enum: MEDIA_CONTROL_ACTIONS }, atome_id: id }, ['action'],
+        'Act on a media of the current project as its touches do outside Édition (D23): its controls over the picture shown (controls) or hidden (hide_controls), '
+        + 'the whole screen (fullscreen, atome_id the media) or back (exit_fullscreen), the next or previous media of the project on the whole screen, '
+        + 'resume (play), pause, ten seconds back (rewind) or ahead (forward). atome_id: the media (projects.search kind videos, images or sounds); '
+        + 'without it, the one on the whole screen. NOT_FOUND: no such media; NO_PROJECT: no project shown.', false],
     search: [{ text, project_id: id, kind: { type: 'string', enum: PROJECT_SEARCH_KINDS }, limit }, ['text'],
         'Search the objects of one project (the current one when project_id is not given: open, or last opened while the Dashboard shows) whose name, text, type or tags hold `text`, as the Trouver panel does; `kind` keeps images, videos or sounds only.', false]
 };
@@ -42,6 +50,6 @@ export const validateProjectsInput = (action, input) => {
 };
 export const PROJECTS_ASSISTANT_INSTRUCTIONS = 'Projects: « quels sont mes projets », « trouve mon projet <nom> » call projects.list '
     + '(query: the name); « ouvre le projet <nom> » calls projects.open with the project_id read from projects.list; « crée un projet '
-    + '<nom> » calls projects.create; « mes projets favoris » calls projects.list with favorites true; « ajoute <projet> aux favoris » / « retire <projet> des favoris » '
-    + 'calls projects.favorite (favorite true / false, project_id from projects.list); « mets l\'outil <outil> dans la bande du projet » calls projects.band_tool (tool_id); « cherche <mot> dans ce projet / dans <projet> » calls projects.search (project_id from '
+    + '<nom> » calls projects.create; « mes projets favoris » calls projects.list with favorites true; « supprime le projet <nom> » calls projects.delete with the project_id read from projects.list, once the user confirmed; « ajoute <projet> aux favoris » / « retire <projet> des favoris » '
+    + 'calls projects.favorite (favorite true / false, project_id from projects.list); « mets cette vidéo en plein écran », « la suivante », « montre les commandes » on a project\'s media calls projects.media; « mets l\'outil <outil> dans la bande du projet » calls projects.band_tool (tool_id); « cherche <mot> dans ce projet / dans <projet> » calls projects.search (project_id from '
     + 'projects.list for another project; kind images, videos or sounds when the user names them).';

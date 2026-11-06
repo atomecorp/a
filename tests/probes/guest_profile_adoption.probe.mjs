@@ -4,15 +4,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import jwt from 'jsonwebtoken';
 import { createUserVaultProvider } from '../../server/userVaultProvider.js';
+import { startVaultSupervisor } from '../server/vault_supervisor_support.mjs';
 const root = fs.mkdtempSync(path.resolve('temp/guest_profile/adoption-'));
-const sockets = path.resolve('temp/gp-sock-' + process.pid);
+const supervisor = await startVaultSupervisor({ root: path.join(root, 'vaults'), centralDatabase: path.join(root, 'directory.db') });
 process.env.SQLITE_PATH = path.join(root, 'directory.db');
 process.env.JWT_SECRET = 'isolated-guest-profile-adoption-test-secret';
 const db = await import('../../database/adole.js');
 const { handleWsApiGuestAdoption } = await import('../../server/wsApiGuestAdoption.js');
 const { handleWsAtomeOperation } = await import('../../server/wsAtomeOperations.js');
 const { UserVaultRouter } = await import('../../server/userVaultRouter.js');
-const provider = createUserVaultProvider({ root: path.join(root, 'vaults'), socketRoot: sockets });
+const provider = createUserVaultProvider({ root: path.join(root, 'vaults'), socketPath: supervisor.socketPath });
 const router = new UserVaultRouter({ provider });
 const owner = crypto.randomUUID(), guest = crypto.randomUUID();
 const hash = value => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -94,6 +95,6 @@ try {
     assert.equal(emptyState.properties.eve_profile.user_face, undefined);
     console.log('guest_profile_adoption: PASS (vault isolation, merge, project import, immutable source, interrupted replay)');
 } finally {
-    await provider.stopAll(); await db.closeDatabase();
-    fs.rmSync(root, { recursive: true, force: true }); fs.rmSync(sockets, { recursive: true, force: true });
+    await provider.close(); await supervisor.stop(); await db.closeDatabase();
+    fs.rmSync(root, { recursive: true, force: true });
 }

@@ -47,16 +47,30 @@ impl VoiceEnvelope {
             return 0.0;
         }
         let offset = t.clamp(0.0, self.duration_seconds);
-        let fade_in = if self.fade_in_seconds > 0.0 { (offset / self.fade_in_seconds).clamp(0.0, 1.0) } else { 1.0 };
+        let fade_in = if self.fade_in_seconds > 0.0 {
+            (offset / self.fade_in_seconds).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
         let fade_out_start = (self.duration_seconds - self.fade_out_seconds).max(0.0);
         let fade_out = if self.fade_out_seconds > 0.0 && offset >= fade_out_start {
             ((self.duration_seconds - offset) / self.fade_out_seconds).clamp(0.0, 1.0)
         } else {
             1.0
         };
-        let attack = if self.attack_seconds > 0.0 { ((offset - self.attack_start_seconds) / self.attack_seconds).clamp(0.0, 1.0) } else { 1.0 };
-        let end = self.end_seconds.map_or(self.duration_seconds, |end| end.min(self.duration_seconds));
-        let release = if self.release_seconds > 0.0 { ((end - offset) / self.release_seconds).clamp(0.0, 1.0) } else { 1.0 };
+        let attack = if self.attack_seconds > 0.0 {
+            ((offset - self.attack_start_seconds) / self.attack_seconds).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
+        let end = self
+            .end_seconds
+            .map_or(self.duration_seconds, |end| end.min(self.duration_seconds));
+        let release = if self.release_seconds > 0.0 {
+            ((end - offset) / self.release_seconds).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
         fade_in.min(fade_out).min(attack).min(release) as f32
     }
 }
@@ -90,8 +104,14 @@ pub struct VoiceRequest {
 impl Default for VoiceRequest {
     fn default() -> Self {
         Self {
-            start_seconds: 0.0, duration_seconds: None, gain: 1.0, pan: 0.0, rate: 1.0,
-            loop_start_seconds: None, loop_end_seconds: None, envelope: None,
+            start_seconds: 0.0,
+            duration_seconds: None,
+            gain: 1.0,
+            pan: 0.0,
+            rate: 1.0,
+            loop_start_seconds: None,
+            loop_end_seconds: None,
+            envelope: None,
         }
     }
 }
@@ -134,7 +154,16 @@ impl SoundData for VoiceSound {
     fn into_sound(self) -> Result<(Box<dyn Sound>, Self::Handle), Self::Error> {
         let (inner, handle) = self.data.into_sound()?;
         match self.envelope {
-            Some(envelope) => Ok((Box::new(EnvelopedSound { inner, envelope, frames: 0, dt: 0.0, control: self.control }), handle)),
+            Some(envelope) => Ok((
+                Box::new(EnvelopedSound {
+                    inner,
+                    envelope,
+                    frames: 0,
+                    dt: 0.0,
+                    control: self.control,
+                }),
+                handle,
+            )),
             None => Ok((inner, handle)),
         }
     }
@@ -158,14 +187,28 @@ impl EnvelopedSound {
     // Frames the voice lasts: the clip's remaining time, in whole output frames,
     // or less when a late end was asked.
     fn length_frames(&self) -> u64 {
-        let end = self.envelope.end_seconds.map_or(self.envelope.duration_seconds, |end| end.min(self.envelope.duration_seconds));
+        let end = self
+            .envelope
+            .end_seconds
+            .map_or(self.envelope.duration_seconds, |end| {
+                end.min(self.envelope.duration_seconds)
+            });
         let natural = ((end - self.envelope.offset_seconds).max(0.0) / self.dt).round() as u64;
-        self.control.as_ref().and_then(|control| control.end_frame()).map_or(natural, |late| late.min(natural))
+        self.control
+            .as_ref()
+            .and_then(|control| control.end_frame())
+            .map_or(natural, |late| late.min(natural))
     }
 
     // The late end's release: full level until `release` frames before the end.
     fn release_gain(&self, length: u64) -> f32 {
-        let Some(control) = self.control.as_ref().filter(|control| control.end_frame().is_some()) else { return 1.0 };
+        let Some(control) = self
+            .control
+            .as_ref()
+            .filter(|control| control.end_frame().is_some())
+        else {
+            return 1.0;
+        };
         let release = control.release_frames();
         if release == 0 || self.frames + release < length {
             return 1.0;
@@ -184,8 +227,12 @@ impl Sound for EnvelopedSound {
         self.dt = dt;
         let length = self.length_frames();
         for frame in out.iter_mut() {
-            let gain = if self.frames < length { self.envelope.gain_at(self.clip_time()) * self.release_gain(length) } else { 0.0 };
-            *frame = *frame * gain;
+            let gain = if self.frames < length {
+                self.envelope.gain_at(self.clip_time()) * self.release_gain(length)
+            } else {
+                0.0
+            };
+            *frame *= gain;
             self.frames += 1;
         }
     }
@@ -212,22 +259,36 @@ pub fn min_region_duration(sample_rate: u32, source_duration: f64) -> Result<f64
     if !source_duration.is_finite() || source_duration <= 0.0 {
         return Err("Clip has no playable duration".to_string());
     }
-    Ok((1.0 / sample_rate.max(1) as f64).max(0.0005).min(source_duration))
+    Ok((1.0 / sample_rate.max(1) as f64)
+        .max(0.0005)
+        .min(source_duration))
 }
 
-pub fn normalize_start(requested: f64, source_duration: f64, min_region: f64) -> Result<f64, String> {
+pub fn normalize_start(
+    requested: f64,
+    source_duration: f64,
+    min_region: f64,
+) -> Result<f64, String> {
     if !requested.is_finite() {
         return Err("start_seconds must be finite".to_string());
     }
-    Ok(requested.max(0.0).min((source_duration - min_region).max(0.0)))
+    Ok(requested
+        .max(0.0)
+        .min((source_duration - min_region).max(0.0)))
 }
 
 // The cropped length, or None when the voice plays to the end of the source.
-pub fn normalize_duration(requested: Option<f64>, min_region: f64, max_duration: f64) -> Result<Option<f64>, String> {
+pub fn normalize_duration(
+    requested: Option<f64>,
+    min_region: f64,
+    max_duration: f64,
+) -> Result<Option<f64>, String> {
     if !max_duration.is_finite() || max_duration <= 0.0 {
         return Ok(None);
     }
-    let Some(duration) = requested else { return Ok(None) };
+    let Some(duration) = requested else {
+        return Ok(None);
+    };
     if !duration.is_finite() {
         return Err("duration_seconds must be finite when provided".to_string());
     }
@@ -235,11 +296,18 @@ pub fn normalize_duration(requested: Option<f64>, min_region: f64, max_duration:
         return Ok(None);
     }
     let bounded = duration.max(min_region).min(max_duration);
-    Ok(if bounded >= max_duration { None } else { Some(bounded) })
+    Ok(if bounded >= max_duration {
+        None
+    } else {
+        Some(bounded)
+    })
 }
 
 // The voice's sound from the clip's decoded data.
-pub fn build_voice_sound(mut data: StaticSoundData, request: &VoiceRequest) -> Result<VoiceSound, String> {
+pub fn build_voice_sound(
+    mut data: StaticSoundData,
+    request: &VoiceRequest,
+) -> Result<VoiceSound, String> {
     let source_duration = duration_seconds(&data)?;
     if !request.gain.is_finite() {
         return Err("gain must be finite".to_string());
@@ -251,31 +319,45 @@ pub fn build_voice_sound(mut data: StaticSoundData, request: &VoiceRequest) -> R
     let start = normalize_start(request.start_seconds, source_duration, min_region)?;
     let max_duration = (source_duration - start).max(0.0);
     let duration = normalize_duration(request.duration_seconds, min_region, max_duration)?;
-    let loop_start = request.loop_start_seconds.filter(|value| value.is_finite() && *value >= 0.0).map(|value| value.min(source_duration));
-    let loop_end = request.loop_end_seconds.filter(|value| value.is_finite() && *value > 0.0).map(|value| value.min(source_duration));
+    let loop_start = request
+        .loop_start_seconds
+        .filter(|value| value.is_finite() && *value >= 0.0)
+        .map(|value| value.min(source_duration));
+    let loop_end = request
+        .loop_end_seconds
+        .filter(|value| value.is_finite() && *value > 0.0)
+        .map(|value| value.min(source_duration));
     if let Some(duration) = duration {
         data = data.slice(start..start + duration);
     } else if start > 0.0 {
         data = data.start_position(start);
     }
-    if let (Some(loop_start), Some(loop_end)) = (loop_start, loop_end) {
-        if loop_end - loop_start >= min_region {
-            match duration {
-                Some(duration) => {
-                    let relative_start = (loop_start - start).max(0.0);
-                    let relative_end = (loop_end - start).max(relative_start + min_region).min(duration);
-                    if relative_end - relative_start >= min_region {
-                        data = data.loop_region(relative_start..relative_end);
-                    }
+    if let (Some(loop_start), Some(loop_end)) = (loop_start, loop_end)
+        && loop_end - loop_start >= min_region
+    {
+        match duration {
+            Some(duration) => {
+                let relative_start = (loop_start - start).max(0.0);
+                let relative_end = (loop_end - start)
+                    .max(relative_start + min_region)
+                    .min(duration);
+                if relative_end - relative_start >= min_region {
+                    data = data.loop_region(relative_start..relative_end);
                 }
-                None => data = data.loop_region(loop_start..loop_end),
             }
+            None => data = data.loop_region(loop_start..loop_end),
         }
     }
     let data = data
         .volume(gain_to_decibels(request.gain))
         .panning(Panning(request.pan.clamp(-1.0, 1.0) as f32))
         .playback_rate(PlaybackRate(request.rate.max(0.0001)));
-    let envelope = request.envelope.filter(|envelope| envelope.duration_seconds.is_finite() && envelope.duration_seconds > 0.0);
-    Ok(VoiceSound { data, envelope, control: None })
+    let envelope = request.envelope.filter(|envelope| {
+        envelope.duration_seconds.is_finite() && envelope.duration_seconds > 0.0
+    });
+    Ok(VoiceSound {
+        data,
+        envelope,
+        control: None,
+    })
 }

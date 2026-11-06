@@ -1,7 +1,8 @@
-// eVe/registry/generated/atome_types.json — the atome types and their property schemas, generated from their JS owner
+// eVe/registry/generated/atome_types.json — the atome types, their property schemas and the defaults a read
+// projection gives every atome of the type (traits, capabilities, policy), generated from their JS owner
 // (atome/src/shared/core_atome_types.js, read through #shared/atome_type_gate.js) for the servers that cannot import it:
-// Axum (platforms/desktop-tauri/src/server/local_atome_type_gate.rs, compiled in) and Swift
-// (platforms/ios/atome-auv3/Common/AiSRuntimeTypeGate.swift, read from the app bundle). They apply the Fastify gate's
+// atome-store (atome/engines/atome-store/src/type_gate.rs, compiled in), the store of the one local host
+// `atome-server::local` that Tauri and the iOS app run. It applies the Fastify gate's
 // rules with its error codes: an undeclared type is `atome_type_unknown`, an undeclared property `atome_property_unknown`.
 import fs from 'node:fs';
 import { generatedFile, stable } from './registry_paths.mjs';
@@ -11,12 +12,20 @@ export const ATOME_TYPES_FILE = 'atome_types.json';
 export async function atomeTypesDocument() {
     const { CORE_ATOME_TYPE_DEFINITIONS } = await import('../../atome/src/shared/core_atome_types.js');
     const gate = await import('../../atome/src/shared/atome_type_gate.js');
-    const types = Object.fromEntries(CORE_ATOME_TYPE_DEFINITIONS.map(definition => [definition.type, {
-        kind: definition.kind || null,
-        allow_unknown_properties: definition.allow_unknown_properties !== false,
-        properties: Object.keys(definition.schema).sort(),
-        schema: definition.schema
-    }]));
+    const { registerAtomeType } = await import('../../atome/src/shared/atome_universal_contract.js');
+    const types = Object.fromEntries(CORE_ATOME_TYPE_DEFINITIONS.map((definition) => {
+        // The registered form is what `normalizeCanonicalAtome` reads (atome_contract.js).
+        const registered = registerAtomeType(definition);
+        return [definition.type, {
+            kind: definition.kind || null,
+            allow_unknown_properties: definition.allow_unknown_properties !== false,
+            properties: Object.keys(definition.schema).sort(),
+            schema: definition.schema,
+            traits: registered.traits,
+            default_capabilities: registered.default_capabilities,
+            default_policy: registered.default_policy
+        }];
+    }));
     return stable({
         format: 'atome_types/1',
         owner: 'atome/src/shared/core_atome_types.js',

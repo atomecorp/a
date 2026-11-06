@@ -1,28 +1,26 @@
 [package]
 name = "atome-ios-bevy-renderer"
 version = "0.1.0"
-edition = "2021"
-description = "iOS C ABI boundary: the shared Atome Bevy renderer core and the native Kira audio engine"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "iOS C ABI boundary: the native Kira audio engine and the local server"
 
 [lib]
 crate-type = ["staticlib"]
 
 [dependencies]
-atome-bevy-renderer-core = { path = "../../../atome/renderers/bevy-core" }
 atome-audio-engine = { path = "../../../atome/engines/audio-engine" }
-serde_json = "1"
+serde_json.workspace = true
+# The local server (atome-server's one-person host), run in the app's process.
+atome-server = { path = "../../../atome/servers/atome-server", default-features = false }
+axum.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "net"] }
 
 [features]
 # The native voice engine; build_bevy_renderer.sh enables it for the app on devices and
 # provides libvosk_ios.a (build_vosk_ios.sh) through VOSK_IOS_LIB_DIR.
 voice = ["atome-audio-engine/voice"]
 
-[profile.dev]
-debug = 0
-panic = "abort"
-strip = "debuginfo"
-
-[profile.release]
-lto = "thin"
-panic = "abort"
-strip = "debuginfo"
+[lints]
+workspace = true

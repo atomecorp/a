@@ -8,9 +8,13 @@
 const S = Object.freeze({ type: 'string' }), N = Object.freeze({ type: 'number' }), B = Object.freeze({ type: 'boolean' });
 const O = Object.freeze({ type: 'object' }), A = Object.freeze({ type: 'array' }), ANY = Object.freeze({});
 
-// Written on any atome: its name (rename) and the bin's trail (eVe/intuition/tools/delete/blackhole_runtime.js).
+// Written on any atome: its name (rename), the bin's trail (eVe/intuition/tools/delete/blackhole_runtime.js), for an
+// entry of a list or a copy of one received (#shared/list_share_contract.js), its list and where the copy comes from,
+// and its place while it is teleported to another surface (#shared/teleport_state.js, any owned atome).
 export const ATOME_COMMON_PROPERTY_SCHEMA = Object.freeze({
-    name: S, deleted_from_project_id: S, deletedFromProjectId: S, deleted_iso: S, deletedIso: S
+    name: S, deleted_from_project_id: S, deletedFromProjectId: S, deleted_iso: S, deletedIso: S, list_root: S, list_link: O,
+    teleport_state: S, teleport_session_id: S, teleport_surface_id: S, teleport_origin_surface_id: S,
+    teleport_controller_surface_id: S, teleport_persist: B
 });
 
 export const ATOME_WRITTEN_PROPERTIES = Object.freeze({
@@ -21,7 +25,7 @@ export const ATOME_WRITTEN_PROPERTIES = Object.freeze({
         access: S, current_activity_id: S, current_activity_name: S, current_project_id: S,
         current_project_name: S, currentActivityId: S, currentActivityName: S, currentProjectId: S,
         currentProjectName: S, email: S, eve_profile: O, first_launch_version: ANY, first_name: S, firstname: S,
-        firstName: S, message_stack: A, nickname: S, notification_stack: A, user_face: S, username: S,
+        firstName: S, meeting_photos: A, message_stack: A, nickname: S, notification_stack: A, user_face: S, username: S,
         visibility: S
     },
     guest_workspace: {

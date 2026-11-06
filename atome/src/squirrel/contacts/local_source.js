@@ -181,6 +181,13 @@ export function createLocalContactsSource({ source_id = 'eve_contacts_local', ro
     return { source_id, role, writable, contract: createContactsConnectorContract({ provider: source_id, role, write_capabilities: ['contacts_import'] }),
         captureImportSession: () => store.capture().check,
         listContactsSync, async listContacts(options) { await hydrate(); return listContactsSync(options); },
+        // The book's groups (an import's collections): each its name and its members' contact ids, read from the canonical store.
+        async listGroups() {
+            if (!clearOnSessionChange()) return { ok: true, items: [] };
+            const rows = (await groups.list()).filter(row => !importRecordDeleted(row));
+            return { ok: true, items: rows.map(row => { const props = importRecordProps(row);
+                return { id: importRecordId(row), name: String(props.name || ''), members: Array.isArray(props.members) ? [...props.members] : [] }; }) };
+        },
         async getContact(id) { await hydrate(); const contact = cache.find(row => row.id === id); return contact ? { ok: true, contact } : { ok: false, error: 'contacts_not_found' }; },
         syncInitial: refresh, syncIncremental: refresh,
         syncStatus() { return { persisted, hydrated: persisted, durability: persisted ? 'canonical_commit' : null }; },

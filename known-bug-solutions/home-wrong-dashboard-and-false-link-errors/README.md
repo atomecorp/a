@@ -18,8 +18,22 @@
    showing `eve.dashboard.load_failed`). Logout also deletes the published
    preferences. Fix: `visual_level_cache.js` keeps the style per principal;
    `workspace_surface_preference.js#waitForHomePreferences` reads the profile
-   (bounded) when nothing is known; a style published while a home is still
+   when nothing is known; a style published while a home is still
    opening is applied once it lands (`user_workspace_surface_runtime.js`).
+   Recurrence (D18, 2026-11-05): the read was bounded (3 s) and an unknown
+   style still fell to Pro through the default `advanced` level — a device
+   without the account's profile (new browser, workspace not yet imported)
+   opened Pro, then flipped to Basic. Now the home waits, with no timeout, for
+   a KNOWN style (published, last known for the principal, or this device's
+   profile copy as it arrives page by page); `readDashboardStyle` answers
+   `undefined` instead of guessing, `registryStyle` throws
+   `dashboard_style_unknown`, and a profile present without a style is reported
+   (`reportRuntimeError`, `eve:home-style`). Regression:
+   `temp/d18_defects/basic_slow_profile.probe.mjs` (B: Pro at 2.9 s before the
+   fix, Basic only after; C1–C3: sign-out → sign-in on the same Basic account,
+   another account in Pro, back from a project). A home's rubric reads that end
+   after a sign-out lay nothing (`dashboard_mystic_rubric_reads.js`, `isCurrent`
+   before placing): they used to reach `registryStyle` with no style.
 2. **Socket health check killed live sockets.** `websocket_health.js` dropped
    the socket (and failed every pending request with `Connection lost`) after
    3 s without a pong — routine on the busy iOS local server. Now any inbound

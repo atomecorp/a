@@ -8,7 +8,7 @@ export const BRICK_SESSION_ERRORS = Object.freeze(['INVALID_ARGUMENT', 'AUTH_REQ
     'BRICK_SESSION_INVALID', 'BRICK_SESSION_REVISION_CHANGED', 'BRICK_SESSION_OBJECTIVES_UNAVAILABLE', 'PRESENTATION_UNAVAILABLE',
     'CONTEXT_CHANGED', 'BRICK_SESSION_WRITE_FAILED', 'BRICK_SESSION_CARD_CLOSED', 'BRICK_SESSION_CARD_ACTION_FAILED', 'BRICK_SESSION_NOT_RUNNING']);
 // What the card's own disc and tools do, asked from elsewhere (the watch, MCP): brick_session.card_action.
-export const BRICK_SESSION_CARD_ACTIONS = Object.freeze(['open', 'start', 'done', 'pause', 'stop', 'finish', 'back', 'set']);
+export const BRICK_SESSION_CARD_ACTIONS = Object.freeze(['open', 'start', 'done', 'next', 'pause', 'resume', 'stop', 'finish', 'back', 'set']);
 const id = { type: 'string', minLength: 1, maxLength: 200 };
 const brick_id = { type: 'string', enum: BRICK_SESSION_IDS };
 const minutes = { type: 'integer', minimum: 1, maximum: 240 };
@@ -33,7 +33,7 @@ const definitions = {
         ['session_id', 'base_revision', 'request_id', 'action'],
         'Record one event of a nap, meditation, breathing or relaxation session (recorded_at: the instant it happened, now when absent): start, pause, resume, confirm (ended early, with the time done), elapse (its time is up), finish (saved; it counts for the user\'s objectives by itself, use_in_followup is recorded true, one objective left out by dashboard.session.objectives.set; a meditation or a breathing also writes its mindful minutes to the health store) or stop.', true],
     card_action: [{ action: { type: 'string', enum: BRICK_SESSION_CARD_ACTIONS }, brick_id, field: { type: 'string', enum: ['minutes'] }, value: minutes }, ['action'],
-        'Do on the nap, meditation, breathing or relaxation card what its own disc and tools do (the watch, MCP), its card opened on brick_id first when no session is under way: open (only show it), start (then the 3-2-1), done (the disc: Départ during the 3-2-1, Terminé before its time), pause (pause, or resume when paused), stop, finish (save the ended session), back (ready again), set (field minutes: its length, to value). Returns card: the card as other surfaces show it (its brick, length, session).', true],
+        'Do on the nap, meditation, breathing or relaxation card what its own disc and tools do (the watch, MCP), its card opened on brick_id first when no session is under way: open (only show it), start (then the 3-2-1), done and next (the band\'s Suivant: Départ during the 3-2-1, Terminé before its time), pause (the disc during a session: pause, or resume when paused), resume (only resumes a paused session), stop, finish (save the ended session), back (ready again), set (field minutes: its length, to value). Returns card: the card as other surfaces show it (its brick, length, session).', true],
     suggestions: [{ enabled: { type: 'boolean' } }, ['enabled'], 'Let eVe propose a nap, a relaxation or a breathing once a day to a user with the « Se faire plaisir » objective (enabled true), or never again on this device (« Ne plus proposer », enabled false).', true],
     get: [{ session_id: id }, ['session_id'], 'Read a nap, meditation, breathing or relaxation session replayed from its recorded events.', false],
     open_sessions: [{}, [], 'List the nap, meditation, breathing or relaxation sessions left under way (running or paused) in the last 24 hours, as { session_id, brick_id, state }: one the app left when it closed can be resumed or stopped.', false]

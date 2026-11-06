@@ -1,0 +1,3 @@
+65606743		2	Tension d'approvisionnement	01/09/2026	02/11/2026		https://ansm.sante.fr/disponibilites-des-produits-de-sante/medicaments/specialites-a-base-de-furosemide-20-mg-et-40-mg-en-comprimes-furosemide
+65606743		2	Tension d'approvisionnement	01/09/2026	28/09/2026		https://ansm.sante.fr/disponibilites-des-produits-de-sante/medicaments/specialites-a-base-de-furosemide-20-mg-et-40-mg-en-comprimes-furosemide
+67131583		3	Arrêt de commercialisation	30/09/2025	06/10/2025		https://ansm.sante.fr/disponibilites-des-produits-de-sante/medicaments/lasilix-retard-60-mg-gelule-furosemide

@@ -3,8 +3,8 @@ use bevy::{
     prelude::*,
     reflect::TypePath,
     render::{
-        render_resource::{AsBindGroup, ShaderType},
         RenderApp,
+        render_resource::{AsBindGroup, ShaderType},
     },
     shader::{Shader, ShaderRef},
     sprite_render::{AlphaMode2d, Material2d, Material2dPlugin},
@@ -12,14 +12,15 @@ use bevy::{
 
 use crate::{
     types::AtomeBackdropStyle,
-    video_external_texture::{
-        video_quad_mesh_from_size, video_quad_mesh_handle_from_size,
+    video_external_texture::{video_quad_mesh_from_size, video_quad_mesh_handle_from_size},
+    workspace_backdrop::{
+        AtomeWorkspaceBackdrop, MENU_PRESENTATION_LAYER, set_workspace_backdrop_enabled,
     },
-    workspace_backdrop::{set_workspace_backdrop_enabled, AtomeWorkspaceBackdrop, MENU_PRESENTATION_LAYER},
     workspace_blur::backdrop_blur_lod,
 };
 
-const BACKDROP_SURFACE_SHADER_HANDLE: Handle<Shader> = uuid_handle!("c7a899e6-7d4b-4fd3-82cb-53c7e11f99bf");
+const BACKDROP_SURFACE_SHADER_HANDLE: Handle<Shader> =
+    uuid_handle!("c7a899e6-7d4b-4fd3-82cb-53c7e11f99bf");
 
 /// The crop last written into a glass surface's quad, and that quad. Every transform patch
 /// re-applies the clip: rewriting an unchanged quad made Bevy free and reallocate its vertex
@@ -126,7 +127,9 @@ pub fn insert_backdrop_surface(
     corner_radius: f32,
     contract: AtomeBackdropStyle,
 ) -> Result<(), String> {
-    let style = contract.normalized().ok_or_else(|| "bevy_backdrop_style_invalid".to_string())?;
+    let style = contract
+        .normalized()
+        .ok_or_else(|| "bevy_backdrop_style_invalid".to_string())?;
     let backdrop = world
         .get_resource::<AtomeWorkspaceBackdrop>()
         .map(|state| state.image.clone())
@@ -135,17 +138,28 @@ pub fn insert_backdrop_surface(
         .get_resource::<crate::types::AtomeBevyRendererConfig>()
         .map(|config| config.device_pixel_ratio)
         .unwrap_or(1.0);
-    let opacity = world.get::<crate::components::AtomeVisualOpacity>(entity).map(|value| value.0).unwrap_or(1.0);
+    let opacity = world
+        .get::<crate::components::AtomeVisualOpacity>(entity)
+        .map(|value| value.0)
+        .unwrap_or(1.0);
     let mesh = {
-        let mut meshes =
-            world.get_resource_mut::<Assets<Mesh>>().ok_or_else(|| "bevy_mesh_assets_required".to_string())?;
+        let mut meshes = world
+            .get_resource_mut::<Assets<Mesh>>()
+            .ok_or_else(|| "bevy_mesh_assets_required".to_string())?;
         video_quad_mesh_handle_from_size(&mut meshes, logical_size, [0.0, 0.0, 1.0, 1.0])
     };
     let material = {
         let mut materials = world
             .get_resource_mut::<Assets<BackdropSurfaceMaterial>>()
             .ok_or_else(|| "bevy_backdrop_surface_assets_required".to_string())?;
-        materials.add(material_from_contract(style, logical_size, corner_radius, backdrop, device_pixel_ratio, opacity))
+        materials.add(material_from_contract(
+            style,
+            logical_size,
+            corner_radius,
+            backdrop,
+            device_pixel_ratio,
+            opacity,
+        ))
     };
     world.entity_mut(entity).insert((
         Mesh2d(mesh),
@@ -157,7 +171,11 @@ pub fn insert_backdrop_surface(
     refresh_workspace_backdrop_enabled(world)
 }
 
-pub fn resize_backdrop_surface(world: &mut World, entity: Entity, logical_size: [f32; 2]) -> Result<(), String> {
+pub fn resize_backdrop_surface(
+    world: &mut World,
+    entity: Entity,
+    logical_size: [f32; 2],
+) -> Result<(), String> {
     if world
         .get::<MeshMaterial2d<BackdropSurfaceMaterial>>(entity)
         .is_none()
@@ -165,8 +183,9 @@ pub fn resize_backdrop_surface(world: &mut World, entity: Entity, logical_size: 
         return Ok(());
     }
     let mesh = {
-        let mut meshes =
-            world.get_resource_mut::<Assets<Mesh>>().ok_or_else(|| "bevy_mesh_assets_required".to_string())?;
+        let mut meshes = world
+            .get_resource_mut::<Assets<Mesh>>()
+            .ok_or_else(|| "bevy_mesh_assets_required".to_string())?;
         video_quad_mesh_handle_from_size(&mut meshes, logical_size, [0.0, 0.0, 1.0, 1.0])
     };
     world.entity_mut(entity).insert(Mesh2d(mesh));
@@ -179,8 +198,14 @@ pub fn resize_backdrop_surface(world: &mut World, entity: Entity, logical_size: 
 /// Follows a corner radius patch: the patch only rewrites `AtomeCornerRadius`,
 /// and a glass disc born small then grown kept rounding with its spawn radius
 /// (a large square past the disc).
-pub fn sync_backdrop_surface_corner_radius(world: &mut World, entity: Entity) -> Result<(), String> {
-    if world.get::<MeshMaterial2d<BackdropSurfaceMaterial>>(entity).is_none() {
+pub fn sync_backdrop_surface_corner_radius(
+    world: &mut World,
+    entity: Entity,
+) -> Result<(), String> {
+    if world
+        .get::<MeshMaterial2d<BackdropSurfaceMaterial>>(entity)
+        .is_none()
+    {
         return Ok(());
     }
     write_backdrop_shape(world, entity, None)
@@ -191,7 +216,11 @@ pub fn sync_backdrop_surface_corner_radius(world: &mut World, entity: Entity) ->
 /// previous size: the shader alone clamps it to half the shortest side, so a
 /// glass shrunk then grown again finds its large radius back. The glass rounds
 /// its four corners alike; per-corner radii keep the largest one.
-fn write_backdrop_shape(world: &mut World, entity: Entity, logical_size: Option<[f32; 2]>) -> Result<(), String> {
+fn write_backdrop_shape(
+    world: &mut World,
+    entity: Entity,
+    logical_size: Option<[f32; 2]>,
+) -> Result<(), String> {
     let radius = world
         .get::<crate::components::AtomeCornerRadius>(entity)
         .map(|radii| radii.0.into_iter().fold(0.0_f32, f32::max));
@@ -202,8 +231,9 @@ fn write_backdrop_shape(world: &mut World, entity: Entity, logical_size: Option<
     let mut materials = world
         .get_resource_mut::<Assets<BackdropSurfaceMaterial>>()
         .ok_or_else(|| "bevy_backdrop_surface_assets_required".to_string())?;
-    let mut material =
-        materials.get_mut(&handle).ok_or_else(|| "bevy_backdrop_surface_material_missing".to_string())?;
+    let mut material = materials
+        .get_mut(&handle)
+        .ok_or_else(|| "bevy_backdrop_surface_material_missing".to_string())?;
     if let Some([width, height]) = logical_size {
         material.uniform.size_radius.x = width.max(1.0);
         material.uniform.size_radius.y = height.max(1.0);
@@ -218,7 +248,9 @@ fn write_backdrop_shape(world: &mut World, entity: Entity, logical_size: Option<
 /// its first inset shadow are drawn over it. Without this the glass dropped them (a
 /// selected item, pressed in by its inset shadow, looked idle).
 pub fn sync_backdrop_surface_border(world: &mut World, entity: Entity) -> Result<(), String> {
-    let Some(handle) = world.get::<MeshMaterial2d<BackdropSurfaceMaterial>>(entity).map(|material| material.0.clone())
+    let Some(handle) = world
+        .get::<MeshMaterial2d<BackdropSurfaceMaterial>>(entity)
+        .map(|material| material.0.clone())
     else {
         return Ok(());
     };
@@ -226,19 +258,32 @@ pub fn sync_backdrop_surface_border(world: &mut World, entity: Entity) -> Result
         .get::<crate::surface_paint::AtomeSurfacePaint>(entity)
         .and_then(|paint| paint.0.clone());
     let border = paint.as_ref().and_then(|paint| paint.border.clone());
-    let inset = paint.as_ref().and_then(|paint| paint.inset_shadows.first().cloned());
+    let inset = paint
+        .as_ref()
+        .and_then(|paint| paint.inset_shadows.first().cloned());
     let mut materials = world
         .get_resource_mut::<Assets<BackdropSurfaceMaterial>>()
         .ok_or_else(|| "bevy_backdrop_surface_assets_required".to_string())?;
-    let mut material =
-        materials.get_mut(&handle).ok_or_else(|| "bevy_backdrop_surface_material_missing".to_string())?;
+    let mut material = materials
+        .get_mut(&handle)
+        .ok_or_else(|| "bevy_backdrop_surface_material_missing".to_string())?;
     material.uniform.corner_cut.y = border.as_ref().map_or(0.0, |border| border.width.max(0.0));
     material.uniform.border_edges = border.map_or([Vec4::ZERO; 4], |border| {
-        border.colors.unwrap_or([border.color; 4]).map(Vec4::from_array)
+        border
+            .colors
+            .unwrap_or([border.color; 4])
+            .map(Vec4::from_array)
     });
-    material.uniform.inset_color = inset.as_ref().map_or(Vec4::ZERO, |shadow| Vec4::from_array(shadow.color));
+    material.uniform.inset_color = inset
+        .as_ref()
+        .map_or(Vec4::ZERO, |shadow| Vec4::from_array(shadow.color));
     material.uniform.inset_geometry = inset.map_or(Vec4::ZERO, |shadow| {
-        Vec4::new(shadow.offset[0], shadow.offset[1], shadow.blur.max(0.0), shadow.spread)
+        Vec4::new(
+            shadow.offset[0],
+            shadow.offset[1],
+            shadow.blur.max(0.0),
+            shadow.spread,
+        )
     });
     Ok(())
 }
@@ -260,7 +305,14 @@ pub(crate) fn crop_backdrop_surface(
         .map(|mesh| mesh.0.clone())
         .ok_or_else(|| "bevy_backdrop_surface_mesh_missing".to_string())?;
     let crop = AtomeBackdropCropMesh(
-        [visible_size[0], visible_size[1], uv_rect[0], uv_rect[1], uv_rect[2], uv_rect[3]],
+        [
+            visible_size[0],
+            visible_size[1],
+            uv_rect[0],
+            uv_rect[1],
+            uv_rect[2],
+            uv_rect[3],
+        ],
         handle.id(),
     );
     if world.get::<AtomeBackdropCropMesh>(entity) == Some(&crop) {
@@ -279,8 +331,14 @@ pub(crate) fn crop_backdrop_surface(
     Ok(())
 }
 
-pub fn patch_backdrop_surface(world: &mut World, entity: Entity, contract: AtomeBackdropStyle) -> Result<(), String> {
-    let style = contract.normalized().ok_or_else(|| "bevy_backdrop_style_invalid".to_string())?;
+pub fn patch_backdrop_surface(
+    world: &mut World,
+    entity: Entity,
+    contract: AtomeBackdropStyle,
+) -> Result<(), String> {
+    let style = contract
+        .normalized()
+        .ok_or_else(|| "bevy_backdrop_style_invalid".to_string())?;
     let handle = world
         .get::<MeshMaterial2d<BackdropSurfaceMaterial>>(entity)
         .map(|material| material.0.clone())
@@ -292,19 +350,26 @@ pub fn patch_backdrop_surface(world: &mut World, entity: Entity, contract: Atome
     let mut materials = world
         .get_resource_mut::<Assets<BackdropSurfaceMaterial>>()
         .ok_or_else(|| "bevy_backdrop_surface_assets_required".to_string())?;
-    let mut material =
-        materials.get_mut(&handle).ok_or_else(|| "bevy_backdrop_surface_material_missing".to_string())?;
+    let mut material = materials
+        .get_mut(&handle)
+        .ok_or_else(|| "bevy_backdrop_surface_material_missing".to_string())?;
     material.uniform.tint = Vec4::from_array(style.tint);
     material.uniform.corner_cut.x = style.corner_cut_px;
-    material.uniform.blur =
-        Vec4::new(style.blur_px, device_pixel_ratio, backdrop_blur_lod(style.blur_px, device_pixel_ratio), style.tint_fade);
+    material.uniform.blur = Vec4::new(
+        style.blur_px,
+        device_pixel_ratio,
+        backdrop_blur_lod(style.blur_px, device_pixel_ratio),
+        style.tint_fade,
+    );
     Ok(())
 }
 
 /// Follows the record opacity. Returns true when the glass switched between
 /// shown and hidden, so the caller knows the capture camera may toggle.
 pub fn sync_backdrop_surface_opacity(world: &mut World, entity: Entity, opacity: f32) -> bool {
-    let Some(handle) = world.get::<MeshMaterial2d<BackdropSurfaceMaterial>>(entity).map(|material| material.0.clone())
+    let Some(handle) = world
+        .get::<MeshMaterial2d<BackdropSurfaceMaterial>>(entity)
+        .map(|material| material.0.clone())
     else {
         return false;
     };
@@ -321,8 +386,10 @@ pub fn sync_backdrop_surface_opacity(world: &mut World, entity: Entity, opacity:
 }
 
 pub fn refresh_workspace_backdrop_enabled(world: &mut World) -> Result<(), String> {
-    let assistant_count =
-        world.query::<&MeshMaterial2d<crate::procedural_sdf::ProceduralSdfMaterial>>().iter(world).count();
+    let assistant_count = world
+        .query::<&MeshMaterial2d<crate::procedural_sdf::ProceduralSdfMaterial>>()
+        .iter(world)
+        .count();
     // Hidden glass samples nothing: while every system surface is suspended (a
     // drag strips the chrome) the workspace is no longer captured twice.
     let visible_surface_count = {

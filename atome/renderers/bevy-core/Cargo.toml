@@ -1,11 +1,13 @@
 [package]
 name = "atome-bevy-renderer-core"
 version = "0.1.0"
-edition = "2021"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
 description = "Shared Bevy renderer core for Atome projections"
 
 [dependencies]
-bevy = { version = "0.19.0", default-features = false, features = [
+bevy = { workspace = true, features = [
     "bevy_window",
     "bevy_winit",
     "bevy_render",
@@ -20,21 +22,20 @@ bevy = { version = "0.19.0", default-features = false, features = [
     "bevy_ui_render",
     "webgpu",
 ] }
-serde = { version = "1", features = ["derive"] }
+serde.workspace = true
 serde_bytes = "0.11"
 image = { version = "0.25.10", default-features = false, features = ["png"] }
 
 [dev-dependencies]
 # Les tests de RETRAIT verifient la deserialisation : il faut donc un
 # vrai format pour distinguer une cle absente d'une cle a `null`.
-serde_json = "1"
+serde_json.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-js-sys = "0.3"
-wasm-bindgen = "0.2"
-web-sys = { version = "0.3", features = ["HtmlMediaElement", "HtmlVideoElement", "VideoFrame", "Window"] }
-wgpu = { version = "29.0.4", default-features = false, features = ["webgpu"] }
+js-sys.workspace = true
+wasm-bindgen.workspace = true
+web-sys = { workspace = true, features = ["HtmlMediaElement", "HtmlVideoElement", "ImageBitmap", "VideoFrame", "Window"] }
+wgpu = { workspace = true, features = ["webgpu"] }
 
-[patch.crates-io]
-wgpu = { path = "../wgpu-web-external-texture/wgpu-29.0.4" }
-wgpu-types = { path = "../wgpu-web-external-texture/wgpu-types-29.0.4" }
+[lints]
+workspace = true

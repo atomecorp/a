@@ -1,5 +1,6 @@
-import { hasPrivateProgramAncestor, parseJson } from './syncShareHierarchy.js';
+import { parseJson } from './syncShareHierarchy.js';
 import crypto from 'node:crypto';
+import { createShareLists } from './sync_share_lists.js';
 import db from '../database/adole.js';
 import { resolveTargetUserId } from './sharing.js';
 import {
@@ -77,6 +78,9 @@ export class SyncSharingService {
         this.notifyPrincipal = options.notifyPrincipal || (() => {});
         // The communication stack (`deliver(target, sender, notification)`): a share to accept waits there, with every request.
         this.deliver = options.deliver || null;
+        // A shared list (server/sync_share_lists.js): read before answering, copied once validated, its versions.
+        this.lists = createShareLists({ vaultRouter: this.vaultRouter, get: id => this.get(id), revoke: (actor, message) => this.revoke(actor, message),
+            notifyPrincipal: (id, payload) => this.notifyPrincipal(id, payload), deliver: this.deliver });
     }
 
     async targetId(message) {
@@ -123,8 +127,9 @@ export class SyncSharingService {
     // Autorite de `granterId` sur `atomeId` : proprietaire (tous les droits) ou detenteur d'un
     // partage actif portant `reshare` (D9). Renvoie le proprietaire reel et les droits tenus.
     async grantAuthority(granterId, atomeId, capability = 'reshare') {
-        if (await hasPrivateProgramAncestor({ provider: this.vaultRouter.provider, ownerId: granterId, atomeId })) {
-            throw new Error('program_sharing_not_finalized');
+        // A programme leaves as its plan (its root alone); its sessions and measures never do.
+        if (await this.vaultRouter.isWithinPrivateProgram(granterId, atomeId)) {
+            throw new Error('program_interior_not_shareable');
         }
         try {
             const stream = await this.ownedStream(granterId, atomeId);
@@ -167,6 +172,8 @@ export class SyncSharingService {
         const accepted = parseJson(peerPolicy?.permissions_json, null);
         const shareMode = normalizeMode(message.mode || message.share_mode);
         const shareType = normalizeType(message.share_type || message.shareType || message.property_overrides?.__shareType);
+        // The sender's own words with what they send (Publier's text): the invitation's message.
+        const note = String(message.note || '').trim().slice(0, 1000);
         const rows = [];
         for (const atomeId of ids) {
             const authority = await this.grantAuthority(granterId, atomeId);
@@ -210,7 +217,7 @@ export class SyncSharingService {
             if (initialStatus === 'active' || initialStatus === 'accepted') row = await this.activate(row);
             const visible = visibleRow(row);
             rows.push(visible);
-            if (visible.status === 'pending') await this.deliverInvitation(principalId, granterId, authority.ownerId, visible);
+            if (visible.status === 'pending') await this.deliverInvitation(principalId, granterId, authority.ownerId, visible, note);
             this.notifyPrincipal(principalId, {
                 type: 'share-invitation',
                 share: visible,
@@ -223,12 +230,14 @@ export class SyncSharingService {
     }
 
     // A share to accept is one more received request: Communication shows it and answers it (share respond).
-    async deliverInvitation(principalId, granterId, ownerId, share) {
+    async deliverInvitation(principalId, granterId, ownerId, share, note = '') {
         if (!this.deliver) return;
         const state = await this.vaultRouter.provider.request(ownerId, 'state:get', { atome_id: share.atome_id });
-        await this.deliver(principalId, granterId, { kind: 'share-request', id: `share_${share.share_id}`, extra: {
+        // A list says what it is (its kind, name and count): the recipient's card shows the list itself (S5).
+        const list = await this.lists.summary(await this.get(share.share_id));
+        await this.deliver(principalId, granterId, { kind: 'share-request', id: `share_${share.share_id}`, message: note, extra: {
             share_id: share.share_id, atomeIds: [share.atome_id], atome_type: state?.atome_type || state?.type || null,
-            mode: share.share_mode, share_type: share.share_type, status: 'pending' } });
+            mode: share.share_mode, share_type: share.share_type, status: 'pending', ...(list || {}) } });
     }
 
     // Tous les partages issus de `shareId` (repartages en chaine), sans cycle.
@@ -315,46 +324,35 @@ export class SyncSharingService {
     async activate(row) {
         if (!row) throw new Error('share_request_not_found');
         if (row.share_type === 'detached') {
-            const state = await this.vaultRouter.getState(row.owner_id, row.atome_id);
-            if (!state) throw new Error('share_source_state_missing');
-            // Une copie figee ne contient que ce que le destinataire a le droit de VOIR.
-            const allowed = parseJson(row.readable_properties_json, null) ?? parseJson(row.allowed_properties_json, null);
-            const properties = allowed?.length
-                ? Object.fromEntries(Object.entries(state.properties || {}).filter(([key]) => allowed.includes(key)))
-                : { ...(state.properties || {}) };
-            const detachedId = crypto.randomUUID();
-            await this.vaultRouter.commit(row.principal_id, {
-                id: crypto.randomUUID(),
-                kind: 'set',
-                atome_id: detachedId,
-                actor: { type: 'user', id: row.principal_id },
-                payload: {
-                    props: {
-                        ...properties,
-                        detached_from: row.atome_id,
-                        detached_share_id: row.share_id
-                    }
-                }
-            }, { source: `share-detached:${row.share_id}` });
-            await db.query(
-                'run',
-                `UPDATE sync_share_requests SET status = 'accepted', detached_atome_id = ?,
-                 updated_at = datetime('now') WHERE share_id = ?`,
-                [detachedId, row.share_id]
-            );
+            // A list is copied whole (root and entries); any other atome, alone. The copy holds only what the
+            // recipient may SEE, and names where it comes from (`list_link`).
+            const copied = await this.lists.accepted(row);
+            let detachedId = copied?.copies?.[row.atome_id] || null;
+            if (!copied) {
+                const state = await this.vaultRouter.getState(row.owner_id, row.atome_id);
+                if (!state) throw new Error('share_source_state_missing');
+                const allowed = parseJson(row.readable_properties_json, null) ?? parseJson(row.allowed_properties_json, null);
+                const properties = allowed?.length
+                    ? Object.fromEntries(Object.entries(state.properties || {}).filter(([key]) => allowed.includes(key)))
+                    : { ...(state.properties || {}) };
+                detachedId = crypto.randomUUID();
+                await this.vaultRouter.commit(row.principal_id, { id: crypto.randomUUID(), kind: 'set', atome_id: detachedId,
+                    actor: { type: 'user', id: row.principal_id }, payload: { props: { ...properties,
+                        list_link: { share_id: row.share_id, owner_id: String(row.owner_id), source_id: row.atome_id, source_atome_id: row.atome_id } } }
+                }, { source: `share-detached:${row.share_id}` });
+            }
+            await db.query('run', `UPDATE sync_share_requests SET status = 'accepted', detached_atome_id = ?, updated_at = datetime('now') WHERE share_id = ?`,
+                [detachedId, row.share_id]);
         } else {
-            await db.query(
-                'run',
-                `UPDATE sync_share_requests SET status = 'active', updated_at = datetime('now')
-                 WHERE share_id = ?`,
-                [row.share_id]
-            );
+            await db.query('run', `UPDATE sync_share_requests SET status = 'active', updated_at = datetime('now') WHERE share_id = ?`, [row.share_id]);
             const streams = typeof this.vaultRouter.listShareStreams === 'function'
                 ? await this.vaultRouter.listShareStreams(row.principal_id, row.share_id)
                 : [row.stream_id];
             for (const streamId of streams) {
                 await this.syncRuntime?.grantStream?.(row.principal_id, streamId);
             }
+            // A list sent to read is copied into the recipient's account in the version they validate.
+            await this.lists.accepted(await this.get(row.share_id));
         }
         return this.get(row.share_id);
     }
@@ -422,6 +420,18 @@ export class SyncSharingService {
         return { ok: true, requests: (rows || []).map(visibleRow) };
     }
 
+    // What waits for this account's answer: the shares not answered yet, and each list linked whose newer version is not decided.
+    async pending(principalId) {
+        const rows = await db.query('all', `SELECT * FROM sync_share_requests WHERE principal_id = ? AND (status = 'pending'
+            OR (share_type = 'linked' AND ${activeLinkedShareSql})) ORDER BY created_at DESC`, [principalId]) || [];
+        const waiting = [];
+        for (const row of rows) {
+            const list = row.status === 'pending' ? null : await this.lists.view(principalId, { share_id: row.share_id }).catch(() => null);
+            if (row.status === 'pending' || list?.pending) waiting.push({ ...visibleRow(row), ...(list ? { list_version: list.list.version } : {}) });
+        }
+        return { ok: true, requests: waiting };
+    }
+
     async revoke(principalId, message) {
         const shareId = String(message.share_id || message.permission_id || message.request_id || '').trim();
         const row = await this.get(shareId);
@@ -440,7 +450,7 @@ export class SyncSharingService {
                  LIMIT 1`,
                 [link.principal_id, link.stream_id]
             );
-            if (!remaining) this.syncRuntime?.revokeStream?.(link.principal_id, link.stream_id);
+            if (!remaining) await this.syncRuntime?.revokeStream?.(link.principal_id, link.stream_id);
             this.notifyPrincipal(String(link.principal_id) === String(principalId) ? link.owner_id : link.principal_id, {
                 type: 'share-revoked', share_id: link.share_id, stream_id: link.stream_id
             });
@@ -466,7 +476,14 @@ export class SyncSharingService {
         if (action === 'update-rights') return this.updateRights(principalId, message);
         if (action === 'with-peer') return this.withPeer(principalId, message);
         if (action === 'inbox' || action === 'shared-with-me') return this.list(principalId, 'inbox');
-        if (action === 'my-shares') return this.list(principalId, 'outbox');
+        if (action === 'my-shares' || action === 'sent') return this.list(principalId, 'outbox');
+        if (action === 'pending') return this.pending(principalId);
+        if (action === 'list-view') return this.lists.view(principalId, message);
+        if (action === 'accept-version') return this.lists.acceptVersion(principalId, message);
+        if (action === 'refuse-version') return this.lists.refuseVersion(principalId, message);
+        if (action === 'detach') return this.lists.detach(principalId, message);
+        if (action === 'announce') return this.lists.announce(principalId, message, await db.query('all',
+            `SELECT * FROM sync_share_requests WHERE owner_id = ? AND atome_id = ? AND ${activeLinkedShareSql}`, [principalId, String(message.atome_id || '')]) || []);
         throw new Error(`unsupported_sync_share_action:${action || 'missing'}`);
     }
 }

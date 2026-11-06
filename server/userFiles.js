@@ -8,7 +8,7 @@
  */
 
 import db from '../database/adole.js';
-import { getABoxEventBus } from './aBoxServer.js';
+import { getSyncEventBus } from './sync/syncEventBus.js';
 import { checkPermission, PERMISSION } from './sharing.js';
 import { FILE_ATOME_TYPES, resolveFileAtomeType, fileTypeWhere } from './file_types.js';
 import { makeId } from '../atome/src/squirrel/shared/scalars.js';
@@ -453,7 +453,7 @@ export async function getFileStats() {
  */
 function emitFileEvent(action, data) {
     try {
-        const eventBus = getABoxEventBus();
+        const eventBus = getSyncEventBus();
         if (eventBus) {
             eventBus.emit('event', {
                 type: 'file-event',

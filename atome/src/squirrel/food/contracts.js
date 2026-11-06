@@ -19,8 +19,8 @@ const definitions = {
         'Link a product to a shopping list item: the item keeps the product\'s scores, verdict and what its selection reads.', true],
     scan: [{ item_id: { type: 'string', minLength: 1, maxLength: 200 }, check: { type: 'boolean' } }, [],
         'Scan a barcode with this device camera (one beep when a valid code is read) and read the product, with the picture taken at that instant (image); the matching unchecked shopping item (item_id, else by barcode or name) is checked, else the product is returned to propose adding it. check false only links the product to that item, leaving it to buy.', true],
-    add: [{ barcode, source, avoid: { type: 'boolean' }, confirm: { type: 'boolean' }, image: SHOPPING_IMAGE_SCHEMA }, [],
-        'Add a product to the shopping list in one take: without barcode the device camera reads its barcode and takes its photo at the same instant. A product judged good (or without verdict) joins the basket at once (added true); one to limit or to avoid, or one already set aside in « À éviter », is NOT added: warning true, with its verdict, risky additives and high nutrients (nutrients_high) to say before asking. Then call again with its barcode (and the image the warning gave back): confirm true puts it in the basket anyway, avoid true sets it aside in « À éviter » (advised). A product the list already holds (same barcode) makes no second item: already says where it was (basket: added false, it was there; bought: back in the basket; avoided).', true],
+    add: [{ barcode, source, avoid: { type: 'boolean' }, confirm: { type: 'boolean' }, more: { type: 'boolean' }, image: SHOPPING_IMAGE_SCHEMA }, [],
+        'Add a product to the shopping list in one take: without barcode the device camera reads its barcode and takes its photo at the same instant. A product judged good (or without verdict) joins the basket at once (added true); one to limit or to avoid, or one already set aside in « À éviter », is NOT added: warning true, with its verdict, risky additives and high nutrients (nutrients_high) to say before asking. Then call again with its barcode (and the image the warning gave back): confirm true puts it in the basket anyway, avoid true sets it aside in « À éviter » (advised). A product the list already holds (same barcode) makes no second item: already says where it was (basket: added false, it was there; bought: back in the basket; avoided). more true on one already in the basket counts one piece more: raised { from, to } gives its quantity before and after.', true],
     identify: [{}, [], 'Scan a barcode with this device camera and only read the product, changing nothing (the shopping list stays as it is): a meal\'s food in the Programme links it to count its nutrients.', false]
 };
 export const FOOD_COMMANDS = Object.freeze(Object.entries(definitions).map(([action, [properties, required, description, persistent]]) => Object.freeze({
@@ -30,7 +30,7 @@ export const FOOD_COMMANDS = Object.freeze(Object.entries(definitions).map(([act
         product: { type: 'object' }, products: { type: 'array', items: { type: 'object' } }, alternatives: { type: 'array', items: { type: 'object' } },
         to_check: { type: 'array', items: { type: 'object' } },
         item: { type: 'object' }, checked: { type: 'boolean' }, added: { type: 'boolean' }, warning: { type: 'boolean' }, avoided: { type: 'boolean' }, image: { type: 'string' },
-        already: { type: 'string', enum: ['basket', 'bought', 'avoided'] }, barcode: { type: 'string' } } }
+        already: { type: 'string', enum: ['basket', 'bought', 'avoided'] }, raised: { type: 'object' }, barcode: { type: 'string' } } }
 })));
 export const validateFoodInput = (action, input) => {
     const contract = FOOD_COMMANDS.find(command => command.action === action);

@@ -160,7 +160,29 @@ export async function commitWorkspaceEvents(ownerId, inputs, { actorType = 'user
             next(0);
         });
     } catch (error) { throw failure || new Error(storageError(error)); }
+    await dropDeletedFiles(ownerId, events.filter(event => event.kind === 'delete').map(event => event.atome_id));
     return { ok: true, success: true, events, event: events[0] };
+}
+
+// A media deleted, here or on another device (its deleted state imported): its bytes leave this browser's file store,
+// so a later pass never uploads them again (`synchronizeBrowserWorkspace`) nor the service worker serves them
+// (offline_media.js; rule 21, register R-115 D36). A kept file is named by its atome, else by its stored name.
+async function dropDeletedFiles(ownerId, atomeIds) {
+    if (!atomeIds.length) return;
+    await transact([STORE_RECORDS, STORE_FILES], 'readwrite', tx => {
+        const files = tx.objectStore(STORE_FILES), owned = files.getAll(ownerKeyRange(ownerId));
+        owned.onsuccess = () => {
+            if (!owned.result.length) return;
+            for (const atomeId of new Set(atomeIds.map(String))) {
+                const found = tx.objectStore(STORE_RECORDS).get(key(ownerId, atomeId));
+                found.onsuccess = () => {
+                    if (!found.result?.deleted_at) return;
+                    const name = found.result.properties?.file_name;
+                    owned.result.filter(file => String(file.atome_id) === atomeId || (name && file.file_name === name)).forEach(file => files.delete(file.key));
+                };
+            }
+        };
+    });
 }
 
 // An explicit snapshot (window.Atome.snapshot) is taken here first, like a commit: in one
@@ -381,6 +403,7 @@ export async function importWorkspaceStates(ownerId, states) {
             }
         };
     });
+    await dropDeletedFiles(ownerId, owned.filter(state => state.deleted_at).map(state => state.atome_id));
 }
 
 export async function acknowledgeWorkspaceFile(ownerId, fileId) {

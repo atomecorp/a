@@ -35,9 +35,11 @@ control-message ownership.
 
 ## Regression and acceptance
 
-- Run `node --test tests/server/ws_sync_runtime.test.mjs`. The burst contract
-  must prove one maximum active replay and ordered completion; the failure
-  contract must prove connection-local containment.
+- Run `cargo test -p atome-vault -p atome-server --test ws_sync` (the Rust runtime, `tests/atome_server/ws_sync.rs`). Since 2026-11-05 the
+  runtime is atome-server's (`atome/servers/atome-server/src/ws_sync/`): one
+  message of a connection at a time by construction; the burst contract proves
+  ordered completion of two subscriptions sent at once, the failure contract
+  connection-local containment.
 - Run the focused vault, replay, sharing, architecture, and SyncEngine tests.
 - Start Fastify, log into the browser through the normal UI with an account
   already created in Tauri, and confirm all announced streams complete replay.

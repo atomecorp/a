@@ -45,6 +45,9 @@ struct ProceduralSdfUniform {
 // captured without any atome or UI: what a turning plate reveals.
 @group(#{MATERIAL_BIND_GROUP}) @binding(7) var menu_back: texture_2d<f32>;
 @group(#{MATERIAL_BIND_GROUP}) @binding(8) var menu_back_sampler: sampler;
+// That background's blur pyramid: the only image a plate's glass blurs.
+@group(#{MATERIAL_BIND_GROUP}) @binding(9) var menu_back_blur: texture_2d<f32>;
+@group(#{MATERIAL_BIND_GROUP}) @binding(10) var menu_back_blur_sampler: sampler;
 
 const BACKDROP_BLUR_LEVEL_SHIFT: f32 = 0.4;
 
@@ -54,10 +57,11 @@ const BACKDROP_BLUR_LEVEL_SHIFT: f32 = 0.4;
 // approach) left ghosts and blocks. Here every level is read through a cubic
 // B-spline — four bilinear fetches — and two adjacent levels are blended, so the
 // radius varies continuously and the result is a smooth, near Gaussian blur.
-// The pyramid is rebuilt every frame: whatever moves behind the glass stays live.
-fn backdrop_bspline_level(uv: vec2<f32>, level: f32) -> vec3<f32> {
-    let base = vec2<f32>(textureDimensions(backdrop_texture, 0));
-    let actual = max(vec2<f32>(textureDimensions(backdrop_texture, i32(level))), vec2(1.0));
+// The workspace pyramid is rebuilt every frame: whatever moves behind the glass
+// stays live. The plates' pyramid (`menu_back_blur`) is the background alone.
+fn backdrop_bspline_level(pyramid: texture_2d<f32>, pyramid_sampler: sampler, uv: vec2<f32>, level: f32) -> vec3<f32> {
+    let base = vec2<f32>(textureDimensions(pyramid, 0));
+    let actual = max(vec2<f32>(textureDimensions(pyramid, i32(level))), vec2(1.0));
     // Texel coordinates in the IDEAL level grid: an odd base size rounds the
     // stored level down, and a texel keeps covering the same base footprint.
     let st = uv * (base / exp2(level)) - 0.5;
@@ -73,25 +77,29 @@ fn backdrop_bspline_level(uv: vec2<f32>, level: f32) -> vec3<f32> {
     let g1 = w2 + w3;
     let p0 = (cell - 0.5 + w1 / g0) / actual;
     let p1 = (cell + 1.5 + w3 / g1) / actual;
-    return g0.y * (g0.x * textureSampleLevel(backdrop_texture, backdrop_sampler, vec2(p0.x, p0.y), level).rgb
-            + g1.x * textureSampleLevel(backdrop_texture, backdrop_sampler, vec2(p1.x, p0.y), level).rgb)
-        + g1.y * (g0.x * textureSampleLevel(backdrop_texture, backdrop_sampler, vec2(p0.x, p1.y), level).rgb
-            + g1.x * textureSampleLevel(backdrop_texture, backdrop_sampler, vec2(p1.x, p1.y), level).rgb);
+    return g0.y * (g0.x * textureSampleLevel(pyramid, pyramid_sampler, vec2(p0.x, p0.y), level).rgb
+            + g1.x * textureSampleLevel(pyramid, pyramid_sampler, vec2(p1.x, p0.y), level).rgb)
+        + g1.y * (g0.x * textureSampleLevel(pyramid, pyramid_sampler, vec2(p0.x, p1.y), level).rgb
+            + g1.x * textureSampleLevel(pyramid, pyramid_sampler, vec2(p1.x, p1.y), level).rgb);
 }
 
-fn sample_aligned_mip(uv: vec2<f32>, lod: f32) -> vec3<f32> {
+fn sample_pyramid_mip(pyramid: texture_2d<f32>, pyramid_sampler: sampler, uv: vec2<f32>, lod: f32) -> vec3<f32> {
     // A B-spline read of level k spreads about 0.65 x 2^k base texels, where
     // `lod` targets 0.5 x 2^lod: hence the small shift down.
-    let top = f32(textureNumLevels(backdrop_texture) - 1u);
+    let top = f32(textureNumLevels(pyramid) - 1u);
     let level = clamp(lod - BACKDROP_BLUR_LEVEL_SHIFT, 0.0, top);
     let low = floor(level);
     let high = min(low + 1.0, top);
     let blend = level - low;
-    let near = backdrop_bspline_level(uv, low);
+    let near = backdrop_bspline_level(pyramid, pyramid_sampler, uv, low);
     if blend < 0.001 || high == low {
         return near;
     }
-    return mix(near, backdrop_bspline_level(uv, high), blend);
+    return mix(near, backdrop_bspline_level(pyramid, pyramid_sampler, uv, high), blend);
+}
+
+fn sample_aligned_mip(uv: vec2<f32>, lod: f32) -> vec3<f32> {
+    return sample_pyramid_mip(backdrop_texture, backdrop_sampler, uv, lod);
 }
 
 fn sd_ellipse(point: vec2<f32>, radius: vec2<f32>) -> f32 {
@@ -557,9 +565,12 @@ const INTUITION_MYSTIC_EYE_MIN: f32 = 0.02;
 // The menu plate of one cell: the shared system glass, tinted by the family of the
 // rung the tile reached, with the light rim that keeps a plate from reading as a
 // hole in the image. `box_distance` is that cell's own rounded box.
+// The glass lies over its own hole, so it blurs what the hole shows, the surface
+// background captured with the menu (`menu_back`), never the live workspace: there
+// the caller's tiles come back under the plates while they turn back.
 fn intuition_mystic_plate(box_distance: f32, screen_uv: vec2<f32>, family: vec4<f32>, glass_mix: f32, tint: vec4<f32>) -> vec3<f32> {
-    let original = textureSampleLevel(backdrop_texture, backdrop_sampler, screen_uv, 0.0).rgb;
-    let blurred = sample_aligned_mip(screen_uv, material.shape.w);
+    let original = textureSampleLevel(menu_back, menu_back_sampler, screen_uv, 0.0).rgb;
+    let blurred = sample_pyramid_mip(menu_back_blur, menu_back_blur_sampler, screen_uv, material.shape.w);
     var plate = mix(original, blurred, glass_mix);
     // Family hue belongs inside the tint; preserve the common live-backdrop share.
     plate = mix(plate, mix(tint.rgb, family.rgb, family.a), tint.a);

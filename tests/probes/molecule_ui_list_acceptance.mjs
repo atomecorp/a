@@ -44,7 +44,7 @@ const railNodeIds = (page) => page.evaluate(async () => {
         railTarget: rail.activeAtomeId || rail.atomeId || null, railKind: rail.kind || null };
     const root = window.eveBevyUiRuntime?.state?.trees?.get?.('eve_bevy_panel_atome_contextual_edit')?.tree?.root;
     const ids = [];
-    const visit = (node) => { if (!node) return; if (/^atome_contextual_tool_[^]*$/.test(String(node.id)) && !/_(label|icon|ground|glass)$/.test(String(node.id))) ids.push(String(node.id)); (node.children || []).forEach(visit); };
+    const visit = (node) => { if (!node) return; if (/^atome_contextual_tool_/.test(String(node.id)) && !/_(label|icon|ground|glass)$/.test(String(node.id))) ids.push(String(node.id)); (node.children || []).forEach(visit); };
     visit(root);
     return { context, ids: ids.filter((id) => !/_(background|corner)$/.test(id)) };
 });

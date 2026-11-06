@@ -22,11 +22,17 @@ pub struct NoteEvent {
 
 impl NoteEvent {
     pub fn note_on(offset: u32, note: u8, velocity: f32) -> Self {
-        Self { offset, kind: EventKind::NoteOn { note, velocity } }
+        Self {
+            offset,
+            kind: EventKind::NoteOn { note, velocity },
+        }
     }
 
     pub fn note_off(offset: u32, note: u8) -> Self {
-        Self { offset, kind: EventKind::NoteOff { note } }
+        Self {
+            offset,
+            kind: EventKind::NoteOff { note },
+        }
     }
 }
 
@@ -37,7 +43,10 @@ pub struct EventList {
 
 impl EventList {
     pub fn with_capacity(capacity: usize) -> Self {
-        Self { events: Vec::with_capacity(capacity), dropped: 0 }
+        Self {
+            events: Vec::with_capacity(capacity),
+            dropped: 0,
+        }
     }
 
     // Keeps the list ordered by offset; equal offsets keep their arrival order.
@@ -46,7 +55,9 @@ impl EventList {
             self.dropped += 1;
             return;
         }
-        let at = self.events.partition_point(|queued| queued.offset <= event.offset);
+        let at = self
+            .events
+            .partition_point(|queued| queued.offset <= event.offset);
         self.events.insert(at, event);
     }
 

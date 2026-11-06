@@ -28,17 +28,30 @@ pub const WHOLE_BELOW: usize = 3 * HEAD_FRAMES;
 
 // The spans one segment needs, as (first, past-the-end) frames, unclamped.
 fn segment_spans(segment: &Segment, markers: &[Marker], jumps: &[u16], out: &mut Vec<(i64, i64)>) {
-    let head = (if segment.is_stretched() { 2 * HEAD_FRAMES } else { HEAD_FRAMES } + TAPS) as i64;
+    let head = (if segment.is_stretched() {
+        2 * HEAD_FRAMES
+    } else {
+        HEAD_FRAMES
+    } + TAPS) as i64;
     let (start, end) = (segment.start as i64, segment.end as i64);
-    let (offset, skip) = (segment.offset as i64, (segment.offset + segment.velocity_offset) as i64);
+    let (offset, skip) = (
+        segment.offset as i64,
+        (segment.offset + segment.velocity_offset) as i64,
+    );
     match segment.playback {
         Playback::Forward => out.push((start + offset - TAPS as i64, start + skip + head)),
         Playback::Reverse => out.push((end - 1 - skip - head, end - offset + TAPS as i64)),
     }
     if let Some(spec) = segment.looping {
-        out.push((spec.start as i64 - spec.crossfade as i64 - head, spec.end as i64 + head));
+        out.push((
+            spec.start as i64 - spec.crossfade as i64 - head,
+            spec.end as i64 + head,
+        ));
     }
-    for marker in markers.iter().filter(|marker| jumps.contains(&marker.label)) {
+    for marker in markers
+        .iter()
+        .filter(|marker| jumps.contains(&marker.label))
+    {
         out.push((marker.frame as i64 - head, marker.frame as i64 + head));
     }
 }
@@ -46,7 +59,10 @@ fn segment_spans(segment: &Segment, markers: &[Marker], jumps: &[u16], out: &mut
 // Clamped to the sample, sorted, joined when closer than a head: (start, len).
 fn joined(mut spans: Vec<(i64, i64)>, frames: usize) -> Vec<(usize, usize)> {
     for span in &mut spans {
-        *span = (span.0.clamp(0, frames as i64), span.1.clamp(0, frames as i64));
+        *span = (
+            span.0.clamp(0, frames as i64),
+            span.1.clamp(0, frames as i64),
+        );
     }
     spans.retain(|(start, end)| start < end);
     spans.sort_unstable();
@@ -54,7 +70,9 @@ fn joined(mut spans: Vec<(i64, i64)>, frames: usize) -> Vec<(usize, usize)> {
     for (start, end) in spans {
         let (start, end) = (start as usize, end as usize);
         match out.last_mut() {
-            Some(last) if start <= last.0 + last.1 + HEAD_FRAMES => last.1 = last.1.max(end - last.0),
+            Some(last) if start <= last.0 + last.1 + HEAD_FRAMES => {
+                last.1 = last.1.max(end - last.0)
+            }
             _ => out.push((start, end - start)),
         }
     }
@@ -66,8 +84,13 @@ impl SampleBank {
     // reads the spans `keymap` can start, loop or jump in.
     pub fn reside(&mut self, keymap: &Keymap) -> Result<(), String> {
         let count = self.len();
-        if count > crate::stream::MAX_STREAMED_SAMPLES && (0..count).any(|index| self.get(index).is_some_and(|data| data.is_streamed())) {
-            return Err(format!("a streaming instrument holds {} samples at most", crate::stream::MAX_STREAMED_SAMPLES));
+        if count > crate::stream::MAX_STREAMED_SAMPLES
+            && (0..count).any(|index| self.get(index).is_some_and(|data| data.is_streamed()))
+        {
+            return Err(format!(
+                "a streaming instrument holds {} samples at most",
+                crate::stream::MAX_STREAMED_SAMPLES
+            ));
         }
         for (index, data) in self.samples_mut().iter_mut().enumerate() {
             if !data.is_streamed() {
@@ -75,10 +98,22 @@ impl SampleBank {
             }
             let mut wanted = Vec::new();
             for zone in keymap.zones() {
-                let jumps: Vec<u16> = zone.composed.iter().flat_map(|composed| composed.transitions.iter())
-                    .filter_map(|transition| match transition.follow { Follow::JumpMarker(label) => Some(label), _ => None }).collect();
+                let jumps: Vec<u16> = zone
+                    .composed
+                    .iter()
+                    .flat_map(|composed| composed.transitions.iter())
+                    .filter_map(|transition| match transition.follow {
+                        Follow::JumpMarker(label) => Some(label),
+                        _ => None,
+                    })
+                    .collect();
                 for segment in zone.segments().filter(|segment| segment.sample == index) {
-                    segment_spans(segment, keymap.markers().span(segment.markers), &jumps, &mut wanted);
+                    segment_spans(
+                        segment,
+                        keymap.markers().span(segment.markers),
+                        &jumps,
+                        &mut wanted,
+                    );
                 }
             }
             *data = data.with_spans(&joined(wanted, data.frames()))?;

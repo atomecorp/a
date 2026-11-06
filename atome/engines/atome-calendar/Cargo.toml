@@ -1,0 +1,24 @@
+[package]
+name = "atome-calendar"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "The one calendar engine (ICAL.js's time, recurrence and time zone arithmetic ported step for step): RFC content lines, a calendar object read into canonical events, and the occurrences of events in a range; read by atome-server and, through squirrel_audio_wasm, by the browser"
+
+[dependencies]
+atome-js-values = { path = "../js-values" }
+chrono = "0.4"
+serde_json.workspace = true
+
+# In the browser the named time zones are the browser's own (Intl), as the JavaScript engine read them.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys.workspace = true
+wasm-bindgen.workspace = true
+
+[lints]
+workspace = true
+
+[[test]]
+name = "calendar_parity"
+path = "../../../tests/atome_calendar/calendar_parity.rs"

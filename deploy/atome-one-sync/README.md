@@ -5,11 +5,11 @@ local Web/Tauri/iOS user acceptance campaign is approved.
 
 ## What this package installs
 
-- one Fastify orchestrator bound to `127.0.0.1:3001`;
+- one `atome-server` process (Rust, Axum) bound to `127.0.0.1:3001`, with no Node process;
 - authenticated WebSocket upgrades for `/ws/api` and `/ws/sync`;
-- one private child vault process, SQLite database, file root, and Unix socket
+- one private child vault process (`atome-vault`), SQLite database and file root
   per explicitly provisioned principal;
-- device-initiated outbound sync only. Fastify never connects to a client.
+- device-initiated outbound sync only. The server never connects to a client.
 
 The macOS/Debian process vault is the current jail substitute. FreeBSD can
 replace the provider later; it is not required for this deployment.
@@ -50,7 +50,7 @@ Expected paths:
 /opt/a                              application checkout
 /etc/squirrel/squirrel.env          root-owned environment, mode 0600
 /etc/squirrel/identity/             persistent signing identity
-/var/lib/atome/orchestrator/         Fastify registry SQLite
+/var/lib/atome/orchestrator/         central registry SQLite
 /var/lib/atome/vaults/               per-principal vault roots
 /run/atome-vault/                    private Unix sockets
 ```
@@ -59,10 +59,11 @@ Create a locked `atome` service account and give it write access only to the
 three data roots. Copy `environment.example` to
 `/etc/squirrel/squirrel.env`, replace every placeholder, generate/preserve the
 server identity outside the checkout, then install `atome-sync.service` and the
-Nginx virtual host. Use `npm ci`, never an unconstrained production install.
+Nginx virtual host. Use `npm ci` (the application's client files), never an unconstrained
+production install, then `cargo build --release -p atome-server -p atome-vault`.
 
 Before the first start, run the repository schema and focused sync checks in a
-staging copy. Starting Fastify applies idempotent orchestrator schema changes;
+staging copy. Starting atome-server applies idempotent central schema changes;
 vault schema is applied inside each explicitly provisioned coffre.
 
 ## Post-start verification
@@ -78,7 +79,7 @@ vault schema is applied inside each explicitly provisioned coffre.
 6. Manual publish exposes only the authorized delta; detached copy never moves.
 7. Revocation removes the active stream immediately and replay remains denied.
 8. `directory.public` carries redacted invalidations only.
-9. Restart one vault and Fastify; replay converges from persisted ACK cursors.
+9. Restart one vault and atome-server; replay converges from persisted ACK cursors.
 10. Record p95 live-property and create/delete/restore latency before release.
 
 Keep production on the QA accounts until the full matrix is green. Physical

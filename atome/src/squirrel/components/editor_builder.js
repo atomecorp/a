@@ -84,6 +84,8 @@ const createEditor = (config = {}) => {
         onDrop,
         onLanguageChange,
         onError,
+        // The commit options of the file's write (the host tool names itself: `{ source, tool_id }`).
+        commitOptions = {},
         ...otherProps
     } = config;
 
@@ -225,7 +227,7 @@ const createEditor = (config = {}) => {
         }
     }
 
-    const { saveContent, validateContent } = makeEditorActions({ state, editorId, onSave, onValidate, onError, updateStatus, updateDirtyIndicator });
+    const { saveContent, validateContent } = makeEditorActions({ state, editorId, onSave, onValidate, onError, updateStatus, updateDirtyIndicator, commitOptions });
     function loadFile(file) {
         const props = file.properties || file.data || {};
 

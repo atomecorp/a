@@ -41,15 +41,15 @@ Both flags are listed by `./run.sh --help`
 
 ### `npm run build:molecule:tauri`
 
-`tauri build --debug --features bevy_renderer_core --bundles app`. A **debug**
+`tauri build --debug --bundles app`. A **debug**
 bundle used by the startup acceptance test (`npm run test:molecule:tauri-startup`).
 It is not a release artifact.
 
 ### Output paths
 
 ```
-platforms/desktop-tauri/target/release/bundle/macos/   # atome.app
-platforms/desktop-tauri/target/release/bundle/dmg/     # the generated .dmg
+target/release/bundle/macos/   # atome.app (the workspace target/ at the root)
+target/release/bundle/dmg/     # the generated .dmg
 ```
 
 Both scripts pick the newest entry in those directories rather than a fixed
@@ -68,10 +68,9 @@ recognition, camera, and contacts usage descriptions.
 
 These are current facts about the scripts, not recommendations.
 
-- **Renderer feature flag.** `tauri:dev` and `build:molecule:tauri` both pass
-  `--features bevy_renderer_core`. The two production entry points call
-  `npm run tauri build` with no feature flag, so the release bundle is not built
-  with the same renderer features as the development runtime.
+- **No renderer feature flag.** Since 2026-11-06 the Tauri crate has no Bevy
+  feature (its standalone Bevy window was removed): `tauri:dev`,
+  `build:molecule:tauri` and the production entry points build the same crate.
 - **No version ledger.** `version` in `tauri.conf.json` is `0.1.0` and nothing
   increments it. This is unlike the iOS path, where
   `scripts/XCode_testflight_generator` owns `MARKETING_VERSION` and

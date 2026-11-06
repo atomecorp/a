@@ -4,15 +4,17 @@ use atome_dsp::biquad::{Biquad, Shape};
 use atome_dsp::delay::{Echo, MIX, TIME_MS};
 use atome_dsp::dynamics::{Compressor, Limiter};
 use atome_dsp::envelope::{self, Envelope};
-use atome_dsp::gain::{Pan, Volume, VOLUME_DB};
+use atome_dsp::gain::{Pan, VOLUME_DB, Volume};
 use atome_dsp::oscillator::{Oscillator, Waveform};
-use atome_dsp::{amplitude_to_db, Chain, Processor, StereoBlock};
+use atome_dsp::{Chain, Processor, StereoBlock, amplitude_to_db};
 
 const RATE: f32 = 48000.0;
 const BLOCK: usize = 64;
 
 fn sine(frequency: f32, frames: usize, amplitude: f32) -> Vec<f32> {
-    (0..frames).map(|n| amplitude * (std::f32::consts::TAU * frequency * n as f32 / RATE).sin()).collect()
+    (0..frames)
+        .map(|n| amplitude * (std::f32::consts::TAU * frequency * n as f32 / RATE).sin())
+        .collect()
 }
 
 // Runs a processor block by block over a stereo copy of `input`.
@@ -21,7 +23,10 @@ fn run(processor: &mut dyn Processor, input: &[f32]) -> (Vec<f32>, Vec<f32>) {
     let mut right = input.to_vec();
     for start in (0..input.len()).step_by(BLOCK) {
         let end = (start + BLOCK).min(input.len());
-        processor.process(&mut StereoBlock::new(&mut left[start..end], &mut right[start..end]));
+        processor.process(&mut StereoBlock::new(
+            &mut left[start..end],
+            &mut right[start..end],
+        ));
     }
     (left, right)
 }
@@ -36,7 +41,10 @@ fn volume_reaches_its_target_without_a_step() {
     volume.prepare(RATE, BLOCK);
     volume.set_param(VOLUME_DB, -6.0);
     let (left, _) = run(&mut volume, &vec![1.0; 4800]);
-    let largest_step = left.windows(2).map(|w| (w[1] - w[0]).abs()).fold(0.0, f32::max);
+    let largest_step = left
+        .windows(2)
+        .map(|w| (w[1] - w[0]).abs())
+        .fold(0.0, f32::max);
     assert!(largest_step < 0.01, "step {largest_step}");
     assert!((amplitude_to_db(left[4799]) + 6.0).abs() < 0.05);
 }
@@ -94,7 +102,11 @@ fn limiter_never_lets_a_sample_over_the_ceiling_and_silences_nan() {
     input[100] = f32::NAN;
     let (left, right) = run(&mut limiter, &input);
     let ceiling = 10f32.powf(-1.0 / 20.0);
-    assert!(left.iter().chain(right.iter()).all(|s| s.is_finite() && s.abs() <= ceiling + 1.0e-6));
+    assert!(
+        left.iter()
+            .chain(right.iter())
+            .all(|s| s.is_finite() && s.abs() <= ceiling + 1.0e-6)
+    );
 }
 
 #[test]
@@ -107,7 +119,13 @@ fn echo_repeats_an_impulse_after_its_time() {
     let mut input = vec![0.0; 24000];
     input[9600] = 1.0;
     let (left, _) = run(&mut echo, &input);
-    let first = left.iter().enumerate().skip(9601).max_by(|a, b| a.1.abs().total_cmp(&b.1.abs())).unwrap().0;
+    let first = left
+        .iter()
+        .enumerate()
+        .skip(9601)
+        .max_by(|a, b| a.1.abs().total_cmp(&b.1.abs()))
+        .unwrap()
+        .0;
     assert!((first as i32 - 14400).abs() <= 1, "echo at {first}");
 }
 
@@ -159,7 +177,11 @@ fn the_render_guard_flushes_denormals_and_restores() {
         if cfg!(any(target_arch = "x86_64", target_arch = "aarch64")) {
             assert!(FlushDenormals::active());
             let tiny = std::hint::black_box(f32::MIN_POSITIVE);
-            assert_eq!(std::hint::black_box(tiny * 0.5), 0.0, "a denormal result is flushed");
+            assert_eq!(
+                std::hint::black_box(tiny * 0.5),
+                0.0,
+                "a denormal result is flushed"
+            );
         }
     }
     assert_eq!(FlushDenormals::active(), before);

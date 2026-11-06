@@ -1,11 +1,12 @@
 use bevy::{
-    core_pipeline::core_2d::{Transparent2d, CORE_2D_DEPTH_FORMAT},
+    core_pipeline::core_2d::{CORE_2D_DEPTH_FORMAT, Transparent2d},
     ecs::system::lifetimeless::{Read, SRes},
     image::Image,
     math::FloatOrd,
     mesh::{Mesh2d, VertexBufferLayout},
     prelude::*,
     render::{
+        Render, RenderApp, RenderStartup, RenderSystems,
         mesh::RenderMesh,
         render_asset::RenderAssets,
         render_phase::{
@@ -19,18 +20,16 @@ use bevy::{
             Face, FragmentState, MultisampleState, PipelineCache, PrimitiveState,
             RenderPipelineDescriptor, Sampler, SamplerBindingType, SamplerDescriptor, ShaderStages,
             SpecializedRenderPipeline, SpecializedRenderPipelines, StencilFaceState, StencilState,
-            TextureSampleType, TextureViewDimension, VertexFormat,
-            VertexState, VertexStepMode,
+            TextureSampleType, TextureViewDimension, VertexFormat, VertexState, VertexStepMode,
         },
         renderer::RenderDevice,
         sync_world::{MainEntity, MainEntityHashMap},
         texture::GpuImage,
         view::{ExtractedView, RenderVisibleEntities},
-        Render, RenderApp, RenderStartup, RenderSystems,
     },
     sprite_render::{
-        init_mesh_2d_pipeline, DrawMesh2d, Mesh2dPipeline, Mesh2dPipelineKey,
-        RenderMesh2dInstances, SetMesh2dBindGroup, SetMesh2dViewBindGroup,
+        DrawMesh2d, Mesh2dPipeline, Mesh2dPipelineKey, RenderMesh2dInstances, SetMesh2dBindGroup,
+        SetMesh2dViewBindGroup, init_mesh_2d_pipeline,
     },
 };
 use std::any::TypeId;
@@ -90,9 +89,18 @@ fn video_params_bytes(
     transition: &AtomeTransition,
 ) -> [u8; 48] {
     let values: [f32; 12] = [
-        opacity.clamp(0.0, 1.0), filters.brightness, filters.contrast, filters.saturate,
-        filters.grayscale, filters.sepia, filters.invert, filters.hue,
-        transition.kind, transition.progress, transition.role, transition.softness,
+        opacity.clamp(0.0, 1.0),
+        filters.brightness,
+        filters.contrast,
+        filters.saturate,
+        filters.grayscale,
+        filters.sepia,
+        filters.invert,
+        filters.hue,
+        transition.kind,
+        transition.progress,
+        transition.role,
+        transition.softness,
     ];
     let mut bytes = [0u8; 48];
     for (index, value) in values.iter().enumerate() {
@@ -401,7 +409,7 @@ fn queue_video_external_textures(
             // Transient items disappear with their video; retaining obsolete
             // pipelines invalidates later command buffers.
             transparent_phase.add_transient(Transparent2d {
-                entity: (render_entity, visible_entity.into()),
+                entity: (render_entity, visible_entity),
                 draw_function: draw_video,
                 pipeline: pipeline_id,
                 sort_key: FloatOrd(mesh_z),

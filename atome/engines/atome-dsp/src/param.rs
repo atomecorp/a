@@ -23,8 +23,22 @@ pub struct ParamSpec {
 }
 
 impl ParamSpec {
-    pub const fn new(id: u32, key: &'static str, min: f32, max: f32, default: f32, unit: Unit) -> Self {
-        Self { id, key, min, max, default, unit }
+    pub const fn new(
+        id: u32,
+        key: &'static str,
+        min: f32,
+        max: f32,
+        default: f32,
+        unit: Unit,
+    ) -> Self {
+        Self {
+            id,
+            key,
+            min,
+            max,
+            default,
+            unit,
+        }
     }
 
     pub fn clamp(&self, value: f32) -> f32 {
@@ -43,7 +57,12 @@ pub struct Smoothed {
 
 impl Smoothed {
     pub fn new(value: f32, time_ms: f32) -> Self {
-        Self { current: value, target: value, coefficient: 0.0, time_ms }
+        Self {
+            current: value,
+            target: value,
+            coefficient: 0.0,
+            time_ms,
+        }
     }
 
     pub fn prepare(&mut self, sample_rate: f32) {

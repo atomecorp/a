@@ -3,12 +3,12 @@
 // limiter that is always on. The same render runs in the native engine's
 // output callback and in the Web AudioWorklet; the round-trip probe rides on it.
 
-use crate::round_trip::RoundTrip;
 use crate::MixGraphEffect;
+use crate::round_trip::RoundTrip;
 use atome_dsp::dynamics::Limiter;
 use atome_dsp::{Processor, StereoBlock};
-use kira::effect::Effect;
 use kira::Frame;
+use kira::effect::Effect;
 
 // The device buffer the direct path asks for: 1.33 ms at 48 kHz.
 pub const BUFFER_FRAMES: u32 = 64;
@@ -48,8 +48,12 @@ impl DirectRender {
             self.left[index] = frame.left;
             self.right[index] = frame.right;
         }
-        self.limiter.process(&mut StereoBlock::new(&mut self.left[..frames], &mut self.right[..frames]));
-        self.probe.process(&mut self.left[..frames], &mut self.right[..frames]);
+        self.limiter.process(&mut StereoBlock::new(
+            &mut self.left[..frames],
+            &mut self.right[..frames],
+        ));
+        self.probe
+            .process(&mut self.left[..frames], &mut self.right[..frames]);
     }
 
     // Adds the direct path over an interleaved device buffer.

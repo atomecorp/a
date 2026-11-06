@@ -110,8 +110,14 @@ fn fade(angle: f32, from: f32, to: f32) -> LinearGradient {
     LinearGradient {
         angle,
         stops: vec![
-            GradientStop { offset: 0.0, color: [1.0, 1.0, 1.0, from] },
-            GradientStop { offset: 1.0, color: [1.0, 1.0, 1.0, to] },
+            GradientStop {
+                offset: 0.0,
+                color: [1.0, 1.0, 1.0, from],
+            },
+            GradientStop {
+                offset: 1.0,
+                color: [1.0, 1.0, 1.0, to],
+            },
         ],
     }
 }
@@ -120,7 +126,12 @@ fn fade(angle: f32, from: f32, to: f32) -> LinearGradient {
 #[test]
 fn a_border_gradient_grades_the_outline_along_its_axis() {
     let paint = SurfacePaint {
-        border: Some(SurfaceBorder { width: 1.0, color: [1.0; 4], colors: None, gradient: Some(fade(90.0, 0.0, 1.0)) }),
+        border: Some(SurfaceBorder {
+            width: 1.0,
+            color: [1.0; 4],
+            colors: None,
+            gradient: Some(fade(90.0, 0.0, 1.0)),
+        }),
         ..Default::default()
     };
     let texture = paint.texture(&silhouette(100.0, 40.0, 0.0), [0.0; 4]);
@@ -134,8 +145,13 @@ fn a_border_gradient_grades_the_outline_along_its_axis() {
 #[test]
 fn an_inset_shadow_gradient_fades_the_stroke_along_its_axis() {
     let paint = SurfacePaint {
-        inset_shadows: vec![InsetShadow { color: [1.0; 4], blur: 0.0, spread: 0.0, offset: [-1.0, 0.0],
-            gradient: Some(fade(180.0, 1.0, 0.0)) }],
+        inset_shadows: vec![InsetShadow {
+            color: [1.0; 4],
+            blur: 0.0,
+            spread: 0.0,
+            offset: [-1.0, 0.0],
+            gradient: Some(fade(180.0, 1.0, 0.0)),
+        }],
         ..Default::default()
     };
     let texture = paint.texture(&silhouette(40.0, 100.0, 0.0), [0.0; 4]);
@@ -148,7 +164,12 @@ fn an_inset_shadow_gradient_fades_the_stroke_along_its_axis() {
 #[test]
 fn a_texture_scale_rasterizes_more_texels_for_the_same_logical_lengths() {
     let paint = SurfacePaint {
-        border: Some(SurfaceBorder { width: 0.5, color: [1.0; 4], colors: None, gradient: None }),
+        border: Some(SurfaceBorder {
+            width: 0.5,
+            color: [1.0; 4],
+            colors: None,
+            gradient: None,
+        }),
         texture_scale: Some(2.0),
         ..Default::default()
     };
@@ -156,9 +177,28 @@ fn a_texture_scale_rasterizes_more_texels_for_the_same_logical_lengths() {
     assert_eq!((texture.width, texture.height), (200, 80));
     assert_eq!(pixel(&texture, 100, 0)[3], 255);
     assert_eq!(pixel(&texture, 100, 1)[3], 0);
-    assert_ne!(paint.cache_key([0.0; 4]), SurfacePaint { texture_scale: None, ..paint.clone() }.cache_key([0.0; 4]));
-    assert!(!SurfacePaint { texture_scale: Some(4.0), ..paint.clone() }.valid());
-    assert!(!SurfacePaint { texture_scale: Some(0.5), ..paint }.valid());
+    assert_ne!(
+        paint.cache_key([0.0; 4]),
+        SurfacePaint {
+            texture_scale: None,
+            ..paint.clone()
+        }
+        .cache_key([0.0; 4])
+    );
+    assert!(
+        !SurfacePaint {
+            texture_scale: Some(4.0),
+            ..paint.clone()
+        }
+        .valid()
+    );
+    assert!(
+        !SurfacePaint {
+            texture_scale: Some(0.5),
+            ..paint
+        }
+        .valid()
+    );
 }
 
 #[test]
@@ -221,6 +261,7 @@ fn ordinary_texture_color_patches_do_not_replace_the_media_texture() {
     let mut world = world();
     let mut node = shape("legacy_texture");
     node.texture = Some(AtomeTexture {
+        external: None,
         width: 1,
         height: 1,
         rgba: vec![12, 34, 56, 255],
@@ -258,7 +299,12 @@ fn painted_surfaces_preserve_the_resolved_mask_across_color_resize_and_removal()
     };
     node.mask = Some(mask);
     let entity = apply_spawn(&mut world, node).unwrap();
-    let alpha = |world: &World| image(world, entity).data.as_ref().unwrap()[3];
+    // A masked surface is cut on the GPU: its pixels are read as the CPU twin draws them.
+    let pixels = |world: &World| {
+        let handle = &world.get::<Sprite>(entity).unwrap().image;
+        crate::shape_mask_gpu::twin::image_pixels(world, handle).2
+    };
+    let alpha = |world: &World| pixels(world)[3];
     assert_eq!(alpha(&world), 0);
     apply_style(
         &mut world,
@@ -281,12 +327,7 @@ fn painted_surfaces_preserve_the_resolved_mask_across_color_resize_and_removal()
     )
     .unwrap();
     assert_eq!(alpha(&world), 0);
-    assert!(image(&world, entity)
-        .data
-        .as_ref()
-        .unwrap()
-        .chunks_exact(4)
-        .any(|pixel| pixel[3] > 0));
+    assert!(pixels(&world).chunks_exact(4).any(|pixel| pixel[3] > 0));
 }
 
 #[test]
@@ -297,10 +338,12 @@ fn malformed_paint_is_rejected_before_spawning_and_signed_spread_survives_normal
     paint.gradient.as_mut().unwrap().stops.reverse();
     node.surface_paint = Some(paint);
     assert!(apply_spawn(&mut world, node).is_err());
-    assert!(!world
-        .resource::<AtomeEntityTable>()
-        .by_id
-        .contains_key("invalid_paint"));
+    assert!(
+        !world
+            .resource::<AtomeEntityTable>()
+            .by_id
+            .contains_key("invalid_paint")
+    );
     let shadow: AtomeShadowStyle =
         serde_json::from_value(serde_json::json!({"color":[0,0,0,0.4],"blur":6,"spread":-3}))
             .unwrap();
@@ -313,29 +356,69 @@ fn malformed_paint_is_rejected_before_spawning_and_signed_spread_survives_normal
 #[test]
 fn glass_surfaces_draw_their_surface_paint_border_and_follow_its_patches() {
     let mut node = shape("glass_chip");
-    node.backdrop = Some(AtomeBackdropStyle { blur_px: 16.0, tint: [0.0, 0.0, 0.1, 0.69], tint_fade: 0.0, corner_cut_px: 0.0 });
+    node.backdrop = Some(AtomeBackdropStyle {
+        blur_px: 16.0,
+        tint: [0.0, 0.0, 0.1, 0.69],
+        tint_fade: 0.0,
+        corner_cut_px: 0.0,
+    });
     node.surface_paint = Some(SurfacePaint {
-        border: Some(SurfaceBorder { width: 1.0, color: [1.0; 4], colors: None, gradient: None }),
+        border: Some(SurfaceBorder {
+            width: 1.0,
+            color: [1.0; 4],
+            colors: None,
+            gradient: None,
+        }),
         ..Default::default()
     });
-    let scene = AtomeRenderScene { nodes: vec![node], effects: Vec::new(), selection_style: None };
+    let scene = AtomeRenderScene {
+        nodes: vec![node],
+        effects: Vec::new(),
+        selection_style: None,
+    };
     let mut app = App::new();
-    app.add_plugins(AtomeBevyRendererPlugin::new(AtomeBevyRendererConfig::new(640.0, 480.0, scene)));
+    app.add_plugins(AtomeBevyRendererPlugin::new(AtomeBevyRendererConfig::new(
+        640.0, 480.0, scene,
+    )));
     app.update();
     let entity = app.world().resource::<AtomeEntityTable>().by_id["glass_chip"];
     let read = |app: &App| {
-        let handle = app.world()
-            .get::<bevy::sprite_render::MeshMaterial2d<crate::backdrop_surface::BackdropSurfaceMaterial>>(entity)
-            .unwrap().0.clone();
-        let uniform = app.world().resource::<Assets<crate::backdrop_surface::BackdropSurfaceMaterial>>()
-            .get(&handle).unwrap().uniform;
+        let handle =
+            app.world()
+                .get::<bevy::sprite_render::MeshMaterial2d<
+                    crate::backdrop_surface::BackdropSurfaceMaterial,
+                >>(entity)
+                .unwrap()
+                .0
+                .clone();
+        let uniform = app
+            .world()
+            .resource::<Assets<crate::backdrop_surface::BackdropSurfaceMaterial>>()
+            .get(&handle)
+            .unwrap()
+            .uniform;
         (uniform.corner_cut.y, uniform.border_edges)
     };
     assert_eq!(read(&app), (1.0, [Vec4::ONE; 4]));
-    let edges = [[1.0, 0.0, 0.0, 1.0], [0.0, 1.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0], [1.0, 1.0, 0.0, 1.0]];
-    apply_style(app.world_mut(), serde_json::from_value(serde_json::json!({"id":"glass_chip",
-        "surface_paint":{"border":{"width":2,"color":[1,1,1,1],"colors":edges}}})).unwrap()).unwrap();
+    let edges = [
+        [1.0, 0.0, 0.0, 1.0],
+        [0.0, 1.0, 0.0, 1.0],
+        [0.0, 0.0, 1.0, 1.0],
+        [1.0, 1.0, 0.0, 1.0],
+    ];
+    apply_style(
+        app.world_mut(),
+        serde_json::from_value(serde_json::json!({"id":"glass_chip",
+        "surface_paint":{"border":{"width":2,"color":[1,1,1,1],"colors":edges}}}))
+        .unwrap(),
+    )
+    .unwrap();
     assert_eq!(read(&app), (2.0, edges.map(Vec4::from_array)));
-    apply_style(app.world_mut(), serde_json::from_value(serde_json::json!({"id":"glass_chip","surface_paint":null})).unwrap()).unwrap();
+    apply_style(
+        app.world_mut(),
+        serde_json::from_value(serde_json::json!({"id":"glass_chip","surface_paint":null}))
+            .unwrap(),
+    )
+    .unwrap();
     assert_eq!(read(&app), (0.0, [Vec4::ZERO; 4]));
 }

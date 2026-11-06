@@ -1,0 +1,25 @@
+[package]
+name = "atome-confine"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "Linux confinement of one vault process: Landlock on its own directory, a seccomp allow-list, resource limits"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+landlock = "0.4"
+libc = "0.2"
+rustix = { version = "1", features = ["process", "thread"] }
+seccompiler = "0.5"
+
+[[test]]
+name = "confinement"
+path = "../../../tests/atome_confine/confinement.rs"
+harness = false
+
+[dev-dependencies]
+rusqlite.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

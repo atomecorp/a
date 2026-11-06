@@ -44,7 +44,11 @@ pub struct ActionBook {
 
 impl ActionBook {
     pub fn new() -> Self {
-        Self { queue: Arc::new(ActionQueue::new(QUEUE_CAPACITY)), generation: 0, builds: VecDeque::with_capacity(KEPT_BUILDS) }
+        Self {
+            queue: Arc::new(ActionQueue::new(QUEUE_CAPACITY)),
+            generation: 0,
+            builds: VecDeque::with_capacity(KEPT_BUILDS),
+        }
     }
 
     pub fn queue(&self) -> Arc<ActionQueue> {
@@ -66,11 +70,24 @@ impl ActionBook {
     }
 
     pub fn drain(&self) -> DrainedActions {
-        let mut drained = DrainedActions { dropped: self.queue.take_dropped(), starved: self.queue.take_starved(), ..DrainedActions::default() };
+        let mut drained = DrainedActions {
+            dropped: self.queue.take_dropped(),
+            starved: self.queue.take_starved(),
+            ..DrainedActions::default()
+        };
         self.queue.drain(|fired| {
-            let info = self.builds.iter().find(|(generation, _)| *generation == fired.generation).and_then(|(_, infos)| infos.get(fired.marker as usize));
+            let info = self
+                .builds
+                .iter()
+                .find(|(generation, _)| *generation == fired.generation)
+                .and_then(|(_, infos)| infos.get(fired.marker as usize));
             match info {
-                Some(info) => drained.actions.push(FiredAction { marker: info.clone(), note: fired.note, frame: fired.frame, count: fired.count }),
+                Some(info) => drained.actions.push(FiredAction {
+                    marker: info.clone(),
+                    note: fired.note,
+                    frame: fired.frame,
+                    count: fired.count,
+                }),
                 None => drained.stale += 1,
             }
         });

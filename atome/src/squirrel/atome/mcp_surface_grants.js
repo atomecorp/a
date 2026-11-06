@@ -21,8 +21,9 @@ export const MCP_READ_GRANT = 'read';
 const HEALTH_FAMILY_IDS = Object.freeze(['thalasso', 'sensors', 'body_data', 'strava']);
 export const isMcpHealthFamily = familyId => familyId.startsWith('health_') || HEALTH_FAMILY_IDS.includes(familyId);
 const PURCHASE_FAMILY_IDS = Object.freeze(['shop']);
-// The person's own controls over programs and requests: never a program's, whatever it was granted.
-const PERSON_ONLY_FAMILY_IDS = Object.freeze(['mcp_access']);
+// The person's own controls over programs and requests, and the lists they send and receive (health ones among
+// them): never a program's, whatever it was granted.
+const PERSON_ONLY_FAMILY_IDS = Object.freeze(['mcp_access', 'share']);
 const PROGRAM_SANDBOX_PROFILE = 'remote_program';
 const LOCAL_SANDBOX_PROFILE = 'desktop_local_owner';
 const DISCOVERY_CAPABILITIES = Object.freeze(['mcp.read', 'runtime.read']);
@@ -132,15 +133,23 @@ export async function forgetMcpProgram(programId, transport) {
     return { ok: true };
 }
 
-/** The actor of a request relayed from a program seat (the relay names `fromProgramId`). */
-export function programActor({ fromUserId, fromProgramId }) {
-    const families = mcpSurfaceGrant(fromProgramId).map(family => PROGRAM_FAMILIES[family]);
+/** The actor of a program holding `grants` (family ids of `listMcpGrantFamilies`). With every family, it is the most
+ *  a program can ever do: the registry's `program` surface (scripts/registry/registry_project_exposure.mjs). */
+export function programGrantActor(actorId, grants) {
+    const families = grants.map((family) => {
+        if (!PROGRAM_FAMILIES[family]) throw mcpError(MCP_ERROR.INVALID_PARAMS, `mcp_grant_family_not_grantable:${family}`);
+        return PROGRAM_FAMILIES[family];
+    });
     return {
-        actor_id: `remote_program:${fromUserId}:${fromProgramId}`,
+        actor_id: actorId,
         capabilities: [...new Set(families.flatMap(family => family.capabilities))],
         sandbox_profiles: [PROGRAM_SANDBOX_PROFILE, ...new Set(families.map(family => family.sandbox).filter(Boolean))]
     };
 }
+
+/** The actor of a request relayed from a program seat (the relay names `fromProgramId`). */
+export const programActor = ({ fromUserId, fromProgramId }) => programGrantActor(`remote_program:${fromUserId}:${fromProgramId}`,
+    mcpSurfaceGrant(fromProgramId));
 
 /** A program's Health call waits for the person's yes on this device, even with « Santé » ticked. */
 export function programAccessPolicy(actor, access) {

@@ -15,7 +15,7 @@ if (!fs.existsSync(config)) {
   const values = { NODE_ENV: 'production', HOST: '127.0.0.1', PORT: '3001', USE_HTTPS: 'false',
     JWT_SECRET: randomBytes(48).toString('hex'), COOKIE_SECRET: randomBytes(48).toString('hex'),
     SERVER_ID: randomUUID(), SERVER_NAME: 'atome', SERVER_PRIVATE_KEY_PATH: `${state}/server-private.pem`,
-    SERVER_PUBLIC_KEY_PATH: `${state}/server-public.pem`, GITHUB_AUTO_SYNC: 'false', SQUIRREL_DISABLE_WATCHER: '1' };
+    SERVER_PUBLIC_KEY_PATH: `${state}/server-public.pem`, GITHUB_AUTO_SYNC: 'false' };
   fs.writeFileSync(`${config}.new`, Object.entries(values).map(([key, value]) => `${key}='${value}'\n`).join(''), { mode: 0o640 });
   execFileSync('chown', ['root:atome', `${config}.new`]);
   execFileSync('chown', ['-R', 'atome:atome', state]);

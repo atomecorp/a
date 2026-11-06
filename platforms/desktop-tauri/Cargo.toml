@@ -3,7 +3,9 @@ name = "squirrel"
 version = "0.1.0"
 description = "A Tauri App"
 authors = ["you"]
-edition = "2021"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
 # The Tauri CLI treats the binary named by `default-run` (or by the package
 # name) as the main binary, so the `[[bin]] atome` target below has to be
 # declared here as well.
@@ -30,87 +32,62 @@ path = "src/main.rs"
 
 [features]
 default = []
-bevy_backend = ["dep:bevy", "dep:atome-bevy-renderer-core"]
-bevy_renderer_core = [
-    "bevy_backend",
-    "bevy/default_app",
-    "bevy/bevy_window",
-    "bevy/bevy_winit",
-    "bevy/x11",
-    "bevy/wayland",
-    "bevy/bevy_render",
-    "bevy/bevy_core_pipeline",
-    "bevy/bevy_camera",
-    "bevy/bevy_asset",
-    "bevy/bevy_image",
-    "bevy/bevy_sprite",
-    "bevy/bevy_sprite_render",
-    "bevy/bevy_ui",
-    "bevy/bevy_ui_render",
-    "bevy/png",
-    "bevy/webgpu",
-]
-bevy_renderer_native = [
-    "bevy_renderer_core",
-    "bevy/multi_threaded",
-]
 
 [build-dependencies]
 cc = "1"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-bevy = { version = "0.19.0", default-features = false, optional = true }
-atome-bevy-renderer-core = { path = "../../atome/renderers/bevy-core", optional = true }
-axum = { version = "0.7.9", features = ["ws"] }
-tokio = { version = "1", features = ["full"] }
-tower-http = { version = "0.5.0", features = ["fs", "cors", "limit"] }
-tauri = { version = "2", features = [] }
+axum = { workspace = true, features = ["ws"] }
+tokio = { workspace = true, features = ["full"] }
+tower-http = { workspace = true, features = ["fs", "cors", "limit"] }
+tauri.workspace = true
 tauri-plugin-opener = "2"
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-stt = { path = "vendor/tauri-plugin-stt" }
 tauri-plugin-health = { path = "vendor/tauri-plugin-health" }
 tauri-plugin-billing = { path = "vendor/tauri-plugin-billing" }
 tauri-plugin-mobile-host = { path = "vendor/tauri-plugin-mobile-host" }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde.workspace = true
+serde_json.workspace = true
 tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 urlencoding = "2"
 futures-util = "0.3"
-tokio-tungstenite = { version = "0.24", features = ["rustls-tls-native-roots"] }
+tokio-tungstenite = { workspace = true, features = ["rustls-tls-native-roots"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
-base64 = "0.22"
-cpal = "0.15"
-hound = "3"
-kira = { version = "0.12", features = ["cpal", "wav", "mp3", "ogg", "flac", "aac", "isomp4"] }
+base64.workspace = true
+hound.workspace = true
+# The audio engine (Kira, cpal, Symphonia) comes whole from atome-audio-engine.
 atome-mix-graph = { path = "../../atome/engines/mix-graph" }
 atome-audio-engine = { path = "../../atome/engines/audio-engine" }
-symphonia = { version = "0.5.5", default-features = false, features = ["aac", "isomp4"] }
-ringbuf = "0.4"
-once_cell = "1"
+once_cell.workspace = true
 midir = "0.11"
 
 # Local authentication and local sync storage. `src/server` uses these on every
 # target, Android included: they are not macOS-only dependencies.
-rusqlite = { version = "0.31", features = ["bundled"] }
+rusqlite.workspace = true
+# The one Atome store (schema, commit, projection, history, ACL, type gate).
+atome-store = { path = "../../atome/engines/atome-store" }
+# The server behaviour shared with the Web server (CORS, request id, static roots).
+atome-server = { path = "../../atome/servers/atome-server", default-features = false }
 bcrypt = "0.15"
 uuid = { version = "1.8", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 jsonwebtoken = "9"
 rand = "0.8"
-sha2 = "0.10"
+sha2.workspace = true
 hex = "0.4"
 
 # HTTP client for GitHub downloads.
 # rustls instead of native-tls: native-tls pulls OpenSSL, which has no
 # Android target here, and tokio-tungstenite already uses rustls.
-reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls-native-roots"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-native-roots"] }
 
-# ZIP extraction for updates
-zip = "0.6"
-tempfile = "3"
+# ZIP extraction for updates (GitHub archives are deflated; reading only).
+zip = { version = "9.3", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+tempfile.workspace = true
 
 # Environment variables from .env file
 dotenvy = "0.15"
@@ -127,20 +104,5 @@ security-framework = { version = "3.7.0", features = ["OSX_10_15"] }
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "=0.21.1"
 
-# The bundled SQLite (C code built by libsqlite3-sys) answers every local query. Left
-# unoptimised by the dev profile, it made each `/ws/api` read of a debug build several
-# times slower (1000 calendar rows: ~11 s). Only this package is optimised.
-[profile.dev.package.libsqlite3-sys]
-opt-level = 3
-
-# Android materializes its embedded web root from the shared library: every launch hashes the
-# stored assets (sha2) and a first launch decompresses them (brotli). Unoptimised by the dev
-# profile, a debug APK spent 43 s per warm launch and 63 s on the first one (Galaxy A23, 2026-10-26).
-[profile.dev.package.sha2]
-opt-level = 3
-
-[profile.dev.package.brotli]
-opt-level = 3
-
-[profile.dev.package.brotli-decompressor]
-opt-level = 3
+[lints]
+workspace = true

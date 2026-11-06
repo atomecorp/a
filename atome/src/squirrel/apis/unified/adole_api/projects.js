@@ -1,6 +1,7 @@
 import { generateUUID } from '../adole.js';
 import { getSessionState, setCurrentProjectCache, getCurrentProjectCache, clearCurrentProjectCache, updateWindowProject } from './session.js';
-import { list_atomes, create_atome, delete_atome, get_atome } from './atomes.js';
+import { list_atomes, create_atome, delete_atomes, get_atome } from './atomes.js';
+import { resolveAtomeId, resolveAtomeParentId, resolveAtomeProjectId } from './atome_record_projection.js';
 import { with_callback, getCurrentUserId, isLoggedOut } from './activities_support.js';
 
 const dispatchProjectChanged = (detail = {}) => {
@@ -133,6 +134,27 @@ export async function list_projects(options = {}, callback) {
     return with_callback(result, callback);
 }
 
+// What a project holds (D36, user 5 Nov. 2026: deleting a project deletes its content): every atome of its scope (the
+// record's `project_id`, the server's own index of a project) and, recursively, every atome held by one of them
+// (`meta.parent_id`), held ones first so the project goes last.
+const PROJECT_CONTENT_LIMIT = Number.MAX_SAFE_INTEGER;
+async function project_content_ids(projectId) {
+    const listed = await list_atomes({ project_id: projectId, limit: PROJECT_CONTENT_LIMIT });
+    const side = listed?.meta?.source === 'tauri' ? 'tauri' : 'fastify';
+    if (listed?.[side]?.error) return { ok: false, error: listed[side].error };
+    const records = (listed[side].atomes || []).map(record => ({ id: String(resolveAtomeId(record) || ''),
+        project: String(resolveAtomeProjectId(record) || ''), parent: String(resolveAtomeParentId(record) || '') })).filter(record => record.id && record.id !== projectId);
+    const held = new Set([projectId]), order = [];
+    for (let grew = true; grew;) {
+        grew = false;
+        for (const record of records) {
+            if (held.has(record.id) || (record.project !== projectId && !held.has(record.parent))) continue;
+            held.add(record.id); order.push(record.id); grew = true;
+        }
+    }
+    return { ok: true, ids: order.reverse() };
+}
+
 export async function delete_project(projectId, callback) {
     if (!projectId) {
         const error = 'Missing project id.';
@@ -142,7 +164,12 @@ export async function delete_project(projectId, callback) {
         }, callback);
     }
 
-    const result = await delete_atome(projectId);
+    const content = await project_content_ids(String(projectId));
+    if (!content.ok) {
+        const error = `project_content_unreadable:${content.error}`;
+        return with_callback({ tauri: { success: false, error }, fastify: { success: false, error } }, callback);
+    }
+    const result = await delete_atomes([...content.ids, String(projectId)]);
     const deleted = result?.tauri?.success === true || result?.fastify?.success === true || result?.ok === true || result?.success === true;
     if (deleted) {
         dispatchProjectAtomeEvent('squirrel:atome-deleted', {
@@ -151,7 +178,8 @@ export async function delete_project(projectId, callback) {
             projectId,
             project_id: projectId,
             type: 'project',
-            atome_type: 'project'
+            atome_type: 'project',
+            content_ids: content.ids
         });
     }
     return with_callback(result, callback);

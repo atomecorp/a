@@ -1,10 +1,29 @@
-import crypto from 'node:crypto';
-import db from '../database/adole.js';
-import { createApnsTransport } from './apns_transport.js';
-import { createFcmTransport } from './fcm_transport.js';
+// The push to a person's devices is the Rust front's (atome/servers/atome-server/src/social/push/,
+// with its APNs and FCM transports): Fastify's services reach it through SERVICE frames on the
+// supervisor's control socket (`push:<operation>`). The installations' registration below is the
+// `auth` family's own on Fastify's half, which the front answers too (auth/account_actions.rs),
+// until that family's handlers leave at the cutover.
+let supervisor = null;
 
-const digest = value => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
-export function createCommunicationPush({ query, transport = createApnsTransport(), androidTransport = createFcmTransport(), now = Date.now } = {}) {
+// The supervisor's client (server/userVaultProvider.js), set once by server_services.js.
+export function setCommunicationPushProvider(vaultProvider) {
+    supervisor = vaultProvider;
+}
+
+const ask = (operation, payload) => {
+    if (!supervisor) throw new Error('communication_push_provider_missing');
+    return supervisor.service(`push:${operation}`, payload);
+};
+
+export const communicationPush = {
+    // `exceptKeyIds`: device keys already told live; `personalOnly`: personal devices out of probation alone (an account notice).
+    deliver: (principal, item, { exceptKeyIds = null, personalOnly = false } = {}) => ask('deliver',
+        { principal: principal ?? null, item: item ?? null, exceptKeyIds: exceptKeyIds ? [...exceptKeyIds] : null, personalOnly }),
+    // A VoIP installation a configured transport reaches: a call may ring.
+    available: (principal) => ask('available', { principal: principal ?? null })
+};
+
+export function createCommunicationPush({ query, now = Date.now } = {}) {
     async function register(claims, input) {
         if (!claims?.sub || !claims.sid || !claims.cnf?.kid) throw new Error('auth_session_invalid');
         const provider = input.provider || 'apns';
@@ -36,67 +55,5 @@ export function createCommunicationPush({ query, transport = createApnsTransport
             [input.installationId, claims.sub, claims.cnf.kid, kind]);
         return { ok: true };
     }
-    // `exceptKeyIds`: device keys already told live; `personalOnly`: personal devices out of probation alone (an account notice).
-    async function deliver(principal, item, { exceptKeyIds = null, personalOnly = false } = {}) {
-        if (!transport.configured() && !androidTransport.configured()) return { ok: false, error: 'push_configuration_required' };
-        const control = item.kind === 'call-state' && /^[a-f0-9-]{36}$/.test(item.room_id);
-        const call = item.kind === 'call-invitation' && /^[a-f0-9-]{36}$/.test(item.room_id)
-            && Number(item.expires_at) > now();
-        const kind = call || control ? 'voip' : 'alert';
-        if (item.kind === 'call-invitation' && !call) return { ok: true, expired: true };
-        const expiresAt = call ? Number(item.expires_at) : now() + (control ? 60000 : 86400000);
-        const reachable = await query('all', `SELECT i.*, k.device_class AS key_class, k.restricted_until_ms AS key_restricted_ms FROM auth_push_installations i
-            JOIN auth_device_sessions s ON s.session_id=i.session_id
-            JOIN auth_device_keys k ON k.key_id=i.key_id
-            WHERE i.principal_id=? AND i.kind=? AND s.principal_id=i.principal_id AND s.key_id=i.key_id
-            AND k.principal_id=i.principal_id AND s.revoked_ms IS NULL AND k.revoked_ms IS NULL
-            AND s.expires_ms>? AND s.idle_expires_ms>?`, [principal, kind, now(), now()]);
-        const installations = reachable.filter(row => !exceptKeyIds?.has(row.key_id)
-            && (!personalOnly || (row.key_class === 'personal' && !(row.key_restricted_ms > now()))));
-        const results = [];
-        await query('run', 'DELETE FROM auth_push_deliveries WHERE expires_ms <= ?', [now()]);
-        for (let offset = 0; offset < installations.length; offset += 4) await Promise.all(installations.slice(offset, offset + 4).map(async installation => {
-            const deliveryTransport = installation.provider === 'fcm' ? androidTransport : transport;
-            // Apple VoIP pushes are exclusively new calls; Android controls
-            // only stop an existing system projection via the same transport.
-            if (control && installation.provider !== 'fcm') return;
-            if (!deliveryTransport.configured()) { results.push({ ok: false, error: 'push_configuration_required' }); return; }
-            if (call && now() >= expiresAt) { results.push({ ok: false, error: 'push_call_expired' }); return; }
-            const id = digest([principal, installation.installation_id, kind, item.id]);
-            let reserved = await query('run', `INSERT INTO auth_push_deliveries VALUES (?, ?, ?, 'sending', ?)
-                ON CONFLICT(delivery_id) DO NOTHING`, [id, installation.installation_id, kind, expiresAt]);
-            if (!reserved.changes) reserved = await query('run', "UPDATE auth_push_deliveries SET state='sending' WHERE delivery_id=? AND state='retry'", [id]);
-            if (!reserved.changes) return;
-            // No message, phone, bearer, photo or caller name is exposed on the lock screen.
-            // A contact request arrives quietly: no sound, nothing lit, among the notifications.
-            const quiet = item.kind === 'connection-request';
-            const payload = { aps: call ? {} : { alert: { title: 'Atome', 'loc-key': 'ATOME_NOTIFICATION' },
-                ...(quiet ? { 'interruption-level': 'passive' } : { sound: 'default' }) },
-                atome: { principal_id: principal, notification_id: item.id, peer_id: item.from_id,
-                    // A new device's request: its touch makes the app ask for it (native_notification_actions.js).
-                    ...(item.kind === 'auth-pair-request' ? { kind: item.kind, pair_id: item.id } : {}),
-                    ...(call || control ? { room_id: item.room_id, call_mode: item.call_mode, expires_at: expiresAt } : {}),
-                    ...(control ? { status: item.status, accepted_principal_id: item.acceptedPrincipalId,
-                        accepted_key_id: item.acceptedKeyId } : {}) } };
-            let result;
-            try { result = await deliveryTransport.send(installation, payload, { voip: call, control, quiet, expiresAt, collapseId: id }); }
-            catch { result = { ok: false, error: 'push_transport_uncertain' }; }
-            const state = result.ok ? 'accepted' : result.status === 429 || result.status >= 500 ? 'retry' : 'failed';
-            await query('run', 'UPDATE auth_push_deliveries SET state=? WHERE delivery_id=?', [state, id]);
-            if (result.invalidToken) await query('run', 'DELETE FROM auth_push_installations WHERE installation_id=? AND kind=? AND token=? AND updated_ms=?',
-                [installation.installation_id, kind, installation.token, installation.updated_ms]);
-            results.push(result);
-        }));
-        return { ok: results.every(result => result.ok), installations: installations.length, results };
-    }
-    async function available(principal) {
-        const rows = await query('all', `SELECT i.provider FROM auth_push_installations i
-            JOIN auth_device_sessions s ON s.session_id=i.session_id JOIN auth_device_keys k ON k.key_id=i.key_id
-            WHERE i.principal_id=? AND i.kind='voip' AND s.principal_id=i.principal_id AND s.key_id=i.key_id
-            AND k.principal_id=i.principal_id AND s.revoked_ms IS NULL AND k.revoked_ms IS NULL
-            AND s.expires_ms>? AND s.idle_expires_ms>?`, [principal, now(), now()]);
-        return rows.some(row => (row.provider === 'fcm' ? androidTransport : transport).configured());
-    }
-    return { register, prune, deliver, available };
+    return { register, prune };
 }
-export const communicationPush = createCommunicationPush({ query: (...args) => db.query(...args) });

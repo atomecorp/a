@@ -6,10 +6,15 @@
 // in the direction it will leave it, so the frames after a head are in the ring
 // before the head runs out.
 
+#![allow(
+    unsafe_code,
+    reason = "the render thread reads the stream ring's published frames without a lock"
+)]
+
 use crate::action_queue::ActionQueue;
 use crate::interp::TAPS;
 use crate::sample::SampleData;
-use crate::stream::{StreamRing, Target, RING_CELLS, RING_FRAMES};
+use crate::stream::{RING_CELLS, RING_FRAMES, StreamRing, Target};
 use std::marker::PhantomData;
 
 pub struct Source<'a> {
@@ -38,7 +43,10 @@ impl Window<'_> {
     #[inline]
     pub fn taps(&self, first: i64, right: bool) -> [f32; TAPS] {
         let at = ((first - self.base) as usize) & self.mask;
-        assert!(first >= self.start && first + TAPS as i64 <= self.end && at + TAPS <= self.cells, "taps inside their window");
+        assert!(
+            first >= self.start && first + TAPS as i64 <= self.end && at + TAPS <= self.cells,
+            "taps inside their window"
+        );
         let channel = if right { self.right } else { self.left };
         // SAFETY: `at..at + TAPS` lies in the window's cells (checked above);
         // a ring's readable frames are never written while readable (stream.rs).
@@ -51,8 +59,18 @@ impl Window<'_> {
 }
 
 impl<'a> Source<'a> {
-    pub fn new(data: &'a SampleData, sample: usize, ring: Option<&'a StreamRing>, report: &'a ActionQueue) -> Self {
-        Self { data, sample, ring, report }
+    pub fn new(
+        data: &'a SampleData,
+        sample: usize,
+        ring: Option<&'a StreamRing>,
+        report: &'a ActionQueue,
+    ) -> Self {
+        Self {
+            data,
+            sample,
+            ring,
+            report,
+        }
     }
 
     pub fn data(&self) -> &'a SampleData {
@@ -74,7 +92,10 @@ impl<'a> Source<'a> {
         let Some(ring) = self.ring else { return };
         let frame = position.max(0.0) as usize;
         // Inside a span with all its taps: a read still taking taps from the ring keeps it.
-        let held = |span: &&crate::sample::Span| (span.start == 0 || span.start + TAPS <= frame) && (frame + TAPS < span.end() || span.end() == self.frames());
+        let held = |span: &&crate::sample::Span| {
+            (span.start == 0 || span.start + TAPS <= frame)
+                && (frame + TAPS < span.end() || span.end() == self.frames())
+        };
         let Some(span) = self.data.span_at(frame).filter(held) else {
             if force {
                 ring.aim(None, true);
@@ -82,9 +103,17 @@ impl<'a> Source<'a> {
             return;
         };
         let target = if direction > 0.0 {
-            (span.end() < self.frames()).then(|| Target { sample: self.sample, reverse: false, origin: span.end() - TAPS })
+            (span.end() < self.frames()).then(|| Target {
+                sample: self.sample,
+                reverse: false,
+                origin: span.end() - TAPS,
+            })
         } else {
-            (span.start > 0).then(|| Target { sample: self.sample, reverse: true, origin: span.start + TAPS })
+            (span.start > 0).then(|| Target {
+                sample: self.sample,
+                reverse: true,
+                origin: span.start + TAPS,
+            })
         };
         ring.aim(target, force);
     }
@@ -95,28 +124,56 @@ impl<'a> Source<'a> {
         let Some(target) = ring.target() else { return };
         let frame = position.max(0.0) as i64;
         let origin = target.origin as i64;
-        let released = if target.reverse { origin - (frame + 1 + TAPS as i64) } else { frame - TAPS as i64 - origin };
+        let released = if target.reverse {
+            origin - (frame + 1 + TAPS as i64)
+        } else {
+            frame - TAPS as i64 - origin
+        };
         ring.release(released.max(0) as usize);
     }
 
     fn span_window(&self, frame: i64) -> Option<Window<'a>> {
         let span = self.data.span_at(usize::try_from(frame).ok()?)?;
         let left = span.frames.left.as_ptr();
-        let right = if self.data.is_mono() { left } else { span.frames.right.as_ptr() };
-        Some(Window { left, right, cells: span.len(), base: span.start as i64, mask: usize::MAX, start: span.start as i64, end: span.end() as i64, life: PhantomData })
+        let right = if self.data.is_mono() {
+            left
+        } else {
+            span.frames.right.as_ptr()
+        };
+        Some(Window {
+            left,
+            right,
+            cells: span.len(),
+            base: span.start as i64,
+            mask: usize::MAX,
+            start: span.start as i64,
+            end: span.end() as i64,
+            life: PhantomData,
+        })
     }
 
     fn ring_window(&self) -> Option<Window<'a>> {
         let ring = self.ring?;
         let (start, end) = ring.valid()?;
         let (left, right) = ring.cells();
-        Some(Window { left, right, cells: RING_CELLS, base: 0, mask: RING_FRAMES - 1, start, end, life: PhantomData })
+        Some(Window {
+            left,
+            right,
+            cells: RING_CELLS,
+            base: 0,
+            mask: RING_FRAMES - 1,
+            start,
+            end,
+            life: PhantomData,
+        })
     }
 
     // The window holding `first` that reaches furthest forward.
     pub fn window(&self, first: i64) -> Option<Window<'a>> {
         let span = self.span_window(first);
-        let ring = self.ring_window().filter(|window| window.start <= first && first < window.end);
+        let ring = self
+            .ring_window()
+            .filter(|window| window.start <= first && first < window.end);
         match (span, ring) {
             (Some(span), Some(ring)) => Some(if ring.end > span.end { ring } else { span }),
             (span, ring) => span.or(ring),
@@ -125,8 +182,12 @@ impl<'a> Source<'a> {
 
     // A window holding `first..last` whole.
     pub fn window_over(&self, first: i64, last: i64) -> Option<Window<'a>> {
-        self.span_window(first).filter(|window| window.contains(first, last))
-            .or_else(|| self.ring_window().filter(|window| window.contains(first, last)))
+        self.span_window(first)
+            .filter(|window| window.contains(first, last))
+            .or_else(|| {
+                self.ring_window()
+                    .filter(|window| window.contains(first, last))
+            })
     }
 
     // Frame `index` (inside the sample) wherever it is held.
@@ -134,7 +195,9 @@ impl<'a> Source<'a> {
         if let Some(found) = self.data.frame(index as usize) {
             return Some(found);
         }
-        let window = self.ring_window().filter(|window| window.contains(index, index + 1))?;
+        let window = self
+            .ring_window()
+            .filter(|window| window.contains(index, index + 1))?;
         let at = ((index - window.base) as usize) & window.mask;
         // SAFETY: `index` is a readable frame of the ring (stream.rs).
         Some(unsafe { (*window.left.add(at), *window.right.add(at)) })

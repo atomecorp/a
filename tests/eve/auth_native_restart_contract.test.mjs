@@ -69,8 +69,8 @@ test('Tauri injects the production authentication authority in debug and release
 test('native restart restores an unlocked grant from SQLite and its exact keystore scope', () => {
     const browser = read('atome/src/squirrel/apis/unified/adole_api/auth_methods_login.js');
     const device = read('atome/src/squirrel/security/auth_device.js');
-    const rust = read('platforms/desktop-tauri/src/server/local_auth_device.rs');
-    const swift = read('platforms/ios/atome-auv3/Common/AiSRuntimeAuthChallenges.swift');
+    // The one local host of Tauri and iOS (`atome-server::local`): iOS asks it in process.
+    const rust = read('atome/servers/atome-server/src/local/local_auth_device.rs');
     const iosBridge = read('platforms/ios/atome-auv3/Common/WebViewManagerIPC.swift');
     const iosOriginGate = read('platforms/ios/atome-auv3/Common/WebViewManagerScriptMessages.swift');
     expect(browser).toMatch(/local-session-describe[\s\S]*record = described\.localGrant/);
@@ -78,8 +78,7 @@ test('native restart restores an unlocked grant from SQLite and its exact keysto
     expect(browser).toMatch(/record\.scope \? await store\.forScope\(record\.scope\)/);
     expect(device).toContain('async function forScope(scope)');
     expect(rust).toContain('"local-session-describe" => describe(message, state)');
-    expect(swift).toContain('static func localAuthDescriptor');
-    expect(iosBridge).toMatch(/command == "auth_local_request"[\s\S]*AiSRuntime\.handleAuthMessage/);
+    expect(iosBridge).toMatch(/command == "auth_local_request"[\s\S]*LocalServer\.shared\.answer\(message\)/);
     expect(iosOriginGate).toMatch(/auth_link_take" \|\| command == "auth_local_request"/);
 });
 
@@ -90,7 +89,7 @@ test('desktop public-key requests satisfy the complete Tauri command contract', 
 
 test('local binding compares the enrolled key id without exporting a persisted macOS public key', () => {
     const browser = read('atome/src/squirrel/apis/unified/adole_api/auth_methods_login.js');
-    const rust = read('platforms/desktop-tauri/src/server/local_auth_device.rs');
+    const rust = read('atome/servers/atome-server/src/local/local_auth_device.rs');
     expect(browser).toMatch(/fields = \{ scope: device\.scope, keyId: device\.keyId/);
     expect(rust).toMatch(/let key_id = key_id\(message\)\?[\s\S]*response\["challenge"\]\["keyId"\] != key_id/);
     expect(rust).toMatch(/session-local-bind[\s\S]*response\["keyId"\] != key_id/);
@@ -123,11 +122,10 @@ test('desktop exports the public point paired with the persisted signing key', (
 });
 
 test('an active guest is resumable while a new guest cannot claim an existing account', () => {
-    const rust = read('platforms/desktop-tauri/src/server/local_auth.rs');
-    const swift = read('platforms/ios/atome-auv3/Common/AiSRuntimeAuthAccounts.swift');
+    // Tauri and iOS share this owner (`platforms/ios/bevy-renderer/src/local_server.rs` runs it).
+    const rust = read('atome/servers/atome-server/src/local/local_auth.rs');
     expect(rust.indexOf('status.as_deref() != Some("active")')).toBeLessThan(rust.indexOf('SELECT 1 FROM atomes'));
-    expect(swift).toMatch(/if let status[\s\S]*guard status == "active"[\s\S]*findUserRecordById/);
-    expect(swift).toMatch(/claims\["grant"\] == nil[\s\S]*"username": "Guest"/);
+    expect(read('platforms/ios/bevy-renderer/src/local_server.rs')).toContain('local::prepare(');
 });
 
 

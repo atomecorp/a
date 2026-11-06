@@ -78,8 +78,6 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
         } else if AppNativeTextRecognizer.canHandle(command: command) {
             // The same on-device recognition as the app (a received result's picture, the Health record).
             AppNativeTextRecognizer.shared.handle(command: command, payload: payload, completion: completion)
-        } else if AppNativeBevyRendererController.canHandle(command: command) {
-            AppNativeBevyRendererController.shared.handle(command: command, payload: payload, completion: completion)
         } else if AppNativeHealthController.canHandle(command: command) {
             // The extension has no HealthKit entitlement and must not read health
             // data next to the real-time audio thread: an explicit, clean refusal.

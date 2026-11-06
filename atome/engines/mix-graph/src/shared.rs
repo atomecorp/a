@@ -7,9 +7,9 @@
 
 use crate::dsp::AtomicParam;
 use crate::graph::{Graph, MAX_BLOCK};
+use kira::Frame;
 use kira::effect::{Effect, EffectBuilder};
 use kira::info::Info;
-use kira::Frame;
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -19,7 +19,9 @@ pub struct CaptureSlot {
 
 impl CaptureSlot {
     pub fn new() -> Arc<Self> {
-        Arc::new(Self { frames: Mutex::new((vec![Frame::ZERO; MAX_BLOCK], 0)) })
+        Arc::new(Self {
+            frames: Mutex::new((vec![Frame::ZERO; MAX_BLOCK], 0)),
+        })
     }
 
     fn store(&self, input: &[Frame]) {
@@ -92,12 +94,17 @@ impl LiveInput {
             self.samples[slot].store(frame.left.to_bits(), Ordering::Relaxed);
             self.samples[slot + 1].store(frame.right.to_bits(), Ordering::Relaxed);
         }
-        self.written.store(written.wrapping_add(input.len().min(free)), Ordering::Release);
+        self.written.store(
+            written.wrapping_add(input.len().min(free)),
+            Ordering::Release,
+        );
     }
 
     // Frames waiting to be pulled.
     pub fn available(&self) -> usize {
-        self.written.load(Ordering::Acquire).wrapping_sub(self.read.load(Ordering::Relaxed))
+        self.written
+            .load(Ordering::Acquire)
+            .wrapping_sub(self.read.load(Ordering::Relaxed))
     }
 
     pub fn pull(&self, out: &mut [Frame]) {
@@ -111,7 +118,10 @@ impl LiveInput {
         let count = written.wrapping_sub(read).min(out.len());
         for (index, slot) in out.iter_mut().take(count).enumerate() {
             let at = (read.wrapping_add(index) & self.mask) * 2;
-            *slot = Frame::new(f32::from_bits(self.samples[at].load(Ordering::Relaxed)), f32::from_bits(self.samples[at + 1].load(Ordering::Relaxed)));
+            *slot = Frame::new(
+                f32::from_bits(self.samples[at].load(Ordering::Relaxed)),
+                f32::from_bits(self.samples[at + 1].load(Ordering::Relaxed)),
+            );
         }
         self.read.store(read.wrapping_add(count), Ordering::Release);
     }
@@ -154,19 +164,28 @@ impl AuxOutputs {
     // Pairs 1..=pairs exist (pair 0 is the main output).
     pub fn configure(&self, pairs: u16, capacity: usize) {
         if let Ok(mut frames) = self.frames.lock() {
-            *frames = (1..=pairs).map(|pair| (pair, Vec::with_capacity(capacity))).collect();
+            *frames = (1..=pairs)
+                .map(|pair| (pair, Vec::with_capacity(capacity)))
+                .collect();
         }
     }
 
     pub fn pairs(&self) -> u16 {
-        self.frames.lock().map(|frames| frames.len() as u16).unwrap_or(0)
+        self.frames
+            .lock()
+            .map(|frames| frames.len() as u16)
+            .unwrap_or(0)
     }
 
     // Moves up to `out.len()` frames of `pair` into `out` (the rest is silence).
     pub fn drain_pair(&self, pair: u16, out: &mut [Frame]) {
         out.fill(Frame::ZERO);
-        let Ok(mut frames) = self.frames.try_lock() else { return };
-        let Some((_, buffer)) = frames.iter_mut().find(|(candidate, _)| *candidate == pair) else { return };
+        let Ok(mut frames) = self.frames.try_lock() else {
+            return;
+        };
+        let Some((_, buffer)) = frames.iter_mut().find(|(candidate, _)| *candidate == pair) else {
+            return;
+        };
         let count = buffer.len().min(out.len());
         out[..count].copy_from_slice(&buffer[..count]);
         buffer.drain(..count);
@@ -207,12 +226,18 @@ impl MixGraphEffect {
     fn adopt_pending(&mut self) {
         // The retired list's capacity is reserved by the control thread, so
         // handing the old graph back never allocates; when full, wait a block.
-        let Ok(mut retired) = self.shared.retired.try_lock() else { return };
+        let Ok(mut retired) = self.shared.retired.try_lock() else {
+            return;
+        };
         if retired.len() >= retired.capacity() {
             return;
         }
-        let Ok(mut pending) = self.shared.pending.try_lock() else { return };
-        let Some(mut next) = pending.take() else { return };
+        let Ok(mut pending) = self.shared.pending.try_lock() else {
+            return;
+        };
+        let Some(mut next) = pending.take() else {
+            return;
+        };
         if let Some(previous) = self.graph.as_mut() {
             next.adopt(previous);
         }
@@ -225,22 +250,30 @@ impl MixGraphEffect {
     pub fn render(&mut self, out: &mut [Frame]) {
         let _flush = atome_dsp::denormal::FlushDenormals::new();
         self.adopt_pending();
-        let Some(graph) = self.graph.as_mut() else { return };
+        let Some(graph) = self.graph.as_mut() else {
+            return;
+        };
         let sample_rate = self.shared.sample_rate.load(Ordering::Relaxed).max(1) as f64;
         for block in out.chunks_mut(MAX_BLOCK) {
-            graph.automation.run(self.shared.frames.load(Ordering::Relaxed), sample_rate);
+            graph
+                .automation
+                .run(self.shared.frames.load(Ordering::Relaxed), sample_rate);
             graph.process(block.len());
-            self.shared.frames.fetch_add(block.len() as u64, Ordering::Relaxed);
+            self.shared
+                .frames
+                .fetch_add(block.len() as u64, Ordering::Relaxed);
             for (frame, mixed) in block.iter_mut().zip(graph.main.iter()) {
                 *frame += *mixed;
             }
-            if !graph.aux.is_empty() {
-                if let Ok(mut aux) = self.shared.aux.frames.try_lock() {
-                    for (channel, buffer) in &graph.aux {
-                        if let Some((_, target)) = aux.iter_mut().find(|(candidate, _)| candidate == channel) {
-                            let free = target.capacity() - target.len();
-                            target.extend_from_slice(&buffer[..block.len().min(free)]);
-                        }
+            if !graph.aux.is_empty()
+                && let Ok(mut aux) = self.shared.aux.frames.try_lock()
+            {
+                for (channel, buffer) in &graph.aux {
+                    if let Some((_, target)) =
+                        aux.iter_mut().find(|(candidate, _)| candidate == channel)
+                    {
+                        let free = target.capacity() - target.len();
+                        target.extend_from_slice(&buffer[..block.len().min(free)]);
                     }
                 }
             }
@@ -250,8 +283,12 @@ impl MixGraphEffect {
 
 impl Effect for MixGraphEffect {
     fn init(&mut self, sample_rate: u32, internal_buffer_size: usize) {
-        self.shared.sample_rate.store(sample_rate, Ordering::Relaxed);
-        self.shared.block_size.store(internal_buffer_size, Ordering::Relaxed);
+        self.shared
+            .sample_rate
+            .store(sample_rate, Ordering::Relaxed);
+        self.shared
+            .block_size
+            .store(internal_buffer_size, Ordering::Relaxed);
     }
 
     fn process(&mut self, input: &mut [Frame], _dt: f64, _info: &Info) {
@@ -266,13 +303,22 @@ pub struct MixGraphEffectBuilder {
 impl EffectBuilder for MixGraphEffectBuilder {
     type Handle = ();
     fn build(self) -> (Box<dyn Effect>, Self::Handle) {
-        (Box::new(MixGraphEffect { shared: self.shared, graph: None }), ())
+        (
+            Box::new(MixGraphEffect {
+                shared: self.shared,
+                graph: None,
+            }),
+            (),
+        )
     }
 }
 
 impl MixGraphEffectBuilder {
     pub fn into_effect(self) -> MixGraphEffect {
-        MixGraphEffect { shared: self.shared, graph: None }
+        MixGraphEffect {
+            shared: self.shared,
+            graph: None,
+        }
     }
 }
 

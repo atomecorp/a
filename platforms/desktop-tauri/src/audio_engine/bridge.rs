@@ -11,11 +11,17 @@ pub fn audio_init() -> Result<Value, String> {
 }
 
 #[tauri::command]
-pub async fn audio_load_clip(paths: tauri::State<'_, crate::ProjectPaths>, id: String, path: String) -> Result<Value, String> {
+pub async fn audio_load_clip(
+    paths: tauri::State<'_, crate::ProjectPaths>,
+    id: String,
+    path: String,
+) -> Result<Value, String> {
     let project_root = paths.project_root.clone();
-    tauri::async_runtime::spawn_blocking(move || commands::load_clip(Some(&project_root), &id, &path))
-        .await
-        .map_err(|error| format!("audio_load_clip_task_failed: {error}"))?
+    tauri::async_runtime::spawn_blocking(move || {
+        commands::load_clip(Some(&project_root), &id, &path)
+    })
+    .await
+    .map_err(|error| format!("audio_load_clip_task_failed: {error}"))?
 }
 
 #[tauri::command]
@@ -38,10 +44,27 @@ pub fn audio_play(id: String) -> Result<Value, String> {
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub fn audio_play_instance(
-    asset_id: String, voice_id: String, start_seconds: f64, duration_seconds: Option<f64>, gain: f64, pan: f64, rate: f64,
-    loop_start_seconds: Option<f64>, loop_end_seconds: Option<f64>, strip_id: Option<String>,
+    asset_id: String,
+    voice_id: String,
+    start_seconds: f64,
+    duration_seconds: Option<f64>,
+    gain: f64,
+    pan: f64,
+    rate: f64,
+    loop_start_seconds: Option<f64>,
+    loop_end_seconds: Option<f64>,
+    strip_id: Option<String>,
 ) -> Result<Value, String> {
-    let request = VoiceRequest { start_seconds, duration_seconds, gain, pan, rate, loop_start_seconds, loop_end_seconds, envelope: None };
+    let request = VoiceRequest {
+        start_seconds,
+        duration_seconds,
+        gain,
+        pan,
+        rate,
+        loop_start_seconds,
+        loop_end_seconds,
+        envelope: None,
+    };
     commands::play_instance(&asset_id, &voice_id, &request, strip_id.as_deref())
 }
 
@@ -52,7 +75,11 @@ pub fn audio_schedule_instances(voices: Vec<ScheduledVoice>) -> Result<Value, St
 }
 
 #[tauri::command]
-pub fn audio_set_voice_end(voice_id: String, end_frame: u64, release_frames: u64) -> Result<Value, String> {
+pub fn audio_set_voice_end(
+    voice_id: String,
+    end_frame: u64,
+    release_frames: u64,
+) -> Result<Value, String> {
     commands::set_voice_end(&voice_id, end_frame, release_frames)
 }
 
@@ -83,11 +110,17 @@ pub fn audio_mix_devices() -> Result<Value, String> {
 
 // Reading and decoding a capture or a long impulse response stays off the UI thread.
 #[tauri::command]
-pub async fn audio_mix_asset_load(paths: tauri::State<'_, crate::ProjectPaths>, asset_id: String, path: String) -> Result<Value, String> {
+pub async fn audio_mix_asset_load(
+    paths: tauri::State<'_, crate::ProjectPaths>,
+    asset_id: String,
+    path: String,
+) -> Result<Value, String> {
     let project_root = paths.project_root.clone();
-    tauri::async_runtime::spawn_blocking(move || commands::mix_asset_load(Some(&project_root), &asset_id, &path))
-        .await
-        .map_err(|error| format!("audio_mix_asset_load_task_failed: {error}"))?
+    tauri::async_runtime::spawn_blocking(move || {
+        commands::mix_asset_load(Some(&project_root), &asset_id, &path)
+    })
+    .await
+    .map_err(|error| format!("audio_mix_asset_load_task_failed: {error}"))?
 }
 
 #[tauri::command]
@@ -103,11 +136,17 @@ pub fn audio_mix_cut_tail(module_id: String) -> Result<Value, String> {
 // A Sampler's sample, decoded off the UI thread; then the instrument commands
 // (description, notes, settings) for the timeline's and the direct path's graphs.
 #[tauri::command]
-pub async fn audio_instrument_sample_load(paths: tauri::State<'_, crate::ProjectPaths>, sample_id: String, path: String) -> Result<Value, String> {
+pub async fn audio_instrument_sample_load(
+    paths: tauri::State<'_, crate::ProjectPaths>,
+    sample_id: String,
+    path: String,
+) -> Result<Value, String> {
     let project_root = paths.project_root.clone();
-    tauri::async_runtime::spawn_blocking(move || commands::instrument_sample_load(Some(&project_root), &sample_id, &path))
-        .await
-        .map_err(|error| format!("audio_instrument_sample_load_task_failed: {error}"))?
+    tauri::async_runtime::spawn_blocking(move || {
+        commands::instrument_sample_load(Some(&project_root), &sample_id, &path)
+    })
+    .await
+    .map_err(|error| format!("audio_instrument_sample_load_task_failed: {error}"))?
 }
 
 #[tauri::command]
@@ -139,9 +178,11 @@ pub fn audio_direct_module_state(module_id: String) -> Result<Value, String> {
 // The measure plays and listens for a few seconds: off the UI thread.
 #[tauri::command]
 pub async fn audio_direct_measure_latency(device_name: Option<String>) -> Result<Value, String> {
-    tauri::async_runtime::spawn_blocking(move || commands::direct_measure_latency(device_name.as_deref()))
-        .await
-        .map_err(|error| format!("audio_direct_measure_latency_task_failed: {error}"))?
+    tauri::async_runtime::spawn_blocking(move || {
+        commands::direct_measure_latency(device_name.as_deref())
+    })
+    .await
+    .map_err(|error| format!("audio_direct_measure_latency_task_failed: {error}"))?
 }
 
 #[tauri::command]
@@ -181,10 +222,21 @@ pub fn audio_set_playback_rate(id: String, rate: f64) -> Result<Value, String> {
 
 #[tauri::command]
 pub fn audio_record_start(
-    paths: tauri::State<crate::ProjectPaths>, session_id: String, file_path: String, sample_rate: u32, channels: u16,
+    paths: tauri::State<crate::ProjectPaths>,
+    session_id: String,
+    file_path: String,
+    sample_rate: u32,
+    channels: u16,
     input_device_name: Option<String>,
 ) -> Result<Value, String> {
-    commands::record_start(Some(&paths.project_root), &session_id, &file_path, sample_rate, channels, input_device_name)
+    commands::record_start(
+        Some(&paths.project_root),
+        &session_id,
+        &file_path,
+        sample_rate,
+        channels,
+        input_device_name,
+    )
 }
 
 #[tauri::command]
@@ -208,29 +260,72 @@ pub fn audio_shutdown() -> Result<Value, String> {
 }
 
 #[tauri::command]
-pub fn audio_wake_start(sample_rate: u32) -> Result<Value, String> { super::wake_capture::start(sample_rate) }
+pub fn audio_wake_start(sample_rate: u32) -> Result<Value, String> {
+    super::wake_capture::start(sample_rate)
+}
 #[tauri::command]
-pub fn audio_wake_stop() -> Result<Value, String> { super::wake_capture::stop() }
+pub fn audio_wake_stop() -> Result<Value, String> {
+    super::wake_capture::stop()
+}
 #[tauri::command]
-pub fn audio_wake_read() -> Result<Value, String> { super::wake_capture::read() }
+pub fn audio_wake_read() -> Result<Value, String> {
+    super::wake_capture::read()
+}
 
 // The native voice engine, through the shared `dispatch` (the iOS app sends the same names).
 #[tauri::command]
-pub async fn audio_voice_start(paths: tauri::State<'_, crate::ProjectPaths>, models_root: String) -> Result<Value, String> {
+pub async fn audio_voice_start(
+    paths: tauri::State<'_, crate::ProjectPaths>,
+    models_root: String,
+) -> Result<Value, String> {
     let project_root = paths.project_root.clone();
-    tauri::async_runtime::spawn_blocking(move || commands::dispatch("voice_start", &serde_json::json!({ "modelsRoot": models_root, "ownCapture": true }), Some(&project_root)))
-        .await
-        .map_err(|error| format!("audio_voice_start_task_failed: {error}"))?
+    tauri::async_runtime::spawn_blocking(move || {
+        commands::dispatch(
+            "voice_start",
+            &serde_json::json!({ "modelsRoot": models_root, "ownCapture": true }),
+            Some(&project_root),
+        )
+    })
+    .await
+    .map_err(|error| format!("audio_voice_start_task_failed: {error}"))?
 }
 #[tauri::command]
-pub fn audio_voice_stop() -> Result<Value, String> { commands::dispatch("voice_stop", &serde_json::json!({}), None) }
+pub fn audio_voice_stop() -> Result<Value, String> {
+    commands::dispatch("voice_stop", &serde_json::json!({}), None)
+}
 #[tauri::command]
-pub fn audio_voice_set_phrases(phrases: Vec<String>) -> Result<Value, String> { commands::dispatch("voice_set_phrases", &serde_json::json!({ "phrases": phrases }), None) }
+pub fn audio_voice_set_phrases(phrases: Vec<String>) -> Result<Value, String> {
+    commands::dispatch(
+        "voice_set_phrases",
+        &serde_json::json!({ "phrases": phrases }),
+        None,
+    )
+}
 #[tauri::command]
-pub fn audio_voice_set_speaking(speaking: bool) -> Result<Value, String> { commands::dispatch("voice_set_speaking", &serde_json::json!({ "speaking": speaking }), None) }
+pub fn audio_voice_set_speaking(speaking: bool) -> Result<Value, String> {
+    commands::dispatch(
+        "voice_set_speaking",
+        &serde_json::json!({ "speaking": speaking }),
+        None,
+    )
+}
 #[tauri::command]
-pub fn audio_voice_set_listening(listening: String) -> Result<Value, String> { commands::dispatch("voice_set_listening", &serde_json::json!({ "listening": listening }), None) }
+pub fn audio_voice_set_listening(listening: String) -> Result<Value, String> {
+    commands::dispatch(
+        "voice_set_listening",
+        &serde_json::json!({ "listening": listening }),
+        None,
+    )
+}
 #[tauri::command]
-pub fn audio_voice_set_wake_verifier(verifier: Option<String>) -> Result<Value, String> { commands::dispatch("voice_set_wake_verifier", &serde_json::json!({ "verifier": verifier }), None) }
+pub fn audio_voice_set_wake_verifier(verifier: Option<String>) -> Result<Value, String> {
+    commands::dispatch(
+        "voice_set_wake_verifier",
+        &serde_json::json!({ "verifier": verifier }),
+        None,
+    )
+}
 #[tauri::command]
-pub fn audio_voice_read(record: bool) -> Result<Value, String> { commands::dispatch("voice_read", &serde_json::json!({ "record": record }), None) }
+pub fn audio_voice_read(record: bool) -> Result<Value, String> {
+    commands::dispatch("voice_read", &serde_json::json!({ "record": record }), None)
+}

@@ -17,7 +17,6 @@ import { v4 as uuidv4 } from 'uuid';
 import { findUserByPhone } from './auth_users.js';
 import { contactBookPhone } from '../atome/src/shared/contact_book_hash.js';
 import { pushNotificationToUserStack } from './notificationStack.js';
-import { getABoxEventBus } from './aBoxServer.js';
 import { wsSendJsonToUser } from './wsApiState.js';
 import { isPublicAccess } from '../atome/src/shared/recipient_access.js';
 import { commitAtomeEvent } from './atomeRoutes.orm.js';

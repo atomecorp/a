@@ -2,25 +2,14 @@
 // (voices play on their strip's sub-track, see atome-mix-graph).
 
 use super::scheduled_backend::{self, ScheduledCpalBackend};
-use kira::sound::static_sound::{StaticSoundData, StaticSoundHandle, StaticSoundSettings};
 use atome_mix_graph::voice::{VoiceRequest, VoiceSound};
-use kira::{AudioManager, AudioManagerSettings, Decibels, Frame, Panning, PlaybackRate, Tween};
+use kira::sound::static_sound::{StaticSoundData, StaticSoundHandle};
+use kira::{AudioManager, AudioManagerSettings, Decibels, Panning, PlaybackRate, Tween};
 use std::collections::HashMap;
 use std::fs;
 use std::io::Cursor;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
-use symphonia::core::audio::{AudioBufferRef, SampleBuffer};
-use symphonia::core::codecs::{
-    CodecType, DecoderOptions, CODEC_TYPE_AAC, CODEC_TYPE_ALAC, CODEC_TYPE_EAC3, CODEC_TYPE_FLAC,
-    CODEC_TYPE_MP1, CODEC_TYPE_MP2, CODEC_TYPE_MP3, CODEC_TYPE_NULL, CODEC_TYPE_OPUS,
-    CODEC_TYPE_VORBIS,
-};
-use symphonia::core::errors::Error as SymphoniaError;
-use symphonia::core::formats::FormatOptions;
-use symphonia::core::io::MediaSourceStream;
-use symphonia::core::meta::MetadataOptions;
-use symphonia::core::probe::Hint;
 
 /// Configurable tween durations for audio parameter changes.
 /// Allows the caller to tune fade times for professional-grade audio.
@@ -280,186 +269,6 @@ fn resolve_native_decode_route(
     ))
 }
 
-#[cfg(test)]
-mod decode_route_tests {
-    use super::{
-        resolve_native_decode_route, sniff_native_container, NativeContainer, NativeDecodeRoute,
-    };
-
-    #[test]
-    fn routes_iso_bmff_by_signature_without_extension() {
-        let bytes = [
-            0x00, 0x00, 0x00, 0x18, b'f', b't', b'y', b'p', b'i', b's', b'o', b'm', 0x00, 0x00,
-            0x02, 0x00,
-        ];
-        assert_eq!(sniff_native_container(&bytes), NativeContainer::IsoBmff);
-        assert_eq!(
-            resolve_native_decode_route(None, &bytes, "clip").unwrap(),
-            NativeDecodeRoute::SymphoniaIsoBmff
-        );
-    }
-
-    #[test]
-    fn routes_iso_bmff_when_free_box_precedes_ftyp() {
-        let bytes = [
-            0x00, 0x00, 0x00, 0x08, b'f', b'r', b'e', b'e', 0x00, 0x00, 0x00, 0x18, b'f', b't',
-            b'y', b'p', b'i', b's', b'o', b'm',
-        ];
-        assert_eq!(sniff_native_container(&bytes), NativeContainer::IsoBmff);
-        assert_eq!(
-            resolve_native_decode_route(Some("mp3"), &bytes, "clip").unwrap(),
-            NativeDecodeRoute::SymphoniaIsoBmff
-        );
-    }
-
-    #[test]
-    fn rejects_mp3_extension_with_non_mp3_bytes() {
-        let bytes = b"not an mp3 stream";
-        let error = resolve_native_decode_route(Some("mp3"), bytes, "clip").unwrap_err();
-        assert!(error.contains("Native audio container mismatch"));
-        assert!(error.contains("extension=mp3"));
-    }
-
-    #[test]
-    fn routes_wav_bytes_to_kira() {
-        let bytes = b"RIFF\x24\x00\x00\x00WAVEfmt ";
-        assert_eq!(sniff_native_container(bytes), NativeContainer::Wav);
-        assert_eq!(
-            resolve_native_decode_route(None, bytes, "clip").unwrap(),
-            NativeDecodeRoute::Kira
-        );
-    }
-}
-
-fn is_likely_audio_codec(codec: CodecType) -> bool {
-    matches!(
-        codec,
-        CODEC_TYPE_AAC
-            | CODEC_TYPE_ALAC
-            | CODEC_TYPE_EAC3
-            | CODEC_TYPE_FLAC
-            | CODEC_TYPE_MP1
-            | CODEC_TYPE_MP2
-            | CODEC_TYPE_MP3
-            | CODEC_TYPE_OPUS
-            | CODEC_TYPE_VORBIS
-    )
-}
-
-fn append_audio_buffer_frames(
-    audio_buffer: AudioBufferRef<'_>,
-    frames: &mut Vec<Frame>,
-) -> Result<u32, String> {
-    let spec = *audio_buffer.spec();
-    let channel_count = spec.channels.count();
-    if channel_count == 0 {
-        return Err("Decoded audio buffer has no channels".to_string());
-    }
-
-    let mut sample_buffer = SampleBuffer::<f32>::new(audio_buffer.capacity() as u64, spec);
-    sample_buffer.copy_interleaved_ref(audio_buffer);
-    let samples = sample_buffer.samples();
-
-    if channel_count == 1 {
-        for sample in samples {
-            frames.push(Frame::from_mono(*sample));
-        }
-    } else {
-        for chunk in samples.chunks(channel_count) {
-            let left = *chunk.first().unwrap_or(&0.0);
-            let right = *chunk.get(1).unwrap_or(&left);
-            frames.push(Frame::new(left, right));
-        }
-    }
-
-    Ok(spec.rate)
-}
-
-fn decode_clip_with_symphonia(
-    bytes: Vec<u8>,
-    extension_hint: Option<&str>,
-) -> Result<StaticSoundData, String> {
-    let mut hint = Hint::new();
-    if let Some(extension) = extension_hint {
-        hint.with_extension(extension);
-    }
-
-    let media_source_stream =
-        MediaSourceStream::new(Box::new(Cursor::new(bytes)), Default::default());
-    let probed = symphonia::default::get_probe()
-        .format(
-            &hint,
-            media_source_stream,
-            &FormatOptions::default(),
-            &MetadataOptions::default(),
-        )
-        .map_err(|error| format!("Failed to probe audio container: {error}"))?;
-    let mut format = probed.format;
-
-    let track = format
-        .tracks()
-        .iter()
-        .find(|track| {
-            track.codec_params.codec != CODEC_TYPE_NULL
-                && is_likely_audio_codec(track.codec_params.codec)
-        })
-        .ok_or("No decodable audio track found".to_string())?;
-    let track_id = track.id;
-    let mut decoder = symphonia::default::get_codecs()
-        .make(&track.codec_params, &DecoderOptions::default())
-        .map_err(|error| format!("Failed to create audio decoder: {error}"))?;
-
-    let mut sample_rate = track.codec_params.sample_rate.unwrap_or(0);
-    let mut frames = Vec::new();
-
-    loop {
-        let packet = match format.next_packet() {
-            Ok(packet) => packet,
-            Err(SymphoniaError::IoError(_)) => break,
-            Err(SymphoniaError::ResetRequired) => {
-                return Err("Audio decoder reset required during decode".to_string());
-            }
-            Err(error) => {
-                return Err(format!("Failed to read audio packet: {error}"));
-            }
-        };
-
-        if packet.track_id() != track_id {
-            continue;
-        }
-
-        match decoder.decode(&packet) {
-            Ok(audio_buffer) => {
-                let detected_sample_rate = append_audio_buffer_frames(audio_buffer, &mut frames)?;
-                if sample_rate == 0 {
-                    sample_rate = detected_sample_rate;
-                }
-            }
-            Err(SymphoniaError::IoError(_)) | Err(SymphoniaError::DecodeError(_)) => continue,
-            Err(SymphoniaError::ResetRequired) => {
-                return Err("Audio decoder reset required during packet decode".to_string());
-            }
-            Err(error) => {
-                return Err(format!("Failed to decode audio packet: {error}"));
-            }
-        }
-    }
-
-    if sample_rate == 0 {
-        return Err("Could not detect the sample rate of the audio".to_string());
-    }
-    if frames.is_empty() {
-        return Err("No audio frames decoded".to_string());
-    }
-
-    Ok(StaticSoundData {
-        sample_rate,
-        frames: frames.into(),
-        settings: StaticSoundSettings::default(),
-        slice: None,
-    })
-}
-
 pub(crate) fn decode_static_sound_data(
     bytes: Vec<u8>,
     extension_hint: Option<&str>,
@@ -472,7 +281,7 @@ pub(crate) fn decode_static_sound_data(
             } else {
                 Some("mp4")
             };
-            decode_clip_with_symphonia(bytes, symphonia_hint)
+            atome_mix_graph::clip_decode::decode_clip(bytes, symphonia_hint)
                 .map_err(|error| format!("Failed to decode audio from {source_label}: {error}"))
         }
         NativeDecodeRoute::Kira => {
@@ -489,11 +298,23 @@ pub fn init() -> Result<(), String> {
 
 // The output stays awake while a voice sounds, one is scheduled or a live input is open.
 fn engine_busy() -> bool {
-    if scheduled_backend::has_pending() || super::live_input::is_open() || super::direct::is_active() {
+    if scheduled_backend::has_pending()
+        || super::live_input::is_open()
+        || super::direct::is_active()
+    {
         return true;
     }
-    ENGINE.try_read().ok()
-        .and_then(|guard| guard.as_ref().map(|engine| engine.voices.values().any(|voice| voice.handle.state() != kira::sound::PlaybackState::Stopped)))
+    ENGINE
+        .try_read()
+        .ok()
+        .and_then(|guard| {
+            guard.as_ref().map(|engine| {
+                engine
+                    .voices
+                    .values()
+                    .any(|voice| voice.handle.state() != kira::sound::PlaybackState::Stopped)
+            })
+        })
         .unwrap_or(true)
 }
 
@@ -504,7 +325,10 @@ pub fn init_with_config(tween_config: TweenConfig) -> Result<(), String> {
     }
     let mix = atome_mix_graph::host::MixHost::new();
     super::aux_outputs::install_aux_source(mix.aux_outputs());
-    let settings = AudioManagerSettings { main_track_builder: mix.main_track_builder(), ..Default::default() };
+    let settings = AudioManagerSettings {
+        main_track_builder: mix.main_track_builder(),
+        ..Default::default()
+    };
     let manager = AudioManager::<ScheduledCpalBackend>::new(settings)
         .map_err(|e| format!("Failed to create AudioManager: {e}"))?;
     scheduled_backend::install_start_hook(super::playback_schedule::start_due_voice);
@@ -575,7 +399,14 @@ pub fn play_instance(
     strip_id: Option<&str>,
 ) -> Result<(), String> {
     let request = VoiceRequest {
-        start_seconds, duration_seconds, gain, pan, rate, loop_start_seconds, loop_end_seconds, envelope: None,
+        start_seconds,
+        duration_seconds,
+        gain,
+        pan,
+        rate,
+        loop_start_seconds,
+        loop_end_seconds,
+        envelope: None,
     };
     let mut guard = ENGINE.write().map_err(lock_err)?;
     let engine = guard.as_mut().ok_or("Audio engine not initialized")?;
@@ -585,19 +416,37 @@ pub fn play_instance(
 }
 
 // The sound a voice plays (atome-mix-graph owns the region, loop and envelope).
-pub(super) fn build_voice_sound(engine: &PlaybackEngine, asset_id: &str, request: &VoiceRequest) -> Result<VoiceSound, String> {
-    let data = engine.clips.get(asset_id).map(|clip| (*clip.data).clone()).ok_or(format!("Clip '{asset_id}' not found"))?;
-    atome_mix_graph::voice::build_voice_sound(data, request).map_err(|error| format!("Clip '{asset_id}': {error}"))
+pub(super) fn build_voice_sound(
+    engine: &PlaybackEngine,
+    asset_id: &str,
+    request: &VoiceRequest,
+) -> Result<VoiceSound, String> {
+    let data = engine
+        .clips
+        .get(asset_id)
+        .map(|clip| (*clip.data).clone())
+        .ok_or(format!("Clip '{asset_id}' not found"))?;
+    atome_mix_graph::voice::build_voice_sound(data, request)
+        .map_err(|error| format!("Clip '{asset_id}': {error}"))
 }
 
-pub(super) fn start_voice(engine: &mut PlaybackEngine, asset_id: &str, voice_id: &str, sound: VoiceSound) -> Result<(), String> {
+pub(super) fn start_voice(
+    engine: &mut PlaybackEngine,
+    asset_id: &str,
+    voice_id: &str,
+    sound: VoiceSound,
+) -> Result<(), String> {
     super::output_idle::note_activity();
     if let Some(mut existing_voice) = engine.voices.remove(voice_id) {
         existing_voice.handle.stop(Tween::default());
     }
-    let handle = engine.mix.play(&mut engine.manager, voice_id, sound)
+    let handle = engine
+        .mix
+        .play(&mut engine.manager, voice_id, sound)
         .map_err(|e| format!("Failed to play clip '{asset_id}': {e}"))?;
-    engine.voices.insert(voice_id.to_string(), VoiceEntry { handle });
+    engine
+        .voices
+        .insert(voice_id.to_string(), VoiceEntry { handle });
     Ok(())
 }
 
@@ -611,7 +460,11 @@ pub fn stop_instance(voice_id: &str) -> Result<(), String> {
     let cancelled = scheduled_backend::cancel_scheduled(voice_id);
     engine.mix.forget_voice(voice_id);
     let Some(mut voice) = engine.voices.remove(voice_id) else {
-        return if cancelled { Ok(()) } else { Err(format!("Voice '{voice_id}' not found")) };
+        return if cancelled {
+            Ok(())
+        } else {
+            Err(format!("Voice '{voice_id}' not found"))
+        };
     };
     let handle = &mut voice.handle;
     handle.stop(Tween {
@@ -644,10 +497,16 @@ pub fn set_volume(id: &str, db: f64) -> Result<(), String> {
 pub fn set_pan(id: &str, pan: f64) -> Result<(), String> {
     let mut guard = ENGINE.write().map_err(lock_err)?;
     let engine = guard.as_mut().ok_or("Audio engine not initialized")?;
-    let voice = engine.voices.get_mut(id).ok_or(format!("Voice '{id}' not found"))?;
+    let voice = engine
+        .voices
+        .get_mut(id)
+        .ok_or(format!("Voice '{id}' not found"))?;
     voice.handle.set_panning(
         Panning(pan.clamp(-1.0, 1.0) as f32),
-        Tween { duration: Duration::from_millis(engine.tween_config.volume_ms), ..Default::default() },
+        Tween {
+            duration: Duration::from_millis(engine.tween_config.volume_ms),
+            ..Default::default()
+        },
     );
     Ok(())
 }
@@ -686,4 +545,55 @@ pub fn shutdown() -> Result<(), String> {
     let mut guard = ENGINE.write().map_err(lock_err)?;
     *guard = None;
     Ok(())
+}
+
+#[cfg(test)]
+mod decode_route_tests {
+    use super::{
+        NativeContainer, NativeDecodeRoute, resolve_native_decode_route, sniff_native_container,
+    };
+
+    #[test]
+    fn routes_iso_bmff_by_signature_without_extension() {
+        let bytes = [
+            0x00, 0x00, 0x00, 0x18, b'f', b't', b'y', b'p', b'i', b's', b'o', b'm', 0x00, 0x00,
+            0x02, 0x00,
+        ];
+        assert_eq!(sniff_native_container(&bytes), NativeContainer::IsoBmff);
+        assert_eq!(
+            resolve_native_decode_route(None, &bytes, "clip").unwrap(),
+            NativeDecodeRoute::SymphoniaIsoBmff
+        );
+    }
+
+    #[test]
+    fn routes_iso_bmff_when_free_box_precedes_ftyp() {
+        let bytes = [
+            0x00, 0x00, 0x00, 0x08, b'f', b'r', b'e', b'e', 0x00, 0x00, 0x00, 0x18, b'f', b't',
+            b'y', b'p', b'i', b's', b'o', b'm',
+        ];
+        assert_eq!(sniff_native_container(&bytes), NativeContainer::IsoBmff);
+        assert_eq!(
+            resolve_native_decode_route(Some("mp3"), &bytes, "clip").unwrap(),
+            NativeDecodeRoute::SymphoniaIsoBmff
+        );
+    }
+
+    #[test]
+    fn rejects_mp3_extension_with_non_mp3_bytes() {
+        let bytes = b"not an mp3 stream";
+        let error = resolve_native_decode_route(Some("mp3"), bytes, "clip").unwrap_err();
+        assert!(error.contains("Native audio container mismatch"));
+        assert!(error.contains("extension=mp3"));
+    }
+
+    #[test]
+    fn routes_wav_bytes_to_kira() {
+        let bytes = b"RIFF\x24\x00\x00\x00WAVEfmt ";
+        assert_eq!(sniff_native_container(bytes), NativeContainer::Wav);
+        assert_eq!(
+            resolve_native_decode_route(None, bytes, "clip").unwrap(),
+            NativeDecodeRoute::Kira
+        );
+    }
 }

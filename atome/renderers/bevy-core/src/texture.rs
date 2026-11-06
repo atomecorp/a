@@ -8,7 +8,11 @@ use bevy::{
 use crate::components::{AtomeRoundedRectMaskCache, AtomeRoundedRectMaskCacheKey};
 use crate::types::AtomeTexture;
 
-pub(crate) fn sprite_rect_from_uv(uv_rect: Option<[f32; 4]>, width: u32, height: u32) -> Option<Rect> {
+pub(crate) fn sprite_rect_from_uv(
+    uv_rect: Option<[f32; 4]>,
+    width: u32,
+    height: u32,
+) -> Option<Rect> {
     let [u, v, w, h] = uv_rect?;
     let texture_width = width.max(1) as f32;
     let texture_height = height.max(1) as f32;
@@ -24,9 +28,13 @@ fn image_from_texture(texture: &AtomeTexture, id: &str) -> Result<Image, String>
     if texture.width == 0 || texture.height == 0 {
         return Err(format!("bevy_texture_dimension_required:{id}"));
     }
-    let expected_len = (texture.width as usize).checked_mul(texture.height as usize)
-        .and_then(|size| size.checked_mul(4)).ok_or_else(|| format!("bevy_texture_size_limit:{id}"))?;
-    if texture.animation.is_some() && expected_len > 32 * 1024 * 1024 { return Err(format!("bevy_texture_size_limit:{id}")); }
+    let expected_len = (texture.width as usize)
+        .checked_mul(texture.height as usize)
+        .and_then(|size| size.checked_mul(4))
+        .ok_or_else(|| format!("bevy_texture_size_limit:{id}"))?;
+    if texture.animation.is_some() && expected_len > 32 * 1024 * 1024 {
+        return Err(format!("bevy_texture_size_limit:{id}"));
+    }
     if texture.animation.is_none() && texture.rgba.len() != expected_len {
         return Err(format!("bevy_texture_rgba_length_invalid:{id}"));
     }
@@ -37,7 +45,11 @@ fn image_from_texture(texture: &AtomeTexture, id: &str) -> Result<Image, String>
             depth_or_array_layers: 1,
         },
         TextureDimension::D2,
-        if texture.animation.is_some() { vec![0; expected_len] } else { texture.rgba.clone() },
+        if texture.animation.is_some() {
+            vec![0; expected_len]
+        } else {
+            texture.rgba.clone()
+        },
         TextureFormat::Rgba8UnormSrgb,
         RenderAssetUsages::default(),
     );
@@ -53,6 +65,9 @@ pub fn image_handle_from_texture(
     let texture = texture
         .as_ref()
         .ok_or_else(|| format!("bevy_texture_required:{id}"))?;
+    if texture.external.is_some() {
+        return crate::browser_texture::browser_texture_image(images, texture, id, None);
+    }
     Ok(images.add(image_from_texture(texture, id)?))
 }
 
@@ -223,6 +238,7 @@ pub fn image_handle_from_rounded_rect_mask(
     }
     Ok(images.add(image_from_texture(
         &AtomeTexture {
+            external: None,
             animation: None,
             width,
             height,

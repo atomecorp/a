@@ -9,13 +9,13 @@
 // strip runs earlier, else through a return (a loop through IN is allowed).
 
 use crate::dsp::{self, DelayLine, SmoothedGain};
-use crate::module::ModuleBox;
+use crate::graph_order::{Layout, ports_of, strip_routes};
 pub use crate::graph_order::{compensation, dependency_order};
-use crate::graph_order::{ports_of, strip_routes, Layout};
+use crate::module::ModuleBox;
 use crate::program::{ModuleSpec, Program, Target};
-use crate::source_bus::{Feeds, SourceBus, StripSource};
 use crate::return_ring::ReturnRing;
 use crate::shared::{CaptureSlot, StripMeter};
+use crate::source_bus::{Feeds, SourceBus, StripSource};
 use kira::Frame;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -117,7 +117,12 @@ pub struct StripParts {
 }
 
 impl Graph {
-    pub fn compile(program: &Program, parts: Vec<StripParts>, feeds: Feeds, module_latency: &dyn Fn(&ModuleSpec) -> usize) -> Result<Graph, String> {
+    pub fn compile(
+        program: &Program,
+        parts: Vec<StripParts>,
+        feeds: Feeds,
+        module_latency: &dyn Fn(&ModuleSpec) -> usize,
+    ) -> Result<Graph, String> {
         let layout = Layout::new(program)?;
         let order = dependency_order(program)?;
         let delays = compensation(program, &order, module_latency)?;
@@ -138,11 +143,17 @@ impl Graph {
             for (step, module) in strip.chain.iter().enumerate() {
                 for port in &module.outputs {
                     if port.port >= ports_of(module) {
-                        return Err(format!("mix module {} has no port {}", module.id, port.port));
+                        return Err(format!(
+                            "mix module {} has no port {}",
+                            module.id, port.port
+                        ));
                     }
                 }
                 if (module.kind == "input") != module.source.is_some() {
-                    return Err(format!("mix module {}: an IN module and only it reads a source", module.id));
+                    return Err(format!(
+                        "mix module {}: an IN module and only it reads a source",
+                        module.id
+                    ));
                 }
                 if let Some(source) = &module.source {
                     let mix = match (layout.mix_source(source)?, feeds.module_bus(source)) {
@@ -158,16 +169,21 @@ impl Graph {
                             MixIn::Lane(lane)
                         }
                         (None, Some((feed, output))) => MixIn::Bus(feed, output),
-                        (None, None) => return Err(format!("mix module {} has no source", module.id)),
+                        (None, None) => {
+                            return Err(format!("mix module {} has no source", module.id));
+                        }
                     };
                     mixes.insert((index, step), mix);
                 }
                 let Some(key) = &module.key else { continue };
-                if module.kind != crate::dsp_module::MODULE_TYPE || !crate::dsp_module::kind_of(module)?.takes_key() {
+                if module.kind != crate::dsp_module::MODULE_TYPE
+                    || !crate::dsp_module::kind_of(module)?.takes_key()
+                {
                     return Err(format!("mix module {} takes no key", module.id));
                 }
                 let (from, port) = layout.key_source(key)?;
-                let forward = position[from] < position[index] || (from == index && port.is_some_and(|(source, _)| source < step));
+                let forward = position[from] < position[index]
+                    || (from == index && port.is_some_and(|(source, _)| source < step));
                 let lane = if forward {
                     lanes.push(vec![Frame::ZERO; MAX_BLOCK]);
                     Lane::Direct(lanes.len() - 1)
@@ -180,7 +196,10 @@ impl Graph {
                     Some((source, port)) => {
                         let source_spec = &program.strips[from].chain[source];
                         if port >= ports_of(source_spec) {
-                            return Err(format!("mix module {} has no port {port}", source_spec.id));
+                            return Err(format!(
+                                "mix module {} has no port {port}",
+                                source_spec.id
+                            ));
                         }
                         taps.entry((from, source)).or_default().push((port, lane));
                     }
@@ -188,11 +207,15 @@ impl Graph {
                 }
             }
             for (_, target) in strip_routes(strip) {
-                if let Some(to) = target.map(|target| layout.target(target)).transpose()?.flatten() {
-                    if position[to] <= position[index] && inbox_return[to].is_none() {
-                        rings.push(ReturnRing::new());
-                        inbox_return[to] = Some(rings.len() - 1);
-                    }
+                if let Some(to) = target
+                    .map(|target| layout.target(target))
+                    .transpose()?
+                    .flatten()
+                    && position[to] <= position[index]
+                    && inbox_return[to].is_none()
+                {
+                    rings.push(ReturnRing::new());
+                    inbox_return[to] = Some(rings.len() - 1);
                 }
             }
         }
@@ -205,7 +228,9 @@ impl Graph {
             let mut route_delays = delays[index].iter().copied();
             let mut route = |target: Option<&Target>| -> Result<Option<Route>, String> {
                 let frames = route_delays.next().unwrap_or(0);
-                let Some(target) = target else { return Ok(None) };
+                let Some(target) = target else {
+                    return Ok(None);
+                };
                 let target = match target {
                     Target::Main => RouteTarget::Main,
                     Target::Device { channel } => {
@@ -218,11 +243,16 @@ impl Graph {
                         let to = layout.strip(id)?;
                         match position[to] > position[index] {
                             true => RouteTarget::Strip(position[to]),
-                            false => RouteTarget::Return(inbox_return[to].expect("a return for every backward route")),
+                            false => RouteTarget::Return(
+                                inbox_return[to].expect("a return for every backward route"),
+                            ),
                         }
                     }
                 };
-                Ok(Some(Route { target, delay: (frames > 0).then(|| DelayLine::new(frames)) }))
+                Ok(Some(Route {
+                    target,
+                    delay: (frames > 0).then(|| DelayLine::new(frames)),
+                }))
             };
             let mut chain = Vec::with_capacity(spec.chain.len());
             for (step, (module, built)) in spec.chain.iter().zip(part.modules).enumerate() {
@@ -233,7 +263,10 @@ impl Graph {
                 let mut ports = Vec::with_capacity(module.outputs.len());
                 let mut routed = vec![false; ports_of(module)];
                 for port in &module.outputs {
-                    ports.push((port.port, route(Some(&port.target))?.expect("a port route has a target")));
+                    ports.push((
+                        port.port,
+                        route(Some(&port.target))?.expect("a port route has a target"),
+                    ));
                     routed[port.port] = true;
                 }
                 let (module_box, adopt) = match built {
@@ -271,11 +304,18 @@ impl Graph {
                 key: vec![Frame::ZERO; MAX_BLOCK],
             });
         }
-        let chunk = if rings.is_empty() { MAX_BLOCK } else { RETURN_FRAMES };
+        let chunk = if rings.is_empty() {
+            MAX_BLOCK
+        } else {
+            RETURN_FRAMES
+        };
         Ok(Graph {
             strips,
             main: vec![Frame::ZERO; MAX_BLOCK],
-            aux: aux_channels.into_iter().map(|channel| (channel, vec![Frame::ZERO; MAX_BLOCK])).collect(),
+            aux: aux_channels
+                .into_iter()
+                .map(|channel| (channel, vec![Frame::ZERO; MAX_BLOCK]))
+                .collect(),
             feeds: feeds.buses,
             lanes,
             rings,
@@ -291,7 +331,11 @@ impl Graph {
         for strip in &mut self.strips {
             for step in &mut strip.chain {
                 if let Some((at, index)) = step.adopt.take() {
-                    step.module = previous.strips.get_mut(at).and_then(|strip| strip.chain.get_mut(index)).and_then(|step| step.module.take());
+                    step.module = previous
+                        .strips
+                        .get_mut(at)
+                        .and_then(|strip| strip.chain.get_mut(index))
+                        .and_then(|step| step.module.take());
                 }
             }
         }
@@ -299,7 +343,13 @@ impl Graph {
 
     // Where each module sits (position, step) once this graph runs.
     pub fn locations(&self) -> impl Iterator<Item = (&str, (usize, usize))> {
-        self.strips.iter().enumerate().flat_map(|(at, strip)| strip.chain.iter().enumerate().map(move |(index, step)| (step.module_id.as_str(), (at, index))))
+        self.strips.iter().enumerate().flat_map(|(at, strip)| {
+            strip
+                .chain
+                .iter()
+                .enumerate()
+                .map(move |(index, step)| (step.module_id.as_str(), (at, index)))
+        })
     }
 
     // Control thread: the fresh modules of a graph the render thread never took.
@@ -307,17 +357,23 @@ impl Graph {
         let mut fresh = Vec::new();
         for strip in &mut self.strips {
             for step in &mut strip.chain {
-                if step.adopt.is_none() {
-                    if let Some(module) = step.module.take() {
-                        fresh.push((step.module_id.clone(), module));
-                    }
+                if step.adopt.is_none()
+                    && let Some(module) = step.module.take()
+                {
+                    fresh.push((step.module_id.clone(), module));
                 }
             }
         }
         fresh
     }
 
-    fn write_lane(lanes: &mut [Vec<Frame>], rings: &mut [ReturnRing], clock: usize, lane: Lane, signal: &[Frame]) {
+    fn write_lane(
+        lanes: &mut [Vec<Frame>],
+        rings: &mut [ReturnRing],
+        clock: usize,
+        lane: Lane,
+        signal: &[Frame],
+    ) {
         match lane {
             Lane::Direct(index) => lanes[index][..signal.len()].copy_from_slice(signal),
             Lane::Return(index) => rings[index].add(clock, signal),
@@ -325,7 +381,17 @@ impl Graph {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn deliver(route: &mut Route, signal: &mut [Frame], later: &mut [StripRuntime], first_later: usize, main: &mut [Frame], aux: &mut [(u16, Vec<Frame>)], offset: usize, rings: &mut [ReturnRing], clock: usize) {
+    fn deliver(
+        route: &mut Route,
+        signal: &mut [Frame],
+        later: &mut [StripRuntime],
+        first_later: usize,
+        main: &mut [Frame],
+        aux: &mut [(u16, Vec<Frame>)],
+        offset: usize,
+        rings: &mut [ReturnRing],
+        clock: usize,
+    ) {
         if let Some(delay) = route.delay.as_mut() {
             delay.process(signal);
         }
@@ -333,10 +399,12 @@ impl Graph {
         let destination: &mut [Frame] = match route.target {
             RouteTarget::Main => main,
             RouteTarget::Strip(position) => &mut later[position - first_later].inbox[..frames],
-            RouteTarget::Device(channel) => match aux.iter_mut().find(|(candidate, _)| *candidate == channel) {
-                Some((_, buffer)) => &mut buffer[offset..offset + frames],
-                None => return,
-            },
+            RouteTarget::Device(channel) => {
+                match aux.iter_mut().find(|(candidate, _)| *candidate == channel) {
+                    Some((_, buffer)) => &mut buffer[offset..offset + frames],
+                    None => return,
+                }
+            }
             RouteTarget::Return(index) => return rings[index].add(clock, signal),
         };
         for (out, input) in destination.iter_mut().zip(signal.iter()) {
@@ -364,15 +432,42 @@ impl Graph {
     }
 
     fn process_chunk(&mut self, offset: usize, frames: usize) {
-        let Graph { strips, main, aux, feeds, lanes, rings, clock, .. } = self;
+        let Graph {
+            strips,
+            main,
+            aux,
+            feeds,
+            lanes,
+            rings,
+            clock,
+            ..
+        } = self;
         let clock = *clock;
         let main = &mut main[offset..offset + frames];
         for feed in feeds.iter_mut() {
             feed.fill(frames);
         }
         for position in 0..strips.len() {
-            let (current, later) = strips[position..].split_first_mut().expect("strip at position");
-            let StripRuntime { capture, source, chain, output, output_enabled, muted, mute_gain, inbox, inbox_return, post_taps, work, scratch, key, meter, .. } = current;
+            let (current, later) = strips[position..]
+                .split_first_mut()
+                .expect("strip at position");
+            let StripRuntime {
+                capture,
+                source,
+                chain,
+                output,
+                output_enabled,
+                muted,
+                mute_gain,
+                inbox,
+                inbox_return,
+                post_taps,
+                work,
+                scratch,
+                key,
+                meter,
+                ..
+            } = current;
             let work = &mut work[..frames];
             source.pull(capture, offset, feeds, work);
             for (out, input) in work.iter_mut().zip(inbox[..frames].iter()) {
@@ -385,20 +480,36 @@ impl Graph {
             mute_gain.apply(work, if *muted { 0.0 } else { 1.0 });
             for step in chain.iter_mut() {
                 let splits = step.splits();
-                let Some(module) = step.module.as_mut() else { continue };
+                let Some(module) = step.module.as_mut() else {
+                    continue;
+                };
                 let share = &mut scratch[..frames];
                 if module.is_send() {
                     if let Some(route) = step.send.as_mut() {
                         share.fill(Frame::ZERO);
                         module.send_into(work, share);
-                        Self::deliver(route, share, later, position + 1, main, aux, offset, rings, clock);
+                        Self::deliver(
+                            route,
+                            share,
+                            later,
+                            position + 1,
+                            main,
+                            aux,
+                            offset,
+                            rings,
+                            clock,
+                        );
                     }
                     continue;
                 }
                 if let Some(mix) = step.mix {
                     match mix {
-                        MixIn::Bus(feed, output) => share.copy_from_slice(&feeds[feed].buses[output][..frames]),
-                        MixIn::Lane(Lane::Direct(index)) => share.copy_from_slice(&lanes[index][..frames]),
+                        MixIn::Bus(feed, output) => {
+                            share.copy_from_slice(&feeds[feed].buses[output][..frames])
+                        }
+                        MixIn::Lane(Lane::Direct(index)) => {
+                            share.copy_from_slice(&lanes[index][..frames])
+                        }
                         MixIn::Lane(Lane::Return(index)) => {
                             share.fill(Frame::ZERO);
                             rings[index].take(clock, share);
@@ -428,14 +539,12 @@ impl Graph {
                     continue;
                 }
                 let split = module.process_split(work, key_signal);
-                let port_signal = |port: usize, out: &mut [Frame], work: &[Frame]| {
-                    match port {
-                        0 => out.copy_from_slice(work),
-                        _ => {
-                            out.fill(Frame::ZERO);
-                            if split {
-                                module.add_port(port, out);
-                            }
+                let port_signal = |port: usize, out: &mut [Frame], work: &[Frame]| match port {
+                    0 => out.copy_from_slice(work),
+                    _ => {
+                        out.fill(Frame::ZERO);
+                        if split {
+                            module.add_port(port, out);
                         }
                     }
                 };
@@ -445,7 +554,17 @@ impl Graph {
                 }
                 for (port, route) in step.ports.iter_mut() {
                     port_signal(*port, share, work);
-                    Self::deliver(route, share, later, position + 1, main, aux, offset, rings, clock);
+                    Self::deliver(
+                        route,
+                        share,
+                        later,
+                        position + 1,
+                        main,
+                        aux,
+                        offset,
+                        rings,
+                        clock,
+                    );
                 }
                 // What stays in the strip: every port not sent elsewhere.
                 if step.routed[0] {
@@ -463,10 +582,18 @@ impl Graph {
                 Self::write_lane(lanes, rings, clock, *lane, work);
             }
             meter.record(dsp::peak(work), dsp::rms(work));
-            if *output_enabled {
-                if let Some(route) = output.as_mut() {
-                    Self::deliver(route, work, later, position + 1, main, aux, offset, rings, clock);
-                }
+            if *output_enabled && let Some(route) = output.as_mut() {
+                Self::deliver(
+                    route,
+                    work,
+                    later,
+                    position + 1,
+                    main,
+                    aux,
+                    offset,
+                    rings,
+                    clock,
+                );
             }
         }
     }

@@ -120,6 +120,11 @@ class AudioSchemeHandler: NSObject, WKURLSchemeHandler {
             serveServerInfo(task: urlSchemeTask)
             return
         }
+        // The isolated preview origin of a page with its JavaScript (PagePreviewServer.swift, D18 item 11).
+        if path == "/page_preview/origin" {
+            servePagePreviewOrigin(task: urlSchemeTask)
+            return
+        }
         
         // Support two URL forms:
         // 1) atome:///audio/Alive.m4a   -> path starts with /audio/
@@ -367,6 +372,24 @@ class AudioSchemeHandler: NSObject, WKURLSchemeHandler {
         ])!
         if complete(task, response: response, data: data) {
             Self.recordResponse(bytes: data.count)
+        }
+    }
+
+    private func servePagePreviewOrigin(task: WKURLSchemeTask) {
+        PagePreviewServer.shared.origin { [weak self] result in
+            guard let self else { return }
+            guard case .success(let origin) = result,
+                  let data = try? JSONSerialization.data(withJSONObject: ["origin": origin]) else {
+                self.log.error("Page preview origin unavailable")
+                self.respond404(task: task)
+                return
+            }
+            let response = HTTPURLResponse(url: task.request.url!, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: [
+                "Content-Type": "application/json",
+                "Content-Length": String(data.count),
+                "Cache-Control": "no-store"
+            ])!
+            _ = self.complete(task, response: response, data: data)
         }
     }
 

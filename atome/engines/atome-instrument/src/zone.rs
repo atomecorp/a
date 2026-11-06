@@ -76,7 +76,8 @@ pub struct ZoneFilter {
 
 impl ZoneFilter {
     pub fn cutoff_for(&self, note: u8, velocity: f32) -> f32 {
-        let cents = self.key_track_cents * (note as f32 - self.key_center as f32) + self.velocity_track_cents * velocity.clamp(0.0, 1.0);
+        let cents = self.key_track_cents * (note as f32 - self.key_center as f32)
+            + self.velocity_track_cents * velocity.clamp(0.0, 1.0);
         self.cutoff_hz * 2f32.powf(cents / 1200.0)
     }
 }
@@ -105,12 +106,18 @@ impl Zone {
 
     // A zone that plays a composed note.
     pub fn composed(key_low: u8, key_high: u8, composed: Composed) -> Self {
-        Self { composed: Some(composed), ..Self::new(key_low, key_high, Vec::new()) }
+        Self {
+            composed: Some(composed),
+            ..Self::new(key_low, key_high, Vec::new())
+        }
     }
 
     // Every segment the zone may read: its takes, its release takes, its steps'.
     pub fn segments(&self) -> impl Iterator<Item = &Segment> {
-        self.takes.iter().chain(self.release_takes.iter()).chain(self.composed.iter().flat_map(Composed::segments))
+        self.takes
+            .iter()
+            .chain(self.release_takes.iter())
+            .chain(self.composed.iter().flat_map(Composed::segments))
     }
 
     pub fn velocities(mut self, low: u8, high: u8) -> Self {
@@ -130,7 +137,8 @@ impl Zone {
     }
 
     pub fn contains(&self, note: u8, velocity: u8) -> bool {
-        (self.key_low..=self.key_high).contains(&note) && (self.velocity_low..=self.velocity_high).contains(&velocity)
+        (self.key_low..=self.key_high).contains(&note)
+            && (self.velocity_low..=self.velocity_high).contains(&velocity)
     }
 }
 

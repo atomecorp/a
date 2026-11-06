@@ -1,21 +1,22 @@
 //! Ordered snapshots inside the shared 2D pass. A material never samples the
 //! attachment it is drawing into, itself, or a later item in the sorted phase.
-use super::{backdrop_blur_lod, pyramid::BlurPyramid, WORKSPACE_BACKDROP_DOWNSCALE};
+use super::{WORKSPACE_BACKDROP_DOWNSCALE, backdrop_blur_lod, pyramid::BlurPyramid};
 use crate::{
     backdrop_surface::BackdropSurfaceMaterial, procedural_sdf::ProceduralSdfMaterial,
     workspace_backdrop::AtomeWorkspaceBackdrop,
 };
 use bevy::{
     core_pipeline::{
-        blit::{BlitPipeline, BlitPipelineKey},
-        core_2d::{main_opaque_pass_2d, main_transparent_pass_2d, Transparent2d},
         Core2d, Core2dSystems,
+        blit::{BlitPipeline, BlitPipelineKey},
+        core_2d::{Transparent2d, main_opaque_pass_2d, main_transparent_pass_2d},
     },
     ecs::schedule::ScheduleCleanupPolicy,
     mesh::VertexAttributeValues,
     platform::collections::HashMap,
     prelude::*,
     render::{
+        Extract, ExtractSchedule, Render, RenderApp, RenderSystems,
         camera::ExtractedCamera,
         render_asset::RenderAssets,
         render_phase::{PhaseItem, ViewSortedRenderPhases},
@@ -27,7 +28,6 @@ use bevy::{
         renderer::{RenderContext, RenderDevice, ViewQuery},
         texture::GpuImage,
         view::{ExtractedView, ViewDepthTexture, ViewTarget},
-        Extract, ExtractSchedule, Render, RenderApp, RenderSystems,
     },
     shader::ShaderCacheError,
 };
@@ -147,31 +147,30 @@ fn extract_sample_regions(
 ) {
     regions.0.clear();
     for (entity, mesh, transform, handle) in &glass {
-        if let (Some(mesh), Some(material)) = (meshes.get(&mesh.0), glass_assets.get(&handle.0)) {
-            if let Some(region) = mesh_region(
+        if let (Some(mesh), Some(material)) = (meshes.get(&mesh.0), glass_assets.get(&handle.0))
+            && let Some(region) = mesh_region(
                 mesh,
                 transform,
                 material.uniform.blur.x,
                 material.uniform.blur.y,
                 0.0,
-            ) {
-                regions.0.insert(entity, region);
-            }
+            )
+        {
+            regions.0.insert(entity, region);
         }
     }
     for (entity, mesh, transform, handle) in &sdf {
-        if let (Some(mesh), Some(material)) = (meshes.get(&mesh.0), sdf_assets.get(&handle.0)) {
-            if material.uniform.gesture.z > 0.0 {
-                if let Some(region) = mesh_region(
-                    mesh,
-                    transform,
-                    material.uniform.gesture.z,
-                    material.uniform.shape.z,
-                    material.uniform.optics.x,
-                ) {
-                    regions.0.insert(entity, region);
-                }
-            }
+        if let (Some(mesh), Some(material)) = (meshes.get(&mesh.0), sdf_assets.get(&handle.0))
+            && material.uniform.gesture.z > 0.0
+            && let Some(region) = mesh_region(
+                mesh,
+                transform,
+                material.uniform.gesture.z,
+                material.uniform.shape.z,
+                material.uniform.optics.x,
+            )
+        {
+            regions.0.insert(entity, region);
         }
     }
 }
@@ -224,7 +223,12 @@ fn overlaps(a: Rect, b: Rect) -> bool {
     a.min.x < b.max.x && a.max.x > b.min.x && a.min.y < b.max.y && a.max.y > b.min.y
 }
 
-fn cut(result: &mut Vec<(Range<usize>, bool)>, start: &mut usize, captured: &mut bool, index: usize) {
+fn cut(
+    result: &mut Vec<(Range<usize>, bool)>,
+    start: &mut usize,
+    captured: &mut bool,
+    index: usize,
+) {
     if index > *start {
         result.push((*start..index, *captured));
     }
@@ -297,9 +301,11 @@ fn compose_transparent_pass(
     phases: Res<ViewSortedRenderPhases<Transparent2d>>,
     regions: Res<SampleRegions>,
     cache: Res<PipelineCache>,
+    backdrop: Res<AtomeWorkspaceBackdrop>,
     pyramid: BlurPyramid,
     mut ctx: RenderContext,
 ) -> Result<(), BevyError> {
+    let backdrop_pyramid = backdrop.image.id();
     let view_entity = view.entity();
     let (camera, extracted, target, depth, snapshot) = view.into_inner();
     let Some(phase) = phases.get(&extracted.retained_view_entity) else {
@@ -328,7 +334,7 @@ fn compose_transparent_pass(
         let Some(snapshot) = snapshot else {
             return Ok(());
         };
-        if !pyramid.ready()? {
+        if !pyramid.ready(backdrop_pyramid)? {
             return Ok(());
         }
         match cache.get_render_pipeline_state(snapshot.pipeline) {
@@ -395,7 +401,7 @@ fn compose_transparent_pass(
                 pass.set_bind_group(0, &snapshot.bind_group, &[]);
                 pass.draw(0..3, 0..1);
             }
-            pyramid.downsample(&mut ctx)?;
+            pyramid.downsample(&mut ctx, backdrop_pyramid)?;
         }
         let attachments = [Some(target.get_color_attachment())];
         let mut pass = ctx.begin_tracked_render_pass(RenderPassDescriptor {

@@ -3,7 +3,7 @@ import { analyzePcmRange, pcm16WavBytes, vowelFamilyForPhoneme } from './tts_pcm
 import { createTtsFrameBus } from './tts_frame_bus.js';
 
 const FRAME_MS = 20;
-const audiblePhonemes = (phonemes) => phonemes.filter((phoneme) => !/^[_^$ (),.!?:;\-]$/.test(phoneme));
+const audiblePhonemes = (phonemes) => phonemes.filter((phoneme) => !/^[_^$ (),.!?:;-]$/.test(phoneme));
 
 export const createTtsRuntime = ({
     env = globalThis,

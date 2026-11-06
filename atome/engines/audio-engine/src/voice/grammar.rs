@@ -21,23 +21,36 @@ pub struct HeardWord {
 impl Grammar {
     pub fn load(model_dir: &str) -> Result<Self, VoiceError> {
         vosk::set_log_level(vosk::LogLevel::Error);
-        let model = Model::new(model_dir).ok_or_else(|| VoiceError::Model(model_dir.to_string()))?;
-        Ok(Self { model, phrases: Vec::new() })
+        let model =
+            Model::new(model_dir).ok_or_else(|| VoiceError::Model(model_dir.to_string()))?;
+        Ok(Self {
+            model,
+            phrases: Vec::new(),
+        })
     }
 
     pub fn set_phrases(&mut self, phrases: &[String]) -> Result<(), VoiceError> {
-        let mut missing: Vec<String> = phrases.iter().flat_map(|phrase| phrase.split_whitespace())
-            .filter(|word| self.model.find_word(word).is_none()).map(str::to_string).collect();
+        let mut missing: Vec<String> = phrases
+            .iter()
+            .flat_map(|phrase| phrase.split_whitespace())
+            .filter(|word| self.model.find_word(word).is_none())
+            .map(str::to_string)
+            .collect();
         missing.dedup();
-        if !missing.is_empty() { return Err(VoiceError::OutOfVocabulary(missing)); }
+        if !missing.is_empty() {
+            return Err(VoiceError::OutOfVocabulary(missing));
+        }
         self.phrases = phrases.to_vec();
         self.phrases.push(UNKNOWN.to_string());
         Ok(())
     }
 
     pub fn recognizer(&self) -> Result<Recognizer, VoiceError> {
-        if self.phrases.is_empty() { return Err(VoiceError::NoPhrases); }
-        let mut recognizer = Recognizer::new_with_grammar(&self.model, SAMPLE_RATE, &self.phrases).ok_or(VoiceError::Recognizer)?;
+        if self.phrases.is_empty() {
+            return Err(VoiceError::NoPhrases);
+        }
+        let mut recognizer = Recognizer::new_with_grammar(&self.model, SAMPLE_RATE, &self.phrases)
+            .ok_or(VoiceError::Recognizer)?;
         recognizer.set_words(true);
         Ok(recognizer)
     }
@@ -46,7 +59,10 @@ impl Grammar {
 /// Words of a recognizer result, appended to `words`.
 fn collect(result: CompleteResult, words: &mut Vec<HeardWord>) {
     if let Some(single) = result.single() {
-        words.extend(single.result.iter().map(|word| HeardWord { word: word.word.to_string(), conf: word.conf }));
+        words.extend(single.result.iter().map(|word| HeardWord {
+            word: word.word.to_string(),
+            conf: word.conf,
+        }));
     }
 }
 
@@ -58,12 +74,18 @@ pub struct TurnRecognizer {
 
 impl TurnRecognizer {
     pub fn new(grammar: &Grammar) -> Result<Self, VoiceError> {
-        Ok(Self { recognizer: grammar.recognizer()?, words: Vec::new() })
+        Ok(Self {
+            recognizer: grammar.recognizer()?,
+            words: Vec::new(),
+        })
     }
 
     pub fn feed(&mut self, pcm: &[i16]) -> Result<(), VoiceError> {
         match self.recognizer.accept_waveform(pcm) {
-            Ok(DecodingState::Finalized) => { collect(self.recognizer.result(), &mut self.words); Ok(()) }
+            Ok(DecodingState::Finalized) => {
+                collect(self.recognizer.result(), &mut self.words);
+                Ok(())
+            }
             Ok(_) => Ok(()),
             Err(error) => Err(VoiceError::Decode(format!("{error:?}"))),
         }
@@ -76,4 +98,6 @@ impl TurnRecognizer {
     }
 }
 
-pub fn is_unknown(word: &HeardWord) -> bool { word.word == UNKNOWN }
+pub fn is_unknown(word: &HeardWord) -> bool {
+    word.word == UNKNOWN
+}

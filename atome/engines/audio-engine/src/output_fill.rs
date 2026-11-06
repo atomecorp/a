@@ -4,7 +4,7 @@
 
 use super::aux_outputs::{self, SharedAuxConsumers};
 use super::direct::{self, SharedDirect};
-use super::scheduled_backend::{note_output_quantum, SharedConsumer, CHANNELS, FIFO_FRAMES};
+use super::scheduled_backend::{CHANNELS, FIFO_FRAMES, SharedConsumer, note_output_quantum};
 use ringbuf::traits::Consumer;
 
 pub(crate) struct OutputFill {
@@ -16,8 +16,18 @@ pub(crate) struct OutputFill {
 }
 
 impl OutputFill {
-    pub(crate) fn new(consumer: SharedConsumer, aux: SharedAuxConsumers, direct: SharedDirect) -> Self {
-        Self { consumer, aux, direct, scratch: vec![0.0; FIFO_FRAMES * CHANNELS], aux_scratch: vec![0.0; FIFO_FRAMES * CHANNELS] }
+    pub(crate) fn new(
+        consumer: SharedConsumer,
+        aux: SharedAuxConsumers,
+        direct: SharedDirect,
+    ) -> Self {
+        Self {
+            consumer,
+            aux,
+            direct,
+            scratch: vec![0.0; FIFO_FRAMES * CHANNELS],
+            aux_scratch: vec![0.0; FIFO_FRAMES * CHANNELS],
+        }
     }
 
     pub(crate) fn fill(&mut self, data: &mut [f32], device_channels: usize, host_ns: i64) {
@@ -31,7 +41,10 @@ impl OutputFill {
         };
         for frame in 0..frames {
             let (left, right) = if frame < popped {
-                (self.scratch[frame * CHANNELS], self.scratch[frame * CHANNELS + 1])
+                (
+                    self.scratch[frame * CHANNELS],
+                    self.scratch[frame * CHANNELS + 1],
+                )
             } else {
                 (0.0, 0.0)
             };
@@ -50,7 +63,13 @@ impl OutputFill {
                 direct.mix_interleaved(data, device_channels);
             }
         }
-        aux_outputs::write_aux(&self.aux, data, device_channels, frames.min(FIFO_FRAMES), &mut self.aux_scratch);
+        aux_outputs::write_aux(
+            &self.aux,
+            data,
+            device_channels,
+            frames.min(FIFO_FRAMES),
+            &mut self.aux_scratch,
+        );
         note_output_quantum(host_ns, frames, popped);
     }
 }

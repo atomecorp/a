@@ -54,7 +54,7 @@ test('assistant playback ends and drains before the only user-turn microphone ca
     };
     const controller = createVoiceAssistantSessionController({
         voiceApi,
-        openingGreeting: 'Bonjour.',
+        announceReady: () => openingSpeech.promise,
         touchResponse: 'Oui ?',
         closingGreeting: 'Au revoir.',
         env

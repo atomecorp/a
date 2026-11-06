@@ -241,6 +241,8 @@ const RESPONSE_PAYLOADS = {
         devices: message.devices,
         handle: message.handle,
         recoveryCode: message.recoveryCode,
+        // The account's backup keys sealed for this new device (pair-complete, recovery-complete; #backup_keyring.js).
+        backupKeys: message.backupKeys,
         // Sign-up by invitation (server/auth_invites.js).
         open: message.open,
         invited: message.invited,

@@ -18,7 +18,7 @@ vi.mock('../../eVe/intuition/tools/user_login_shared_runtime.js', () => ({
     ensureSharedLoginSequence: () => ({ handleAuthenticated: async () => false })
 }));
 vi.mock('../../eVe/domains/dashboard/workspace_surface_preference.js', () => ({ rememberWorkspaceSurface: async () => ({ ok: true }),
-    waitForHomePreferences: async () => true,
+    waitForHomePreferences: async () => ({ ok: true }),
     ensureHomeTemplateProject: async () => ({ ok: true, projectId: window.__eveProfilePreferences.workspace.home_eve_project_id }) }));
 vi.mock('../../eVe/domains/matrix/matrix_module_runtime.js', () => ({ openWorkspaceHomeProjection: owners.home, readMatrixInstance: () => null,
     closeWorkspaceHomeProjection: vi.fn(async () => {}) }));

@@ -28,14 +28,23 @@ pub struct ReturnRing {
     ring: Vec<Frame>,
 }
 
+impl Default for ReturnRing {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ReturnRing {
     pub fn new() -> Self {
-        Self { ring: vec![Frame::ZERO; RETURN_RING] }
+        Self {
+            ring: vec![Frame::ZERO; RETURN_RING],
+        }
     }
 
     pub fn add(&mut self, clock: usize, signal: &[Frame]) {
         for (index, frame) in signal.iter().enumerate() {
-            self.ring[(clock + index + RETURN_FRAMES) & (RETURN_RING - 1)] += Frame::new(guard(frame.left), guard(frame.right));
+            self.ring[(clock + index + RETURN_FRAMES) & (RETURN_RING - 1)] +=
+                Frame::new(guard(frame.left), guard(frame.right));
         }
     }
 

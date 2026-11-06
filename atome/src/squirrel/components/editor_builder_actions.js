@@ -4,7 +4,7 @@
 import { loadAdoleApi, isAdoleAuthenticated } from './editor_builder_adole.js';
 
 export function makeEditorActions(deps) {
-    const { state, editorId, onSave, onValidate, onError, updateStatus, updateDirtyIndicator } = deps;
+    const { state, editorId, onSave, onValidate, onError, updateStatus, updateDirtyIndicator, commitOptions } = deps;
 
     function saveContent() {
         if (!state.editorView || state.isSaving) return;
@@ -97,7 +97,7 @@ export function makeEditorActions(deps) {
                         size: content.length
                     }
                 }
-            });
+            }, commitOptions);
 
             if (result?.ok === true) {
                 state.fileId = atomeId;

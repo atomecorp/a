@@ -1,6 +1,6 @@
 import { createCalendarApiSource } from './calendar_api_source.js';
 import { toText } from '../shared/scalars.js';
-import { calendarRangeOccurrences } from './icalendar.js';
+import { calendarRangeOccurrences, loadCalendarEngine } from './icalendar.js';
 
 const DEFAULT_LIMIT = 50;
 
@@ -465,7 +465,7 @@ export const createCalendarService = ({
         },
         async calendarNext(options = {}) {
             const reference = toDate(options.reference || now()) || new Date();
-            const listed = await collectSources(options);
+            const [listed] = await Promise.all([collectSources(options), loadCalendarEngine()]);
             if (listed.ok !== true) return listed;
             const limit = toLimit(options.limit, DEFAULT_LIMIT);
             const events = listed.items.filter(entry => !options.source_id || entry.source_id === options.source_id);

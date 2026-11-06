@@ -4,9 +4,9 @@
 // render thread sleeps, so an idle app is not kept awake by silence. The next
 // voice, or a read of the render clock, wakes both at once.
 
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::Sender;
-use std::sync::Mutex;
 use std::thread::Thread;
 use std::time::{Duration, Instant};
 
@@ -20,8 +20,13 @@ static WAKERS: Mutex<Option<(Sender<()>, Thread)>> = Mutex::new(None);
 static BUSY_PROBE: Mutex<Option<fn() -> bool>> = Mutex::new(None);
 
 fn now_ms() -> u64 {
-    let Ok(mut origin) = ORIGIN.lock() else { return 0 };
-    origin.get_or_insert_with(Instant::now).elapsed().as_millis() as u64
+    let Ok(mut origin) = ORIGIN.lock() else {
+        return 0;
+    };
+    origin
+        .get_or_insert_with(Instant::now)
+        .elapsed()
+        .as_millis() as u64
 }
 
 // What keeps the output awake besides recent activity (the engine's voices and effects).
@@ -57,21 +62,28 @@ pub fn note_activity() -> bool {
     if ACTIVE.swap(true, Ordering::AcqRel) {
         return false;
     }
-    if let Ok(slot) = WAKERS.lock() {
-        if let Some((device, render)) = slot.as_ref() {
-            let _ = device.send(());
-            render.unpark();
-        }
+    if let Ok(slot) = WAKERS.lock()
+        && let Some((device, render)) = slot.as_ref()
+    {
+        let _ = device.send(());
+        render.unpark();
     }
     true
 }
 
 // Called by the device thread: whether the output should rest now.
 pub(crate) fn should_rest() -> bool {
-    if STAY_AWAKE.load(Ordering::Acquire) || !is_active() || now_ms().saturating_sub(LAST_ACTIVITY_MS.load(Ordering::Acquire)) < IDLE_SECONDS * 1000 {
+    if STAY_AWAKE.load(Ordering::Acquire)
+        || !is_active()
+        || now_ms().saturating_sub(LAST_ACTIVITY_MS.load(Ordering::Acquire)) < IDLE_SECONDS * 1000
+    {
         return false;
     }
-    let busy = BUSY_PROBE.lock().ok().and_then(|slot| *slot).map_or(false, |probe| probe());
+    let busy = BUSY_PROBE
+        .lock()
+        .ok()
+        .and_then(|slot| *slot)
+        .is_some_and(|probe| probe());
     if busy {
         LAST_ACTIVITY_MS.store(now_ms(), Ordering::Release);
         return false;
@@ -82,5 +94,9 @@ pub(crate) fn should_rest() -> bool {
 
 // How long the render thread waits before checking the FIFO again.
 pub(crate) fn render_wait() -> Option<Duration> {
-    if is_active() { Some(Duration::from_millis(1)) } else { None }
+    if is_active() {
+        Some(Duration::from_millis(1))
+    } else {
+        None
+    }
 }

@@ -5,7 +5,7 @@ import { validateParams } from '../ai/agent_gateway_normalize.js';
 // screens of the record, the results, the supplements and the protocols. Health data: CLOSED to AI and MCP by default —
 // the executor answers only the person acting in the app (source `ui`, health access open;
 // eVe/domains/health_record/health_record_commands.js). Opening or closing a screen holds no data (the screen shows it
-// to the person in the app, never to the caller). Removing an entry and saving a file out are confirmed.
+// to the person in the app, never to the caller). Removing an entry or a result and saving a file out are confirmed.
 export const HEALTH_RECORD_ERRORS = Object.freeze(['INVALID_ARGUMENT', 'AUTH_REQUIRED', 'health_access_denied_for_actor', 'health_record_kind_invalid',
     'health_record_state_invalid', 'health_record_source_invalid', 'health_record_entry_unknown', 'health_result_unknown', 'health_result_unreadable',
     'health_result_line_unknown', 'health_export_cancelled', 'health_export_failed', 'health_record_presentation_unavailable', 'HEALTH_RECORD_FAILED']);
@@ -18,16 +18,17 @@ const command = (action, persistent, description, input, required = []) => Objec
 export const HEALTH_RECORD_KIND_NAMES = Object.freeze(['identity', 'history', 'allergy', 'vaccination', 'consultation', 'exam', 'prescription', 'follow_up', 'document']);
 export const HEALTH_RECORD_SCREENS = Object.freeze(['rubric', 'identity', 'allergies', 'treatments', 'consultations', 'exams', 'prescriptions', 'follow_ups',
     'results', 'documents', 'entry', 'share', 'import', 'verify', 'csv', 'supplements', 'supplement', 'intakes', 'catalogue', 'protocol', 'alerts',
-    'templates', 'template', 'template_send']);
+    'templates', 'template', 'template_send', 'medications', 'medication', 'medicine_catalogue', 'history']);
 const fields = { type: 'object', additionalProperties: false, properties: Object.fromEntries([
-    ...['title', 'date', 'sampled', 'received', 'professional', 'notes', 'birth_date', 'blood_group', 'physician', 'reaction'].map(key => [key, { type: 'string', maxLength: 4000 }]),
+    ...['title', 'date', 'sampled', 'received', 'professional', 'notes', 'birth_date', 'blood_group', 'sex', 'physician', 'reaction'].map(key => [key, { type: 'string', maxLength: 4000 }]),
     ['source', { type: 'string', enum: ['declared', 'professional', 'document'] }], ['state', { type: 'string', maxLength: 24 }],
     ...['original_atome_id', 'report_id', 'event_id', 'protocol_id'].map(key => [key, id])]) };
 
 export const HEALTH_RECORD_COMMANDS = Object.freeze([
-    command('open', false, 'Show a screen of the Health record to the person in the app (the record\'s rubric, a rubric\'s entries, an entry, share, results, supplements, protocols, templates).',
+    command('open', false, 'Show a screen of the Health record to the person in the app (the record\'s rubric, a rubric\'s entries, an entry, share, results, supplements, medicines and their intakes and history, protocols, templates).',
         { screen: { type: 'string', enum: HEALTH_RECORD_SCREENS }, person_id: person, entry_id: id, kind: { type: 'string', enum: HEALTH_RECORD_KIND_NAMES },
-            report_id: id, proposal_id: id, product_id: id, template_id: id }, ['screen']),
+            report_id: id, proposal_id: id, product_id: id, template_id: id,
+            item_kind: { type: 'string', enum: ['supplement', 'medication'], description: 'Prises and Historique: the supplements\' or the medicines\'.' } }, ['screen']),
     command('close', false, 'Close the Health record screen shown.', {}),
     command('entries', false, 'List the entries of one rubric of a person\'s record (newest first).', { person_id: person, kind: { type: 'string', enum: HEALTH_RECORD_KIND_NAMES } }),
     command('entry_save', true, 'Add an entry, or a new version of one (the previous version is kept): its fields as the person typed them; a field left out is « non renseigné ».',
@@ -37,6 +38,7 @@ export const HEALTH_RECORD_COMMANDS = Object.freeze([
     command('result_import', true, 'Read a received result (a text already filed by the import, or a text read from its original file): the original kept unchanged, its lines proposed, the lines its reading doubted marked to verify, nothing verified; a file nobody could read (no text recognition on this host) is kept as a received exam report filled by hand.',
         { text: { type: 'string', minLength: 1, maxLength: 524288 }, text_atome_id: id, original_file_id: id, original_name: { type: 'string', maxLength: 200 },
             uncertain_lines: { type: 'array', maxItems: 4000, items: { type: 'integer', minimum: 1 } }, person_id: person }),
+    command('result_remove', true, 'Remove one received result: the report, the values verified from it and its original.', { report_id: id }, ['report_id']),
     command('result_read', false, 'A received result: its lines as read and its original\'s lines.', { report_id: id }, ['report_id']),
     command('result_verify', true, '« Enreg. »: the ticked lines become values (refs); corrections: { ref: value typed }, the value read kept beside it.',
         { report_id: id, refs: { type: 'array', minItems: 1, maxItems: 500, items: id }, corrections: { type: 'object' } }, ['report_id', 'refs']),
@@ -45,7 +47,7 @@ export const HEALTH_RECORD_COMMANDS = Object.freeze([
         { person_id: person, keys: { type: 'array', minItems: 1, maxItems: 500, items: id }, originals: { type: 'boolean' }, save: { type: 'boolean' } }, ['keys'])
 ]);
 export const HEALTH_RECORD_OPEN_ACTIONS = Object.freeze(['open', 'close']);
-export const HEALTH_RECORD_CONFIRMED_COMMANDS = Object.freeze(['health_record.entry_remove', 'health_record.results_export']);
+export const HEALTH_RECORD_CONFIRMED_COMMANDS = Object.freeze(['health_record.entry_remove', 'health_record.result_remove', 'health_record.results_export']);
 export const validateHealthRecordInput = (action, input) => {
     const contract = HEALTH_RECORD_COMMANDS.find(entry => entry.action === action);
     return contract && validateParams(contract.input_schema, input).ok ? null : 'INVALID_ARGUMENT';

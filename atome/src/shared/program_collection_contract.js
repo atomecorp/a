@@ -18,12 +18,16 @@ export const PROGRAM_DATA_PERMISSION_SCHEMA = Object.freeze({ type: 'object', ad
         source: { type: 'string', enum: ['preferences', 'journal'] }, allowed: { type: 'boolean' }, date: { type: 'string' },
         answer_state: { type: 'string', enum: ['unknown', 'later'] }
     } });
-/** The health part of the preferences stays on this device only (decision Q70, 31 Oct. 2026; #device_scope_contract.js). */
-export const PROGRAM_PREFERENCE_DEVICE_KEYS = Object.freeze(['allergies', 'intolerances']);
-/** Where a preference was kept before Q70, synced with the account: read once by the move to the device, then deleted. */
+/** The health part of the preferences: on the server, sealed for its owner alone (AGENTS.md rule 21, 4 Nov. 2026, which
+ * replaces decision Q70 of 31 Oct. 2026 « this device only »; #eVe/domains/programs/health_profile_store.js). */
+export const PROGRAM_PREFERENCE_HEALTH_KEYS = Object.freeze(['allergies', 'intolerances']);
+/** A synced preference in clear: the others, and where the health ones lay before Q70 (read once by the move, then deleted). */
 export const syncedProgramPreferenceId = (actor, key) => 'program_preference:' + encodeURIComponent(actor) + ':' + key;
-export const programPreferenceId = (actor, key) => PROGRAM_PREFERENCE_DEVICE_KEYS.includes(key)
-    ? deviceAtomeId('program_preference', String(actor), key) : syncedProgramPreferenceId(actor, key);
+/** Where Q70 kept the health ones, on one device (read once by the move, then deleted). */
+export const deviceProgramPreferenceId = (actor, key) => deviceAtomeId('program_preference', String(actor), key);
+export const HEALTH_PREFERENCE_PREFIX = 'health_preference:';
+export const programPreferenceId = (actor, key) => PROGRAM_PREFERENCE_HEALTH_KEYS.includes(key)
+    ? HEALTH_PREFERENCE_PREFIX + encodeURIComponent(actor) + ':' + key : syncedProgramPreferenceId(actor, key);
 export const programDataPermissionId = (actor, purpose, source) =>
     'program_data_permission:' + encodeURIComponent(actor) + ':' + encodeURIComponent(purpose) + ':' + source;
 export const collectionInstant = value => typeof value === 'string' && /(?:Z|[+-]\d\d:\d\d)$/.test(value) ? Date.parse(value) : NaN;

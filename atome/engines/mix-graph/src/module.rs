@@ -5,8 +5,8 @@
 use crate::dsp::{self, AtomicParam, SmoothedGain};
 use crate::dsp_module::DspRuntime;
 use kira::Frame;
-use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU8, Ordering};
 
 // Bypass request written by the control thread.
 pub const REQUEST_ACTIVE: u8 = 0;
@@ -35,7 +35,11 @@ impl ModuleControls {
     pub fn new(value: f32, bypass: bool, parameters: Vec<AtomicParam>) -> Arc<Self> {
         Arc::new(Self {
             value: AtomicParam::new(value),
-            request: AtomicU8::new(if bypass { REQUEST_BYPASS } else { REQUEST_ACTIVE }),
+            request: AtomicU8::new(if bypass {
+                REQUEST_BYPASS
+            } else {
+                REQUEST_ACTIVE
+            }),
             state: AtomicU8::new(if bypass { STATE_BYPASSED } else { STATE_ACTIVE }),
             parameters,
         })
@@ -62,7 +66,11 @@ pub type ModuleBox = Box<ModuleRuntime>;
 
 impl ModuleRuntime {
     pub fn new(controls: Arc<ModuleControls>, processor: Processor, sample_rate: u32) -> ModuleBox {
-        Box::new(Self { controls, processor, sample_rate })
+        Box::new(Self {
+            controls,
+            processor,
+            sample_rate,
+        })
     }
 
     // Resolve the request against the current state.
@@ -166,7 +174,11 @@ impl ModuleRuntime {
         let state = self.resolve_state();
         let level = dsp::db_to_amplitude(self.controls.value.get());
         if let Processor::Send(gain) | Processor::Input(gain) = &mut self.processor {
-            gain.add_into(source, destination, if state == STATE_ACTIVE { level } else { 0.0 });
+            gain.add_into(
+                source,
+                destination,
+                if state == STATE_ACTIVE { level } else { 0.0 },
+            );
         }
     }
 

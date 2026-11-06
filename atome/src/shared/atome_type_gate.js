@@ -13,8 +13,12 @@ import { EVENT_META_PROPERTY_KEYS } from './adole_event_contract.js';
 export const ATOME_TYPE_UNKNOWN = 'atome_type_unknown';
 export const ATOME_PROPERTY_UNKNOWN = 'atome_property_unknown';
 
-// Envelope fields carried in a patch (type, parent, owner, deletion…): never properties, never gated.
-export const ATOME_ENVELOPE_PROPERTY_KEYS = Object.freeze([...new Set([...EVENT_META_PROPERTY_KEYS, ...RESERVED_PROPERTY_KEYS])].sort());
+// A copy's provenance, carried by the copy of an atome of any type (server/shop_delivery.js#copyProject).
+const COPY_PROVENANCE_PROPERTY_KEYS = ['shared_from', 'original_atome_id', 'share_type', 'shop_order_id'];
+
+// Envelope fields carried in a patch (type, parent, owner, deletion, a copy's provenance…): never gated.
+export const ATOME_ENVELOPE_PROPERTY_KEYS = Object.freeze([...new Set([...EVENT_META_PROPERTY_KEYS, ...RESERVED_PROPERTY_KEYS,
+    ...COPY_PROVENANCE_PROPERTY_KEYS])].sort());
 
 // Kinds that write no new property: a deletion, a restore of stored truth, a snapshot, an ownership transfer.
 export const ATOME_UNGATED_EVENT_KINDS = Object.freeze(['delete', 'restore', 'snapshot', 'transfer-owner']);

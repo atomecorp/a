@@ -23,7 +23,7 @@ const fixture = () => {
 const env = { Atome: { getStateCurrent: async (id) => ({ id, properties: { kind: 'audio', media_url: `/api/uploads/${id}.wav` } }) } };
 
 test('kernel: fades are set, validated, trimmed with the clip and split in halves', () => {
-    let timeline = setClipFades(fixture(), { clip_id: 'c', in_frames: 4800, out_frames: 9600 });
+    const timeline = setClipFades(fixture(), { clip_id: 'c', in_frames: 4800, out_frames: 9600 });
     assert.deepEqual(timeline.clips[0].fades, { in_frames: 4800, out_frames: 9600 });
     assert.throws(() => setClipFades(timeline, { clip_id: 'c', in_frames: 96000, out_frames: 1 }), /longer than the clip/);
     assert.throws(() => setClipFades(timeline, { clip_id: 'c', in_frames: 1.5 }), /integers/);

@@ -27,7 +27,11 @@ impl SincTables {
                 let mut sum = 0.0;
                 for (tap, weight) in row.iter_mut().enumerate() {
                     let x = tap as f64 - (HALF as f64 - 1.0) - fraction;
-                    let sinc = if x.abs() < 1.0e-9 { 1.0 } else { (PI * cutoff * x).sin() / (PI * cutoff * x) };
+                    let sinc = if x.abs() < 1.0e-9 {
+                        1.0
+                    } else {
+                        (PI * cutoff * x).sin() / (PI * cutoff * x)
+                    };
                     let w = (x + HALF as f64) / TAPS as f64;
                     let window = 0.42 - 0.5 * (2.0 * PI * w).cos() + 0.08 * (4.0 * PI * w).cos();
                     let value = cutoff * sinc * window;
@@ -47,7 +51,10 @@ impl SincTables {
     // The rows of the band that reads at `step` (fixed for a run of frames).
     #[inline]
     pub fn band(&self, step: f64) -> &[[f32; TAPS]] {
-        let band = BANDS.iter().position(|&limit| step.abs() <= limit + 1.0e-9).unwrap_or(BANDS.len() - 1);
+        let band = BANDS
+            .iter()
+            .position(|&limit| step.abs() <= limit + 1.0e-9)
+            .unwrap_or(BANDS.len() - 1);
         &self.rows[band * (PHASES + 1)..(band + 1) * (PHASES + 1)]
     }
 
@@ -93,6 +100,11 @@ pub fn dot(weights: &[f32; TAPS], taps: &[f32; TAPS]) -> f32 {
     for lane in 0..HALF {
         lanes[lane] = weights[lane] * taps[lane] + weights[lane + HALF] * taps[lane + HALF];
     }
-    let quarter = [lanes[0] + lanes[4], lanes[1] + lanes[5], lanes[2] + lanes[6], lanes[3] + lanes[7]];
+    let quarter = [
+        lanes[0] + lanes[4],
+        lanes[1] + lanes[5],
+        lanes[2] + lanes[6],
+        lanes[3] + lanes[7],
+    ];
     (quarter[0] + quarter[2]) + (quarter[1] + quarter[3])
 }

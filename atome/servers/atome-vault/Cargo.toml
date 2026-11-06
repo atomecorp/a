@@ -1,0 +1,31 @@
+[package]
+name = "atome-vault"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "One person's vault process: the atome-store engine on that person's database alone, behind binary frames"
+
+[[bin]]
+name = "atome-vault"
+path = "src/main.rs"
+
+[[test]]
+name = "worker_process"
+path = "../../../tests/atome_vault/worker_process.rs"
+
+[dependencies]
+base64.workspace = true
+chrono = "0.4"
+ring = "0.17"
+sha2.workspace = true
+atome-confine = { path = "../atome-confine" }
+atome-store = { path = "../../engines/atome-store" }
+rusqlite.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

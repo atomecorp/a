@@ -40,11 +40,39 @@ pub const MODE: u32 = 9;
 pub const BEND_RANGE: u32 = 10;
 pub const PARAMS: [ParamSpec; 11] = [
     ParamSpec::new(GAIN_DB, "gain_db", -60.0, 12.0, 0.0, Unit::Decibels),
-    ParamSpec::new(ATTACK_MS, "attack_ms", 0.1, 10000.0, 1.0, Unit::Milliseconds),
-    ParamSpec::new(DECAY_MS, "decay_ms", 1.0, 10000.0, 144.0, Unit::Milliseconds),
+    ParamSpec::new(
+        ATTACK_MS,
+        "attack_ms",
+        0.1,
+        10000.0,
+        1.0,
+        Unit::Milliseconds,
+    ),
+    ParamSpec::new(
+        DECAY_MS,
+        "decay_ms",
+        1.0,
+        10000.0,
+        144.0,
+        Unit::Milliseconds,
+    ),
     ParamSpec::new(SUSTAIN, "sustain", 0.0, 1.0, 1.0, Unit::Percent),
-    ParamSpec::new(RELEASE_MS, "release_ms", 1.0, 20000.0, 89.0, Unit::Milliseconds),
-    ParamSpec::new(VELOCITY_SENSE, "velocity_sense", 0.0, 1.0, 0.89, Unit::Percent),
+    ParamSpec::new(
+        RELEASE_MS,
+        "release_ms",
+        1.0,
+        20000.0,
+        89.0,
+        Unit::Milliseconds,
+    ),
+    ParamSpec::new(
+        VELOCITY_SENSE,
+        "velocity_sense",
+        0.0,
+        1.0,
+        0.89,
+        Unit::Percent,
+    ),
     ParamSpec::new(TUNE_CENTS, "tune_cents", -1200.0, 1200.0, 0.0, Unit::Plain),
     ParamSpec::new(GLIDE_MS, "glide_ms", 0.0, 5000.0, 55.0, Unit::Milliseconds),
     ParamSpec::new(POLYPHONY, "polyphony", 1.0, 128.0, 21.0, Unit::Plain),
@@ -86,8 +114,15 @@ const ACTION_CAPACITY: usize = 256;
 // What a voice reads and reports to; a macro so the voices can be borrowed beside it.
 macro_rules! context {
     ($sampler:ident) => {
-        $crate::voice::Context { bank: &$sampler.bank, tables: &$sampler.tables, keymap: &mut $sampler.keymap, actions: &$sampler.actions,
-            generation: $sampler.generation, controllers: &$sampler.controllers, now: $sampler.now }
+        $crate::voice::Context {
+            bank: &$sampler.bank,
+            tables: &$sampler.tables,
+            keymap: &mut $sampler.keymap,
+            actions: &$sampler.actions,
+            generation: $sampler.generation,
+            controllers: &$sampler.controllers,
+            now: $sampler.now,
+        }
     };
 }
 
@@ -209,7 +244,13 @@ impl Sampler {
 
     fn shape(&self) -> Shape {
         let value = |id: u32| self.values[id as usize];
-        Shape { attack_ms: value(ATTACK_MS), decay_ms: value(DECAY_MS), sustain: value(SUSTAIN), release_ms: value(RELEASE_MS), glide_ms: value(GLIDE_MS) }
+        Shape {
+            attack_ms: value(ATTACK_MS),
+            decay_ms: value(DECAY_MS),
+            sustain: value(SUSTAIN),
+            release_ms: value(RELEASE_MS),
+            glide_ms: value(GLIDE_MS),
+        }
     }
 
     fn velocity_level(&self, velocity: f32) -> f32 {
@@ -224,21 +265,38 @@ impl Sampler {
             EventKind::Sustain { down } => {
                 self.sustain_down = down;
                 if !down {
-                    for voice in self.pool.voices_mut().iter_mut().filter(|voice| voice.active && voice.sustained) {
+                    for voice in self
+                        .pool
+                        .voices_mut()
+                        .iter_mut()
+                        .filter(|voice| voice.active && voice.sustained)
+                    {
                         voice.release();
                     }
                 }
             }
-            EventKind::PitchBend { semitones } => self.bend = semitones.clamp(-1.0, 1.0) * self.values[BEND_RANGE as usize],
+            EventKind::PitchBend { semitones } => {
+                self.bend = semitones.clamp(-1.0, 1.0) * self.values[BEND_RANGE as usize]
+            }
             EventKind::Controller { number, value } => {
                 self.controllers[number as usize & 127] = value.clamp(0.0, 1.0);
-                for voice in self.pool.voices_mut().iter_mut().filter(|voice| voice.active) {
+                for voice in self
+                    .pool
+                    .voices_mut()
+                    .iter_mut()
+                    .filter(|voice| voice.active)
+                {
                     voice.controller_moved();
                 }
             }
             EventKind::AllNotesOff => {
                 self.held_count = 0;
-                for voice in self.pool.voices_mut().iter_mut().filter(|voice| voice.active) {
+                for voice in self
+                    .pool
+                    .voices_mut()
+                    .iter_mut()
+                    .filter(|voice| voice.active)
+                {
                     voice.release();
                 }
             }
@@ -247,10 +305,26 @@ impl Sampler {
 
     // Applies `event` at its frame, or carries it (and, through `carrying`, every
     // event after it) to the next block once the priming budget is spent.
-    fn step(&mut self, out: &mut Buses, cursor: &mut usize, event: NoteEvent, carrying: bool) -> bool {
-        let starts = matches!(event.kind, EventKind::NoteOn { .. } | EventKind::NoteOff { .. });
-        if carrying || (starts && self.keymap.stretches() && self.primes >= priming_budget(self.sample_rate, out.frames)) {
-            self.carried.push(NoteEvent { offset: 0, kind: event.kind });
+    fn step(
+        &mut self,
+        out: &mut Buses,
+        cursor: &mut usize,
+        event: NoteEvent,
+        carrying: bool,
+    ) -> bool {
+        let starts = matches!(
+            event.kind,
+            EventKind::NoteOn { .. } | EventKind::NoteOff { .. }
+        );
+        if carrying
+            || (starts
+                && self.keymap.stretches()
+                && self.primes >= priming_budget(self.sample_rate, out.frames))
+        {
+            self.carried.push(NoteEvent {
+                offset: 0,
+                kind: event.kind,
+            });
             return true;
         }
         let at = (event.offset as usize).min(out.frames);
@@ -268,13 +342,25 @@ impl Sampler {
         let frames = end - start;
         let (stride, buses) = (out.frames, out.count());
         let transpose = self.bend + self.values[TUNE_CENTS as usize] / 100.0;
-        let (scratch_left, scratch_right) = (&mut self.scratch_left[..frames], &mut self.scratch_right[..frames]);
+        let (scratch_left, scratch_right) = (
+            &mut self.scratch_left[..frames],
+            &mut self.scratch_right[..frames],
+        );
         let mut context = context!(self);
-        for voice in self.pool.voices_mut().iter_mut().filter(|voice| voice.active) {
+        for voice in self
+            .pool
+            .voices_mut()
+            .iter_mut()
+            .filter(|voice| voice.active)
+        {
             scratch_left.fill(0.0);
             scratch_right.fill(0.0);
             voice.render(&mut context, transpose, scratch_left, scratch_right);
-            let bus = if buses == 1 { 0 } else { context.keymap.zone(voice.zone).output as usize };
+            let bus = if buses == 1 {
+                0
+            } else {
+                context.keymap.zone(voice.zone).output as usize
+            };
             let span = bus * stride + start..bus * stride + end;
             for (sample, value) in out.left[span.clone()].iter_mut().zip(scratch_left.iter()) {
                 *sample += value;
@@ -301,8 +387,14 @@ impl Sampler {
     // One block of `frames` frames on every output: `left` and `right` hold
     // `outputs()` buses (or more, left silent) of `frames` samples side by side.
     pub fn process_outputs(&mut self, left: &mut [f32], right: &mut [f32], frames: usize) {
-        debug_assert!(frames > 0 && left.len() == right.len() && left.len() >= frames * self.outputs());
-        self.run(&mut Buses { left, right, frames });
+        debug_assert!(
+            frames > 0 && left.len() == right.len() && left.len() >= frames * self.outputs()
+        );
+        self.run(&mut Buses {
+            left,
+            right,
+            frames,
+        });
     }
 
     fn run(&mut self, out: &mut Buses) {
@@ -343,11 +435,17 @@ impl Processor for Sampler {
     // Every output summed into the one block (the instrument heard whole).
     fn process(&mut self, block: &mut StereoBlock) {
         let frames = block.frames();
-        self.run(&mut Buses { left: &mut *block.left, right: &mut *block.right, frames });
+        self.run(&mut Buses {
+            left: &mut *block.left,
+            right: &mut *block.right,
+            frames,
+        });
     }
 
     fn set_param(&mut self, id: u32, value: f32) {
-        let Some(spec) = PARAMS.get(id as usize) else { return };
+        let Some(spec) = PARAMS.get(id as usize) else {
+            return;
+        };
         let value = spec.clamp(value);
         self.values[id as usize] = value;
         if id == GAIN_DB {
@@ -367,7 +465,10 @@ impl Processor for Sampler {
         self.events.clear();
         self.carried.clear();
         self.held_count = 0;
-        self.switch = self.keymap.switches().map_or(0, |switches| switches.default);
+        self.switch = self
+            .keymap
+            .switches()
+            .map_or(0, |switches| switches.default);
         self.sustain_down = false;
         self.bend = 0.0;
         self.controllers = [0.0; 128];

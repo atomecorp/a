@@ -1,0 +1,18 @@
+[
+ {"name": "no criterion holds for everyone", "criteria": [], "profile": {}, "expected": "true"},
+ {"name": "unknown age", "criteria": [{"parameter": "age_years", "comparison": "ge", "value": 65}], "profile": {}, "expected": "unknown"},
+ {"name": "elderly", "criteria": [{"parameter": "age_years", "comparison": "ge", "value": 65}], "profile": {"age_years": 72}, "expected": "true"},
+ {"name": "not yet elderly", "criteria": [{"parameter": "age_years", "comparison": "ge", "value": 65}], "profile": {"age_years": 64.9}, "expected": "false"},
+ {"name": "between includes its lower bound", "criteria": [{"parameter": "weight_kg", "comparison": "between", "value": 5, "upper": 8}], "profile": {"weight_kg": 5}, "expected": "true"},
+ {"name": "between excludes its upper bound", "criteria": [{"parameter": "weight_kg", "comparison": "between", "value": 5, "upper": 8}], "profile": {"weight_kg": 8}, "expected": "false"},
+ {"name": "bmi from weight and height", "criteria": [{"parameter": "bmi", "comparison": "gt", "value": 30}], "profile": {"weight_kg": 100, "height_cm": 170}, "expected": "true"},
+ {"name": "bmi without the height", "criteria": [{"parameter": "bmi", "comparison": "gt", "value": 30}], "profile": {"weight_kg": 100}, "expected": "unknown"},
+ {"name": "sex", "criteria": [{"parameter": "sex", "comparison": "is", "category": "female"}], "profile": {"sex": "male"}, "expected": "false"},
+ {"name": "pregnancy yes", "criteria": [{"parameter": "pregnancy", "comparison": "is", "category": "yes"}], "profile": {"pregnant": true}, "expected": "true"},
+ {"name": "not pregnant has no term", "criteria": [{"parameter": "pregnancy_weeks", "comparison": "ge", "value": 24}], "profile": {"pregnant": false}, "expected": "false"},
+ {"name": "a failing criterion wins over an unknown one", "criteria": [{"parameter": "gfr", "comparison": "lt", "value": 30}, {"parameter": "age_years", "comparison": "lt", "value": 18}], "profile": {"age_years": 40}, "expected": "false"},
+ {"name": "severe renal impairment", "criteria": [{"parameter": "gfr", "comparison": "lt", "value": 30}], "profile": {"gfr": 25}, "expected": "true"},
+ {"name": "hepatic grade", "criteria": [{"parameter": "hepatic_impairment", "comparison": "ge", "value": 2}], "profile": {"hepatic_impairment": 1}, "expected": "false"},
+ {"name": "the latest lab result wins", "criteria": [{"parameter": "lab", "comparison": "ge", "value": 1.26, "lab": "fasting_glucose"}], "profile": {"labs": [{"key": "fasting_glucose", "value": 1.4, "date": "2026-01-02"}, {"key": "fasting_glucose", "value": 0.95, "date": "2026-10-30"}]}, "expected": "false"},
+ {"name": "a lab never measured", "criteria": [{"parameter": "lab", "comparison": "gt", "value": 5, "lab": "potassium"}], "profile": {"labs": [{"key": "hba1c", "value": 7}]}, "expected": "unknown"}
+]

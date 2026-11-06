@@ -113,9 +113,10 @@ export function createPairingClient({ devices, approver, send, token, ensureSess
             const { challenge } = await request('pair-requester-challenge', { pairId: attempt.pairId, purpose: 'pair-complete' });
             const result = await request('pair-complete', { pairId: attempt.pairId, ...await device.sign(checkChallenge(challenge, 'pair-complete', attempt.pairId)) });
             await devices.remove('pair-attempt');
-            const accepted = await accept(result, attempt.scope, attempt.approve, attempt.deviceClass);
+            // The account's ring is kept before its session opens: the workspace the session boots may need it at once
+            // (a sealed record read), and a ring made then would replace the one received.
             if (result.backupKeys && attempt.backupKey) await keyring.receive(result.user.id, result.backupKeys, attempt.backupKey);
-            return accepted;
+            return accept(result, attempt.scope, attempt.approve, attempt.deviceClass);
         },
         // A shared device holding an account's key asks its owner to open it once more (§6.4).
         async startSharedOpen(userId) {
@@ -274,9 +275,9 @@ export function createPairingClient({ devices, approver, send, token, ensureSess
             const { challenge } = await request('recovery-requester-challenge', { ...fields, purpose: 'recovery-complete' });
             const result = await request('recovery-complete', { ...fields, ...await device.sign(checkChallenge(challenge, 'recovery-complete', attempt.recoveryId)) });
             await devices.remove('recovery-attempt');
-            const accepted = await accept(result, attempt.scope, attempt.approve, 'personal');
+            // The ring before the session, as for a pairing.
             if (result.backupKeys && attempt.wrapKey) await keyring.unwrap(result.user.id, result.backupKeys, attempt.wrapKey);
-            return accepted;
+            return accept(result, attempt.scope, attempt.approve, 'personal');
         },
         async abandonRecovery() { await devices.remove('recovery-attempt'); return { ok: true }; },
         async cancelRecovery(recoveryId) {

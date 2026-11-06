@@ -1,7 +1,9 @@
 [package]
 name = "squirrel-bevy-renderer"
 version = "0.1.0"
-edition = "2021"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
 description = "Unique Bevy WebGPU renderer surface for Atome/eVe web projection"
 
 [lib]
@@ -9,7 +11,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 atome-bevy-renderer-core = { path = "../../../atome/renderers/bevy-core" }
-bevy = { version = "0.19.0", default-features = false, features = [
+bevy = { workspace = true, features = [
     "bevy_window",
     "bevy_winit",
     "bevy_render",
@@ -24,27 +26,9 @@ bevy = { version = "0.19.0", default-features = false, features = [
     "bevy_ui_render",
     "webgpu",
 ] }
-serde = { version = "1", features = ["derive"] }
-serde-wasm-bindgen = "0.6"
-wasm-bindgen = "=0.2.108"
+serde.workspace = true
+serde-wasm-bindgen.workspace = true
+wasm-bindgen.workspace = true
 
-[patch.crates-io]
-wgpu = { path = "../../../atome/renderers/wgpu-web-external-texture/wgpu-29.0.4" }
-wgpu-types = { path = "../../../atome/renderers/wgpu-web-external-texture/wgpu-types-29.0.4" }
-
-[profile.release]
-# WebKit compiles this renderer inside its separately limited WebContent
-# process. Keeping the generated code as small as possible lowers both transfer
-# and JavaScriptCore compilation pressure on iOS.
-opt-level = "z"
-lto = true
-codegen-units = 1
-panic = "abort"
-strip = true
-
-# wasm-pack post-processes the release artifact with wasm-opt; -Oz targets size,
-# which dominates cold project/Dashboard open cost for this renderer. --all-features
-# lets wasm-opt accept the post-MVP opcodes Rust emits (nontrapping float-to-int,
-# bulk-memory, sign-ext, ...); without it wasm-opt validation aborts the build.
-[package.metadata.wasm-pack.profile.release]
-wasm-opt = ['-Oz', '--all-features']
+[lints]
+workspace = true

@@ -27,7 +27,9 @@ impl Processor for Splitter {
     fn process(&mut self, _block: &mut StereoBlock) {}
 
     fn process_ports(&mut self, block: &mut StereoBlock, extra: &mut [StereoBlock]) {
-        let Some(second) = extra.first_mut() else { return };
+        let Some(second) = extra.first_mut() else {
+            return;
+        };
         for index in 0..block.frames() {
             let (left, right) = (block.left[index], block.right[index]);
             let (first, other) = match self.split {

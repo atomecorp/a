@@ -13,13 +13,13 @@ use crate::markers::Hits;
 use crate::reading::Source;
 use crate::sample::{SampleBank, SampleData};
 use crate::segment::{LoopMode, SegmentPlayer};
-use crate::zone::{ZoneFilter, MAX_PLAYERS};
-use composed_play::Composition;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::stretch::VoiceStretch;
+use crate::zone::{MAX_PLAYERS, ZoneFilter};
 use atome_dsp::biquad::{Coefficients, Section};
 use atome_dsp::envelope::{self, Envelope};
 use atome_dsp::{Processor, Smoothed, StereoBlock};
-#[cfg(not(target_arch = "wasm32"))]
-use crate::stretch::VoiceStretch;
+use composed_play::Composition;
 
 // Control rate of the pitch (glide, bend): the reading step is set every 32 frames.
 pub const CONTROL_FRAMES: usize = 32;
@@ -50,7 +50,13 @@ impl<'a> Context<'a> {
         let count = self.keymap.markers_mut().fires(marker, crossings)?;
         let fired = *self.keymap.markers().get(marker);
         if fired.reports {
-            self.actions.push(FiredMarker { marker: marker as u32, generation: self.generation, note, count, frame });
+            self.actions.push(FiredMarker {
+                marker: marker as u32,
+                generation: self.generation,
+                note,
+                count,
+                frame,
+            });
         }
         Some(fired.label)
     }
@@ -58,7 +64,8 @@ impl<'a> Context<'a> {
 
 // The reading step of `segment`'s sample for a pitch in semitones.
 fn reading_step(data: &SampleData, sample_rate: f32, pitch: f32, root: u8, tune_cents: f32) -> f64 {
-    data.sample_rate as f64 / sample_rate as f64 * 2f64.powf((pitch - root as f32 + tune_cents / 100.0) as f64 / 12.0)
+    data.sample_rate as f64 / sample_rate as f64
+        * 2f64.powf((pitch - root as f32 + tune_cents / 100.0) as f64 / 12.0)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -169,18 +176,38 @@ impl Voice {
             self.stretcher = Some(stretcher);
         }
         #[cfg(target_arch = "wasm32")]
-        assert!(!stretch, "the keymap refuses stretched segments on this platform");
+        assert!(
+            !stretch,
+            "the keymap refuses stretched segments on this platform"
+        );
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn start(&mut self, context: &mut Context, picks: &[Pick], note: u8, velocity: f32, level: f32, shape: Shape, one_shot: bool, transpose: f32) {
+    pub fn start(
+        &mut self,
+        context: &mut Context,
+        picks: &[Pick],
+        note: u8,
+        velocity: f32,
+        level: f32,
+        shape: Shape,
+        one_shot: bool,
+        transpose: f32,
+    ) {
         self.count = 0;
         self.holds_gate = false;
         self.composition = Composition::IDLE;
         let zones = context.keymap.zones();
         for pick in picks {
-            let take = if one_shot { zones[pick.zone].release_takes[pick.take] } else { zones[pick.zone].takes[pick.take] };
-            let data = context.bank.get(take.sample).expect("keymap checked its samples");
+            let take = if one_shot {
+                zones[pick.zone].release_takes[pick.take]
+            } else {
+                zones[pick.zone].takes[pick.take]
+            };
+            let data = context
+                .bank
+                .get(take.sample)
+                .expect("keymap checked its samples");
             let gain = atome_dsp::db_to_amplitude(zones[pick.zone].gain_db);
             self.players[self.count].start(take, data, velocity, pick.level * level * gain);
             self.holds_gate |= matches!(take.looping, Some(spec) if spec.mode == LoopMode::Sustain);
@@ -196,11 +223,16 @@ impl Voice {
         self.pitch = Smoothed::new(note as f32, shape.glide_ms.max(0.1));
         self.pitch.prepare(self.sample_rate);
         self.envelope.reset();
-        let (attack, decay, sustain) = if one_shot { (0.1, 1.0, 1.0) } else { (shape.attack_ms, shape.decay_ms, shape.sustain) };
+        let (attack, decay, sustain) = if one_shot {
+            (0.1, 1.0, 1.0)
+        } else {
+            (shape.attack_ms, shape.decay_ms, shape.sustain)
+        };
         self.envelope.set_param(envelope::ATTACK_MS, attack);
         self.envelope.set_param(envelope::DECAY_MS, decay);
         self.envelope.set_param(envelope::SUSTAIN, sustain);
-        self.envelope.set_param(envelope::RELEASE_MS, shape.release_ms);
+        self.envelope
+            .set_param(envelope::RELEASE_MS, shape.release_ms);
         self.envelope.set_param(envelope::GATE, 1.0);
         self.active = true;
         self.note = note;
@@ -214,7 +246,15 @@ impl Voice {
 
     // The zone's filter for this note (its cutoff following key and velocity), or none.
     pub fn set_filter(&mut self, filter: Option<ZoneFilter>, note: u8, velocity: f32) {
-        self.filter = filter.map(|filter| Coefficients::design(filter.shape, self.sample_rate, filter.cutoff_for(note, velocity), filter.q, 0.0));
+        self.filter = filter.map(|filter| {
+            Coefficients::design(
+                filter.shape,
+                self.sample_rate,
+                filter.cutoff_for(note, velocity),
+                filter.q,
+                0.0,
+            )
+        });
         self.filter_sections = [Section::default(); 2];
     }
 
@@ -225,7 +265,9 @@ impl Voice {
     }
 
     fn filter_block(&mut self, left: &mut [f32], right: &mut [f32]) {
-        let Some(coefficients) = self.filter else { return };
+        let Some(coefficients) = self.filter else {
+            return;
+        };
         let [left_section, right_section] = &mut self.filter_sections;
         for sample in left.iter_mut() {
             *sample = left_section.tick(&coefficients, *sample);
@@ -286,7 +328,13 @@ impl Voice {
 
     // Adds this voice into `left`/`right` (scratch the caller cleared).
     // `transpose` is the bend plus the instrument's tuning, in semitones.
-    pub fn render(&mut self, context: &mut Context, transpose: f32, left: &mut [f32], right: &mut [f32]) {
+    pub fn render(
+        &mut self,
+        context: &mut Context,
+        transpose: f32,
+        left: &mut [f32],
+        right: &mut [f32],
+    ) {
         if self.stretching {
             self.render_stretched(context, transpose, left, right);
             return;
@@ -299,7 +347,13 @@ impl Voice {
             for _ in at..end {
                 pitch = self.pitch.tick();
             }
-            self.read(context, pitch + transpose, at, &mut left[at..end], &mut right[at..end]);
+            self.read(
+                context,
+                pitch + transpose,
+                at,
+                &mut left[at..end],
+                &mut right[at..end],
+            );
             at = end;
         }
         self.filter_block(left, right);
@@ -313,12 +367,21 @@ impl Voice {
         if self.composition.on {
             return self.composition.ended;
         }
-        self.players[..self.count].iter().all(SegmentPlayer::is_finished)
+        self.players[..self.count]
+            .iter()
+            .all(SegmentPlayer::is_finished)
     }
 
     // Reads the note's segments at `pitch` (semitones, the note plus bend and
     // tuning) into `left`/`right`, `at` frames into this render.
-    fn read(&mut self, context: &mut Context, pitch: f32, at: usize, left: &mut [f32], right: &mut [f32]) {
+    fn read(
+        &mut self,
+        context: &mut Context,
+        pitch: f32,
+        at: usize,
+        left: &mut [f32],
+        right: &mut [f32],
+    ) {
         if self.composition.on {
             self.read_composed(context, pitch, at, left, right);
             return;
@@ -327,14 +390,33 @@ impl Voice {
         for player in &mut self.players[..self.count] {
             let segment = *player.segment();
             let source = context.source(segment.sample, player.ring());
-            let step = reading_step(source.data(), self.sample_rate, pitch, segment.root, segment.tune_cents);
+            let step = reading_step(
+                source.data(),
+                self.sample_rate,
+                pitch,
+                segment.root,
+                segment.tune_cents,
+            );
             let mut done = 0;
             while done < left.len() && !player.is_finished() {
                 let markers = context.keymap.markers().span(segment.markers);
-                done += player.render(&source, context.tables, step, markers, &mut left[done..], &mut right[done..], &mut hits);
+                done += player.render(
+                    &source,
+                    context.tables,
+                    step,
+                    markers,
+                    &mut left[done..],
+                    &mut right[done..],
+                    &mut hits,
+                );
                 let frame = context.now + (at + done) as u64;
                 for &index in hits.markers() {
-                    context.fire(&mut self.crossings, segment.markers.first as usize + index as usize, self.note, frame);
+                    context.fire(
+                        &mut self.crossings,
+                        segment.markers.first as usize + index as usize,
+                        self.note,
+                        frame,
+                    );
                 }
             }
         }
@@ -347,7 +429,13 @@ impl Voice {
         let mut right = std::mem::take(&mut self.input_right);
         left[at..at + frames].fill(0.0);
         right[at..at + frames].fill(0.0);
-        self.read(context, pitch, at, &mut left[at..at + frames], &mut right[at..at + frames]);
+        self.read(
+            context,
+            pitch,
+            at,
+            &mut left[at..at + frames],
+            &mut right[at..at + frames],
+        );
         self.input_left = left;
         self.input_right = right;
     }
@@ -361,11 +449,22 @@ impl Voice {
     #[cfg(not(target_arch = "wasm32"))]
     fn prime(&mut self, context: &mut Context, pitch: f32) {
         let ratio = VoiceStretch::ratio(self.factor, self.speed(pitch));
-        let (opening, ahead) = self.stretcher.as_ref().expect("a stretched keymap prepares a stretcher per voice").priming_frames(ratio);
+        let (opening, ahead) = self
+            .stretcher
+            .as_ref()
+            .expect("a stretched keymap prepares a stretcher per voice")
+            .priming_frames(ratio);
         self.read_takes(context, pitch, 0, opening + ahead);
         let stretcher = self.stretcher.as_mut().expect("prepared");
         let (left, right) = (&self.input_left, &self.input_right);
-        stretcher.prime((&left[..opening], &right[..opening]), (&left[opening..opening + ahead], &right[opening..opening + ahead]), ratio);
+        stretcher.prime(
+            (&left[..opening], &right[..opening]),
+            (
+                &left[opening..opening + ahead],
+                &right[opening..opening + ahead],
+            ),
+            ratio,
+        );
     }
 
     #[cfg(target_arch = "wasm32")]
@@ -374,7 +473,13 @@ impl Voice {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn render_stretched(&mut self, context: &mut Context, transpose: f32, left: &mut [f32], right: &mut [f32]) {
+    fn render_stretched(
+        &mut self,
+        context: &mut Context,
+        transpose: f32,
+        left: &mut [f32],
+        right: &mut [f32],
+    ) {
         let frames = left.len();
         let mut at = 0;
         while at < frames {
@@ -385,13 +490,21 @@ impl Voice {
             }
             let pitch = pitch + transpose;
             let ratio = VoiceStretch::ratio(self.factor, self.speed(pitch));
-            let input = self.stretcher.as_mut().expect("prepared").input_for(end - at, ratio);
+            let input = self
+                .stretcher
+                .as_mut()
+                .expect("prepared")
+                .input_for(end - at, ratio);
             self.read_takes(context, pitch, 0, input);
             if self.finished() {
                 self.tail += end - at;
             }
             let stretcher = self.stretcher.as_mut().expect("prepared");
-            stretcher.process((&self.input_left[..input], &self.input_right[..input]), &mut left[at..end], &mut right[at..end]);
+            stretcher.process(
+                (&self.input_left[..input], &self.input_right[..input]),
+                &mut left[at..end],
+                &mut right[at..end],
+            );
             at = end;
         }
         self.filter_block(left, right);
@@ -403,7 +516,13 @@ impl Voice {
     }
 
     #[cfg(target_arch = "wasm32")]
-    fn render_stretched(&mut self, _context: &mut Context, _transpose: f32, _left: &mut [f32], _right: &mut [f32]) {
+    fn render_stretched(
+        &mut self,
+        _context: &mut Context,
+        _transpose: f32,
+        _left: &mut [f32],
+        _right: &mut [f32],
+    ) {
         unreachable!("the keymap refuses stretched segments on this platform");
     }
 

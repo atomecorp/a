@@ -19,7 +19,7 @@ assert.ok(restoreOps.some(op=>op.type==='spawn'&&op.node.id==='workspace_shape'&
 console.log('login handoff restores workspace capture membership: ok');
 
 const {registerBevySurfaceBackgroundRuntime,ensureBevySurfaceBackgroundApplied}=await import('../../eVe/domains/rendering/bevy_surface_background_runtime.js');
-let applications=[];
+const applications=[];
 const surface=document.createElement('canvas');
 registerBevySurfaceBackgroundRuntime(surface,{started:true,wasmModule:{apply_atome_bevy_surface_background:payload=>applications.push(payload),request_atome_bevy_redraw:()=>{}}});
 assert.equal(await ensureBevySurfaceBackgroundApplied(surface),true);

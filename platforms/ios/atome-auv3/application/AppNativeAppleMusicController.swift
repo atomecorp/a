@@ -41,7 +41,7 @@ final class AppNativeAppleMusicController {
         }
     }
     private static func principal(_ token: String) throws -> String {
-        guard let claims = try AiSRuntime.verifyToken(token), let owner = claims["sub"] as? String, !owner.isEmpty else {
+        guard let owner = LocalServer.shared.verifiedUser(token) else {
             throw AppleMusicFailure(code: "AUTH_REQUIRED")
         }
         return owner
@@ -50,9 +50,9 @@ final class AppNativeAppleMusicController {
         guard let id = payload["request_id"] as? String, id.range(of: "^[A-Za-z0-9_-]{1,160}$", options: .regularExpression) != nil else {
             throw AppleMusicFailure(code: "INVALID_ARGUMENT")
         }
-        let response = AiSRuntime.handleStateCurrentMessage(["action": "get", "atome_id": "apple_music_operation_" + id, "token": token])
-        guard response["success"] as? Bool == true, let record = response["state"] as? [String: Any],
-              record["owner_id"] as? String == owner, record["type"] as? String == "apple_music_operation", record["project_id"] as? String == nil,
+        let response = LocalServer.shared.answer(["type": "state-current", "action": "get", "atome_id": "apple_music_operation_" + id, "token": token])
+        guard response["success"] as? Bool == true, let record = (response["data"] as? [String: Any])?["state"] as? [String: Any],
+              record["owner_id"] as? String == owner, record["atome_type"] as? String == "apple_music_operation", record["project_id"] as? String == nil,
               let props = record["properties"] as? [String: Any], props["__deleted"] as? Bool != true,
               props["status"] as? String == "submitting", let saved = props["request"] as? [String: Any],
               saved["action"] as? String == request.operation, let input = saved["input"] as? [String: Any],

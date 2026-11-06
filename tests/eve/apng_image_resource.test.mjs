@@ -80,18 +80,6 @@ test('large Natural APNG bounds keep the decoded animation resident without chan
     expect([payload.texture.width, payload.texture.height]).toEqual([texture.width, texture.height]);
 });
 
-test('Tauri and iOS native mappings preserve animated bytes across JSON bridge startup and resource replacement', async () => {
-    const { mapVirtualSceneForNative, mapNativeOps } = await import('../../eVe/domains/rendering/bevy_native_texture_mapping.js');
-    const { VIRTUAL_SCENE_DIFF_TYPES } = await import('../../eVe/domains/rendering/virtual_scene_contract.js');
-    const texture = await resolveAnimatedPngTexture(options);
-    const node = { id: 'apng_native', kind: 'image', bounds: { x: 0, y: 0, width: 100, height: 100 }, renderLayer: 1,
-        content: { source: options.source }, bevyTexture: texture };
-    const native = JSON.parse(JSON.stringify(await mapVirtualSceneForNative({ nodes: [node] })));
-    expect(native.nodes[0].texture.animation.bytes).toEqual(Array.from(bytes));
-    const ops = JSON.parse(JSON.stringify(await mapNativeOps([{ type: VIRTUAL_SCENE_DIFF_TYPES.updateResource, id: node.id, content: node.content, node }])));
-    expect(ops[0].patch.texture.animation.bytes).toEqual(Array.from(bytes));
-});
-
 test('Visual image projection owns its slot layer above the panel and retains clipping', async () => {
     const { projectBevyUiTreeRecords } = await import('../../eVe/domains/rendering/bevy_ui_overlay_record_projection.js');
     const records = projectBevyUiTreeRecords({ treeId: 'visual_test', workspaceLayer: 'projectView', tree: { root: {

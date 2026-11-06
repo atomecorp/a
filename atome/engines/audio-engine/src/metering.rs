@@ -150,9 +150,7 @@ mod tests {
 
     #[test]
     fn metering_accepts_i16_samples_without_float_buffer() {
-        let _lock = crate::metering_scope::METERING_TEST_LOCK
-            .lock()
-            .unwrap();
+        let _lock = crate::metering_scope::METERING_TEST_LOCK.lock().unwrap();
         reset();
         push_i16_samples(&[0, 16_384, -16_384, 32_767]);
         let levels = get_levels();
@@ -162,9 +160,7 @@ mod tests {
 
     #[test]
     fn metering_accepts_u16_samples_without_float_buffer() {
-        let _lock = crate::metering_scope::METERING_TEST_LOCK
-            .lock()
-            .unwrap();
+        let _lock = crate::metering_scope::METERING_TEST_LOCK.lock().unwrap();
         reset();
         push_u16_samples(&[32_768, 49_152, 16_384, 65_535]);
         let levels = get_levels();
@@ -174,9 +170,7 @@ mod tests {
 
     #[test]
     fn metering_keeps_f32_path() {
-        let _lock = crate::metering_scope::METERING_TEST_LOCK
-            .lock()
-            .unwrap();
+        let _lock = crate::metering_scope::METERING_TEST_LOCK.lock().unwrap();
         reset();
         push_samples(&[0.0, 0.25, -0.5, 1.0]);
         let levels = get_levels();

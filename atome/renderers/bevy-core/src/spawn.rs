@@ -8,17 +8,11 @@ use bevy::{
 use crate::{
     backdrop_surface::insert_backdrop_surface,
     clip::apply_entity_clip,
+    node_texture::{effective_corner_radii, texture_handle_for_node_in_world},
     procedural_sdf::insert_procedural_sdf,
     render_math::{atome_rect_transform_with_local, color_from_rgba, depth_for_layer},
     selection_overlay::rebuild_selection_overlay,
-    shape_sdf::{
-        apply_spatial_mask_to_texture, cached_image_handle_from_shape_mask, shape_mask_texture,
-        AtomeShapeSilhouette,
-    },
     shape_shadow_overlay::rebuild_shape_shadow_overlay,
-    texture::{
-        image_handle_from_texture, uniform_corner_radii, AtomeCornerRadii,
-    },
     types::*,
     video_external_texture::{
         insert_video_external_texture_component_for_node, insert_video_quad_mesh,
@@ -26,7 +20,7 @@ use crate::{
     waveform_playback_overlay::rebuild_waveform_playback_overlay,
 };
 
-fn color_for_node(node: &AtomeRenderNode) -> [f32; 4] {
+pub(crate) fn color_for_node(node: &AtomeRenderNode) -> [f32; 4] {
     node.color.unwrap_or([0.24, 0.55, 0.92, 1.0])
 }
 
@@ -72,7 +66,9 @@ fn node_base_components(
         text_metadata: AtomeTextMetadata(node.text.clone()),
         media_source: AtomeMediaSource(node.source.clone()),
         waveform_peaks: AtomeWaveformPeaks(node.peaks.clone().unwrap_or_default()),
-        waveform_progress: AtomeWaveformPlaybackProgress(node.playback_progress.map(|value| value.clamp(0.0, 1.0))),
+        waveform_progress: AtomeWaveformPlaybackProgress(
+            node.playback_progress.map(|value| value.clamp(0.0, 1.0)),
+        ),
         selected: AtomeSelected(node.selected.unwrap_or(false)),
         shape_shadow: AtomeShapeShadow(node.shadow),
         resolved_mask: AtomeResolvedMask(node.mask.clone().and_then(AtomeMaskStyle::normalized)),
@@ -91,99 +87,6 @@ fn node_base_components(
             node.origin,
         ),
     }
-}
-
-/// A node may carry per-corner radii instead of the uniform scalar. A partially
-/// rounded shape has `corner_radius == 0.0`, so the mask must be selected on the
-/// resolved radii rather than on the scalar alone.
-pub(crate) fn effective_corner_radii(node: &AtomeRenderNode) -> AtomeCornerRadii {
-    node.corner_radii
-        .unwrap_or_else(|| uniform_corner_radii(node.corner_radius))
-}
-
-/// La silhouette complete d'un noeud : sa variante, ses reglages, sa boite et
-/// son arrondi resolu. Le meme objet sert au masque ET a l'ombre, pour qu'une
-/// etoile ne puisse pas projeter l'ombre d'un carre.
-pub(crate) fn shape_silhouette_for_node(node: &AtomeRenderNode) -> AtomeShapeSilhouette {
-    AtomeShapeSilhouette {
-        geometry: node.shape_geometry(),
-        width: node.logical_size[0].max(1.0),
-        height: node.logical_size[1].max(1.0),
-        corner_radii: effective_corner_radii(node),
-    }
-}
-
-/// Le masque alpha d'un noeud, quand sa projection en a resolu un.
-fn node_mask(node: &AtomeRenderNode) -> Option<AtomeMaskStyle> {
-    node.mask.clone().and_then(AtomeMaskStyle::normalized)
-}
-
-/// Une texture decoupee par la silhouette du masque : l'alpha est compose ICI,
-/// sur le CPU, dans la texture qui part a la carte graphique. Le noeud garde son
-/// materiau, sa pose et ses calques ; seule sa couverture change — et une image
-/// sans masque n'est jamais recopiee.
-fn masked_texture(texture: &AtomeTexture, mask: Option<&AtomeMaskStyle>) -> Option<AtomeTexture> {
-    match mask {
-        Some(mask) => Some(apply_spatial_mask_to_texture(texture, mask)),
-        None => None,
-    }
-}
-
-pub(crate) fn texture_handle_for_node(
-    images: &mut Assets<Image>,
-    node: &AtomeRenderNode,
-) -> Result<Option<Handle<Image>>, String> {
-    if node.kind == "video" || node.kind == "media_window" {
-        return Ok(None);
-    }
-    let mask = node_mask(node);
-    if let Some(paint) = node.surface_paint.as_ref().filter(|_| node.kind == "shape") {
-        if !paint.valid() { return Err(format!("bevy_surface_paint_invalid:{}", node.id)); }
-        let texture = paint.texture(&shape_silhouette_for_node(node), color_for_node(node));
-        let texture = masked_texture(&texture, mask.as_ref()).unwrap_or(texture);
-        return Ok(Some(image_handle_from_texture(images, &Some(texture), &node.id)?));
-    }
-    if let Some(source) = node.texture.as_ref() {
-        return match masked_texture(source, mask.as_ref()) {
-            Some(masked) => Ok(Some(image_handle_from_texture(images, &Some(masked), &node.id)?)),
-            None => Ok(Some(image_handle_from_texture(images, &node.texture, &node.id)?)),
-        };
-    }
-    let silhouette = shape_silhouette_for_node(node);
-    // Un masque demande une texture a decouper : meme un rectangle plein en
-    // recoit une, sinon l'alpha du masque n'aurait rien a multiplier et la
-    // forme restait entiere.
-    if node.kind == "shape" && (silhouette.requires_mask() || mask.is_some()) {
-        let texture = shape_mask_texture(&silhouette);
-        let texture = masked_texture(&texture, mask.as_ref()).unwrap_or(texture);
-        return Ok(Some(image_handle_from_texture(images, &Some(texture), &node.id)?));
-    }
-    Ok(None)
-}
-
-pub(crate) fn texture_handle_for_node_in_world(
-    world: &mut World,
-    node: &AtomeRenderNode,
-) -> Result<Option<Handle<Image>>, String> {
-    let silhouette = shape_silhouette_for_node(node);
-    if node.kind == "shape" && node.texture.is_none() && node_mask(node).is_none() {
-        if let Some(paint) = &node.surface_paint {
-            return Ok(Some(crate::shape_texture::cached_image_handle_from_shape_surface(world, &silhouette, Some(paint), color_for_node(node), &node.id)?));
-        }
-    }
-    // Une forme SANS texture ET sans masque se sert du cache : c'est le cas de
-    // tres loin le plus frequent (chaque carre arrondi de l'interface).
-    if node.kind == "shape"
-        && node.texture.is_none()
-        && silhouette.requires_mask()
-        && node_mask(node).is_none()
-    {
-        return Ok(Some(cached_image_handle_from_shape_mask(world, &silhouette, &node.id)?));
-    }
-    let mut images = world
-        .get_resource_mut::<Assets<Image>>()
-        .ok_or_else(|| "bevy_image_assets_required".to_string())?;
-    texture_handle_for_node(&mut images, node)
 }
 
 pub fn spawn_node_in_world(world: &mut World, node: AtomeRenderNode) -> Result<Entity, String> {
@@ -254,23 +157,33 @@ pub fn spawn_node_with_texture_handle(
                         AtomeVisualOpacity(normalize_opacity(node.opacity)),
                     ))
                     .id();
-                insert_backdrop_surface(world, entity, [width, height], node.corner_radius, backdrop)?;
+                insert_backdrop_surface(
+                    world,
+                    entity,
+                    [width, height],
+                    node.corner_radius,
+                    backdrop,
+                )?;
                 entity
             } else {
-            let sprite = if let Some(handle) = texture_handle {
-                let mut sprite = Sprite::from_image(handle);
-                sprite.custom_size = Some(size);
-                sprite.color = if node.surface_paint.is_some() { white_with_opacity(node.opacity) } else { color_from_rgba(visible_color) };
-                sprite
-            } else {
-                Sprite::from_color(color_from_rgba(visible_color), size)
-            };
-            world
-                .spawn((
-                    node_base_components(&node, width, height, surface_width, surface_height),
-                    sprite,
-                ))
-                .id()
+                let sprite = if let Some(handle) = texture_handle {
+                    let mut sprite = Sprite::from_image(handle);
+                    sprite.custom_size = Some(size);
+                    sprite.color = if node.surface_paint.is_some() {
+                        white_with_opacity(node.opacity)
+                    } else {
+                        color_from_rgba(visible_color)
+                    };
+                    sprite
+                } else {
+                    Sprite::from_color(color_from_rgba(visible_color), size)
+                };
+                world
+                    .spawn((
+                        node_base_components(&node, width, height, surface_width, surface_height),
+                        sprite,
+                    ))
+                    .id()
             }
         }
         "text" => {
@@ -290,7 +203,7 @@ pub fn spawn_node_with_texture_handle(
                         node_base_components(&node, width, height, surface_width, surface_height),
                         Text2d::new(node.text.clone().unwrap_or_default()),
                         TextFont {
-                            font_size: FontSize::Px(height.min(32.0).max(12.0)),
+                            font_size: FontSize::Px(height.clamp(12.0, 32.0)),
                             ..default()
                         },
                         TextColor(color_from_rgba(visible_color)),
@@ -312,7 +225,11 @@ pub fn spawn_node_with_texture_handle(
             };
             sprite.custom_size = Some(size);
             if let Some(texture) = node.texture.as_ref() {
-                sprite.rect = crate::texture::sprite_rect_from_uv(node.uv_rect, texture.width, texture.height);
+                sprite.rect = crate::texture::sprite_rect_from_uv(
+                    node.uv_rect,
+                    texture.width,
+                    texture.height,
+                );
             }
             if has_texture {
                 sprite.color = white_with_opacity(node.opacity);
@@ -353,7 +270,10 @@ pub fn spawn_node_with_texture_handle(
                 .spawn((
                     node_base_components(&node, width, height, surface_width, surface_height),
                     NoAutomaticBatching,
-                    crate::media_window::AtomeMediaWindow { id: node.id.clone(), mask_texture: None },
+                    crate::media_window::AtomeMediaWindow {
+                        id: node.id.clone(),
+                        mask_texture: None,
+                    },
                 ))
                 .id();
             insert_video_quad_mesh(world, entity, [width, height], [0.0, 0.0, 1.0, 1.0])?;
@@ -367,7 +287,11 @@ pub fn spawn_node_with_texture_handle(
             };
             sprite.custom_size = Some(size);
             if let Some(texture) = node.texture.as_ref() {
-                sprite.rect = crate::texture::sprite_rect_from_uv(node.uv_rect, texture.width, texture.height);
+                sprite.rect = crate::texture::sprite_rect_from_uv(
+                    node.uv_rect,
+                    texture.width,
+                    texture.height,
+                );
             }
             if has_texture {
                 sprite.color = white_with_opacity(node.opacity);
@@ -395,7 +319,13 @@ pub fn spawn_node_with_texture_handle(
                 ))
                 .id();
             if contract.mode > 3.5 {
-                crate::login_light::insert(world, entity, [width, height], contract, texture_handle)?;
+                crate::login_light::insert(
+                    world,
+                    entity,
+                    [width, height],
+                    contract,
+                    texture_handle,
+                )?;
             } else {
                 insert_procedural_sdf(world, entity, [width, height], contract)?;
             }
@@ -407,14 +337,30 @@ pub fn spawn_node_with_texture_handle(
                 .progress_ring
                 .ok_or_else(|| format!("bevy_progress_ring_contract_required:{}", node.id))?;
             let entity = world
-                .spawn(node_base_components(&node, width, height, surface_width, surface_height))
+                .spawn(node_base_components(
+                    &node,
+                    width,
+                    height,
+                    surface_width,
+                    surface_height,
+                ))
                 .id();
-            crate::progress_ring::insert(world, entity, [width, height], ring, normalize_opacity(node.opacity))?;
+            crate::progress_ring::insert(
+                world,
+                entity,
+                [width, height],
+                ring,
+                normalize_opacity(node.opacity),
+            )?;
             entity
         }
         other => return Err(format!("bevy_render_kind_unsupported:{other}")),
     };
-    world.entity_mut(entity).insert(crate::surface_paint::AtomeSurfacePaint(node.surface_paint.clone()));
+    world
+        .entity_mut(entity)
+        .insert(crate::surface_paint::AtomeSurfacePaint(
+            node.surface_paint.clone(),
+        ));
     crate::backdrop_surface::sync_backdrop_surface_border(world, entity)?;
     world.entity_mut(entity).insert((
         AtomeVisualColor(visual_color),
@@ -430,27 +376,38 @@ pub fn spawn_node_with_texture_handle(
         crate::media_window::refresh_media_window_mask(world, entity, &node.id)?;
     }
     if let Some(source_rect) = world.get::<Sprite>(entity).map(|sprite| sprite.rect) {
-        world.entity_mut(entity).insert(AtomeSpriteSourceRect(source_rect));
+        world
+            .entity_mut(entity)
+            .insert(AtomeSpriteSourceRect(source_rect));
     }
     if node.project_space {
-        world.entity_mut(entity).insert(crate::project_view::AtomeProjectSpace);
+        world
+            .entity_mut(entity)
+            .insert(crate::project_view::AtomeProjectSpace);
     }
     if node.presentation {
-        world.entity_mut(entity).insert(bevy::camera::visibility::RenderLayers::layer(
-            crate::workspace_backdrop::MENU_PRESENTATION_LAYER,
-        ));
+        world
+            .entity_mut(entity)
+            .insert(bevy::camera::visibility::RenderLayers::layer(
+                crate::workspace_backdrop::MENU_PRESENTATION_LAYER,
+            ));
     }
     if node.menu_plane > 0 {
-        world.entity_mut(entity).insert(bevy::camera::visibility::RenderLayers::layer(
-            if node.menu_plane == 1 { crate::mystic_capture::MENU_FACE_LAYER }
-            else { crate::mystic_capture::MENU_OVERLAY_LAYER },
-        ));
+        world
+            .entity_mut(entity)
+            .insert(bevy::camera::visibility::RenderLayers::layer(
+                if node.menu_plane == 1 {
+                    crate::mystic_capture::MENU_FACE_LAYER
+                } else {
+                    crate::mystic_capture::MENU_OVERLAY_LAYER
+                },
+            ));
     }
-    if let Some(texture) = &node.texture {
-        if let Err(error) = crate::animated_png::install_animation(world, entity, texture) {
-            world.despawn(entity);
-            return Err(error);
-        }
+    if let Some(texture) = &node.texture
+        && let Err(error) = crate::animated_png::install_animation(world, entity, texture)
+    {
+        world.despawn(entity);
+        return Err(error);
     }
     Ok(entity)
 }

@@ -29,6 +29,7 @@ final class NativePersonalImport {
         guard !WebViewManager.runningInExtension else { completion(nil, "personal_import_app_required"); return }
         if command == "export_file_save" { save(payload, completion: completion); return }
         if command == "export_file_share" { share(payload, completion: completion); return }
+        if command == "export_file_print" { printPage(payload, completion: completion); return }
         if command == "contacts_open_settings" {
             // Page de l'app dans Reglages : c'est la que l'acces limite aux contacts s'elargit.
             DispatchQueue.main.async {
@@ -271,6 +272,40 @@ final class NativePersonalImport {
                             "activity_type": activity?.rawValue ?? NSNull()], nil)
             }
             presenter.present(sheet, animated: true)
+        }
+    }
+
+    // Hands a page the web layer painted (one sheet as a JPEG or PNG, an ordonnance) to the system print sheet. The answer
+    // says whether it was printed, or cancelled by the person; never a silent success.
+    private func printPage(_ payload: [String: Any], completion: @escaping ([String: Any]?, String?) -> Void) {
+        guard let name = payload["name"] as? String, !name.isEmpty, name.utf8.count < 180,
+              let encoded = payload["dataBase64"] as? String, encoded.count < 90_000_000,
+              let data = Data(base64Encoded: encoded), data.count <= 64 * 1024 * 1024,
+              let image = UIImage(data: data) else {
+            completion(nil, "export_payload_invalid"); return
+        }
+        DispatchQueue.main.async {
+            guard var presenter = WebViewManager.webView?.window?.rootViewController else {
+                completion(nil, "export_presenter_unavailable"); return
+            }
+            while let child = presenter.presentedViewController { presenter = child }
+            guard UIPrintInteractionController.isPrintingAvailable else { completion(nil, "export_print_unavailable"); return }
+            let info = UIPrintInfo(dictionary: nil)
+            info.outputType = .general
+            info.jobName = name
+            let controller = UIPrintInteractionController.shared
+            controller.printInfo = info
+            controller.printingItem = image
+            let done: UIPrintInteractionController.CompletionHandler = { _, completed, error in
+                if let error { completion(nil, "export_print_failed:\((error as NSError).code)"); return }
+                completion(["success": completed, "cancelled": !completed], nil)
+            }
+            if UIDevice.current.userInterfaceIdiom == .pad {
+                let rect = CGRect(x: presenter.view.bounds.midX, y: presenter.view.bounds.midY, width: 1, height: 1)
+                controller.present(from: rect, in: presenter.view, animated: true, completionHandler: done)
+            } else {
+                controller.present(animated: true, completionHandler: done)
+            }
         }
     }
 }

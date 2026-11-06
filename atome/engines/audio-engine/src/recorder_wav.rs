@@ -1,74 +1,83 @@
-use hound::{WavSpec, WavWriter};
+use atome_audio_kernels::wav;
 use ringbuf::traits::*;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::fs::File;
+use std::io::{BufWriter, Seek, SeekFrom, Write};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 /// Output format for WAV recording.
-#[derive(Clone, Copy, Debug, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, serde::Deserialize, Default)]
 pub enum OutputFormat {
     /// 16-bit signed integer PCM (CD quality, smaller files)
     Int16,
     /// 24-bit signed integer PCM (professional quality)
+    #[default]
     Int24,
     /// 32-bit IEEE float (maximum precision, larger files)
     Float32,
 }
 
-impl Default for OutputFormat {
-    fn default() -> Self {
-        Self::Int24
+impl OutputFormat {
+    /// The WAV sample size: 16 and 24 are PCM, 32 is float.
+    fn bits(self) -> u16 {
+        match self {
+            Self::Int16 => 16,
+            Self::Int24 => 24,
+            Self::Float32 => 32,
+        }
     }
 }
 
-impl OutputFormat {
-    pub(super) fn wav_spec(&self, sample_rate: u32, channels: u16) -> WavSpec {
-        match self {
-            Self::Int16 => WavSpec {
-                channels,
-                sample_rate,
-                bits_per_sample: 16,
-                sample_format: hound::SampleFormat::Int,
-            },
-            Self::Int24 => WavSpec {
-                channels,
-                sample_rate,
-                bits_per_sample: 24,
-                sample_format: hound::SampleFormat::Int,
-            },
-            Self::Float32 => WavSpec {
-                channels,
-                sample_rate,
-                bits_per_sample: 32,
-                sample_format: hound::SampleFormat::Float,
-            },
+/// A take's WAV file written as it comes, through the kernels' WAV codec (atome-audio-kernels
+/// `wav::float_header` / `push_float_sample`): the bytes are those `wav::encode` writes for the
+/// same samples. The header is written with no frame first, then again once they are counted.
+pub(super) struct TakeWav {
+    file: BufWriter<File>,
+    path: String,
+    channels: u16,
+    sample_rate: u32,
+    bits: u16,
+    samples: usize,
+    bytes: Vec<u8>,
+}
+
+impl TakeWav {
+    fn write(&mut self, samples: &[f32]) -> Result<(), String> {
+        self.bytes.clear();
+        for &sample in samples {
+            wav::push_float_sample(&mut self.bytes, sample, self.bits);
         }
+        self.samples += samples.len();
+        self.file
+            .write_all(&self.bytes)
+            .map_err(|error| format!("Failed to write WAV sample: {error}"))
     }
 
-    fn write_f32_sample<W: std::io::Write + std::io::Seek>(
-        &self,
-        writer: &mut WavWriter<W>,
-        sample: f32,
-    ) -> Result<(), hound::Error> {
-        match self {
-            Self::Int16 => {
-                let s = (sample * 32767.0).clamp(-32768.0, 32767.0) as i16;
-                writer.write_sample(s)
-            }
-            Self::Int24 => {
-                let s = (sample * 8_388_607.0).clamp(-8_388_608.0, 8_388_607.0) as i32;
-                writer.write_sample(s)
-            }
-            Self::Float32 => writer.write_sample(sample),
-        }
+    fn finalize(mut self) -> Result<(), String> {
+        let frames = self.samples / usize::from(self.channels);
+        let header = wav::float_header(
+            usize::from(self.channels),
+            self.sample_rate,
+            self.bits,
+            frames,
+        )
+        .map_err(|error| format!("Failed to finalize WAV {}: {error}", self.path))?;
+        let finalize = |error: std::io::Error| format!("Failed to finalize WAV: {error}");
+        self.file.flush().map_err(finalize)?;
+        self.file.seek(SeekFrom::Start(0)).map_err(finalize)?;
+        self.file.write_all(&header).map_err(finalize)?;
+        self.file.flush().map_err(finalize)
     }
 }
 
 /// Preferred buffer size hint for CPAL.
 #[derive(Clone, Copy, Debug)]
 #[allow(dead_code)]
+#[derive(Default)]
 pub enum BufferSizeHint {
     /// Let CPAL choose (usually ~2048 samples)
+    #[default]
     Default,
     /// Low latency (~256 samples, higher CPU)
     Low,
@@ -90,36 +99,20 @@ impl BufferSizeHint {
     }
 }
 
-impl Default for BufferSizeHint {
-    fn default() -> Self {
-        Self::Default
-    }
-}
-
-fn write_f32_buffer<W: std::io::Write + std::io::Seek>(
-    writer: &mut WavWriter<W>,
-    format: OutputFormat,
-    samples: &[f32],
-) -> Result<(), String> {
-    for &sample in samples {
-        format
-            .write_f32_sample(writer, sample)
-            .map_err(|error| format!("Failed to write WAV sample: {error}"))?;
-    }
-    Ok(())
-}
-
 // Channels written for `capture_channels` input voices. A device exposing more than two
 // (the built-in microphone array of a MacBook) is mixed down to mono: decoders of the other
 // platforms (iOS, Kira) only accept mono or stereo files.
 pub(super) fn written_channels(capture_channels: u16) -> u16 {
-    if capture_channels > 2 { 1 } else { capture_channels.max(1) }
+    if capture_channels > 2 {
+        1
+    } else {
+        capture_channels.max(1)
+    }
 }
 
 pub(super) fn spawn_wav_writer_thread(
     mut consumer: ringbuf::HeapCons<f32>,
-    mut writer: WavWriter<std::io::BufWriter<std::fs::File>>,
-    output_format: OutputFormat,
+    mut writer: TakeWav,
     writer_stop: Arc<AtomicBool>,
     capture_channels: u16,
 ) -> std::thread::JoinHandle<Result<(), String>> {
@@ -133,7 +126,7 @@ pub(super) fn spawn_wav_writer_thread(
             let count = consumer.pop_slice(&mut buffer);
             if count > 0 {
                 if !downmix {
-                    write_f32_buffer(&mut writer, output_format, &buffer[..count])?;
+                    writer.write(&buffer[..count])?;
                     continue;
                 }
                 pending.extend_from_slice(&buffer[..count]);
@@ -142,7 +135,7 @@ pub(super) fn spawn_wav_writer_thread(
                     .chunks_exact(frame)
                     .map(|voices| voices.iter().sum::<f32>() / frame as f32)
                     .collect();
-                write_f32_buffer(&mut writer, output_format, &mixed)?;
+                writer.write(&mixed)?;
                 pending.drain(..whole);
                 continue;
             }
@@ -151,10 +144,7 @@ pub(super) fn spawn_wav_writer_thread(
             }
             std::thread::sleep(Duration::from_millis(2));
         }
-        writer
-            .finalize()
-            .map_err(|error| format!("Failed to finalize WAV: {error}"))?;
-        Ok(())
+        writer.finalize()
     })
 }
 
@@ -163,8 +153,65 @@ pub(super) fn create_wav_writer(
     output_format: OutputFormat,
     sample_rate: u32,
     channels: u16,
-) -> Result<WavWriter<std::io::BufWriter<std::fs::File>>, String> {
-    let wav_spec = output_format.wav_spec(sample_rate, channels);
-    WavWriter::create(path, wav_spec)
-        .map_err(|error| format!("Failed to create WAV file {path}: {error}"))
+) -> Result<TakeWav, String> {
+    let bits = output_format.bits();
+    let create = |error: String| format!("Failed to create WAV file {path}: {error}");
+    let header = wav::float_header(usize::from(channels), sample_rate, bits, 0)
+        .map_err(|error| create(error.to_string()))?;
+    let mut file = BufWriter::new(File::create(path).map_err(|error| create(error.to_string()))?);
+    file.write_all(&header)
+        .map_err(|error| create(error.to_string()))?;
+    Ok(TakeWav {
+        file,
+        path: path.to_string(),
+        channels,
+        sample_rate,
+        bits,
+        samples: 0,
+        bytes: Vec::new(),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // A take written as it comes holds the bytes the kernels' codec writes for the same buffer,
+    // at every format, a frame split across writes included.
+    #[test]
+    fn a_take_is_the_kernels_encoding_of_its_samples() {
+        let directory = tempfile::tempdir().expect("a temporary directory");
+        let rate = 48_000;
+        let frames = 4_801;
+        let left: Vec<f32> = (0..frames)
+            .map(|i| (i as f32 * 0.013).sin() * 1.2 - 0.05)
+            .collect();
+        let right: Vec<f32> = (0..frames)
+            .map(|i| ((i % 97) as f32 / 48.0) - 1.0)
+            .collect();
+        let interleaved: Vec<f32> = left
+            .iter()
+            .zip(&right)
+            .flat_map(|(l, r)| [*l, *r])
+            .collect();
+        for format in [
+            OutputFormat::Int16,
+            OutputFormat::Int24,
+            OutputFormat::Float32,
+        ] {
+            let path = directory.path().join(format!("{format:?}.wav"));
+            let path = path.to_str().expect("a UTF-8 path");
+            let mut take = create_wav_writer(path, format, rate, 2).expect("the take");
+            for chunk in interleaved.chunks(1_023) {
+                take.write(chunk).expect("the samples");
+            }
+            take.finalize().expect("the header");
+            let expected = wav::encode(&[&left, &right], rate, format.bits()).expect("encoded");
+            assert_eq!(
+                std::fs::read(path).expect("the file"),
+                expected,
+                "{format:?}"
+            );
+        }
+    }
 }

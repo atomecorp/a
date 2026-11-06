@@ -12,7 +12,9 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         logical_position: [12.0, 24.0],
         logical_size: [120.0, 50.0],
         clip_rect: None,
-        clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
+        clip_rotation: 0.0,
+        clip_rounded_rects: vec![],
+        clip_fades: vec![],
         scale: [1.0, 1.0],
         rotation: 0.0,
         origin: [0.0, 0.0],
@@ -56,7 +58,9 @@ fn text_node_with_texture(id: &str) -> AtomeRenderNode {
         logical_position: [18.0, 26.0],
         logical_size: [80.0, 30.0],
         clip_rect: None,
-        clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
+        clip_rotation: 0.0,
+        clip_rounded_rects: vec![],
+        clip_fades: vec![],
         scale: [1.0, 1.0],
         rotation: 0.0,
         origin: [0.0, 0.0],
@@ -80,7 +84,13 @@ fn text_node_with_texture(id: &str) -> AtomeRenderNode {
         source: None,
         texture_size: None,
         uv_rect: None,
-        texture: Some(AtomeTexture { animation: None, width: 160, height: 60, rgba: vec![255; 160 * 60 * 4] }),
+        texture: Some(AtomeTexture {
+            external: None,
+            animation: None,
+            width: 160,
+            height: 60,
+            rgba: vec![255; 160 * 60 * 4],
+        }),
         peaks: None,
         playback_progress: None,
         selected: None,
@@ -93,15 +103,24 @@ fn text_node_with_texture(id: &str) -> AtomeRenderNode {
 
 fn assert_vec2_near(actual: Option<Vec2>, expected: Vec2) {
     let actual = actual.expect("sprite custom size should be set");
-    assert!((actual.x - expected.x).abs() < 0.01, "x: {actual:?} != {expected:?}");
-    assert!((actual.y - expected.y).abs() < 0.01, "y: {actual:?} != {expected:?}");
+    assert!(
+        (actual.x - expected.x).abs() < 0.01,
+        "x: {actual:?} != {expected:?}"
+    );
+    assert!(
+        (actual.y - expected.y).abs() < 0.01,
+        "y: {actual:?} != {expected:?}"
+    );
 }
 
 fn assert_fixed_projection_size(projection: &Projection, width: f32, height: f32) {
     let Projection::Orthographic(orthographic) = projection else {
         panic!("expected orthographic camera projection");
     };
-    let bevy::camera::ScalingMode::Fixed { width: actual_width, height: actual_height } = orthographic.scaling_mode
+    let bevy::camera::ScalingMode::Fixed {
+        width: actual_width,
+        height: actual_height,
+    } = orthographic.scaling_mode
     else {
         panic!("expected fixed orthographic scaling mode");
     };
@@ -110,7 +129,11 @@ fn assert_fixed_projection_size(projection: &Projection, width: f32, height: f32
 }
 
 fn assert_alpha_near(color: Color, expected: f32) {
-    assert!((color.alpha() - expected).abs() < 0.001, "alpha: {} != {expected}", color.alpha());
+    assert!(
+        (color.alpha() - expected).abs() < 0.001,
+        "alpha: {} != {expected}",
+        color.alpha()
+    );
 }
 
 #[test]
@@ -134,7 +157,9 @@ fn plugin_spawns_projected_nodes_and_camera() {
         selection_style: None,
     };
     let mut app = App::new();
-    app.add_plugins(AtomeBevyRendererPlugin::new(AtomeBevyRendererConfig::new(640.0, 480.0, scene)));
+    app.add_plugins(AtomeBevyRendererPlugin::new(AtomeBevyRendererConfig::new(
+        640.0, 480.0, scene,
+    )));
     app.update();
 
     let mut camera_query = app.world_mut().query::<&Camera2d>();
@@ -161,7 +186,9 @@ fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_pr
         logical_position: [70.0, 90.0],
         logical_size: [360.0, 240.0],
         clip_rect: None,
-        clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
+        clip_rotation: 0.0,
+        clip_rounded_rects: vec![],
+        clip_fades: vec![],
         scale: [1.0, 1.0],
         rotation: 0.0,
         origin: [0.0, 0.0],
@@ -185,7 +212,13 @@ fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_pr
         source: Some("fixture://image".to_string()),
         texture_size: None,
         uv_rect: None,
-        texture: Some(AtomeTexture { animation: None, width: 4, height: 4, rgba: vec![255; 4 * 4 * 4] }),
+        texture: Some(AtomeTexture {
+            external: None,
+            animation: None,
+            width: 4,
+            height: 4,
+            rgba: vec![255; 4 * 4 * 4],
+        }),
         peaks: None,
         playback_progress: None,
         selected: None,
@@ -199,10 +232,18 @@ fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_pr
         logical_position: [130.0, 160.0],
         logical_size: [220.0, 60.0],
         clip_rect: None,
-        clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
+        clip_rotation: 0.0,
+        clip_rounded_rects: vec![],
+        clip_fades: vec![],
         layer: 3,
         text: Some("Backdrop fixture text".to_string()),
-        texture: Some(AtomeTexture { animation: None, width: 220, height: 60, rgba: vec![255; 220 * 60 * 4] }),
+        texture: Some(AtomeTexture {
+            external: None,
+            animation: None,
+            width: 220,
+            height: 60,
+            rgba: vec![255; 220 * 60 * 4],
+        }),
         ..text_node_with_texture("backdrop_fixture_text")
     };
     let circle = AtomeRenderNode {
@@ -210,7 +251,9 @@ fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_pr
         logical_position: [150.0, 120.0],
         logical_size: [340.0, 340.0],
         clip_rect: None,
-        clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
+        clip_rotation: 0.0,
+        clip_rounded_rects: vec![],
+        clip_fades: vec![],
         corner_radius: 170.0,
         corner_radii: None,
         shape_variant: None,
@@ -220,14 +263,25 @@ fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_pr
         mask: None,
         mask_source: false,
         surface_paint: None,
-        backdrop: Some(AtomeBackdropStyle { blur_px: 12.0, tint: [0.36, 0.4, 0.47, 0.58], tint_fade: 0.3, corner_cut_px: 0.0 }),
+        backdrop: Some(AtomeBackdropStyle {
+            blur_px: 12.0,
+            tint: [0.36, 0.4, 0.47, 0.58],
+            tint_fade: 0.3,
+            corner_cut_px: 0.0,
+        }),
         presentation: true,
         menu_plane: 0,
         ..shape_node("backdrop_fixture_circle")
     };
-    let scene = AtomeRenderScene { nodes: vec![image, text, circle], effects: Vec::new(), selection_style: None };
+    let scene = AtomeRenderScene {
+        nodes: vec![image, text, circle],
+        effects: Vec::new(),
+        selection_style: None,
+    };
     let mut app = App::new();
-    app.add_plugins(AtomeBevyRendererPlugin::new(AtomeBevyRendererConfig::new(640.0, 480.0, scene)));
+    app.add_plugins(AtomeBevyRendererPlugin::new(AtomeBevyRendererConfig::new(
+        640.0, 480.0, scene,
+    )));
     app.update();
 
     let table = app.world().resource::<AtomeEntityTable>();
@@ -244,18 +298,35 @@ fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_pr
         .get(&material_handle)
         .unwrap();
     assert_eq!(material.uniform.size_radius.z, 170.0);
-    assert_eq!(material.uniform.blur.z, crate::workspace_blur::backdrop_blur_lod(12.0, 1.0));
+    assert_eq!(
+        material.uniform.blur.z,
+        crate::workspace_blur::backdrop_blur_lod(12.0, 1.0)
+    );
     // The tint fade reaches the shader untouched, and is clamped like the tint.
     assert_eq!(material.uniform.blur.w, 0.3);
-    let excessive = AtomeBackdropStyle { blur_px: 8.0, tint: [0.0, 0.0, 0.0, 0.5], tint_fade: 4.0, corner_cut_px: 0.0 };
+    let excessive = AtomeBackdropStyle {
+        blur_px: 8.0,
+        tint: [0.0, 0.0, 0.0, 0.5],
+        tint_fade: 4.0,
+        corner_cut_px: 0.0,
+    };
     assert_eq!(excessive.normalized().unwrap().tint_fade, 1.0);
-    let circle_layers = app.world().get::<bevy::camera::visibility::RenderLayers>(circle_entity).unwrap();
-    assert!(circle_layers.intersects(&bevy::camera::visibility::RenderLayers::layer(
-        crate::workspace_backdrop::MENU_PRESENTATION_LAYER,
-    )));
+    let circle_layers = app
+        .world()
+        .get::<bevy::camera::visibility::RenderLayers>(circle_entity)
+        .unwrap();
+    assert!(
+        circle_layers.intersects(&bevy::camera::visibility::RenderLayers::layer(
+            crate::workspace_backdrop::MENU_PRESENTATION_LAYER,
+        ))
+    );
     for id in ["backdrop_fixture_image", "backdrop_fixture_text"] {
         let entity = table.by_id[id];
-        assert!(app.world().get::<bevy::camera::visibility::RenderLayers>(entity).is_none());
+        assert!(
+            app.world()
+                .get::<bevy::camera::visibility::RenderLayers>(entity)
+                .is_none()
+        );
     }
 
     apply_surface(
@@ -285,7 +356,10 @@ fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_pr
         .get(&material_handle)
         .unwrap();
     assert_eq!(resized_material.uniform.blur.y, 1.5);
-    assert_eq!(resized_material.uniform.blur.z, crate::workspace_blur::backdrop_blur_lod(12.0, 1.5));
+    assert_eq!(
+        resized_material.uniform.blur.z,
+        crate::workspace_blur::backdrop_blur_lod(12.0, 1.5)
+    );
 }
 
 #[test]
@@ -293,7 +367,12 @@ fn backdrop_style_patch_updates_the_resident_material_without_reallocation() {
     let glass = AtomeRenderNode {
         project_space: false,
         surface_paint: None,
-        backdrop: Some(AtomeBackdropStyle { blur_px: 9.0, tint: [0.03, 0.06, 0.09, 0.52], tint_fade: 0.0, corner_cut_px: 0.0 }),
+        backdrop: Some(AtomeBackdropStyle {
+            blur_px: 9.0,
+            tint: [0.03, 0.06, 0.09, 0.52],
+            tint_fade: 0.0,
+            corner_cut_px: 0.0,
+        }),
         presentation: true,
         menu_plane: 0,
         ..shape_node("backdrop_patch_fixture")
@@ -302,15 +381,26 @@ fn backdrop_style_patch_updates_the_resident_material_without_reallocation() {
     app.add_plugins(AtomeBevyRendererPlugin::new(AtomeBevyRendererConfig::new(
         640.0,
         480.0,
-        AtomeRenderScene { nodes: vec![glass], effects: Vec::new(), selection_style: None },
+        AtomeRenderScene {
+            nodes: vec![glass],
+            effects: Vec::new(),
+            selection_style: None,
+        },
     )));
     app.update();
 
     let entity = app.world().resource::<AtomeEntityTable>().by_id["backdrop_patch_fixture"];
-    let material_handle =
-        app.world().get::<MeshMaterial2d<crate::backdrop_surface::BackdropSurfaceMaterial>>(entity).unwrap().0.clone();
+    let material_handle = app
+        .world()
+        .get::<MeshMaterial2d<crate::backdrop_surface::BackdropSurfaceMaterial>>(entity)
+        .unwrap()
+        .0
+        .clone();
     let mesh_handle = app.world().get::<Mesh2d>(entity).unwrap().0.clone();
-    let material_count = app.world().resource::<Assets<crate::backdrop_surface::BackdropSurfaceMaterial>>().len();
+    let material_count = app
+        .world()
+        .resource::<Assets<crate::backdrop_surface::BackdropSurfaceMaterial>>()
+        .len();
     let mesh_count = app.world().resource::<Assets<Mesh>>().len();
     let image_count = app.world().resource::<Assets<Image>>().len();
 
@@ -328,7 +418,12 @@ fn backdrop_style_patch_updates_the_resident_material_without_reallocation() {
             color: None,
             shadow: None,
             surface_paint: None,
-            backdrop: Some(Some(AtomeBackdropStyle { blur_px: 18.0, tint: [0.24, 0.29, 0.37, 1.0], tint_fade: 0.0, corner_cut_px: 0.0 })),
+            backdrop: Some(Some(AtomeBackdropStyle {
+                blur_px: 18.0,
+                tint: [0.24, 0.29, 0.37, 1.0],
+                tint_fade: 0.0,
+                corner_cut_px: 0.0,
+            })),
             selected: None,
             opacity: None,
             playback_progress: None,
@@ -340,8 +435,12 @@ fn backdrop_style_patch_updates_the_resident_material_without_reallocation() {
     )
     .unwrap();
 
-    let resident_handle =
-        app.world().get::<MeshMaterial2d<crate::backdrop_surface::BackdropSurfaceMaterial>>(entity).unwrap().0.clone();
+    let resident_handle = app
+        .world()
+        .get::<MeshMaterial2d<crate::backdrop_surface::BackdropSurfaceMaterial>>(entity)
+        .unwrap()
+        .0
+        .clone();
     let material = app
         .world()
         .resource::<Assets<crate::backdrop_surface::BackdropSurfaceMaterial>>()
@@ -349,10 +448,15 @@ fn backdrop_style_patch_updates_the_resident_material_without_reallocation() {
         .unwrap();
     assert_eq!(resident_handle, material_handle);
     assert_eq!(app.world().get::<Mesh2d>(entity).unwrap().0, mesh_handle);
-    assert_eq!(material.uniform.blur.z, crate::workspace_blur::backdrop_blur_lod(18.0, 1.0));
+    assert_eq!(
+        material.uniform.blur.z,
+        crate::workspace_blur::backdrop_blur_lod(18.0, 1.0)
+    );
     assert_eq!(material.uniform.tint, Vec4::new(0.24, 0.29, 0.37, 1.0));
     assert_eq!(
-        app.world().resource::<Assets<crate::backdrop_surface::BackdropSurfaceMaterial>>().len(),
+        app.world()
+            .resource::<Assets<crate::backdrop_surface::BackdropSurfaceMaterial>>()
+            .len(),
         material_count
     );
     assert_eq!(app.world().resource::<Assets<Mesh>>().len(), mesh_count);
@@ -364,7 +468,12 @@ fn backdrop_glass_follows_record_opacity_and_releases_the_capture_when_hidden() 
     let glass = AtomeRenderNode {
         project_space: false,
         surface_paint: None,
-        backdrop: Some(AtomeBackdropStyle { blur_px: 18.0, tint: [0.0, 0.0, 0.0, 0.84], tint_fade: 0.0, corner_cut_px: 0.0 }),
+        backdrop: Some(AtomeBackdropStyle {
+            blur_px: 18.0,
+            tint: [0.0, 0.0, 0.0, 0.84],
+            tint_fade: 0.0,
+            corner_cut_px: 0.0,
+        }),
         presentation: true,
         menu_plane: 0,
         ..shape_node("backdrop_opacity_fixture")
@@ -373,13 +482,21 @@ fn backdrop_glass_follows_record_opacity_and_releases_the_capture_when_hidden() 
     app.add_plugins(AtomeBevyRendererPlugin::new(AtomeBevyRendererConfig::new(
         640.0,
         480.0,
-        AtomeRenderScene { nodes: vec![glass], effects: Vec::new(), selection_style: None },
+        AtomeRenderScene {
+            nodes: vec![glass],
+            effects: Vec::new(),
+            selection_style: None,
+        },
     )));
     app.update();
 
     let entity = app.world().resource::<AtomeEntityTable>().by_id["backdrop_opacity_fixture"];
-    let handle =
-        app.world().get::<MeshMaterial2d<crate::backdrop_surface::BackdropSurfaceMaterial>>(entity).unwrap().0.clone();
+    let handle = app
+        .world()
+        .get::<MeshMaterial2d<crate::backdrop_surface::BackdropSurfaceMaterial>>(entity)
+        .unwrap()
+        .0
+        .clone();
     let opacity_of = |app: &App| {
         app.world()
             .resource::<Assets<crate::backdrop_surface::BackdropSurfaceMaterial>>()
@@ -390,7 +507,10 @@ fn backdrop_glass_follows_record_opacity_and_releases_the_capture_when_hidden() 
             .w
     };
     let capture_active = |app: &App| {
-        let camera = app.world().resource::<crate::workspace_backdrop::AtomeWorkspaceBackdrop>().camera;
+        let camera = app
+            .world()
+            .resource::<crate::workspace_backdrop::AtomeWorkspaceBackdrop>()
+            .camera;
         app.world().get::<Camera>(camera).unwrap().is_active
     };
     assert_eq!(opacity_of(&app), 1.0);
@@ -419,7 +539,10 @@ fn backdrop_glass_follows_record_opacity_and_releases_the_capture_when_hidden() 
     };
     apply_style(app.world_mut(), patch(0.0)).unwrap();
     assert_eq!(opacity_of(&app), 0.0);
-    assert!(!capture_active(&app), "hidden glass must not keep the workspace capture running");
+    assert!(
+        !capture_active(&app),
+        "hidden glass must not keep the workspace capture running"
+    );
 
     apply_style(app.world_mut(), patch(1.0)).unwrap();
     assert_eq!(opacity_of(&app), 1.0);
@@ -429,9 +552,14 @@ fn backdrop_glass_follows_record_opacity_and_releases_the_capture_when_hidden() 
 #[test]
 fn workspace_backdrop_swaps_one_complete_gpu_generation_on_surface_resize() {
     let mut app = App::new();
-    app.add_plugins(AtomeBevyRendererPlugin::new(AtomeBevyRendererConfig::empty(640.0, 480.0)));
+    app.add_plugins(AtomeBevyRendererPlugin::new(
+        AtomeBevyRendererConfig::empty(640.0, 480.0),
+    ));
     app.update();
-    let original = app.world().resource::<workspace_backdrop::AtomeWorkspaceBackdrop>().clone();
+    let original = app
+        .world()
+        .resource::<workspace_backdrop::AtomeWorkspaceBackdrop>()
+        .clone();
     apply_surface(
         app.world_mut(),
         AtomeSurfacePatch {
@@ -443,7 +571,9 @@ fn workspace_backdrop_swaps_one_complete_gpu_generation_on_surface_resize() {
         },
     )
     .unwrap();
-    let resized = app.world().resource::<workspace_backdrop::AtomeWorkspaceBackdrop>();
+    let resized = app
+        .world()
+        .resource::<workspace_backdrop::AtomeWorkspaceBackdrop>();
     assert_ne!(resized.capture_image, original.capture_image);
     assert_ne!(resized.image, original.image);
     assert_eq!(resized.pixel_size, UVec2::new(800, 600));
@@ -462,7 +592,14 @@ fn shape_spawn_applies_initial_opacity_to_sprite() {
     world.insert_resource(AtomeRendererDiagnostics::default());
     world.insert_resource(Assets::<Image>::default());
 
-    let entity = apply_spawn(&mut world, AtomeRenderNode { opacity: 0.25, ..shape_node("transparent_shape") }).unwrap();
+    let entity = apply_spawn(
+        &mut world,
+        AtomeRenderNode {
+            opacity: 0.25,
+            ..shape_node("transparent_shape")
+        },
+    )
+    .unwrap();
 
     assert_alpha_near(world.get::<Sprite>(entity).unwrap().color, 0.25);
     assert_eq!(world.get::<AtomeVisualOpacity>(entity).unwrap().0, 0.25);
@@ -477,10 +614,16 @@ fn shape_clip_crops_on_spawn_and_restores_on_transform_update() {
     world.insert_resource(Assets::<Image>::default());
     let entity = apply_spawn(
         &mut world,
-        AtomeRenderNode { clip_rect: Some([42.0, 34.0, 50.0, 30.0]), ..shape_node("clipped_shape") },
+        AtomeRenderNode {
+            clip_rect: Some([42.0, 34.0, 50.0, 30.0]),
+            ..shape_node("clipped_shape")
+        },
     )
     .unwrap();
-    assert_vec2_near(world.get::<Sprite>(entity).unwrap().custom_size, Vec2::new(50.0, 30.0));
+    assert_vec2_near(
+        world.get::<Sprite>(entity).unwrap().custom_size,
+        Vec2::new(50.0, 30.0),
+    );
 
     apply_transform(
         &mut world,
@@ -492,11 +635,16 @@ fn shape_clip_crops_on_spawn_and_restores_on_transform_update() {
             rotation: 0.0,
             origin: [0.0, 0.0],
             clip_rect: None,
-            clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
+            clip_rotation: 0.0,
+            clip_rounded_rects: vec![],
+            clip_fades: vec![],
         },
     )
     .unwrap();
-    assert_vec2_near(world.get::<Sprite>(entity).unwrap().custom_size, Vec2::new(120.0, 50.0));
+    assert_vec2_near(
+        world.get::<Sprite>(entity).unwrap().custom_size,
+        Vec2::new(120.0, 50.0),
+    );
 }
 
 #[test]
@@ -504,12 +652,15 @@ fn backdrop_clip_crops_the_resident_mesh_without_stretching_or_accumulating_asse
     let glass = AtomeRenderNode {
         project_space: false,
         clip_rect: Some([42.0, 34.0, 50.0, 30.0]),
-        clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
+        clip_rotation: 0.0,
+        clip_rounded_rects: vec![],
+        clip_fades: vec![],
         surface_paint: None,
         backdrop: Some(AtomeBackdropStyle {
             blur_px: 12.0,
             tint: [0.2, 0.3, 0.4, 0.5],
-            tint_fade: 0.0, corner_cut_px: 0.0,
+            tint_fade: 0.0,
+            corner_cut_px: 0.0,
         }),
         ..shape_node("clipped_backdrop")
     };
@@ -521,7 +672,11 @@ fn backdrop_clip_crops_the_resident_mesh_without_stretching_or_accumulating_asse
     let entity = apply_spawn(app.world_mut(), glass).unwrap();
     let mesh_handle = app.world().get::<Mesh2d>(entity).unwrap().0.clone();
     let mesh_count = app.world().resource::<Assets<Mesh>>().len();
-    let mesh = app.world().resource::<Assets<Mesh>>().get(&mesh_handle).unwrap();
+    let mesh = app
+        .world()
+        .resource::<Assets<Mesh>>()
+        .get(&mesh_handle)
+        .unwrap();
     let Some(VertexAttributeValues::Float32x3(positions)) =
         mesh.attribute(Mesh::ATTRIBUTE_POSITION)
     else {
@@ -539,12 +694,7 @@ fn backdrop_clip_crops_the_resident_mesh_without_stretching_or_accumulating_asse
     let Some(VertexAttributeValues::Float32x2(uvs)) = mesh.attribute(Mesh::ATTRIBUTE_UV_0) else {
         panic!("backdrop mesh should carry Float32x2 UVs");
     };
-    let expected_uvs = [
-        [0.25, 0.8],
-        [2.0 / 3.0, 0.8],
-        [0.25, 0.2],
-        [2.0 / 3.0, 0.2],
-    ];
+    let expected_uvs = [[0.25, 0.8], [2.0 / 3.0, 0.8], [0.25, 0.2], [2.0 / 3.0, 0.2]];
     for (actual, expected) in uvs.iter().zip(expected_uvs) {
         assert!(
             (actual[0] - expected[0]).abs() < 0.00001,
@@ -566,14 +716,20 @@ fn backdrop_clip_crops_the_resident_mesh_without_stretching_or_accumulating_asse
             rotation: 0.0,
             origin: [0.0, 0.0],
             clip_rect: None,
-            clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
+            clip_rotation: 0.0,
+            clip_rounded_rects: vec![],
+            clip_fades: vec![],
         },
     )
     .unwrap();
 
     assert_eq!(app.world().get::<Mesh2d>(entity).unwrap().0, mesh_handle);
     assert_eq!(app.world().resource::<Assets<Mesh>>().len(), mesh_count);
-    let restored = app.world().resource::<Assets<Mesh>>().get(&mesh_handle).unwrap();
+    let restored = app
+        .world()
+        .resource::<Assets<Mesh>>()
+        .get(&mesh_handle)
+        .unwrap();
     let Some(VertexAttributeValues::Float32x3(restored_positions)) =
         restored.attribute(Mesh::ATTRIBUTE_POSITION)
     else {
@@ -598,13 +754,22 @@ fn backdrop_transform_keeps_an_unchanged_crop_out_of_the_mesh() {
     let glass = AtomeRenderNode {
         project_space: false,
         clip_rect: Some([42.0, 34.0, 50.0, 30.0]),
-        clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
+        clip_rotation: 0.0,
+        clip_rounded_rects: vec![],
+        clip_fades: vec![],
         surface_paint: None,
-        backdrop: Some(AtomeBackdropStyle { blur_px: 12.0, tint: [0.2, 0.3, 0.4, 0.5], tint_fade: 0.0, corner_cut_px: 0.0 }),
+        backdrop: Some(AtomeBackdropStyle {
+            blur_px: 12.0,
+            tint: [0.2, 0.3, 0.4, 0.5],
+            tint_fade: 0.0,
+            corner_cut_px: 0.0,
+        }),
         ..shape_node("animated_backdrop")
     };
     let mut app = App::new();
-    app.add_plugins(AtomeBevyRendererPlugin::new(AtomeBevyRendererConfig::empty(640.0, 480.0)));
+    app.add_plugins(AtomeBevyRendererPlugin::new(
+        AtomeBevyRendererConfig::empty(640.0, 480.0),
+    ));
     app.update();
     let entity = apply_spawn(app.world_mut(), glass).unwrap();
     let mesh_handle = app.world().get::<Mesh2d>(entity).unwrap().0.clone();
@@ -616,14 +781,24 @@ fn backdrop_transform_keeps_an_unchanged_crop_out_of_the_mesh() {
         rotation: 0.0,
         origin: [0.5, 0.5],
         clip_rect,
-        clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
+        clip_rotation: 0.0,
+        clip_rounded_rects: vec![],
+        clip_fades: vec![],
     };
     apply_transform(app.world_mut(), patch(1.0, None)).unwrap();
     let sentinel = vec![[7.0, 7.0, 7.0]; 4];
-    app.world_mut().resource_mut::<Assets<Mesh>>().get_mut(&mesh_handle).unwrap()
+    app.world_mut()
+        .resource_mut::<Assets<Mesh>>()
+        .get_mut(&mesh_handle)
+        .unwrap()
         .insert_attribute(Mesh::ATTRIBUTE_POSITION, sentinel.clone());
-    let positions = |app: &App| match app.world().resource::<Assets<Mesh>>().get(&mesh_handle).unwrap()
-        .attribute(Mesh::ATTRIBUTE_POSITION) {
+    let positions = |app: &App| match app
+        .world()
+        .resource::<Assets<Mesh>>()
+        .get(&mesh_handle)
+        .unwrap()
+        .attribute(Mesh::ATTRIBUTE_POSITION)
+    {
         Some(VertexAttributeValues::Float32x3(values)) => values.clone(),
         _ => panic!("backdrop mesh should carry Float32x3 positions"),
     };
@@ -631,10 +806,18 @@ fn backdrop_transform_keeps_an_unchanged_crop_out_of_the_mesh() {
     for step in 1..=8 {
         apply_transform(app.world_mut(), patch(1.0 + step as f32 * 0.01, None)).unwrap();
     }
-    assert_eq!(positions(&app), sentinel, "a pose change must not rewrite an unchanged crop");
+    assert_eq!(
+        positions(&app),
+        sentinel,
+        "a pose change must not rewrite an unchanged crop"
+    );
 
     apply_transform(app.world_mut(), patch(1.0, Some([12.0, 24.0, 60.0, 50.0]))).unwrap();
-    assert_eq!(positions(&app)[1], [30.0, -25.0, 0.0], "a new crop rewrites the quad");
+    assert_eq!(
+        positions(&app)[1],
+        [30.0, -25.0, 0.0],
+        "a new crop rewrites the quad"
+    );
     assert_eq!(app.world().get::<Mesh2d>(entity).unwrap().0, mesh_handle);
 }
 
@@ -686,9 +869,14 @@ fn text_texture_spawn_and_opacity_patch_update_sprite_alpha() {
     world.insert_resource(AtomeRendererDiagnostics::default());
     world.insert_resource(Assets::<Image>::default());
 
-    let entity =
-        apply_spawn(&mut world, AtomeRenderNode { opacity: 0.4, ..text_node_with_texture("fading_text_texture") })
-            .unwrap();
+    let entity = apply_spawn(
+        &mut world,
+        AtomeRenderNode {
+            opacity: 0.4,
+            ..text_node_with_texture("fading_text_texture")
+        },
+    )
+    .unwrap();
     assert_alpha_near(world.get::<Sprite>(entity).unwrap().color, 0.4);
 
     apply_style(
@@ -796,7 +984,10 @@ fn shape_shadow_overlay_follows_owner_opacity() {
     )
     .unwrap();
 
-    let overlay_entity = world.get::<AtomeShapeShadowOverlay>(entity).unwrap().entities[0];
+    let overlay_entity = world
+        .get::<AtomeShapeShadowOverlay>(entity)
+        .unwrap()
+        .entities[0];
     assert_alpha_near(world.get::<Sprite>(overlay_entity).unwrap().color, 0.25);
 
     apply_style(
@@ -825,8 +1016,14 @@ fn shape_shadow_overlay_follows_owner_opacity() {
     )
     .unwrap();
 
-    let updated_overlay_entity = world.get::<AtomeShapeShadowOverlay>(entity).unwrap().entities[0];
-    assert_alpha_near(world.get::<Sprite>(updated_overlay_entity).unwrap().color, 0.6);
+    let updated_overlay_entity = world
+        .get::<AtomeShapeShadowOverlay>(entity)
+        .unwrap()
+        .entities[0];
+    assert_alpha_near(
+        world.get::<Sprite>(updated_overlay_entity).unwrap().color,
+        0.6,
+    );
 }
 
 #[test]
@@ -836,10 +1033,16 @@ fn transform_and_surface_patches_reproject_nodes() {
     world.insert_resource(AtomeBevyRendererConfig::empty(640.0, 480.0));
     world.insert_resource(AtomeRendererDiagnostics::default());
     world.insert_resource(Assets::<Image>::default());
-    world.spawn((Camera2d, crate::render_math::atome_camera_projection(640.0, 480.0)));
+    world.spawn((
+        Camera2d,
+        crate::render_math::atome_camera_projection(640.0, 480.0),
+    ));
     let entity = apply_spawn(&mut world, shape_node("shape_surface")).unwrap();
 
-    assert_eq!(world.get::<Transform>(entity).unwrap().translation, Vec3::new(-248.0, 191.0, depth_for_layer(3)));
+    assert_eq!(
+        world.get::<Transform>(entity).unwrap().translation,
+        Vec3::new(-248.0, 191.0, depth_for_layer(3))
+    );
     apply_surface(
         &mut world,
         AtomeSurfacePatch {
@@ -851,7 +1054,10 @@ fn transform_and_surface_patches_reproject_nodes() {
         },
     )
     .unwrap();
-    assert_eq!(world.get::<Transform>(entity).unwrap().translation, Vec3::new(-88.0, 71.0, depth_for_layer(3)));
+    assert_eq!(
+        world.get::<Transform>(entity).unwrap().translation,
+        Vec3::new(-88.0, 71.0, depth_for_layer(3))
+    );
     let mut projection_query = world.query::<&Projection>();
     let projection = projection_query.single(&world).unwrap();
     assert_fixed_projection_size(projection, 320.0, 240.0);
@@ -867,17 +1073,23 @@ fn rounded_shape_nodes_use_alpha_mask_texture_without_resizing() {
 
     let entity = apply_spawn(
         &mut world,
-        AtomeRenderNode { corner_radius: 8.0, corner_radii: None, ..shape_node("rounded_shape") },
+        AtomeRenderNode {
+            corner_radius: 8.0,
+            corner_radii: None,
+            ..shape_node("rounded_shape")
+        },
     )
     .unwrap();
 
     let sprite = world.get::<Sprite>(entity).unwrap();
     assert_vec2_near(sprite.custom_size, Vec2::new(120.0, 50.0));
-    let image =
-        world.resource::<Assets<Image>>().get(&sprite.image).expect("rounded shape should reference a generated mask");
+    let image = world
+        .resource::<Assets<Image>>()
+        .get(&sprite.image)
+        .expect("rounded shape should reference a generated mask");
     assert_eq!(image.texture_descriptor.size.width, 120);
     assert_eq!(image.texture_descriptor.size.height, 50);
-    let data = image.data.as_ref().expect("rounded mask should keep rgba data");
+    let (_, _, data) = crate::shape_mask_gpu::twin::image_pixels(&world, &sprite.image);
     let alpha_at = |x: usize, y: usize| -> u8 { data[(y * 120 + x) * 4 + 3] };
     assert_eq!(alpha_at(0, 0), 0);
     assert_eq!(alpha_at(60, 25), 255);
@@ -888,8 +1100,14 @@ fn workspace_dashboard_layers_keep_text_above_cards() {
     let dashboard_card_layer = 600 + 804;
     let dashboard_text_layer = 600 + 807;
 
-    assert_eq!(depth_for_layer(dashboard_card_layer), dashboard_card_layer as f32);
-    assert_eq!(depth_for_layer(dashboard_text_layer), dashboard_text_layer as f32);
+    assert_eq!(
+        depth_for_layer(dashboard_card_layer),
+        dashboard_card_layer as f32
+    );
+    assert_eq!(
+        depth_for_layer(dashboard_text_layer),
+        dashboard_text_layer as f32
+    );
     assert!(depth_for_layer(dashboard_text_layer) > depth_for_layer(dashboard_card_layer));
 }
 
@@ -904,16 +1122,41 @@ fn surface_background_stays_behind_atomes_and_outside_entity_table() {
     let atome_entity = apply_spawn(&mut world, shape_node("shape_above_background")).unwrap();
     let background_entity = background::apply_surface_background(
         &mut world,
-        AtomeSurfaceBackgroundPatch { signature: "solid".to_string(), color: [0.1, 0.1, 0.1, 1.0], texture: None, ..Default::default() },
+        AtomeSurfaceBackgroundPatch {
+            signature: "solid".to_string(),
+            color: [0.1, 0.1, 0.1, 1.0],
+            texture: None,
+            ..Default::default()
+        },
     )
     .unwrap();
 
-    assert!(world.get::<AtomeSurfaceBackground>(background_entity).is_some());
-    assert_eq!(world.resource::<AtomeEntityTable>().by_id.len(), 1);
-    assert_eq!(world.resource::<AtomeEntityTable>().by_id.get("shape_above_background"), Some(&atome_entity));
-    assert!(world.resource::<AtomeEntityTable>().by_id.values().all(|entity| *entity != background_entity));
     assert!(
-        world.get::<Transform>(background_entity).unwrap().translation.z
+        world
+            .get::<AtomeSurfaceBackground>(background_entity)
+            .is_some()
+    );
+    assert_eq!(world.resource::<AtomeEntityTable>().by_id.len(), 1);
+    assert_eq!(
+        world
+            .resource::<AtomeEntityTable>()
+            .by_id
+            .get("shape_above_background"),
+        Some(&atome_entity)
+    );
+    assert!(
+        world
+            .resource::<AtomeEntityTable>()
+            .by_id
+            .values()
+            .all(|entity| *entity != background_entity)
+    );
+    assert!(
+        world
+            .get::<Transform>(background_entity)
+            .unwrap()
+            .translation
+            .z
             < world.get::<Transform>(atome_entity).unwrap().translation.z
     );
 }
@@ -931,7 +1174,13 @@ fn surface_background_cover_size_tracks_surface_resize() {
         AtomeSurfaceBackgroundPatch {
             signature: "wide".to_string(),
             color: [0.0, 0.0, 0.0, 1.0],
-            texture: Some(AtomeTexture { animation: None, width: 200, height: 100, rgba: vec![255; 200 * 100 * 4] }),
+            texture: Some(AtomeTexture {
+                external: None,
+                animation: None,
+                width: 200,
+                height: 100,
+                rgba: vec![255; 200 * 100 * 4],
+            }),
             ..Default::default()
         },
     )
@@ -964,7 +1213,13 @@ fn surface_background_cover_size_tracks_surface_resize() {
         AtomeSurfaceBackgroundPatch {
             signature: "tall".to_string(),
             color: [0.0, 0.0, 0.0, 1.0],
-            texture: Some(AtomeTexture { animation: None, width: 100, height: 200, rgba: vec![255; 100 * 200 * 4] }),
+            texture: Some(AtomeTexture {
+                external: None,
+                animation: None,
+                width: 100,
+                height: 200,
+                rgba: vec![255; 100 * 200 * 4],
+            }),
             ..Default::default()
         },
     )
@@ -987,8 +1242,15 @@ fn surface_background_cover_image_and_video_share_centred_crop() {
             assert!(crop.min.x >= 0.0 && crop.min.y >= 0.0);
             assert!(crop.max.x <= texture.x && crop.max.y <= texture.y);
             assert!((crop.width() / crop.height() - width / height).abs() < 0.0001);
-            assert!((crop.width() - texture.x).abs() < 0.001 || (crop.height() - texture.y).abs() < 0.001);
-            let (size, uv) = background::video_background_geometry(width, height, &AtomeSurfaceBackgroundVideo { video_size: source });
+            assert!(
+                (crop.width() - texture.x).abs() < 0.001
+                    || (crop.height() - texture.y).abs() < 0.001
+            );
+            let (size, uv) = background::video_background_geometry(
+                width,
+                height,
+                &AtomeSurfaceBackgroundVideo { video_size: source },
+            );
             assert_vec2_near(Some(size), Vec2::new(width, height));
             assert_vec2_near(Some(Vec2::new(uv[0], uv[1]) * texture), crop.min);
             assert_vec2_near(Some(Vec2::new(uv[2], uv[3]) * texture), crop.size());
@@ -1008,7 +1270,8 @@ fn surface_background_legacy_modes_are_ignored() {
             "signature": fit, "color": [0.0, 0.0, 0.0, 1.0],
             "texture": { "width": 4, "height": 2, "rgba": vec![255u8; 32] },
             "fit": fit, "tile_size": [4.0, 2.0], "backdrop": null
-        })).unwrap();
+        }))
+        .unwrap();
         let entity = background::apply_surface_background(&mut world, patch).unwrap();
         let sprite = world.get::<Sprite>(entity).unwrap();
         assert_vec2_near(sprite.custom_size, Vec2::new(400.0, 800.0));
@@ -1016,7 +1279,13 @@ fn surface_background_legacy_modes_are_ignored() {
         assert_vec2_near(Some(crop.min), Vec2::new(1.5, 0.0));
         assert_vec2_near(Some(crop.max), Vec2::new(2.5, 2.0));
     }
-    assert_eq!(world.query::<&AtomeSurfaceBackground>().iter(&world).count(), 1);
+    assert_eq!(
+        world
+            .query::<&AtomeSurfaceBackground>()
+            .iter(&world)
+            .count(),
+        1
+    );
 }
 
 #[test]
@@ -1030,34 +1299,77 @@ fn surface_background_video_covers_and_recrops_on_resize() {
     let video_patch = || AtomeSurfaceBackgroundPatch {
         signature: "video:cover".to_string(),
         color: [0.0, 0.0, 0.0, 1.0],
-        video: Some(AtomeSurfaceBackgroundVideoSource { id: "bg_video".to_string(), width: 400, height: 200 }),
+        video: Some(AtomeSurfaceBackgroundVideoSource {
+            id: "bg_video".to_string(),
+            width: 400,
+            height: 200,
+        }),
         ..Default::default()
     };
     background::apply_surface_background(&mut world, video_patch()).unwrap();
     let quads: Vec<(Entity, String)> = world
-        .query::<(Entity, &crate::video_external_texture::AtomeVideoExternalTexture, &AtomeSurfaceBackgroundVideo)>()
-        .iter(&world).map(|(entity, texture, _)| (entity, texture.id.clone())).collect();
+        .query::<(
+            Entity,
+            &crate::video_external_texture::AtomeVideoExternalTexture,
+            &AtomeSurfaceBackgroundVideo,
+        )>()
+        .iter(&world)
+        .map(|(entity, texture, _)| (entity, texture.id.clone()))
+        .collect();
     assert_eq!(quads.len(), 1);
     assert_eq!(quads[0].1, "bg_video");
     let uvs = |world: &World| {
-        let handle = world.get::<bevy::mesh::Mesh2d>(quads[0].0).unwrap().0.clone();
+        let handle = world
+            .get::<bevy::mesh::Mesh2d>(quads[0].0)
+            .unwrap()
+            .0
+            .clone();
         let mesh = world.resource::<Assets<Mesh>>().get(&handle).unwrap();
-        let Some(VertexAttributeValues::Float32x2(values)) = mesh.attribute(Mesh::ATTRIBUTE_UV_0) else { panic!("uv expected") };
+        let Some(VertexAttributeValues::Float32x2(values)) = mesh.attribute(Mesh::ATTRIBUTE_UV_0)
+        else {
+            panic!("uv expected")
+        };
         values.clone()
     };
     assert!(uvs(&world).contains(&[0.0, 0.0]));
     assert!(uvs(&world).contains(&[1.0, 1.0]));
-    apply_surface(&mut world, AtomeSurfacePatch {
-        width: 400.0, height: 800.0, pixel_width: None, pixel_height: None, device_pixel_ratio: None
-    }).unwrap();
+    apply_surface(
+        &mut world,
+        AtomeSurfacePatch {
+            width: 400.0,
+            height: 800.0,
+            pixel_width: None,
+            pixel_height: None,
+            device_pixel_ratio: None,
+        },
+    )
+    .unwrap();
     assert!(uvs(&world).contains(&[0.375, 0.0]));
     assert!(uvs(&world).contains(&[0.625, 1.0]));
     background::apply_surface_background(&mut world, video_patch()).unwrap();
-    assert_eq!(world.query::<&AtomeSurfaceBackgroundVideo>().iter(&world).count(), 1);
-    background::apply_surface_background(&mut world, AtomeSurfaceBackgroundPatch {
-        signature: "solid".to_string(), color: [0.2, 0.2, 0.2, 1.0], ..Default::default()
-    }).unwrap();
-    assert_eq!(world.query::<&AtomeSurfaceBackgroundVideo>().iter(&world).count(), 0);
+    assert_eq!(
+        world
+            .query::<&AtomeSurfaceBackgroundVideo>()
+            .iter(&world)
+            .count(),
+        1
+    );
+    background::apply_surface_background(
+        &mut world,
+        AtomeSurfaceBackgroundPatch {
+            signature: "solid".to_string(),
+            color: [0.2, 0.2, 0.2, 1.0],
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        world
+            .query::<&AtomeSurfaceBackgroundVideo>()
+            .iter(&world)
+            .count(),
+        0
+    );
 }
 
 #[test]
@@ -1079,22 +1391,42 @@ fn selected_nodes_create_overlay_from_configured_visual_style() {
     world.insert_resource(AtomeBevyRendererConfig::new(640.0, 480.0, scene));
     world.insert_resource(AtomeRendererDiagnostics::default());
     world.insert_resource(Assets::<Image>::default());
-    let entity =
-        apply_spawn(&mut world, AtomeRenderNode { selected: Some(true), ..shape_node("selected_shape") }).unwrap();
+    let entity = apply_spawn(
+        &mut world,
+        AtomeRenderNode {
+            selected: Some(true),
+            ..shape_node("selected_shape")
+        },
+    )
+    .unwrap();
 
     let overlay = world.get::<AtomeSelectionOverlay>(entity).unwrap();
     assert!(overlay.entities.len() > 4);
     assert_eq!(overlay.image_handles.len(), 1);
-    assert_eq!(world.get::<AtomeSelected>(entity).unwrap().0, true);
-    let (texture_width, _texture_height, texture_rgba) =
-        build_shadow_texture_rgba(world.resource::<AtomeBevyRendererConfig>().selection_style, 120.0, 50.0).unwrap();
-    let alpha_at = |x: u32, y: u32| -> u8 { texture_rgba[(y as usize * texture_width as usize + x as usize) * 4 + 3] };
+    assert!(world.get::<AtomeSelected>(entity).unwrap().0);
+    let (texture_width, _texture_height, texture_rgba) = build_shadow_texture_rgba(
+        world.resource::<AtomeBevyRendererConfig>().selection_style,
+        120.0,
+        50.0,
+    )
+    .unwrap();
+    let alpha_at = |x: u32, y: u32| -> u8 {
+        texture_rgba[(y as usize * texture_width as usize + x as usize) * 4 + 3]
+    };
     assert!(alpha_at(12, 12) > alpha_at(8, 12));
     assert!(alpha_at(8, 12) > alpha_at(1, 12));
     assert_eq!(alpha_at(0, 0), 0);
     let selected_depth = world.get::<Transform>(entity).unwrap().translation.z;
-    let shadow_depth = world.get::<Transform>(overlay.entities[0]).unwrap().translation.z;
-    let outline_depth = world.get::<Transform>(overlay.entities[1]).unwrap().translation.z;
+    let shadow_depth = world
+        .get::<Transform>(overlay.entities[0])
+        .unwrap()
+        .translation
+        .z;
+    let outline_depth = world
+        .get::<Transform>(overlay.entities[1])
+        .unwrap()
+        .translation
+        .z;
     assert_eq!(shadow_depth, selected_depth - 0.5);
     assert_eq!(outline_depth, selected_depth + 0.5);
     assert!(shadow_depth < selected_depth);
@@ -1143,8 +1475,10 @@ fn imported_text_textures_use_linear_sampling_without_changing_logical_size() {
 
     let sprite = world.get::<Sprite>(entity).unwrap();
     assert_eq!(sprite.custom_size, Some(Vec2::new(80.0, 30.0)));
-    let image =
-        world.resource::<Assets<Image>>().get(&sprite.image).expect("text sprite should reference a Bevy image");
+    let image = world
+        .resource::<Assets<Image>>()
+        .get(&sprite.image)
+        .expect("text sprite should reference a Bevy image");
     assert_eq!(image.texture_descriptor.size.width, 160);
     assert_eq!(image.texture_descriptor.size.height, 60);
     assert!(matches!(image.sampler, ImageSampler::Descriptor(_)));
@@ -1159,6 +1493,7 @@ fn audio_waveform_uv_window_is_applied_on_spawn_and_resource_update() {
     world.insert_resource(AtomeRendererDiagnostics::default());
     world.insert_resource(Assets::<Image>::default());
     let texture = AtomeTexture {
+        external: None,
         animation: None,
         width: 100,
         height: 20,
@@ -1221,7 +1556,9 @@ fn audio_waveform_progress_spawns_and_moves_bevy_playhead_overlay() {
             logical_position: [20.0, 30.0],
             logical_size: [200.0, 60.0],
             clip_rect: None,
-            clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
+            clip_rotation: 0.0,
+            clip_rounded_rects: vec![],
+            clip_fades: vec![],
             scale: [1.0, 1.0],
             rotation: 0.0,
             origin: [0.0, 0.0],
@@ -1257,8 +1594,9 @@ fn audio_waveform_progress_spawns_and_moves_bevy_playhead_overlay() {
     )
     .unwrap();
 
-    let overlay =
-        world.get::<AtomeWaveformPlaybackOverlay>(entity).expect("waveform progress should create a Bevy overlay");
+    let overlay = world
+        .get::<AtomeWaveformPlaybackOverlay>(entity)
+        .expect("waveform progress should create a Bevy overlay");
     assert_eq!(overlay.entities.len(), 1);
     let line_entity = overlay.entities[0];
     assert_eq!(
@@ -1295,7 +1633,10 @@ fn audio_waveform_progress_spawns_and_moves_bevy_playhead_overlay() {
     let moved_overlay = world.get::<AtomeWaveformPlaybackOverlay>(entity).unwrap();
     let moved_line_entity = moved_overlay.entities[0];
     assert_eq!(
-        world.get::<Transform>(moved_line_entity).unwrap().translation,
+        world
+            .get::<Transform>(moved_line_entity)
+            .unwrap()
+            .translation,
         Vec3::new(-150.0, 180.0, depth_for_layer(2) + 0.7)
     );
 
@@ -1333,15 +1674,18 @@ fn rounded_rect_mask_handles_are_cached_per_dimensions() {
     let mut world = World::new();
     world.insert_resource(Assets::<Image>::default());
 
-    let first =
-        crate::texture::cached_image_handle_from_rounded_rect_mask(&mut world, 1440.0, 920.0, [12.0; 4], "bg_1")
-            .unwrap();
-    let second =
-        crate::texture::cached_image_handle_from_rounded_rect_mask(&mut world, 1440.0, 920.0, [12.0; 4], "bg_2")
-            .unwrap();
-    let different =
-        crate::texture::cached_image_handle_from_rounded_rect_mask(&mut world, 1440.0, 920.0, [8.0; 4], "bg_3")
-            .unwrap();
+    let first = crate::texture::cached_image_handle_from_rounded_rect_mask(
+        &mut world, 1440.0, 920.0, [12.0; 4], "bg_1",
+    )
+    .unwrap();
+    let second = crate::texture::cached_image_handle_from_rounded_rect_mask(
+        &mut world, 1440.0, 920.0, [12.0; 4], "bg_2",
+    )
+    .unwrap();
+    let different = crate::texture::cached_image_handle_from_rounded_rect_mask(
+        &mut world, 1440.0, 920.0, [8.0; 4], "bg_3",
+    )
+    .unwrap();
 
     assert_eq!(first, second);
     assert_ne!(first, different);
@@ -1359,9 +1703,14 @@ fn rounded_rect_mask_handles_are_cached_per_dimensions() {
 fn rounded_rect_mask_rounds_only_the_requested_corners() {
     let mut images = Assets::<Image>::default();
     // Top corners rounded, bottom corners square: [TL, TR, BR, BL].
-    let handle =
-        crate::texture::image_handle_from_rounded_rect_mask(&mut images, 40.0, 40.0, [8.0, 8.0, 0.0, 0.0], "partial")
-            .unwrap();
+    let handle = crate::texture::image_handle_from_rounded_rect_mask(
+        &mut images,
+        40.0,
+        40.0,
+        [8.0, 8.0, 0.0, 0.0],
+        "partial",
+    )
+    .unwrap();
     let image = images.get(&handle).unwrap();
     let alpha_at = |x: usize, y: usize| image.data.as_ref().unwrap()[(y * 40 + x) * 4 + 3];
 
@@ -1387,8 +1736,11 @@ fn partially_rounded_shape_gets_a_mask_even_with_a_zero_scalar_radius() {
         ..shape_node("accordion_header")
     };
     let mut images = Assets::<Image>::default();
-    let handle = crate::spawn::texture_handle_for_node(&mut images, &node).unwrap();
-    assert!(handle.is_some(), "a node with only per-corner radii must still receive a rounded mask");
+    let handle = crate::node_texture::texture_handle_for_node(&mut images, &node).unwrap();
+    assert!(
+        handle.is_some(),
+        "a node with only per-corner radii must still receive a rounded mask"
+    );
 }
 
 // A widened glass surface (a ribbon tool revealing its inline field) must keep
@@ -1401,7 +1753,9 @@ fn backdrop_surface_resize_keeps_the_corner_radius_instead_of_stretching_it() {
         logical_position: [100.0, 400.0],
         logical_size: [60.0, 60.0],
         clip_rect: None,
-        clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
+        clip_rotation: 0.0,
+        clip_rounded_rects: vec![],
+        clip_fades: vec![],
         corner_radius: 8.0,
         corner_radii: None,
         shape_variant: None,
@@ -1411,23 +1765,36 @@ fn backdrop_surface_resize_keeps_the_corner_radius_instead_of_stretching_it() {
         mask: None,
         mask_source: false,
         surface_paint: None,
-        backdrop: Some(AtomeBackdropStyle { blur_px: 12.0, tint: [0.0, 0.0, 0.0, 0.84], tint_fade: 0.0, corner_cut_px: 0.0 }),
+        backdrop: Some(AtomeBackdropStyle {
+            blur_px: 12.0,
+            tint: [0.0, 0.0, 0.0, 0.84],
+            tint_fade: 0.0,
+            corner_cut_px: 0.0,
+        }),
         presentation: true,
         menu_plane: 0,
         ..shape_node("backdrop_resize_tool")
     };
-    let scene = AtomeRenderScene { nodes: vec![tool], effects: Vec::new(), selection_style: None };
+    let scene = AtomeRenderScene {
+        nodes: vec![tool],
+        effects: Vec::new(),
+        selection_style: None,
+    };
     let mut app = App::new();
-    app.add_plugins(AtomeBevyRendererPlugin::new(AtomeBevyRendererConfig::new(640.0, 480.0, scene)));
+    app.add_plugins(AtomeBevyRendererPlugin::new(AtomeBevyRendererConfig::new(
+        640.0, 480.0, scene,
+    )));
     app.update();
     let entity = app.world().resource::<AtomeEntityTable>().by_id["backdrop_resize_tool"];
     let read = |app: &App| {
-        let handle = app
-            .world()
-            .get::<bevy::sprite_render::MeshMaterial2d<crate::backdrop_surface::BackdropSurfaceMaterial>>(entity)
-            .unwrap()
-            .0
-            .clone();
+        let handle =
+            app.world()
+                .get::<bevy::sprite_render::MeshMaterial2d<
+                    crate::backdrop_surface::BackdropSurfaceMaterial,
+                >>(entity)
+                .unwrap()
+                .0
+                .clone();
         app.world()
             .resource::<Assets<crate::backdrop_surface::BackdropSurfaceMaterial>>()
             .get(&handle)
@@ -1436,7 +1803,8 @@ fn backdrop_surface_resize_keeps_the_corner_radius_instead_of_stretching_it() {
             .size_radius
     };
     assert_eq!(read(&app), Vec4::new(60.0, 60.0, 8.0, 1.0));
-    crate::backdrop_surface::resize_backdrop_surface(app.world_mut(), entity, [300.0, 60.0]).unwrap();
+    crate::backdrop_surface::resize_backdrop_surface(app.world_mut(), entity, [300.0, 60.0])
+        .unwrap();
     // Same radius, new size: before the fix x stayed 60, so every corner was
     // drawn 5x wider than tall.
     assert_eq!(read(&app), Vec4::new(300.0, 60.0, 8.0, 1.0));
@@ -1450,15 +1818,48 @@ fn project_space_node_is_marked_and_follows_the_view() {
     world.insert_resource(AtomeRendererDiagnostics::default());
     world.insert_resource(Assets::<Image>::default());
     world.init_resource::<crate::project_view::AtomeProjectView>();
-    let atom = apply_spawn(&mut world, AtomeRenderNode { project_space: true, ..shape_node("project_atom") }).unwrap();
+    let atom = apply_spawn(
+        &mut world,
+        AtomeRenderNode {
+            project_space: true,
+            ..shape_node("project_atom")
+        },
+    )
+    .unwrap();
     let ui = apply_spawn(&mut world, shape_node("ui_node")).unwrap();
-    assert!(world.get::<crate::project_view::AtomeProjectSpace>(atom).is_some());
-    assert!(world.get::<crate::project_view::AtomeProjectSpace>(ui).is_none());
-    apply_render_op(&mut world, AtomeRenderOp::ProjectView(crate::AtomeProjectViewPatch { zoom: 2.0, pan_x: 0.0, pan_y: 0.0 })).unwrap();
+    assert!(
+        world
+            .get::<crate::project_view::AtomeProjectSpace>(atom)
+            .is_some()
+    );
+    assert!(
+        world
+            .get::<crate::project_view::AtomeProjectSpace>(ui)
+            .is_none()
+    );
+    apply_render_op(
+        &mut world,
+        AtomeRenderOp::ProjectView(crate::AtomeProjectViewPatch {
+            zoom: 2.0,
+            pan_x: 0.0,
+            pan_y: 0.0,
+        }),
+    )
+    .unwrap();
     crate::project_view::sync_project_view_globals(&mut world);
     let local = *world.get::<Transform>(atom).unwrap();
-    let global = world.get::<GlobalTransform>(atom).unwrap().compute_transform();
+    let global = world
+        .get::<GlobalTransform>(atom)
+        .unwrap()
+        .compute_transform();
     assert!((global.scale.x - local.scale.x * 2.0).abs() < 1e-5);
     let ui_local = *world.get::<Transform>(ui).unwrap();
-    assert_eq!(world.get::<GlobalTransform>(ui).unwrap().compute_transform().scale, ui_local.scale);
+    assert_eq!(
+        world
+            .get::<GlobalTransform>(ui)
+            .unwrap()
+            .compute_transform()
+            .scale,
+        ui_local.scale
+    );
 }

@@ -1,5 +1,4 @@
 import { test, expect } from 'vitest';
-import { startBevyNativeRenderer, refreshBevyNativeRendererProjectTextures } from '../../eVe/domains/rendering/bevy_native_renderer_runtime.js';
 import { registerBevySurfaceBackgroundRuntime, ensureBevySurfaceBackgroundApplied } from '../../eVe/domains/rendering/bevy_surface_background_runtime.js';
 import { resolveImageRasterSize } from '../../eVe/domains/rendering/bevy_image_texture_source.js';
 import { createBrowserBevyMediaTextureResolver } from '../../eVe/domains/rendering/bevy_media_texture_resolver.js';
@@ -111,25 +110,6 @@ test('a delayed decode cannot restore an old source or geometry after scene repl
     SURFACE_RUNTIME.delete(surface);
 });
 
-
-test('native bridges refresh the original image through resource ops and reject superseded zooms', async () => {
-    const calls = [];
-    const surface = { id: 'native_zoom_qa', tagName: 'CANVAS', ownerDocument: { defaultView: {
-        __ATOME_IOS_NATIVE_INVOKE: async (command, payload) => { calls.push({ command, payload }); return { success: true }; }
-    } } };
-    let width = 2;
-    await startBevyNativeRenderer({ surface, width: 400, height: 300, virtualScene: { nodes: [node()] },
-        mediaTextureResolver: async () => ({ width, height: width / 2, rgba: new Uint8Array(width * width * 2) }) });
-    width = 8;
-    expect((await refreshBevyNativeRendererProjectTextures({ surface })).refreshed).toBe(1);
-    const op = calls.at(-1).payload.ops[0];
-    expect(op.type).toBe('resource');
-    expect(op.patch.texture.width).toBe(8);
-    expect(op.patch.uv_rect).toEqual([0, 0, 1, 1]);
-    expect(Array.isArray(op.patch.texture.rgba)).toBe(true);
-    expect((await refreshBevyNativeRendererProjectTextures({ surface, isCurrent: () => false })).refreshed).toBe(0);
-    expect(calls).toHaveLength(2);
-});
 
 test('Dashboard wallpaper re-decodes its original when the surface gains pixels', async () => {
     const calls = [], sources = [], canvases = [];

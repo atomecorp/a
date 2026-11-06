@@ -4,7 +4,7 @@ import { SHOPPING_CATEGORIES, SHOPPING_IMAGE_SCHEMA, SHOPPING_PRICE_SCHEMA, SHOP
 // One contract for runtime V2, AI discovery and direct MCP calls, like GPS.
 export const SHOPPING_ERRORS = Object.freeze(['INVALID_ARGUMENT', 'AUTH_REQUIRED', 'ITEM_NOT_FOUND', 'AMBIGUOUS_ITEM',
     'ACTIVITY_NOT_FOUND', 'VERSION_CONFLICT', 'CONTEXT_CHANGED', 'LIST_INCOMPLETE', 'PRESENTATION_UNAVAILABLE', 'COMMIT_FAILED',
-    'CONTACT_REQUIRED', 'PROVIDER_UNAVAILABLE']);
+    'PROVIDER_UNAVAILABLE']);
 
 const id = { type: 'string', minLength: 1, maxLength: 200 };
 const label = { type: 'string', minLength: 1, maxLength: 400, pattern: '\\S' };
@@ -25,9 +25,6 @@ const definitions = {
     clear_checked: [{}, [], 'Remove every bought item from the list.', true],
     sync_nutrition: [{ activity_id: id }, ['activity_id'],
         'Recompute the list contributions of one nutrition activity: a planned meal adds its declared foods and portions; checked items are never touched.', true],
-    share: [{ user_id: id }, ['user_id'], 'Share the shopping list live with a contact (their account id): once they accept it in their messages, they see, add, tick and remove items with the user.', true],
-    unshare: [{ user_id: id }, ['user_id'], 'Stop sharing the shopping list with that person.', true],
-    shares: [{}, [], 'The people the shopping list is shared with (user_id, status pending until they accept), in the order they were added.', false],
     open: [{ label, category }, [], 'Open the shopping list on the current presentation surface; with label (and category), on that product\'s sheet.', false]
 };
 const itemSchema = { type: 'object', required: ['id', 'label', 'category', 'checked'], properties: {
@@ -40,8 +37,7 @@ export const SHOPPING_COMMANDS = Object.freeze(Object.entries(definitions).map((
     input_schema: { type: 'object', additionalProperties: false, properties, required },
     output_schema: { type: 'object', required: ['ok'], properties: { ok: { type: 'boolean' }, error: { type: 'string', enum: SHOPPING_ERRORS },
         item: itemSchema, items: { type: 'array', items: itemSchema }, candidates: { type: 'array', items: itemSchema },
-        changed: { type: 'integer', minimum: 0 }, members: { type: 'array', items: { type: 'object', required: ['user_id', 'status'],
-            properties: { user_id: { type: 'string' }, status: { type: 'string' } } } } } }
+        changed: { type: 'integer', minimum: 0 } } }
 })));
 export const validateShoppingInput = (action, input) => {
     const contract = SHOPPING_COMMANDS.find(command => command.action === action);
@@ -50,4 +46,4 @@ export const validateShoppingInput = (action, input) => {
 };
 export const shoppingError = error => SHOPPING_ERRORS.includes(error?.code || error?.message || error)
     ? (error?.code || error?.message || error) : 'COMMIT_FAILED';
-export const SHOPPING_ASSISTANT_INSTRUCTIONS = 'Shopping list: « ajoute du lait », « mets 2 shampoings sur la liste » call shopping.add with the item in the user\'s words (category beauty, hygiene, household or kitchen when obvious, food otherwise); « j\'ai pris les tomates », « coche le pain » call shopping.check with the label; « le Nutella coûte 3,49 » calls shopping.update with price { amount: 3.49, currency: \'EUR\' }; « qu\'est-ce qu\'il me reste à acheter » calls shopping.list with checked false; « mets-le dans à éviter » calls shopping.update with avoided true (false takes it back into the basket); « montre ma liste de courses » calls shopping.open; « partage ma liste avec Marie » calls shopping.share with her account id, shopping.unshare stops it, shopping.shares tells with whom. AMBIGUOUS_ITEM means ask which candidate. Never call shopping.clear_checked unless the user asks to empty the bought items.';
+export const SHOPPING_ASSISTANT_INSTRUCTIONS = 'Shopping list: « ajoute du lait », « mets 2 shampoings sur la liste » call shopping.add with the item in the user\'s words (category beauty, hygiene, household or kitchen when obvious, food otherwise); « j\'ai pris les tomates », « coche le pain » call shopping.check with the label; « le Nutella coûte 3,49 » calls shopping.update with price { amount: 3.49, currency: \'EUR\' }; « qu\'est-ce qu\'il me reste à acheter » calls shopping.list with checked false; « mets-le dans à éviter » calls shopping.update with avoided true (false takes it back into the basket); « montre ma liste de courses » calls shopping.open; « partage ma liste avec Marie » calls share.send with list_kind shopping, live true and her account id; share.sent tells with whom, share.revoke stops it. AMBIGUOUS_ITEM means ask which candidate. Never call shopping.clear_checked unless the user asks to empty the bought items.';

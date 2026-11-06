@@ -13,11 +13,8 @@ export function createScheduledSendStore({ query }) {
         WHERE send_id = ? AND state = 'pending'`, [sendId]))?.changes || 0) === 1;
     const finish = (sendId, from, to, result) => query('run', `UPDATE scheduled_sends SET state = ?, result_json = ?, done_at = datetime('now'),
         updated_at = datetime('now') WHERE send_id = ? AND state = ?`, [to, result ? JSON.stringify(result) : null, sendId, from]);
-    // ISO times compare as text.
-    const due = at => query('all', "SELECT * FROM scheduled_sends WHERE state = 'pending' AND due_at <= ? ORDER BY due_at LIMIT 200", [at]);
-    const next = () => query('get', "SELECT due_at FROM scheduled_sends WHERE state = 'pending' ORDER BY due_at LIMIT 1");
     const children = parentId => query('all', 'SELECT * FROM scheduled_sends WHERE parent_id = ?', [parentId]);
     const ofOwner = (ownerId, since) => query('all', `SELECT * FROM scheduled_sends WHERE owner_id = ?${since ? ' AND updated_at >= ?' : ''}
         ORDER BY due_at LIMIT 500`, since ? [ownerId, since.replace('T', ' ').slice(0, 19)] : [ownerId]);
-    return { get, put, take, finish, due, next, children, ofOwner };
+    return { get, put, take, finish, children, ofOwner };
 }

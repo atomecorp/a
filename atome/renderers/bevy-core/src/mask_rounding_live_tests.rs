@@ -5,8 +5,8 @@
 
 use bevy::{image::Image, prelude::*};
 
-use crate::*;
 use crate::shape_sdf::{AtomeShapeGeometry, AtomeShapeSilhouette, AtomeShapeVariant};
+use crate::*;
 
 fn shape_node(id: &str) -> AtomeRenderNode {
     AtomeRenderNode {
@@ -17,7 +17,9 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         logical_position: [12.0, 24.0],
         logical_size: [120.0, 50.0],
         clip_rect: None,
-        clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
+        clip_rotation: 0.0,
+        clip_rounded_rects: vec![],
+        clip_fades: vec![],
         scale: [1.0, 1.0],
         rotation: 0.0,
         origin: [0.0, 0.0],
@@ -86,7 +88,11 @@ fn style_patch(id: &str) -> AtomeStylePatch {
 }
 
 fn sprite_image(world: &World, entity: Entity) -> Handle<Image> {
-    world.get::<Sprite>(entity).expect("shape sprite").image.clone()
+    world
+        .get::<Sprite>(entity)
+        .expect("shape sprite")
+        .image
+        .clone()
 }
 
 fn drop_shadow() -> AtomeShadowStyle {
@@ -107,11 +113,18 @@ fn removing_the_rounding_repaints_square_corners_on_a_live_shape() {
     let mut world = test_world();
     let entity = apply_spawn(
         &mut world,
-        AtomeRenderNode { corner_radius: 12.0, ..shape_node("live_rounding") },
+        AtomeRenderNode {
+            corner_radius: 12.0,
+            ..shape_node("live_rounding")
+        },
     )
     .unwrap();
     assert_eq!(world.get::<AtomeCornerRadius>(entity).unwrap().0, [12.0; 4]);
-    assert_ne!(sprite_image(&world, entity), Handle::default(), "un arrondi se peint par un masque");
+    assert_ne!(
+        sprite_image(&world, entity),
+        Handle::default(),
+        "un arrondi se peint par un masque"
+    );
 
     apply_style(
         &mut world,
@@ -138,14 +151,21 @@ fn putting_the_rounding_back_keeps_the_very_same_entity() {
 
     apply_style(
         &mut world,
-        AtomeStylePatch { corner_radius: Some(9.0), ..style_patch("live_rounding_back") },
+        AtomeStylePatch {
+            corner_radius: Some(9.0),
+            ..style_patch("live_rounding_back")
+        },
     )
     .unwrap();
 
     assert_eq!(world.get::<AtomeCornerRadius>(entity).unwrap().0, [9.0; 4]);
     assert_ne!(sprite_image(&world, entity), Handle::default());
     assert_eq!(
-        world.resource::<AtomeEntityTable>().by_id.get("live_rounding_back").copied(),
+        world
+            .resource::<AtomeEntityTable>()
+            .by_id
+            .get("live_rounding_back")
+            .copied(),
         Some(entity),
         "l'arrondi est non destructif : l'atome n'est jamais re-cree"
     );
@@ -170,7 +190,11 @@ fn changing_the_variant_live_rebuilds_the_silhouette() {
     let profile = world.get::<AtomeShapeProfile>(entity).unwrap().0;
     assert_eq!(profile.variant.as_str(), "star");
     assert_eq!(profile.star_branches, 7);
-    assert_ne!(sprite_image(&world, entity), Handle::default(), "une etoile se peint par son masque");
+    assert_ne!(
+        sprite_image(&world, entity),
+        Handle::default(),
+        "une etoile se peint par son masque"
+    );
 }
 
 #[test]
@@ -178,7 +202,10 @@ fn removing_the_shadow_removes_the_overlay_of_a_live_object() {
     let mut world = test_world();
     let entity = apply_spawn(
         &mut world,
-        AtomeRenderNode { shadow: Some(drop_shadow()), ..shape_node("live_shadow") },
+        AtomeRenderNode {
+            shadow: Some(drop_shadow()),
+            ..shape_node("live_shadow")
+        },
     )
     .unwrap();
     assert!(
@@ -191,7 +218,14 @@ fn removing_the_shadow_removes_the_overlay_of_a_live_object() {
 
     // Some(None) est ce que le diff envoie quand l'outil Ombre RETIRE l'ombre :
     // le renderer doit alors la retirer, pas ignorer le patch.
-    apply_style(&mut world, AtomeStylePatch { shadow: Some(None), ..style_patch("live_shadow") }).unwrap();
+    apply_style(
+        &mut world,
+        AtomeStylePatch {
+            shadow: Some(None),
+            ..style_patch("live_shadow")
+        },
+    )
+    .unwrap();
 
     assert!(world.get::<AtomeShapeShadow>(entity).unwrap().0.is_none());
     assert!(
@@ -218,9 +252,11 @@ fn a_null_shadow_in_the_patch_is_a_removal_not_an_omission() {
         "`shadow: null` veut dire RETIRE ; serde le confondait avec « cle absente »"
     );
 
-    let untouched: AtomeStylePatch =
-        serde_json::from_str(r#"{"id":"wire"}"#).expect("patch muet");
-    assert_eq!(untouched.shadow, None, "une cle absente ne touche pas a l'ombre");
+    let untouched: AtomeStylePatch = serde_json::from_str(r#"{"id":"wire"}"#).expect("patch muet");
+    assert_eq!(
+        untouched.shadow, None,
+        "une cle absente ne touche pas a l'ombre"
+    );
 
     let posed: AtomeStylePatch = serde_json::from_str(
         r#"{"id":"wire","shadow":{"type":"drop","color":[0,0,0,0.5],"blur":8,"offset_x":2,"offset_y":2,"spread":0,"invert":false}}"#,
@@ -256,7 +292,10 @@ fn deserializing_a_removal_patch_really_removes_the_shadow_from_a_live_object() 
     let mut world = test_world();
     let entity = apply_spawn(
         &mut world,
-        AtomeRenderNode { shadow: Some(drop_shadow()), ..shape_node("wire_shadow") },
+        AtomeRenderNode {
+            shadow: Some(drop_shadow()),
+            ..shape_node("wire_shadow")
+        },
     )
     .unwrap();
 
@@ -281,7 +320,10 @@ fn deserializing_a_removal_patch_really_removes_the_rounding_from_a_live_object(
     let mut world = test_world();
     let entity = apply_spawn(
         &mut world,
-        AtomeRenderNode { corner_radius: 14.0, ..shape_node("wire_rounding") },
+        AtomeRenderNode {
+            corner_radius: 14.0,
+            ..shape_node("wire_rounding")
+        },
     )
     .unwrap();
     assert_eq!(world.get::<AtomeCornerRadius>(entity).unwrap().0, [14.0; 4]);
@@ -346,7 +388,10 @@ fn a_mask_source_never_comes_back_visible() {
 
     apply_visibility(
         &mut world,
-        AtomeVisibilityPatch { id: "mask_source_hidden".to_string(), visible: true },
+        AtomeVisibilityPatch {
+            id: "mask_source_hidden".to_string(),
+            visible: true,
+        },
     )
     .unwrap();
     assert_eq!(
@@ -364,21 +409,29 @@ fn a_plain_shape_carrying_a_mask_is_really_cut() {
     let mut world = test_world();
     let entity = apply_spawn(
         &mut world,
-        AtomeRenderNode { mask: Some(star_mask(120.0, 50.0)), ..shape_node("masked_rect") },
+        AtomeRenderNode {
+            mask: Some(star_mask(120.0, 50.0)),
+            ..shape_node("masked_rect")
+        },
     )
     .unwrap();
 
     let handle = sprite_image(&world, entity);
-    assert_ne!(handle, Handle::default(), "un masque exige une texture a decouper");
-    let images = world.resource::<Assets<Image>>();
-    let image = images.get(&handle).expect("la texture decoupee");
-    let width = image.texture_descriptor.size.width as usize;
-    let height = image.texture_descriptor.size.height as usize;
-    let data = image.data.as_ref().expect("des pixels a decouper");
+    assert_ne!(
+        handle,
+        Handle::default(),
+        "un masque exige une texture a decouper"
+    );
+    let (width, height, data) = crate::shape_mask_gpu::twin::image_pixels(&world, &handle);
+    let (width, height) = (width as usize, height as usize);
     let alpha = |x: usize, y: usize| data[(y * width + x) * 4 + 3];
 
     assert_eq!(alpha(0, 0), 0, "le coin de la boite est hors de l'etoile");
-    assert_eq!(alpha(width / 2, height / 2), 255, "le centre de l'etoile reste plein");
+    assert_eq!(
+        alpha(width / 2, height / 2),
+        255,
+        "le centre de l'etoile reste plein"
+    );
 }
 
 #[test]
@@ -401,7 +454,8 @@ fn a_masked_object_shadow_uses_the_final_mask_alpha() {
             shadow: Some(shadow),
             ..shape_node("masked_shadow")
         },
-    ).unwrap();
+    )
+    .unwrap();
     let handle = world
         .get::<AtomeShapeShadowOverlay>(entity)
         .and_then(|overlay| overlay.image_handles.first())
@@ -414,7 +468,10 @@ fn a_masked_object_shadow_uses_the_final_mask_alpha() {
     let data = image.data.as_ref().unwrap();
     let alpha = |x: usize, y: usize| data[(y * width + x) * 4 + 3];
     assert_eq!(alpha(0, 0), 0, "the old rectangular shadow must not return");
-    assert!(alpha(width / 2, height / 2) > 0, "the visible masked centre casts the shadow");
+    assert!(
+        alpha(width / 2, height / 2) > 0,
+        "the visible masked centre casts the shadow"
+    );
 }
 
 #[test]
@@ -422,11 +479,18 @@ fn resizing_a_rounded_shape_recuts_its_mask_instead_of_stretching_the_corners() 
     let mut world = test_world();
     let entity = apply_spawn(
         &mut world,
-        AtomeRenderNode { corner_radius: 6.0, ..shape_node("widening_rounded") },
+        AtomeRenderNode {
+            corner_radius: 6.0,
+            ..shape_node("widening_rounded")
+        },
     )
     .unwrap();
     let before = sprite_image(&world, entity);
-    let before_size = world.resource::<Assets<Image>>().get(&before).expect("mask image").size();
+    let before_size = world
+        .resource::<Assets<Image>>()
+        .get(&before)
+        .expect("mask image")
+        .size();
 
     apply_transform(
         &mut world,
@@ -438,17 +502,29 @@ fn resizing_a_rounded_shape_recuts_its_mask_instead_of_stretching_the_corners() 
             rotation: 0.0,
             origin: [0.0, 0.0],
             clip_rect: None,
-            clip_rotation: 0.0, clip_rounded_rects: vec![], clip_fades: vec![],
+            clip_rotation: 0.0,
+            clip_rounded_rects: vec![],
+            clip_fades: vec![],
         },
     )
     .unwrap();
 
     let after = sprite_image(&world, entity);
-    let after_size = world.resource::<Assets<Image>>().get(&after).expect("mask image").size();
+    let after_size = world
+        .resource::<Assets<Image>>()
+        .get(&after)
+        .expect("mask image")
+        .size();
     assert_ne!(before, after, "la decoupe est refaite a la nouvelle taille");
     let ratio_before = before_size.x as f32 / before_size.y as f32;
     let ratio_after = after_size.x as f32 / after_size.y as f32;
-    assert!((ratio_before - 120.0 / 50.0).abs() < 0.1, "masque initial {before_size:?}");
-    assert!((ratio_after - 400.0 / 50.0).abs() < 0.2, "masque redecoupe {after_size:?}");
+    assert!(
+        (ratio_before - 120.0 / 50.0).abs() < 0.1,
+        "masque initial {before_size:?}"
+    );
+    assert!(
+        (ratio_after - 400.0 / 50.0).abs() < 0.2,
+        "masque redecoupe {after_size:?}"
+    );
     assert_eq!(world.get::<AtomeCornerRadius>(entity).unwrap().0, [6.0; 4]);
 }

@@ -67,7 +67,7 @@ export const createWorkingMemory = ({
     const conversationTurns = [];
     const conversationSummaries = [];
     const sessionPreferences = {};
-    let version = WORKING_MEMORY_VERSION;
+    const version = WORKING_MEMORY_VERSION;
 
     const getDomainSet = (domain) => {
         if (!domains.has(domain)) {

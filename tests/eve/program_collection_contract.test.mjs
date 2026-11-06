@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createProjectProgramRuntime } from '../../eVe/domains/programs/project_program_runtime.js';
 import { createProgramCollectionControl } from '../../eVe/domains/programs/program_collection_control.js';
-import { programPreferenceId, programDataPermissionId } from '../../atome/src/shared/program_collection_contract.js';
+import { PROGRAM_PREFERENCE_HEALTH_KEYS, programPreferenceId, programDataPermissionId } from '../../atome/src/shared/program_collection_contract.js';
 import { normalizeCanonicalAtome } from '../../atome/src/shared/atome_contract.js';
 import { registerCoreAtomeTypes } from '../../atome/src/shared/core_atome_types.js';
 import { runWithoutHealthAccess } from '../../atome/src/squirrel/health/health_actor_gate.js';
@@ -10,6 +10,8 @@ import { JSDOM } from 'jsdom';
 import { normalizeBevyUiTree } from '../../eVe/domains/rendering/bevy_ui_tree_normalization.js';
 
 const date = '2030-01-07T10:00:00Z';
+// The health preferences' seal (health_profile_store.js), its box readable here: the record holds only it (rule 21).
+const seal = async () => ({ sealValue: async (value, principals) => ({ to: principals, box: JSON.stringify(value) }), openValue: async sealed => JSON.parse(sealed.box) });
 const walk = node => [node, ...(node.children || []).flatMap(walk)];
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 const fixture = () => {
@@ -31,12 +33,14 @@ const fixture = () => {
         for (const event of events) { const result = await commitActivity(event); if (!result.ok) return result; }
         return { ok: true };
     });
-    const runtime = createProjectProgramRuntime({ read, list, commitCollection, actor: () => actor, project: () => active, now: () => date });
+    const runtime = createProjectProgramRuntime({ read, list, commitCollection, actor: () => actor, project: () => active, now: () => date, seal });
     const invoke = (operation = 'collection_read', input = {}) => runtime.invoke({ operation, project_id: active, ...input });
     const preference = (key, value, extra = {}) => {
         const id = programPreferenceId('alice', key);
-        records.set(id, { id, type: 'record', owner_id: 'alice', properties: { program_preference: {
-            version: 1, key, status: 'answered', value, date, provenance: 'manual', uncertain: false, ...extra } } });
+        const program_preference = { version: 1, key, status: 'answered', value, date, provenance: 'manual', uncertain: false, ...extra };
+        records.set(id, PROGRAM_PREFERENCE_HEALTH_KEYS.includes(key)
+            ? { id, type: 'health_profile', owner_id: 'alice', properties: { sealed: { to: ['alice'], box: JSON.stringify({ program_preference }) } } }
+            : { id, type: 'record', owner_id: 'alice', properties: { program_preference } });
         return id;
     };
     const journal = (id, value, extra = {}) => records.set(id, { id, type: 'text', owner_id: 'alice', project_id: 'p', properties: {
@@ -94,7 +98,8 @@ describe('purposeful Programme collection through canonical Atomes', () => {
         expect(f.read.mock.calls.some(([value]) => value === programPreferenceId('alice', 'allergies'))).toBe(false);
         expect(await f.invoke('collection_permission', { brick_id: 'nutrition', data_source: 'preferences', allow_read: true }))
             .toMatchObject({ question: { status: 'answered', value: 'Fictitious allergy' } });
-        expect([...f.records.values()].filter(record => record.properties.program_preference)).toHaveLength(1);
+        expect([...f.records.values()].filter(record => record.properties.program_preference)).toHaveLength(0);
+        expect([...f.records.values()].filter(record => record.type === 'health_profile' && record.properties.sealed?.to?.[0] === 'alice')).toHaveLength(1);
     });
     it('uses the same owned health brick in a standalone activity without a programme or Dashboard', async () => {
         const f = fixture();
@@ -178,7 +183,7 @@ describe('purposeful Programme collection through canonical Atomes', () => {
         let control = createProgramCollectionControl({ id: 'collection', projectId: 'p', interactive: () => true, refresh, gateway });
         await control.build({ box }).on.activate();
         await vi.waitFor(() => expect(walk(control.build({ box })).some(item => item.id === 'collection_question')).toBe(true));
-        let nodes = walk(control.build({ box }));
+        const nodes = walk(control.build({ box }));
         expect(nodes.filter(item => item.id === 'collection_question')).toHaveLength(1);
         expect(f.list).not.toHaveBeenCalled(); expect(f.writes).toHaveLength(0);
         await nodes.find(item => item.id === 'collection_brick').children.find(item => item.on?.activate

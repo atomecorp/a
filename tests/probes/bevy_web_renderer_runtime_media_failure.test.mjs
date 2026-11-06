@@ -299,7 +299,10 @@ test('Bevy web runtime refreshes text texture when a transform changes text boun
         scale: [1, 1],
         rotation: 0,
         origin: [0, 0],
-        clip_rect: null
+        clip_rect: null,
+        clip_rotation: 0,
+        clip_rounded_rects: [],
+        clip_fades: []
     });
     assert.deepEqual(appliedOps.find((op) => op.type === 'text')?.patch?.texture?.width, 240);
     assert.deepEqual(appliedOps.find((op) => op.type === 'text')?.patch?.texture?.height, 72);

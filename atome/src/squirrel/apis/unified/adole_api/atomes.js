@@ -1,7 +1,7 @@
 import { TauriAdapter, FastifyAdapter, checkBackends, generateUUID } from '../adole.js';
 import { isTauriRuntime } from './runtime.js';
 import { sanitizeAtomeProperties } from '../../../../shared/atome_contract.js';
-import { commitGuestAtome, deleteGuestAtome, getGuestAtome, listGuestAtomes } from './guest_workspace_store.js';
+import { commitGuestAtome, commitWorkspaceEvents, deleteGuestAtome, getGuestAtome, listGuestAtomes } from './guest_workspace_store.js';
 import {
     buildUpsertPayload,
     filterByOwner,
@@ -371,6 +371,31 @@ export async function delete_atome(atomeId, callback) {
     return results;
 }
 
+// Several atomes deleted in ONE canonical batch (a project with all it holds, D36): one `commit-batch` of `delete` events,
+// in the order given (what is held first, its holder last).
+export async function delete_atomes(atomeIds = [], callback) {
+    const currentUserId = getCurrentUserId();
+    const ids = [...new Set((Array.isArray(atomeIds) ? atomeIds : []).map(id => String(id || '')).filter(Boolean))];
+    const done = (result) => { if (typeof callback === 'function') callback(result); return result; };
+    if (!currentUserId || !ids.length) {
+        const error = 'Missing atomeIds or user.';
+        return done({ tauri: { success: false, error }, fastify: { success: false, error } });
+    }
+    const runtimeTauri = isTauriRuntime();
+    if (isAnonymous() && !runtimeTauri) {
+        const local = await commitWorkspaceEvents(currentUserId, ids.map(id => ({ kind: 'delete', atome_id: id, payload: { props: {} } })), { actorType: 'guest' })
+            .catch(error => ({ ok: false, error: String(error?.message || error) }));
+        return done({ tauri: { success: false, data: null, error: null }, fastify: { success: local?.ok !== false, data: local, error: local?.error || null } });
+    }
+    const primary = runtimeTauri ? 'tauri' : 'fastify';
+    const actor = { type: 'user', id: String(currentUserId) };
+    const primaryResult = await adapters[primary].atome.commitBatch(ids.map(id => ({ kind: 'delete', atome_id: id, actor })));
+    const okPrimary = !!(primaryResult?.ok || primaryResult?.success);
+    const results = { tauri: { success: false, data: null, error: null }, fastify: { success: false, data: null, error: null } };
+    results[primary] = { success: okPrimary, data: primaryResult, error: okPrimary ? null : primaryResult?.error };
+    return done(results);
+}
+
 export async function realtime_patch(atomeId, properties = {}, callback) {
     const runtimeTauri = isTauriRuntime();
     if (isAnonymous() && !runtimeTauri) {
@@ -415,6 +440,7 @@ export default {
     create_atome,
     alter_atome,
     delete_atome,
+    delete_atomes,
     realtime_patch,
     get_atome,
     syncLocalProjectsToFastify

@@ -123,7 +123,6 @@ export function createSitePublishing({ store, vaultRouter, syncRuntime = null, r
         const due = at ? Date.parse(at) : NaN;
         if (Number.isFinite(due) && due > now()) {
             await store.addOperation({ opId: crypto.randomUUID(), siteId, kind: 'publish', version: built.version, dueAt: new Date(due).toISOString() });
-            arm();
             return { ok: true, scheduled: true, version: built.version, issues: built.manifest.issues, site: await writeStatus(ownerId, siteId) };
         }
         return { ok: true, version: built.version, issues: built.manifest.issues, url: urlOf(claimed.row), site: await activate(ownerId, siteId, built.version) };
@@ -160,7 +159,6 @@ export function createSitePublishing({ store, vaultRouter, syncRuntime = null, r
         if (!Number.isFinite(due) || due <= now()) return fail('INVALID_ARGUMENT');
         if (!await store.pending(siteId)) return fail('NOT_FOUND');
         await store.movePending(siteId, new Date(due).toISOString());
-        arm();
         return { ok: true, site: await writeStatus(ownerId, siteId) };
     };
     const history = async (ownerId, { site_id: siteId }) => {
@@ -212,31 +210,7 @@ export function createSitePublishing({ store, vaultRouter, syncRuntime = null, r
     };
     const previewOf = token => { const entry = previews.get(token); return entry && entry.expires >= now() ? entry : null; };
 
-    // The clock: due planned operations run, then the timer waits for the next one.
-    let timer = null;
-    const tick = async () => {
-        for (const op of await store.due(new Date(now()).toISOString())) {
-            const row = await store.site(op.site_id);
-            if (!row) { await store.finishOperation(op.op_id, 'failed', 'site_missing'); continue; }
-            try {
-                await store.finishOperation(op.op_id, 'done');
-                await activate(row.owner_id, row.site_id, op.version);
-            } catch (error) {
-                await writeStatus(row.owner_id, row.site_id, { last_error: String(error?.message || error) }).catch(written => console.error('[site] status', written));
-            }
-        }
-        arm();
-    };
-    const arm = () => {
-        if (timer) clearTimeout(timer);
-        timer = null;
-        store.nextDue().then(at => {
-            if (!at) return;
-            timer = setTimeout(() => { tick().catch(error => console.error('[site] clock', error)); }, Math.min(Math.max(0, Date.parse(at) - now()), 3600_000));
-            timer.unref?.();
-        }).catch(error => console.error('[site] clock', error));
-    };
-    arm();
+    // The clock that runs the due planned operations is the Rust front's (atome-server src/site/operations.rs).
 
     const handle = async (data, userId) => {
         const action = String(data?.action || '');
@@ -247,5 +221,5 @@ export function createSitePublishing({ store, vaultRouter, syncRuntime = null, r
         const run = { publish, rollback, retire, cancel, reschedule, history, state, check, preview }[action];
         return run ? run(userId, input) : null;
     };
-    return { handle, ensureRow, publish, rollback, retire, cancel, reschedule, history, state, list, check, preview, previewOf, tick, statusOf, writeStatus, versionDir, store };
+    return { handle, ensureRow, publish, rollback, retire, cancel, reschedule, history, state, list, check, preview, previewOf, statusOf, writeStatus, versionDir, store };
 }

@@ -6,11 +6,13 @@ use bevy::{
 };
 
 use crate::{
-    render_math::{atome_rect_transform, atome_rect_transform_with_local, color_from_rgba, depth_for_layer},
+    render_math::{
+        atome_rect_transform, atome_rect_transform_with_local, color_from_rgba, depth_for_layer,
+    },
     shadow_texture::{build_gaussian_shadow_texture_rgba, shadow_padding},
     types::{
-        AtomeBevyRendererConfig, AtomeLayer, AtomeLocalTransform, AtomeLogicalPosition, AtomeLogicalSize, AtomeSelected,
-        AtomeSelectionOverlay, SelectionVisualStyle,
+        AtomeBevyRendererConfig, AtomeLayer, AtomeLocalTransform, AtomeLogicalPosition,
+        AtomeLogicalSize, AtomeSelected, AtomeSelectionOverlay, SelectionVisualStyle,
     },
     workspace_backdrop::MENU_PRESENTATION_LAYER,
 };
@@ -27,9 +29,11 @@ fn inherit_presentation_layer(world: &mut World, source: Entity, entities: &[Ent
         return;
     }
     for entity in entities {
-        world.entity_mut(*entity).insert(
-            bevy::camera::visibility::RenderLayers::layer(MENU_PRESENTATION_LAYER),
-        );
+        world
+            .entity_mut(*entity)
+            .insert(bevy::camera::visibility::RenderLayers::layer(
+                MENU_PRESENTATION_LAYER,
+            ));
     }
 }
 
@@ -56,17 +60,34 @@ pub(crate) fn follow_atom_pose(world: &mut World, atom: Entity, overlays: &[Enti
         (config.width, config.height)
     };
     let (width, height) = (size.width.max(1.0), size.height.max(1.0));
-    let plain = atome_rect_transform(position.x, position.y, width, height, surface_width, surface_height, 0.0);
+    let plain = atome_rect_transform(
+        position.x,
+        position.y,
+        width,
+        height,
+        surface_width,
+        surface_height,
+        0.0,
+    );
     let pose = atome_rect_transform_with_local(
-        position.x, position.y, width, height, surface_width, surface_height, 0.0,
-        local.scale, local.rotation, local.origin,
+        position.x,
+        position.y,
+        width,
+        height,
+        surface_width,
+        surface_height,
+        0.0,
+        local.scale,
+        local.rotation,
+        local.origin,
     );
     for &overlay_entity in overlays {
         let Some(current) = world.get::<Transform>(overlay_entity).copied() else {
             continue;
         };
         let offset = current.translation - plain.translation;
-        let moved = pose.rotation * Vec3::new(offset.x * pose.scale.x, offset.y * pose.scale.y, 0.0);
+        let moved =
+            pose.rotation * Vec3::new(offset.x * pose.scale.x, offset.y * pose.scale.y, 0.0);
         let mut next = current;
         next.translation.x = pose.translation.x + moved.x;
         next.translation.y = pose.translation.y + moved.y;
@@ -153,7 +174,13 @@ pub(crate) fn build_shadow_texture_rgba(
     width: f32,
     height: f32,
 ) -> Option<(u32, u32, Vec<u8>)> {
-    build_gaussian_shadow_texture_rgba(style.shadow_color, width, height, [0.0; 4], style.shadow_size)
+    build_gaussian_shadow_texture_rgba(
+        style.shadow_color,
+        width,
+        height,
+        [0.0; 4],
+        style.shadow_size,
+    )
 }
 
 fn spawn_blurred_shadow(
@@ -255,11 +282,10 @@ pub fn translate_selection_overlay(world: &mut World, entity: Entity, delta_x: f
 
 pub fn rebuild_selection_overlay(world: &mut World, entity: Entity) -> Result<(), String> {
     remove_selection_overlay(world, entity);
-    if world
+    if !world
         .get::<AtomeSelected>(entity)
         .map(|value| value.0)
         .unwrap_or(false)
-        != true
     {
         return Ok(());
     }

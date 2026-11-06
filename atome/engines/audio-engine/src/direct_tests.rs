@@ -1,7 +1,7 @@
 // The direct path renders a live input in the very block that brought it,
 // keeps its backlog a few device buffers deep, and never lets a peak through.
 
-use atome_mix_graph::direct_render::{DirectRender, BUFFER_FRAMES, LIVE_RING_FRAMES};
+use atome_mix_graph::direct_render::{BUFFER_FRAMES, DirectRender, LIVE_RING_FRAMES};
 use atome_mix_graph::{MixGraph, Program};
 use kira::Frame;
 
@@ -41,7 +41,11 @@ fn the_backlog_stays_a_few_buffers_deep() {
     }
     let mut out = vec![0.0f32; BUFFER_FRAMES as usize * 2];
     render.mix_interleaved(&mut out, 2);
-    assert!(input.available() <= LIVE_RING_FRAMES / 2, "backlog {}", input.available());
+    assert!(
+        input.available() <= LIVE_RING_FRAMES / 2,
+        "backlog {}",
+        input.available()
+    );
 }
 
 #[test]
@@ -70,25 +74,35 @@ fn measures_the_round_trip_on_this_machine() {
     println!("DIRECT_ROUND_TRIP {result}");
 }
 
-
 // Inside an audio unit (todo/effets_generateurs_audio L8): a strip whose IN is
 // `host` hears what the host's render block pushes, played in that block, and
 // the unit stops copying the dry input only while one listens.
 #[test]
 fn the_host_input_reaches_the_strip_that_listens_to_it() {
-    use super::host_output::{push_host_input, HOST_INPUT_ID};
+    use super::host_output::{HOST_INPUT_ID, push_host_input};
     let mut graph = MixGraph::with_live_capacity(48_000, LIVE_RING_FRAMES);
     let mut render = DirectRender::new(graph.effect_builder().into_effect(), 48_000);
-    graph.apply(program(&LIVE.replace("\"device_id\":\"mic\"", &format!("\"device_id\":\"{HOST_INPUT_ID}\"")))).expect("apply");
+    graph
+        .apply(program(&LIVE.replace(
+            "\"device_id\":\"mic\"",
+            &format!("\"device_id\":\"{HOST_INPUT_ID}\""),
+        )))
+        .expect("apply");
     let (device, input) = graph.live_inputs().pop().expect("live input");
     assert_eq!(device, HOST_INPUT_ID);
     let frames = BUFFER_FRAMES as usize;
     let silent = vec![0.0f32; frames];
-    assert!(!push_host_input(&silent, &silent), "nobody listens yet: the dry input stays");
+    assert!(
+        !push_host_input(&silent, &silent),
+        "nobody listens yet: the dry input stays"
+    );
     super::live_input::sync_direct(vec![(device, input)]).expect("listen");
     let mut left = vec![0.0f32; frames];
     left[0] = 0.5;
-    assert!(push_host_input(&left, &left), "a strip listens: the chain plays the input");
+    assert!(
+        push_host_input(&left, &left),
+        "a strip listens: the chain plays the input"
+    );
     let mut out = vec![0.0f32; frames * 2];
     render.mix_interleaved(&mut out, 2);
     assert!((out[0] - 0.25).abs() < 1.0e-3, "frame 0 = {}", out[0]);

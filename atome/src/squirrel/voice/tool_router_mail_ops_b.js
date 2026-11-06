@@ -126,6 +126,7 @@ export const executeMailOpsB = async (ctx) => {
             });
         }
 
+        // biome-ignore lint/suspicious/noFallthroughSwitchClause: a prompt with its reply text is a reply.
         case 'reply_prompt':
             if (!request.draft?.reply_text) {
                 return createStructuredResult({
@@ -133,8 +134,6 @@ export const executeMailOpsB = async (ctx) => {
                     reply_text: isEnglish(locale) ? 'What should I reply to this mail?' : 'Que veux-tu que je reponde a ce mail ?'
                 });
             }
-        // fall through to reply when draft_text is available
-
         case 'reply': {
             const replyTrust = checkMailTrust(workingMemory, locale, 'reply');
             if (replyTrust && !replyTrust.__trust_warning) return replyTrust;
