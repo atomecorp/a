@@ -75,7 +75,7 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 - Reste : toute la mission.
 
 ### R-119 — Achats récurrents et boutiques : analyse de faisabilité (2026-11-05)
-- Statut : OUVERT — les 3 maquettes VALIDÉES (m3 le 2026-11-06, « oui je valide ») ; reste à coder les lots L1–L5
+- Statut : CODÉ, lots L1–L5 FAITS (2026-11-06, « ok vas y je valide ») — restent seulement des blocages hors de ma main (voir « Reste » plus bas)
 - Source : toi, 2026-11-05 : « pour pouvoir acheter en ligne… faire des listes et, par exemple, tous les mois, commander
   au même endroit… Nutri & Co, NutriPure… ou alors on le valide manuellement… il me rappelle à chaque fois que je n'en ai
   plus… comment on fait pour gérer les boutiques… gérer ça dans l'agenda, et avec les projets et les objectifs ». Analyse
@@ -106,8 +106,28 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   pertinent en version réduite (N0 rappel + lien, N1 panier prérempli, N2 suivi de l'abonnement de la boutique ; N3 eVe
   qui paie écarté). Preuves : `temp/achats_recurrents/cart_chain.probe.mjs` (Nutri&Co, 2 produits au panier, capture
   `out_NutriCo_cart.png`), `temp/achats_recurrents/nutripure_cart.probe.mjs` (3 articles au panier).
-- Reste : les 3 maquettes (fiche d'une boutique du web, plan d'achat avec l'outil « Commander », notification
-  « à commander ») à faire valider ; puis lots L1–L5 ; tester chaque boutique du catalogue avant son entrée. Rien n'est codé.
+- FAIT (2026-11-06), lots L1–L5 :
+  L1 stock et autonomie d'un complément (Boîte, Stock sur sa fiche ; `health_product_supply.js`, `health_products.restock`) ;
+  L2 catalogue des 28 boutiques (`atome/src/shared/web_shop_catalogue.js`) et boutiques à soi (`shop.web_shop_add`) ;
+  L3 plan par boutique, rythme Conso / 15 / 30 / 60 j / Abonn., objectif (fermé → le plan s'arrête), budget, événement
+  « Commande … » de l'Agenda (`eVe/domains/shop/purchase_plans.js`, `web_shop_commands.js`, commandes `shop.plans`,
+  `plan_set`, `plan_item`, `plan_remove`, `plan_decline`, `plan_order`, `web_shops`, `web_shop_site`) ; L4 page d'une
+  boutique du web dans Boutiques (m1), « Achat » au maintien d'un complément et d'un article de Mes courses (m2), panier
+  Nutri&Co rempli par ses liens et stock réapprovisionné à la commande ; L5 proposition dans la phrase d'eVe (m3), son
+  maintien « Ne plus proposer ». Un plan qui contient un complément est donnée de santé : invisible pour l'IA et MCP.
+  Preuves : `temp/achats_recurrents/code/pure.probe.mjs` (calcul et catalogue), `flow.probe.mjs` 18/18 téléphone et
+  ordinateur (vrai panier Nutri&Co 23×2 + 25×1, stock 100 → 340, plan caché à l'IA, objectif fermé), `screens.probe.mjs`
+  7/7 (gestes réels m2a, fiche, m2b), `tools.probe.mjs` 9/9 (Rythme, Favori, Site, ajout par l'adresse d'un produit,
+  proposition puis « Ne plus proposer ») ; captures `temp/achats_recurrents/code/*.png`. `registry:check`, Biome,
+  `check:browser-shared-contract-imports`, `check:no-fallbacks` : ok.
+- Reste (bloqué, hors de ma main) :
+  (1) panier Amazon en un lien = l'identifiant Amazon Partenaires d'atome (Q4) ; comptes Awin / Effiliation / Nutri&Co à
+  ouvrir par toi ; d'ici là Amazon = rappel + lien (N0), et la mention « lien affilié » n'est pas montrée (aucun compte) ;
+  (2) Nutrimuscle : son lien Shopify laisse le panier vide, Myprotein n'est pas Shopify → N0 tant qu'aucun lien n'est prouvé ;
+  (3) essai appareil par toi (iOS, Tauri : la suite de liens s'ouvre l'une après l'autre dans le navigateur du système) ;
+  (4) changer la quantité d'un produit à l'écran : aujourd'hui par MCP / l'assistant (`shop.plan_item quantity`) ou en le
+  retirant puis rajoutant ; un réglage à l'écran est un élément neuf → maquette à valider d'abord (règle 16) ;
+  (5) commissions d'affiliation → grand livre de R-120 quand il existera.
 
 ### R-118 — Refonte Rust-first : étapes 1 (hygiène) et 2 (atome-store) faites, restes et suite (2026-11-04)
 - Statut : EN COURS, tout le code FAIT (2026-11-06) — étapes 1 à 7 FAITES : étape 3 L3.0–L3.11 codés (visio portée en Rust sur mediasoup 0.21, parité 58/58 et alarme 28/28 ; atome-server sert seul, aucun processus Node, 15/15 ; iOS L3.11 22/22) ; étape 4 bande en voie B, étape 5 scène et gestes, étape 6 texte T1 (gardé, décision du 2026-11-06), étape 7 cpal 0.18 / kira 0.12.6. Contrôles finaux FAITS (`check:rust` tout ok et `deny`, `check:js`, D20 12/12, timeline, WASM final). Restent, hors de ma main : (1) bascule L3.10 = copie des coffres de prod à fournir par toi, puis retrait du JS Fastify/visio Node et déploiement par toi ; (2) essais appareil par toi (iPad : bande, texte, masques, défilement, serveur embarqué et AUv3 ; écoute ; TLS Android).

@@ -166,6 +166,13 @@ Le rapport final (dans ce fichier) dira :
 - [x] 8. Projets et objectifs
 - [x] 9. Assistant et commandes
 - [x] 10. Bilan et recommandation
+- [x] Maquettes m1–m3 validées (2026-11-06)
+- [x] L1 stock et autonomie d'un complément (2026-11-06)
+- [x] L2 catalogue et boutiques à soi (2026-11-06)
+- [x] L3 plan, rythme, objectif, budget, Agenda (2026-11-06)
+- [x] L4 page de la boutique, Achat, panier rempli, stock réapprovisionné (2026-11-06)
+- [x] L5 proposition d'eVe et « Ne plus proposer » (2026-11-06)
+- [ ] Amazon (identifiant Partenaires), Nutrimuscle, réglage de quantité à l'écran (maquette) — bloqués, voir R-119
 
 # Résultats de l'analyse (2026-11-05)
 

@@ -18,11 +18,14 @@ export const isExternalPageUrl = (value) => {
 
 // A web page must open its window during the user's gesture: `reserve()` is
 // called first (synchronously from the activation), the address is set once
-// it is known. Native hosts open the system browser instead.
-export function reserveExternalWindow() {
+// it is known. Native hosts open the system browser instead. `keepOpener`: the
+// window stays this page's own so it can be led through several addresses
+// (`openExternalSequence`); the browser lets a page navigate only a window it
+// opened and still holds. Only a shop of the catalogue is opened so (R-119 Q5).
+export function reserveExternalWindow({ keepOpener = false } = {}) {
     if (iosOpenUrl() || tauriInvoke() || typeof env()?.open !== 'function') return null;
     const popup = env().open('about:blank', '_blank');
-    if (popup) popup.opener = null;
+    if (popup && !keepOpener) popup.opener = null;
     return popup || null;
 }
 

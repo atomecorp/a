@@ -40,6 +40,13 @@ export function validateProfile(profile, { bundle, team, now = Date.now() }) {
     return [...profile.ProvisionedDevices].sort();
 }
 
+// Every product the archive embeds, with its bundle and release entitlements (project.pbxproj, configuration/*.xcconfig).
+const APPLICATION = { bundle: 'one.atome.app', entitlements: 'application/atomeRelease.entitlements' };
+const EMBEDDED_EXTENSIONS = {
+    'atomeAudioUnit.appex': { bundle: 'one.atome.app.atome', entitlements: 'auv3/auv3Release.entitlements' },
+    'atomeLiveActivity.appex': { bundle: 'one.atome.app.liveactivity', entitlements: null },
+};
+
 export function validateIpa(ipa, directory, team) {
     const output = path.join(directory, 'verified-ipa');
     fs.mkdirSync(output, { recursive: true });
@@ -49,9 +56,11 @@ export function validateIpa(ipa, directory, team) {
     if (apps.length !== 1) throw new Error('ipa_requires_one_app');
     const app = path.join(payload, apps[0]);
     const plugins = path.join(app, 'PlugIns');
-    const extensions = fs.readdirSync(plugins).filter(name => name.endsWith('.appex'));
-    if (extensions.length !== 1) throw new Error('ipa_requires_auv3');
+    const extensions = fs.readdirSync(plugins).filter(name => name.endsWith('.appex')).sort();
+    if (JSON.stringify(extensions) !== JSON.stringify(Object.keys(EMBEDDED_EXTENSIONS).sort()))
+        throw new Error(`ipa_extensions_changed:${extensions.join(',')}`);
     const products = [app, ...extensions.map(name => path.join(plugins, name))];
+    const expected = product => product === app ? APPLICATION : EMBEDDED_EXTENSIONS[path.basename(product)];
     let deviceSet;
     let version;
     let build;
@@ -59,7 +68,7 @@ export function validateIpa(ipa, directory, team) {
     const checks = products.map(product => {
         run('/usr/bin/codesign', ['--verify', '--deep', '--strict', product]);
         const info = readPlist(run('/usr/bin/plutil', ['-convert', 'xml1', '-o', '-', path.join(product, 'Info.plist')]));
-        const expectedBundle = product === app ? 'one.atome.app' : 'one.atome.app.atome';
+        const { bundle: expectedBundle, entitlements } = expected(product);
         if (info.CFBundleIdentifier !== expectedBundle) throw new Error('bundle_identifier_changed');
         const profile = readProfile(path.join(product, 'embedded.mobileprovision'));
         const devices = validateProfile(profile, { bundle: expectedBundle, team });
@@ -81,14 +90,15 @@ export function validateIpa(ipa, directory, team) {
                     throw new Error(`entitlement_not_provisioned:${key}`);
             } else if (allowed !== value) throw new Error(`entitlement_not_provisioned:${key}`);
         }
-        const source = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../platforms/ios/atome-auv3',
-            product === app ? 'application/atomeRelease.entitlements' : 'auv3/auv3Release.entitlements');
-        const required = readPlist(fs.readFileSync(source, 'utf8'));
+        // A target without an entitlements file (the Live Activity widget) requires none beyond its identity.
+        const required = entitlements
+            ? readPlist(fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../platforms/ios/atome-auv3', entitlements), 'utf8'))
+            : {};
         for (const [key, value] of Object.entries(required)) {
             if ((key.startsWith('com.apple.developer.') || key === 'aps-environment' || key === 'com.apple.security.application-groups')
                 && JSON.stringify(signed[key]) !== JSON.stringify(value)) throw new Error(`required_entitlement_changed:${key}`);
         }
-        const prefix = path.join(directory, `signer-${checksIndex(product, app)}`);
+        const prefix = path.join(directory, `signer-${expectedBundle}`);
         run('/usr/bin/codesign', ['-d', `--extract-certificates=${prefix}`, product], { stdio: ['pipe', 'pipe', 'ignore'] });
         const certificate = `${prefix}0`;
         run('/usr/bin/openssl', ['x509', '-inform', 'DER', '-in', certificate, '-checkend', '0', '-noout']);
@@ -101,7 +111,6 @@ export function validateIpa(ipa, directory, team) {
     return { team, version, build, signature: 'verified', sha256: sha256File(ipa), size: fs.statSync(ipa).size, products: checks };
 }
 
-const checksIndex = (product, app) => product === app ? 'app' : 'extension';
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
     try {

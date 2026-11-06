@@ -140,7 +140,7 @@ export const MCP_CONTRACT_FAMILIES = Object.freeze([
     // Selling and buying are the user's to confirm (the payment is simulated for now).
     { id: 'shop', commands: SHOP_COMMANDS, validate: validateShopInput, noClient: 'PRESENTATION_UNAVAILABLE',
         confirmed: SHOP_CONFIRMED_COMMANDS, instructions: SHOP_ASSISTANT_INSTRUCTIONS,
-        preload: ['shop.browse', 'shop.open', 'shop.sell', 'shop.mine', 'shop.buy', 'shop.write'] },
+        preload: ['shop.browse', 'shop.open', 'shop.sell', 'shop.mine', 'shop.buy', 'shop.write', 'shop.plans', 'shop.plan_item'] },
     // Asking a coach for a session, cancelling one, publishing one's coaching are the user's to confirm.
     { id: 'coaches', commands: COACH_COMMANDS, validate: validateCoachInput, noClient: 'PRESENTATION_UNAVAILABLE',
         confirmed: COACH_CONFIRMED_COMMANDS, instructions: COACH_ASSISTANT_INSTRUCTIONS,

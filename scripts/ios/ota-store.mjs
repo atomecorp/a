@@ -59,8 +59,9 @@ export function stage(id, root = OTA_ROOT) {
 export async function publish(report, origin, root = OTA_ROOT) {
     if (!validId(report?.id) || report.team !== '2W25PVZ57F' || report.signature !== 'verified'
         || !/^[a-f0-9]{64}$/.test(report.sha256) || !Number.isSafeInteger(report.size) || report.size < 1
-        || report.products?.length !== 2) throw new Error('invalid_publication_report');
-    const expected = ['one.atome.app', 'one.atome.app.atome'];
+        || report.products?.length !== 3) throw new Error('invalid_publication_report');
+    // signing.mjs#validateIpa order: the application, then its extensions by bundle name (AUv3, Live Activity).
+    const expected = ['one.atome.app', 'one.atome.app.atome', 'one.atome.app.liveactivity'];
     if (report.products.some((p, index) => p.bundle !== expected[index] || !(Date.parse(p.expires) > Date.now()) || p.deviceCount < 1))
         throw new Error('invalid_provisioning_report');
     const originUrl = new URL(origin);
