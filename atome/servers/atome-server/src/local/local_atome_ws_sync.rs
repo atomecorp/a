@@ -56,14 +56,25 @@ impl Subscriptions {
     {
         let mut known: HashMap<String, i64> = cursors.into_iter().collect();
         known.entry("directory.public".into()).or_insert(0);
-        for stream in announced {
-            known.entry(stream).or_insert(0);
+        for stream in &announced {
+            known.entry(stream.clone()).or_insert(0);
         }
+        // The server's order is kept (the account's own record, its profile, comes first:
+        // a new device's home awaits it); the streams it does not name follow by id.
+        let rank: HashMap<&str, usize> = announced
+            .iter()
+            .enumerate()
+            .rev()
+            .map(|(index, stream)| (stream.as_str(), index))
+            .collect();
         let mut fresh: Vec<_> = known
             .into_iter()
             .filter(|(stream, _)| !self.streams.contains(stream))
             .collect();
-        fresh.sort_by(|a, b| a.0.cmp(&b.0));
+        fresh.sort_by(|a, b| {
+            let place = |stream: &str| rank.get(stream).copied().unwrap_or(usize::MAX);
+            place(&a.0).cmp(&place(&b.0)).then_with(|| a.0.cmp(&b.0))
+        });
         for batch in fresh.chunks(if self.batch { 500 } else { 1 }) {
             let id = if self.batch {
                 uuid::Uuid::new_v4().to_string()
@@ -360,6 +371,54 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(sent.lock().unwrap().len(), 3);
+    }
+
+    #[tokio::test]
+    async fn the_announced_order_is_kept_before_the_known_streams() {
+        let sent = Arc::new(Mutex::new(Vec::<Value>::new()));
+        let captured = sent.clone();
+        let mut sink = Box::pin(futures_util::sink::unfold(
+            captured,
+            |captured, message: Message| async move {
+                if let Message::Text(text) = message {
+                    captured
+                        .lock()
+                        .unwrap()
+                        .push(serde_json::from_str(&text).unwrap());
+                }
+                Ok::<_, std::convert::Infallible>(captured)
+            },
+        ));
+        let mut state = Subscriptions {
+            batch: true,
+            ..Default::default()
+        };
+        state
+            .subscribe(
+                &mut sink,
+                vec![("0-known".into(), 7)],
+                vec!["f-profile".into(), "1-other".into(), "0-known".into()],
+            )
+            .await
+            .unwrap();
+        let streams = sent.lock().unwrap()[0]["streams"].clone();
+        assert_eq!(
+            streams
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|entry| (
+                    entry["stream"].as_str().unwrap().to_string(),
+                    entry["cursor"].as_i64().unwrap()
+                ))
+                .collect::<Vec<_>>(),
+            vec![
+                ("f-profile".to_string(), 0),
+                ("1-other".to_string(), 0),
+                ("0-known".to_string(), 7),
+                ("directory.public".to_string(), 0)
+            ]
+        );
     }
 
     #[test]

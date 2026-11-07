@@ -179,12 +179,16 @@ impl VaultRouter {
             .await
     }
 
+    // A device subscribes in this order, and an old account holds thousands of streams:
+    // the account's own record (its profile, which a new device's home awaits) comes first.
     pub async fn list_authorized_streams(&self, principal: &str) -> Result<Vec<String>, String> {
         let owned = self
             .central
             .all(
-                "SELECT stream_id FROM vault_stream_registry WHERE vault_principal_id = ? ORDER BY stream_id".into(),
-                vec![json!(principal)],
+                "SELECT stream_id FROM vault_stream_registry WHERE vault_principal_id = ?
+                 ORDER BY atome_id IS NOT ?, stream_id"
+                    .into(),
+                vec![json!(principal), json!(principal)],
             )
             .await?;
         let shared = self
