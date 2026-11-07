@@ -18,6 +18,13 @@ Format d'une entrée : un titre `### R-NNN — …`, puis une ligne `- Statut : 
 d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui est validé, ce qui reste.
 
 ## Entrées à exécuter
+### R-122 — Page d'installation iOS (atome.one/ios/install) vide : réparée et déployée (2026-11-06)
+- Statut : FAIT — déployé le 6 nov. sur ton autorisation (`scripts/ios/deploy.mjs --apply`, sauvegarde serveur `/var/backups/atome-ios-ota/0774ee91-56ce-460a-9fa8-0053ee554107`) ; preuve : la CSP servie porte le hash de l'import map, et la sonde `temp/ios_install_probe/probe.mjs` sur https://atome.one affiche la page sur bureau et mobile (« Link unavailable » avec un faux jeton, la route /ios/session répond) ; le lien avec un vrai jeton se confirme sur ton iPhone
+- Source : toi, 2026-11-06 : « le lien pour la page apparaît sur desktop mais sur mobile je vois plus le lien… enquête dis-moi et répare ».
+- Cause : la page importe `eVe/i18n/i18n.js` → `languages.js` → `languages_coaches.js` → `#shared/coach_contract.js` ; sans import map, le navigateur ne résout pas `#shared/` (« Failed to resolve module specifier »), le script s'arrête, la page reste blanche (constaté en production sur Chromium bureau aussi).
+- Fait en local : import map dans `atome/src/ios-install.html` (chemins absolus), son hash sha256 admis par la CSP dans `server/http_ios_ota_routes.js#registerIosOtaRoutes`. Sonde `temp/ios_install_probe/` (serveur réel des routes + Playwright bureau et mobile) : « Install atome » affiché sur les deux.
+- Reste : rien du côté du code. Le serveur tourne sur le commit a3dbe8b96 du 2 nov. (le reste de l'app n'y est pas à jour ; sans lien avec cette panne).
+
 ### R-121 — Site + domaine + hébergement : audit, paiement global réservé à deux téléphones (2026-11-05)
 - Statut : ATTENTE R-120 — le paiement s'établit dans la session R-120 « Évaluation de tâche et faisabilité » (toi, 5 nov.) ; consignes et 10 questions transmises le 5 nov., en attente de son partage et de son API de débit ; ma part : registraire OVH réel + domaine payé en crédits
 - Source : toi, 2026-11-05 : « une audit et des screenshots de la tâche… acheter un nom de domaine, l'héberger chez atome,
@@ -407,6 +414,21 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   - À te dire à la fin : deux anciennes clés privées restent dans l'historique git d'atome (`certs/key.pem` 2025-11-21→26, une clé dans
     `src/squirrel/mail/node_protocol_transport.integration.test.mjs` 2026-03-14→07-03) : les considérer comme
     publiques si elles ont servi ; les effacer = réécrire l'historique (ta demande explicite seulement).
+- iPhone bloqué sur « Le démarrage continue… » (toi, 2026-11-06, capture du téléphone). Depuis L3.11 la page ne marche que par le
+  serveur local Rust, qui ne démarre pas sans la clé de session du trousseau (`LocalServer.swift#sessionKey`) : un refus du
+  trousseau laissait la page attendre sans fin. Reproduit sur le simulateur iPhone 17 Pro (build non signée : `read -34018`,
+  même écran). FAIT : l'échec du serveur est désormais explicite (« Le démarrage a échoué » + Réessayer, qui relance le
+  serveur ; code du trousseau dans le journal) ; build signée : écran de connexion en 5 s. Simulateur : signalsmith-stretch
+  ne compilait plus (bindgen refuse `arm64-apple-ios-sim`) ; corrigé dans `platforms/ios/build_bevy_renderer.sh`, prouvé
+  depuis zéro. ATTENTE UTILISATEUR : la cause exacte sur TON téléphone (session ouverte, vrai coffre) n'est lisible que
+  sur l'appareil : le brancher en USB, je lance l'app avec sa console (`[BOOT_FAILURE]` / `LocalServer failed: …`).
+  - Simulateur (toi : « ça doit au moins booter sur simulateur ») : build signée, la console montre serveur local, connexion
+    et modules prêts (`authentication_ready` 5 s), puis l'affichage s'arrête : `navigator.gpu` présent mais `requestAdapter()`
+    rend null dans la WebView du simulateur (WebGL2 oui). Préexistant (le renderer n'a jamais eu d'autre voie ; déjà noté le
+    12 oct.), pas lié à la refonte. `audio_command_unknown:voice_start` = moteur de voix absent du simulateur, attendu.
+    ATTENTE UTILISATEUR : faire tourner la vraie app iOS sur le Mac (« Designed for iPad », vrai GPU) demande une build signée
+    avec ton équipe (`-allowProvisioningUpdates`), refusée par le mode auto ; une voie WebGL2 pour le simulateur n'est pas
+    viable (les passes GPU masques/ombres demandent des storage textures) et serait un second renderer (règle « un seul »).
 - Défaut relevé, gardé tel quel (comportement Fastify, décision 5) : un undo rejoué avec le même `requestId` répond
   `event_id_conflict` au lieu de rendre le résultat du premier (fixture étape 56).
 ### R-117 — Écran guidé « deux façons » : textes superposés, prononciation d'eVe (2026-11-04)

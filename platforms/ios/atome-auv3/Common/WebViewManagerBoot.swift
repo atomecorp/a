@@ -136,6 +136,7 @@ extension WebViewManager {
         mainLoadTimer = nil
         mainLoadDone = false
         resetBootTelemetry()
+        if FeatureFlags.startLocalHTTPServer { LocalServer.shared.start() }
         bootRestartHandler?()
         startBootWatchdog()
         markBootMilestone(reason)

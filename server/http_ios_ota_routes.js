@@ -2,12 +2,19 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 import { OTA_ROOT, readJson, current, storePath, cleanup, withStoreLock } from '../scripts/ios/ota-store.mjs';
 import { DOWNLOAD_TTL_MS, CURRENT_MANIFEST_PATH, tokenHash, manifest, issueCapability, verifyCapability } from '../scripts/ios/ota-contract.mjs';
 
 export function registerIosOtaRoutes(server, { root = OTA_ROOT, origin = 'https://atome.one' } = {}) {
     if (!fs.existsSync(path.join(root, 'settings.json'))) return;
     const shell = fileURLToPath(new URL('../atome/src/ios-install.html', import.meta.url));
+    // The shell's import map resolves the '#squirrel/', '#shared/' and '#utils/' specifiers its
+    // modules import (as atome/src/index.html does); the CSP admits that one inline script by its hash.
+    const html = fs.readFileSync(shell, 'utf8');
+    const mapOpen = '<script type="importmap">';
+    const mapStart = html.indexOf(mapOpen) + mapOpen.length;
+    const importMapHash = createHash('sha256').update(html.slice(mapStart, html.indexOf('</script>', mapStart))).digest('base64');
     const active = new Map();
     const settings = () => readJson(path.join(root, 'settings.json'));
     const readUser = (hash, config) => config.users[hash]?.enabled === true;
@@ -22,8 +29,8 @@ export function registerIosOtaRoutes(server, { root = OTA_ROOT, origin = 'https:
     });
     server.get('/ios/install', { logLevel: 'silent' }, async (_request, reply) => {
         privateHeaders(reply).type('text/html; charset=utf-8');
-        reply.header('Content-Security-Policy', "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'");
-        return reply.send(fs.createReadStream(shell));
+        reply.header('Content-Security-Policy', `default-src 'none'; script-src 'self' 'sha256-${importMapHash}'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'`);
+        return reply.send(html);
     });
     server.post('/ios/session', { logLevel: 'silent', bodyLimit: 1024 }, async (request, reply) => {
         privateHeaders(reply);

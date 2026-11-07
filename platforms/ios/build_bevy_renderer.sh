@@ -92,6 +92,9 @@ for ARCH in ${ARCHS:-arm64}; do
         RUST_TARGET="x86_64-apple-ios"
       else
         RUST_TARGET="aarch64-apple-ios-sim"
+        # bindgen (signalsmith-stretch) hands clang `arm64-apple-ios-sim`, a triple clang refuses; the
+        # simulator's own triple comes last and wins.
+        export BINDGEN_EXTRA_CLANG_ARGS_aarch64_apple_ios_sim="--target=arm64-apple-ios-simulator"
       fi
       ;;
     *)

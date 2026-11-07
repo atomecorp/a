@@ -1,0 +1,39 @@
+{
+  "sources": [
+    {"id": "anses_2012_sa_0228", "publisher": "Anses", "title": "Avis relatif aux risques liés à la présence de « levure de riz rouge » dans les compléments alimentaires (saisine 2012-SA-0228)", "licence": "Citation, contenu non reproduit", "url": "https://www.anses.fr/fr/system/files/NUT2012sa0228.pdf", "version": "2014-02-14", "retrieved": "2026-11-05"},
+    {"id": "anses_2016_sa_0209", "publisher": "Anses", "title": "Avis relatif aux risques liés à la consommation de compléments alimentaires contenant de la mélatonine (saisine 2016-SA-0209)", "licence": "Citation, contenu non reproduit", "url": "https://www.anses.fr/fr/system/files/NUT2016SA0209.pdf", "version": "2018-02-23", "retrieved": "2026-11-05"},
+    {"id": "anses_2019_sa_0111", "publisher": "Anses", "title": "Avis relatif à l'évaluation des risques liés à la consommation de compléments alimentaires contenant du curcuma (saisine 2019-SA-0111)", "licence": "Citation, contenu non reproduit", "url": "https://www.anses.fr/fr/system/files/NUT2019SA0111.pdf", "version": "2022-05-12", "retrieved": "2026-11-05"},
+    {"id": "anses_2014_sa_0096", "publisher": "Anses", "title": "Avis relatif aux risques liés à la consommation de compléments alimentaires contenant de la spiruline (saisine 2014-SA-0096)", "licence": "Citation, contenu non reproduit", "url": "https://www.anses.fr/fr/system/files/NUT2014SA0096.pdf", "version": "2017-08-04", "retrieved": "2026-11-05"},
+    {"id": "anses_2012_sa_0200", "publisher": "Anses", "title": "Avis relatif aux risques liés à la présence dans les compléments alimentaires de p-synéphrine ou d'ingrédients obtenus à partir de fruits de Citrus spp. en contenant (saisine 2012-SA-0200)", "licence": "Citation, contenu non reproduit", "url": "https://www.anses.fr/fr/system/files/NUT2012sa0200.pdf", "version": "2014-03-14", "retrieved": "2026-11-05"}
+  ],
+  "aliases": [
+    {"substance": "millepertuis", "names": ["millepertuis", "hypericum perforatum"]},
+    {"substance": "pamplemousse jus et fruit", "names": ["pamplemousse", "citrus paradisi", "citrus x paradisi"]},
+    {"substance": "ginkgo", "names": ["ginkgo", "ginkgo biloba"]},
+    {"substance": "cafeine", "names": ["cafeine", "coffea arabica", "coffea canephora", "paullinia cupana", "guarana", "camellia sinensis", "ilex paraguariensis", "cola nitida", "cola acuminata"]},
+    {"substance": "fer", "names": ["fer", "ferreux", "ferrique", "bisglycinate de fer", "pyrophosphate ferrique", "fumarate ferreux", "gluconate ferreux", "sulfate ferreux", "lactoferrine"]},
+    {"substance": "calcium", "names": ["calcium", "calcique", "lithothamne", "lithothamnium", "lithothamnion"]},
+    {"substance": "magnesium", "names": ["magnesium", "magnesien", "magnesienne"]},
+    {"substance": "zinc", "names": ["zinc"]},
+    {"substance": "potassium", "names": ["potassium", "potassique"]},
+    {"substance": "vitamine d", "names": ["vitamine d", "vitamine d3", "vitamine d2", "cholecalciferol", "ergocalciferol"]},
+    {"substance": "vitamine a", "names": ["vitamine a", "retinol", "acetate de retinyle", "palmitate de retinyle"]},
+    {"substance": "levure de riz rouge", "names": ["levure de riz rouge", "monascus purpureus", "monacoline", "monacoline k"]},
+    {"substance": "melatonine", "names": ["melatonine"]},
+    {"substance": "curcuma", "names": ["curcuma", "curcuma longa", "curcumine", "curcuminoides"]},
+    {"substance": "spiruline", "names": ["spiruline", "arthrospira platensis", "arthrospira maxima", "spirulina"]},
+    {"substance": "synephrine", "names": ["synephrine", "p synephrine", "citrus aurantium"]}
+  ],
+  "rules": [
+    {"id": "red_yeast_rice_statins", "subject": "levure de riz rouge", "conditions": [], "treatments": ["inhibiteurs de l'hmg coa reductase statines"], "level": "avoid", "text": "La levure de riz rouge contient de la monacoline K (lovastatine) : elle n'est pas une alternative aux statines et ne se prend pas avec un traitement hypocholestérolémiant.", "source": "anses_2012_sa_0228"},
+    {"id": "red_yeast_rice_populations", "subject": "levure de riz rouge", "conditions": ["pregnancy", "breastfeeding", "children_adolescents", "over_70", "chronic_kidney_disease", "muscle_disease", "untreated_hypothyroidism", "liver_disease"], "treatments": [], "level": "avoid", "text": "Ne pas en consommer : femmes enceintes ou allaitantes, enfants et adolescents, plus de 70 ans, insuffisance rénale, maladie musculaire, hypothyroïdie non traitée, atteinte hépatique évolutive.", "source": "anses_2012_sa_0228"},
+    {"id": "red_yeast_rice_grapefruit_alcohol", "subject": "levure de riz rouge", "conditions": [], "treatments": ["pamplemousse jus et fruit", "alcool boisson ou excipient"], "level": "avoid", "text": "À éviter chez les forts consommateurs de pamplemousse (jus ou fruit) ou d'alcool ; demander conseil à un professionnel de santé avant d'en prendre.", "source": "anses_2012_sa_0228"},
+    {"id": "melatonin_populations", "subject": "melatonine", "conditions": ["pregnancy", "breastfeeding", "children_adolescents", "autoimmune_disease", "sustained_vigilance"], "treatments": [], "level": "avoid", "text": "Déconseillée : femmes enceintes ou allaitantes, enfants et adolescents, maladies inflammatoires ou auto-immunes, activité demandant une vigilance soutenue.", "source": "anses_2016_sa_0209"},
+    {"id": "melatonin_medical_advice", "subject": "melatonine", "conditions": ["epilepsy", "asthma", "mood_disorders"], "treatments": [], "level": "advice_first", "text": "Pas sans l'avis du médecin en cas d'épilepsie, d'asthme ou de troubles de l'humeur, du comportement ou de la personnalité.", "source": "anses_2016_sa_0209"},
+    {"id": "turmeric_biliary", "subject": "curcuma", "conditions": ["biliary_disease", "liver_disease"], "treatments": [], "level": "avoid", "text": "Déconseillé en cas de pathologie des voies biliaires ou d'altération de la fonction hépatique (cas d'hépatites rapportés).", "source": "anses_2019_sa_0111"},
+    {"id": "turmeric_treatments", "subject": "curcuma", "conditions": [], "treatments": ["anticoagulants oraux", "antivitamines k", "cytotoxiques", "immunosuppresseurs"], "level": "advice_first", "text": "Risque d'interaction avec les anticoagulants, les anticancéreux et les immunosuppresseurs : pas sans avis médical.", "source": "anses_2019_sa_0111"},
+    {"id": "spirulina_populations", "subject": "spiruline", "conditions": ["phenylketonuria", "allergic_terrain", "muscle_disease", "liver_disease"], "treatments": [], "level": "avoid", "text": "Déconseillée en cas de phénylcétonurie, de terrain allergique ou de vulnérabilité musculaire ou hépatique ; préférer les circuits les mieux contrôlés.", "source": "anses_2014_sa_0096"},
+    {"id": "synephrine_caffeine", "subject": "synephrine", "conditions": [], "treatments": ["cafeine"], "level": "avoid", "text": "Ne pas associer la p-synéphrine (Citrus aurantium) à la caféine ni à une préparation qui en contient ; repère : pas plus de 20 mg de p-synéphrine par jour.", "source": "anses_2012_sa_0200"},
+    {"id": "synephrine_populations", "subject": "synephrine", "conditions": ["pregnancy", "breastfeeding", "children_adolescents", "hypertension", "heart_disease", "depression"], "treatments": [], "level": "avoid", "text": "Fortement déconseillée : femmes enceintes ou allaitantes, enfants et adolescents, personnes traitées au long cours pour hypertension, cardiopathie ou dépression.", "source": "anses_2012_sa_0200"}
+  ]
+}

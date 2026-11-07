@@ -313,6 +313,8 @@ yarn-error.log*
 
 # Local databases (outside src/ to avoid hot-reload)
 data/
+# Curated reference data compiled into atome-health-ref (include_str!), not a local database.
+!atome/engines/atome-health-ref/data/
 *.db
 *.db-journal
 *.db-wal

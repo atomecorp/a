@@ -29,7 +29,10 @@ final class LocalServer {
                 if let time = self.backgroundTime { atome_ios_local_server_quiesce(time.0, time.1) }
                 WebViewManager.announceLocalHTTPPort(port)
             } catch {
+                // The page works through this server only: its boot fails now, and a retry starts it again.
+                self.started = false
                 print("❌ LocalServer failed: \(error.localizedDescription)")
+                DispatchQueue.main.async { WebViewManager.reportBootFailure(reason: "local_server_failed") }
             }
         }
     }
@@ -128,7 +131,9 @@ final class LocalServer {
         var item: CFTypeRef?
         let status = SecItemCopyMatching(read as CFDictionary, &item)
         if status == errSecSuccess, let data = item as? Data, data.count == 32 { return data }
-        guard status == errSecItemNotFound else { throw Failure(errorDescription: "local_auth_key_unavailable") }
+        guard status == errSecItemNotFound else {
+            throw Failure(errorDescription: "local_auth_key_unavailable: read \(status)")
+        }
         var bytes = [UInt8](repeating: 0, count: 32)
         guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else {
             throw Failure(errorDescription: "local_auth_key_unavailable")
@@ -136,8 +141,9 @@ final class LocalServer {
         var write = query
         write[kSecValueData as String] = Data(bytes)
         write[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        guard SecItemAdd(write as CFDictionary, nil) == errSecSuccess else {
-            throw Failure(errorDescription: "local_auth_key_unavailable")
+        let added = SecItemAdd(write as CFDictionary, nil)
+        guard added == errSecSuccess else {
+            throw Failure(errorDescription: "local_auth_key_unavailable: add \(added)")
         }
         return Data(bytes)
     }
