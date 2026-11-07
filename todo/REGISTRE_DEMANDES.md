@@ -187,8 +187,9 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
     portage Rust (`atome-server/src/ios_ota/mod.rs`) avait perdu le hash de l'import map dans la CSP (Fastify
     l'ajoutait) : Chromium refuse l'import map, `#shared/coach_contract.js` ne se résout pas, page vide (sonde
     `temp/regress_1107/ios_install.probe.mjs`). `install_csp` le calcule depuis la page ; hash identique à celui que
-    le navigateur exige (`nwfiTKrU…`), tests `ota_install_csp.rs` 2/2. Pas encore en ligne : déploiement du serveur
-    Rust à faire (accord demandé le 2026-11-07).
+    le navigateur exige (`nwfiTKrU…`), tests `ota_install_csp.rs` 2/2. En ligne (2026-11-07, à ta demande) :
+    commit cb9fdcf38 poussé, atome.one mis à jour (`server_update.js`, santé 200), CSP servie avec le hash, la page
+    s'affiche ; app iOS 1.51 (49) construite en Ad Hoc et publiée sur l'OTA (`/ios/status` = 1.51/49), commit 9965ae192.
   - À faire par toi : sur l'iPad, Safari, toucher une fois l'écran puis faire parler eVe et jouer un son (notification,
     clip) ; lancer une conversation vocale.
 - À faire par toi (étape 4) : mesurer sur l'iPad A12Z le glissé le long de la bande du bas, renderer `58ae80e9fd7cb82e` (recharger sans le service worker), lire images/s (avant 9–24) et ops/image (avant 7–14 ; attendu ≈ 0,3).
