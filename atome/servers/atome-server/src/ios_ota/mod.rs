@@ -16,7 +16,10 @@ use axum::body::Body;
 use axum::extract::Request;
 use axum::http::{HeaderMap, HeaderValue, Method, StatusCode, header};
 use axum::response::{IntoResponse, Response};
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
 use serde_json::{Value as JsonValue, json};
+use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Arc, LazyLock, Mutex};
@@ -24,7 +27,7 @@ use store::Unlocked;
 
 const ORIGIN: &str = "https://atome.one";
 const SESSION_BODY_LIMIT: usize = 1024;
-const INSTALL_CSP: &str = "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'";
+const IMPORT_MAP_OPEN: &str = "<script type=\"importmap\">";
 
 // The releases being downloaded, by how many downloads.
 type Downloads = Arc<Mutex<HashMap<String, usize>>>;
@@ -232,6 +235,10 @@ async fn install(ota: &Ota) -> Result<Response, NodeError> {
     let page = tokio::fs::read(&ota.shell)
         .await
         .map_err(|e| fastify_reply::node_fs_error(&e, "open", &ota.shell))?;
+    let csp = HeaderValue::from_str(&install_csp(&page)?).map_err(|e| NodeError {
+        code: None,
+        message: e.to_string(),
+    })?;
     let chunk = futures_util::stream::once(async move {
         Ok::<_, std::io::Error>(axum::body::Bytes::from(page))
     });
@@ -241,11 +248,27 @@ async fn install(ota: &Ota) -> Result<Response, NodeError> {
         header::CONTENT_TYPE,
         HeaderValue::from_static("text/html; charset=utf-8"),
     );
-    fields.insert(
-        header::CONTENT_SECURITY_POLICY,
-        HeaderValue::from_static(INSTALL_CSP),
-    );
+    fields.insert(header::CONTENT_SECURITY_POLICY, csp);
     Ok(response)
+}
+
+// The page's CSP: its import map resolves the '#squirrel/', '#shared/' and '#utils/' specifiers
+// its modules import (as atome/src/index.html does), and is the one inline script it admits, by
+// its hash; without it the page's modules fail to resolve and it stays white.
+fn install_csp(page: &[u8]) -> Result<String, NodeError> {
+    let html = String::from_utf8_lossy(page);
+    let map = html
+        .split_once(IMPORT_MAP_OPEN)
+        .and_then(|(_, rest)| rest.split_once("</script>"))
+        .map(|(map, _)| map)
+        .ok_or_else(|| NodeError {
+            code: None,
+            message: "ios-install.html carries no import map".to_owned(),
+        })?;
+    let hash = STANDARD.encode(Sha256::digest(map.as_bytes()));
+    Ok(format!(
+        "default-src 'none'; script-src 'self' 'sha256-{hash}'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'"
+    ))
 }
 
 // `POST /ios/session`'s body as Fastify reads it before the handler (`bodyLimit: 1024`): a type no
@@ -384,3 +407,7 @@ pub async fn answer(cors: &CorsPolicy, request: Request) -> Response {
     cors.decorate(&path, &headers, response.headers_mut());
     response
 }
+
+#[cfg(test)]
+#[path = "../../../../../tests/atome_server/ota_install_csp.rs"]
+mod install_csp_parity;

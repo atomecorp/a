@@ -28,7 +28,26 @@ pub(super) fn ensure_schema(db: &Connection) -> Result<(), rusqlite::Error> {
             stream_id TEXT NOT NULL, last_sequence INTEGER NOT NULL DEFAULT 0,
             updated_at TEXT NOT NULL, PRIMARY KEY (local_user_id, stream_id)
          );
-         UPDATE atomes
+         CREATE TABLE IF NOT EXISTS local_repairs (name TEXT PRIMARY KEY, done_at TEXT NOT NULL);",
+    )?;
+    // These sweeps mend rows written before the sync contract of Aug. 2026; every later write
+    // projects type, parent, deletion and local media itself (`patch.rs`). A database is mended
+    // once: swept at each open, a 4 GB vault held the server's first answer ~19 s, past the
+    // iOS boot watchdog.
+    let mended = db
+        .query_row(
+            "SELECT 1 FROM local_repairs WHERE name = ?1",
+            [PRE_CONTRACT_REPAIRS],
+            |_| Ok(()),
+        )
+        .optional()?
+        .is_some();
+    if mended {
+        return Ok(());
+    }
+    let tx = db.unchecked_transaction()?;
+    tx.execute_batch(
+        "UPDATE atomes
          SET atome_type = COALESCE(
            NULLIF(NULLIF(json_extract((SELECT properties FROM state_current WHERE state_current.atome_id = atomes.atome_id), '$.type'), ''), 'generic'),
            NULLIF(json_extract((SELECT properties FROM state_current WHERE state_current.atome_id = atomes.atome_id), '$.kind'), ''),
@@ -49,8 +68,15 @@ pub(super) fn ensure_schema(db: &Connection) -> Result<(), rusqlite::Error> {
          SET properties = json_set(COALESCE(properties, '{}'), '$.__deleted', json('true'))
          WHERE atome_id IN (SELECT atome_id FROM atomes WHERE deleted_at IS NOT NULL);",
     )?;
-    repair_local_media_references(db)
+    repair_local_media_references(&tx)?;
+    tx.execute(
+        "INSERT INTO local_repairs (name, done_at) VALUES (?1, ?2)",
+        rusqlite::params![PRE_CONTRACT_REPAIRS, Utc::now().to_rfc3339()],
+    )?;
+    tx.commit()
 }
+
+const PRE_CONTRACT_REPAIRS: &str = "remote_projection_pre_contract";
 
 const MEDIA_REFERENCE_KEYS: [&str; 8] = [
     "file_name",

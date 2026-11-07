@@ -479,10 +479,24 @@ import { loadAudioKernels } from './audio_kernels.js';
 
   audio.__register_backend('kira', backend);
 
+  // WebKit holds an AudioContext made or resumed outside a person's gesture: the
+  // engine is made and woken inside their first touch, click or key (prewarm has
+  // its module ready by then), again at each one until its context runs. Once it
+  // has run, the engine's own sleep and wake need no gesture.
+  var GESTURE_UNLOCK_EVENTS = ['pointerdown', 'pointerup', 'touchend', 'keydown'];
+  function unlockInGesture() {
+    backend.unlock().then(function () {
+      GESTURE_UNLOCK_EVENTS.forEach(function (type) { window.removeEventListener(type, unlockInGesture, true); });
+    }, function (error) {
+      emitError('gesture_unlock', error);
+    });
+  }
+
   Promise.resolve().then(function () {
     var runtime = resolveAudioRuntime(window);
     if (runtime.playback === 'web_wasm_kira') {
       audio.set_backend('kira');
+      GESTURE_UNLOCK_EVENTS.forEach(function (type) { window.addEventListener(type, unlockInGesture, true); });
       return backend.prewarm().catch(function (error) {
         emitError('wasm_prewarm', error);
       });

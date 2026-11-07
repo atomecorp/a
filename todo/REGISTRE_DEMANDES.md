@@ -138,6 +138,59 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 
 ### R-118 — Refonte Rust-first : étapes 1 (hygiène) et 2 (atome-store) faites, restes et suite (2026-11-04)
 - Statut : EN COURS, tout le code FAIT (2026-11-06) — étapes 1 à 7 FAITES : étape 3 L3.0–L3.11 codés (visio portée en Rust sur mediasoup 0.21, parité 58/58 et alarme 28/28 ; atome-server sert seul, aucun processus Node, 15/15 ; iOS L3.11 22/22) ; étape 4 bande en voie B, étape 5 scène et gestes, étape 6 texte T1 (gardé, décision du 2026-11-06), étape 7 cpal 0.18 / kira 0.12.6. Contrôles finaux FAITS (`check:rust` tout ok et `deny`, `check:js`, D20 12/12, timeline, WASM final). Restent, hors de ma main : (1) bascule L3.10 = copie des coffres de prod à fournir par toi, puis retrait du JS Fastify/visio Node et déploiement par toi ; (2) essais appareil par toi (iPad : bande, texte, masques, défilement, serveur embarqué et AUv3 ; écoute ; TLS Android).
+- RÉGRESSIONS après la refonte (signalées par toi le 2026-11-07) — ATTENTE UTILISATEUR (décision ci-dessous) :
+  « l'app iOS ne marche plus, Tauri non plus, plus de son quand eVe parle sur l'iPad, atome.one très long sur iPad M5 et
+  n'aboutit pas sur iPhone ». Mesuré le 2026-11-07 (`temp/regress_1107/`) : le renderer Bevy n'a presque pas changé
+  (WASM 13,4 → 13,7 Mo, code voix client ±50 lignes) ; atome.one (Rust) charge sur Chromium WebGPU sans erreur mais
+  l'accueil n'apparaît qu'entre 15 et 30 s ; un chargement fait ≈ 3 100–3 400 fichiers et 40–56 Mo, comme avant
+  (journal nginx du 06/11 15:15 sur Node : 3 093 requêtes, 56 Mo) ; Tauri dev : `asset not found: index.html` —
+  la fenêtre est en mode dev sans `devUrl`, Tauri charge alors `tauri://localhost` (tauri 2.12.1
+  `manager/mod.rs#get_app_url`) alors que le serveur Axum répond bien sur 3000 ; config identique à avant,
+  seule différence de lancement : `tauri dev --features bevy_renderer_core` devenu `tauri dev` (cause exacte
+  non encore prouvée). Voix de l'assistant sur le serveur Rust : clé lisible par le service, chemin non testé
+  (pas de compte sur atome.one). Simulateur iOS : « Unable to find a GPU », antérieur à la refonte.
+  Question posée : remettre atome.one sur 1.48 ? Réponse : « Non, répare en Rust » (2026-11-07).
+  - Tauri : FAIT — la fenêtre ouvre toujours Axum (`platforms/desktop-tauri/src/lib.rs`, `config.url` explicite ;
+    cassé depuis fad2f55d2 du 4 nov., avant la refonte) ; relancé, tableau de bord connecté affiché
+    (`temp/regress_1107/tauri_run_a.png`).
+  - iOS et Tauri, démarrage : FAIT dans le code — les réparations d'avant le contrat de sync
+    (`local_atome_remote_projection.rs#ensure_schema`) tournaient à chaque ouverture : ≈ 19 s mesurées sur la base
+    Tauri de 4,3 Go avant la première réponse (le chien de garde iOS crie à 8 s) ; elles tournent une fois par base,
+    marque `local_repairs` (test `schema_repair_runs_once_per_database`, 9/9 ; marque posée dans la base Tauri ;
+    `cargo check` iOS OK). À faire par toi : reconstruire l'app iOS et la lancer sur le téléphone (le premier
+    lancement fait encore la réparation une fois).
+  - Web atome.one : pas de régression serveur trouvée — mêmes en-têtes qu'avant (`max-age=0`), 3 196 empreintes du
+    cache hors ligne exactes (116 Mo), service worker installé et activé ; accueil à 17–20 s au premier chargement
+    sur Chromium. nginx servait en HTTP/1.1 (jamais HTTP/2) : ≈ 1 800 fichiers par 6 connexions. FAIT
+    (2026-11-07, accord donné) : `http2 on;` dans `/etc/nginx/sites-available/atome.one` (sauvegarde
+    `/root/atome.one.nginx.bak-20261107-http2`, `nginx -t` OK) ; HTTP/2 vérifié, `/ws/api` répond, accueil Chromium
+    17–20 s → 10,4 s au premier chargement, 11 s → 5,5 s au retour. À faire par toi : recharger sur l'iPad et l'iPhone.
+  - Écran blanc 3–4 s au rechargement (signalé le 2026-11-07) : FAIT — le graphe de modules (≈ 1 000 fichiers) ne
+    s'exécute qu'une fois tout chargé ; un petit module `atome/src/squirrel/first_paint.js` (chargé avant `spark.js`
+    dans `index.html`) pose le fond du jeton dès la première peinture : fond à 64–242 ms en local (sonde
+    `temp/regress_1107/paint.probe.mjs`). Corrigé au passage : `mutedNode` manquait à l'import de
+    `bevy_panel_interaction_runtime.js` (défaut antérieur).
+  - Son (signalé le 2026-11-07 : « plus de son quand eVe parle sur l'iPad ») : FAIT dans le code — cause prouvée dans
+    une WKWebView (`temp/regress_1107/wksound/`) : le contexte audio du moteur Kira Web n'était jamais créé ni repris
+    dans un geste ; WebKit le garde alors suspendu (`suspended@0.00`, 0 bloc rendu). Corrections :
+    `backend.kira.js` crée et réveille le moteur dans le premier toucher, clic ou touche (réarmé à chaque geste tant
+    que le contexte ne tourne pas) ; `audio-wasm/src/scheduled_backend.rs#wake` reprend aussi un contexte retenu par
+    le navigateur (créé hors geste, interrompu par un appel), pas seulement endormi par le moteur ; WASM reconstruit.
+    Mesuré sur l'arbre vivant, sans rien injecter : clic → `running`, puis notification jouée hors geste après la mise
+    en veille du moteur → réveil et 2 406 blocs rendus. Limite connue : un son demandé avant tout toucher (la toute
+    première phrase d'accueil) reste muet par la règle de WebKit ; tout son après le premier toucher joue.
+  - Voix de l'assistant : chemin vérifié dans le code, pas de bout en bout — la phrase « prête » et la synthèse locale
+    passent par le moteur (débloqué ci-dessus) ; la voix temps réel par un élément `<audio>` WebRTC démarré dans le
+    geste du micro ; actions identiques client et serveur Rust (`realtime-*`, `speech`). Un test réel demande un compte
+    et l'iPad (console Safari par USB).
+  - Lien d'installation iOS `https://atome.one/ios/install` blanc (signalé le 2026-11-07) : FAIT dans le code — le
+    portage Rust (`atome-server/src/ios_ota/mod.rs`) avait perdu le hash de l'import map dans la CSP (Fastify
+    l'ajoutait) : Chromium refuse l'import map, `#shared/coach_contract.js` ne se résout pas, page vide (sonde
+    `temp/regress_1107/ios_install.probe.mjs`). `install_csp` le calcule depuis la page ; hash identique à celui que
+    le navigateur exige (`nwfiTKrU…`), tests `ota_install_csp.rs` 2/2. Pas encore en ligne : déploiement du serveur
+    Rust à faire (accord demandé le 2026-11-07).
+  - À faire par toi : sur l'iPad, Safari, toucher une fois l'écran puis faire parler eVe et jouer un son (notification,
+    clip) ; lancer une conversation vocale.
 - À faire par toi (étape 4) : mesurer sur l'iPad A12Z le glissé le long de la bande du bas, renderer `58ae80e9fd7cb82e` (recharger sans le service worker), lire images/s (avant 9–24) et ops/image (avant 7–14 ; attendu ≈ 0,3).
 - Étape 5 (2026-11-06) : FAIT — survol au repos sans image, défilement en voie B (Rust) et son test de toucher pendant une glissade (sonde `temp/step5_scene/scroll_hit.probe.mjs` 6/6), ombres des formes floutées sur le GPU (12 étoiles redimensionnées : 37,7 → 60 im/s, principal 24,1 → 4,0 ms), masques des formes dessinés sur le GPU (`shape_mask_gpu.rs` + `shape_silhouette.wgsl` ; 12 étoiles : principal 6,0 → 0,8 ms, polygones 6,1 → 0,8 ; pixels 0 différence pour les 7 sortes, ≤ 1 niveau avec ombre ; sonde `temp/step5_scene/mask_pixels.probe.mjs`), ombres à alpha et masquées par le même flou GPU (image masquée à ombre redimensionnée : 278 → 160 ms/image), voie légère du curseur d'outil du ruban pour la barre, la colonne et le cadran (`bevy_ui_slider_motion.js`, `bevy_ui_main_menu_slider_preview.js` ; CPU par mouvement 17–20 → 11 ms, 14–15 → 8, 14 → 10,6 ; redessins entiers du ruban par passe 90 → 8, 82 → 1, 67 → 1 ; 0 pixel différent à 3 valeurs par forme ; montée, descente, double toucher pour taper, relâcher vérifiés ; sonde `temp/step5_scene/slider_light.probe.mjs`). Restes notés à l'étape 5, FAITS au lot de nettoyage du 2026-11-06 : (1) FAIT — le masque spatial est dessiné sur le GPU (`bevy-core/src/spatial_mask_gpu.rs`, `spatial_mask_pass.rs`, `spatial_mask.wgsl`) : 12 carrés masqués redimensionnés, principal 75,4 → 0,9 ms (12 → 57 im/s), avec ombre 136,4 → 1,5 ms (6,9 → 44 im/s) ; pixels 0 différence pour 8 cas sur 11, 1 pixel à 1 niveau pour 3 (sondes `temp/cleanup_r118/mask_measure.probe.mjs`, `mask_pixels.probe.mjs`) ; (2) FAIT — la retenue sur les nombres naturels est le comportement de tout curseur d'outil, l'option `slider_natural` supprimée (« Taille » : naturel 3,05 contre 1,53 mouvements ; sonde `temp/cleanup_r118/natural_hold.probe.mjs`) ; (3) FAIT — les coins `radius_corners` passent par le patch de mouvement : 0 redessin entier du ruban près des bouts (avant 9), 0 pixel différent (sonde `temp/cleanup_r118/slider_corners.probe.mjs`). À faire par toi : sur l'iPad A12Z, renderer `0415a397c1a88a91` (recharger sans le service worker), redimensionner une étoile, un polygone et un carré à ombre portée (fluidité attendue sans saccade), glisser le curseur « Taille » du ruban d'un projet de haut en bas (barre, colonne, cadran : sans saccade), faire défiler une longue liste, l'attraper en pleine glissade et toucher une ligne (la ligne touchée = celle sous le doigt).
 - Étape 6 (2026-11-06) : FAIT en voie T1 — le texte reste peint par Canvas2D (polices du système, émojis, toutes les écritures, IME du DOM caché inchangé) et passe au renderer en `ImageBitmap` copié par le GPU (`bevy-core/src/browser_texture.rs`, `browser_texture_web.rs`, `browser_texture.wgsl`) ; retirés : `getImageData`, la boucle JS `bevy_text_texture_pixels.js`, la copie RGBA dans le WASM. Mac, médianes de 10 passes alternées T0/T1 : pincement CPU par image 14,8 → 8,5 ms (p95 entre images 28,6 → 24,3 ms), panneau de 200 libellés monté 165 → 59 ms, posé 347 → 210 ms, CPU 219 → 117 ms, frappe CPU par touche 29,1 → 24,0 ms, ouverture d'un projet de 24 textes 1023 → 1006 ms ; relectures de pixels → 0 partout. Pixels contre T0 : ≤ 1 niveau (textes, émojis, écritures, panneau 0, texte masqué, sélection en édition). Sondes `temp/step6_text/text_measure.probe.mjs`, `text_pixels.probe.mjs`, `mask_text.probe.mjs`, `home_panic.probe.mjs`. Renderer final `79911cae8dfff552` (avec le masque spatial GPU du lot de nettoyage). Question ouverte (règle 16, à te poser) : T2 = cosmic-text dans Bevy (Roboto embarquée) — CPU plus bas (panneau 36 ms contre 117, projet 916 ms contre 1006) mais rendu visiblement différent : Roboto au lieu de la police du système, pas d'émojis en couleur, ni arabe, hébreu, CJK, devanagari (carrés vides), et caret, sélection, contour, ombre, styles riches, paragraphes mis en page et grilles à réécrire en Rust ; maquettes `temp/step6_text/mockups/t0_vs_t2_texts_zoom.png` et `t0_vs_t2_panel_zoom.png` ; rien n'est livré de T2. À faire par toi : sur l'iPad A12Z, renderer `79911cae8dfff552` (recharger sans le service worker), ouvrir un projet avec des textes, en sélectionner un, taper une phrase, pincer pour zoomer et dézoomer, ouvrir un panneau riche en libellés (Réglages) : les textes doivent être identiques à avant (mêmes polices, émojis, accents) et le pincement plus fluide.
@@ -429,6 +482,28 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
     ATTENTE UTILISATEUR : faire tourner la vraie app iOS sur le Mac (« Designed for iPad », vrai GPU) demande une build signée
     avec ton équipe (`-allowProvisioningUpdates`), refusée par le mode auto ; une voie WebGL2 pour le simulateur n'est pas
     viable (les passes GPU masques/ombres demandent des storage textures) et serait un second renderer (règle « un seul »).
+- Mise à jour serveur (toi, 2026-11-06 : « met le serveur à jour qu'on soit fixé » ; choix : staging + répétition sur copie
+  privée de la prod, puis prod ; commit + push « tout le nécessaire » accordé). Fait : eVe e3a8b1ad, atome 424a37cbc poussés
+  (données d'atome-health-ref exclues par la règle `data/` du .gitignore → le serveur Rust ne compilait pas ; verrou npm
+  refait pour npm 10 ; correctifs iOS ; OTA 1.49/47). Staging : atome-server Rust actif (health ok, 47 Mo), compilé sur la
+  machine (72 min à 2 tâches), `chmod o+x /opt/a-staging/database_storage` (demandé par le script). Pièges notés : un
+  `server_update.js` lancé depuis l'ancien code exécute l'ancienne logique (relance Node sur le nouveau code → panne) ; le
+  lancer une fois le code à jour sur disque. Copie privée de la prod prête (`/root/r118_rehearsal`, 0700, env de staging
+  sans clé de fournisseur, à lancer sous `systemd-run -p IPAddressDeny=any -p IPAddressAllow=localhost`) ; base centrale :
+  0 condition `null`, aucun ancien mot de passe. BLOQUÉ, ATTENTE UTILISATEUR : les coffres ne démarrent pas
+  (`vault_confinement_landlock: fully incompatible access-rights`) : le noyau 6.14.11-4-pve a Landlock compilé
+  (`CONFIG_SECURITY_LANDLOCK=y`) mais pas actif (lsm = lockdown,capability,yama,apparmor,ima,evm). Il faut l'ajouter au
+  démarrage (`lsm=landlock,lockdown,capability,yama,apparmor,ima,evm` dans GRUB_CMDLINE_LINUX, update-grub) et redémarrer
+  la machine, prod comprise. Prod intacte (Fastify 1.46) ; ne pas la mettre à jour avant.
+  - FAIT (2026-11-07, ton « Oui, maintenant ») : Landlock activé (`/etc/default/grub`, copie
+    `grub.bak-20261107-landlock`, update-grub, redémarrage 1 min 40 s ; lsm = …,landlock,…). Répétition sur la copie privée
+    (bac à sable sans réseau) : central migrée par la chaîne Rust, intégrité ok, 20/20 coffres confinés ; copie effacée
+    ensuite. Staging et prod sur atome-server 1.49 (424a37cbc) : toutes les phases de `server_update.js` ok ; prod :
+    `/health`, `server-info`, page d'accueil 200 en public, sonde `/ws/api` (films, concerts, cinémas, matchs) ok,
+    inscriptions toujours fermées (3/3), 20/20 coffres, 59 Mo ; visio dans le processus, adresses de prod présentes.
+    Prod : patchs OTA manuels (identiques à origin) mis dans `git stash` « r118-ota-handpatch-20261107 » ; cache de build
+    de staging copié dans `/opt/a/target`. Reste (L3.10 suite) : retirer le JS Fastify/visio Node après quelques jours sans
+    retour en arrière ; vérifier sur ton iPhone que l'app démarre (nouvelle app + nouveau serveur).
 - Défaut relevé, gardé tel quel (comportement Fastify, décision 5) : un undo rejoué avec le même `requestId` répond
   `event_id_conflict` au lieu de rendre le résultat du premier (fixture étape 56).
 ### R-117 — Écran guidé « deux façons » : textes superposés, prononciation d'eVe (2026-11-04)

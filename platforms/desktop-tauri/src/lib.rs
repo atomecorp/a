@@ -24,7 +24,6 @@ use std::path::{Path, PathBuf};
 use tauri::{Manager, State};
 
 const TAURI_LOCAL_HTTP_PORT: u16 = 3000;
-#[cfg(target_os = "android")]
 const TAURI_LOCAL_HTTP_URL: &str = "http://127.0.0.1:3000/";
 #[cfg(target_os = "android")]
 const TAURI_LOCAL_HTTP_WAIT_SECS: u64 = 120;
@@ -452,7 +451,7 @@ pub fn run() {
 
             #[cfg(not(target_os = "android"))]
             {
-                let config = app
+                let mut config = app
                     .config()
                     .app
                     .windows
@@ -460,6 +459,9 @@ pub fn run() {
                     .find(|window| window.label == "main")
                     .ok_or("main window missing from tauri.conf.json")?
                     .clone();
+                // The page is always Axum's: `frontendDist` names it only for a bundled build,
+                // `tauri dev` would open `tauri://localhost` and find no asset there.
+                config.url = tauri::WebviewUrl::External(tauri::Url::parse(TAURI_LOCAL_HTTP_URL)?);
                 tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?
                     .initialization_script(format!(
                         "window.__ATOME_PROJECT_ROOT__={:?};",

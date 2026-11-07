@@ -1210,6 +1210,10 @@ function __wbg_get_imports() {
         __wbg_start_847dce622393ba48: function() { return handleError(function (arg0, arg1) {
             arg0.start(arg1);
         }, arguments); },
+        __wbg_state_0038cc71be46ea44: function(arg0) {
+            const ret = arg0.state;
+            return (__wbindgen_enum_AudioContextState.indexOf(ret) + 1 || 4) - 1;
+        },
         __wbg_static_accessor_GLOBAL_9d53f2689e622ca1: function() {
             const ret = typeof global === 'undefined' ? null : global;
             return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
@@ -1244,7 +1248,7 @@ function __wbg_get_imports() {
         },
         __wbindgen_cast_0000000000000001: function(arg0, arg1) {
             // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 90, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, wasm_bindgen__convert__closures_____invoke__hfdb5f1f393d59aed);
+            const ret = makeMutClosure(arg0, arg1, wasm_bindgen__convert__closures_____invoke__h659b352ae21eac7d);
             return ret;
         },
         __wbindgen_cast_0000000000000002: function(arg0) {
@@ -1284,9 +1288,12 @@ function __wbg_get_imports() {
 }
 
 const lAudioContext = (typeof AudioContext !== 'undefined' ? AudioContext : (typeof webkitAudioContext !== 'undefined' ? webkitAudioContext : undefined));
-function wasm_bindgen__convert__closures_____invoke__hfdb5f1f393d59aed(arg0, arg1) {
-    wasm.wasm_bindgen__convert__closures_____invoke__hfdb5f1f393d59aed(arg0, arg1);
+function wasm_bindgen__convert__closures_____invoke__h659b352ae21eac7d(arg0, arg1) {
+    wasm.wasm_bindgen__convert__closures_____invoke__h659b352ae21eac7d(arg0, arg1);
 }
+
+
+const __wbindgen_enum_AudioContextState = ["suspended", "running", "closed"];
 
 
 const __wbindgen_enum_ChannelInterpretation = ["speakers", "discrete"];

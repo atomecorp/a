@@ -14,7 +14,7 @@ use kira::backend::{Backend, Renderer};
 use std::cell::{Cell, RefCell};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
-use web_sys::{AudioContext, AudioContextOptions};
+use web_sys::{AudioContext, AudioContextOptions, AudioContextState};
 
 const BLOCK_FRAMES: usize = 512;
 const CHANNELS: usize = 2;
@@ -278,7 +278,9 @@ fn start_pump(clock: &mut RenderClock) -> Result<(), JsValue> {
 
 // A demand (a voice to play, a clock read, a sound command, a hold): the quiet
 // count starts again; an engine asleep renders again and resumes its context.
-// Answers the context's resume when it was asleep: its clock runs from then.
+// A context the browser holds (made outside a gesture, interrupted by a call)
+// is resumed too: inside a person's gesture, that resume is what lets it run.
+// Answers the context's resume then: its clock runs from then.
 pub fn wake() -> Result<Option<js_sys::Promise>, JsValue> {
     CLOCK.with(|cell| {
         let mut guard = cell.borrow_mut();
@@ -286,12 +288,15 @@ pub fn wake() -> Result<Option<js_sys::Promise>, JsValue> {
             return Ok(None);
         };
         clock.quiet_frames = 0;
-        if !clock.asleep {
+        let held = clock.context.state() != AudioContextState::Running;
+        if !clock.asleep && !held {
             return Ok(None);
         }
-        clock.asleep = false;
         let resumed = clock.context.resume()?;
-        start_pump(clock)?;
+        if clock.asleep {
+            clock.asleep = false;
+            start_pump(clock)?;
+        }
         Ok(Some(resumed))
     })
 }

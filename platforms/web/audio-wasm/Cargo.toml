@@ -17,6 +17,7 @@ web-sys = { workspace = true, features = [
     "AudioBuffer",
     "AudioBufferSourceNode",
     "AudioContextOptions",
+    "AudioContextState",
     "AudioDestinationNode",
     "AudioNode",
     "ChannelInterpretation",
