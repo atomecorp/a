@@ -109,7 +109,6 @@ export const accountMethods = {
     getPendingRecovery: () => pairingClient().pendingRecovery(),
     completeRecovery: () => pairingClient().completeRecovery(),
     abandonRecovery: () => pairingClient().abandonRecovery(),
-    cancelRecovery: (recoveryId) => pairingClient().cancelRecovery(recoveryId),
     listLocalAccounts: () => pairingClient().listLocalAccounts(),
     switchAccount: (userId) => pairingClient().switchAccount(userId),
     startSharedOpen: (userId) => pairingClient().startSharedOpen(userId),

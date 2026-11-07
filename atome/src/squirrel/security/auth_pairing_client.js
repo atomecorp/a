@@ -280,9 +280,6 @@ export function createPairingClient({ devices, approver, send, token, ensureSess
             return accept(result, attempt.scope, attempt.approve, 'personal');
         },
         async abandonRecovery() { await devices.remove('recovery-attempt'); return { ok: true }; },
-        async cancelRecovery(recoveryId) {
-            return request('recovery-cancel', { ...await approval('recovery-cancel', { subject: { recoveryId } }), recoveryId });
-        },
         // Signs a connection challenge with the current session key (the /ws/sync handshake).
         async signConnectionChallenge(challenge) {
             const device = await deviceOf(await sessionRecord());

@@ -4,7 +4,6 @@ import { createDeviceSessions } from './auth_sessions.js';
 import { createPasswordAuth } from './auth_password.js';
 import { createDeviceRegistry } from './auth_devices.js';
 import { createHandles } from './auth_handles.js';
-import { openRecoveryRequest, RECOVERY_PHONE_DELAY_MS } from './auth_recovery.js';
 
 // The injected persistence and account functions are the existing server owners.
 // SMS I/O is outside transactions; proofs and identity changes are atomic.
@@ -182,17 +181,6 @@ export function createPhoneLinkAuth({ query, transaction, findByPhone, findById,
         } else account = existing || await createAccount(phone);
         const device = await query('get', 'SELECT * FROM auth_device_keys WHERE key_id = ?', [value.key_id]);
         if (device && (device.revoked_ms !== null || device.principal_id !== account.user_id)) reject();
-        if (!device && existing && !changing) {
-            // A verified phone is a recovery channel only: a new device of an
-            // existing account waits 72 h, cancellable from every enrolled device.
-            const request = await openRecoveryRequest({ query, proof, now }, account.user_id, { channel: 'phone_recovery',
-                sessionKey: { keyId: value.key_id, jwk: JSON.parse(value.public_key) }, deviceMeta: {}, delay: RECOVERY_PHONE_DELAY_MS });
-            const consumed = await query('run', `UPDATE auth_link_attempts SET state = 'consumed'
-                WHERE attempt_id = ? AND state IN ('sent', 'approved', 'verified_payment')`, [value.attempt_id]);
-            if (Number(consumed.changes) !== 1) reject();
-            await notify(account.user_id, { kind: 'auth-recovery-started', recoveryId: request.request_id, notBefore: request.not_before_ms });
-            return { ok: true, recoveryPending: true, recoveryId: request.request_id, notBefore: request.not_before_ms };
-        }
         if (!device) {
             await devices.enroll({ keyId: value.key_id, principalId: account.user_id, jwk: JSON.parse(value.public_key),
                 enrolledBy: existing ? 'phone_link' : 'creation', restrictedUntil: existing ? now() + 86400000 : now() });
@@ -201,7 +189,13 @@ export function createPhoneLinkAuth({ query, transaction, findByPhone, findById,
         const changed = await query('run', `UPDATE auth_link_attempts SET state = 'consumed'
             WHERE attempt_id = ? AND state IN ('sent', 'approved', 'verified_payment')`, [value.attempt_id]);
         if (Number(changed.changes) !== 1) reject();
-        return { ...await sessions.create(account, value.key_id), newAccount: !existing && !changing };
+        const session = { ...await sessions.create(account, value.key_id), newAccount: !existing && !changing };
+        if (device || !existing) return session;
+        // A new device of an existing account: it opens at once, on probation, and every other
+        // device of the account is told, as for the recovery code and the pairing.
+        await notify(account.user_id, { kind: 'auth-device-added', deviceId: value.key_id, label: '', platform: 'web' },
+            { exceptDeviceId: value.key_id });
+        return { ...session, probationUntil: now() + 86400000 };
     }
     async function confirm(input) {
         // Commit failed guesses independently of the approval transaction.

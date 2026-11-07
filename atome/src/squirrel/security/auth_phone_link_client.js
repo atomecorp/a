@@ -86,21 +86,11 @@ export function createPhoneLinkClient({ devices, send, installSession, storePurc
     }
     async function settleAttempt(result, record) {
         if (result.token) return accept(result, record.phone, record.attemptId);
-        // A verified phone only opens a delayed recovery of its account (V1 §7.4):
-        // this device completes it later with the same key.
         // The SMS proved a number that another account holds: this account keeps its own.
         if (result.phoneTaken) {
             await devices.remove('attempt');
             onPending({ phoneTaken: true });
             return { ok: true, phoneTaken: true };
-        }
-        if (result.recoveryPending) {
-            const device = await devices.forPhone(record.phone);
-            await devices.put('recovery-attempt', { scope: device.scope, recoveryId: result.recoveryId, notBefore: result.notBefore,
-                approve: null, channel: 'phone' });
-            await devices.remove('attempt');
-            onPending({ recoveryPending: true, notBefore: result.notBefore });
-            return { ok: true, recoveryPending: true, notBefore: result.notBefore };
         }
         const next = { ...record, paymentRequired: result.paymentRequired === true,
             pairingCode: result.pairingCode ?? record.pairingCode,

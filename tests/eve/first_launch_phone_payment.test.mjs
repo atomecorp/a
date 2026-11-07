@@ -72,11 +72,11 @@ describe('first-launch server payment and phone proof', () => {
         expect(await f.service.resend(await f.proof(a.attemptId, 'resend'))).toMatchObject({ paymentRequired: true });
         expect(f.links).toHaveLength(count);
     });
-    it('existing accounts keep their identity without payment, through a delayed recovery request', async () => {
+    it('existing accounts keep their identity without payment, their link opening them at once', async () => {
         const f = fixture({ existing: true }), a = await f.start();
         const result = await f.service.complete({ ...parseAuthLink(f.links[0]), ...await f.proof(a.attemptId, 'consume') });
-        expect(result).toMatchObject({ ok: true, recoveryPending: true }); expect(result.paymentRequired).toBeUndefined(); expect(f.created()).toBe(0);
-        expect(f.db.prepare('SELECT principal_id FROM auth_recovery_requests').get().principal_id).toBe('existing');
+        expect(result).toMatchObject({ ok: true, newAccount: false }); expect(result.paymentRequired).toBeUndefined(); expect(f.created()).toBe(0);
+        expect(f.db.prepare('SELECT principal_id FROM auth_device_keys').get().principal_id).toBe('existing');
     });
     it('rejects expired verified payments and legacy unpaid attempts', async () => {
         const f = fixture(), a = await f.start();

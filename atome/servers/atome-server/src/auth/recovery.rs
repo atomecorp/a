@@ -1,6 +1,6 @@
 // Recovery (server/auth_recovery.js, ported): opening the space without another device.
-// The recovery code opens at once; the SMS link of a phone account opens after its
-// delay, cancellable by an enrolled device. Completing adds this device to the
+// The recovery code opens at once (the SMS link opens its account itself, phone_link/finish.rs;
+// a `phone_recovery` request left from before waits out its delay). Completing adds this device to the
 // account's others (user decision, 2026-10-26: nothing is revoked) and tells them, as a
 // pairing does.
 use super::device_sessions::{self, text};
@@ -63,7 +63,7 @@ fn hex64(value: Option<&JsonValue>) -> bool {
 }
 
 /// A request opening the account `principal` to `session_key`'s device after `delay`;
-/// the recovery code's and the SMS link's (`openRecoveryRequest`).
+/// the recovery code's (`openRecoveryRequest`).
 pub struct Opening<'a> {
     pub channel: &'a str,
     pub session_key: JsonValue,

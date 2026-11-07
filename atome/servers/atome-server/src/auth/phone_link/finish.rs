@@ -1,11 +1,10 @@
 // The phone link opened (`complete`, `finishAttempt` and `pay` of server/auth_phone_link.js):
-// the number proven, the attempt's device key opens its account, has its number changed, or
-// waits for a recovery; a new account waits for its payment, which makes it.
+// the number proven, the attempt's device key opens its account or has its number changed; a new
+// account waits for its payment, which makes it.
 use super::{attempt, consume_attempt, pending, refused, sql};
 use crate::auth::device_sessions::{self, public_key, text};
 use crate::auth::outcome::Outcome;
 use crate::auth::proof::{Proof, digest, require_handle};
-use crate::auth::recovery::{self, Opening};
 use crate::auth::{Sessions, accounts, devices, now_ms, signup};
 use crate::billing::Billing;
 use crate::vault_router::central::{atomic, row_json};
@@ -13,7 +12,6 @@ use rusqlite::{Connection, OptionalExtension};
 use serde_json::{Value as JsonValue, json};
 use std::sync::Arc;
 
-const RECOVERY_PHONE_DELAY_MS: i64 = 72 * 60 * 60 * 1000;
 // A device enrolled by the SMS alone on an existing account waits a day.
 const PROBATION_MS: i64 = 86_400_000;
 
@@ -165,32 +163,6 @@ fn opened(
         return refused();
     }
     let jwk = public_key(value)?;
-    if device.is_none() && existing && !changing {
-        // A verified phone is a recovery channel only: a new device of an existing
-        // account waits 72 h, cancellable from every enrolled device.
-        let (request, not_before) = recovery::open(
-            db,
-            proof,
-            principal,
-            &Opening {
-                channel: "phone_recovery",
-                session_key: json!({ "keyId": key_id, "jwk": jwk }),
-                approve: None,
-                device_meta: Some(&json!({})),
-                delay: RECOVERY_PHONE_DELAY_MS,
-            },
-            now,
-        )?;
-        consume_attempt(db, id)?;
-        return Ok(Outcome::answer(
-            json!({ "ok": true, "recoveryPending": true, "recoveryId": request, "notBefore": not_before }),
-        )
-        .notify(
-            principal,
-            json!({ "kind": "auth-recovery-started", "recoveryId": request, "notBefore": not_before }),
-            JsonValue::Null,
-        ));
-    }
     if device.is_none() {
         let mut key = devices::Enrollment::session(key_id, principal, &jwk);
         key.enrolled_by = Some(if existing { "phone_link" } else { "creation" });
@@ -201,7 +173,17 @@ fn opened(
     consume_attempt(db, id)?;
     let mut answer = device_sessions::create(db, proof, secret, account, key_id, now)?;
     answer["newAccount"] = json!(!existing && !changing);
-    Ok(Outcome::answer(answer))
+    if device.is_some() || !existing {
+        return Ok(Outcome::answer(answer));
+    }
+    // A new device of an existing account: it opens at once, on probation, and every other
+    // device of the account is told, as for the recovery code and the pairing.
+    answer["probationUntil"] = json!(now + PROBATION_MS);
+    Ok(Outcome::answer(answer).notify(
+        principal,
+        json!({ "kind": "auth-device-added", "deviceId": key_id, "label": "", "platform": "web" }),
+        json!({ "exceptDeviceId": key_id }),
+    ))
 }
 
 /// `phone-link-payment`: the payment of the account a verified number makes. A receipt,

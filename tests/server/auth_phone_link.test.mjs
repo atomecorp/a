@@ -63,17 +63,17 @@ describe('persistent phone-link protocol', () => {
         expect(f.db.prepare('SELECT count(*) AS n FROM auth_device_sessions').get().n).toBe(0);
         expect((await f.complete(input)).ok).toBe(true);
     });
-    it('turns the SMS link of an existing account into a 72 h recovery request, never a session', async () => {
+    it('opens the account of the SMS link on the new device at once, on probation, and tells the others', async () => {
         const f = fixture(); f.accounts.set('+33612345678', { user_id: 'existing-id', username: 'Existing', phone: '+33612345678' });
         const key = f.device(); const attempt = await f.start(key);
         const result = await f.complete(await f.input(key, attempt.attemptId));
-        expect(result).toMatchObject({ ok: true, recoveryPending: true, notBefore: f.now() + 72 * 3600000 });
-        expect(result.token).toBeUndefined();
-        expect(f.db.prepare('SELECT count(*) AS n FROM auth_device_keys').get().n).toBe(0);
-        expect(f.db.prepare('SELECT count(*) AS n FROM auth_device_sessions').get().n).toBe(0);
-        expect(f.db.prepare('SELECT principal_id, channel, state FROM auth_recovery_requests').get())
-            .toEqual({ principal_id: 'existing-id', channel: 'phone_recovery', state: 'pending' });
-        expect(f.notices).toMatchObject([{ principalId: 'existing-id', kind: 'auth-recovery-started' }]);
+        expect(result).toMatchObject({ ok: true, newAccount: false, probationUntil: f.now() + 86400000 });
+        expect(result.token).toEqual(expect.any(String));
+        expect(f.db.prepare('SELECT principal_id, enrolled_by, restricted_until_ms FROM auth_device_keys').get())
+            .toEqual({ principal_id: 'existing-id', enrolled_by: 'phone_link', restricted_until_ms: f.now() + 86400000 });
+        expect(f.db.prepare('SELECT count(*) AS n FROM auth_device_sessions').get().n).toBe(1);
+        expect(f.db.prepare('SELECT count(*) AS n FROM auth_recovery_requests').get().n).toBe(0);
+        expect(f.notices).toMatchObject([{ principalId: 'existing-id', kind: 'auth-device-added', options: { exceptDeviceId: expect.any(String) } }]);
     });
     it('has no signed approval of an SMS attempt: enrolled devices approve through pairing', async () => {
         const f = fixture(); const phone = f.device(); const first = await f.start(phone);
@@ -93,8 +93,9 @@ describe('persistent phone-link protocol', () => {
         expect(await f.auth.confirm({ attemptId: attempt.attemptId, token, pairingCode: attempt.pairingCode })).toEqual({ ok: true, approved: true });
         expect(f.db.prepare('SELECT count(*) AS n FROM auth_device_sessions').get().n).toBe(0);
         const result = await f.complete(await f.input(computer, attempt.attemptId, 'resume'));
-        expect(result).toMatchObject({ ok: true, recoveryPending: true });
-        expect(f.db.prepare('SELECT count(*) AS n FROM auth_device_sessions').get().n).toBe(0);
+        expect(result).toMatchObject({ ok: true, newAccount: false });
+        expect(result.token).toEqual(expect.any(String));
+        expect(f.db.prepare('SELECT count(*) AS n FROM auth_device_sessions').get().n).toBe(1);
     });
     it('renews with a signed challenge, rotates generation and revokes on reuse', async () => {
         const f = fixture(); const key = f.device(); const attempt = await f.start(key);
