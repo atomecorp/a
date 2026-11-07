@@ -18,6 +18,17 @@ Format d'une entrée : un titre `### R-NNN — …`, puis une ligne `- Statut : 
 d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui est validé, ce qui reste.
 
 ## Entrées à exécuter
+### R-126 — Icônes en PNG au lieu du SVG demandé : challenger le choix, mesurer son poids en mémoire (2026-11-07)
+- Statut : OUVERT — à faire après R-124 (toi, 7 nov. : « tu ne fais pas de suite… tu me diras après avoir résolu les problèmes »).
+- Source : toi, 7 nov. : « on a fait usage extensif de PNG alors que j'avais demandé du SVG au départ… ça encombre la mémoire, c'est plus lourd… tu challenges ça ».
+- À faire : recenser les PNG d'icônes (où, combien, quelle taille de fichier, à quelle taille ils sont affichés) et pourquoi ils ont été choisis (contrainte du rendu Bevy, de WebKit ou de l'AUv3 ?) ; mesurer leur part réelle dans l'empreinte mémoire (fichier sur disque contre image décodée en mémoire : une icône décodée pèse ses pixels, PNG ou SVG rastérisé, la différence tient surtout à la taille de rastérisation et au nombre de tailles gardées) ; te rendre un avis argumenté et un plan de passage au SVG là où il est possible, avec R-125.
+
+### R-125 — Mémoire de l'app sur les appareils de 2 Go (iPhone 8…) : mesurer, puis alléger (2026-11-07)
+- Statut : OUVERT — après R-124 (toi, 7 nov. : « Oui, ça me va, mais il faut surtout… régler le problème du serveur… c'est l'urgence »).
+- Source : toi, 7 nov. : « il y a plein d'appareils qui n'ont que 2 gigas, comment on fait ? … chargement progressif, libérer la mémoire, charger à la volée ».
+- Constaté : les ~3 Go du 7 nov. sont ceux de `rustc` compilant `atome-server` sur atome.one (tué par l'OOM, 3,8 Gio sans swap ; swap de 4 Go ajouté), pas ceux d'Atome en marche (atome-server en production : 132 Mo et 364 Mo). L'app iOS vise iOS 16.6, donc l'iPhone 8 (2 Go) ; aucune réaction aux alertes mémoire d'iOS dans le code (ni `didReceiveMemoryWarning`, ni `physicalMemory`, ni `navigator.deviceMemory`).
+- À faire : 1) mesurer l'empreinte réelle de l'app (iPad « Jeezs's Tab », Instruments) à l'ouverture et après un parcours accueil, assistant, scan, audio, visio, part par part (WebKit, Bevy, serveur local, audio) ; 2) selon la mesure : vider les caches sur alerte mémoire, charger les modules à l'ouverture et les décharger à la sortie, sons longs en flux, textures plafonnées, mode allégé sous ~3 Go ; 3) essai sur un vrai appareil de 2 Go.
+
 ### R-124 — Assistant inopérant (« Le serveur atome n'a pas pu mener la demande IA à bien ») et scan sans netteté ni bip (2026-11-07)
 - Statut : OUVERT — code poussé (accord du 7 nov. : « tu vérifies bien que le scanner marche et qu'il bip… après tu peux pousser ») ; mise à jour d'atome.one et publication iOS : voir la dernière ligne ; cause exacte de l'assistant sur atome.one inconnue (journal de production non lu : lecture SSH refusée par les permissions de la session).
 - Source : toi, 7 nov. : « quand je lance Assistant, il dit le serveur Atom n'a pas pu mener la… demande IA à bien… il n'arrive pas à se connecter au serveur… En priorité l'assistant » ; « quand j'ai scanné un produit, il n'y a pas de bip… il n'arrive pas à avoir net, l'appareil photo… il n'arrive pas à retrouver le code barre ».
