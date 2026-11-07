@@ -286,20 +286,34 @@ const KNOWN_PREFIXES: [&str; 7] = [
     "rate_limit_exceeded",
 ];
 
+// The provider's transport failing, as fetch threw it (http.rs): the provider unreachable, its answer
+// cut, its answer unreadable. Each is told as its own cause, never as a failure of this server.
+const TRANSPORT_FAILURES: [(&str, &str); 3] = [
+    ("fetch failed", "provider_unreachable"),
+    ("terminated", "provider_stream_incomplete"),
+    ("SyntaxError", "provider_invalid_response"),
+];
+
 /// The failure's reply fields: a known code travels, any other text stays here; a credit refusal on
 /// the platform key is eVe's shared credit, never the person's own key.
-fn failed(failure: Failure, cancelled: bool, shared: bool) -> JsonValue {
+fn failed(failure: &Failure, cancelled: bool, shared: bool) -> JsonValue {
     let known = KNOWN_PREFIXES
         .iter()
         .any(|prefix| failure.message.starts_with(prefix))
         || audio::ERRORS.contains(&failure.message.as_str())
         || video::ERRORS.contains(&failure.message.as_str());
+    let transport = TRANSPORT_FAILURES
+        .iter()
+        .find(|(text, _)| *text == failure.message)
+        .map(|(_, code)| *code);
     let code = if cancelled {
         "provider_cancelled".to_string()
     } else if !failure.provider_code.is_empty() {
         failure.provider_code.clone()
     } else if known {
         failure.message.clone()
+    } else if let Some(code) = transport {
+        code.into()
     } else {
         "provider_operation_failed".into()
     };
@@ -315,3 +329,7 @@ fn failed(failure: Failure, cancelled: bool, shared: bool) -> JsonValue {
     }
     fields
 }
+
+#[cfg(test)]
+#[path = "../../../../../tests/server/provider_failure_codes.rs"]
+mod tests;

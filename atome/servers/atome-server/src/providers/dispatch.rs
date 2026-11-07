@@ -51,12 +51,12 @@ pub async fn answer<L: Link>(
 ) -> JsonValue {
     let principal = match principal {
         // `jwt.verify` threw: its text is no known code.
-        Err(()) => return envelope(message, false, failed("jwt".into(), false, false)),
+        Err(()) => return envelope(message, false, failed(&"jwt".into(), false, false)),
         Ok(None) => {
             return envelope(
                 message,
                 false,
-                failed("not_authenticated".into(), false, false),
+                failed(&"not_authenticated".into(), false, false),
             );
         }
         Ok(Some(principal)) => principal,
@@ -85,7 +85,7 @@ pub async fn answer<L: Link>(
         .unwrap_or_else(|| "openai".into());
     let mut cancelled = match attached.admit(&principal, &action, &request_id, provider.clone()) {
         Ok(cancelled) => cancelled,
-        Err(code) => return envelope(message, false, failed(code.into(), false, false)),
+        Err(code) => return envelope(message, false, failed(&code.into(), false, false)),
     };
     let shared = AtomicBool::new(false);
     let work = run(
@@ -107,11 +107,14 @@ pub async fn answer<L: Link>(
     attached.finish(&request_id);
     match outcome {
         Ok(fields) => envelope(message, true, fields),
-        Err((failure, cancelled)) => envelope(
-            message,
-            false,
-            failed(failure, cancelled, shared.load(Ordering::Relaxed)),
-        ),
+        Err((failure, cancelled)) => {
+            let fields = failed(&failure, cancelled, shared.load(Ordering::Relaxed));
+            // A cause that does not travel as itself is kept in the server's journal, never lost.
+            if !cancelled && fields["error"] != failure.message.as_str() {
+                eprintln!("[ai-provider] {action} failed: {}", failure.message);
+            }
+            envelope(message, false, fields)
+        }
     }
 }
 

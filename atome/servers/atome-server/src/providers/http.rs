@@ -143,13 +143,26 @@ pub fn openai_failure(body: &JsonValue, default: &str, http_status: Option<u16>)
     }
 }
 
-/// A request sent: a redirect or an unreachable provider fail as fetch fails.
+/// A request sent: a redirect or an unreachable provider fail as fetch fails, the transport's own
+/// cause (resolution, TLS, connection) written to the server's journal without the address.
 pub async fn send(request: reqwest::RequestBuilder) -> Done<reqwest::Response> {
-    let response = request
-        .send()
-        .await
-        .map_err(|_| Failure::from("fetch failed"))?;
+    let response = request.send().await.map_err(|error| {
+        let error = error.without_url();
+        let mut cause = error.to_string();
+        let mut source = std::error::Error::source(&error);
+        while let Some(inner) = source {
+            cause.push_str(": ");
+            cause.push_str(&inner.to_string());
+            source = inner.source();
+        }
+        eprintln!("[ai-provider] request failed: {cause}");
+        Failure::from("fetch failed")
+    })?;
     if response.status().is_redirection() {
+        eprintln!(
+            "[ai-provider] request redirected: HTTP {}",
+            response.status().as_u16()
+        );
         return Err("fetch failed".into());
     }
     Ok(response)

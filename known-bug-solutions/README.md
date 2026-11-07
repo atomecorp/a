@@ -68,6 +68,7 @@ the established solution before attempting a new implementation.
 | Expert List opens without its main menu while catalog registration replaces the first render | [main-menu-projection-admission](main-menu-projection-admission/README.md) |
 | Opaque floating Bevy panels interleave rails, text, commands and footers | [panel-window-stack](panel-window-stack/README.md) |
 | Assistant appears before connection, loses voice on token refresh, or its input covers ribbon tools | [assistant-connection-ribbon](assistant-connection-ribbon/README.md) |
+| Assistant always says « Le serveur atome n'a pas pu mener la demande IA à bien » (`provider_operation_failed`) after the Rust refactor | [assistant-provider-operation-failed](assistant-provider-operation-failed/README.md) |
 | The assistant never says she is ready (« Attends, je prépare tes documents », then « Salut »); she has to be asked « tu es là ? » | [assistant-ready-sentence-missing](assistant-ready-sentence-missing/README.md) |
 | Nested media cannot crop, images stretch, or trimmed waveforms deform | [source-space-media-crop](source-space-media-crop/README.md) |
 | SVG double-click has no WebGPU handles or Color targets an old layer | [svg-vector-edit-webgpu](svg-vector-edit-webgpu/README.md) |
@@ -117,6 +118,7 @@ the established solution before attempting a new implementation.
 | Project view: reorder detaches a Molecule member, Delete bypasses the Molecule, Create Text/Code/Return/long press misroute text editing | [project-view-molecule-text-regressions](project-view-molecule-text-regressions/README.md) |
 | Slow first canvas (purple wait), surface briefly drawn at 75 %, unstable motion while the UI prepares | [ui-preparation-motion](ui-preparation-motion/README.md) |
 | Barcode scan: « Service produits indisponible » for every product for minutes while Open Food Facts answers (additives taxonomy failure blocked product reads) | [food-scan-provider-unavailable](food-scan-provider-unavailable/README.md) |
+| Barcode scan on iPhone: the code stays blurred, is never read, no beep (wide camera held under its minimum focus distance) | [barcode-scan-blurred-close-up](barcode-scan-blurred-close-up/README.md) |
 
 ## Maintenance rules
 
