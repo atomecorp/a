@@ -147,6 +147,10 @@ uuid = { version = "1", features = ["v4"] }
 # The calls' SFU (visio feature): 0.21.0, whose worker answers the router capabilities of Node's mediasoup 3.19.
 mediasoup = { version = "=0.21.0", optional = true }
 
+# iOS gives native code no root store to read (tls.rs#system_roots): Mozilla's roots, in the app.
+[target.'cfg(target_os = "ios")'.dependencies]
+webpki-root-certs = "1"
+
 [dev-dependencies]
 tempfile.workspace = true
 flate2 = "1.1"

@@ -3,7 +3,9 @@
 // client receives these roots explicitly; nothing reads them from the process
 // environment. Android gives native code no root store rustls-native-certs
 // knows: its authorities are one PEM file each in the Conscrypt APEX (updated
-// by the system) or under /system on older releases, read there directly.
+// by the system) or under /system on older releases, read there directly. iOS
+// gives native code no root store to read at all (rustls-native-certs finds none
+// there): its roots are Mozilla's, shipped with the app as the browsers carry them.
 
 use std::sync::Arc;
 use tokio_rustls::rustls::{self, ClientConfig, RootCertStore};
@@ -20,9 +22,18 @@ const ANDROID_CA_DIRS: [&str; 2] = [
     "/system/etc/security/cacerts",
 ];
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn system_roots() -> rustls_native_certs::CertificateResult {
     rustls_native_certs::load_native_certs()
+}
+
+#[cfg(target_os = "ios")]
+fn system_roots() -> rustls_native_certs::CertificateResult {
+    let mut roots = rustls_native_certs::CertificateResult::default();
+    roots
+        .certs
+        .extend_from_slice(webpki_root_certs::TLS_SERVER_ROOT_CERTS);
+    roots
 }
 
 #[cfg(target_os = "android")]

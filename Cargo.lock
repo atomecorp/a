@@ -775,6 +775,7 @@ dependencies = [
  "url",
  "urlencoding",
  "uuid",
+ "webpki-root-certs",
 ]
 
 [[package]]
