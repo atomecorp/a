@@ -57,6 +57,15 @@ export function createRecovery({ query, transaction, proof, sessions, devices, h
     async function start(input, network) {
         const { keyId, jwk } = publicDeviceKey(input.sessionKey);
         if (input.handle && input.phone) reject('auth_request_invalid');
+        // A code made before it had a lookup (17–26 Oct. 2026) is found by its account's verifier,
+        // and its lookup written, so that the code alone opens its account like every later one.
+        const unindexed = async (code) => {
+            const rows = await query('all', 'SELECT principal_id, verifier FROM auth_recovery_codes WHERE lookup IS NULL');
+            const found = rows.find((row) => crypto.timingSafeEqual(Buffer.from(row.verifier, 'hex'), Buffer.from(recoveryVerifier(row.principal_id, code), 'hex')));
+            if (!found) return null;
+            await query('run', 'UPDATE auth_recovery_codes SET lookup = ? WHERE principal_id = ?', [recoveryLookup(String(code || '')), found.principal_id]);
+            return found.principal_id;
+        };
         // The account is named by its handle, its verified phone number, or the code itself.
         const address = input.phone ? `phone:${String(input.phone)}` : String(input.handle || '').trim().toLowerCase();
         // Identical shape and work for an unknown handle or number and a wrong code.
@@ -65,7 +74,8 @@ export function createRecovery({ query, transaction, proof, sessions, devices, h
             if (address) await proof.limit(`recovery-handle:${proof.keyedIndex(address)}`, 10, 86400000);
             const principalId = address
                 ? (input.phone ? await handles.resolvePhone(input.phone) : await handles.resolve(address))
-                : (await query('get', 'SELECT principal_id FROM auth_recovery_codes WHERE lookup = ?', [recoveryLookup(String(input.code || ''))]))?.principal_id || null;
+                : (await query('get', 'SELECT principal_id FROM auth_recovery_codes WHERE lookup = ?', [recoveryLookup(String(input.code || ''))]))?.principal_id
+                    || await unindexed(input.code);
             const stored = principalId ? await query('get', 'SELECT verifier FROM auth_recovery_codes WHERE principal_id = ?', [principalId]) : null;
             const candidate = recoveryVerifier(principalId || randomHandle(), input.code);
             const valid = !!stored && crypto.timingSafeEqual(Buffer.from(stored.verifier, 'hex'), Buffer.from(candidate, 'hex'));

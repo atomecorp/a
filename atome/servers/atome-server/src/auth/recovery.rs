@@ -53,6 +53,36 @@ fn lookup(code: Option<&JsonValue>) -> String {
     ))
 }
 
+// A code made before it had a lookup (17–26 Oct. 2026) is found by its account's verifier,
+// and its lookup written, so that the code alone opens its account like every later one.
+fn unindexed(db: &Connection, code: Option<&JsonValue>) -> Result<Option<String>, String> {
+    let mut statement = db
+        .prepare("SELECT principal_id, verifier FROM auth_recovery_codes WHERE lookup IS NULL")
+        .map_err(|e| e.to_string())?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    let Some((principal, _)) = rows.into_iter().find(|(principal, stored)| {
+        bool::from(
+            stored
+                .as_bytes()
+                .ct_eq(verifier(principal, code).as_bytes()),
+        )
+    }) else {
+        return Ok(None);
+    };
+    db.execute(
+        "UPDATE auth_recovery_codes SET lookup = ? WHERE principal_id = ?",
+        [lookup(code), principal.clone()],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(Some(principal))
+}
+
 // `/^[a-f0-9]{64}$/.test(String(value))`.
 fn hex64(value: Option<&JsonValue>) -> bool {
     let text = js::text(value);
@@ -224,14 +254,19 @@ pub fn start(
             )?;
         }
         let principal = if address.is_empty() {
-            db.query_row(
-                "SELECT principal_id FROM auth_recovery_codes WHERE lookup = ?",
-                [lookup(input.get("code"))],
-                |row| row.get::<_, Option<String>>(0),
-            )
-            .optional()
-            .map_err(|e| e.to_string())?
-            .flatten()
+            let found = db
+                .query_row(
+                    "SELECT principal_id FROM auth_recovery_codes WHERE lookup = ?",
+                    [lookup(input.get("code"))],
+                    |row| row.get::<_, Option<String>>(0),
+                )
+                .optional()
+                .map_err(|e| e.to_string())?
+                .flatten();
+            match found {
+                Some(principal) => Some(principal),
+                None => unindexed(db, input.get("code"))?,
+            }
         } else if by_phone {
             handles::resolve_phone(db, input.get("phone"))?
         } else {
