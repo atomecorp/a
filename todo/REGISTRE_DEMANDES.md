@@ -19,7 +19,7 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 
 ## Entrées à exécuter
 ### R-123 — Restaurer sa session par le lien SMS (iOS 1.51) : 72 h retirées, lien livré une fois (2026-11-07)
-- Statut : OUVERT — corrigé et vérifié en local ; reste à commiter, déployer le serveur, construire l'iOS, puis ton essai sur l'iPhone
+- Statut : ATTENTE UTILISATEUR — livré le 7 nov. (eVe b66c4884, atome db005597e + 815c47b3d poussés ; atome.one mis à jour, binaire Rust de 12:01 UTC sur 815c47b3d, health 200, server-info 1.52 ; iOS 1.52 (50) publiée sur l'OTA, signature vérifiée) ; reste ton essai sur l'iPhone
 - Source : toi, 2026-11-07 : « impossible de restaurer mon session… il demande de copier-coller un code. Quand on reçoit le SMS, le code disparaît… il dit qu'on a 72 heures… vérifier le workflow complet » ; puis « c'est normal qu'il envoie un lien… ça doit activer la session » et « le comportement actuel, par lien, était correct si on peut le conserver ».
 - Décidé (sécurité égale, moins de recopie) : le lien reste. Ouvert sur l'appareil qui l'a demandé, il ouvre la session tout de suite (appareil en probation 24 h pour les actions sensibles, les autres appareils prévenus `auth-device-added`). Ouvert sur un autre appareil, il demande le code d'association à 8 chiffres affiché par le demandeur (protection contre un lien intercepté).
 - Causes : (1) `phone_link/finish.rs#opened` changeait un nouvel appareil d'un compte existant en récupération différée de 72 h au lieu d'une session ; (2) iOS livrait le même lien universel deux fois (gestionnaires SwiftUI + `SceneDelegate`) : la 2e ouverture voyait l'essai déjà consommé et demandait le code d'association (« le code disparaît », puis « Opération incomplète »).
