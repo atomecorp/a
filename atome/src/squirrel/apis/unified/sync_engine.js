@@ -18,6 +18,8 @@ const PERSIST_DELAY_MS = 250;
 const SUBSCRIBE_COALESCE_MS = 50;
 // Server limit for one `subscribe` carrying many cursors (`subscribe-batch` capability).
 const SUBSCRIBE_BATCH_SIZE = 500;
+// A restore's progress is told at most this often while its streams arrive.
+const RESTORE_STATUS_INTERVAL_MS = 500;
 
 const syncUrl = (env) => {
     const explicit = String(env?.__SQUIRREL_FASTIFY_WS_SYNC_URL__ || '').trim();
@@ -64,6 +66,9 @@ export class SyncEngine {
         this.batchSettlement = false;
         this.pendingSubscriptions = new Set();
         this.subscribedStreams = new Set();
+        // Streams subscribed at cursor 0 not received yet: a restore's remaining work.
+        this.waitingStreams = new Set();
+        this.restoreStatusAt = 0;
         this.subscribeQueue = new Set();
         this.subscribeTimer = null;
         this.subscriptionSerial = 0;
@@ -176,6 +181,8 @@ export class SyncEngine {
             serverVersion: this.connected ? this.serverVersion : null,
             registered: this.registered,
             pending_replay_count: this.pendingReplays,
+            restore_total: this.subscribedStreams.size,
+            restore_waiting: this.waitingStreams.size,
             source: this.source,
             principal_id: principalId(this.env) || null,
             environment_fingerprint: this.scopeKey(),
@@ -211,6 +218,7 @@ export class SyncEngine {
             this.pendingReplays = 0;
             this.pendingSubscriptions.clear();
             this.subscribedStreams.clear();
+            this.waitingStreams.clear();
             socket.send(JSON.stringify(boundToKey(authToken) ? { type: 'auth-challenge', token: authToken } : { type: 'auth', token: authToken }));
         };
         this.authToken = authToken;
@@ -276,12 +284,16 @@ export class SyncEngine {
             if (this.batchSubscribe && this.batchSettlement && !message.subscription_id) return;
             if (message.subscription_id && !this.pendingSubscriptions.delete(message.subscription_id)) return;
             const completed = message.settled_streams || (Array.isArray(message.streams) ? message.streams : [message]);
-            for (const entry of completed) this.persistCursor(entry?.stream, entry?.cursor);
+            for (const entry of completed) {
+                this.persistCursor(entry?.stream, entry?.cursor);
+                this.waitingStreams.delete(String(entry?.stream || ''));
+            }
             this.settleReplay();
             return;
         }
         if (message.type === 'revoked') {
             this.streams.delete(String(message.stream || ''));
+            this.waitingStreams.delete(String(message.stream || ''));
             this.persistScope();
             if (!this.batchSubscribe) this.settleReplay();
             return;
@@ -292,7 +304,10 @@ export class SyncEngine {
             if (message.code !== 'stream_access_denied') return;
             // A batch denial names streams this account no longer reaches: stop resubscribing them.
             if (Array.isArray(message.streams)) {
-                for (const stream of message.streams) this.streams.delete(String(stream));
+                for (const stream of message.streams) {
+                    this.streams.delete(String(stream));
+                    this.waitingStreams.delete(String(stream));
+                }
                 this.schedulePersist();
             } else if (!this.batchSubscribe) this.settleReplay();
         }
@@ -303,6 +318,10 @@ export class SyncEngine {
         const stream = String(message.stream || '').trim();
         const sequence = Number(message.sequence);
         if (!eventId || !stream || !Number.isInteger(sequence)) return;
+        if (this.waitingStreams.delete(stream) && Date.now() - this.restoreStatusAt >= RESTORE_STATUS_INTERVAL_MS) {
+            this.restoreStatusAt = Date.now();
+            this.publishStatus();
+        }
         if (this.seenEventIds.has(eventId)) {
             this.ack(stream, sequence);
             return;
@@ -405,7 +424,10 @@ export class SyncEngine {
             const id = this.batchSubscribe && this.batchSettlement ? `${this.source}:${++this.subscriptionSerial}` : null;
             const message = this.batchSubscribe ? { streams: batch } : batch[0];
             if (this.send({ type: 'subscribe', ...message, ...(id ? { subscription_id: id } : {}) })) {
-                batch.forEach(entry => this.subscribedStreams.add(entry.stream));
+                batch.forEach(entry => {
+                    this.subscribedStreams.add(entry.stream);
+                    if (entry.cursor === 0) this.waitingStreams.add(entry.stream);
+                });
                 if (id) this.pendingSubscriptions.add(id);
                 this.pendingReplays += 1;
             }

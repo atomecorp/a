@@ -1,13 +1,22 @@
 use super::local_atome::{LocalAtomeState, RemoteSyncCredential};
 use serde_json::{Value, json};
 
+// Where a connection's replay stands: its batches still unanswered, the streams it subscribed,
+// and those among them this device has never received yet (a restore, a new device).
+#[derive(Clone, Copy, Default)]
+pub(super) struct Replay {
+    pub(super) pending: usize,
+    pub(super) total: usize,
+    pub(super) waiting: usize,
+}
+
 pub(super) fn publish(
     state: &LocalAtomeState,
     user: &str,
     credential: &RemoteSyncCredential,
     connection: &str,
     restore: &str,
-    pending: usize,
+    replay: Replay,
     error: Option<&str>,
 ) {
     let current = state
@@ -22,7 +31,8 @@ pub(super) fn publish(
         return;
     }
     let value = json!({"principal_id":user, "environment_fingerprint":credential.environment_fingerprint,
-        "connection_state":connection, "restore_state":restore, "pending_replay_count":pending, "last_error_code":error});
+        "connection_state":connection, "restore_state":restore, "pending_replay_count":replay.pending, "restore_total":replay.total, "restore_waiting":replay.waiting,
+        "last_error_code":error});
     if let Ok(mut map) = state.sync_progress.lock() {
         map.insert(user.to_string(), value.clone());
     }
@@ -47,7 +57,7 @@ pub(super) fn read(state: &LocalAtomeState, user: &str) -> Value {
             value
         }
         _ => {
-            json!({"principal_id":user,"connection_state":"disconnected","restore_state":"unknown","pending_replay_count":0,"last_error_code":null})
+            json!({"principal_id":user,"connection_state":"disconnected","restore_state":"unknown","pending_replay_count":0,"restore_total":0,"restore_waiting":0,"last_error_code":null})
         }
     }
 }

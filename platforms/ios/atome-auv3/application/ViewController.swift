@@ -15,6 +15,7 @@ final class FullscreenWebViewController: UIViewController {
     private let bootLogo = UIImageView(image: UIImage(named: "LaunchLogo"))
     private let bootStatusLabel = UILabel()
     private let bootRetryButton = UIButton(type: .system)
+    private let bootRestoreGauge = BootRestoreGauge()
 
     override func loadView() {
         WebViewManager.markBootMilestone("view_load_started")
@@ -43,7 +44,8 @@ final class FullscreenWebViewController: UIViewController {
         WebViewManager.installBootPresentationHandlers(
             onReady: { [weak self] _ in self?.hideBootOverlay() },
             onFailure: { [weak self] reason, _ in self?.showBootFailure(reason: reason) },
-            onRestart: { [weak self] in self?.showBootOverlay() }
+            onRestart: { [weak self] in self?.showBootOverlay() },
+            onRestore: { [weak self] progress in self?.showBootRestore(progress) }
         )
         WebViewManager.startBootWatchdog()
         view.insetsLayoutMarginsFromSafeArea = true
@@ -114,6 +116,9 @@ final class FullscreenWebViewController: UIViewController {
         bootOverlay.addSubview(bootLogo)
         bootOverlay.addSubview(bootStatusLabel)
         bootOverlay.addSubview(bootRetryButton)
+        bootRestoreGauge.translatesAutoresizingMaskIntoConstraints = false
+        bootRestoreGauge.isHidden = true
+        bootOverlay.addSubview(bootRestoreGauge)
         NSLayoutConstraint.activate([
             bootOverlay.topAnchor.constraint(equalTo: root.topAnchor),
             bootOverlay.bottomAnchor.constraint(equalTo: root.bottomAnchor),
@@ -128,7 +133,9 @@ final class FullscreenWebViewController: UIViewController {
             bootStatusLabel.trailingAnchor.constraint(lessThanOrEqualTo: bootOverlay.trailingAnchor, constant: -24),
             bootStatusLabel.centerXAnchor.constraint(equalTo: bootOverlay.centerXAnchor),
             bootRetryButton.topAnchor.constraint(equalTo: bootStatusLabel.bottomAnchor, constant: 14),
-            bootRetryButton.centerXAnchor.constraint(equalTo: bootOverlay.centerXAnchor)
+            bootRetryButton.centerXAnchor.constraint(equalTo: bootOverlay.centerXAnchor),
+            bootRestoreGauge.topAnchor.constraint(equalTo: bootStatusLabel.bottomAnchor, constant: 8),
+            bootRestoreGauge.centerXAnchor.constraint(equalTo: bootOverlay.centerXAnchor)
         ])
     }
 
@@ -144,6 +151,24 @@ final class FullscreenWebViewController: UIViewController {
         bootStatusLabel.backgroundColor = .clear
         bootStatusLabel.text = "Ouverture…"
         bootRetryButton.isHidden = true
+        bootRestoreGauge.isHidden = true
+    }
+
+    // The home awaits the account's profile while a restore runs: the cover says so and fills
+    // its gauge (mockup validated 8 Nov. 2026), opaque again if a stall warning had cleared it.
+    private func showBootRestore(_ progress: BootRestoreProgress) {
+        bootOverlay.layer.removeAllAnimations()
+        bootOverlay.backgroundColor = bootBackgroundColor
+        bootOverlay.isOpaque = true
+        bootOverlay.isUserInteractionEnabled = true
+        bootOverlay.alpha = 1
+        bootOverlay.isHidden = false
+        bootLogo.isHidden = false
+        bootStatusLabel.backgroundColor = .clear
+        bootStatusLabel.text = progress.label
+        bootRetryButton.isHidden = true
+        bootRestoreGauge.show(progress)
+        bootRestoreGauge.isHidden = false
     }
 
     private func hideBootOverlay() {
@@ -172,6 +197,7 @@ final class FullscreenWebViewController: UIViewController {
             ? "Le moteur d’affichage s’est arrêté."
             : "Le démarrage a échoué."
         bootRetryButton.isHidden = false
+        bootRestoreGauge.isHidden = true
     }
 
     private func showBootDelayWarning() {
@@ -185,6 +211,7 @@ final class FullscreenWebViewController: UIViewController {
         bootStatusLabel.text = "Le démarrage continue…"
         bootStatusLabel.backgroundColor = UIColor(white: 0, alpha: 0.72)
         bootRetryButton.isHidden = true
+        bootRestoreGauge.isHidden = true
     }
 
     @objc private func retryBoot() {

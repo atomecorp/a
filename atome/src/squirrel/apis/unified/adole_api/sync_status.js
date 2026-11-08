@@ -22,13 +22,14 @@ export async function getWorkspaceSyncStatus() {
         status = { principal_id: principal, environment_fingerprint: engine?.environment_fingerprint,
             connection_state: ['authentication_expired', 'authentication_invalid'].includes(engine?.error) ? 'auth_required' : engine?.connected ? 'connected' : 'disconnected',
             restore_state: engine?.registered && engine.pending_replay_count === 0 ? progress?.restore_state || 'unknown' : 'receiving',
-            pending_replay_count: engine?.pending_replay_count || 0, pending_delivery_count: pending.length + refused.length,
+            pending_replay_count: engine?.pending_replay_count || 0,
+            restore_total: engine?.restore_total || 0, restore_waiting: engine?.restore_waiting || 0, pending_delivery_count: pending.length + refused.length,
             last_error_code: refused.length ? 'workspace_sync_refused' : progress?.last_error_code || engine?.error || null };
     }
     if (getSessionState().user?.id !== principal || getSessionState().mode !== session.mode) throw new Error('workspace_identity_changed');
     if (String(globalThis.window?.__SQUIRREL_ENVIRONMENT_FINGERPRINT__ || '') !== environment) throw new Error('workspace_environment_changed');
     if (isTauriRuntime() && environment && status.environment_fingerprint && status.environment_fingerprint !== environment) throw new Error('sync_status_environment_mismatch');
     if (status.principal_id && status.principal_id !== principal) throw new Error('sync_status_principal_mismatch');
-    return { connection_state: 'disconnected', restore_state: 'unknown', pending_replay_count: 0,
+    return { connection_state: 'disconnected', restore_state: 'unknown', pending_replay_count: 0, restore_total: 0, restore_waiting: 0,
         last_error_code: null, ...status, principal_id: principal };
 }

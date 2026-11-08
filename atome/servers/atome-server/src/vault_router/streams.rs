@@ -272,6 +272,52 @@ impl VaultRouter {
         Ok(projected)
     }
 
+    // A subscription batch's replay page over the principal's own streams: one registry read
+    // and one vault request (`streams:events`) for `[[stream_id, cursor], …]`. The streams it
+    // does not own (shared, or unknown) are given back, replayed one by one through their access.
+    pub async fn list_own_streams_events(
+        &self,
+        principal: &str,
+        pairs: &[JsonValue],
+    ) -> Result<(Vec<JsonValue>, Vec<String>), String> {
+        let ids = unique(pairs.iter().map(|pair| js::string(&pair[0])));
+        if ids.is_empty() {
+            return Ok((Vec::new(), Vec::new()));
+        }
+        let rows = self
+            .central
+            .all(
+                format!("SELECT stream_id FROM vault_stream_registry WHERE vault_principal_id = ? AND stream_id IN ({})", marks(ids.len())),
+                std::iter::once(json!(principal)).chain(ids.iter().map(|id| json!(id))).collect(),
+            )
+            .await?;
+        let own: HashSet<String> = rows
+            .iter()
+            .map(|row| js::string(&row["stream_id"]))
+            .collect();
+        let (mine, others): (Vec<&JsonValue>, Vec<&JsonValue>) = pairs
+            .iter()
+            .partition(|pair| own.contains(&js::string(&pair[0])));
+        let others = unique(others.into_iter().map(|pair| js::string(&pair[0])));
+        if mine.is_empty() {
+            return Ok((Vec::new(), others));
+        }
+        let events = self
+            .ask(
+                principal,
+                "streams:events",
+                json!({ "streams": mine, "limit": 500 }),
+            )
+            .await?;
+        let events = events
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|event| js::with(event, [("vault_principal_id", json!(principal))]))
+            .collect();
+        Ok((events, others))
+    }
+
     // The share, among those opening this stream, whose root holds the event's object.
     async fn share_covering_event(
         &self,

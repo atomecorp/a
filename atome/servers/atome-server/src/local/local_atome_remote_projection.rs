@@ -28,7 +28,13 @@ pub(super) fn ensure_schema(db: &Connection) -> Result<(), rusqlite::Error> {
             stream_id TEXT NOT NULL, last_sequence INTEGER NOT NULL DEFAULT 0,
             updated_at TEXT NOT NULL, PRIMARY KEY (local_user_id, stream_id)
          );
-         CREATE TABLE IF NOT EXISTS local_repairs (name TEXT PRIMARY KEY, done_at TEXT NOT NULL);",
+         CREATE TABLE IF NOT EXISTS local_repairs (name TEXT PRIMARY KEY, done_at TEXT NOT NULL);
+         -- Each projected event looks up the children awaiting it (`patch.rs`): without these, every
+         -- event of a restore parsed the whole projection (20-80 ms an event at 7 600 atomes).
+         CREATE INDEX IF NOT EXISTS idx_state_current_parent_id
+           ON state_current(json_extract(properties, '$.parent_id'));
+         CREATE INDEX IF NOT EXISTS idx_state_current_parent_id_alias
+           ON state_current(json_extract(properties, '$.parentId'));",
     )?;
     // These sweeps mend rows written before the sync contract of Aug. 2026; every later write
     // projects type, parent, deletion and local media itself (`patch.rs`). A database is mended
@@ -231,8 +237,26 @@ fn ensure_principal(tx: &Transaction<'_>, principal_id: &str) -> Result<(), Stri
     Ok(())
 }
 
-pub(super) fn persist_ws_event(
+// The events received together, persisted in one transaction (on iOS each commit syncs the
+// journal to disk: one per event held a restore to a few dozen events a second). True for each
+// event newly recorded, false for one already held.
+pub(super) fn persist_ws_events(
     db: &mut Connection,
+    local_user_id: &str,
+    remote_user_id: &str,
+    events: &[JsonValue],
+) -> Result<Vec<bool>, String> {
+    let tx = db.transaction().map_err(|error| error.to_string())?;
+    let inserted = events
+        .iter()
+        .map(|event| persist_event(&tx, local_user_id, remote_user_id, event))
+        .collect::<Result<Vec<_>, _>>()?;
+    tx.commit().map_err(|error| error.to_string())?;
+    Ok(inserted)
+}
+
+fn persist_event(
+    tx: &Transaction<'_>,
     local_user_id: &str,
     remote_user_id: &str,
     event: &JsonValue,
@@ -252,15 +276,14 @@ pub(super) fn persist_ws_event(
         .and_then(JsonValue::as_i64)
         .filter(|value| *value > 0)
         .ok_or_else(|| "remote_event_sequence_invalid".to_string())?;
-    let duplicate = db
+    let duplicate = tx
         .query_row("SELECT 1 FROM events WHERE id = ?1", [event_id], |_| Ok(()))
         .optional()
         .map_err(|error| error.to_string())?
         .is_some();
-    let tx = db.transaction().map_err(|error| error.to_string())?;
     if !duplicate {
         let patch = patch_of(event);
-        let winner_keys = project_patch(&tx, local_user_id, remote_user_id, event, &patch)?;
+        let winner_keys = project_patch(tx, local_user_id, remote_user_id, event, &patch)?;
         let projected_atome_id = projection_atome_id(event, local_user_id, remote_user_id);
         let timestamp = event
             .get("timestamp")
@@ -301,7 +324,7 @@ pub(super) fn persist_ws_event(
         if let Some(atome_id) = projected_atome_id {
             for key in winner_keys {
                 atome_store::conflicts::record(
-                    &tx,
+                    tx,
                     atome_id,
                     &key,
                     event_id,
@@ -329,6 +352,5 @@ pub(super) fn persist_ws_event(
         ],
     )
     .map_err(|error| error.to_string())?;
-    tx.commit().map_err(|error| error.to_string())?;
     Ok(!duplicate)
 }

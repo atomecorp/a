@@ -16,7 +16,8 @@ use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 
 const ITERATIONS: NonZeroU32 = NonZeroU32::new(120_000).expect("iterations");
-const AREAS: [&str; 2] = ["credentials", "secrets"];
+// The person's sealed folders; the supervisor hands them to the vault's own account.
+pub const AREAS: [&str; 2] = ["credentials", "secrets"];
 
 fn text<'a>(payload: &'a JsonValue, name: &str) -> Result<&'a str, String> {
     payload

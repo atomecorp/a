@@ -7,9 +7,6 @@ use super::*;
 use append::{AppendOptions, ConflictMode};
 use reads::{EventFilter, StateFilter, field, field_text, js_number_of, number_or};
 
-// Upper bound of one stream replay batch (raw stored bytes); see `stream:events`.
-const STREAM_BATCH_BYTES: i64 = 8 * 1024 * 1024;
-
 // Opens a person's vault database as Fastify's vault process opened it: WAL, the
 // schema, then the references an earlier write left pending.
 pub fn open_database(path: &std::path::Path) -> Result<Connection, String> {
@@ -31,13 +28,11 @@ fn strict_true(payload: &JsonValue, keys: &[&str]) -> bool {
         .any(|key| payload.get(*key) == Some(&JsonValue::Bool(true)))
 }
 
-// Every row value parsed as the vault's `parseRow` does.
-fn parsed_event_row(mut row: JsonMap<String, JsonValue>) -> JsonValue {
-    for key in ["payload", "actor", "projection", "lww_decisions"] {
-        let value = row_json::parse_stored(row.get(key));
-        row.insert(key.into(), value);
-    }
-    JsonValue::Object(row)
+fn replay_cursor(value: Option<&JsonValue>) -> f64 {
+    js_number_of(value)
+        .filter(|cursor| cursor.is_finite())
+        .unwrap_or(0.0)
+        .max(0.0)
 }
 
 fn string_list(value: Option<&JsonValue>) -> Vec<String> {
@@ -260,7 +255,31 @@ impl Vault<'_> {
             "stream:of-atome" => with_transaction(db, |db| {
                 self.stream_of_atome(db, field_text(payload, &["atome_id", "atomeId"]))
             }),
-            "stream:events" => self.stream_events(db, payload),
+            "stream:events" => {
+                let stream_id = field_text(payload, &["stream_id", "streamId"])
+                    .ok_or("vault_stream_required")?;
+                let streams = [(stream_id, replay_cursor(payload.get("cursor")))];
+                let limit = number_or(payload.get("limit"), 500).clamp(1, 1000);
+                stream_pages::events_after(db, &streams, limit).map(JsonValue::Array)
+            }
+            // A subscription batch's replay: `[[stream_id, cursor], …]`, one page across them.
+            "streams:events" => {
+                let streams: Vec<(String, f64)> = payload
+                    .get("streams")
+                    .and_then(JsonValue::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|pair| {
+                        let stream = pair.get(0)?.as_str().filter(|id| !id.is_empty())?;
+                        Some((stream.to_string(), replay_cursor(pair.get(1))))
+                    })
+                    .collect();
+                if streams.len() > 1000 {
+                    return Err("vault_stream_batch_too_large".into());
+                }
+                let limit = number_or(payload.get("limit"), 500).clamp(1, 1000);
+                stream_pages::events_after(db, &streams, limit).map(JsonValue::Array)
+            }
             "stream:head" => {
                 let stream_id = field_text(payload, &["stream_id", "streamId"])
                     .ok_or("vault_stream_required")?;
@@ -366,50 +385,6 @@ impl Vault<'_> {
             }),
             None => JsonValue::Null,
         })
-    }
-
-    // Every event carries the projection of its object (hundreds of KB for a large
-    // project): the batch is bounded in bytes too, read from the row sizes first; at least one event goes.
-    fn stream_events(&self, db: &Connection, payload: &JsonValue) -> Result<JsonValue, String> {
-        let stream_id =
-            field_text(payload, &["stream_id", "streamId"]).ok_or("vault_stream_required")?;
-        let cursor = js_number_of(payload.get("cursor"))
-            .filter(|cursor| cursor.is_finite())
-            .unwrap_or(0.0)
-            .max(0.0);
-        let limit = number_or(payload.get("limit"), 500).clamp(1, 1000);
-        let mut sizes = db
-            .prepare(
-                "SELECT COALESCE(LENGTH(payload), 0) + COALESCE(LENGTH(projection), 0) + COALESCE(LENGTH(lww_decisions), 0)
-                 FROM events WHERE stream_id = ?1 AND sequence > ?2 ORDER BY sequence ASC, id ASC LIMIT ?3",
-            )
-            .map_err(|e| e.to_string())?;
-        let mut count: i64 = 0;
-        let mut bytes: i64 = 0;
-        let rows = sizes
-            .query_map(rusqlite::params![stream_id, cursor, limit], |row| {
-                row.get::<_, i64>(0)
-            })
-            .map_err(|e| e.to_string())?;
-        for size in rows {
-            let size = size.map_err(|e| e.to_string())?;
-            if count > 0 && bytes + size > STREAM_BATCH_BYTES {
-                break;
-            }
-            bytes += size;
-            count += 1;
-        }
-        if count == 0 {
-            return Ok(json!([]));
-        }
-        let rows = row_json::query_objects(
-            db,
-            "SELECT * FROM events WHERE stream_id = ? AND sequence > ? ORDER BY sequence ASC, id ASC LIMIT ?",
-            &[&stream_id, &cursor, &count],
-        )?;
-        Ok(JsonValue::Array(
-            rows.into_iter().map(parsed_event_row).collect(),
-        ))
     }
 
     fn files_described(&self, db: &Connection, payload: &JsonValue) -> Result<JsonValue, String> {

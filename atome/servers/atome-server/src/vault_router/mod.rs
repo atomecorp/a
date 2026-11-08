@@ -62,10 +62,15 @@ impl VaultRouter {
         payload: JsonValue,
     ) -> Result<JsonValue, String> {
         let payload = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
+        // A vault answers its requests one after another: a timeout names the operation awaited.
         let reply = self
             .vaults
             .request(principal, frame::request_body(operation, &payload))
-            .await?;
+            .await
+            .map_err(|error| match error.as_str() {
+                "vault_request_timeout" => format!("{error}:{operation}"),
+                _ => error,
+            })?;
         serde_json::from_slice(&reply).map_err(|_| "vault_reply_invalid".to_string())
     }
 
@@ -543,6 +548,11 @@ impl VaultRouter {
                 self.list_stream_events(&who, at("stream_id"), &options)
                     .await?
             )),
+            "router:own-streams-events" => {
+                let pairs = at("streams").as_array().cloned().unwrap_or_default();
+                let (events, others) = self.list_own_streams_events(&who, &pairs).await?;
+                Ok(json!({ "events": events, "others": others }))
+            }
             "router:stream-head" => self.stream_head(&who, at("stream_id")).await,
             "router:project-event" => Ok(optional(
                 self.project_event_for_principal(&who, at("event")).await?,

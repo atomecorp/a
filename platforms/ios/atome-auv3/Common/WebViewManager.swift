@@ -38,6 +38,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     static var bootPresentationHandler: (([String: Any]) -> Void)?
     static var bootFailureHandler: ((String, [String: Any]) -> Void)?
     static var bootRestartHandler: (() -> Void)?
+    static var bootRestoreHandler: ((BootRestoreProgress) -> Void)?
     // Injected by the app target: reloads a presented page the system terminated.
     static var presentedPageTerminationHandler: (() -> Void)?
     static var bootTerminalFailure = false

@@ -2,6 +2,50 @@ import Foundation
 import QuartzCore
 import Darwin
 
+// A restore under way while the home awaits the account's profile: the share already here and the
+// gauge's look, both given by the page (its text and its tokens; mockup validated 8 Nov. 2026).
+struct BootRestoreProgress {
+    let fraction: Double
+    let label: String
+    let ground: [Double]
+    let accent: [Double]
+    let fillDarken: Double
+    let radius: Double
+    let width: Double
+    let height: Double
+    // The ground's inner shadow: its colour (rgba), blur and vertical offset.
+    let insetColor: [Double]
+    let insetBlur: Double
+    let insetOffset: Double
+
+    init?(_ body: [String: Any]) {
+        let numbers = { (key: String) in (body[key] as? [NSNumber])?.map(\.doubleValue) ?? [] }
+        guard let fraction = (body["fraction"] as? NSNumber)?.doubleValue, (0...1).contains(fraction),
+              let label = body["label"] as? String, !label.isEmpty,
+              let fillDarken = (body["fillDarken"] as? NSNumber)?.doubleValue,
+              let radius = (body["radius"] as? NSNumber)?.doubleValue,
+              let width = (body["width"] as? NSNumber)?.doubleValue, width > 0,
+              let height = (body["height"] as? NSNumber)?.doubleValue, height > 0 else { return nil }
+        let ground = numbers("ground"), accent = numbers("accent")
+        let inset = body["groundInset"] as? [String: Any]
+        let insetColor = (inset?["color"] as? [NSNumber])?.map(\.doubleValue) ?? []
+        let insetOffset = (inset?["offset"] as? [NSNumber])?.map(\.doubleValue) ?? []
+        guard ground.count == 4, accent.count == 4, insetColor.count == 4, insetOffset.count == 2,
+              let insetBlur = (inset?["blur"] as? NSNumber)?.doubleValue else { return nil }
+        self.fraction = fraction
+        self.label = String(label.prefix(120))
+        self.ground = ground
+        self.accent = accent
+        self.fillDarken = fillDarken
+        self.radius = radius
+        self.width = width
+        self.height = height
+        self.insetColor = insetColor
+        self.insetBlur = insetBlur
+        self.insetOffset = insetOffset[1]
+    }
+}
+
 final class BootStallWatchdog {
     private let coldWebKitGrace: TimeInterval = 20
     private let activeBootStallLimit: TimeInterval = 8
@@ -118,8 +162,10 @@ extension WebViewManager {
     static func installBootPresentationHandlers(
         onReady: @escaping ([String: Any]) -> Void,
         onFailure: @escaping (String, [String: Any]) -> Void,
-        onRestart: @escaping () -> Void
+        onRestart: @escaping () -> Void,
+        onRestore: @escaping (BootRestoreProgress) -> Void
     ) {
+        bootRestoreHandler = onRestore
         bootPresentationHandler = onReady
         bootFailureHandler = onFailure
         bootRestartHandler = onRestart
@@ -165,6 +211,13 @@ extension WebViewManager {
         print(bootSummaryLine("presentation_ready", report: report))
         print("[BOOT_PRESENTATION] \(String(describing: report))")
         DispatchQueue.main.async { bootPresentationHandler?(report) }
+    }
+
+    // A restore that advances is a boot at work: the watchdog waits again, and the cover reads it.
+    static func handleBootRestoreProgress(_ progress: BootRestoreProgress) {
+        guard !bootTerminalFailure, !bootPresented else { return }
+        markBootMilestone("restore_progress")
+        DispatchQueue.main.async { bootRestoreHandler?(progress) }
     }
 
     static func handleBootAuthenticationReady(_ body: [String: Any]) {

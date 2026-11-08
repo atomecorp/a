@@ -38,6 +38,7 @@ mod schema;
 pub mod security;
 mod snapshots;
 mod state_projection;
+mod stream_pages;
 pub mod type_gate;
 pub mod vault;
 
@@ -58,6 +59,10 @@ mod commit_parity;
 #[cfg(test)]
 #[path = "../../../../tests/atome_vault/vault_parity.rs"]
 mod vault_parity;
+
+#[cfg(test)]
+#[path = "../../../../tests/atome_vault/replay_pages.rs"]
+mod replay_pages;
 
 #[cfg(test)]
 #[path = "../../../../tests/atome_vault/conversations.rs"]

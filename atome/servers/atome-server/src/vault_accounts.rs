@@ -89,34 +89,44 @@ impl VaultAccounts {
     }
 }
 
-// The vault directory, its database files and its file root belong to `uid`
-// (a vault created before this, by Fastify's Node child, belonged to root).
-// Links are changed, never followed; Fastify's own folders there stay root's.
+// The vault directory, its database files, its file root and its sealed folders
+// (`credentials/`, `secrets/`: the provider keys and the account's secrets) belong
+// to `uid` (a vault created before this, by Fastify's Node child, belonged to root).
+// A folder is walked only while its top is not handed yet, and every top is handed
+// last, so a start cut midway walks it again. Links are changed, never followed;
+// Fastify's own folders there stay root's.
 pub fn hand_over(directory: &Path, uid: u32) -> Result<(), String> {
     let error = |e: std::io::Error| format!("vault_hand_over_failed:{e}");
-    if std::fs::symlink_metadata(directory).map_err(error)?.uid() == uid {
-        return Ok(());
-    }
-    let mut paths = vec![directory.to_path_buf()];
-    paths.extend(VAULT_FILES.iter().map(|name| directory.join(name)));
-    let mut pending = vec![directory.join("files")];
-    while let Some(path) = pending.pop() {
-        let Ok(metadata) = std::fs::symlink_metadata(&path) else {
+    let owner = |path: &Path| {
+        std::fs::symlink_metadata(path)
+            .ok()
+            .map(|metadata| metadata.uid())
+    };
+    let mut paths = Vec::new();
+    for tree in std::iter::once("files").chain(atome_vault::sealed::AREAS) {
+        let top = directory.join(tree);
+        if owner(&top).is_none_or(|current| current == uid) {
             continue;
-        };
-        if metadata.is_dir() {
-            for entry in std::fs::read_dir(&path).map_err(error)? {
-                pending.push(entry.map_err(error)?.path());
+        }
+        let mut pending = vec![top];
+        let mut walked = Vec::new();
+        while let Some(path) = pending.pop() {
+            if std::fs::symlink_metadata(&path).map_err(error)?.is_dir() {
+                for entry in std::fs::read_dir(&path).map_err(error)? {
+                    pending.push(entry.map_err(error)?.path());
+                }
             }
+            walked.push(path);
         }
-        paths.push(path);
+        paths.extend(walked.into_iter().rev());
     }
+    paths.extend(VAULT_FILES.iter().map(|name| directory.join(name)));
+    paths.push(directory.to_path_buf());
     for path in paths {
-        match std::os::unix::fs::lchown(&path, Some(uid), Some(uid)) {
-            Ok(()) => {}
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            Err(e) => return Err(error(e)),
+        if owner(&path).is_none_or(|current| current == uid) {
+            continue;
         }
+        std::os::unix::fs::lchown(&path, Some(uid), Some(uid)).map_err(error)?;
     }
     Ok(())
 }

@@ -38,8 +38,10 @@ export function createCommunicationPush({ query, now = Date.now } = {}) {
             const count = await query('get', 'SELECT count(*) AS total FROM auth_push_installations WHERE principal_id=? AND kind=?', [claims.sub, input.kind]);
             if (count.total >= 20) throw new Error('push_installation_limit');
         }
-        await query('run', 'DELETE FROM auth_push_installations WHERE token = ? AND kind = ? AND environment = ? AND key_id = ? AND provider = ?',
-            [input.deviceToken, input.kind, input.environment, claims.cnf.kid, provider]);
+        // A device token is one app install: the key registering it now takes it from any earlier
+        // registration (a session restored on that device holds a new key; the old row refused it).
+        await query('run', 'DELETE FROM auth_push_installations WHERE token = ? AND kind = ? AND environment = ? AND provider = ? AND installation_id <> ?',
+            [input.deviceToken, input.kind, input.environment, provider, input.installationId]);
         await query('run', `INSERT INTO auth_push_installations
             (installation_id,kind,principal_id,key_id,session_id,token,environment,updated_ms,provider) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(installation_id, kind) DO UPDATE SET principal_id=excluded.principal_id, session_id=excluded.session_id,

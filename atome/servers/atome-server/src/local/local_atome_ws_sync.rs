@@ -3,7 +3,7 @@ use super::{
     local_atome::{LocalAtomeState, RemoteSyncCredential},
     local_atome_sync_progress as progress,
 };
-use futures_util::{SinkExt, StreamExt};
+use futures_util::{FutureExt, SinkExt, StreamExt};
 use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet, VecDeque};
 use tokio::time::{Duration, Instant, interval, sleep};
@@ -26,6 +26,9 @@ where
         .await
         .map_err(|error| error.to_string())
 }
+// At most this many frames already received are read together (one transaction for their events).
+const RECEIVED_GROUP: usize = 256;
+
 fn available_streams(state: &LocalAtomeState, user: &str) -> Result<Vec<(String, i64)>, String> {
     let db = state
         .db
@@ -34,12 +37,72 @@ fn available_streams(state: &LocalAtomeState, user: &str) -> Result<Vec<(String,
     super::local_atome_remote_projection::stream_cursors(&db, user)
 }
 
+// The events received together: persisted in one transaction, then acknowledged one by one.
+async fn persist_received<S>(
+    state: &LocalAtomeState,
+    user: &str,
+    credential: &RemoteSyncCredential,
+    sink: &mut S,
+    applied: &mut HashSet<String>,
+    events: Vec<Value>,
+) -> Result<(), String>
+where
+    S: futures_util::Sink<Message> + Unpin,
+    S::Error: std::fmt::Display,
+{
+    if events.is_empty() {
+        return Ok(());
+    }
+    let inserted = {
+        let mut db = state
+            .db
+            .lock()
+            .map_err(|_| "local_projection_database_unavailable")?;
+        let inserted = super::local_atome_remote_projection::persist_ws_events(
+            &mut db,
+            user,
+            &credential.remote_user_id,
+            &events,
+        )?;
+        // A media deleted elsewhere: its copy on this device goes (local_atome_media_removal.rs, D36).
+        for (event, inserted) in events.iter().zip(&inserted) {
+            if *inserted && event["kind"].as_str() == Some("delete") {
+                super::local_atome_media_removal::remove_deleted_media(
+                    &db,
+                    state.storage_root(),
+                    event["atome_id"].as_str(),
+                )?;
+            }
+        }
+        inserted
+    };
+    for (event, inserted) in events.iter().zip(inserted) {
+        let stream = event["stream"]
+            .as_str()
+            .ok_or("remote_event_stream_required")?;
+        let sequence = event["sequence"]
+            .as_i64()
+            .ok_or("remote_event_sequence_invalid")?;
+        if inserted {
+            applied.insert(stream.to_string());
+        }
+        send_json(
+            sink,
+            json!({"type":"ack","stream":stream,"sequence":sequence}),
+        )
+        .await?;
+    }
+    Ok(())
+}
+
 #[derive(Default)]
 struct Subscriptions {
     streams: HashSet<String>,
     pending: HashMap<String, Vec<String>>,
     order: VecDeque<String>,
     applied: HashSet<String>,
+    // Streams subscribed at cursor 0 not received yet: a restore's remaining work.
+    waiting: HashSet<String>,
     batch: bool,
     settlement: bool,
 }
@@ -91,6 +154,12 @@ impl Subscriptions {
             }
             send_json(sink, message).await?;
             let streams: Vec<String> = batch.iter().map(|(stream, _)| stream.clone()).collect();
+            self.waiting.extend(
+                batch
+                    .iter()
+                    .filter(|(_, cursor)| *cursor == 0)
+                    .map(|(stream, _)| stream.clone()),
+            );
             self.streams.extend(streams.iter().cloned());
             self.pending.insert(id.clone(), streams);
             self.order.push_back(id);
@@ -110,11 +179,21 @@ impl Subscriptions {
         let Some(id) = id else {
             return false;
         };
-        if self.pending.remove(&id).is_none() {
+        let Some(streams) = self.pending.remove(&id) else {
             return false;
+        };
+        for stream in &streams {
+            self.waiting.remove(stream);
         }
         self.order.retain(|entry| entry != &id);
         true
+    }
+    fn replay(&self) -> progress::Replay {
+        progress::Replay {
+            pending: self.pending.len(),
+            total: self.streams.len(),
+            waiting: self.waiting.len(),
+        }
     }
 }
 
@@ -131,7 +210,15 @@ async fn connected_session(
     } else {
         &credential.remote_url
     };
-    progress::publish(state, user, &credential, "connecting", "unknown", 0, None);
+    progress::publish(
+        state,
+        user,
+        &credential,
+        "connecting",
+        "unknown",
+        progress::Replay::default(),
+        None,
+    );
     let url = format!(
         "{}{}",
         endpoint
@@ -148,6 +235,7 @@ async fn connected_session(
     let mut replay_error: Option<String> = None;
     let mut last_received = Instant::now();
     let mut health_probe: Option<Instant> = None;
+    let mut published_waiting = 0;
     let mut connection_checks = super::sync_event_sender().subscribe();
     let mut maintenance = interval(Duration::from_secs(10));
     let mut projection_tick = interval(Duration::from_millis(500));
@@ -175,8 +263,18 @@ async fn connected_session(
             // The socket is let go with the vault: nothing is projected in background time.
             _ = state.db.quiesced() => return Err("local_vault_quiesced".into()),
             _ = projection_tick.tick() => {
-                if health_probe.is_some_and(|sent| sent.elapsed() >= Duration::from_secs(10)) { return Err("sync_heartbeat_timeout".into()); }
+                // While its subscriptions replay, the server answers in order after them (checking a
+                // batch's streams can outlast the ping's 10 s): the 90 s silence bound judges it then.
+                if subscriptions.pending.is_empty() && health_probe.is_some_and(|sent| sent.elapsed() >= Duration::from_secs(10)) {
+                    return Err("sync_heartbeat_timeout".into());
+                }
                 progress::projection(user, subscriptions.applied.drain().collect());
+                // A restore's progress, told at the projection's pace while its streams arrive.
+                if subscriptions.waiting.len() != published_waiting {
+                    published_waiting = subscriptions.waiting.len();
+                    let restore = if replay_error.is_some() { "error" } else { "receiving" };
+                    progress::publish(state, user, &credential, "connected", restore, subscriptions.replay(), replay_error.as_deref());
+                }
             }
             Ok(notice) = connection_checks.recv() => {
                 if registered && health_probe.is_none() && notice["type"] == "sync:connection-check" && notice["local_user_id"] == user {
@@ -200,71 +298,79 @@ async fn connected_session(
                 }
             }
             incoming = source.next() => {
-                let message = incoming.ok_or("sync_socket_closed")?.map_err(|error| error.to_string())?;
-                last_received = Instant::now();
-                let Message::Text(text) = message else { continue; };
-                let payload: Value = serde_json::from_str(&text).map_err(|error| error.to_string())?;
-                match payload["type"].as_str().unwrap_or("") {
-                    "welcome" => {
-                        let capabilities = payload["capabilities"].as_array();
-                        subscriptions.batch = capabilities.is_some_and(|items| items.iter().any(|item| item == "subscribe-batch"));
-                        subscriptions.settlement = capabilities.is_some_and(|items| items.iter().any(|item| item == "subscribe-batch-settlement"));
-                        send_json(&mut sink, json!({"type":"register","source":format!("tauri:{user}"),"capabilities":["sqlite-projection","offline-lww"]})).await?;
+                // The frames already here are read together: their events go in one transaction.
+                // Any frame proves the socket alive: the pong waits behind the replay already
+                // queued for this device, which a phone takes minutes to persist.
+                let mut frames = vec![incoming.ok_or("sync_socket_closed")?.map_err(|error| error.to_string())?];
+                let mut closed = false;
+                while frames.len() < RECEIVED_GROUP {
+                    match source.next().now_or_never() {
+                        Some(Some(message)) => frames.push(message.map_err(|error| error.to_string())?),
+                        Some(None) => { closed = true; break; }
+                        None => break,
                     }
-                    "registered" => {
-                        if payload["principal_id"].as_str() != Some(credential.remote_user_id.as_str()) { return Err("sync_principal_mismatch".into()); }
-                        registered = true;
-                        let announced = payload["streams"].as_array().into_iter().flatten().filter_map(Value::as_str).map(str::to_string).collect();
-                        subscriptions.subscribe(&mut sink, available_streams(state, user)?, announced).await?;
-                        progress::projection(user, subscriptions.streams.iter().cloned().collect());
-                        progress::publish(state, user, &credential, "connected", "receiving", subscriptions.pending.len(), None);
-                    }
-                    "stream-available" => {
-                        if let Some(stream) = payload["stream"].as_str() {
-                            subscriptions.subscribe(&mut sink, available_streams(state, user)?, vec![stream.to_string()]).await?;
-                        }
-                    }
-                    "pong" => { health_probe = None; }
-                    "event" => {
-                        let stream = payload["stream"].as_str().ok_or("remote_event_stream_required")?;
-                        let sequence = payload["sequence"].as_i64().ok_or("remote_event_sequence_invalid")?;
-                        let inserted = {
-                            let mut db = state.db.lock().map_err(|_| "local_projection_database_unavailable")?;
-                            let inserted = super::local_atome_remote_projection::persist_ws_event(&mut db, user, &credential.remote_user_id, &payload)?;
-                            // A media deleted elsewhere: its copy on this device goes (local_atome_media_removal.rs, D36).
-                            if inserted && payload["kind"].as_str() == Some("delete") {
-                                super::local_atome_media_removal::remove_deleted_media(&db, state.storage_root(), payload["atome_id"].as_str())?;
-                            }
-                            inserted
-                        };
-                        if inserted {
-                            subscriptions.applied.insert(stream.to_string());
-                        }
-                        send_json(&mut sink, json!({"type":"ack","stream":stream,"sequence":sequence})).await?;
-                    }
-                    "replay-complete" => {
-                        if !subscriptions.settle(&payload) { continue; }
-                        progress::projection(user, subscriptions.applied.drain().collect());
-                        let pending = subscriptions.pending.len();
-                        if pending == 0 { *failures = 0; }
-                        let restore = if replay_error.is_some() { "error" } else if pending == 0 { "ready" } else { "receiving" };
-                        progress::publish(state, user, &credential, "connected", restore, pending, replay_error.as_deref());
-                    }
-                    "revoked" => {
-                        if let Some(stream) = payload["stream"].as_str() { subscriptions.streams.remove(stream); }
-                        // A revoked single replay has no replay-complete. A batch still has one.
-                        if !subscriptions.batch { subscriptions.settle(&payload); }
-                        broadcast_sync_event(payload);
-                    }
-                    "error" => {
-                        let code = payload["code"].as_str().unwrap_or("sync_error");
-                        if matches!(code, "authentication_expired" | "authentication_invalid") { return Err(code.to_string()); }
-                        if code == "stream_access_denied" && !subscriptions.batch { subscriptions.settle(&payload); }
-                        replay_error = Some(code.to_string());
-                        progress::publish(state, user, &credential, "connected", "error", subscriptions.pending.len(), replay_error.as_deref());
-                    }
-                    _ => {}
                 }
+                last_received = Instant::now();
+                health_probe = None;
+                let mut events = Vec::new();
+                for message in frames {
+                    let Message::Text(text) = message else { continue; };
+                    let payload: Value = serde_json::from_str(&text).map_err(|error| error.to_string())?;
+                    if payload["type"] == "event" {
+                        if let Some(stream) = payload["stream"].as_str() { subscriptions.waiting.remove(stream); }
+                        events.push(payload);
+                        continue;
+                    }
+                    persist_received(state, user, &credential, &mut sink, &mut subscriptions.applied, std::mem::take(&mut events)).await?;
+                    match payload["type"].as_str().unwrap_or("") {
+                        "welcome" => {
+                            let capabilities = payload["capabilities"].as_array();
+                            subscriptions.batch = capabilities.is_some_and(|items| items.iter().any(|item| item == "subscribe-batch"));
+                            subscriptions.settlement = capabilities.is_some_and(|items| items.iter().any(|item| item == "subscribe-batch-settlement"));
+                            send_json(&mut sink, json!({"type":"register","source":format!("tauri:{user}"),"capabilities":["sqlite-projection","offline-lww"]})).await?;
+                        }
+                        "registered" => {
+                            if payload["principal_id"].as_str() != Some(credential.remote_user_id.as_str()) { return Err("sync_principal_mismatch".into()); }
+                            registered = true;
+                            // A connection that reached its account resets the delay: a long restore
+                            // cut by the network starts again at once, not after 30 s.
+                            *failures = 0;
+                            let announced = payload["streams"].as_array().into_iter().flatten().filter_map(Value::as_str).map(str::to_string).collect();
+                            subscriptions.subscribe(&mut sink, available_streams(state, user)?, announced).await?;
+                            progress::projection(user, subscriptions.streams.iter().cloned().collect());
+                            published_waiting = subscriptions.waiting.len();
+                            progress::publish(state, user, &credential, "connected", "receiving", subscriptions.replay(), None);
+                        }
+                        "stream-available" => {
+                            if let Some(stream) = payload["stream"].as_str() {
+                                subscriptions.subscribe(&mut sink, available_streams(state, user)?, vec![stream.to_string()]).await?;
+                            }
+                        }
+                        "replay-complete" => {
+                            if !subscriptions.settle(&payload) { continue; }
+                            progress::projection(user, subscriptions.applied.drain().collect());
+                            let restore = if replay_error.is_some() { "error" } else if subscriptions.pending.is_empty() { "ready" } else { "receiving" };
+                            published_waiting = subscriptions.waiting.len();
+                            progress::publish(state, user, &credential, "connected", restore, subscriptions.replay(), replay_error.as_deref());
+                        }
+                        "revoked" => {
+                            if let Some(stream) = payload["stream"].as_str() { subscriptions.streams.remove(stream); subscriptions.waiting.remove(stream); }
+                            // A revoked single replay has no replay-complete. A batch still has one.
+                            if !subscriptions.batch { subscriptions.settle(&payload); }
+                            broadcast_sync_event(payload);
+                        }
+                        "error" => {
+                            let code = payload["code"].as_str().unwrap_or("sync_error");
+                            if matches!(code, "authentication_expired" | "authentication_invalid") { return Err(code.to_string()); }
+                            if code == "stream_access_denied" && !subscriptions.batch { subscriptions.settle(&payload); }
+                            replay_error = Some(code.to_string());
+                            progress::publish(state, user, &credential, "connected", "error", subscriptions.replay(), replay_error.as_deref());
+                        }
+                        _ => {}
+                    }
+                }
+                persist_received(state, user, &credential, &mut sink, &mut subscriptions.applied, events).await?;
+                if closed { return Err("sync_socket_closed".into()); }
             }
         }
     }
@@ -304,7 +410,7 @@ pub(super) async fn run(state: LocalAtomeState, remote_url: String, path: String
                         "disconnected"
                     },
                     if projection_error { "error" } else { "unknown" },
-                    0,
+                    progress::Replay::default(),
                     Some(&error),
                 );
             }

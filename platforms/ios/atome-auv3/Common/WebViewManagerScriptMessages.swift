@@ -145,6 +145,15 @@ extension WebViewManager {
                         WebViewManager.handleBootPresentationReady(body)
                         return
                     }
+                    if action == "bootRestoreProgress" {
+                        let version = (body["version"] as? NSNumber)?.intValue ?? 0
+                        guard version == 1, let progress = BootRestoreProgress(body) else {
+                            WebViewManager.reportBootFailure(reason: "boot_restore_protocol_invalid")
+                            return
+                        }
+                        WebViewManager.handleBootRestoreProgress(progress)
+                        return
+                    }
                     if action == "bootAuthenticationReady" {
                         let version = (body["version"] as? NSNumber)?.intValue ?? 0
                         guard version == 1 else {

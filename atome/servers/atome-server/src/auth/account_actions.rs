@@ -216,9 +216,12 @@ pub fn push_register(
             }
         }
     }
+    // A device token is one app install: the key registering it now takes it from any earlier
+    // registration (a session restored on that device holds a new key; the old row refused it).
     db.execute(
-        "DELETE FROM auth_push_installations WHERE token = ? AND kind = ? AND environment = ? AND key_id = ? AND provider = ?",
-        params![token, kind, environment, kid, provider],
+        "DELETE FROM auth_push_installations WHERE token = ? AND kind = ? AND environment = ? AND provider = ?
+         AND installation_id <> ?",
+        params![token, kind, environment, provider, id],
     )
     .and_then(|_| {
         db.execute(
@@ -334,4 +337,49 @@ pub fn delete_account(
     Ok(Outcome::answer(json!({ "ok": true }))
         .disconnect(revoked)
         .directory(&principal, true))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // A session restored on the same phone: a new device key, a new installation id, the same
+    // APNs token. Its registration takes the token; the earlier row goes.
+    #[test]
+    fn a_restored_session_takes_its_device_token() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("central.db");
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        crate::central_schema::prepare(&path, &root).unwrap();
+        let db = Connection::open(&path).unwrap();
+        db.execute(
+            "INSERT INTO atomes (atome_id, atome_type) VALUES ('user-a', 'user')",
+            [],
+        )
+        .unwrap();
+        let token = "ab".repeat(32);
+        let register = |installation: &str, key: &str, session: &str| {
+            push_register(
+                &db,
+                &json!({ "installationId": installation, "kind": "alert", "environment": "production",
+                "deviceToken": token, "provider": "apns" }),
+                &json!({ "sub": "user-a", "sid": session, "cnf": { "kid": key } }),
+                1,
+            )
+        };
+        register("11111111-1111-1111-1111-111111111111", "key-1", "session-1").unwrap();
+        register("22222222-2222-2222-2222-222222222222", "key-2", "session-2").unwrap();
+        let rows: Vec<String> = db
+            .prepare("SELECT key_id FROM auth_push_installations WHERE token = ?")
+            .unwrap()
+            .query_map([&token], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(rows, vec!["key-2".to_string()]);
+        // The same installation registering again keeps its one row.
+        register("22222222-2222-2222-2222-222222222222", "key-2", "session-2").unwrap();
+        // A foreign key still cannot take over an installation.
+        assert!(register("22222222-2222-2222-2222-222222222222", "key-3", "session-3").is_err());
+    }
 }
