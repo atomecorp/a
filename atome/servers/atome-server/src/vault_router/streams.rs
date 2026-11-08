@@ -180,15 +180,28 @@ impl VaultRouter {
     }
 
     // A device subscribes in this order, and an old account holds thousands of streams:
-    // the account's own record (its profile, which a new device's home awaits) comes first.
+    // the account's own record (its profile, which a new device's home awaits) comes first,
+    // the stream its vault holds its latest event in (the registry keeps one atome a stream).
     pub async fn list_authorized_streams(&self, principal: &str) -> Result<Vec<String>, String> {
+        let own = if self.owner_of(principal).await?.as_deref() == Some(principal) {
+            let stream = self
+                .ask(
+                    principal,
+                    "stream:of-atome",
+                    json!({ "atome_id": principal }),
+                )
+                .await?;
+            Some(js::string(&stream["stream_id"])).filter(|id| !id.is_empty())
+        } else {
+            None
+        };
         let owned = self
             .central
             .all(
                 "SELECT stream_id FROM vault_stream_registry WHERE vault_principal_id = ?
-                 ORDER BY atome_id IS NOT ?, stream_id"
+                 ORDER BY stream_id IS NOT ?, atome_id IS NOT ?, stream_id"
                     .into(),
-                vec![json!(principal), json!(principal)],
+                vec![json!(principal), json!(own), json!(principal)],
             )
             .await?;
         let shared = self
