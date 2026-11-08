@@ -55,3 +55,30 @@ pub(crate) fn events_after(
     }
     Ok(events)
 }
+
+// Every stream of the vault in the order a new device needs them: the account's own record
+// (its home awaits it), the projects (their record and their content), the contacts, the rest,
+// the import provenance records last; by id within each. A restore of tens of thousands of
+// imported calendar entries no longer holds back the person's own work.
+const RESTORE_ORDER: &str = "SELECT s.stream_id, s.project_id, s.atome_id FROM sync_streams s
+     LEFT JOIN atomes a ON a.atome_id = s.atome_id
+     ORDER BY CASE
+         WHEN s.atome_id = ?1 THEN 0
+         WHEN s.project_id IS NOT NULL OR a.atome_type = 'project' THEN 1
+         WHEN a.atome_type IN ('contact', 'contact_group') THEN 2
+         WHEN a.atome_type = 'import_origin' THEN 4
+         ELSE 3 END, s.stream_id";
+
+pub(crate) fn restore_order(db: &Connection, principal: &str) -> Result<Vec<JsonValue>, String> {
+    let mut statement = db.prepare(RESTORE_ORDER).map_err(|e| e.to_string())?;
+    let rows = statement
+        .query_map([principal], |row| {
+            Ok(json!([
+                row.get::<_, String>(0)?,
+                row.get::<_, Option<String>>(1)?,
+                row.get::<_, Option<String>>(2)?
+            ]))
+        })
+        .map_err(|e| e.to_string())?;
+    rows.collect::<Result<_, _>>().map_err(|e| e.to_string())
+}

@@ -126,8 +126,10 @@ impl Record {
         self.state().principal.clone()
     }
 
+    // Closed, or its device gone (its writer stopped on a failed send): a replay queued for
+    // a phone sent to the background stops at once, instead of holding the vault for minutes.
     pub(super) fn is_closed(&self) -> bool {
-        self.closed.load(Ordering::SeqCst)
+        self.closed.load(Ordering::SeqCst) || self.out.is_closed()
     }
 
     pub(super) fn follows(&self, stream: &str) -> bool {

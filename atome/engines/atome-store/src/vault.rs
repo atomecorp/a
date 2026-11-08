@@ -280,6 +280,10 @@ impl Vault<'_> {
                 let limit = number_or(payload.get("limit"), 500).clamp(1, 1000);
                 stream_pages::events_after(db, &streams, limit).map(JsonValue::Array)
             }
+            "streams:restore-order" => {
+                let principal = field_text(payload, &["principal_id"]).unwrap_or_default();
+                stream_pages::restore_order(db, &principal).map(JsonValue::Array)
+            }
             "stream:head" => {
                 let stream_id = field_text(payload, &["stream_id", "streamId"])
                     .ok_or("vault_stream_required")?;

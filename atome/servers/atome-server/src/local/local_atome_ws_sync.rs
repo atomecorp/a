@@ -1,3 +1,4 @@
+use super::local_atome_ws_subscriptions::Subscriptions;
 use super::{
     broadcast_sync_event,
     local_atome::{LocalAtomeState, RemoteSyncCredential},
@@ -5,7 +6,7 @@ use super::{
 };
 use futures_util::{FutureExt, SinkExt, StreamExt};
 use serde_json::{Value, json};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::HashSet;
 use tokio::time::{Duration, Instant, interval, sleep};
 use tokio_tungstenite::tungstenite::Message;
 
@@ -17,7 +18,7 @@ fn credential_for(state: &LocalAtomeState, user: &str) -> Option<RemoteSyncCrede
         .get(user)
         .cloned()
 }
-async fn send_json<S>(sink: &mut S, payload: Value) -> Result<(), String>
+pub(super) async fn send_json<S>(sink: &mut S, payload: Value) -> Result<(), String>
 where
     S: futures_util::Sink<Message> + Unpin,
     S::Error: std::fmt::Display,
@@ -95,108 +96,6 @@ where
     Ok(())
 }
 
-#[derive(Default)]
-struct Subscriptions {
-    streams: HashSet<String>,
-    pending: HashMap<String, Vec<String>>,
-    order: VecDeque<String>,
-    applied: HashSet<String>,
-    // Streams subscribed at cursor 0 not received yet: a restore's remaining work.
-    waiting: HashSet<String>,
-    batch: bool,
-    settlement: bool,
-}
-impl Subscriptions {
-    async fn subscribe<S>(
-        &mut self,
-        sink: &mut S,
-        cursors: Vec<(String, i64)>,
-        announced: Vec<String>,
-    ) -> Result<(), String>
-    where
-        S: futures_util::Sink<Message> + Unpin,
-        S::Error: std::fmt::Display,
-    {
-        let mut known: HashMap<String, i64> = cursors.into_iter().collect();
-        known.entry("directory.public".into()).or_insert(0);
-        for stream in &announced {
-            known.entry(stream.clone()).or_insert(0);
-        }
-        // The server's order is kept (the account's own record, its profile, comes first:
-        // a new device's home awaits it); the streams it does not name follow by id.
-        let rank: HashMap<&str, usize> = announced
-            .iter()
-            .enumerate()
-            .rev()
-            .map(|(index, stream)| (stream.as_str(), index))
-            .collect();
-        let mut fresh: Vec<_> = known
-            .into_iter()
-            .filter(|(stream, _)| !self.streams.contains(stream))
-            .collect();
-        fresh.sort_by(|a, b| {
-            let place = |stream: &str| rank.get(stream).copied().unwrap_or(usize::MAX);
-            place(&a.0).cmp(&place(&b.0)).then_with(|| a.0.cmp(&b.0))
-        });
-        for batch in fresh.chunks(if self.batch { 500 } else { 1 }) {
-            let id = if self.batch {
-                uuid::Uuid::new_v4().to_string()
-            } else {
-                batch[0].0.clone()
-            };
-            let mut message = if self.batch {
-                json!({"type":"subscribe", "streams":batch.iter().map(|(stream,cursor)| json!({"stream":stream,"cursor":cursor})).collect::<Vec<_>>()})
-            } else {
-                json!({"type":"subscribe","stream":batch[0].0,"cursor":batch[0].1})
-            };
-            if self.batch && self.settlement {
-                message["subscription_id"] = json!(id);
-            }
-            send_json(sink, message).await?;
-            let streams: Vec<String> = batch.iter().map(|(stream, _)| stream.clone()).collect();
-            self.waiting.extend(
-                batch
-                    .iter()
-                    .filter(|(_, cursor)| *cursor == 0)
-                    .map(|(stream, _)| stream.clone()),
-            );
-            self.streams.extend(streams.iter().cloned());
-            self.pending.insert(id.clone(), streams);
-            self.order.push_back(id);
-        }
-        Ok(())
-    }
-    fn settle(&mut self, message: &Value) -> bool {
-        if self.batch && self.settlement && message.get("subscription_id").is_none() {
-            return false;
-        }
-        let id = message
-            .get("subscription_id")
-            .or_else(|| message.get("stream"))
-            .and_then(Value::as_str)
-            .map(str::to_string)
-            .or_else(|| self.order.front().cloned());
-        let Some(id) = id else {
-            return false;
-        };
-        let Some(streams) = self.pending.remove(&id) else {
-            return false;
-        };
-        for stream in &streams {
-            self.waiting.remove(stream);
-        }
-        self.order.retain(|entry| entry != &id);
-        true
-    }
-    fn replay(&self) -> progress::Replay {
-        progress::Replay {
-            pending: self.pending.len(),
-            total: self.streams.len(),
-            waiting: self.waiting.len(),
-        }
-    }
-}
-
 async fn connected_session(
     state: &LocalAtomeState,
     remote_url: &str,
@@ -265,7 +164,7 @@ async fn connected_session(
             _ = projection_tick.tick() => {
                 // While its subscriptions replay, the server answers in order after them (checking a
                 // batch's streams can outlast the ping's 10 s): the 90 s silence bound judges it then.
-                if subscriptions.pending.is_empty() && health_probe.is_some_and(|sent| sent.elapsed() >= Duration::from_secs(10)) {
+                if subscriptions.settled() && health_probe.is_some_and(|sent| sent.elapsed() >= Duration::from_secs(10)) {
                     return Err("sync_heartbeat_timeout".into());
                 }
                 progress::projection(user, subscriptions.applied.drain().collect());
@@ -348,8 +247,9 @@ async fn connected_session(
                         }
                         "replay-complete" => {
                             if !subscriptions.settle(&payload) { continue; }
+                            subscriptions.send_ready(&mut sink).await?;
                             progress::projection(user, subscriptions.applied.drain().collect());
-                            let restore = if replay_error.is_some() { "error" } else if subscriptions.pending.is_empty() { "ready" } else { "receiving" };
+                            let restore = if replay_error.is_some() { "error" } else if subscriptions.settled() { "ready" } else { "receiving" };
                             published_waiting = subscriptions.waiting.len();
                             progress::publish(state, user, &credential, "connected", restore, subscriptions.replay(), replay_error.as_deref());
                         }
@@ -421,121 +321,5 @@ pub(super) async fn run(state: LocalAtomeState, remote_url: String, path: String
                 .min(30_000),
         ))
         .await;
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::sync::{Arc, Mutex};
-
-    #[tokio::test]
-    async fn batches_are_bounded_correlated_and_settled_once() {
-        let sent = Arc::new(Mutex::new(Vec::<Value>::new()));
-        let captured = sent.clone();
-        let mut sink = Box::pin(futures_util::sink::unfold(
-            captured,
-            |captured, message: Message| async move {
-                if let Message::Text(text) = message {
-                    captured
-                        .lock()
-                        .unwrap()
-                        .push(serde_json::from_str(&text).unwrap());
-                }
-                Ok::<_, std::convert::Infallible>(captured)
-            },
-        ));
-        let mut state = Subscriptions {
-            batch: true,
-            settlement: true,
-            ..Default::default()
-        };
-        state
-            .subscribe(
-                &mut sink,
-                vec![],
-                (0..1200).map(|index| format!("stream-{index}")).collect(),
-            )
-            .await
-            .unwrap();
-        let messages = sent.lock().unwrap().clone();
-        assert_eq!(
-            messages
-                .iter()
-                .map(|message| message["streams"].as_array().unwrap().len())
-                .collect::<Vec<_>>(),
-            vec![500, 500, 201]
-        );
-        for message in messages {
-            let reply = json!({"subscription_id":message["subscription_id"]});
-            assert!(state.settle(&reply));
-            assert!(!state.settle(&reply));
-        }
-        assert!(state.pending.is_empty());
-        state
-            .subscribe(&mut sink, vec![], vec!["stream-1".into()])
-            .await
-            .unwrap();
-        assert_eq!(sent.lock().unwrap().len(), 3);
-    }
-
-    #[tokio::test]
-    async fn the_announced_order_is_kept_before_the_known_streams() {
-        let sent = Arc::new(Mutex::new(Vec::<Value>::new()));
-        let captured = sent.clone();
-        let mut sink = Box::pin(futures_util::sink::unfold(
-            captured,
-            |captured, message: Message| async move {
-                if let Message::Text(text) = message {
-                    captured
-                        .lock()
-                        .unwrap()
-                        .push(serde_json::from_str(&text).unwrap());
-                }
-                Ok::<_, std::convert::Infallible>(captured)
-            },
-        ));
-        let mut state = Subscriptions {
-            batch: true,
-            ..Default::default()
-        };
-        state
-            .subscribe(
-                &mut sink,
-                vec![("0-known".into(), 7)],
-                vec!["f-profile".into(), "1-other".into(), "0-known".into()],
-            )
-            .await
-            .unwrap();
-        let streams = sent.lock().unwrap()[0]["streams"].clone();
-        assert_eq!(
-            streams
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|entry| (
-                    entry["stream"].as_str().unwrap().to_string(),
-                    entry["cursor"].as_i64().unwrap()
-                ))
-                .collect::<Vec<_>>(),
-            vec![
-                ("f-profile".to_string(), 0),
-                ("1-other".to_string(), 0),
-                ("0-known".to_string(), 7),
-                ("directory.public".to_string(), 0)
-            ]
-        );
-    }
-
-    #[test]
-    fn an_unrelated_receipt_cannot_complete_another_subscription() {
-        let mut state = Subscriptions::default();
-        state
-            .pending
-            .insert("expected".into(), vec!["stream".into()]);
-        state.order.push_back("expected".into());
-        assert!(!state.settle(&json!({"subscription_id":"old-socket"})));
-        assert_eq!(state.pending.len(), 1);
-        assert!(state.settle(&json!({"streams":[]})));
     }
 }

@@ -7,6 +7,7 @@
 pub mod central;
 pub(crate) use atome_js_values as js;
 pub(crate) mod shares;
+mod stream_listing;
 mod streams;
 
 use crate::media::Storage;

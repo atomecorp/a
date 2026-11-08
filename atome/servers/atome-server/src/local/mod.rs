@@ -75,6 +75,7 @@ mod local_atome_sync_commands;
 mod local_atome_sync_media;
 mod local_atome_sync_progress;
 mod local_atome_sync_worker;
+mod local_atome_ws_subscriptions;
 mod local_atome_ws_sync;
 #[cfg(test)]
 mod local_atome_ws_sync_health_tests;

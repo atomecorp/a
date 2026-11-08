@@ -52,13 +52,33 @@ export function createPairingClient({ devices, approver, send, token, ensureSess
     // A session enrolled by SMS before V1 has no scope of its own: its device key's
     // (the phone scope) also names its approve key.
     const scopeOf = async (record) => record.scope || (await deviceOf(record)).scope;
+    // A device enrolled before approve keys (or after losing its own) adds one: the session
+    // key signs, the platform verifies the user (Face ID), the server replaces the device's
+    // previous approve key.
+    async function addApproveKey() {
+        const record = await sessionRecord();
+        const scope = await scopeOf(record);
+        const device = await deviceOf(record);
+        const fields = { sessionId: record.session.id, generation: record.session.generation };
+        const pre = await request('approve-key-add-challenge', fields);
+        const signed = await device.sign(checkChallenge(pre.challenge, 'approve-key-add', `${fields.sessionId}:${fields.generation}`));
+        const approve = await registerApprove(pre.register, 'personal', scope);
+        if (!approve) throw new Error('auth_approve_key_unavailable');
+        const result = await request('approve-key-add', { ...fields, ...signed, approve: approve.approve });
+        await devices.put(`approve:${scope}`, approve.record);
+        return { result, record: approve.record };
+    }
     // Approve-class purposes: the server names the challenge, the approve key proves the user.
+    // A session opened by SMS or a password may sign with a key this device holds no approve
+    // key for: where the platform verifies its user, it adds one first.
     async function approval(purpose, extra = {}) {
+        const scope = await scopeOf(await sessionRecord());
+        const stored = await devices.read(`approve:${scope}`)
+            || (await approver.available() ? (await addApproveKey()).record : null);
+        if (!stored) throw new Error('auth_approve_key_required');
         const record = await sessionRecord();
         const fields = { sessionId: record.session.id, generation: record.session.generation };
         const response = await request('approval-challenge', { ...fields, purpose, ...extra });
-        const stored = await devices.read(`approve:${await scopeOf(record)}`);
-        if (!stored) throw new Error('auth_approve_key_required');
         const challenge = checkChallenge(response.challenge, purpose);
         return { ...fields, approval: await approver.approve(challenge, stored) };
     }
@@ -209,20 +229,7 @@ export function createPairingClient({ devices, approver, send, token, ensureSess
             await devices.put('workspace-identity', { locked: true });
             return { ok: true, reload: true };
         },
-        // A device enrolled before approve keys (or after losing its own) adds one.
-        async addApproveKey() {
-            const record = await sessionRecord();
-            const scope = await scopeOf(record);
-            const device = await deviceOf(record);
-            const fields = { sessionId: record.session.id, generation: record.session.generation };
-            const pre = await request('approve-key-add-challenge', fields);
-            const signed = await device.sign(checkChallenge(pre.challenge, 'approve-key-add', `${fields.sessionId}:${fields.generation}`));
-            const approve = await registerApprove(pre.register, 'personal', scope);
-            if (!approve) throw new Error('auth_approve_key_unavailable');
-            const result = await request('approve-key-add', { ...fields, ...signed, approve: approve.approve });
-            await devices.put(`approve:${scope}`, approve.record);
-            return result;
-        },
+        addApproveKey: async () => (await addApproveKey()).result,
         listDevices: () => authenticated('devices-list'),
         // The account's backup keys on this device, made the first time a copy needs them; none without an account.
         async backupKeys() {
