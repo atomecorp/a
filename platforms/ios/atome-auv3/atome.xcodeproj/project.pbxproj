@@ -524,8 +524,8 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 6BLIVE000000000000000008 /* atomeLiveActivity.xcconfig */;
 			buildSettings = {
-				CURRENT_PROJECT_VERSION = 54;
-				MARKETING_VERSION = 1.56;
+				CURRENT_PROJECT_VERSION = 55;
+				MARKETING_VERSION = 1.57;
 			};
 			name = Debug;
 		};
@@ -533,8 +533,8 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 6BLIVE000000000000000008 /* atomeLiveActivity.xcconfig */;
 			buildSettings = {
-				CURRENT_PROJECT_VERSION = 54;
-				MARKETING_VERSION = 1.56;
+				CURRENT_PROJECT_VERSION = 55;
+				MARKETING_VERSION = 1.57;
 			};
 			name = Release;
 		};
@@ -676,7 +676,7 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = application/atomeCarPlaySimulator.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 54;
+				CURRENT_PROJECT_VERSION = 55;
 				DEVELOPMENT_TEAM = 2W25PVZ57F;
 				"FRAMEWORK_SEARCH_PATHS[arch=*]" = "$(SRCROOT)/Common ";
 				GENERATE_INFOPLIST_FILE = NO;
@@ -697,7 +697,7 @@
 					"$(BUILT_PRODUCTS_DIR)",
 					"$(TARGET_TEMP_DIR)",
 				);
-				MARKETING_VERSION = 1.56;
+				MARKETING_VERSION = 1.57;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-latome_ios_bevy_renderer",
@@ -727,7 +727,7 @@
 				CODE_SIGN_ENTITLEMENTS = application/atomeRelease.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 54;
+				CURRENT_PROJECT_VERSION = 55;
 				DEVELOPMENT_TEAM = 2W25PVZ57F;
 				"FRAMEWORK_SEARCH_PATHS[arch=*]" = "$(SRCROOT)/Common ";
 				GENERATE_INFOPLIST_FILE = NO;
@@ -748,7 +748,7 @@
 					"$(BUILT_PRODUCTS_DIR)",
 					"$(TARGET_TEMP_DIR)",
 				);
-				MARKETING_VERSION = 1.56;
+				MARKETING_VERSION = 1.57;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-latome_ios_bevy_renderer",
@@ -777,7 +777,7 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=*]" = auv3/auv3.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 54;
+				CURRENT_PROJECT_VERSION = 55;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = auv3/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = atome;
@@ -795,7 +795,7 @@
 					"$(BUILT_PRODUCTS_DIR)",
 					"$(TARGET_TEMP_DIR)",
 				);
-				MARKETING_VERSION = 1.56;
+				MARKETING_VERSION = 1.57;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-latome_ios_bevy_renderer",
@@ -820,7 +820,7 @@
 				CODE_SIGN_ENTITLEMENTS = auv3/auv3Release.entitlements;
 				"CODE_SIGN_ENTITLEMENTS[sdk=*]" = auv3/auv3Release.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 54;
+				CURRENT_PROJECT_VERSION = 55;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = auv3/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = atome;
@@ -838,7 +838,7 @@
 					"$(BUILT_PRODUCTS_DIR)",
 					"$(TARGET_TEMP_DIR)",
 				);
-				MARKETING_VERSION = 1.56;
+				MARKETING_VERSION = 1.57;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-latome_ios_bevy_renderer",
@@ -860,8 +860,8 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 6BWTCH000000000000000017 /* atomeWatch.xcconfig */;
 			buildSettings = {
-				CURRENT_PROJECT_VERSION = 54;
-				MARKETING_VERSION = 1.56;
+				CURRENT_PROJECT_VERSION = 55;
+				MARKETING_VERSION = 1.57;
 			};
 			name = Debug;
 		};
@@ -869,8 +869,8 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 6BWTCH000000000000000017 /* atomeWatch.xcconfig */;
 			buildSettings = {
-				CURRENT_PROJECT_VERSION = 54;
-				MARKETING_VERSION = 1.56;
+				CURRENT_PROJECT_VERSION = 55;
+				MARKETING_VERSION = 1.57;
 			};
 			name = Release;
 		};
