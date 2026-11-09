@@ -29,6 +29,8 @@ where
 }
 // At most this many frames already received are read together (one transaction for their events).
 const RECEIVED_GROUP: usize = 256;
+// At most this many of them are written while the database is held.
+const PERSISTED_SLICE: usize = 16;
 
 fn available_streams(state: &LocalAtomeState, user: &str) -> Result<Vec<(String, i64)>, String> {
     let db = state
@@ -54,29 +56,36 @@ where
     if events.is_empty() {
         return Ok(());
     }
-    let inserted = {
-        let mut db = state
-            .db
-            .lock()
-            .map_err(|_| "local_projection_database_unavailable")?;
-        let inserted = super::local_atome_remote_projection::persist_ws_events(
-            &mut db,
-            user,
-            &credential.remote_user_id,
-            &events,
-        )?;
-        // A media deleted elsewhere: its copy on this device goes (local_atome_media_removal.rs, D36).
-        for (event, inserted) in events.iter().zip(&inserted) {
-            if *inserted && event["kind"].as_str() == Some("delete") {
-                super::local_atome_media_removal::remove_deleted_media(
-                    &db,
-                    state.storage_root(),
-                    event["atome_id"].as_str(),
-                )?;
+    // A slice at a time, the database let go between them: a restore's replay held it for a
+    // whole group, and every read of the app (a panel, a photo) waited seconds behind it
+    // (user, 8 Nov. 2026: « ça bloque à chaque fois que je veux ouvrir un panneau »).
+    let mut inserted = Vec::with_capacity(events.len());
+    for slice in events.chunks(PERSISTED_SLICE) {
+        {
+            let mut db = state
+                .db
+                .lock()
+                .map_err(|_| "local_projection_database_unavailable")?;
+            let written = super::local_atome_remote_projection::persist_ws_events(
+                &mut db,
+                user,
+                &credential.remote_user_id,
+                slice,
+            )?;
+            // A media deleted elsewhere: its copy on this device goes (local_atome_media_removal.rs, D36).
+            for (event, written) in slice.iter().zip(&written) {
+                if *written && event["kind"].as_str() == Some("delete") {
+                    super::local_atome_media_removal::remove_deleted_media(
+                        &db,
+                        state.storage_root(),
+                        event["atome_id"].as_str(),
+                    )?;
+                }
             }
+            inserted.extend(written);
         }
-        inserted
-    };
+        tokio::task::yield_now().await;
+    }
     for (event, inserted) in events.iter().zip(inserted) {
         let stream = event["stream"]
             .as_str()

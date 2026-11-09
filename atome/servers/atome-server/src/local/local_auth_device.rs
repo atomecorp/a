@@ -305,6 +305,7 @@ fn bind(
                 rusqlite::params![principal, remote_id],
             )
             .map_err(|_| "local_account_write_failed")?;
+            tokens::revoked();
             tx.execute(
                 "DELETE FROM remote_sync_stream_cursors WHERE local_user_id=?1",
                 [principal.as_str()],
@@ -473,6 +474,7 @@ fn consume(message: &JsonValue, state: &LocalAuthState) -> Result<JsonValue, Str
             };
             tx.execute(sql, [grant])
                 .map_err(|_| "local_database_write_failed")?;
+            tokens::revoked();
         }
         tx.commit().map_err(|_| "local_database_write_failed")?;
     }

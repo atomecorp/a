@@ -300,8 +300,19 @@ export function calendarOccurrence(event, start) {
 // One occurrence owner for agenda projections and next-event queries. The engine reads the
 // exceptions before expanding the masters and bounds each series, not the input list; per
 // occurrence it gives its event, its series' master, its start, whether it has an end, and that end.
+// A single event ended before the range gives no occurrence. Serializing the account's whole
+// past (12 000 events on an iPhone) for the engine froze the page ~350 ms at every Agenda read.
+// The margin covers a date-only or floating end read in another zone.
+const PAST_MARGIN_MS = 2 * 86400000;
+const endedBefore = (event, from) => {
+    if (event?.recurrence || event?.rdates?.length || event?.recurrence_id || event?.end == null) return false;
+    const end = new Date(event.end).getTime(), start = new Date(event.start).getTime();
+    return end < from - PAST_MARGIN_MS && start < from - PAST_MARGIN_MS;
+};
+
 export function calendarRangeOccurrences(events, range, limit = 800) {
-    const list = events || [];
+    const from = instant(range.start);
+    const list = Number.isFinite(from) ? (events || []).filter(event => !endedBefore(event, from)) : (events || []);
     const flat = engine().calendarRangeOccurrences(JSON.stringify(list), instant(range.start), instant(range.end),
         Boolean(range.futureOnly), Boolean(range.excludeCompleted), limit);
     const occurrences = [];

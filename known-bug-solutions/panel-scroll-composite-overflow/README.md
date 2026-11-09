@@ -74,3 +74,48 @@ The avatar case above is unchanged (its node clips: its subtree stays hidden).
 - `node temp/bevy_scroll_blank/diag.mjs` (Devenir coach, wheel) and
   `DRAG=1 node temp/activities_audit/l12/work/scroll.diag.mjs` (also with
   `LEVEL=activity_shop ITEM=new_shop`): the scrolled body is drawn.
+
+## Regression (8 Nov. 2026): thumbnails painted over the preview and under the list
+
+### Symptom
+
+Captures (Dashboard, `dashboard_takes_view.js`) with the preview on, on the iPhone: the
+rows' thumbnails scrolled out of the list's window were painted over the preview above it
+and over the panel's foot band under it; the rows, their boxes and labels were clipped.
+Reproduced on the Web with upright takes (a portrait fake camera,
+`temp/thumb_clip/portrait.y4m`): `PORTRAIT=1 node temp/thumb_clip/takes_thumb_clip.probe.mjs`.
+
+### Cause
+
+The zero opacity of the first correction did not hold once the renderer owns a list's
+motion. `atome/renderers/bevy-core/src/scroll_area.rs` lays a retained record at the opacity
+it has when shown (its `ScrollRecordSpec.opacity`, 1) with its chain's clip. The tree then
+described again (a take added, the list re-laid) moved the record — a transform patch with
+`clip: null` — while its opacity, 0 before and after in the browser's description, sent no
+style patch: the entity combined the renderer's opacity 1 with no clip, and the scroll area
+skips records out of view before and after a frame, so nothing laid it back. Only records
+inside a clipping box of their own (a thumbnail's frame) were described with `null`; a row
+or a label keeps the window's clip, disjoint from it, and stayed hidden.
+
+### Fix
+
+- `bevy_ui_overlay_record_projection.js#pushNodeRecords`: the children of a clipped-out
+  clipping node are described with an empty clip (a zero-size rect), never `null`; the
+  renderer hides them whatever their opacity.
+- `bevy_projection_clip_contract.js#readBevyProjectionClipRect` accepts a zero-size rect as
+  empty (a negative size is still refused).
+- `atome/renderers/bevy-core/src/clip.rs#visible_polygon_for_rounded_clips`: an empty
+  rectangle, or a polygon left with no area, cuts the atom out. Its degenerate corners used
+  to keep the whole box (zero-size rect) or an edge (zero-height rect), which the rounded
+  frames then painted.
+
+### Regression check
+
+- `npx vitest run tests/eve/bevy_ui_overlay_clipped_out_clip.test.mjs` (red before: the
+  thumbnails out of view had `clip: null`, the contract refused a zero-size clip).
+- `cargo test -p atome-bevy-renderer-core --lib rounded_clip_tests` (red before:
+  `an_empty_rectangle_hides_an_upright_thumbnail_whatever_its_rounded_frames`;
+  `a_thumbnail_scrolled_out_stays_hidden_when_described_again_elsewhere` reproduces the
+  stale-opacity sequence through a real `ScrollTree`).
+- `PORTRAIT=1 node temp/thumb_clip/takes_thumb_clip.probe.mjs` (and `VIDEOS=9`): no
+  pixel change over the preview, no thumbnail under the window, at rest and while moving.

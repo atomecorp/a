@@ -97,3 +97,16 @@ test('a late Calendar account read cannot hydrate the next account cache', async
     expect(await result).toMatchObject({ ok: false, error: 'calendar_session_changed' });
     expect(eventCache.has('private-old')).toBe(false);
 });
+
+test('the past is not handed to the engine, a long appointment still running is', async () => {
+    const past = Array.from({ length: 50 }, (_, index) => event(`past-${index}`, `2025-0${1 + (index % 9)}-10T10:00:00Z`));
+    const source = [...past, event('running', '2026-09-01T09:00:00Z', '2026-10-20T09:00:00Z'), event('soon', '2026-10-12T09:00:00Z'),
+        { id: 'open', title: 'open', start: new Date('2026-10-11T08:00:00Z'), alarms: [] }];
+    const stringify = vi.spyOn(JSON, 'stringify');
+    const ids = (await serviceFor(source).calendarNext({ limit: 10, overlap: true })).items.map(item => item.id);
+    const handed = stringify.mock.calls.map(([value]) => value).find(value => Array.isArray(value) && value.some(entry => entry?.id === 'soon'));
+    stringify.mockRestore();
+    expect(ids).toEqual(expect.arrayContaining(['running', 'soon']));
+    expect(ids.some(id => id.startsWith('past-'))).toBe(false);
+    expect(handed.map(entry => entry.id).sort()).toEqual(['open', 'running', 'soon']);
+});

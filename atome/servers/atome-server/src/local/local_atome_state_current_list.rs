@@ -59,13 +59,22 @@ pub(super) async fn handle_state_current_list(
         Err(e) => return error_response(request_id, &e.to_string()),
     };
 
-    let mut conditions = vec![
+    // A project or a type already chooses a few rows by index: each is then checked against
+    // its own permissions. Listing every readable id first (1.5 million permission rows on
+    // an iPhone account) cost 16 s for 365 records, under the database lock.
+    let narrowed = project_id.is_some() || atome_type.is_some();
+    let readable = if narrowed {
+        "(sc.owner_id = ? OR EXISTS (
+            SELECT 1 FROM permissions p
+            WHERE p.atome_id = sc.atome_id AND p.principal_id = ? AND p.can_read = 1
+        ))"
+    } else {
         "(sc.owner_id = ? OR sc.atome_id IN (
             SELECT p.atome_id FROM permissions p
             WHERE p.principal_id = ? AND p.can_read = 1
         ))"
-        .to_string(),
-    ];
+    };
+    let mut conditions = vec![readable.to_string()];
     let mut scope_params = vec![
         rusqlite::types::Value::from(user_id.to_string()),
         rusqlite::types::Value::from(user_id.to_string()),
@@ -76,8 +85,9 @@ pub(super) async fn handle_state_current_list(
     }
     if let Some(kind) = atome_type {
         conditions.push(
-            // Each term matches one schema expression index: no JSON decode of the whole table.
-            "(sc.atome_id IN (SELECT atome_id FROM atomes WHERE LOWER(COALESCE(atome_type, '')) = ?) OR LOWER(COALESCE(json_extract(sc.properties, '$.type'), '')) = ? OR LOWER(COALESCE(json_extract(sc.properties, '$.kind'), '')) = ?)".to_string()
+            // Each term reads one schema expression index; their union drives the query, so no
+            // other row is decoded.
+            "sc.atome_id IN (SELECT atome_id FROM atomes WHERE LOWER(COALESCE(atome_type, '')) = ? UNION SELECT atome_id FROM state_current WHERE LOWER(COALESCE(json_extract(properties, '$.type'), '')) = ? UNION SELECT atome_id FROM state_current WHERE LOWER(COALESCE(json_extract(properties, '$.kind'), '')) = ?)".to_string()
         );
         if kind == "tool" {
             // The activity-selection tools are derived from the activity list at run time;

@@ -187,6 +187,7 @@ pub(super) async fn handle_transfer_owner(
                      WHERE guest_principal_id = ?4 AND status = 'active'",
                     rusqlite::params![to_owner_id, adoption_operation, Utc::now().to_rfc3339(), from_owner_id],
                 ).map_err(|error| error.to_string())?;
+                crate::local::local_auth::revoke_confirmed_sessions();
                 Ok(())
             }) {
                 return error_response(request_id, &error);
@@ -285,6 +286,7 @@ pub(super) async fn handle_transfer_owner(
                  WHERE guest_principal_id = ?4 AND status = 'active'",
                 rusqlite::params![to_owner_id, adoption_operation, now, from_owner_id],
             ).map_err(|e| e.to_string())?;
+            crate::local::local_auth::revoke_confirmed_sessions();
         }
 
         let mut params_particles: Vec<Box<dyn rusqlite::ToSql>> = Vec::with_capacity(ids.len());

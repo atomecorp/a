@@ -140,7 +140,21 @@ pub(super) async fn download_upload_handler(
     };
 
     let safe_name = sanitize_file_name(&file);
-    let file_path = downloads_dir.join(&safe_name);
+    let mut file_path = downloads_dir.join(&safe_name);
+    // A native capture (an iPhone photo, a video take) stays where it was written, in the home's
+    // `recordings` or `captures`, looked for in that order as media/downloads.rs#target does
+    // (user, 8 Nov. 2026: « les photos sont prises… une liste qui n'est pas lisible »).
+    if fs::metadata(&file_path).await.is_err()
+        && let Some(home) = downloads_dir.parent()
+    {
+        for root in ["recordings", "captures"] {
+            let placed = home.join(root).join(&safe_name);
+            if fs::metadata(&placed).await.is_ok() {
+                file_path = placed;
+                break;
+            }
+        }
+    }
     let verbose_logs = download_verbose_logs_enabled();
     if verbose_logs {
         println!(

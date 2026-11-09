@@ -100,12 +100,23 @@ export function createAccountAuth({ query, transaction, proof, sessions, devices
             const approve = await approvals.register(input.approve, 'approve-key-register', `add:${input.sessionId}:${input.generation}`, row.key_id);
             const deviceId = devices.deviceOf(sessionKey);
             if (!sessionKey.device_id) await query('run', 'UPDATE auth_device_keys SET device_id = ? WHERE key_id = ?', [deviceId, sessionKey.key_id]);
+            // A hardware approve key outlives the app (the Secure Enclave keeps it through a reinstall): the same key,
+            // already known for this account, is enrolled again in place, never inserted twice; another account's is refused.
+            const known = await devices.byId(approve.keyId);
+            if (known && (known.principal_id !== row.principal_id || known.key_role !== 'approve')) reject('auth_approve_key_required');
             await query('run', `UPDATE auth_device_keys SET revoked_ms = ? WHERE principal_id = ? AND device_id = ?
-                AND key_role = 'approve' AND revoked_ms IS NULL`, [now(), row.principal_id, deviceId]);
-            await devices.enroll({ keyId: approve.keyId, principalId: row.principal_id, jwk: approve.jwk, role: 'approve', deviceId,
-                assurance: approve.assurance, deviceClass: sessionKey.device_class, platform: sessionKey.platform || 'web',
-                label: sessionKey.label || '', enrolledBy: 'approve_key_add', restrictedUntil: sessionKey.restricted_until_ms,
-                credentialId: approve.credentialId, signCount: approve.signCount });
+                AND key_role = 'approve' AND revoked_ms IS NULL AND key_id != ?`, [now(), row.principal_id, deviceId, approve.keyId]);
+            if (known) {
+                await query('run', `UPDATE auth_device_keys SET revoked_ms = NULL, public_key = ?, device_id = ?, assurance = ?,
+                    restricted_until_ms = ?, enrolled_by = 'approve_key_add', credential_id = ?, sign_count = ?, last_seen_ms = ? WHERE key_id = ?`,
+                [JSON.stringify(approve.jwk), deviceId, approve.assurance, sessionKey.restricted_until_ms, approve.credentialId ?? null,
+                    approve.signCount ?? null, now(), approve.keyId]);
+            } else {
+                await devices.enroll({ keyId: approve.keyId, principalId: row.principal_id, jwk: approve.jwk, role: 'approve', deviceId,
+                    assurance: approve.assurance, deviceClass: sessionKey.device_class, platform: sessionKey.platform || 'web',
+                    label: sessionKey.label || '', enrolledBy: 'approve_key_add', restrictedUntil: sessionKey.restricted_until_ms,
+                    credentialId: approve.credentialId, signCount: approve.signCount });
+            }
             await proof.audit('approve_key_added', row.principal_id, approve.keyId);
             return { principalId: row.principal_id, deviceId, canApprove: approve.assurance === 'hardware_uv' };
         });

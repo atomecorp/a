@@ -228,6 +228,12 @@ fn visible_polygon_for_rounded_clips(
         Vec2::new(0.0, size[1]),
     ];
     if let Some(rect) = clip {
+        // An empty rectangle hides everything. Cut by its degenerate corners, the polygon kept an edge lying on it
+        // (a zero-height rect along a box's top), or the whole box (a zero-size rect: every edge null, every point
+        // "inside"), and the rounded boundaries then painted what the rectangle hides.
+        if rect[2] <= 0.0 || rect[3] <= 0.0 {
+            return Vec::new();
+        }
         polygon = clip_convex_polygon(
             &polygon,
             &clip_corners_in_atom_frame(position, size, local, rect, clip_rotation),
@@ -256,6 +262,13 @@ fn visible_polygon_for_rounded_clips(
         if polygon.is_empty() {
             break;
         }
+    }
+    // A polygon with no area (an edge left on a boundary) shows nothing: the atom is cut out.
+    let doubled_area: f32 = (0..polygon.len())
+        .map(|i| polygon[i].perp_dot(polygon[(i + 1) % polygon.len()]))
+        .sum();
+    if polygon.len() < 3 || doubled_area.abs() < 0.02 {
+        return Vec::new();
     }
     polygon
 }

@@ -132,31 +132,58 @@ pub fn approve_key_add(
             &[&device, &text(&session_key, "key_id")],
         )?;
     }
+    // A hardware approve key outlives the app (the Secure Enclave keeps it through a reinstall):
+    // the same key, already known for this account, comes back. It is enrolled again in place,
+    // never inserted twice (the key id is unique); another account's key is refused.
+    let known = devices::by_id(db, &approve.key_id)?;
+    if let Some(key) = &known
+        && (text(key, "principal_id") != principal || text(key, "key_role") != "approve")
+    {
+        return Err("auth_approve_key_required".into());
+    }
     sql(
         "UPDATE auth_device_keys SET revoked_ms = ? WHERE principal_id = ? AND device_id = ?
-         AND key_role = 'approve' AND revoked_ms IS NULL",
-        &[&now, &principal, &device],
+         AND key_role = 'approve' AND revoked_ms IS NULL AND key_id != ?",
+        &[&now, &principal, &device, &approve.key_id],
     )?;
-    let label = text(&session_key, "label");
-    devices::enroll(
-        db,
-        &Enrollment {
-            role: "approve",
-            device_id: Some(&device),
-            assurance: &approve.assurance,
-            device_class: text(&session_key, "device_class"),
-            platform: Some(text(&session_key, "platform"))
-                .filter(|p| !p.is_empty())
-                .unwrap_or("web"),
-            label,
-            enrolled_by: Some("approve_key_add"),
-            restricted_until: Some(number(&session_key, "restricted_until_ms") as i64),
-            credential_id: approve.credential_id.as_deref(),
-            sign_count: approve.sign_count,
-            ..Enrollment::session(&approve.key_id, principal, &approve.jwk)
-        },
-        now,
-    )?;
+    let restricted = number(&session_key, "restricted_until_ms") as i64;
+    if known.is_some() {
+        sql(
+            "UPDATE auth_device_keys SET revoked_ms = NULL, public_key = ?, device_id = ?, assurance = ?,
+             restricted_until_ms = ?, enrolled_by = 'approve_key_add', credential_id = ?, sign_count = ?,
+             last_seen_ms = ? WHERE key_id = ?",
+            &[
+                &approve.jwk.to_string(),
+                &device,
+                &approve.assurance,
+                &restricted,
+                &approve.credential_id,
+                &approve.sign_count,
+                &now,
+                &approve.key_id,
+            ],
+        )?;
+    } else {
+        devices::enroll(
+            db,
+            &Enrollment {
+                role: "approve",
+                device_id: Some(&device),
+                assurance: &approve.assurance,
+                device_class: text(&session_key, "device_class"),
+                platform: Some(text(&session_key, "platform"))
+                    .filter(|p| !p.is_empty())
+                    .unwrap_or("web"),
+                label: text(&session_key, "label"),
+                enrolled_by: Some("approve_key_add"),
+                restricted_until: Some(restricted),
+                credential_id: approve.credential_id.as_deref(),
+                sign_count: approve.sign_count,
+                ..Enrollment::session(&approve.key_id, principal, &approve.jwk)
+            },
+            now,
+        )?;
+    }
     proof.audit(
         db,
         "approve_key_added",

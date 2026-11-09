@@ -5,6 +5,7 @@ import { parseCalendarData, buildIcs, canonicalCalendarDate, canonicalCalendarDa
 import { saveExportFile } from '../shared/file_export.js';
 import { importData } from '../shared/import_reconciliation.js';
 import { readDavImport } from '../shared/dav_import_transport.js';
+import { calendarEventIdentity, calendarIdentity, runCalendarDedup } from './calendar_dedup.js';
 
 export function normalizeImportedEvent(input) {
     const source = input.properties || input;
@@ -33,8 +34,12 @@ export function createCalendarImport({ env = globalThis, session, device } = {})
     // Un meme rendez-vous natif (meme serie, meme debut) vu depuis un autre appareil
     // ou un autre calendrier local du meme compte iCloud n'est garde qu'une fois.
     const store = createCanonicalImport({ type: 'calendar_event', api, session, normalize: normalizeImportedEvent,
-        identityKeys: (props) => (props.native_series_id && props.start ? [`series:${props.native_series_id}|${props.start}`] : []) });
-    const calendars = createCanonicalImport({ type: 'calendar', api, session, normalize: input => ({
+        // Le meme titre au meme moment dans le meme calendrier fusionne (calendar_dedup.js).
+        identityKeys: (props) => [props.native_series_id && props.start ? `series:${props.native_series_id}|${props.start}` : '',
+            calendarEventIdentity(props)].filter(Boolean) });
+    // Un calendrier revu depuis un autre appareil (autre identifiant natif) reprend celui du meme nom.
+    const calendars = createCanonicalImport({ type: 'calendar', api, session, identityKeys: props => [calendarIdentity(props)],
+        normalize: input => ({
         name: input.name || input.title || '', ...(input.color ? { color: input.color } : {}),
         ...(input.timezone ? { timezone: input.timezone } : {}), calendar_scope: 'personal', access: 'private', visibility: 'private'
     }) });
@@ -81,6 +86,16 @@ export function createCalendarImport({ env = globalThis, session, device } = {})
         register(id, pull) { if (typeof pull !== 'function') throw new Error('calendar_import_pull_required'); sources.set(id, pull); },
         activate(id, options = {}) { if (id === 'native_calendar') ensureNative(); return lifecycle.activate(id, options); },
         stop: lifecycle.deactivate, status: lifecycle.status, synchronized: lifecycle.synchronized, dispose: lifecycle.dispose,
+        // The copies left by earlier imports merged (calendar_dedup.js); `dry_run` only counts them.
+        async mergeDuplicates(options = {}) {
+            const context = store.capture();
+            const result = await runCalendarDedup({ api: context.store, owner: context.owner, dryRun: options.dry_run === true,
+                onProgress: options.onProgress });
+            context.check();
+            if (!result.dry_run && env.dispatchEvent && env.CustomEvent) env.dispatchEvent(new env.CustomEvent('squirrel:import-updated',
+                { detail: { domain: 'calendar_event', source_id: 'merge_duplicates', ok: true } }));
+            return result;
+        },
         async importIcs(content, options = {}) {
             const checkSession = store.capture().check;
             const items = parseCalendarData(content);

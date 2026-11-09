@@ -29,6 +29,15 @@ pub(super) async fn resolve_playback_media_file(
     file_name: &str,
 ) -> Result<(PathBuf, &'static str, String), String> {
     let mime_type = guess_mime_from_ext(file_name);
+    // The iPhone has no ffmpeg, and its WebKit plays what its camera writes (HEVC in a `.mov`):
+    // a file is served as it is (user, 8 Nov. 2026: « les vidéos… je peux pas les relire »).
+    if cfg!(target_os = "ios") {
+        return Ok((
+            source_path.to_path_buf(),
+            mime_type,
+            sanitize_file_name(file_name),
+        ));
+    }
     Ok(
         match playback::ensure_cache(source_path, file_name, mime_type).await? {
             Some((cached_path, cached_name)) => (cached_path, "video/mp4", cached_name),

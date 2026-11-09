@@ -202,9 +202,18 @@ pub async fn handle_sync_message(
                     _ => {}
                 }
             }
+            // The count and the oldest rows: the whole list (3.7 MB for an iPhone account) was
+            // serialized to the page at every status read, ~345 ms of frozen page each time.
+            let pending_count = match db.query_row(
+                "SELECT COUNT(*) FROM atomes WHERE owner_id = ?1 AND sync_status = 'pending' AND deleted_at IS NULL",
+                [user_id], |row| row.get::<_, i64>(0)
+            ) {
+                Ok(count) => count,
+                Err(error) => return response("sync", &message, false, None, Some(error.to_string())),
+            };
             let mut stmt = match db.prepare(
                 "SELECT atome_id, atome_type, parent_id, owner_id, updated_at FROM atomes
-                 WHERE owner_id = ?1 AND sync_status = 'pending' AND deleted_at IS NULL ORDER BY updated_at ASC"
+                 WHERE owner_id = ?1 AND sync_status = 'pending' AND deleted_at IS NULL ORDER BY updated_at ASC LIMIT 100"
             ) {
                 Ok(stmt) => stmt,
                 Err(error) => return response("sync", &message, false, None, Some(error.to_string())),
@@ -224,7 +233,7 @@ pub async fn handle_sync_message(
                     &message,
                     true,
                     Some(
-                        json!({"changes": rows.filter_map(Result::ok).collect::<Vec<_>>(), "pending_delivery_count": pending_delivery_count, "sync_status": sync_status}),
+                        json!({"changes": rows.filter_map(Result::ok).collect::<Vec<_>>(), "pending_count": pending_count, "pending_delivery_count": pending_delivery_count, "sync_status": sync_status}),
                     ),
                     None,
                 ),
@@ -259,6 +268,12 @@ mod tests {
                 [],
             )
             .unwrap();
+            // More pending Atomes than one status read carries.
+            db.execute("INSERT INTO atomes (atome_id,atome_type,owner_id,creator_id) VALUES ('account-a','user','account-a','account-a')", []).unwrap();
+            for index in 0..105 {
+                db.execute("INSERT INTO atomes (atome_id,atome_type,owner_id,sync_status,updated_at) VALUES (?1,'note','account-a','pending',?2)",
+                    rusqlite::params![format!("note-{index:03}"), format!("2026-01-01T00:{:02}:{:02}Z", index / 60, index % 60)]).unwrap();
+            }
             for (actor, status, error) in [
                 ("account-a", "failed", "property_write_denied"),
                 ("account-a", "synced", "old_error"),
@@ -273,6 +288,9 @@ mod tests {
         assert!(result.success);
         let data = result.data.unwrap();
         assert_eq!(data["pending_delivery_count"], 1);
+        assert_eq!(data["pending_count"], 105);
+        let changes = data["changes"].as_array().unwrap();
+        assert_eq!((changes.len(), changes[0]["atome_id"].as_str()), (100, Some("note-000")));
         assert_eq!(
             data["sync_status"]["last_error_code"],
             "property_write_denied"

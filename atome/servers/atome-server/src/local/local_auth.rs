@@ -21,6 +21,7 @@ mod notifications;
 mod tokens;
 #[cfg(target_os = "android")]
 pub use notifications::notification_storage;
+pub(crate) use tokens::revoked as revoke_confirmed_sessions;
 pub use tokens::secret as file_session_secret;
 
 #[derive(Clone)]

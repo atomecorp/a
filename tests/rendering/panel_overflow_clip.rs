@@ -353,4 +353,142 @@ mod rounded_clip_tests {
             Some(&Visibility::Visible)
         );
     }
+
+    // A list row's thumbnail (an upright take, 27.5 x 48.8 in its rounded 48.8 frame) inside the panel body.
+    const BODY: [f32; 8] = [0.5, 77.0, 429.0, 622.5, 3.0, 3.0, 3.0, 3.0];
+    const WINDOW: [f32; 4] = [20.5, 482.0, 390.0, 207.5];
+
+    fn frame_at(y: f32) -> [f32; 8] {
+        [60.5, y, 48.837_21, 48.837_21, 3.0, 3.0, 3.0, 3.0]
+    }
+
+    fn thumbnail_app(y: f32, clip: [f32; 4]) -> (App, Entity) {
+        let mut app = App::new();
+        app.add_plugins(crate::AtomeBevyRendererPlugin::new(
+            crate::AtomeBevyRendererConfig::empty(430.0, 932.0),
+        ));
+        app.world_mut().init_resource::<Assets<ColorMaterial>>();
+        app.update();
+        let node: crate::AtomeRenderNode = serde_json::from_value(serde_json::json!({
+            "id":"thumb", "kind":"shape", "logical_position":[71.183_14, y], "logical_size":[27.470_93, 48.837_21],
+            "layer":3, "color":[0.0,1.0,0.0,1.0], "opacity":0.0, "clip_rect":clip
+        }))
+        .unwrap();
+        let entity = crate::apply_spawn(app.world_mut(), node).unwrap();
+        (app, entity)
+    }
+
+    fn painted(app: &App, entity: Entity) -> bool {
+        let shown = |e: Entity| app.world().get::<Visibility>(e) != Some(&Visibility::Hidden);
+        let proxy = app
+            .world()
+            .get::<AtomeClipPolygonProxy>(entity)
+            .map(|p| p.0);
+        match proxy {
+            Some(proxy) if app.world().get_entity(proxy).is_ok() => shown(entity) && shown(proxy),
+            _ => shown(entity),
+        }
+    }
+
+    #[test]
+    fn an_empty_rectangle_hides_an_upright_thumbnail_whatever_its_rounded_frames() {
+        // Out of its list's window: a zero-height rect along its top edge (a scroll chain's disjoint clips), a
+        // zero-size one (a clipping frame out of view, bevy_ui_overlay_record_projection.js). The rounded frames
+        // alone used to keep its polygon (corners cut, not empty) and paint it whole or as an edge.
+        for rect in [[60.5, 315.0, 48.837_21, 0.0], [60.5, 315.0, 0.0, 0.0]] {
+            let points = visible_polygon_for_rounded_clips(
+                [71.183_14, 315.0],
+                [27.470_93, 48.837_21],
+                AtomeLocalTransform::default(),
+                Some(rect),
+                0.0,
+                &[BODY, frame_at(315.0)],
+            );
+            assert!(points.is_empty(), "{rect:?} left {points:?}");
+            let (mut app, entity) = thumbnail_app(315.0, rect);
+            let patch: crate::AtomeTransformPatch = serde_json::from_value(serde_json::json!({
+                "id":"thumb", "logical_position":[71.183_14, 315.0], "logical_size":[27.470_93, 48.837_21],
+                "clip_rect":rect, "clip_rounded_rects":[BODY, frame_at(315.0)]
+            }))
+            .unwrap();
+            crate::apply_transform(app.world_mut(), patch).unwrap();
+            app.update();
+            assert!(!painted(&app, entity), "{rect:?} painted the thumbnail");
+        }
+    }
+
+    #[test]
+    fn a_thumbnail_scrolled_out_stays_hidden_when_described_again_elsewhere() {
+        use crate::scroll_area::{
+            ScrollAreaSpec, ScrollChainLink, ScrollClip, ScrollRecordRole, ScrollRecordSpec,
+            ScrollTree, ScrollTreeSpec,
+        };
+        use crate::scroll_motion::ScrollMotionSpec;
+        // Described above the window (its frame out of view): transparent, its clip empty.
+        let (mut app, entity) = thumbnail_app(315.0, [60.5, 315.0, 0.0, 0.0]);
+        let spec = |offset: f64, frame_y: f32| ScrollTreeSpec {
+            areas: vec![ScrollAreaSpec {
+                id: "window".into(),
+                motion: ScrollMotionSpec {
+                    velocity_blend: 0.5,
+                    min_velocity_px_per_ms: 0.02,
+                    max_velocity_px_per_ms: 6.0,
+                    friction_per16_ms: 0.968_475_3,
+                    release_window_ms: 80.0,
+                    rubber: 0.55,
+                    bounce_spring_per_ms: 0.012,
+                },
+                area_box: WINDOW,
+                max: 428.5,
+                offset,
+                jump: false,
+                edge_mask: None,
+                thumb_travel: 0.0,
+            }],
+            records: vec![ScrollRecordSpec {
+                id: "thumb".into(),
+                opacity: 1.0,
+                role: ScrollRecordRole::Content,
+                area: None,
+                chain: vec![
+                    ScrollChainLink {
+                        area: None,
+                        clip: Some(ScrollClip {
+                            rect: Some(WINDOW),
+                            rounded: vec![BODY],
+                            fades: Vec::new(),
+                        }),
+                    },
+                    ScrollChainLink {
+                        area: Some("window".into()),
+                        clip: Some(ScrollClip {
+                            rect: Some([60.5, frame_y, 48.837_21, 48.837_21]),
+                            rounded: vec![frame_at(frame_y)],
+                            fades: Vec::new(),
+                        }),
+                    },
+                ],
+            }],
+        };
+        let mut tree = ScrollTree::new(spec(428.5, 315.0));
+        tree.present(app.world_mut(), 0.0).unwrap();
+        app.update();
+        // The list lays it at the opacity it has when shown, out of view: hidden.
+        assert!(!painted(&app, entity));
+        // The list laid again (a take added above, the preview turned on): its place changes, its opacity does not
+        // (described transparent both times, no style patch reaches the renderer). Its own clip must hide it.
+        let patch: crate::AtomeTransformPatch = serde_json::from_value(serde_json::json!({
+            "id":"thumb", "logical_position":[71.183_14, 251.0], "logical_size":[27.470_93, 48.837_21],
+            "clip_rect":[60.5, 251.0, 0.0, 0.0]
+        }))
+        .unwrap();
+        crate::apply_transform(app.world_mut(), patch).unwrap();
+        tree.describe(spec(428.5, 251.0));
+        tree.present(app.world_mut(), 16.0).unwrap();
+        app.update();
+        assert!(
+            !painted(&app, entity),
+            "an out-of-view thumbnail painted over what lies above its list"
+        );
+    }
 }
