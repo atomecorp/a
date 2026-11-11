@@ -10,7 +10,7 @@ import { readLastCreationRailToolEntry, readCreationToolContentKey } from '../..
 import { readArmedToolState, writeArmedToolState, rememberLastCreationTool, readLastCreationTool } from '../../eVe/intuition/tools/core/armed_tool_state.js';
 import { normalizeCatalogToolEntry } from '../../eVe/intuition/tools/core/tool_definition_ssot.js';
 import { setMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_product_registry.js';
-import { restoreProjectWorkModeValue } from '../../eVe/domains/rendering/project_work_mode_state.js';
+import { getProjectWorkMode, restoreProjectWorkModeValue } from '../../eVe/domains/rendering/project_work_mode_state.js';
 import * as viewMode from '../../eVe/domains/rendering/project_view_mode_state.js';
 
 vi.mock('../../eVe/domains/rendering/project_view_creation_runtime.js', () => ({
@@ -113,13 +113,17 @@ test('the lower slot alternates native stop and canonical Create activation repe
         assert.ok(stopped, 'selection retains the stopped shortcut');
         assert.deepEqual(stopped.style.position, before.style.position);
         assert.equal(stopped.style.translation, undefined);
+        assert.equal(findNode(stopped, 'atome_contextual_tool_draw_create_icon_glow'), null, 'a stopped shortcut is not lit');
         const motionCount = motions.length;
         await new Promise(resolve => setTimeout(resolve, 100));
         assert.equal(motions.length, motionCount, 'an inactive shortcut owns no pulse timer');
         // A retained node still carries its earlier active paint: live state wins.
         await activate(index === 0 ? before : stopped);
         assert.equal(h.active.draw, true);
-        assert.deepEqual((await slot('draw_create')).style.translation, [0, 2]);
+        // A running shortcut reads lit: its glyph wears the glow, its tile keeps its rest place.
+        const running = await slot('draw_create');
+        assert.equal(running.style.translation, undefined);
+        assert.ok(findNode(running, 'atome_contextual_tool_draw_create_icon_glow'), 'the running shortcut lights its glyph');
         assert.equal(h.latches.get('tool.main.draw'), true);
         assert.equal(window.__eveDrawTool.getBrushSize(), 37, 'native tool options survive each cycle');
     }
@@ -141,7 +145,10 @@ test('the lower slot alternates native stop and canonical Create activation repe
     restoreProjectWorkModeValue('shortcut_project', 'consultation');
     assert.equal(await slot('text_create'), null, 'a stopped creation shortcut stays hidden outside edit mode');
     await activate(text);
-    assert.equal(h.active.text, false, 'a stale node cannot bypass the current work mode');
+    // A rail case chosen outside Édition never bypasses the work mode: it first
+    // switches the project to Édition through the band's own Edit tool, then acts.
+    assert.equal(getProjectWorkMode('shortcut_project'), 'edit', 'a stale node passes through the Edit tool');
+    assert.equal(h.active.text, true, 'the shortcut acts only once the project is in Édition');
     restoreProjectWorkModeValue('shortcut_project', 'edit');
     assert.ok(await slot('text_create'));
     runtime.setSuspended(true); await runtime.render();

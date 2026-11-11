@@ -247,6 +247,8 @@ test('a colour committed outside the project surface never repaints it', async (
 
 
 test('new projects capture the user default once and share the uncoloured project default', () => {
+    // Creation reads the device's active life profiles through the window owner.
+    globalThis.window ||= {};
     const windowRef = { __eveProfilePreferences: { visual: { masteryLevel: 'advanced' } } };
     const first = projectCreationViewProperties({ name: 'First' }, { windowRef });
     assert.equal(first.background, '#272727');

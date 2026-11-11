@@ -23,11 +23,13 @@ describe('MIDI Binding Bevy panel contract', () => {
             emit: () => {}, bodyWidth: 340
         });
         const ids = idsOf(nodes);
+        // Each value is the one tool slider of its card (`<card>_<key>`, dashboard_band_sliders.js `grid`).
         expect(ids).toEqual(expect.arrayContaining([
             'midi_editor_learn', 'midi_editor_manual', 'midi_input_port', 'midi_input_message',
-            'channel', 'number', 'input_min', 'input_max', 'midi_capture_action',
-            'midi_search_action', 'midi_continuous_toggle', 'continuous_min',
-            'continuous_max', 'midi_continuous_invert', 'midi_binding_test'
+            'midi_input_values_channel', 'midi_input_values_number', 'midi_input_values_input_min',
+            'midi_input_values_input_max', 'midi_capture_action', 'midi_search_action', 'midi_continuous_toggle',
+            'midi_continuous_values_continuous_min', 'midi_continuous_values_continuous_max',
+            'midi_continuous_invert', 'midi_binding_test'
         ]));
         await midiBindingSurface.handleEvent({ type: 'midi.binding.test' }, { refresh });
         const testIds = idsOf(midiBindingSurface.buildContent(midiBindingSurface.readState(), {
@@ -35,7 +37,7 @@ describe('MIDI Binding Bevy panel contract', () => {
         }));
         expect(testIds).toEqual(expect.arrayContaining([
             'midi_test_receive', 'midi_test_output', 'midi_test_message',
-            'test_channel', 'test_number', 'test_value', 'midi_test_send'
+            'midi_test_values_test_channel', 'midi_test_values_test_number', 'midi_test_values_test_value', 'midi_test_send'
         ]));
     });
 });

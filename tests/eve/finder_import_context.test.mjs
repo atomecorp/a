@@ -59,6 +59,8 @@ test('Finder virtualizes a long list, reaches its last result and imports checke
     const finder = createFinderPanelSurface({ loadRecords: async () => records, resolveProjectId: () => 'p',
         importRecords: async batch => { calls.push(batch); return { ok: true, created: batch.length }; }, closePanel: async () => {} });
     await finder.load();
+    // Rows are ticked in Choix only (R-007 B): their boxes, and so their ranges, show while it is lit.
+    await finder.handleEvent({ type: 'finder.choose' });
     const draw = () => finder.surface.buildContent(finder.readState(), { bodyWidth: 500, bodyHeight: 400, emit: () => {} });
     assert.ok(node(draw(), 'finder_list_virtual_list'));
     assert.equal(node(draw(), 'finder_list_entry_200'), null);
@@ -114,17 +116,28 @@ test('hidden panel preserves captured handler but has no shell or hit target', (
     assert.equal(hitTestBevyUiNode(tree.root, { x: 100, y: 100 }), null);
 });
 
-test('Mystic translates at every edge without reversing the compass and pins anchors on every page', () => {
+// The centre stays exactly at the finger (mystic_layout.js#computeMysticLayout): at an edge the columns that
+// cannot fit pass, whole, to the other side; where there is room the compass is never reversed.
+test('Mystic keeps the finger at every edge, the compass where it fits, and pins anchors on every page', () => {
     for (const [x, y] of [[0, 0], [1200, 0], [0, 800], [1200, 800], [600, 400]]) {
         const input = { slots: resolveMysticSlots(24), center: { x, y }, surface: { width: 1200, height: 800 }, tileSize: 60 };
         const a = computeMysticLayout(input); assert.deepEqual(a, computeMysticLayout(input));
-        for (const tile of a.tiles) { const slot = input.slots[tile.index]; assert.equal(Math.sign(tile.dx), Math.sign(slot.dx)); assert.equal(Math.sign(tile.dy), Math.sign(slot.dy)); }
+        assert.deepEqual(a.center, { x, y });
+        for (const tile of a.tiles) {
+            assert.ok(tile.point[0] - tile.size / 2 >= 0 && tile.point[0] + tile.size / 2 <= 1200, `${tile.slot} inside horizontally at ${x},${y}`);
+            assert.ok(tile.point[1] - tile.size / 2 >= 0 && tile.point[1] + tile.size / 2 <= 800, `${tile.slot} inside vertically at ${x},${y}`);
+            if (x === 600 && y === 400) {
+                const slot = input.slots[tile.index];
+                assert.equal(Math.sign(tile.dx), Math.sign(slot.dx)); assert.equal(Math.sign(tile.dy), Math.sign(slot.dy));
+            }
+        }
     }
     const items = CONTEXT_MENUS.menus.mystic.fixed.map(item => ({ key: item.command, slot: item.slot }));
     const pages = resolveMysticPage({ items, capacity: 8 });
     for (let page = 0; page < pages.pages; page++) {
         const keys = resolveMysticPage({ items, capacity: 8, page }).items.map(item => item.key);
-        for (const key of ['find', 'capture', 'communicate', 'dashboard']) assert.ok(keys.includes(key));
+        // The four cardinal anchors of menus.mystic.fixed (context_menus.json).
+        for (const key of ['capture', 'import', 'communicate', 'create']) assert.ok(keys.includes(key));
     }
 });
 
@@ -144,6 +157,7 @@ test('partial transfer reports the failed items and does not replay successful s
         return {ok:false,created:1,importedSourceIds:['a'],failures:[{id:'b',error:'fixture_failure'}]};
     }});
     await finder.load();
+    await finder.handleEvent({type:'finder.choose'});
     finder.surface.buildContent(finder.readState(),{bodyWidth:500,bodyHeight:400,emit:()=>{}});
     for(const record of records) { await finder.handleEvent({type:'finder.selection.press',value:buildSelectionKey(record)}); await finder.handleEvent({type:'finder.selection.release'}); }
     await finder.handleEvent({type:'finder.import.selection'});
@@ -210,7 +224,7 @@ test('Finder preserves a created atome when subsequent source metadata fails', a
 test('every previously lazy exposed tool resolves a canonical definition and an executable handler before first use', async () => {
     const {createToolRuntimeBootstrap}=await import('../../eVe/intuition/tools/core/tool_runtime_bootstrap.js');
     const handlers=new Map();
-    const runtime=createToolRuntimeBootstrap({buildLabelKey:key=>'eve.tool.'+key,publishRuntimeRegisteredHandler:(id,handler)=>handlers.set(id,handler),PANEL_RUNTIME_CONFIG_BY_TOOL_ID:{},MAIN_TOOL_RUNTIME_CONFIG_BY_TOOL_ID:{},V2_CALENDAR_API_EXECUTION_MODE:'v2_calendar_api',V2_REGISTERED_HANDLER_EXECUTION_MODE:'v2_registered_handler'});
+    const runtime=createToolRuntimeBootstrap({buildLabelKey:key=>'eve.tool.'+key,publishRuntimeRegisteredHandler:(id,handler)=>handlers.set(id,handler),PANEL_RUNTIME_CONFIG_BY_TOOL_ID:{},MAIN_TOOL_RUNTIME_CONFIG_BY_TOOL_ID:{'tool.main.z_order':{kind:'palette',toggle_on_pointer:true,children:['ui.zorder.up','ui.zorder.down','ui.zorder.front','ui.zorder.back']}},V2_CALENDAR_API_EXECUTION_MODE:'v2_calendar_api',V2_REGISTERED_HANDLER_EXECUTION_MODE:'v2_registered_handler'});
     for(const id of ['ui.youtube.create','ui.placeholder.create','ui.shape.create','ui.generator.create','ui.new_project','tool.main.z_order']) {
         const tool=runtime.resolveBootstrapRuntimeTool(id);
         assert.equal(tool.id,id);assert.equal(tool.type,'tool');assert.equal(typeof handlers.get(id),'function',id);

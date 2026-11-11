@@ -149,10 +149,16 @@ test('obsolete DOM/JPEG recording preview path stays deleted', async () => {
     assert.match(nativePreviewSource, /maximumFps = 30/);
     assert.match(nativePreviewSource, /alwaysDiscardsLateVideoFrames = true/);
     assert.match(nativePreviewSource, /jpegRepresentation/);
-    assert.match(nativePreviewSource, /"pixel_format": "jpeg"/);
+    assert.match(nativePreviewSource, /func latestFrame\(after: UInt64\)/);
     assert.equal(nativePreviewSource.includes('bgra8'), false);
     assert.equal(swiftSource.includes('AVCaptureVideoPreviewLayer'), false);
-    assert.equal(swiftSource.includes('media_camera_preview_'), false);
+    // The video take and the live camera preview (video_api_preview.js) each
+    // hold that same bounded JPEG preview state; neither owns another pipeline.
+    const previewStateOwners = swiftEntries
+        .filter(({ source }) => source.includes('AppNativeVideoPreviewState()'))
+        .map(({ name }) => name)
+        .sort();
+    assert.deepEqual(previewStateOwners, ['AppNativeMediaCaptureController.swift', 'AppNativeVideoRecorder.swift']);
 });
 
 test('native video cancel remains retryable after a bridge failure', async () => {
@@ -203,8 +209,9 @@ test('native video cancel remains retryable after a bridge failure', async () =>
 
     assert.equal(result.ok, true);
     assert.equal(result.discarded, true);
-    assert.equal(typeof controller.readPreviewFrame, 'function');
-    assert.equal(typeof controller.previewSourceId, 'string');
+    // Its camera frames come from the atome:// scheme (video_native_preview_stream.js), not through this controller.
+    assert.equal(controller.native, true);
+    assert.equal('readPreviewFrame' in controller, false);
     const stopCalls = calls.filter(({ command }) => command === 'media_video_record_cancel');
     assert.equal(stopCalls.length, 2);
     assert.deepEqual(stopCalls.map(({ payload }) => payload), [

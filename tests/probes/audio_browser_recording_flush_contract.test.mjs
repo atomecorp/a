@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
-import { afterEach, test, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { afterEach, beforeAll, test, vi } from 'vitest';
+import { loadAudioKernels } from '../../atome/src/application/audio_runtime/audio_kernels.js';
 import { createAudioRecord } from '../../eVe/domains/media/api/audio_core_record.js';
 import { createAudioStorage } from '../../eVe/domains/media/api/audio_core_storage.js';
 import {
@@ -106,6 +108,12 @@ const emitContinuousCapture = ({ node, request, sampleRate }) => {
         chunk_count: 2, flush_frame: 1024, context_time: 1024 / sampleRate
     });
 };
+
+// The recorder encodes its WAV through the Rust kernels; a Node probe loads them from source.
+beforeAll(() => loadAudioKernels({
+    moduleUrl: new URL('../../atome/src/wasm/squirrel_audio_wasm.js', import.meta.url).href,
+    binary: readFileSync(new URL('../../atome/src/wasm/squirrel_audio_wasm_bg.wasm', import.meta.url))
+}));
 
 afterEach(() => {
     vi.restoreAllMocks();
@@ -328,7 +336,8 @@ test('native discard physically deletes the consumed WAV and retries deletion wi
         AtomeFileSystem: {
             deleteFile: (path, callback) => {
                 deleteCalls += 1;
-                assert.equal(path, 'data/users/u/recordings/native.wav');
+                // The native recorder writes under the App Group root, so a relative path is addressed there.
+                assert.equal(path, 'appgroup:data/users/u/recordings/native.wav');
                 callback(rejectDelete ? { success: false, error: 'busy' } : { success: true });
             }
         }
@@ -423,7 +432,7 @@ test('native exact terminal result stays owned until its physical cleanup succee
     await assert.rejects(controller.stop(), (error) => error.recordingTerminal === true);
     assert.equal(controller.state, 'finalization_failed');
     assert.equal((await controller.stop({ discard: true })).discarded, true);
-    assert.equal(deletedPath, 'data/users/u/recordings/invalid.wav');
+    assert.equal(deletedPath, 'appgroup:data/users/u/recordings/invalid.wav');
     assert.equal(stopCalls, 1);
 });
 

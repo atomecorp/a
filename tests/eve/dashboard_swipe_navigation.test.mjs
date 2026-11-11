@@ -65,13 +65,15 @@ test('a band tool slides up only when the first travel goes up', () => {
     assert.equal(slidesUp({ dx: 0, dy: 12 }), false);
 });
 
-const groundHandlers = ({ home = () => true } = {}) => {
+const groundHandlers = ({ turning = false } = {}) => {
     const calls = [];
     const state = { grid: {}, phase: MYSTIC_PHASE.open, stack: [], surfaceEpoch: 1 };
     const grid = {
         pressPersistent: () => false, dragPersistent: () => false, releasePersistent: () => false, cancelPersistent: () => {},
-        navigate: direction => calls.push(`navigate:${direction}`), home: () => { calls.push('home'); return home(); },
-        swipeHandlers: { press: () => {}, drag: () => {}, release: () => {}, cancel: () => {} }, cancelSwipe: () => {}
+        navigate: direction => calls.push(`navigate:${direction}`), home: () => { calls.push('home'); return true; },
+        swipeHandlers: { press: () => calls.push('swipe:press'), drag: () => {}, release: () => calls.push('swipe:release'), cancel: () => {},
+            turning: () => turning },
+        cancelSwipe: () => calls.push('swipe:cancel')
     };
     const handlers = bevyUiMysticItemHandlers({ state, grid, close: () => calls.push('close'), isOriginatingHoldPress: () => false,
         updateHover: () => null, releaseAt: () => calls.push('releaseAt'), releaseCentreHold: () => {}, pressCentre: () => {},
@@ -79,18 +81,18 @@ const groundHandlers = ({ home = () => true } = {}) => {
     return { root: handlers[BEVY_MYSTIC_ROOT_ID], calls };
 };
 
-test('on a rubric\'s ground a swipe up goes home, a still lift is Back, a downward lift chooses where it lands', () => {
-    const up = groundHandlers();
-    up.root.press(at(100, 500)); up.root.release(at(104, 380));
-    assert.deepEqual(up.calls, ['home']);
+// The ground's lift where it began is the band's Back (user, 28 Oct. 2026); a drag from the ground is navigation on its
+// one axis, the pages (rule 20): never a plate chosen where it lifts, never the menu closed (bevy_ui_mystic_item_handlers.js).
+test('on a rubric\'s ground a still lift is Back, a page turn is the swipe\'s, and no drag chooses where it lands', () => {
     const still = groundHandlers();
     still.root.press(at(100, 500)); still.root.release(at(102, 503));
-    assert.deepEqual(still.calls, ['navigate:back']);
-    const down = groundHandlers();
-    down.root.press(at(100, 300)); down.root.release(at(104, 420));
-    assert.deepEqual(down.calls, ['releaseAt']);
-    // A caller without a way home keeps the lift's own route.
-    const none = groundHandlers({ home: () => false });
-    none.root.press(at(100, 500)); none.root.release(at(104, 380));
-    assert.deepEqual(none.calls, ['home', 'releaseAt']);
+    assert.deepEqual(still.calls, ['swipe:press', 'swipe:cancel', 'navigate:back']);
+    const turn = groundHandlers({ turning: true });
+    turn.root.press(at(300, 500)); turn.root.release(at(120, 504));
+    assert.deepEqual(turn.calls, ['swipe:press', 'swipe:release']);
+    for (const [from, to] of [[at(100, 500), at(104, 380)], [at(100, 300), at(104, 420)]]) {
+        const drag = groundHandlers();
+        drag.root.press(from); drag.root.release(to);
+        assert.deepEqual(drag.calls, ['swipe:press', 'swipe:cancel']);
+    }
 });

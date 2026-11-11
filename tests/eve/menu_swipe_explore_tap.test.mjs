@@ -23,7 +23,7 @@ const harness = ({ scrolls = true, gliding = false } = {}) => {
         return {};
     }, { lensAxis: 'x' });
     const handlers = new Map([[`${TREE}:${TOOL}:lens`, lens], [`${TREE}:${TOOL}:activate`, () => {}], [`${TREE}:${NEXT}:activate`, () => {}]]);
-    const state = { handlers, lastSurfacePoints: new Map(), pointerTarget: null };
+    const state = { handlers, lastSurfacePoints: new Map(), pointerTarget: null, touchObservers: new Set() };
     const scrollRuntime = { begin: () => { scroll.begun += 1; }, drag: () => { if (!scroll.begun) return false; scroll.dragged += 1; return true; },
         end: () => scroll.dragged > 0, hover: () => {}, wheel: () => false, catchGlide: () => gliding };
     const runtime = createBevyUiPointerRuntime({ state, scrollRuntime, emitUiEvents: list => events.push(...list),

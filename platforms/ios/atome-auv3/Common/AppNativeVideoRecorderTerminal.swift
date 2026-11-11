@@ -213,6 +213,8 @@ extension AppNativeVideoRecorder {
             return
         }
 
+        do { try FileSyncCoordinator.shared.publishNow(fileURL, relativePath: resolvedRelativePath) }
+        catch { log("video_publish_failed file=\(resolvedFileName) error=\(error.localizedDescription)") }
         FileSyncCoordinator.shared.syncAll(force: true)
         log("video_done file=\(resolvedFileName) bytes=\(size) duration=\(duration) resolution=\(inspection.width)x\(inspection.height) video_tracks=\(inspection.videoTrackCount) audio_tracks=\(inspection.audioTrackCount) video_codecs=\(inspection.videoCodecs) audio_codecs=\(inspection.audioCodecs)")
         finishTerminal(successPayload, acknowledged: false,

@@ -69,8 +69,9 @@ describe('accepted engagement uses the canonical Matrix value contract', () => {
         expect(await ensureObjectiveEngagement(f.projectId)).toEqual({ ok: true, created: false, atome_id: result.atome_id });
         expect(f.history).toHaveLength(1); expect(f.records.get(f.projectId)).toEqual(original);
         expect(cell.properties.template_value).toBe(5);
-        expect(systemTemplateSpec('sleep').version).toBe(2);
-        expect(systemTemplateSpec('music_title').version).toBe(2);
+        // Version 3 (system_template_catalog.js#programTemplate): its tabs part by the charter's gap.
+        expect(systemTemplateSpec('sleep').version).toBe(3);
+        expect(systemTemplateSpec('music_title').version).toBe(3);
         expect(objectiveEngagementAtoms()).toHaveLength(9);
     });
     it('does not create an assembly when the project is locked or a canonical commit is refused', async () => {

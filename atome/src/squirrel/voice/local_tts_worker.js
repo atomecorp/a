@@ -1,5 +1,8 @@
 import * as ort from '../../assets/vendor/onnxruntime-web/ort.wasm.min.mjs';
 import { encodeFrenchPhonemes } from './french_phoneme_encoder.js';
+import { limitSharedMemory } from './wasm_memory_limit.js';
+
+limitSharedMemory();
 
 const MODEL_URL = '/src/assets/voice/fr_FR-siwis-medium/fr_FR-siwis-medium.onnx';
 const CONFIG_URL = '/src/assets/voice/fr_FR-siwis-medium/fr_FR-siwis-medium.onnx.json';

@@ -1,12 +1,16 @@
-import { test, expect, vi, afterEach } from 'vitest';
+import { test, expect, vi, afterEach, beforeAll } from 'vitest';
 vi.mock('../../atome/src/squirrel/apis/unified/adole_api/session.js',()=>({getSessionState:()=>({mode:'authenticated',user:{id:'owner'},updatedAt:1})}));
 import { CalendarAPI } from '../../eVe/intuition/tools/calendar_api.js';
 import { createCanonicalImport } from '../../atome/src/squirrel/shared/canonical_import.js';
 import { normalizeImportedEvent } from '../../atome/src/squirrel/calendar/import_source.js';
 import { eventCache, alarmTimers } from '../../eVe/intuition/tools/calendar_engine_state.js';
 import { projectCalendarRange, rangeOccurrences } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_calendar_projection.js';
-import { parseCalendarData } from '../../atome/src/squirrel/calendar/icalendar.js';
+import { parseCalendarData, loadCalendarEngine } from '../../atome/src/squirrel/calendar/icalendar.js';
+import { readFileSync } from 'node:fs';
 import { createProjectDropExternalRuntime } from '../../eVe/intuition/tools/project_drop_external_runtime.js';
+// Every calendar read takes its occurrences from the Rust engine (squirrel_audio_wasm), loaded here from its files as the page loads /wasm/.
+beforeAll(()=>loadCalendarEngine({moduleUrl:new URL('../../atome/src/wasm/squirrel_audio_wasm.js',import.meta.url).href,
+    binary:readFileSync(new URL('../../atome/src/wasm/squirrel_audio_wasm_bg.wasm',import.meta.url))}));
 afterEach(()=>{for(const timers of alarmTimers.values())timers.forEach(clearTimeout);alarmTimers.clear();eventCache.clear();delete globalThis.window;});
 test('personal events use canonical global CRUD, retain cancellation exceptions and leave project tasks intact',async()=>{
     const records=new Map(),writes=[];

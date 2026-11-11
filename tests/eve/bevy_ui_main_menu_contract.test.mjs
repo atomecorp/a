@@ -7,7 +7,9 @@ import { createBevyUiMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_
 import { setMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_product_registry.js';
 import { createBevyMainMenuHoldRuntime } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_hold_runtime.js';
 import { createContextToolInvocationRuntime } from '../../eVe/intuition/runtime/eve_intuition/context_tool_invocation_runtime.js';
-import { resolveDashboardBlockUnitSize } from '../../eVe/domains/dashboard/dashboard_tokens.js';
+import { dashboardScreenCell } from '../../eVe/domains/dashboard/dashboard_home_matrix.js';
+import { resolveSystemUiScreenGrid, systemUiGridJointPx, systemUiGridToolPx } from '../../eVe/elements/system_ui_grid.js';
+import { SYSTEM_UI_METRICS } from '../../eVe/elements/system_ui_tokens.js';
 import { readToolboxReservedHeight } from '../../eVe/domains/dashboard/dashboard_environment.js';
 import { MAIN_HANDLE_ICON } from '../../eVe/intuition/ribbon/tokens.js';
 import { BEVY_MENU_TOKENS } from '../../eVe/intuition/ribbon/bevy_ui_menu_surface.js';
@@ -36,18 +38,23 @@ test('system menu content consumes the global content color contract', () => {
     assert.equal(BEVY_MENU_TOKENS.surface.grip, EVE_COMMON_SKIN_TOKENS.systemContent.gpu);
 });
 
-test('standard menu tools inherit the canonical button surface while Mystic overrides only its circular geometry', () => {
+test('standard menu tools and Mystic plates wear the common tool glass and the one canonical radius', () => {
     const button = EVE_BUTTON_SKIN_TOKENS.bevyButton;
-    assert.equal(BEVY_MENU_TOKENS.surface.material, button.surface);
+    // The tools' glass (33 % / 9 px), not the panels' slab a panel button sits on.
+    assert.equal(BEVY_MENU_TOKENS.surface.material, EVE_COMMON_SKIN_TOKENS.bevy.toolSurface);
+    assert.notEqual(BEVY_MENU_TOKENS.surface.material, button.surface);
     assert.equal(BEVY_MENU_TOKENS.shape.standardRadiusPx, button.radiusPx);
     assert.equal(BEVY_MENU_TOKENS.shape.paletteRadiusPx, button.radiusPx);
-    assert.equal(BEVY_MENU_TOKENS.chrome.outlineRadiusPx, button.radiusPx);
-    assert.notEqual(BEVY_MENU_TOKENS.shape.mysticRadiusPx, button.radiusPx);
+    // A tool's states are looks, never a border (AGENTS.md rule 15): no outline chrome is declared.
+    assert.equal(BEVY_MENU_TOKENS.chrome, undefined);
+    // The Mystic's plates are tiles of the same grid: they keep the standard radius, no circle of their own.
+    assert.equal(BEVY_MENU_TOKENS.shape.mysticRadiusPx, button.radiusPx);
 });
 
 test('Capture screen icon is canonical before and after its lazy module loads', () => {
+    // The capture entries are declared by their own content module, composed by main_menu_content_runtime.js.
     const initialContentSource = readFileSync(
-        resolve(process.cwd(), 'eVe/intuition/runtime/eve_intuition/main_menu_content_runtime.js'),
+        resolve(process.cwd(), 'eVe/intuition/runtime/eve_intuition/main_menu_capture_content.js'),
         'utf8'
     );
     const lazyCaptureSource = readFileSync(
@@ -84,17 +91,19 @@ test('the capture palette keeps only its capture sources and Actions while the r
         },
         translate: (_key, fallback) => fallback
     });
-    // La palette « rec. » ne garde que les sources de capture et Actions ;
-    // import, validation, Relire (capture_actions) et apercu en sortent (2026-09-29).
-    assert.deepEqual(content.capture.children, ['audio', 'video', 'photo', 'screen', 'record_actions']);
-    for (const key of ['preview', 'import', 'validation', 'capture_actions']) {
+    // La palette « rec. » ne garde que ses sources de capture (MIDI compris) ;
+    // import, validation et apercu en sortent mais restent declares ; Relire
+    // (capture_actions) et Actions (record_actions) ne sont plus des outils du ruban.
+    assert.deepEqual(content.capture.children, ['audio', 'video', 'photo', 'screen', 'midi']);
+    for (const key of ['preview', 'import', 'validation']) {
         assert.ok(content[key], `${key} doit rester un outil declare, hors palette`);
     }
+    for (const key of ['capture_actions', 'record_actions']) assert.equal(content[key], undefined, key);
     // Les trois listes synchronisees du ruban portent la meme composition.
     const runtimeSource = readFileSync(resolve(process.cwd(), 'eVe/intuition/tools/core/tool_runtime.js'), 'utf8');
     const captureSource = readFileSync(resolve(process.cwd(), 'eVe/intuition/tools/capture.js'), 'utf8');
-    assert.match(runtimeSource, /children: \['ui\.capture\.audio', 'ui\.capture\.video', 'ui\.capture\.photo', 'ui\.capture\.screen', 'ui\.record\.actions'\]/);
-    assert.match(captureSource, /const CAPTURE_CHILDREN = \['audio', 'video', 'photo', 'screen', 'record_actions'\];/);
+    assert.match(runtimeSource, /children: \['ui\.capture\.audio', 'ui\.capture\.video', 'ui\.capture\.photo', 'ui\.capture\.screen', 'ui\.capture\.midi'\]/);
+    assert.match(captureSource, /const CAPTURE_CHILDREN = \['audio', 'video', 'photo', 'screen', 'midi'\];/);
 });
 
 test('the permanent bar is the five intents plus view/help/contact; mode and activity stay declared', async () => {
@@ -162,11 +171,21 @@ test('the permanent bar is the five intents plus view/help/contact; mode and act
     assert.equal(content.contact.touch, undefined);
     // The roots the ribbon really draws come from the taxonomy, in its own order.
     const { resolveMainMenuVisibility } = await import('../../eVe/intuition/menu/context_menu_resolver.js');
-    assert.deepEqual(resolveMainMenuVisibility({ level: 'advanced' }).roots, content.toolbox.children);
-    // Beginner keeps the beginner families (the registry's `menu_slot.main.roots`, R-104 D5), View included (user, 4 Nov. 2026);
-    // protected levels keep all.
-    assert.deepEqual(resolveMainMenuVisibility({ level: 'beginner' }).roots, content.toolbox.children.filter(key => key !== 'calendar'));
-    assert.deepEqual(resolveMainMenuVisibility({ level: 'intermediate' }).roots, content.toolbox.children);
+    // The registry reads the home's style from the published visual preferences.
+    const previousWindow = globalThis.window;
+    globalThis.window ||= {};
+    const previousPreferences = globalThis.window.__eveProfilePreferences;
+    globalThis.window.__eveProfilePreferences = { visual: { dashboardStyle: 'eve' } };
+    try {
+        assert.deepEqual(resolveMainMenuVisibility({ level: 'advanced' }).roots, content.toolbox.children);
+        // Beginner keeps the beginner families (the registry's `menu_slot.main.roots`, R-104 D5), View included (user, 4 Nov. 2026);
+        // protected levels keep all.
+        assert.deepEqual(resolveMainMenuVisibility({ level: 'beginner' }).roots, content.toolbox.children.filter(key => key !== 'calendar'));
+        assert.deepEqual(resolveMainMenuVisibility({ level: 'intermediate' }).roots, content.toolbox.children);
+    } finally {
+        globalThis.window.__eveProfilePreferences = previousPreferences;
+        globalThis.window = previousWindow;
+    }
     const taxonomy = JSON.parse(readFileSync(resolve(process.cwd(),
         'eVe/intuition/menu/context_menus.json'), 'utf8'));
     assert.equal(taxonomy.commands.contact.panel, 'contact');
@@ -207,7 +226,8 @@ test('the main Paste tool is a direct action while its history panel remains sep
         'utf8'
     );
     const shortcutSource = readFileSync(resolve(process.cwd(), 'eVe/default/shortcuts.js'), 'utf8');
-    assert.match(bootstrapSource, /'ui\.paste\.panel':\s*\(payload = \{\}\) => executeBootstrapPanelHandler/);
+    // The declared panels share one generated entry: `ui.paste.panel` opens through the panel handler.
+    assert.match(bootstrapSource, /\['home',[^\]]*'paste'[^\]]*\]\.map\(panel => \[`ui\.\$\{panel\}\.panel`,\s*\(payload = \{\}\) => executeBootstrapPanelHandler/);
     assert.match(bootstrapSource, /'tool\.main\.paste':\s*\(payload = \{\}\) => executeBootstrapActionProxyHandler\(payload, \{ kind: 'clipboard', operation: 'paste', proxy_tool_id: 'ui\.paste\.action' \}\)/);
     assert.doesNotMatch(runtimeSource, /'tool\.main\.paste':\s*\{ kind: 'panel'/);
     assert.match(editMenuSource, /copy:\s*\{[\s\S]*?extra_input:\s*\{ context_type:\s*'project' \}[\s\S]*?touch:/);
@@ -232,7 +252,9 @@ test('Molecule clipboard preserves structural roots and Mystic opening placement
     assert.match(stateSource, /root_ids:\s*rootIds/);
     assert.match(stateSource, /copies:[\s\S]*root_ids:\s*group\.root_ids/);
     assert.match(pasteSource, /source_to_duplicate[\s\S]*resolveClipboardRootIds[\s\S]*applySelectionBatch/);
-    assert.match(mysticItemsSource, /computedExtraInput\.drop_position\s*=\s*\{ x:\s*Number\(point\.x\), y:\s*Number\(point\.y\) \}/);
+    // Paste lands where the Mystic opened: its point joins the tool's extra input.
+    assert.match(mysticItemsSource, /drop_position:\s*\{ x:\s*Number\(point\.x\), y:\s*Number\(point\.y\) \}/);
+    assert.match(mysticItemsSource, /extraInput:\s*pastePoint \? \{ \.\.\.\(computedExtraInput \|\| \{\}\), \.\.\.pastePoint \}/);
     // Le contrat est l'appel compose (scene + atome leve), pas sa mise en page :
     // l'argument peut passer a la ligne sans que le contrat change.
     assert.match(mysticTargetSource, /resolveComposedInteractionTarget\(\s*sceneState\?\.scene,\s*hit\?\.atom/);
@@ -315,9 +337,12 @@ test('BevyUI Atome hold suppression expires when its release emits no activation
     assert.equal(hold.consumeActivation(BEVY_MAIN_MENU_ATOME_ID), false);
 });
 
-test('BevyUI main menu model keeps the required item order and fixed dashboard half-size', () => {
+test('BevyUI main menu model keeps the required item order and the grid tool size', () => {
     const items = buildBevyMainMenuItems(menuContent());
-    assert.equal(resolveBevyMainMenuItemSize(), Math.round(resolveDashboardBlockUnitSize() / 2));
+    // Without a window size, the default tool: one 60 px cell less the joint.
+    assert.ok(!(Number(globalThis.window?.innerWidth) > 0));
+    assert.equal(resolveBevyMainMenuItemSize(), systemUiGridToolPx(SYSTEM_UI_METRICS.unitPx));
+    assert.equal(resolveBevyMainMenuItemSize(), BEVY_MENU_TOKENS.toolSizePx);
     assert.deepEqual(items.map((item) => item.id), [
         BEVY_MAIN_MENU_ATOME_ID,
         ...TOOL_KEYS.map((key) => `eve_bevy_ui_main_menu_tool_${key}`)
@@ -356,7 +381,13 @@ test('BevyUI main menu is the sole dashboard toolbox height authority', async ()
     try {
         setMainMenuRuntime(harness.runtime);
         await harness.runtime.showFully();
-        assert.equal(readToolboxReservedHeight(harness.surface), resolveBevyMainMenuItemSize() + BEVY_MENU_TOKENS.toolGapPx);
+        // The ribbon's row is the grid's lowest: it reserves from its tools' top (inside their cell by half the joint)
+        // down to the surface's bottom, the grid's margin included.
+        const { width, height } = harness.surface.getBoundingClientRect();
+        const cell = dashboardScreenCell({ width: globalThis.window.innerWidth, height: globalThis.window.innerHeight });
+        assert.equal(resolveBevyMainMenuItemSize(), cell - systemUiGridJointPx());
+        const grid = resolveSystemUiScreenGrid({ width, height, cell });
+        assert.equal(readToolboxReservedHeight(harness.surface), height - (grid.bottom - grid.cell + grid.joint / 2));
         harness.runtime.hideCompletely();
         assert.equal(readToolboxReservedHeight(harness.surface), 0);
     } finally {

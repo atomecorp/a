@@ -106,8 +106,8 @@ export const ATOME_WRITTEN_PROPERTIES = Object.freeze({
         duration_sec: N, duration_seconds: N, file_name: S, file_path: S, fileName: S, filePath: S, font_size: ANY,
         font_weight: ANY, fontSize: ANY, fontWeight: ANY, has_audio: B, height: ANY, hierarchy_order: N,
         is_public: ANY, left: ANY, line_height: ANY, lineHeight: ANY, material: O, media_duration: N,
-        media_height: N, media_kind: S, media_pending: B, media_source: S, media_updated_iso: S, media_url: S,
-        media_user_id: S, media_width: N, mediaHeight: N, mediaUserId: S, mediaWidth: N, mime_type: S, mimeType: S,
+        media_height: N, media_kind: S, media_pending: B, media_poster_data_url: S, media_source: S, media_updated_iso: S,
+        media_url: S, media_user_id: S, media_width: N, mediaHeight: N, mediaUserId: S, mediaWidth: N, mime_type: S, mimeType: S,
         mute: B, mute_strength: N, natural_height: N, natural_width: N, naturalHeight: N, naturalWidth: N,
         nominal_fps: N, order: N, orientation: S, original_name: ANY, overflow: S, pending: B, recording_id: S,
         render_layer: N, render_order: N, renderLayer: N, renderOrder: N, rotate: N, rounding_enabled: B,
@@ -235,7 +235,7 @@ export const ATOME_WRITTEN_PROPERTIES = Object.freeze({
         community: ANY, font_size: ANY, font_weight: ANY, fontSize: ANY, fontWeight: ANY, height: S, image: ANY,
         left: ANY, line_height: ANY, lineHeight: ANY, matrix_cell: ANY, media_kind: S, media_url: ANY, mute: B,
         news_id: S, news_presentation: O, overflow: ANY, post_key: ANY, publication_id: S, render_layer: N,
-        render_order: N, renderLayer: N, renderOrder: N, role: ANY, sensor_recording_consent: ANY, sent_at: ANY,
+        render_order: N, renderLayer: N, renderOrder: N, role: ANY, sensor_backups: O, sensor_recording_consent: ANY, sent_at: ANY,
         server_id: ANY, template_control: ANY, text: S, thalasso_stay: ANY, top: ANY, width: S, zIndex: N
     },
     interaction: {

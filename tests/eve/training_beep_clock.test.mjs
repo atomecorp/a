@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
-import { afterEach, test } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { afterEach, beforeAll, test } from 'vitest';
 import { createTrainingBeeps } from '../../eVe/domains/training/training_sound.js';
+import { loadAudioKernels } from '../../atome/src/application/audio_runtime/audio_kernels.js';
 import { getMediaPlaybackAudioExecutor } from '../../eVe/domains/media/shared/media_playback_audio_executor.js';
 import { getPlayRecordCore } from '../../atome/src/application/audio_runtime/play_record_core.js';
 
@@ -10,6 +12,11 @@ import { getPlayRecordCore } from '../../atome/src/application/audio_runtime/pla
 // engine after one leg of the bridge and comes back after the other. "Heard" is the instant of the scheduled frame.
 const RATE = 48000, EPOCH = 1_800_000_000_000, PERIOD = 2000;
 const realDateNow = Date.now;
+// The beeps' tones are the Rust cue kernel's (audio_kernels.js): loaded once from its files, as the page loads it from /wasm/.
+beforeAll(() => loadAudioKernels({
+    moduleUrl: new URL('../../atome/src/wasm/squirrel_audio_wasm.js', import.meta.url).href,
+    binary: readFileSync(new URL('../../atome/src/wasm/squirrel_audio_wasm_bg.wasm', import.meta.url))
+}));
 afterEach(() => { Date.now = realDateNow; });
 
 const createDevice = ({ legs }) => {
@@ -33,7 +40,7 @@ const createDevice = ({ legs }) => {
     executor.scheduleVoices = async (voices) => { scheduled.push(...voices); };
     // A session of `count` beeps, each handed over about a second ahead of its instant, as the session runtime does.
     const session = async (count, { ready = true } = {}) => {
-        const beeps = createTrainingBeeps(win), start = now + 2000, from = scheduled.length, moment = { key: `set-${start}`, zero: EPOCH + start };
+        const beeps = createTrainingBeeps(win), start = Math.ceil(now) + 2000, from = scheduled.length, moment = { key: `set-${start}`, zero: EPOCH + start };
         if (ready) await beeps.ready();
         for (let index = 0; index < count; index += 1) {
             const due = start + index * PERIOD;
@@ -42,7 +49,7 @@ const createDevice = ({ legs }) => {
         }
         return scheduled.slice(from).map((voice, index) => voice.startRenderFrame * 1000 / RATE - (start + index * PERIOD));
     };
-    return { session, advance: (ms) => { now += ms; } };
+    return { win, session, advance: (ms) => { now += ms; }, frames: () => scheduled.map(voice => voice.startRenderFrame) };
 };
 const symmetric = random => { const trip = 10 + random() * 450; return [trip / 2, trip / 2]; };
 const asymmetric = random => { const trip = 10 + random() * 450, toEngine = random() * trip; return [toEngine, trip - toEngine]; };
@@ -75,4 +82,42 @@ test('a long session never trades its anchor for a worse read', async () => {
     const errors = await createDevice({ legs: asymmetric }).session(150); // 5 minutes of beeps
     const tail = errors.slice(30);
     assert.ok(spread(tail) <= 40, `spread after the first minute ${spread(tail)} ms`);
+});
+
+// The multitrack's rule (user, 11 Nov. 2026): what follows is placed on the sample. Beeps PERIOD ms apart lie exactly
+// PERIOD × RATE / 1000 frames apart, though each placement reads the clock again through a bridge of varying delay.
+test('beeps of a session lie on the sample grid: every interval exact, across reads of varying delay', async () => {
+    const device = createDevice({ legs: symmetric });
+    await device.session(40);
+    const frames = device.frames(), steps = frames.slice(1).map((frame, index) => frame - frames[index]);
+    assert.deepEqual([...new Set(steps)], [PERIOD * RATE / 1000]);
+});
+
+test('a moment chained on the previous one keeps its grid (a rest, then its set)', async () => {
+    const device = createDevice({ legs: symmetric });
+    await device.session(6);
+    const before = device.frames().at(-1);
+    await device.session(6, { ready: false });
+    const after = device.frames().slice(-6);
+    // The second session starts 2 s after the first one's last placement was handed over: its instants stay on the same grid.
+    for (const frame of after) assert.equal((frame - before) % (RATE / 1000), 0, `${frame - before} frames is not a whole ms`);
+});
+
+// iPad, 11 Nov. 2026: through a 90 s rest the native output rested (nothing sounded for 5 s), its frames stopped and the
+// grid broke between the sets. While a moment runs, its placer reads the engine's clock at least every 2 s: it stays awake.
+test('a running moment keeps the engine awake: its clock is read at least every 2 s, none read without a moment', async () => {
+    const device = createDevice({ legs: () => [1, 1] }), executor = getMediaPlaybackAudioExecutor(device.win);
+    const beeps = createTrainingBeeps(device.win), reads = [];
+    const read = executor.readRenderClock;
+    executor.readRenderClock = async () => { reads.push(device.win.performance.now()); return read(); };
+    await beeps.ready();
+    reads.length = 0;
+    const moment = { key: 'rest', zero: Date.now() };
+    for (let tick = 0; tick < 90; tick += 1) { await beeps.place(moment, []); device.advance(250); }
+    const gaps = reads.slice(1).map((at, index) => at - reads[index]);
+    assert.ok(reads.length >= 10 && Math.max(...gaps) <= 2500, `${reads.length} reads, gaps ${gaps}`);
+    await beeps.clear();
+    reads.length = 0;
+    for (let tick = 0; tick < 20; tick += 1) { await beeps.place(null, []); device.advance(250); }
+    assert.equal(reads.length, 0);
 });

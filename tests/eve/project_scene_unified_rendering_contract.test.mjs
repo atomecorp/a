@@ -416,7 +416,8 @@ test('Natural drop away from any target commits only the final spatial drop', as
         clientX: 200, clientY: 200, bubbles: true
     }));
     await nextTick();
-    assert.deepEqual(getRenderSurfaceState(canvas)?.pointerSession?.last, { x: 200, y: 200 });
+    // A project-surface point is a project point that also carries its screen point (identity view here).
+    assert.deepEqual(getRenderSurfaceState(canvas)?.pointerSession?.last, { x: 200, y: 200, screen: { x: 200, y: 200 } });
     dom.window.document.dispatchEvent(new dom.window.MouseEvent('pointerup', { clientX: 200, clientY: 200, bubbles: true }));
     await nextTick();
     await nextTick();

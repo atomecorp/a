@@ -317,7 +317,10 @@ test('preview capture iframe has the browser aliases and registers its capture f
 
 test('Rubber Band asset route is preserved by Web, Tauri, and iOS packaging', () => {
     const fastify = readFileSync(repositoryFile('server/server.js'), 'utf8');
+    // Tauri starts the shared local server, which serves the Web server's static roots.
     const tauriServer = readFileSync(repositoryFile('platforms/desktop-tauri/src/server/mod.rs'), 'utf8');
+    const localServerStart = readFileSync(repositoryFile('atome/servers/atome-server/src/local/local_start.rs'), 'utf8');
+    const staticRoots = readFileSync(repositoryFile('atome/servers/atome-server/src/http/statics.rs'), 'utf8');
     const tauriConfig = JSON.parse(readFileSync(repositoryFile('platforms/desktop-tauri/tauri.conf.json'), 'utf8'));
     assert.equal(tauriConfig.bundle.resources['../../atome/src'], 'project/atome/src');
     assert.equal(tauriConfig.bundle.resources['../../atome/security'], 'project/atome/security');
@@ -328,8 +331,9 @@ test('Rubber Band asset route is preserved by Web, Tauri, and iOS packaging', ()
     const iOSScheme = readFileSync(repositoryFile('platforms/ios/atome-auv3/Common/AudioSchemeHandler.swift'), 'utf8');
 
     assert.match(fastify, /prefix: '\/vendor\/rubberband-wasm\/'/);
-    assert.match(tauriServer, /node_modules\/rubberband-wasm\/dist/);
-    assert.match(tauriServer, /nest_service\("\/vendor\/rubberband-wasm", rubberband_service\)/);
+    assert.match(tauriServer, /local::start_server\(/);
+    assert.match(localServerStart, /StaticRoots::of_app\(&project_root, /);
+    assert.match(staticRoots, /"\/vendor\/rubberband-wasm\/"\.into\(\),\s*project\s*\.join\("node_modules"\)\s*\.join\("rubberband-wasm"\)\s*\.join\("dist"\)/);
     assert.equal(
         tauriConfig.bundle.resources['../../node_modules/rubberband-wasm/dist'],
         'project/node_modules/rubberband-wasm/dist'

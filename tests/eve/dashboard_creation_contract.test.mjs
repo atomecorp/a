@@ -209,6 +209,8 @@ test('a rejected canonical creation fails before ordering or opening a project',
 
 test.each(['beginner', 'intermediate', 'advanced'])('the %s List composes the shared upper preview and splitter', level => {
     projectStore(level);
+    // The Visual panel is shown on request (its tool); the List then lays it above the splitter.
+    projectViewVisualPanel.setEnabled(true);
     const record = { id: 'welcome', type: 'text', project_id: 'new', properties: { text: 'Shared preview', color: '#ffffff' } };
     const tree = buildProjectViewSurfaceTree({
         surface: { getBoundingClientRect: () => ({ width: 1200, height: 800 }) },
@@ -234,6 +236,7 @@ test.each(['beginner', 'intermediate', 'advanced'])('the %s List composes the sh
     const content = nodes.find(node => node.id.endsWith('_content'));
     expect(body.style.position[1] + body.style.size[1]).toBe(content.style.size[1]);
     expect(content.style.position[1]).toBeGreaterThan(separator.style.position[1]);
+    projectViewVisualPanel.setEnabled(false);
 });
 
 for (const level of ['beginner', 'intermediate', 'advanced']) {

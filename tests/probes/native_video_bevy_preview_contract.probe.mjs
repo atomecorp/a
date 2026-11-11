@@ -29,28 +29,29 @@ test('native recording session feeds a data output beside the movie output', () 
     assert.match(previewSource, /alwaysDiscardsLateVideoFrames = true/);
 });
 
-test('native camera preview is latest-only, bounded to 96px and capped at 15 fps', () => {
-    assert.match(previewSource, /maximumDimension = 96/);
-    assert.match(previewSource, /minimumFrameInterval = 1\.0 \/ 15\.0/);
+test('native camera preview is latest-only, bounded to 960px JPEG and capped at 30 fps', () => {
+    assert.match(previewSource, /maximumDimension = 960/);
+    assert.match(previewSource, /maximumFps = 30/);
     assert.match(previewSource, /AppNativeVideoPreviewSlot\(\),\s*AppNativeVideoPreviewSlot\(\),\s*AppNativeVideoPreviewSlot\(\)/);
     assert.match(previewSource, /pendingPixelBuffer = pixelBuffer/);
     assert.match(previewSource, /pendingPixelBuffer = nil/);
     assert.match(previewSource, /conversionQueue\.async/);
-    assert.match(previewSource, /vImageScale_ARGB8888/);
-    assert.doesNotMatch(previewSource, /AVCaptureVideoPreviewLayer|jpeg|JPEG|UIImage|CIContext/);
+    assert.match(previewSource, /jpegRepresentation/);
+    assert.doesNotMatch(previewSource, /AVCaptureVideoPreviewLayer|UIImage/);
 });
 
-test('raw camera frames cross the native bridge as disposable Bevy source data', () => {
-    assert.match(controllerSource, /"media_video_preview_frame"/);
-    assert.match(operationsSource, /videoRecorder\.readPreviewFrame/);
-    assert.match(recorderSource, /"preview_command": "media_video_preview_frame"/);
-    assert.match(previewSource, /"pixel_format": "bgra8"/);
-    assert.match(previewSource, /"encoding": "base64"/);
-    assert.match(previewSource, /"bytes_base64"/);
-    assert.match(previewSource, /"source_id"/);
-    assert.match(previewSource, /"sequence"/);
-    assert.match(previewSource, /"orientation"/);
-    assert.match(previewSource, /"mirrored"/);
+// Frames are served as bytes on the atome:// scheme, never evaluated as a script per frame
+// (base64 through the native-invoke bridge froze the WebView while filming, iPad, 11 Nov. 2026).
+test('camera frames reach the WebView as JPEG bytes on the atome scheme', async () => {
+    const scheme = await readSource('../../platforms/ios/atome-auv3/Common/AudioSchemeHandler.swift');
+    assert.match(scheme, /\/__native\/media_preview\//);
+    assert.match(scheme, /"Content-Type": "image\/jpeg"/);
+    assert.match(scheme, /"X-Atome-Sequence"/);
+    assert.match(controllerSource, /func latestPreviewFrame\(kind: String, after: UInt64\)/);
+    assert.match(previewSource, /func latestFrame\(after: UInt64\)/);
+    assert.doesNotMatch(controllerSource, /preview_frame/);
+    assert.doesNotMatch(operationsSource, /preview_frame|framePayload/);
+    assert.doesNotMatch(previewSource, /base64/);
 });
 
 test('native video cleanup detaches the preview delegate and releases retained frames', () => {

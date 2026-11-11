@@ -165,8 +165,13 @@ test('a guest workspace keeps the surface for the session without a profile writ
 test('the startup presentation resumes a saved project only for the project surface', async () => {
     const env = installWindow();
     try {
-        env.window.__authCheckComplete = true;
-        env.window.__authCheckResult = { authenticated: true, userId: 'surface_user', anonymous: false };
+        // The session this boot restored. The real auth bootstrap (adole_apis.js, imported with the project bootstrap) also
+        // runs its auto-login here, finds no stored account and publishes « logged out » whenever its async steps end — before
+        // or after the project bootstrap reads the check under a loaded suite (failed 4 runs in 5). The check's result is the
+        // fixture's: its later writes are not this boot's.
+        const restored = { authenticated: true, userId: 'surface_user', anonymous: false };
+        Object.defineProperty(env.window, '__authCheckComplete', { configurable: true, get: () => true, set: () => {} });
+        Object.defineProperty(env.window, '__authCheckResult', { configurable: true, get: () => restored, set: () => {} });
         env.window.__eveProfilePreferences = { workspace: { startup_view: 'dashboard' } };
         env.window.eveToolBase = { loadProjectAtomes: async () => [{ id: 'shape_one', type: 'shape' }] };
         env.window.AdoleAPI = {

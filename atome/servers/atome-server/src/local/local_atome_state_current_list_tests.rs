@@ -104,3 +104,47 @@ async fn a_tool_catalogue_read_leaves_derived_tools_and_excluded_particles_behin
     assert_eq!(states[0]["atome_id"], json!("tool_ui.project.open"));
     assert_eq!(states[0]["properties"], json!({ "tool_id": "t" }));
 }
+
+#[tokio::test]
+async fn a_whole_typed_read_walks_the_type_from_a_cursor_each_row_once() {
+    let state = state();
+    {
+        let db = state.db.lock().expect("database lock");
+        db.execute(
+            "INSERT INTO atomes (atome_id, atome_type, owner_id, creator_id) VALUES ('owner', 'user', NULL, 'owner')",
+            [],
+        ).expect("owner atome");
+        for index in 0..7 {
+            let (id, kind) = (format!("event-{index}"), if index == 3 { "note" } else { "calendar_event" });
+            let deleted = if index == 5 { ",\"__deleted\":true" } else { "" };
+            db.execute(
+                "INSERT INTO atomes (atome_id, atome_type, owner_id, creator_id) VALUES (?1, ?2, 'owner', 'owner')",
+                rusqlite::params![id, kind],
+            ).expect("event atome");
+            db.execute(
+                "INSERT INTO state_current (atome_id, owner_id, properties, version) VALUES (?1, 'owner', ?2, 1)",
+                rusqlite::params![id, format!("{{\"type\":\"{kind}\"{deleted}}}")],
+            ).expect("event state");
+        }
+    }
+
+    let (mut ids, mut after) = (Vec::new(), json!(null));
+    for _ in 0..5 {
+        let response = handle_state_current_list(
+            json!({ "atome_type": "calendar_event", "storage_order": true, "after": after, "limit": 2 }),
+            "owner",
+            &state,
+            None,
+        )
+        .await;
+        assert!(response.success, "{:?}", response.error);
+        let data = response.data.expect("data");
+        ids.extend(data["states"].as_array().expect("states").iter().map(|row| row["atome_id"].as_str().unwrap().to_string()));
+        after = data["next"].clone();
+        if after.is_null() {
+            break;
+        }
+    }
+    assert_eq!(ids, ["event-0", "event-1", "event-2", "event-4", "event-6"]);
+    assert!(after.is_null());
+}

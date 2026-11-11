@@ -70,19 +70,22 @@ test('shared panel accordion opens a continuous one-unit body and keeps instance
     const header = findNode(open, 'accordion_open_header');
     const body = findNode(open, 'accordion_open_body');
 
+    // One block grows: the block carries the ground, its header (at the foot on
+    // the opening side) and its body paint none of their own.
     assert.deepEqual(open.style.size, [
         358,
-        BEVY_PANEL_TOKENS.accordion.headerHeightPx + BEVY_PANEL_TOKENS.accordion.bodyHeightPx
+        BEVY_PANEL_TOKENS.accordion.headerHeightPx + BEVY_PANEL_TOKENS.accordion.bodyHeightPx + BEVY_PANEL_TOKENS.paddingPx
     ]);
     assert.deepEqual(open.style.shadow, BEVY_PANEL_TOKENS.accordion.expandedShadow);
+    assert.equal(open.style.radius, BEVY_PANEL_TOKENS.radiusPx);
     assert.equal(header.style.radius, BEVY_PANEL_TOKENS.radiusPx);
     assert.equal(header.style.radius_corners, undefined);
-    assert.deepEqual(header.style.shadow, BEVY_PANEL_TOKENS.surfaces.active.shadow);
+    assert.deepEqual(header.style.background, BEVY_PANEL_TOKENS.colors.transparent);
+    assert.equal(header.style.shadow, undefined);
     assert.equal(caretShapeOf(findNode(open, 'accordion_open_chevron')), 'down');
     assert.deepEqual(body.style.position, [0, BEVY_PANEL_TOKENS.accordion.headerHeightPx]);
     assert.deepEqual(body.style.size, [358, BEVY_PANEL_TOKENS.accordion.bodyHeightPx]);
-    assert.equal(body.style.radius, BEVY_PANEL_TOKENS.radiusPx);
-    assert.deepEqual(body.style.background, BEVY_PANEL_TOKENS.controlMaterial.background);
+    assert.deepEqual(body.style.background, BEVY_PANEL_TOKENS.colors.transparent);
     assert.equal(findNode(open, 'accordion_open_body_text').text, 'Section content');
     assert.equal(findNode(other, 'accordion_other_body'), null);
     const openRecords = projectBevyUiTreeRecords({ tree: { root: open }, treeId: 'accordion_open', workspaceLayer: 'panel' });
@@ -98,7 +101,7 @@ test('native accordion headers use the canonical pointer activation route', () =
     const canvas = { setPointerCapture: () => {}, releasePointerCapture: () => {} };
     const target = { treeId: 'accordion_tree', nodeId: 'accordion_header', kind: 'accordion', box: {}, scrollAncestors: [] };
     const runtime = createBevyUiPointerRuntime({
-        state: { lastSurfacePoints: new Map(), pointerTarget: null, focusTarget: null, hoverTarget: null, pendingTextActivation: null },
+        state: { lastSurfacePoints: new Map(), pointerTarget: null, focusTarget: null, hoverTarget: null, pendingTextActivation: null, touchObservers: new Set() },
         hitTestTrees: () => target,
         localEventForTarget: (_, type) => ({ type }),
         emitUiEvents: (events) => emitted.push(...events),
@@ -126,13 +129,13 @@ test('open accordion projects the common surface radius to the GPU record', () =
     });
     const recordFor = (suffix) => records.find((record) => record.id.endsWith(suffix))?.properties;
 
-    const header = recordFor('accordion_corner_fixture_header');
-    assert.equal(header?.shape, 'rounded_rect');
-    assert.equal(header?.corner_radius, BEVY_PANEL_TOKENS.radiusPx);
-
-    const body = recordFor('accordion_corner_fixture_body');
-    assert.equal(body?.shape, 'rounded_rect');
-    assert.equal(body?.corner_radius, BEVY_PANEL_TOKENS.radiusPx);
+    // The open block is the one painted surface; its header and body are
+    // transparent and project no record of their own.
+    const block = recordFor('accordion_corners_accordion_corner_fixture');
+    assert.equal(block?.shape, 'rounded_rect');
+    assert.equal(block?.corner_radius, BEVY_PANEL_TOKENS.radiusPx);
+    assert.equal(recordFor('accordion_corner_fixture_header'), undefined);
+    assert.equal(recordFor('accordion_corner_fixture_body'), undefined);
 });
 
 test('left and right accordion controls reserve symmetric space and closed chevrons point inward', () => {
@@ -173,4 +176,17 @@ test('the canonical handedness event rebuilds already open and nested accordion 
         setHandedness('right');
         assert.equal(findNode(rebuilt,'outer_chevron').style.position[0],right);
     } finally {bevyPanelRuntimeState.mounted.delete('handedness_fixture');dom.window.close();globalThis.window=previousWindow;globalThis.document=previousDocument;globalThis.CustomEvent=previousCustomEvent;}
+});
+
+test('a header that answers a touch is a named control, open or folded (VoiceOver: the feeling rows)', () => {
+    for (const expanded of [false, true]) {
+        const tree = accordionNode({ id: 'feeling_form', label: 'Forme', expanded, onActivate: () => {} });
+        const header = findNode(tree, 'feeling_form_header');
+        assert.equal(header.accessibility?.label, 'Forme');
+        assert.equal(header.accessibility?.role, 'button');
+        assert.equal(header.accessibility?.expanded, expanded);
+        assert.equal(typeof header.on?.activate, 'function');
+    }
+    const inert = findNode(accordionNode({ id: 'still', label: 'Still' }), 'still_header');
+    assert.equal(inert.accessibility, undefined);
 });

@@ -77,7 +77,7 @@ test('Bevy projection orders higher z-index above later low-z paint order', () =
 });
 
 test('Imported media stack position is above the current project scene records', async () => {
-    const dom = new JSDOM('<!doctype html><html><body><div id="project"></div></body></html>');
+    const dom = new JSDOM('<!doctype html><html><body><div id="project"></div></body></html>', { pretendToBeVisual: true });
     const host = dom.window.document.getElementById('project');
     host.getBoundingClientRect = () => ({
         left: 0,
@@ -89,7 +89,9 @@ test('Imported media stack position is above the current project scene records',
     });
     const wasmModule = {
         default: async () => undefined,
-        run_atome_bevy_renderer: () => undefined
+        run_atome_bevy_renderer: () => undefined,
+        // A surface resize settling after the render reaches the engine's surface export.
+        apply_atome_bevy_surface: () => undefined
     };
 
     await renderProjectScene({
@@ -122,7 +124,7 @@ test('Imported media stack position is above the current project scene records',
 });
 
 test('Dashboard ephemeral records do not raise imported media above the project stack', async () => {
-    const dom = new JSDOM('<!doctype html><html><body><div id="project"></div></body></html>');
+    const dom = new JSDOM('<!doctype html><html><body><div id="project"></div></body></html>', { pretendToBeVisual: true });
     const host = dom.window.document.getElementById('project');
     host.getBoundingClientRect = () => ({
         left: 0,
@@ -134,7 +136,9 @@ test('Dashboard ephemeral records do not raise imported media above the project 
     });
     const wasmModule = {
         default: async () => undefined,
-        run_atome_bevy_renderer: () => undefined
+        run_atome_bevy_renderer: () => undefined,
+        // A surface resize settling after the render reaches the engine's surface export.
+        apply_atome_bevy_surface: () => undefined
     };
 
     await renderProjectScene({
@@ -162,7 +166,7 @@ test('Dashboard ephemeral records do not raise imported media above the project 
 });
 
 test('New media stays inside the project band below visible Dashboard records', async () => {
-    const dom = new JSDOM('<!doctype html><html><body><div id="project"></div></body></html>');
+    const dom = new JSDOM('<!doctype html><html><body><div id="project"></div></body></html>', { pretendToBeVisual: true });
     const host = dom.window.document.getElementById('project');
     host.getBoundingClientRect = () => ({
         left: 0,
@@ -174,7 +178,9 @@ test('New media stays inside the project band below visible Dashboard records', 
     });
     const wasmModule = {
         default: async () => undefined,
-        run_atome_bevy_renderer: () => undefined
+        run_atome_bevy_renderer: () => undefined,
+        // A surface resize settling after the render reaches the engine's surface export.
+        apply_atome_bevy_surface: () => undefined
     };
 
     await renderProjectScene({
@@ -207,7 +213,7 @@ test('New media stays inside the project band below visible Dashboard records', 
 });
 
 test('Repeated explicit media stack positions remain clamped inside the project band', async () => {
-    const dom = new JSDOM('<!doctype html><html><body><div id="project"></div></body></html>');
+    const dom = new JSDOM('<!doctype html><html><body><div id="project"></div></body></html>', { pretendToBeVisual: true });
     const host = dom.window.document.getElementById('project');
     host.getBoundingClientRect = () => ({
         left: 0,
@@ -219,7 +225,9 @@ test('Repeated explicit media stack positions remain clamped inside the project 
     });
     const wasmModule = {
         default: async () => undefined,
-        run_atome_bevy_renderer: () => undefined
+        run_atome_bevy_renderer: () => undefined,
+        // A surface resize settling after the render reaches the engine's surface export.
+        apply_atome_bevy_surface: () => undefined
     };
 
     await renderProjectScene({
@@ -248,7 +256,10 @@ test('Repeated explicit media stack positions remain clamped inside the project 
     assert.equal(first.order, 31);
     assert.equal(second.zIndex, WORKSPACE_PROJECT_LAYER_MAX);
     assert.equal(second.z_index, WORKSPACE_PROJECT_LAYER_MAX);
-    assert.equal(second.order, 32);
+    // A new arrival takes the scene's next stack slot: the source's own order is not kept.
+    assert.equal(second.order, first.order);
+    assert.equal(second.left, 12);
+    assert.equal(second.top, 14);
     clearProjectScene('dashboard_stack_repeated_project');
 });
 
@@ -329,7 +340,7 @@ test('RenderAtom keeps media natural dimensions out of project bounds', () => {
 });
 
 test('Bevy web runtime rejects a second canvas after the web event loop is owned', async () => {
-    const dom = new JSDOM('<!doctype html><html><body><canvas id="eve_surface_project_login"></canvas></body></html>');
+    const dom = new JSDOM('<!doctype html><html><body><canvas id="eve_surface_project_login"></canvas></body></html>', { pretendToBeVisual: true });
     const firstSurface = dom.window.document.getElementById('eve_surface_project_login');
     const calls = [];
     const wasmModule = {
@@ -376,7 +387,7 @@ test('Bevy web runtime rejects a second canvas after the web event loop is owned
 });
 
 test('Project reconcile retries a pre-run Bevy failure instead of diffing against an invalid baseline', async () => {
-    const dom = new JSDOM('<!doctype html><html><body><div id="project_view_failed_projection"></div></body></html>');
+    const dom = new JSDOM('<!doctype html><html><body><div id="project_view_failed_projection"></div></body></html>', { pretendToBeVisual: true });
     const host = dom.window.document.getElementById('project_view_failed_projection');
     host.getBoundingClientRect = () => ({
         left: 0,
@@ -434,7 +445,7 @@ test('Project reconcile retries a pre-run Bevy failure instead of diffing agains
 });
 
 test('Bevy web runtime coalesces concurrent starts on the same canvas', async () => {
-    const dom = new JSDOM('<!doctype html><html><body><canvas id="eve_surface_project_concurrent"></canvas></body></html>');
+    const dom = new JSDOM('<!doctype html><html><body><canvas id="eve_surface_project_concurrent"></canvas></body></html>', { pretendToBeVisual: true });
     const surface = dom.window.document.getElementById('eve_surface_project_concurrent');
     const calls = [];
     const wasmModule = {

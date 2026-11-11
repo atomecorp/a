@@ -1,7 +1,8 @@
 import { expect, test, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { applyTreeScrollLayout } from '../../eVe/domains/rendering/bevy_ui_scroll_layout.js';
-import { createBevyUiScrollRuntime, locateBevyUiNode } from '../../eVe/domains/rendering/bevy_ui_scroll_runtime.js';
+import { locateBevyUiNode } from '../../eVe/domains/rendering/bevy_ui_scroll_runtime.js';
+import { createTestScrollRuntime } from './bevy_scroll_engine_double.mjs';
 import { node } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tree_primitives.js';
 import { accordionNode } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_accordion.js';
 import { bevyPanelRuntimeState, closeBevyPanelSurface, openBevyPanelSurface, registerBevyPanelSurface } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js';
@@ -39,7 +40,7 @@ test.each(['start', 'end'])('revealing a nested header aligns every scroll ances
         node('after', 'panel', { size: [300, 200] })
     ]) };
     const events = [];
-    const runtime = createBevyUiScrollRuntime({ refreshTree: () => {}, emitTargetEvent: (...args) => events.push(args), requestFrame: () => 1 });
+    const runtime = createTestScrollRuntime({ refreshTree: () => {}, emitTargetEvent: (...args) => events.push(args), requestFrame: () => 1 });
     runtime.applyTree({ tree, treeId: 'reveal' });
     expect(runtime.revealNode({ tree, treeId: 'reveal', nodeId: 'header', align })).toBe(true);
     const painted = runtime.applyTree({ tree, treeId: 'reveal' });
@@ -124,6 +125,11 @@ test.each([['up', false], ['down', false], ['up', true], ['down', true]])('openi
     }
 });
 
+// The nesting reads through its disclosure symbols alone: the rails and their return caps beside the
+// cells are gone (bevy_panel_hierarchy.js, user request 25 Oct. 2026). A nested hierarchy still follows
+// its scroll owner, is clipped by it, and its closed body leaves the tree.
+const nodeIds = root => { const ids = []; const visit = current => { ids.push(current.id); (current.children || []).forEach(visit); }; visit(root); return ids; };
+
 test.each([['left', 'up'], ['right', 'up'], ['left', 'down'], ['right', 'down']])('nested %s hierarchy follows %s scrolling and removes its closed segments', (handedness, direction) => {
     const treeFor = expanded => {
         const accordion = accordionNode({ id: 'nested_card', width: 340, direction, expanded,
@@ -134,53 +140,62 @@ test.each([['left', 'up'], ['right', 'up'], ['left', 'down'], ['right', 'down']]
         ])
     ] }) }; };
     const tree = treeFor(true);
-    const runtime = createBevyUiScrollRuntime({ refreshTree: () => {}, emitTargetEvent: () => {}, requestFrame: () => 1 });
+    const runtime = createTestScrollRuntime({ refreshTree: () => {}, emitTargetEvent: () => {}, requestFrame: () => 1 });
     const check = painted => {
-        const header = locateBevyUiNode({ node: painted.root, nodeId: 'nested_card_header' });
-        const cap = locateBevyUiNode({ node: painted.root, nodeId: `nested_card_return_${direction === 'up' ? 'end' : 'start'}` });
-        expect(cap.box.y + cap.box.height / 2).toBe(header.box.y + header.box.height / 2);
-        expect(cap.scrollAncestors.map(({ node }) => node.id)).toContain('inner');
-        const record = projectBevyUiTreeRecords({ tree: painted, treeId: 'rails', workspaceLayer: 'panel' }).find(record => record.id.endsWith(cap.node.id));
-        if (cap.box.y + cap.box.height <= 0 || cap.box.y >= 180) expect(record).toBeUndefined();
+        expect(nodeIds(painted.root).filter(id => id.includes('_return_'))).toEqual([]);
+        // The header's disclosure symbol now carries the nesting.
+        const header = locateBevyUiNode({ node: painted.root, nodeId: 'nested_card_chevron' });
+        expect(header.scrollAncestors.map(({ node }) => node.id)).toContain('inner');
+        const record = projectBevyUiTreeRecords({ tree: painted, treeId: 'rails', workspaceLayer: 'panel' }).find(record => record.id.endsWith(header.node.id));
+        if (header.box.y + header.box.height <= 0 || header.box.y >= 180) expect(record).toBeUndefined();
         else {
             expect(record.properties.clip.y).toBe(0);
             expect(record.properties.clip.height).toBe(180);
         }
+        return header.box.y;
     };
     let painted = runtime.applyTree({ tree, treeId: 'rails' });
-    check(painted);
+    const before = check(painted);
     const decorated = panelHierarchyNode({ id: 'enclosing', width: 340, handedness, children: [tree.root] });
-    const ids = []; const visit = current => { ids.push(current.id); (current.children || []).forEach(visit); };
-    visit(decorated);
+    const ids = nodeIds(decorated);
     expect(new Set(ids).size).toBe(ids.length);
-    for (let cycle = 0; cycle < 3; cycle++) {
-        const closed = runtime.applyTree({ tree: treeFor(false), treeId: 'rails' });
-        expect(locateBevyUiNode({ node: closed.root, nodeId: 'nested_card_return_start' })).toBeNull();
-        expect(locateBevyUiNode({ node: closed.root, nodeId: 'nested_card_return_end' })).toBeNull();
-        runtime.applyTree({ tree: treeFor(true), treeId: 'rails' });
-    }
+    // The list follows the wheel from where it was declared.
     const inner = locateBevyUiNode({ node: painted.root, nodeId: 'inner' });
     runtime.wheel({ treeId: 'rails', scrollAncestors: [{ node: inner.node, box: inner.box }] }, { delta_y: direction === 'up' ? -50 : 50 });
     painted = runtime.applyTree({ tree, treeId: 'rails' });
-    check(painted);
+    expect(check(painted)).toBe(before + (direction === 'up' ? 50 : -50));
+    // A closed card leaves nothing behind, however many times it closes; a list whose content shrank keeps the offset
+    // it can still show (clamped, as any list), so the reopened card lays the same way each time.
+    const reopened = [];
+    for (let cycle = 0; cycle < 3; cycle++) {
+        const closed = runtime.applyTree({ tree: treeFor(false), treeId: 'rails' });
+        expect(locateBevyUiNode({ node: closed.root, nodeId: 'nested_card_body' })).toBeNull();
+        expect(locateBevyUiNode({ node: closed.root, nodeId: 'card_fields' })).toBeNull();
+        reopened.push(check(runtime.applyTree({ tree: treeFor(true), treeId: 'rails' })));
+    }
+    expect(new Set(reopened).size).toBe(1);
     runtime.clearTree('rails');
 });
 
-test.each([['left', 'up'], ['right', 'up'], ['left', 'down'], ['right', 'down']])('%s %s hierarchy caps lie at the centre of the actual inter-row gap', (handedness, direction) => {
+test.each([['left', 'up'], ['right', 'up'], ['left', 'down'], ['right', 'down']])('%s %s hierarchy draws no caps and keeps the actual inter-row geometry', (handedness, direction) => {
     const row = node('parent_row', 'panel', { size: [340, 60] }, [], { listHierarchy: {
         expanded: true, levelOffset: 1, direction, startOffset: -128, endOffset: 188, edgeGapPx: 8
     } });
     const painted = panelHierarchyNode({ id: 'seams', width: 340, handedness, children: [row] });
-    const cap = locateBevyUiNode({ node: painted, nodeId: `parent_row_return_${direction === 'up' ? 'start' : 'end'}` });
-    expect(cap.box.y + cap.box.height / 2).toBe(direction === 'up' ? -132 : 192);
+    expect(nodeIds(painted).filter(id => id.includes('_return_'))).toEqual([]);
+    expect(locateBevyUiNode({ node: painted, nodeId: 'parent_row' }).box).toMatchObject({ y: 0, height: 60 });
     const accordion = accordionNode({ id: 'body_seam', width: 340, expanded: true, direction,
         bodyHeight: 124, bodyChildren: [node('body_cells', 'column', { size: [340, 124], gap: 4 }, [
             node('first_cell', 'panel', { size: [340, 60], radius: 3 }), node('last_cell', 'panel', { size: [340, 60], radius: 3 })
         ])] });
+    const bare = locateBevyUiNode({ node: accordion, nodeId: 'last_cell' }).box;
     const tree = panelHierarchyNode({ id: 'accordion_seams', width: 340, handedness, children: [accordion] });
-    const limit = locateBevyUiNode({ node: tree, nodeId: `body_seam_return_${direction === 'up' ? 'start' : 'end'}` });
-    const cell = locateBevyUiNode({ node: tree, nodeId: direction === 'up' ? 'first_cell' : 'last_cell' });
-    expect(limit.box.y + limit.box.height / 2).toBe(direction === 'up' ? cell.box.y - 2 : cell.box.y + cell.box.height + 2);
+    expect(nodeIds(tree).filter(id => id.includes('_return_'))).toEqual([]);
+    const first = locateBevyUiNode({ node: tree, nodeId: 'first_cell' }).box;
+    const last = locateBevyUiNode({ node: tree, nodeId: 'last_cell' }).box;
+    expect(last.y - (first.y + first.height)).toBe(4);
+    expect(last.y - first.y).toBe(64);
+    expect(last.height).toBe(bare.height);
 });
 
 test.each([T.inputHeightPx, T.inputHeightPx * 2, T.inputHeightPx * 4])('row tools remain inside the %s px row even with a wider canonical column', rowHeight => {

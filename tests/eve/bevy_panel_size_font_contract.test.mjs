@@ -9,13 +9,16 @@ globalThis.document = dom.window.document;
 globalThis.HTMLElement = dom.window.HTMLElement;
 globalThis.Element = dom.window.Element;
 globalThis.Node = dom.window.Node;
+// Modules dispatch their custom events on this window: they must be its own class.
+globalThis.CustomEvent = dom.window.CustomEvent;
 
 const {
     FONT_CHOICES,
     createFontPanelSurface
 } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_font_runtime.js');
 const {
-    SIZE_PRESETS,
+    SIZE_MAX,
+    SIZE_MIN,
     createSizePanelSurface
 } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_size_runtime.js');
 const {
@@ -26,6 +29,11 @@ const { resolveBevyPanelGeometry } = await import('../../eVe/intuition/runtime/b
 const { setMainMenuRuntime } = await import('../../eVe/intuition/ribbon/bevy_ui_product_registry.js');
 const { resolveBevyMainMenuItemSize } = await import('../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js');
 const { setAtomeContextualEditApi } = await import('../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_registry.js');
+const { resolveBevyPanelGridSlab } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_layout.js');
+const { readState: readIntuitionState, setHandedness } = await import('../../eVe/intuition/core/state.js');
+const { BEVY_PANEL_TOKENS } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js');
+const { BEVY_MENU_TOKENS } = await import('../../eVe/intuition/ribbon/bevy_ui_menu_surface.js');
+const { fitSingleLineText } = await import('../../eVe/domains/rendering/text_editing_layout.js');
 
 const findNode = (node, id) => {
     if (Array.isArray(node)) return node.map((child) => findNode(child, id)).find(Boolean) || null;
@@ -34,7 +42,9 @@ const findNode = (node, id) => {
     return (node.children || []).map((child) => findNode(child, id)).find(Boolean) || null;
 };
 
-test('Size keeps only its canonical numeric field and presets', async () => {
+// Size is the one tool slider (AGENTS.md rule 14, dashboard_band_sliders.js `grid`): dragged, it follows live
+// on the selection (start, frames, end); its presets and numeric field were retired.
+test('Size keeps only its canonical tool slider', async () => {
     const applies = [];
     const runtime = createSizePanelSurface({
         applySize: async (value, options) => { applies.push({ value, options }); return { ok: true, count: 2 }; },
@@ -42,38 +52,36 @@ test('Size keeps only its canonical numeric field and presets', async () => {
     });
     const cleanup = runtime.surface.onOpen({ refresh: () => {} });
     try {
-        const emitted = [];
-        const content = runtime.surface.buildContent(runtime.readState(), {
-            bodyWidth: 358,
-            emit: (intent) => emitted.push(intent)
-        });
+        const content = runtime.surface.buildContent(runtime.readState(), { bodyWidth: 358, emit: () => {} });
         assert.equal(runtime.surface.surfaceId, 'eve_bevy_panel_size');
         assert.equal(findNode(content, 'size_hint'), null);
         assert.equal(findNode(content, 'size_selection_summary'), null);
-        assert.equal(findNode(content, 'size_numeric_field_input').kind, 'number_input');
-        assert.equal(findNode(content, 'size_numeric_field_decrement').kind, 'button');
-        assert.equal(findNode(content, 'size_numeric_field_increment').kind, 'button');
-        assert.equal(findNode(content, 'size_presets').children.length, SIZE_PRESETS.length);
-        assert.equal(runtime.readState().numeric.value, 72);
+        assert.equal(findNode(content, 'size_presets'), null);
+        assert.equal(findNode(content, 'size_numeric_field_input'), null);
+        const slider = findNode(content, 'size_values_size');
+        assert.equal(slider.kind, 'tool_slider');
+        assert.equal(runtime.readState().value, 72);
 
-        findNode(content, 'size_numeric_field_increment').on.activate();
-        await runtime.surface.handleEvent(emitted.pop(), { refresh: () => {} });
-        assert.deepEqual(applies.at(-1), { value: 73, options: { phase: 'end', live: false } });
-
-        await runtime.surface.handleEvent({ type: 'size.preset.activate', value: '144' }, { refresh: () => {} });
-        assert.deepEqual(applies.at(-1), { value: 144, options: { phase: 'end', live: false } });
-
-        await runtime.surface.handleEvent({ type: 'size.numeric.drag', event: { delta_y: -16 } }, { refresh: () => {} });
-        await runtime.surface.handleEvent({ type: 'size.numeric.drag', event: { delta_y: -8 } }, { refresh: () => {} });
-        await runtime.surface.handleEvent({ type: 'size.numeric.release' }, { refresh: () => {} });
-        assert.deepEqual(applies.slice(-3).map(({ options }) => options.phase), ['start', 'frame', 'end']);
-        const unknown = await runtime.surface.handleEvent({ type: 'size.preset.activate', value: '999' });
+        slider.on.press({});
+        slider.on.drag({ delta_x: 30 });
+        slider.on.drag({ delta_x: 30 });
+        slider.on.release({});
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        assert.deepEqual(applies.map(({ options }) => options), [
+            { phase: 'start', live: true }, { phase: 'frame', live: true }, { phase: 'frame', live: true }, { phase: 'end', live: false }
+        ]);
+        assert.equal(applies[0].value, 72, 'the session starts from the selection size');
+        assert.ok(applies[1].value > 72 && applies[2].value > applies[1].value);
+        assert.equal(applies[3].value, applies[2].value, 'the release commits the last live value');
+        assert.ok(applies.every(({ value }) => value >= SIZE_MIN && value <= SIZE_MAX));
+        assert.equal(runtime.readState().value, applies[3].value);
+        const unknown = await runtime.surface.handleEvent({ type: 'size.preset.activate', value: '144' });
         assert.equal(unknown.ok, false);
     } finally {
         cleanup?.();
         runtime.surface.onClose();
     }
-    assert.equal(runtime.readState().numeric.value, 96);
+    assert.equal(runtime.readState().value, BEVY_PANEL_TOKENS.unitScalePx(96));
 });
 
 test('Font composes the canonical selectable list and applies only known families', async () => {
@@ -106,55 +114,54 @@ test('Font composes the canonical selectable list and applies only known familie
     assert.equal(runtime.readState().activeFont, 'Arial');
 });
 
-test('Font opens glued beside the contextual rail and vertically centered on it', () => {
+// The contextual rail owns a column on the hand's side while it shows (bevy_panel_layout.js): Font opens at that
+// edge, against the column, at the foot above the toolbar, its slab laid on the screen grid's columns.
+test('Font opens glued beside the contextual rail at the hand\'s edge', () => {
     const runtime = createFontPanelSurface();
     const surface = { getBoundingClientRect: () => ({ width: 1024, height: 768 }) };
-    const railWidth = resolveBevyMainMenuItemSize();
+    const reserve = Math.round(resolveBevyMainMenuItemSize() + BEVY_MENU_TOKENS.toolGapPx + BEVY_PANEL_TOKENS.dockGapPx);
+    const width = runtime.surface.defaultGeometry.width;
+    const foot = 768 - 74 - BEVY_PANEL_TOKENS.dockGapPx;
+    const previous = readIntuitionState().handedness;
     assert.equal(runtime.surface.openAtHandednessEdge, true);
-    assert.equal(runtime.surface.openBesideContextualRail, true);
-    setAtomeContextualEditApi({ readState: () => ({ menuVisible: true }) });
-    assert.equal(runtime.surface.resolveHandednessEdgeInsetPx(), railWidth);
-    setAtomeContextualEditApi(null);
-    assert.equal(runtime.surface.resolveHandednessEdgeInsetPx(), 0);
+    setMainMenuRuntime({ getReservedHeight: () => 74 });
+    const open = (handedness, menuVisible) => {
+        setHandedness(handedness);
+        setAtomeContextualEditApi({ readState: () => ({ menuVisible, handedness }) });
+        return resolveBevyPanelGeometry({ surface, defaultGeometry: runtime.surface.defaultGeometry,
+            openAtHandednessEdge: runtime.surface.openAtHandednessEdge });
+    };
+    try {
+        const left = open('left', true);
+        assert.equal(left.x, resolveBevyPanelGridSlab({ surface, x: reserve, width, left: reserve }).x);
+        assert.ok(left.x >= reserve, 'never over the rail column');
+        assert.equal(left.y + left.height, foot);
 
-    setMainMenuRuntime({ handedness: 'left', getReservedHeight: () => 74 });
-    const left = resolveBevyPanelGeometry({
-        surface,
-        defaultGeometry: runtime.surface.defaultGeometry,
-        allowMobileFloating: runtime.surface.allowMobileFloating,
-        openAtHandednessEdge: runtime.surface.openAtHandednessEdge,
-        handednessEdgeInsetPx: railWidth
-    });
-    assert.deepEqual([left.x, left.y, left.width], [railWidth, 97, 400]);
+        const right = open('right', true);
+        assert.equal(right.x, resolveBevyPanelGridSlab({ surface, x: 1024 - reserve - width, width, right: 1024 - reserve }).x);
+        assert.ok(right.x + right.width <= 1024 - reserve, 'never over the rail column');
+        assert.equal(right.y + right.height, foot);
 
-    setMainMenuRuntime({ handedness: 'right', getReservedHeight: () => 74 });
-    const right = resolveBevyPanelGeometry({
-        surface,
-        defaultGeometry: runtime.surface.defaultGeometry,
-        allowMobileFloating: runtime.surface.allowMobileFloating,
-        openAtHandednessEdge: runtime.surface.openAtHandednessEdge,
-        handednessEdgeInsetPx: railWidth
-    });
-    assert.deepEqual([right.x, right.y, right.width], [1024 - railWidth - 400, 97, 400]);
-    assert.equal(right.x + right.width, 1024 - railWidth);
+        const withoutContextualRail = open('right', false);
+        assert.equal(withoutContextualRail.x, resolveBevyPanelGridSlab({ surface, x: 1024 - width, width }).x);
+        assert.ok(withoutContextualRail.x > right.x, 'without the rail the panel takes the screen edge');
+        assert.ok(withoutContextualRail.x + withoutContextualRail.width <= 1024);
 
-    const withoutContextualRail = resolveBevyPanelGeometry({
-        surface,
-        defaultGeometry: runtime.surface.defaultGeometry,
-        allowMobileFloating: runtime.surface.allowMobileFloating,
-        openAtHandednessEdge: runtime.surface.openAtHandednessEdge,
-        handednessEdgeInsetPx: 0
-    });
-    assert.equal(withoutContextualRail.x + withoutContextualRail.width, 1024);
-
-    const narrow = resolveBevyPanelGeometry({
-        surface: { getBoundingClientRect: () => ({ width: 390, height: 844 }) },
-        defaultGeometry: runtime.surface.defaultGeometry,
-        allowMobileFloating: runtime.surface.allowMobileFloating,
-        openAtHandednessEdge: runtime.surface.openAtHandednessEdge,
-        handednessEdgeInsetPx: railWidth
-    });
-    assert.deepEqual([narrow.x, narrow.y, narrow.width, narrow.height], [0, 135, 370, 500]);
+        setAtomeContextualEditApi(null);
+        // A phone lays the panel at the foot across the grid's width, as tall as asked.
+        const narrowSurface = { getBoundingClientRect: () => ({ width: 390, height: 844 }) };
+        const narrow = resolveBevyPanelGeometry({ surface: narrowSurface, defaultGeometry: runtime.surface.defaultGeometry,
+            openAtHandednessEdge: runtime.surface.openAtHandednessEdge });
+        const slab = resolveBevyPanelGridSlab({ surface: narrowSurface, x: 0, width: 390 });
+        assert.equal(narrow.mobile, true);
+        assert.deepEqual([narrow.x, narrow.width], [slab.x, slab.width]);
+        assert.equal(narrow.height, runtime.surface.defaultGeometry.height);
+        assert.equal(narrow.y + narrow.height, 844 - 74 - BEVY_PANEL_TOKENS.dockGapPx);
+    } finally {
+        setAtomeContextualEditApi(null);
+        setMainMenuRuntime(null);
+        setHandedness(previous);
+    }
 });
 
 test('Color keeps swatches, RGBA value and channels without redundant labels', async () => {
@@ -170,9 +177,13 @@ test('Color keeps swatches, RGBA value and channels without redundant labels', a
     assert.equal(findNode(content, 'color_hint'), null);
     assert.equal(findNode(content, 'color_selection_summary'), null);
     assert.equal(findNode(content, 'color_base_label'), null);
-    assert.equal(findNode(content, 'color_rgba_text').text, 'rgba(248, 248, 248, 1.00)');
+    // The RGBA value is cut with « … » when its room lacks (AGENTS.md rule 12).
+    const rgba = findNode(content, 'color_rgba_text');
+    assert.equal(rgba.text, fitSingleLineText({ value: 'rgba(248, 248, 248, 1.00)', width: rgba.style.size[0],
+        style: { font_size: BEVY_PANEL_TOKENS.controlTextSizePx } }).text);
+    assert.ok(rgba.text.startsWith('rgba(248, 248, '));
     assert.equal(COLOR_SWATCHES.length, 12);
-    assert.ok(['r', 'g', 'b', 'a'].every((key) => findNode(content, `color_channel_${key}_input`)?.kind === 'number_input'));
+    assert.ok(['r', 'g', 'b', 'a'].every((key) => findNode(content, `color_channels_${key}`)?.kind === 'tool_slider'));
     findNode(content, 'color_swatch_0_2').on.activate();
     await runtime.surface.handleEvent(emitted.pop(), { refresh: () => {} });
     assert.deepEqual(applies.at(-1), { r: 244, g: 67, b: 54, a: 100 });

@@ -1,4 +1,6 @@
 import { test, expect, vi, afterEach } from 'vitest';
+// The active life profiles filter what the Dashboard shows (dashboard_data_adapters.js); none is active here, so all shows.
+vi.mock('../../eVe/domains/life_profiles/life_profile_runtime.js', () => ({ getLifeProfileRuntime: () => ({ ensure: async () => [], visible: () => true }) }));
 import { createDashboardDataAdapters } from '../../eVe/domains/dashboard/dashboard_data_adapters.js';
 import { createDashboardDataController } from '../../eVe/domains/dashboard/dashboard_data_controller.js';
 import { itemsForRender } from '../../eVe/domains/dashboard/dashboard_environment.js';
@@ -17,7 +19,8 @@ test('Dashboard requests ten upcoming occurrences without a data project and ret
     ] }));
     const adapters = createDashboardDataAdapters({ calendarApiLoader: async () => ({ next }) });
     const result = await adapters.list({ id: 'calendar', data_source: 'calendar' }, { projectId: '__eve_dashboard_workspace__' });
-    expect(next.mock.calls[0][0]).toMatchObject({ limit: 10, projectId: null });
+    // The read takes the week's appointments (DASHBOARD_CALENDAR_READ_LIMIT, 60); the ten shown are itemsForRender's cap below.
+    expect(next.mock.calls[0][0]).toMatchObject({ limit: 60, projectId: null });
     expect(result.map(item => item.id)).toEqual(['series-a', 'series-b']);
     expect(result.every(item => item.payload.id === 'series')).toBe(true);
 });
@@ -34,8 +37,9 @@ test('a superseded read cannot replace a newer Calendar result', async () => {
     const slow = deferred(); let reads = 0;
     const state = { active: true, sceneProjectId: 'project', dataProjectId: 'project', openGeneration: 1 };
     const data = createDashboardDataController({ state, adapters: { listMany: async () => ++reads === 1 ? slow.promise : new Map([['calendar', upcoming(2)]]) } });
+    // A second plain open joins the read in flight (dashboard_data_controller.js#inflightReads); the newer read is a forced one.
     const first = data.loadVisibleItems(categories, { categoryIds: ['calendar'] });
-    await data.loadVisibleItems(categories, { categoryIds: ['calendar'] });
+    await data.loadVisibleItems(categories, { categoryIds: ['calendar'], force: true });
     slow.resolve(new Map([['calendar', upcoming(1)]])); await first;
     expect(state.itemsByCategory.get('calendar')).toHaveLength(2);
 });
@@ -54,7 +58,9 @@ test('personal mutations, imports and persisted remote updates refresh without a
     const data = createDashboardDataController({ state, constants: { dashboard: { categories } }, adapters: { listMany: reads },
         calendarApiLoader: async () => ({ on: handler => { listener = handler; return () => { listener = null; }; } }), renderDashboard: async () => {} });
     await data.loadCategories(); await data.connectCalendarChanges(); data.connectDirectoryChanges();
-    await listener('create', { id: 'personal', projectId: null }); expect(reads).toHaveBeenCalledTimes(1);
+    // The calendar's listener only starts the coalesced reread (dashboard_calendar_subscription.js); it returns nothing to await.
+    listener('create', { id: 'personal', projectId: null }); await vi.waitFor(() => expect(reads).toHaveBeenCalledTimes(1));
+    expect(state.lastCalendarChangeError).toBeUndefined();
     for (const name of ['squirrel:import-updated', 'squirrel:atome-updated']) {
         win.dispatchEvent(new CustomEvent(name, { detail: name.includes('import') ? { domain: 'calendar_event' } : { atome_type: 'calendar_event', atome_id: 'remote' } }));
         await vi.waitFor(() => expect(reads).toHaveBeenCalledTimes(name.includes('import') ? 2 : 3));

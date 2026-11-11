@@ -207,9 +207,10 @@ test('Tauri capability authorizes the registered audio_get_scope command', async
 });
 
 test('Tauri callback scope publisher is fixed-size and lock-free', async () => {
+    // The engine itself is the shared atome-audio-engine crate; the Tauri app only wraps its commands.
     const [scopeSource, meteringSource, bridgeSource] = await Promise.all([
-        readFile(new URL('../../platforms/desktop-tauri/src/audio_engine/metering_scope.rs', import.meta.url), 'utf8'),
-        readFile(new URL('../../platforms/desktop-tauri/src/audio_engine/metering.rs', import.meta.url), 'utf8'),
+        readFile(new URL('../../atome/engines/audio-engine/src/metering_scope.rs', import.meta.url), 'utf8'),
+        readFile(new URL('../../atome/engines/audio-engine/src/metering.rs', import.meta.url), 'utf8'),
         readFile(new URL('../../platforms/desktop-tauri/src/audio_engine/bridge.rs', import.meta.url), 'utf8')
     ]);
     const publishBody = scopeSource.slice(scopeSource.indexOf('pub fn publish'), scopeSource.indexOf('pub fn snapshot'));
@@ -268,12 +269,13 @@ test('Tauri terminal payload keeps a positive file size through the JavaScript r
 });
 
 test('Tauri recorder publishes output size and rejects a zero-byte terminal file before acknowledgement', async () => {
-    const [recorderSource, bridgeSource] = await Promise.all([
-        readFile(new URL('../../platforms/desktop-tauri/src/audio_engine/recorder.rs', import.meta.url), 'utf8'),
-        readFile(new URL('../../platforms/desktop-tauri/src/audio_engine/bridge.rs', import.meta.url), 'utf8')
+    // The recorder and its terminal payload live in the shared atome-audio-engine crate.
+    const [recorderSource, commandsSource] = await Promise.all([
+        readFile(new URL('../../atome/engines/audio-engine/src/recorder.rs', import.meta.url), 'utf8'),
+        readFile(new URL('../../atome/engines/audio-engine/src/commands.rs', import.meta.url), 'utf8')
     ]);
     assert.match(recorderSource, /pub size_bytes: u64/);
     assert.match(recorderSource, /fs::metadata\(&session\.file_path\)/);
     assert.match(recorderSource, /audio_recording_empty: no output bytes were written/);
-    assert.match(bridgeSource, /"size_bytes": result\.size_bytes/);
+    assert.match(commandsSource, /"size_bytes": result\.size_bytes/);
 });

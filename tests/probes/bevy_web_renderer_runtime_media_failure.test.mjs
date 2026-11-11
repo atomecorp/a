@@ -17,32 +17,47 @@ const flushBevyRun = () => new Promise((resolve) => setTimeout(resolve, 0));
 const latestRunCall = (calls = []) => calls.find((call) => call.type === 'run');
 
 const createTextTextureDocument = ({ devicePixelRatio = 2 } = {}) => {
-    const canvas = {
-        width: 0,
-        height: 0,
-        getContext: () => ({
-            clearRect: () => null,
-            scale: () => null,
-            save: () => null,
-            restore: () => null,
-            beginPath: () => null,
-            rect: () => null,
-            clip: () => null,
-            fillRect: () => null,
-            strokeText: () => null,
-            fillText: () => null,
-            measureText: (text) => ({ width: String(text || '').length * 8 }),
-            getImageData: (_x, _y, width, height) => {
-                const data = new Uint8ClampedArray(width * height * 4);
-                data[0] = 255;
-                data[3] = 128;
-                data[7] = 0;
-                return { data };
-            }
-        })
-    };
+    const painted = [];
+    const createContext = () => ({
+        clearRect: () => null,
+        scale: () => null,
+        save: () => null,
+        restore: () => null,
+        beginPath: () => null,
+        rect: () => null,
+        clip: () => null,
+        fillRect: () => null,
+        strokeText: () => null,
+        fillText: () => null,
+        measureText: (text) => ({ width: String(text || '').length * 8 }),
+        getImageData: (_x, _y, width, height) => {
+            const data = new Uint8ClampedArray(width * height * 4);
+            data[0] = 255;
+            data[3] = 128;
+            data[7] = 0;
+            return { data };
+        }
+    });
+    const canvas = { width: 0, height: 0, getContext: createContext };
+    // Text textures are painted off screen and handed over as an ImageBitmap.
+    class RecordingOffscreenCanvas {
+        constructor(width, height) {
+            this.width = width;
+            this.height = height;
+            painted.push(this);
+        }
+        getContext(type, options) {
+            this.contextType = type;
+            this.contextOptions = options;
+            return createContext();
+        }
+        transferToImageBitmap() {
+            return { width: this.width, height: this.height };
+        }
+    }
     return {
-        defaultView: { devicePixelRatio },
+        painted,
+        defaultView: { devicePixelRatio, OffscreenCanvas: RecordingOffscreenCanvas },
         createElement: (name) => {
             assert.equal(name, 'canvas');
             return canvas;
@@ -64,6 +79,7 @@ test('Bevy web runtime keeps broken initial deferred media present without block
     const dom = new JSDOM('<!doctype html><html><body><canvas id="eve_surface_project_media_failure"></canvas></body></html>');
     const surface = dom.window.document.getElementById('eve_surface_project_media_failure');
     const calls = [];
+    const resolvedTextures = [];
     const scene = createVirtualSceneTree([
         {
             id: 'broken_video',
@@ -93,13 +109,15 @@ test('Bevy web runtime keeps broken initial deferred media present without block
         height: 240,
         virtualScene: scene,
         mediaTextureResolver: async (node) => {
+            resolvedTextures.push(node.id);
             throw new Error(`bevy_media_texture_video_metadata_failed:${node.id}`);
         },
         wasmModule: {
             default: async () => calls.push({ type: 'init' }),
             run_atome_bevy_renderer: (canvasSelector, width, height, surfaceMetrics, initialScene) => {
                 calls.push({ type: 'run', canvasSelector, width, height, surfaceMetrics, initialScene });
-            }
+            },
+            apply_atome_bevy_resource: (payload) => calls.push({ type: 'resource', payload })
         }
     });
     assert.equal(result.deferred_nodes.length, 1);
@@ -111,7 +129,12 @@ test('Bevy web runtime keeps broken initial deferred media present without block
     assert.equal(latestRunCall(calls).initialScene.nodes.length, 2);
     assert.deepEqual(latestRunCall(calls).initialScene.nodes.map((node) => node.id), ['broken_video', 'shape_ok']);
     assert.equal(readBevyWebRendererState(surface).node_count, 2);
-    assert.equal(readBevyWebRendererState(surface).deferred_nodes.length, 1);
+    // A video's deferred resource is its source for the GPU decode route: a
+    // failing RGBA resolver is never consulted, so the video stays present.
+    assert.deepEqual(resolvedTextures, []);
+    assert.deepEqual(calls.filter((call) => call.type === 'resource').map((call) => call.payload.id), ['broken_video']);
+    assert.equal(readBevyWebRendererState(surface).deferred_nodes.length, 0);
+    assert.deepEqual(readBevyWebRendererState(surface).resolved_deferred_nodes, ['broken_video']);
     assert.equal(readBevyWebRendererState(surface).skipped_nodes.length, 0);
 });
 
@@ -203,14 +226,19 @@ test('Bevy web runtime keeps source-backed uncached videos present after initial
     assert.equal(result.node_count, 1);
     assert.equal(latestRunCall(calls).initialScene.nodes[0].id, 'pending_video');
     assert.equal(latestRunCall(calls).initialScene.nodes[0].texture, undefined);
-    assert.equal(calls.some((call) => call.type === 'resource'), false);
-    assert.equal(readBevyWebRendererState(surface).deferred_nodes.length, 1);
-    assert.deepEqual(readBevyWebRendererState(surface).resolved_deferred_nodes, []);
+    // The deferred video hands its source to the decode route, never an RGBA texture.
+    const resources = calls.filter((call) => call.type === 'resource');
+    assert.equal(resources.length, 1);
+    assert.equal(resources[0].payload.id, 'pending_video');
+    assert.equal(resources[0].payload.texture ?? null, null);
+    assert.equal(readBevyWebRendererState(surface).deferred_nodes.length, 0);
+    assert.deepEqual(readBevyWebRendererState(surface).resolved_deferred_nodes, ['pending_video']);
 });
 
-test('Bevy text texture resolver oversamples and bleeds transparent edge colors for linear sampling', async () => {
+test('Bevy text texture resolver oversamples into an off-screen bitmap for the GPU edge pass', async () => {
+    const documentRef = createTextTextureDocument({ devicePixelRatio: 2 });
     const resolver = createBrowserBevyMediaTextureResolver({
-        documentRef: createTextTextureDocument({ devicePixelRatio: 2 }),
+        documentRef,
         textTextureScale: 2,
         textMaxTextureSize: 512
     });
@@ -226,10 +254,13 @@ test('Bevy text texture resolver oversamples and bleeds transparent edge colors 
 
     assert.equal(texture.width, 64);
     assert.equal(texture.height, 32);
-    assert.equal(texture.rgba[4], 255);
-    assert.equal(texture.rgba[5], 0);
-    assert.equal(texture.rgba[6], 0);
-    assert.equal(texture.rgba[7], 0);
+    // No read-back: the bitmap goes to the GPU, whose pass makes the alpha straight
+    // and bleeds the transparent edge colours (bevy-core browser_texture.rs).
+    assert.equal(texture.rgba, undefined);
+    assert.deepEqual(texture.bitmap, { width: 64, height: 32 });
+    assert.equal(documentRef.painted.length, 1);
+    assert.equal(documentRef.painted[0].contextType, '2d');
+    assert.equal(documentRef.painted[0].contextOptions?.willReadFrequently, true);
 });
 
 test('Bevy web runtime refreshes text texture when a transform changes text bounds', async () => {

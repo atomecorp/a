@@ -5,6 +5,7 @@ import { test } from 'vitest';
 import { BEVY_ICON_BUTTON_TOKENS } from '../../eVe/intuition/shared/bevy_ui_icon_button.js';
 import { contactPanelMode, contactSurface } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_contact_runtime.js';
 import { BEVY_PANEL_TOKENS } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
+import { panelBandTool } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_band.js';
 import * as contactPickerApi from '../../eVe/intuition/tools/contact_picker.js';
 
 const visit = (root, predicate) => {
@@ -49,9 +50,9 @@ const draw = () => {
     const emitted = [];
     const snapshot = contactSurface.readState();
     const content = contactSurface.buildContent(snapshot, { emit: (intent) => emitted.push(intent), bodyWidth: 388 });
-    const fixed = contactSurface.buildFixedContent(contactSurface.readState(), { emit: (intent) => emitted.push(intent), bodyWidth: 388 });
-    const footer = contactSurface.buildFooterContent(snapshot, { emit: intent => emitted.push(intent) });
-    return { content, fixed, footer, emitted };
+    // The panel's tools lie in its foot band (bevy_panel_band.js): one item per tool, by its key.
+    const tools = contactSurface.buildBandTools(contactSurface.readState(), { emit: (intent) => emitted.push(intent) });
+    return { content, tools, emitted };
 };
 
 test('the pick mode of the Contact panel is the Communication picker, not a second surface', async () => {
@@ -78,26 +79,24 @@ test('the pick mode of the Contact panel is the Communication picker, not a seco
     }
 });
 
-test('the pick footer chooses the checked people and stays inert without a selection', async () => {
+test('the pick band chooses the checked people and stays inert without a selection', async () => {
     const picked = [];
     const { dom, release } = await openPanel({ mode: 'pick', onPick: (recipients) => picked.push(recipients) });
     try {
-        let { fixed } = draw();
-        const actions = visit(fixed, (node) => node.id === 'contact_pick_actions_row');
-        assert.deepEqual(actions.children.map((child) => child.id),
-            ['contact_pick_choose']);
-        assert.equal(visit(fixed, (node) => node.id === 'contact_pick_choose_label').text, 'Choisir');
-        assert.equal(visit(fixed, (node) => node.id === 'contact_pick_choose').style.opacity,
-            BEVY_PANEL_TOKENS.actionButton.disabledOpacity, 'without a selection the button is inert');
-        assert.equal(visit(fixed, (node) => node.id === 'contact_pick_choose').on, undefined);
-        assert.equal(visit(fixed, (node) => node.id === 'contact_delete'), null, 'picking never deletes');
+        let { tools, emitted } = draw();
+        const tool = (key) => tools.find((item) => item.key === key);
+        assert.deepEqual(tools.map((item) => item.key), ['contact_search', 'contact_pick_choose'],
+            'picking offers the search and Choix, never a deletion or a selection of all');
+        assert.equal(tool('contact_pick_choose').label, panelBandTool('choose').label);
+        assert.equal(tool('contact_pick_choose').disabled, true, 'without a selection the tool is inert');
 
         await contactSurface.handleEvent({ type: 'contact.selection.toggle_all' });
-        ({ fixed } = draw());
-        assert.equal(visit(fixed, (node) => node.id === 'contact_pick_choose_label').text, 'Choisir (2)');
-        assert.equal(typeof visit(fixed, (node) => node.id === 'contact_pick_choose').on.activate, 'function');
-        assert.equal(visit(draw().footer, node => node.id === 'contact_select_all'), null);
-        assert.equal(visit(fixed, (node) => node.id === 'contact_delete'), null);
+        ({ tools, emitted } = draw());
+        assert.equal(tool('contact_pick_choose').disabled, false);
+        tool('contact_pick_choose').onSelect();
+        assert.deepEqual(emitted.at(-1), { type: 'contact.pick.selection' });
+        assert.equal(tool('contact_select_all'), undefined);
+        assert.equal(tool('contact_delete'), undefined);
 
         const result = await contactSurface.handleEvent({ type: 'contact.pick.selection' });
         assert.equal(result.ok, true);
@@ -153,9 +152,16 @@ test('the book mode keeps the whole row as the unfold and only offers the deleta
         assert.equal(snapshot.entries[0].selectable, false, 'one does not select oneself for deletion');
         assert.equal(snapshot.selectableCount, 2);
 
-        const { content } = draw();
+        const { content, emitted } = draw();
         const header = visit(content, (node) => node.id === 'contact_accordion_local_ada_header');
-        assert.deepEqual(Object.keys(header.on || {}), ['activate'], 'the book row unfolds, it does not pick');
+        assert.deepEqual(Object.keys(header.on || {}).sort(), ['activate', 'long_press'],
+            'the book row unfolds at a tap and is ticked by a hold, it does not pick');
+        header.on.activate();
+        assert.deepEqual(emitted.at(-1), { type: 'contact.accordion.toggle', id: 'local_ada' });
+        header.on.long_press();
+        assert.deepEqual(emitted.at(-1), { type: 'contact.selection.hold', id: 'local_ada' });
+        const own = visit(content, (node) => node.id === 'contact_accordion_current_user_header');
+        assert.equal(own.on.long_press, undefined, 'the own row cannot be held into the selection');
         assert.equal(visit(content, (node) => node.id === 'contact_accordion_local_ada_chevron').kind, 'panel',
             'without a row-level choice the caret belongs to the header');
     } finally {
@@ -189,17 +195,16 @@ test('a contact row is doubled and its face follows the shared row density', asy
     }
 });
 
-test('account creation is offered by the list itself, in both modes', async () => {
+// Créer in the band adds a local contact to the book (user, 27 Oct. 2026); the picker only chooses.
+test('the book band creates a contact while the picker band offers no creation', async () => {
     const { dom, release } = await openPanel();
     try {
-        const { fixed, footer, emitted } = draw();
-        const createUser = visit(footer, (node) => node.id === 'contact_create_user');
-        assert.equal(createUser.accessibility.label, 'Créer un utilisateur',
-            'the label is the canonical account label, not a second wording');
-        const addContact = visit(fixed, (node) => node.id === 'contact_add');
-        assert.equal(addContact, null, 'local creation is no longer a permanent action');
-        createUser.on.activate();
-        assert.deepEqual(emitted.at(-1), { type: 'contact.create_user' });
+        const { tools, emitted } = draw();
+        const create = tools.find((item) => item.key === 'contact_create');
+        assert.equal(create.label, panelBandTool('create').label, 'the label is the shared band tool, not a second wording');
+        assert.equal(tools.at(-1), create, 'Créer closes the book tools');
+        create.onSelect();
+        assert.deepEqual(emitted.at(-1), { type: 'contact.add' });
     } finally {
         release?.();
         await contactSurface.onClose?.();
@@ -208,9 +213,8 @@ test('account creation is offered by the list itself, in both modes', async () =
 
     const picker = await openPanel({ mode: 'pick', onPick: () => {} });
     try {
-        const { footer } = draw();
-        assert.ok(footer.some((child) => child.id === 'contact_create_user'),
-            'the Communication user list offers it too, it is the same panel');
+        const { tools } = draw();
+        assert.equal(tools.some((item) => item.key === 'contact_create'), false);
     } finally {
         picker.release?.();
         await contactSurface.onClose?.();

@@ -2,14 +2,14 @@ import { eveT } from '../../eVe/i18n/i18n.js';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
-import { buildAtomeContextualEditTree } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_model.js';
+import { buildAtomeContextualEditTree, contextualRailColumn } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_model.js';
 import { createAtomeContextualEditRuntime } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_runtime.js';
 import { createAtomeContextualEditHandlers } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_handlers.js';
 import { normalizeBevyUiTree } from '../../eVe/domains/rendering/bevy_ui_tree_normalization.js';
-import { createBevyUiScrollRuntime } from '../../eVe/domains/rendering/bevy_ui_scroll_runtime.js';
 import { hitTestBevyUiNode } from '../../eVe/domains/rendering/bevy_ui_hit_test_runtime.js';
 import { createBevyUiPointerRuntime } from '../../eVe/domains/rendering/bevy_ui_pointer_runtime.js';
 import { createRuntimeHarness, waitFrame } from './bevy_ui_main_menu_test_helpers.mjs';
+import { createTestScrollRuntime } from './bevy_scroll_engine_double.mjs';
 import {
     ACTIVE_TOOL_SURFACE,
     isActiveRailToolKey,
@@ -71,7 +71,9 @@ const readMenuAccess = async (context) => ({ ...context,
 test('the pinned zone is glued above the Atome handle and pushes the ordinary level up', () => {
     const baseline = buildRail();
     const bottom = baseline.layout.bottom;
-    assert.equal(bottom, 400 - ITEM_SIZE - baseline.layout.gap, 'the rail leaves the common seam above the Atome handle');
+    // The rail lies in the one screen grid: its last case in the row right above the ribbon's.
+    const { grid } = contextualRailColumn({ surface: { getBoundingClientRect: () => ({ width: 400, height: 400 }) }, width: 400, height: 400, itemSize: ITEM_SIZE });
+    assert.equal(bottom, Math.floor(grid.bottom - grid.cell - grid.joint / 2), 'the rail stands in the grid row above the Atome handle');
     assert.equal(railOf(baseline).style.size[1], baseline.layout.railHeight);
 
     const tree = buildRail({
@@ -83,11 +85,12 @@ test('the pinned zone is glued above the Atome handle and pushes the ordinary le
     assert.equal(pinned.style.position[1] + ITEM_SIZE, bottom, 'the last case is glued to the rail bottom');
     assert.equal(JSON.stringify(pinned).includes('Stop'), true, 'the pinned case carries the lit presentation');
     assert.equal(railOf(tree).style.position[1], railOf(baseline).style.position[1]);
-    assert.equal(railOf(tree).style.size[1] + ITEM_SIZE, railOf(baseline).style.size[1]);
+    // The pinned case takes its cell (a case and the seam) from the scrolling viewport.
+    assert.equal(railOf(tree).style.size[1] + ITEM_SIZE + tree.layout.gap, railOf(baseline).style.size[1]);
     const level = collectIds(railOf(tree).children[0]);
     assert.equal(level.filter((id) => id === 'atome_contextual_tool_tool_2').length, 0);
     assert.equal(collectIds(tree.root).filter((id) => id === 'atome_contextual_tool_tool_2').length, 1);
-    assert.equal(railOf(tree).children[0].style.size[1], (6 - 1) * ITEM_SIZE);
+    assert.equal(railOf(tree).children[0].style.size[1], (6 - 1) * ITEM_SIZE + (6 - 2) * tree.layout.gap, 'the five resident tools and their seams');
     assert.equal(tree.layout.bottom, bottom, 'the pinned zone never covers the menu band');
 });
 
@@ -100,13 +103,15 @@ test('the first tool activated is the closest to Atome, the next ones stack abov
                 { key: 'tool_3', label: 'Stop recording', icon: 'stop' }
             ]
         });
-        assert.equal(tree.layout.x, handedness === 'left' ? tree.layout.gap : 400 - ITEM_SIZE - tree.layout.gap);
+        // The rail's column is the grid's first for a left hand, its last for a right hand.
+        assert.equal(tree.layout.x, contextualRailColumn({ surface: { getBoundingClientRect: () => ({ width: 400, height: 400 }) },
+            width: 400, height: 400, itemSize: ITEM_SIZE, handedness }).x);
         const first = findNode(tree.root, 'atome_contextual_tool_tool_0');
         const second = findNode(tree.root, 'atome_contextual_tool_tool_3');
         assert.deepEqual(first.style.position, [tree.layout.x, tree.layout.bottom - tree.layout.itemSize]);
         assert.deepEqual(second.style.position, [tree.layout.x, tree.layout.bottom - (2 * tree.layout.itemSize) - tree.layout.gap]);
         assert.ok(first.style.position[1] > second.style.position[1]);
-        assert.equal(railOf(tree).style.size[1] + (2 * ITEM_SIZE), buildRail().layout.railHeight);
+        assert.equal(railOf(tree).style.size[1] + 2 * (ITEM_SIZE + tree.layout.gap), buildRail().layout.railHeight);
     }
 });
 
@@ -129,24 +134,26 @@ test('a pinned tool keeps the options it declares anchored to its own case', () 
     const option = findNode(open.root, 'atome_contextual_tool_container_play_container_play_stop');
     assert.ok(option, 'the pinned case still opens the options it declares');
     assert.equal(option.style.position[1], pinned.style.position[1], 'the options sit on the pinned case row');
-    assert.equal(option.style.position[0], pinned.style.position[0] - ITEM_SIZE);
+    assert.equal(option.style.position[0], pinned.style.position[0] - ITEM_SIZE - open.layout.gap, 'the next cell, past the seam');
     assert.ok(option.style.position[1] > open.layout.y, 'the options never fall back to the top of the rail');
-    assert.ok(findNode(open.root, 'atome_contextual_tool_container_play_palette_accent'),
-        'the open pinned case carries the shared palette accent');
+    // The palette mark is the folded corner every palette tile carries (bevy_ui_menu_palette.js), no accent bar.
+    assert.ok(findNode(open.root, 'atome_contextual_tool_container_play_corner'),
+        'the open pinned case carries the shared palette corner');
 });
 
 test('the pinned zone never scrolls while the ordinary level keeps scrolling', () => {
-    const scroll = createBevyUiScrollRuntime({ refreshTree: () => {}, emitTargetEvent: () => {} });
+    const scroll = createTestScrollRuntime({ refreshTree: () => {}, emitTargetEvent: () => {} });
     const tree = buildRail({ height: 260, activeSlots: [{ key: 'tool_0', label: 'Stop', icon: 'stop' }] });
     const applied = scroll.applyTree({ tree, treeId: tree.id });
     const rail = railOf(applied);
-    assert.equal(rail.style.size[1], 208 - ITEM_SIZE, 'the viewport is shortened by the reserved zone');
-    const pinnedPoint = { x: 375, y: 180 };
-    const levelPoint = { x: 375, y: 25 };
+    assert.equal(rail.style.size[1], tree.layout.railHeight - (ITEM_SIZE + tree.layout.gap), 'the viewport is shortened by the reserved zone');
+    const column = tree.layout.x + ITEM_SIZE / 2;
+    const pinnedPoint = { x: column, y: tree.layout.bottom - ITEM_SIZE / 2 };
+    const levelPoint = { x: column, y: tree.layout.y + ITEM_SIZE / 2 };
     const pinnedHit = () => hitTestBevyUiNode(applied.root, pinnedPoint);
     assert.equal(pinnedHit().node.id, 'atome_contextual_tool_tool_0');
     assert.equal(hitTestBevyUiNode(applied.root, levelPoint).node.id, 'atome_contextual_tool_tool_1');
-    assert.equal(scroll.wheel({ treeId: tree.id, ...hitTestBevyUiNode(applied.root, levelPoint) }, { deltaY: 104 }), true);
+    assert.equal(scroll.wheel({ treeId: tree.id, ...hitTestBevyUiNode(applied.root, levelPoint) }, { deltaY: 2 * (ITEM_SIZE + tree.layout.gap) }), true);
     const scrolled = scroll.applyTree({ tree, treeId: tree.id });
     assert.equal(hitTestBevyUiNode(scrolled.root, levelPoint).node.id, 'atome_contextual_tool_tool_3');
     assert.equal(hitTestBevyUiNode(scrolled.root, pinnedPoint).node.id, 'atome_contextual_tool_tool_0');
@@ -164,14 +171,16 @@ test('the pinned case is the same slot: same id, same handler, same active paint
         definitions: [{ key: 'tool_1' }, { key: 'tool_2', active }],
         activeSlots
     });
-    const pinned = findNode(paintOf({ activeSlots: [{ key: 'tool_2', label: 'Stop', icon: 'stop' }] }).root,
+    const pinned = findNode(paintOf({ activeSlots: [{ key: 'tool_2', label: 'Stop', icon: 'stop', active: true }] }).root,
         'atome_contextual_tool_tool_2');
-    const litLevelPaint = findNode(paintOf({ active: true }).root, 'atome_contextual_tool_tool_2').style.background;
-    const neutralPaint = findNode(paintOf().root, 'atome_contextual_tool_tool_1').style.background;
+    // The current look of a tool is its sunk case (bevy_ui_menu_surface.js): a running slot reads it, pinned or not.
+    const paint = (node) => JSON.stringify({ background: node.style.background, translation: node.style.translation || null });
+    const litLevelPaint = paint(findNode(paintOf({ active: true }).root, 'atome_contextual_tool_tool_2'));
+    const neutralPaint = paint(findNode(paintOf().root, 'atome_contextual_tool_tool_1'));
     assert.equal(pinned.on.activate, stop, 'the pinned case stays actionable through the same handler');
     assert.equal(pinned.kind, 'icon_button');
-    assert.deepEqual(pinned.style.background, litLevelPaint, 'the pinned case keeps the active paint of its slot');
-    assert.notDeepEqual(litLevelPaint, neutralPaint);
+    assert.equal(paint(pinned), litLevelPaint, 'the pinned case keeps the active paint of its slot');
+    assert.notEqual(litLevelPaint, neutralPaint);
 });
 
 test('a lit rail tool is pinned on every rail that publishes one, and a ribbon tool never is', () => {
@@ -356,14 +365,15 @@ test('a media record keeps its case above the Atome handle with no rail at all',
         const pinned = findNode(tree.root, 'atome_contextual_tool_record_action');
         assert.ok(pinned, 'the record keeps its case above the Atome handle');
         assert.deepEqual(pinned.style.position, [tree.layout.x, tree.layout.bottom - tree.layout.itemSize]);
-        assert.equal(pinned.style.position[1] + ITEM_SIZE, tree.layout.bottom);
+        assert.equal(pinned.style.position[1] + tree.layout.itemSize, tree.layout.bottom);
         assert.equal(pinned.accessibility.label, eveT('eve.menu.stop', 'Stop'),
             'the case shows the lit stop face');
         assert.notEqual(pinned.accessibility.label, 'record_action', 'the case never falls back to the raw key');
         assert.equal(findNode(pinned, 'atome_contextual_tool_record_action_icon').image.source
             .endsWith('icons/stop.svg'), true, 'the case carries the stop icon');
-        assert.equal(findNode(tree.root, `${TREE_ID}_pinned_shadow`)?.id, `${TREE_ID}_pinned_shadow`,
-            'the case keeps the rail exterior depth even with no viewport');
+        // Each tile draws its own depth (bevy_ui_menu_surface.js): no rail around it to lend one.
+        assert.ok(findNode(pinned, 'atome_contextual_tool_record_action_background')?.style.backdrop,
+            'the case keeps its own ground even with no viewport');
         assert.deepEqual(glowingIds(tree), ['atome_contextual_tool_record_action'],
             'the case glows so the user sees the record is still running');
         pinned.on.activate();
@@ -551,7 +561,8 @@ test('an armed creation tool keeps its pinned case glued to the rail bottom, and
         assert.deepEqual(readActiveRailToolEntries().map((entry) => entry.key),
             ['code_create', 'page_create', 'create_placeholder', 'generator'],
             'each armed creation tool resides in the rail, keyed by its menu content key');
-        const tree = await renderArmedRail({ invoker: async () => ({ ok: true }) });
+        // An armed creation tool is pinned on a rail only (active_tool_registry.js `creationTool`): the project's.
+        const tree = await renderArmedRail({ definitions: [{ key: 'tool_0', label: 'tool_0' }], invoker: async () => ({ ok: true }) });
         const keys = ['code_create', 'page_create', 'create_placeholder', 'generator'];
         const nodes = keys.map((key) => findNode(tree.root, `atome_contextual_tool_${key}`));
         assert.ok(nodes.every(Boolean), 'Code, Page, Placeholder and Generator are all pinned');
@@ -592,12 +603,13 @@ test('an armed Page shows its formats in the rail level, the current one lit, an
         });
         assert.deepEqual(definitions.map((definition) => definition.key), [
             'page_format_free', 'page_format_sixteen_nine', 'page_format_four_three',
-            'page_format_three_two', 'page_format_a4', 'page_format_square'
+            'page_format_three_two', 'page_format_a4', 'page_format_a3', 'page_format_a5', 'page_format_letter',
+            'page_format_square'
         ]);
         const tree = await renderArmedRail({ definitions,
             invoker: (definition, options) => invokeArmedToolOption('page', definition, options, view) });
         const nodes = definitions.map((definition) => findNode(tree.root, `atome_contextual_tool_${definition.key}`));
-        assert.ok(nodes.every(Boolean), 'the six formats are cases of the rail level');
+        assert.ok(nodes.every(Boolean), 'the nine formats are cases of the rail level');
         assert.deepEqual(pinnedIds(tree), [], 'the options are not pinned: the tool is');
         const lit = nodes.filter((node) => node.style.translation !== undefined);
         assert.deepEqual(lit.map((node) => node.id), ['atome_contextual_tool_page_format_a4'],
@@ -610,7 +622,7 @@ test('an armed Page shows its formats in the rail level, the current one lit, an
     }
 });
 
-test('the lateral rail opens its palette on press and applies the option under the release', () => {
+test('the lateral rail lays its open palette on the tool row and each option takes the release', () => {
     const definitions = [
         { key: 'tool_0', label: 'tool_0' },
         { key: 'palette_1', label: 'palette_1', toolType: 'palette', children: [
@@ -634,10 +646,9 @@ test('the lateral rail opens its palette on press and applies the option under t
         const first = findNode(tree.root, 'atome_contextual_tool_palette_1_option_a');
         const second = findNode(tree.root, 'atome_contextual_tool_palette_1_option_b');
         assert.ok(parent && first && second, `palette children exist (${handedness})`);
-        // The press opens the palette WITHOUT lifting: the parent carries the
-        // one gesture the shared pointer runtime needs, and the children carry
-        // the choice a release applies.
-        assert.equal(typeof parent.on.palette_open, 'function');
+        // The children carry the choice a release applies; the gesture that
+        // reveals them (a slide toward the inside, `palette_slide_open`) is the
+        // rail's handlers' (atome_contextual_edit_handlers.js), proven below.
         assert.equal(typeof first.on.palette_choose, 'function');
         assert.equal(typeof second.on.palette_choose, 'function');
         // Glued to the inner edge of the rail and centred on the tool's own row:
@@ -654,9 +665,11 @@ test('the lateral rail opens its palette on press and applies the option under t
             ? option.style.position[0] + option.style.size[0] : option.style.position[0]);
         const far = (option) => (flowsLeft ? option.style.position[0] : option.style.position[0] + option.style.size[0]);
         const toolInnerEdge = flowsLeft ? toolLeft : toolLeft + parent.style.size[0];
-        assert.equal(facing(first), toolInnerEdge, `the first option touches the tool (${handedness})`);
+        // One seam between two tiles, the grid's (system_ui_grid.js): the row reads as the rail's.
+        const seam = flowsLeft ? -tree.layout.gap : tree.layout.gap;
+        assert.equal(facing(first), toolInnerEdge + seam, `the first option is the tool's neighbour (${handedness})`);
         assert.equal(first.style.position[1], toolY, `the option sits on the tool row (${handedness})`);
-        assert.equal(facing(second), far(first), `the options touch each other (${handedness})`);
+        assert.equal(facing(second), far(first) + seam, `the options are neighbours (${handedness})`);
     }
 });
 
@@ -664,7 +677,7 @@ test('the lateral rail opens its palette on press and applies the option under t
 // The gesture is proven on the route the product really uses: the rail model
 // builds the palette, its own handlers own the choice, and the shared pointer
 // runtime decides what a press, a slide without a lift and a release mean.
-test('a press-and-slide along the rail applies the option under the finger and closes the palette', () => {
+test('a slide from a rail palette opens it, applies the option under the finger and closes it', () => {
     const definitions = [
         { key: 'tool_0', label: 'tool_0' },
         { key: 'draw', label: 'draw', toolType: 'palette', children: [
@@ -676,7 +689,7 @@ test('a press-and-slide along the rail applies the option under the finger and c
     const railState = { activePaletteKey: '', activeAtomeId: 'shape', railScrollOffset: 0 };
     const pointerState = {
         lastSurfacePoints: new Map(), pointerTarget: null, focusTarget: null,
-        hoverTarget: null, pendingTextActivation: null, handlers: new Map()
+        hoverTarget: null, pendingTextActivation: null, handlers: new Map(), touchObservers: new Set()
     };
     let tree = null;
     let root = null;
@@ -737,7 +750,10 @@ test('a press-and-slide along the rail applies the option under the finger and c
     });
     const toolPoint = centreOf('atome_contextual_tool_draw');
     runtime.routePointerEvent({ canvas, phase: 'pointerdown', point: toolPoint, event: { pointerId: 4 } });
-    assert.equal(railState.activePaletteKey, 'draw', 'the press opens the palette without a lift');
+    assert.equal(railState.activePaletteKey, '', 'the press alone opens nothing: it may still be a tap or a scroll');
+    // The first travel toward the inside of the screen reveals the options without a lift (palette_slide_open).
+    runtime.routePointerEvent({ canvas, phase: 'pointermove', point: { x: toolPoint.x - ITEM_SIZE / 2, y: toolPoint.y }, event: { pointerId: 4 } });
+    assert.equal(railState.activePaletteKey, 'draw', 'the slide opens the palette without a lift');
     const optionPoint = centreOf('atome_contextual_tool_draw_draw_colour');
     assert.ok(optionPoint.x < toolPoint.x, 'the option sits towards the centre of the screen');
     assert.equal(optionPoint.y, toolPoint.y, 'the slide stays on the tool row');
@@ -763,7 +779,7 @@ test('a slide on an already open rail palette reveals it again and still applies
     const railState = { activePaletteKey: 'draw', activeAtomeId: 'shape', railScrollOffset: 0 };
     const pointerState = {
         lastSurfacePoints: new Map(), pointerTarget: null, focusTarget: null,
-        hoverTarget: null, pendingTextActivation: null, handlers: new Map()
+        hoverTarget: null, pendingTextActivation: null, handlers: new Map(), touchObservers: new Set()
     };
     let root = null;
     const render = () => {
@@ -821,7 +837,7 @@ test('a slide on an already open rail palette reveals it again and still applies
         scrollRuntime: { begin: () => {}, drag: () => false, end: () => false, hover: () => {}, wheel: () => false }
     });
     runtime.routePointerEvent({ canvas, phase: 'pointerdown', point: toolPoint, event: { pointerId: 5 } });
-    assert.equal(railState.activePaletteKey, '', 'the press on an open palette behaves like a tap');
+    assert.equal(railState.activePaletteKey, 'draw', 'the press alone leaves the open palette as it is');
     runtime.routePointerEvent({ canvas, phase: 'pointermove', point: optionPoint, event: { pointerId: 5 } });
     assert.equal(railState.activePaletteKey, 'draw', 'the slide reveals it again instead of toggling');
     runtime.routePointerEvent({ canvas, phase: 'pointerup', point: optionPoint, event: { pointerId: 5 } });
@@ -843,7 +859,7 @@ test('a slide from a rail hold tool opens its options, while a tap keeps the too
     const railState = { activePaletteKey: '', activeAtomeId: 'shape', railScrollOffset: 0 };
     const pointerState = {
         lastSurfacePoints: new Map(), pointerTarget: null, focusTarget: null,
-        hoverTarget: null, pendingTextActivation: null, handlers: new Map()
+        hoverTarget: null, pendingTextActivation: null, handlers: new Map(), touchObservers: new Set()
     };
     let root = null;
     const render = () => {
@@ -969,19 +985,23 @@ test('the rail reserves the band the menu publishes, and re-renders when that ba
         runtime.enter({ atomeId: 'shape', kind: 'image', contextLevel: 'selection', record: records[0] });
         await runtime.render();
         const first = rendered.at(-1);
-        assert.equal(first.layout.bottom, 600 - ITEM_SIZE - first.layout.gap,
+        // The rail's last case is in the grid row right above the ribbon's (contextualRailColumn).
+        const { grid } = contextualRailColumn({ surface: { getBoundingClientRect: () => ({ width: 800, height: 600 }) },
+            width: 800, height: 600, itemSize: first.layout.itemSize });
+        assert.equal(first.layout.bottom, Math.floor(grid.bottom - grid.cell - grid.joint / 2),
             'the rail level stops at the band the menu reserves');
 
         // The band moves (an input box is laid out, the Atome slot stays visible):
-        // the menu publishes the new geometry and the rail re-reads it.
-        band = ITEM_SIZE * 2;
+        // the menu publishes the new geometry and the rail re-reads it. It now
+        // reserves a second row: the rail rises by one whole cell.
+        band = 2 * (first.layout.itemSize + first.layout.gap);
         globalThis.window.dispatchEvent(new globalThis.window.CustomEvent('eve:intuitionx-state-changed', {
             detail: { source: 'bevy_ui_main_menu', reservedHeight: band }
         }));
         await settle();
         const second = rendered.at(-1);
         assert.notEqual(second, first, 'the rail re-renders on the geometry the menu publishes');
-        assert.equal(second.layout.bottom, 600 - ITEM_SIZE * 2 - second.layout.gap,
+        assert.equal(second.layout.bottom, first.layout.bottom - grid.cell,
             'and reserves the band where it is now, never the one it remembered');
 
         globalThis.window.dispatchEvent(new globalThis.window.CustomEvent('eve:intuitionx-state-changed', {

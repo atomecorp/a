@@ -199,18 +199,27 @@ describe('Programme consumes the Matrix budget without a second writable time co
     });
     it('retains the current Matrix budget when the native panel prepares an older plan', async () => {
         const { createProgramPanelSurface } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_program_runtime.js');
-        const surface = createProgramPanelSurface({ call: async () => ({ ok: true, proposal: { involvement: {
-            minutes: 100, basis: 'week', days: [1, 2, 3], rhythm: 5 } } }) });
-        const state = surface.readState();
-        Object.assign(state, { projectId: 'p', data: { program: initialProgram('sleep'), budget: {
-            atome_id: 'budget', value: { minutes: 20, basis: 'day', days: [1] } }, events: [], observations: [], revisions: [] },
-            involvement: { minutes: 20, basis: 'day', days: [1], rhythm: 3 } });
-        const nodes = surface.buildContent(state, { emit: () => {}, refresh: () => {}, bodyWidth: 600 }).flatMap(walk);
-        expect(nodes.some(node => node.id === 'program_openBudget')).toBe(true);
-        expect(nodes.some(node => ['program_time', 'program_unit', 'program_days'].includes(node.id))).toBe(false);
-        expect(await surface.handleEvent({ type: 'program.days', value: '2' })).toMatchObject({ ok: false, error: 'program_budget_external_owner' });
-        await surface.handleEvent({ type: 'program.resume' });
-        expect(state.involvement).toEqual({ minutes: 20, basis: 'day', days: [1], rhythm: 3 });
+        // readState is a snapshot: the panel reads the Matrix budget itself (onOpen → project.program.read → hydrate).
+        const dom = new JSDOM('<body></body>', { url: 'http://localhost' });
+        vi.stubGlobal('window', dom.window); vi.stubGlobal('document', dom.window.document);
+        const data = { ok: true, program: { ...initialProgram('sleep'), involvement: { minutes: 10, basis: 'day', days: [], rhythm: 3 } }, budget: {
+            atome_id: 'budget', value: { minutes: 20, basis: 'day', days: [1] } }, events: [], observations: [], revisions: [] };
+        const surface = createProgramPanelSurface({ readProjects: async () => [], call: async payload => (payload.tool_id === 'project.program.read'
+            ? structuredClone(data) : { ok: true, proposal: { involvement: { minutes: 100, basis: 'week', days: [1, 2, 3], rhythm: 5 } } }) });
+        const release = surface.onOpen({ context: { project_id: 'p' }, refresh: vi.fn() });
+        try {
+            await vi.waitFor(() => expect(surface.readState().involvement).toEqual({ minutes: 20, basis: 'day', days: [1], rhythm: 3 }));
+            const emit = vi.fn(), nodes = surface.buildContent(surface.readState(), { emit, refresh: () => {}, bodyWidth: 600 }).flatMap(walk);
+            expect(nodes.some(node => node.id === 'program_budget_owner')).toBe(true);
+            expect(nodes.some(node => ['program_time', 'program_unit', 'program_days'].includes(node.id))).toBe(false);
+            // The Matrix budget's own editor is the band's Budget tool (behind More), never a second writable control.
+            await surface.handleEvent({ type: 'program.more' });
+            surface.buildBandTools(surface.readState(), { emit, refresh: () => {} }).find(tool => tool.key === 'program_budget').onSelect();
+            expect(emit).toHaveBeenCalledWith({ type: 'program.openBudget' });
+            expect(await surface.handleEvent({ type: 'program.days', value: '2' })).toMatchObject({ ok: false, error: 'program_budget_external_owner' });
+            await surface.handleEvent({ type: 'program.resume' });
+            expect(surface.readState().involvement).toEqual({ minutes: 20, basis: 'day', days: [1], rhythm: 3 });
+        } finally { release(); dom.window.close(); }
         surface.onClose();
     });
     it('permits canonical Natural navigation in Consultation while preserving scene-edit refusals', async () => {

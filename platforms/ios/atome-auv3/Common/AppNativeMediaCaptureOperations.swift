@@ -98,11 +98,7 @@ extension AppNativeMediaCaptureController: AVCapturePhotoCaptureDelegate {
                 return
             }
             let position = self.resolveCameraPosition(from: payload)
-            let started: [String: Any] = [
-                "success": true,
-                "source_id": Self.cameraPreviewSourceId,
-                "preview_command": "media_camera_preview_frame"
-            ]
+            let started: [String: Any] = ["success": true]
             if self.cameraPreviewActive, self.activeCameraPosition == position, self.photoSession?.isRunning == true {
                 self.complete(completion, payload: started.merging(["camera_position": self.cameraPositionName(position)]) { $1 })
                 return
@@ -137,12 +133,6 @@ extension AppNativeMediaCaptureController: AVCapturePhotoCaptureDelegate {
                 self.cameraPreviewState.stop()
                 self.complete(completion, payload: ["success": false], error: error.localizedDescription)
             }
-        }
-    }
-
-    func readCameraPreviewFrame(completion: @escaping ([String: Any], String?) -> Void) {
-        sessionQueue.async {
-            self.complete(completion, payload: self.cameraPreviewState.framePayload(sourceId: Self.cameraPreviewSourceId))
         }
     }
 
@@ -205,10 +195,6 @@ extension AppNativeMediaCaptureController: AVCapturePhotoCaptureDelegate {
         videoRecorder.readState(completion: completion)
     }
 
-    func readVideoPreviewFrame(completion: @escaping ([String: Any], String?) -> Void) {
-        videoRecorder.readPreviewFrame(completion: completion)
-    }
-
     func cancelVideoRecording(payload: [String: Any],
                               completion: @escaping ([String: Any], String?) -> Void) {
         let projectAtomeId = resolveString(payload, ["projectAtomeId", "project_atome_id"])
@@ -252,6 +238,8 @@ extension AppNativeMediaCaptureController: AVCapturePhotoCaptureDelegate {
             }
             do {
                 try data.write(to: url, options: [.atomic])
+                do { try FileSyncCoordinator.shared.publishNow(url, relativePath: self.photoRelativePath ?? "") }
+                catch { NSLog("[AppNativeMediaCapture] photo_publish_failed file=%@ error=%@", url.lastPathComponent, error.localizedDescription) }
                 FileSyncCoordinator.shared.syncAll(force: true)
                 let dimensions = photo.resolvedSettings.photoDimensions
                 self.complete(completion, payload: [

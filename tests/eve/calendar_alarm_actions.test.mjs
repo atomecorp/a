@@ -1,12 +1,16 @@
 import { test, expect, vi, afterEach, beforeAll } from 'vitest';
 vi.mock('../../atome/src/squirrel/apis/unified/adole_api/session.js', () => ({ getSessionState: () => ({ mode: 'authenticated', user: { id: 'owner' } }) }));
 vi.mock('../../atome/src/squirrel/atome/mcp.js', () => ({ handleAtomeMCPRequestAsync: vi.fn(async () => ({ result: { ok: true } })) }));
-const notices = vi.hoisted(() => ({ add: vi.fn(), invoke: vi.fn() }));
+const notices = vi.hoisted(() => ({ add: vi.fn(), invoke: vi.fn(), online: vi.fn(async () => true) }));
+// The server's reach decides whether a reminder is sent now or waits for `restore` (calendar_alarm_delivery.js#publish).
+vi.mock('../../atome/src/squirrel/apis/unified/adole_connection.js', () => ({ checkConnection: notices.online }));
 vi.mock('../../eVe/intuition/tools/communication.js', () => ({ addNotification: notices.add }));
 vi.mock('../../eVe/intuition/runtime/tool_gateway.js', () => ({ invokeToolGateway: notices.invoke }));
+// A new event takes the active life profiles (calendar_api.js#createEvent); none is active here.
+vi.mock('../../eVe/domains/life_profiles/life_profile_runtime.js', () => ({ getLifeProfileRuntime: () => ({ stampFor: async () => [] }) }));
 import { CalendarAPI } from '../../eVe/intuition/tools/calendar_api.js';
 import { eventCache, alarmTimers } from '../../eVe/intuition/tools/calendar_engine_state.js';
-import { resolveActorProfile } from '../../atome/src/squirrel/atome/mcp_security.js';
+import { resolveTransportActor } from '../../atome/src/squirrel/atome/mcp_transport.js';
 import { handleAtomeMCPRequestAsync } from '../../atome/src/squirrel/atome/mcp.js';
 import { createCalendarAlarmDelivery, readPendingCalendarNotifications } from '../../eVe/intuition/tools/calendar_alarm_delivery.js';
 import { readFileSync } from 'node:fs';
@@ -33,8 +37,10 @@ const install = () => {
     } };
 };
 test('approved timeline defaults preserve explicitly restricted actors', () => {
-    expect(resolveActorProfile().capabilities).toEqual(expect.arrayContaining(['timeline.read', 'timeline.write']));
-    expect(resolveActorProfile({ actor: { capabilities: ['calendar.read'] } }).capabilities).toEqual(['calendar.read']);
+    // The actor's capabilities follow its transport now (mcp_transport.js#resolveTransportActor replaced resolveActorProfile).
+    const ui = { source: { type: 'ui', layer: 'calendar' } };
+    expect(resolveTransportActor(ui).capabilities).toEqual(expect.arrayContaining(['timeline.read', 'timeline.write']));
+    expect(resolveTransportActor({ ...ui, actor: { capabilities: ['calendar.read'] } }).capabilities).toEqual(['calendar.read']);
 });
 test('agenda countdown persists before a single MCP dispatch and cancellation retains event', async () => {
     install();
@@ -44,7 +50,9 @@ test('agenda countdown persists before a single MCP dispatch and cancellation re
     expect((await CalendarAPI.readAlarms({ eventId: alarm.eventId })).items[0].remaining_ms).toBe(2000);
     await vi.advanceTimersByTimeAsync(2000);
     expect(handleAtomeMCPRequestAsync).toHaveBeenCalledTimes(1);
-    expect(handleAtomeMCPRequestAsync.mock.calls[0][0].params).toMatchObject({ actor: { user_id: 'owner' }, tool_id: 'ui.project.transport' });
+    // The actor rides on the transport (second argument), no longer in the request's params.
+    expect(handleAtomeMCPRequestAsync.mock.calls[0][0].params).toMatchObject({ tool_id: 'ui.project.transport' });
+    expect(handleAtomeMCPRequestAsync.mock.calls[0][1]).toMatchObject({ source: { type: 'system' }, actor: { user_id: 'owner' } });
     const event = eventCache.get(alarm.eventId);
     expect(event.alarms[0].firedAt).toBeTruthy();
     CalendarAPI.scheduleAlarmsForEvent(event);
@@ -64,14 +72,15 @@ test('cancelled and distant alarms never fire early', async () => {
 });
 
 test('a calendar reminder projects from its persisted alarm while offline and retries through the same stack command', async () => {
-    install(); notices.invoke.mockResolvedValue({ ok: false, error: 'offline' });
+    install(); notices.online.mockResolvedValue(false);
     const scheduled = await CalendarAPI.setAlarm({ title: 'Meeting', delay_ms: 1000 });
     expect(scheduled.ok).toBe(true);
     await vi.advanceTimersByTimeAsync(1000);
     expect(notices.add).toHaveBeenCalledWith(expect.objectContaining({ kind: 'calendar', persisted: true }));
     const pending = readPendingCalendarNotifications();
     expect(pending).toHaveLength(1); expect(pending[0]).toMatchObject({ action: { toolId: 'ui.panel.open', input: { eventId: scheduled.eventId, mode: 'open' } } });
-    notices.invoke.mockResolvedValue({ ok: true, result: { ok: true } });
+    expect(notices.invoke).not.toHaveBeenCalled();
+    notices.online.mockResolvedValue(true); notices.invoke.mockResolvedValue({ ok: true, result: { ok: true } });
     const delivery = createCalendarAlarmDelivery({ emitChange() {}, updateEvent: CalendarAPI.updateEvent });
     delivery.restore(eventCache.get(scheduled.eventId));
     await vi.waitFor(() => expect(readPendingCalendarNotifications()).toEqual([]));

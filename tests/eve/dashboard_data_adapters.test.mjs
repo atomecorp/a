@@ -2,12 +2,24 @@ import assert from 'node:assert/strict';
 import { test, beforeEach, vi } from 'vitest';
 
 const favorites = vi.hoisted(() => ({ ids: null }));
-vi.mock('../../eVe/intuition/tools/contact_favorites_preference.js', () => ({
-    isContactFavorite: id => favorites.ids === null || favorites.ids.has(id)
+vi.mock('../../eVe/intuition/tools/contact_favorites_preference.js', async (original) => ({
+    ...(await original()),
+    isContactFavorite: id => favorites.ids === null || favorites.ids.has(id?.id ?? id)
 }));
-beforeEach(() => { favorites.ids = null; });
+// The life profiles the Agenda filters by (life_profile_runtime.js): none set, every appointment shows.
+vi.mock('../../eVe/domains/life_profiles/life_profile_runtime.js', async (original) => ({
+    ...(await original()),
+    getLifeProfileRuntime: () => ({ ensure: async () => {}, visible: () => true })
+}));
+// The contacts row waits for the profile's published preferences (dashboard_contact_items.js#waitForPublishedFavorites).
+beforeEach(() => {
+    favorites.ids = null;
+    globalThis.window ||= {};
+    globalThis.window.__eveProfilePreferences ||= {};
+});
 
 import { createDashboardDataAdapters } from '../../eVe/domains/dashboard/dashboard_data_adapters.js';
+import { listContactItems } from '../../eVe/domains/dashboard/dashboard_contact_items.js';
 import {
     dashboardItemTextFields,
     formatDashboardCalendarDisplayDate
@@ -16,39 +28,46 @@ import { DASHBOARD_WORKSPACE_PROJECT_ID } from '../../eVe/domains/dashboard/dash
 
 test('dashboard Calendar cards keep canonical title, start, and project scope together', async () => {
     const start = new Date(2026, 7, 11, 14, 30);
-    let requestedProjectId = '';
-    const adapters = createDashboardDataAdapters({
-        calendarApiLoader: async () => ({
-            next: async ({ projectId } = {}) => {
-                requestedProjectId = projectId;
-                return {
-                    ok: true,
-                    items: [{
-                        id: 'calendar_exact',
-                        title: 'QA Calendar 11 août',
-                        name: 'Stale fallback',
-                        start,
-                        createdAt: new Date(2026, 6, 1)
-                    }]
-                };
-            }
-        })
-    });
+    // The Agenda shows only appointments not yet over (isDashboardAppointment): read it the morning of the 11th.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 7, 11, 9, 0));
+    try {
+        let requestedProjectId = '';
+        const adapters = createDashboardDataAdapters({
+            calendarApiLoader: async () => ({
+                next: async ({ projectId } = {}) => {
+                    requestedProjectId = projectId;
+                    return {
+                        ok: true,
+                        items: [{
+                            id: 'calendar_exact',
+                            title: 'QA Calendar 11 août',
+                            name: 'Stale fallback',
+                            start,
+                            createdAt: new Date(2026, 6, 1)
+                        }]
+                    };
+                }
+            })
+        });
 
-    const [item] = await adapters.list(
-        { id: 'calendar', data_source: 'calendar' },
-        { projectId: 'calendar_project_exact' }
-    );
-    const fields = dashboardItemTextFields(item, { id: 'calendar' }, { x: 0, y: 0, width: 160, height: 120 });
+        const [item] = await adapters.list(
+            { id: 'calendar', data_source: 'calendar' },
+            { projectId: 'calendar_project_exact' }
+        );
+        const fields = dashboardItemTextFields(item, { id: 'calendar' }, { x: 0, y: 0, width: 160, height: 120 });
 
-    assert.equal(requestedProjectId, 'calendar_project_exact');
-    assert.equal(item.id, 'calendar_exact');
-    assert.equal(item.title, 'QA Calendar 11 août');
-    assert.equal(item.start, start);
-    assert.equal(item.payload.title, item.title);
-    assert.equal(item.payload.start, item.start);
-    assert.equal(fields[0].value, item.title);
-    assert.equal(fields[1].display_value, formatDashboardCalendarDisplayDate(start));
+        assert.equal(requestedProjectId, 'calendar_project_exact');
+        assert.equal(item.id, 'calendar_exact');
+        assert.equal(item.title, 'QA Calendar 11 août');
+        assert.equal(item.start, start);
+        assert.equal(item.payload.title, item.title);
+        assert.equal(item.payload.start, item.start);
+        assert.equal(fields[0].value, item.title);
+        assert.equal(fields[1].display_value, formatDashboardCalendarDisplayDate(start));
+    } finally {
+        vi.useRealTimers();
+    }
 });
 
 test('dashboard Calendar reads reject the renderer workspace and use the canonical project', async () => {
@@ -368,23 +387,28 @@ test('dashboard contact items ignore whitespace-only display names and use stabl
     assert.equal(items[0].title, 'ada@example.test');
 });
 
+// The population is keyed by identity only; the row then shows one tile per person, a person
+// being the cards that share a phone number (dashboard_contact_items.js `favoriteContactItems`).
 test('dashboard contact identity never merges or creates cards from phone and email display data', async () => {
-    const adapters = createDashboardDataAdapters({
-        peopleDirectoryLoader: async () => [
-            { id: 'contact_a', name: 'Ada', phone: '0600000000', email: 'shared@example.test' },
-            { id: 'contact_b', name: 'Grace', phone: '0600000000', email: 'shared@example.test' },
-            { name: 'Unidentified', phone: '0600000000', email: 'shared@example.test' }
-        ],
-        contactsApiLoader: async () => ({
-            ensureReady: async () => ({ ok: true }),
-            list: async () => ({ items: [] })
-        }),
-        currentUserLoader: async () => null
+    const people = [
+        { id: 'contact_a', name: 'Ada', phone: '0600000000', email: 'shared@example.test' },
+        { id: 'contact_b', name: 'Grace', phone: '0600000000', email: 'shared@example.test' },
+        { name: 'Unidentified', phone: '0600000000', email: 'shared@example.test' }
+    ];
+    const contactsApiLoader = async () => ({
+        ensureReady: async () => ({ ok: true }),
+        list: async () => ({ items: [] })
     });
+    const listFor = (directory) => createDashboardDataAdapters({
+        peopleDirectoryLoader: async () => directory, contactsApiLoader, currentUserLoader: async () => null
+    }).list({ id: 'contacts', data_source: 'contacts' });
 
-    const items = await adapters.list({ id: 'contacts', data_source: 'contacts' });
-
-    assert.deepEqual(items.map((item) => item.id), ['contact_a', 'contact_b']);
+    const { items: population } = await listContactItems(contactsApiLoader, async () => people, async () => null);
+    assert.deepEqual(population.map((item) => item.id), ['contact_a', 'contact_b']);
+    assert.deepEqual((await listFor(people)).map((item) => item.id), ['contact_a']);
+    // A shared email is display data: it never makes two people one.
+    assert.deepEqual((await listFor([{ ...people[0] }, { ...people[1], phone: '0611111111' }, people[2]]))
+        .map((item) => item.id), ['contact_a', 'contact_b']);
 });
 
 test('dashboard contact items exclude the current user and preserve alphabetical order', async () => {
@@ -429,7 +453,8 @@ test('dashboard self exclusion follows canonical identities across refresh and a
     assert.deepEqual((await list()).map(item => item.id), ['user_b', 'shared_contact']);
     assert.deepEqual((await list()).map(item => item.id), ['user_b', 'shared_contact']);
     current = { id: 'user_b', email: 'shared@example.test', phone: '0600000000' };
-    assert.deepEqual((await list()).map(item => item.id), ['user_a', 'local_link', 'shared_contact']);
+    // Visible again, Ada and the shared contact carry the same number: the row shows them as one person.
+    assert.deepEqual((await list()).map(item => item.id), ['user_a', 'local_link']);
 });
 
 test('anonymous Dashboard treats unavailable authenticated contacts as an empty row', async () => {

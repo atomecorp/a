@@ -19,7 +19,7 @@ afterEach(() => { for (const root of fixtures.splice(0)) fs.rmSync(root, { recur
 async function candidate(root, build = '24', content = 'signed-ipa-fixture') {
     const id = randomUUID(); const { ipa } = stage(id, root); fs.writeFileSync(ipa, content);
     return { id, version: '1.25', build, team: '2W25PVZ57F', signature: 'verified', sha256: await hashFile(ipa), size: fs.statSync(ipa).size,
-        products: ['one.atome.app', 'one.atome.app.atome'].map(bundle => ({ bundle, expires: '2030-01-01T00:00:00Z', deviceCount: 9 })) };
+        products: ['one.atome.app', 'one.atome.app.atome', 'one.atome.app.liveactivity'].map(bundle => ({ bundle, expires: '2030-01-01T00:00:00Z', deviceCount: 9 })) };
 }
 describe('OTA immutable publication lifecycle', () => {
     it('rejects an interrupted upload without altering the last valid build', async () => {

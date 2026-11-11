@@ -10,7 +10,7 @@ import {
 import { commRuntime, commSurface } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_comm_runtime.js';
 import { createCommCompose } from '../../eVe/intuition/tools/communication_compose.js';
 import { resolveCommSendDraft } from '../../eVe/intuition/tools/communication_events.js';
-import { createCommunicationNewsPublication } from '../../eVe/intuition/tools/communication_news_publication.js';
+import { createNewsPublishApi } from '../../eVe/domains/news/news_publish_api.js';
 import { buildMainMenuNotificationNodes } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_notification.js';
 import { dispatchAttachmentDrop } from '../../eVe/domains/rendering/surface_interaction_runtime.js';
 
@@ -126,38 +126,39 @@ describe('Communication attachments', () => {
 });
 
 describe('Communication News publication', () => {
-    it('creates one canonical News record and shares it without notifying the author', async () => {
-        const createAtome = vi.fn(async (spec) => ({ ok: true, id: spec.id, canonicalState: spec }));
+    // One publication chain (news_publish_api.js): the author's project, tagged `news`, is the durable object;
+    // the server broadcasts its envelope (`news/publish`), never a client loop notifying each recipient.
+    it('publishes one canonical News envelope through the server, never sharing it to the author', async () => {
+        const records = [
+            { id: 'project_a', properties: { name: 'Projet A', news_id: 'news_1' } },
+            { id: 'contribution_a', properties: { news_contribution: true, author_id: 'user_a', news_post_id: 'news_publication_1' } }
+        ];
+        const runtime = {
+            readProjectRecords: vi.fn(async () => records),
+            markProjectAsNews: vi.fn(async () => ({ ok: true, created: false, news_id: 'news_1' })),
+            ensureContributionMolecule: vi.fn(async () => ({ ok: true }))
+        };
+        const publish = vi.fn(async () => ({ ok: true }));
         const share = vi.fn(async () => ({ ok: true }));
-        const invalidate = vi.fn(async () => {});
-        const result = await createCommunicationNewsPublication({
-            author: { id: 'user_a', name: 'Alice' },
-            message: 'Hello',
-            recipients: [{ id: 'user_a' }, { id: 'user_b' }],
-            projectId: 'project_a',
-            createAtome,
-            share,
-            invalidate,
-            now: () => '2026-09-01T12:00:00.000Z',
-            idFactory: () => 'news_publication_1'
-        });
+        const news = createNewsPublishApi({ getApi: () => ({ news: { publish }, share }), loadThreadRuntime: async () => runtime,
+            resolveAuthor: async () => ({ id: 'user_a', name: 'Alice' }), target: null });
 
-        expect(result).toMatchObject({ ok: true, id: 'news_publication_1' });
-        expect(createAtome).toHaveBeenCalledWith(expect.objectContaining({
-            id: 'news_publication_1',
-            type: 'record',
-            project_id: 'project_a',
-            properties: expect.objectContaining({
-                source_domain: 'eve.dashboard', category_id: 'news', author_id: 'user_a', preview: 'Hello'
+        const result = await news.publish({ projectId: 'project_a', message: 'Hello' });
+
+        expect(result).toMatchObject({ ok: true, publication: { id: 'news_publication_1', type: 'news_publication' } });
+        expect(runtime.ensureContributionMolecule).not.toHaveBeenCalled();
+        expect(publish).toHaveBeenCalledTimes(1);
+        expect(publish).toHaveBeenCalledWith(expect.objectContaining({
+            audience: 'all',
+            publication: expect.objectContaining({
+                id: 'news_publication_1',
+                properties: expect.objectContaining({
+                    source_domain: 'eve.dashboard', category_id: 'news', news_id: 'news_1', news_source_project_id: 'project_a',
+                    author_id: 'user_a', author_name: 'Alice', preview: 'Hello'
+                })
             })
-        }), { render: false });
-        expect(share).toHaveBeenCalledTimes(1);
-        expect(share).toHaveBeenCalledWith(
-            expect.objectContaining({ id: 'user_b' }),
-            'news_publication_1',
-            expect.objectContaining({ id: 'news_publication_1', type: 'record' })
-        );
-        expect(invalidate).toHaveBeenCalledWith(['news']);
+        }));
+        expect(share).not.toHaveBeenCalled();
     });
 });
 

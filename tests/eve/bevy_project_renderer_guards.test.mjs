@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { JSDOM } from 'jsdom';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import {
     assertExternalRendererHostAllowed,
     assertExternalRendererTargetAllowed
@@ -194,10 +194,12 @@ test('Bevy project renderer guards lock canvas ownership, drag, and video playba
     const playHandlerStart = mediaReaderRuntime.indexOf("tool_id: 'ui.play'");
     assert.notEqual(playHandlerStart, -1);
     const playHandler = mediaReaderRuntime.slice(playHandlerStart);
-    assert.match(playHandler, /const mediaResult = await runMediaReaderAction\('toggle'/);
+    // The requested transport action defaults to 'toggle' and reaches the media reader first.
+    assert.match(playHandler, /const requestedAction = normalizeTransportAction\(action \|\| input\?\.action, 'toggle'\)/);
+    assert.match(playHandler, /const mediaResult = await runMediaReaderAction\(requestedAction/);
     assert.match(playHandler, /const animationResult = mediaResult\?\.handled === true/);
     assert.ok(
-        playHandler.indexOf("const mediaResult = await runMediaReaderAction('toggle'")
+        playHandler.indexOf('const mediaResult = await runMediaReaderAction(requestedAction')
         < playHandler.indexOf('const animationResult = mediaResult?.handled === true'),
         'ui.play must let the media reader own video transport before any animation fallback'
     );
@@ -217,6 +219,8 @@ test('Bevy project renderer guards lock canvas ownership, drag, and video playba
     // The MTrax domain (and its timeline playback driver) was deleted. The project
     // transport now drives Bevy video decode from the eVeIntuition media reader
     // and the shared project-view item model used by every structured queue.
+    // The media controls and cue seek a paused video's frame, the record preview
+    // drives its own take and the Visual program drives its object playback.
     // Guard that no other stray caller appears outside those canonical
     // transport owners and the defining runtime.
     const setBevyCallers = jsFilesUnder('eVe')
@@ -224,8 +228,12 @@ test('Bevy project renderer guards lock canvas ownership, drag, and video playba
         .map((file) => file.slice(repoRoot.length + 1).replaceAll('\\', '/'))
         .filter((file) => file !== 'eVe/domains/rendering/bevy_video_decode_source_runtime.js');
     assert.deepEqual(setBevyCallers, [
+        'eVe/domains/media/project_media_controls.js',
+        'eVe/domains/media/project_media_cue.js',
+        'eVe/domains/media/record_preview_playback.js',
         'eVe/domains/rendering/project_view_playback_item_model.js',
         'eVe/domains/rendering/project_view_transport_runtime.js',
+        'eVe/domains/rendering/project_view_visual_program.js',
         'eVe/intuition/runtime/eve_intuition/media_reader_tool_runtime.js'
     ]);
 
@@ -305,10 +313,11 @@ test('Bevy project renderer guards lock canvas ownership, drag, and video playba
     assert.doesNotMatch(rustExternalTexture, /copy_external_image_to_texture/);
     assert.doesNotMatch(rustExternalWeb, /copy_external_image_to_texture/);
 
-    const webRendererCargo = readSource('platforms/web/bevy-renderer/Cargo.toml');
+    const workspaceCargo = readSource('Cargo.toml');
     const coreCargo = readSource('atome/renderers/bevy-core/Cargo.toml');
     const webRendererExports = readSource('platforms/web/bevy-renderer/src/exports.rs');
-    const webRendererLock = readSource('platforms/web/bevy-renderer/Cargo.lock');
+    // One Cargo workspace at the root: its lock pins the web renderer's wgpu.
+    const webRendererLock = readSource('Cargo.lock');
     const webRendererLib = readSource('platforms/web/bevy-renderer/src/lib.rs');
     const videoDiagnostics = readSource('atome/renderers/bevy-core/src/video_diagnostics.rs');
     const maintainedWgpuBackend = readSource('atome/renderers/wgpu-web-external-texture/wgpu-29.0.4/src/backend/webgpu.rs');
@@ -317,10 +326,10 @@ test('Bevy project renderer guards lock canvas ownership, drag, and video playba
     const generatedBevyTypes = readSource('atome/src/wasm/squirrel_bevy_renderer.d.ts');
     const generatedBevyWasmTypes = readSource('atome/src/wasm/squirrel_bevy_renderer_bg.wasm.d.ts');
     const bevyTypes = readSource('atome/renderers/bevy-core/src/types.rs');
-    assert.match(webRendererCargo, /wgpu-web-external-texture\/wgpu-29\.0\.4/);
-    assert.match(webRendererCargo, /wgpu-web-external-texture\/wgpu-types-29\.0\.4/);
-    assert.match(coreCargo, /wgpu-web-external-texture\/wgpu-29\.0\.4/);
-    assert.match(coreCargo, /wgpu-web-external-texture\/wgpu-types-29\.0\.4/);
+    // The external-texture fork is patched once for the whole workspace; the core takes the workspace wgpu.
+    assert.match(workspaceCargo, /\[patch\.crates-io\][\s\S]*wgpu = \{ path = "atome\/renderers\/wgpu-web-external-texture\/wgpu-29\.0\.4" \}/);
+    assert.match(workspaceCargo, /\[patch\.crates-io\][\s\S]*wgpu-types = \{ path = "atome\/renderers\/wgpu-web-external-texture\/wgpu-types-29\.0\.4" \}/);
+    assert.match(coreCargo, /wgpu = \{ workspace = true, features = \["webgpu"\] \}/);
     assert.match(webRendererLock, /name = "wgpu"\nversion = "29\.0\.4"/);
     assert.match(maintainedWgpuBackend, /import_external_texture\(&mapped_desc\)/);
     assert.match(maintainedWgpuBackend, /BindingResource::ExternalTexture\(external_texture\)/);
@@ -396,7 +405,7 @@ test('external renderers are forbidden from targeting the Bevy project canvas or
     }));
 });
 
-test('Bevy perf diagnostics keep high-frequency video events opt-in', () => {
+test('Bevy perf diagnostics keep high-frequency video events opt-in', async () => {
     const dom = new JSDOM('<!doctype html><html><body></body></html>');
     globalThis.window = dom.window;
     globalThis.document = dom.window.document;
@@ -451,11 +460,14 @@ test('Bevy perf diagnostics keep high-frequency video events opt-in', () => {
     globalThis.window = optInDom.window;
     globalThis.document = optInDom.window.document;
     delete optInDom.window.__EVE_BEVY_PERF__;
-    const optInDiagnostics = ensureBevyPerfDiagnostics();
+    // The URL opt-in is read once per session: a fresh module reads the new location.
+    vi.resetModules();
+    const freshDiagnostics = await import('../../eVe/domains/rendering/bevy_perf_diagnostics_runtime.js');
+    const optInDiagnostics = freshDiagnostics.ensureBevyPerfDiagnostics();
     assert.equal(optInDiagnostics.summary().enabled, true);
 });
 
-test('transform-only Bevy diffs request one redraw without delayed redraw primes', async () => {
+test('transform-only Bevy diffs queue one self-waking batch without redraw requests or delayed primes', async () => {
     const dom = new JSDOM('<!doctype html><html><body><canvas id="eve_surface_project"></canvas></body></html>');
     globalThis.window = dom.window;
     globalThis.document = dom.window.document;
@@ -531,7 +543,9 @@ test('transform-only Bevy diffs request one redraw without delayed redraw primes
     const ops = calls.filter((call) => call.type === 'ops').flatMap((call) => call.ops);
     assert.equal(ops.filter((op) => op.type === 'transform').length, 1);
     assert.equal(ops.filter((op) => op.type === 'text').length, 0);
-    assert.equal(calls.filter((call) => call.type === 'redraw').length, 1);
+    // The queued transform batch wakes its own frame (frame_clock.rs): no second, idle redraw request.
+    assert.equal(calls.filter((call) => call.type === 'ops').length, 1);
+    assert.equal(calls.filter((call) => call.type === 'redraw').length, 0);
 });
 
 test('text transform diffs rasterize texture only when text bounds change', async () => {
@@ -699,7 +713,9 @@ test('Bevy style diffs forward opacity to the WASM style export', async () => {
         selected: undefined,
         opacity: 0.38
     });
-    assert.equal(calls.filter((call) => call.type === 'redraw').length + delayedRedraws, 1);
+    // The queued style batch wakes its own frame (frame_clock.rs): no host redraw, immediate or delayed.
+    assert.equal(calls.filter((call) => call.type === 'ops').length, 1);
+    assert.equal(calls.filter((call) => call.type === 'redraw').length + delayedRedraws, 0);
 });
 
 test('live project video without poster cannot enter the RGBA media resolver path', async () => {

@@ -2,6 +2,7 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import { buildBevyPanelTree } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tree.js';
 import { layoutForNode, nodeBox } from '../../eVe/domains/rendering/bevy_ui_layout_runtime.js';
 import { BEVY_PANEL_TOKENS } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
+import { panelBandToolNodeId } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_band.js';
 import { healthMonitorsForHost } from '../../atome/src/squirrel/health/health_catalog.js';
 import { createHealthOwner } from '../../atome/src/squirrel/health/health_owner.js';
 import { createHealthChannel } from '../../atome/src/squirrel/health/health_channel.js';
@@ -11,7 +12,7 @@ vi.mock('../../eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js', () => ({
     registerBevyPanelSurface: (definition) => { panels.definition = definition; },
     openBevyPanelSurface: async (key, context = {}) => {
         await panels.definition.onOpen({ context, refresh: () => {} });
-        panels.firstActions = panels.definition.buildFixedContent(panels.definition.readState(), { emit: () => {}, bodyWidth: 360 });
+        panels.firstActions = panels.definition.buildBandTools(panels.definition.readState(), { emit: () => {} });
         return { ok: true };
     },
     closeBevyPanelSurface: async () => { panels.definition.onClose(); return { ok: true }; }
@@ -245,30 +246,30 @@ test.each([{ selected: [] }, { selected: ['steps'] }])('a failed automatic assoc
         const bodyWidth = width - BEVY_PANEL_TOKENS.paddingPx * 2;
         const snapshot = modules.readState();
         const bodyChildren = panels.definition.buildContent(snapshot, { emit, bodyWidth });
-        const fixedChildren = panels.definition.buildFixedContent(snapshot, { emit, bodyWidth });
+        const bandItems = panels.definition.buildBandTools(snapshot, { emit });
         const tree = buildBevyPanelTree({ id: 'health_fixture', geometry: { x: 0, y: 0, width, height: 600 },
-            surfaceSize: { width, height: 844 }, bodyChildren, fixedChildren });
+            surfaceSize: { width, height: 844 }, bodyChildren, bandItems });
         const boxes = boxesOf(tree.root);
-        const action = boxes.get('health_link');
+        const action = boxes.get(panelBandToolNodeId('health_fixture', 'health_link'));
         expect(action, 'association action must exist before checking any measure').toBeDefined();
         expect(action.box.x + action.box.width, 'association must fit inside the visible panel').toBeLessThanOrEqual(width);
-        expect(action.box.y + action.box.height).toBeLessThanOrEqual(boxes.get('health_fixture_footer').box.y);
+        expect(action.box.y + action.box.height, 'association stays in the panel\'s band').toBeLessThanOrEqual(600);
         expect(boxes.has('health_hint')).toBe(false);
         expect(boxes.has('health_link_prompt')).toBe(false);
     }
-    const fixed = panels.definition.buildFixedContent(modules.readState(), { emit, bodyWidth: 360 });
-    await fixed[0].on.activate(); await settle();
+    const fixed = panels.definition.buildBandTools(modules.readState(), { emit });
+    await fixed[0].onSelect(); await settle();
     expect(owner.link).toHaveBeenCalledTimes(2);
     expect(owner.requestAccess.mock.calls[0][0]).toHaveLength(32);
     expect(modules.state.selected).toEqual(selected);
-    expect(panels.definition.buildFixedContent(modules.readState(), { emit, bodyWidth: 360 })).toEqual([]);
+    expect(panels.definition.buildBandTools(modules.readState(), { emit })).toEqual([]);
     modules.stop();
 });
 
 test('linked iOS asks the unanswered catalog on opening, leaving no Associate to press', async () => {
     const { modules, owner } = setup();
     await modules.activate(); await settle();
-    const fixed = panels.definition.buildFixedContent(modules.readState(), { emit: intent => modules.handleEvent(intent), bodyWidth: 360 });
+    const fixed = panels.definition.buildBandTools(modules.readState(), { emit: intent => modules.handleEvent(intent) });
     expect(fixed).toEqual([]);
     expect(owner.link).not.toHaveBeenCalled();
     expect(owner.requestAccess).toHaveBeenCalledTimes(1);
@@ -279,7 +280,7 @@ test('linked iOS asks the unanswered catalog on opening, leaving no Associate to
 test('first mounted panel already includes Associate when native status resolves during opening', async () => {
     const { modules } = setup({ linked: false, selected: ['steps'] });
     await modules.activate();
-    expect(panels.firstActions.some(node => node.id === 'health_link')).toBe(true);
+    expect(panels.firstActions.some(item => item.key === 'health_link')).toBe(true);
     modules.stop();
 });
 
@@ -287,29 +288,30 @@ test('association stays behind authenticated-account and sealed-channel checks',
     const { modules, owner } = setup({ linked: false });
     owner.linkStatus.mockResolvedValue({ linked: false, reason: 'health_account_required' });
     await modules.activate();
-    let fixed = panels.definition.buildFixedContent(modules.readState(), { emit: () => {}, bodyWidth: 360 });
+    let fixed = panels.definition.buildBandTools(modules.readState(), { emit: () => {} });
     expect(fixed).toEqual([]);
     expect(owner.requestAccess).not.toHaveBeenCalled();
     owner.describe = () => ({ host: 'ios', supported: false, reason: 'health_access_sealed' });
-    fixed = panels.definition.buildFixedContent(modules.readState(), { emit: () => {}, bodyWidth: 360 });
+    fixed = panels.definition.buildBandTools(modules.readState(), { emit: () => {} });
     expect(fixed).toEqual([]);
     modules.stop();
 });
 
-test('Android mixed request/settings actions remain fully inside the fixed footer', async () => {
+test('Android mixed request/settings actions remain fully inside the panel\'s band', async () => {
     const { modules, owner, monitors } = setup({ host: 'android', selected: ['steps', 'weight'] });
     monitors.weight.access = 'denied';
     // The sheet shown on opening was dismissed: steps is still askable.
     owner.requestAccess.mockImplementation(async () => ({ ok: true, completed: true }));
     await modules.activate();
-    const fixedChildren = panels.definition.buildFixedContent(modules.readState(), { emit: () => {}, bodyWidth: 300 });
+    const bandItems = panels.definition.buildBandTools(modules.readState(), { emit: () => {} });
     const tree = buildBevyPanelTree({ id: 'android_fixture', geometry: { x: 0, y: 0, width: 320, height: 600 },
-        surfaceSize: { width: 320, height: 844 }, fixedChildren });
+        surfaceSize: { width: 320, height: 844 }, bandItems });
     const boxes = boxesOf(tree.root);
-    expect(boxes.get('health_allow')).toBeDefined();
-    expect(boxes.get('health_settings')).toBeDefined();
-    for (const id of ['health_allow', 'health_settings']) {
-        const { box } = boxes.get(id);
+    const tool = key => boxes.get(panelBandToolNodeId('android_fixture', key));
+    expect(tool('health_allow')).toBeDefined();
+    expect(tool('health_settings')).toBeDefined();
+    for (const key of ['health_allow', 'health_settings']) {
+        const { box } = tool(key);
         expect(box.x + box.width).toBeLessThanOrEqual(320);
     }
     modules.stop();
@@ -330,12 +332,10 @@ test.each([260, 340, 400, 768])('sensor names reclaim empty status space at body
     expect(label.style.wrap_width).toBe(label.style.size[0]);
     expect(name.children.some(node => node.id.endsWith('_state'))).toBe(false);
     await row.on.long_press();
-    expect(modules.readState().inspectedLabel).toBe(snapshot.entries[index].label);
+    // The full name of a touched row is the words of the panel's band (its status).
+    expect(modules.readState().status).toBe(snapshot.entries[index].label);
     expect(modules.state.selected).toEqual([]);
     expect(persist).not.toHaveBeenCalled();
-    const note = panels.definition.buildFixedContent(modules.readState(), { emit, bodyWidth }).find(node => node.id === 'health_full_name');
-    expect(note.text).toBe(label.text);
-    expect(note.style.wrap_width).toBe(bodyWidth);
     await row.on.activate();
     expect(modules.state.selected).toContain('walking_heart_rate_average');
     expect(persist).toHaveBeenCalledTimes(1);
@@ -355,10 +355,9 @@ test('new readings propagate to the existing monitor cell and leave other sensor
     modules.destroy();
 });
 
-test('the shared selector footer says Validate and closing retains selected monitor cards', async () => {
+test('closing the selector retains the selected monitor cards', async () => {
     const { modules, persist } = setup(); await modules.openSelector();
     await modules.handleEvent({ type: 'health.row.toggle', value: 'heart_rate' }); await settle();
-    expect(panels.definition.closeLabel).toBe('Valider');
     panels.definition.onClose();
     expect(persist).toHaveBeenLastCalledWith(['heart_rate']);
     expect(modules.items(new Map()).get('monitor').map(item => item.metadata.health_monitor.monitorId)).toEqual(['heart_rate']);

@@ -15,6 +15,8 @@ const texture = (red = 255, green = 255, blue = 255) => ({
     rgba: [red, green, blue, 255]
 });
 
+// Application pictures (system `__` ids, local icons) resolve with their batch;
+// project pictures spawn pending and hydrate later (bevy_pending_media_contract.js).
 const imageNode = (id, source, extra = {}) => ({
     id,
     kind: 'image',
@@ -63,11 +65,11 @@ const createHarness = async (resolver) => {
 test('Bevy web renderer omits skipped image spawns from the applied scene baseline until retry succeeds', async () => {
     let failTexture = true;
     const resolver = async () => {
-        if (failTexture) throw new Error('bevy_media_texture_image_decode_failed:menu_icon');
+        if (failTexture) throw new Error('bevy_media_texture_image_decode_failed:__eve_menu_icon');
         return texture(50, 90, 130);
     };
     const { calls, surface } = await createHarness(resolver);
-    const node = imageNode('menu_icon', '/icons/menu.svg');
+    const node = imageNode('__eve_menu_icon', '/icons/menu.svg');
     const nextScene = scene([node]);
     const spawnOp = { type: VIRTUAL_SCENE_DIFF_TYPES.spawn, node };
 
@@ -81,9 +83,9 @@ test('Bevy web renderer omits skipped image spawns from the applied scene baseli
 
     assert.equal(failed.ok, true);
     assert.equal(afterFailure.node_count, 0);
-    assert.equal(afterFailure.virtual_scene.byId.has('menu_icon'), false);
+    assert.equal(afterFailure.virtual_scene.byId.has('__eve_menu_icon'), false);
     assert.deepEqual(afterFailure.virtual_scene.nodes, []);
-    assert.deepEqual(afterFailure.skipped_nodes.map((entry) => entry.id), ['menu_icon']);
+    assert.deepEqual(afterFailure.skipped_nodes.map((entry) => entry.id), ['__eve_menu_icon']);
     assert.equal(calls.some((call) => call.type === 'ops'), false);
 
     failTexture = false;
@@ -97,18 +99,18 @@ test('Bevy web renderer omits skipped image spawns from the applied scene baseli
     const opsCall = calls.find((call) => call.type === 'ops');
 
     assert.equal(afterRetry.node_count, 1);
-    assert.equal(afterRetry.virtual_scene.byId.get('menu_icon'), node);
+    assert.equal(afterRetry.virtual_scene.byId.get('__eve_menu_icon'), node);
     assert.deepEqual(afterRetry.skipped_nodes, []);
     assert.equal(opsCall.ops.length, 1);
     assert.equal(opsCall.ops[0].type, 'spawn');
-    assert.equal(opsCall.ops[0].node.id, 'menu_icon');
+    assert.equal(opsCall.ops[0].node.id, '__eve_menu_icon');
     assert.deepEqual(opsCall.ops[0].node.texture, texture(50, 90, 130));
 });
 
 test('Bevy web renderer omits skipped initial image nodes from the startup applied scene baseline', async () => {
     let failTexture = true;
     const resolver = async () => {
-        if (failTexture) throw new Error('bevy_media_texture_image_decode_failed:initial_menu_icon');
+        if (failTexture) throw new Error('bevy_media_texture_image_decode_failed:__eve_initial_menu_icon');
         return texture(80, 100, 120);
     };
     const dom = new JSDOM('<!doctype html><html><body><canvas id="eve_surface_project_initial_skip"></canvas></body></html>');
@@ -123,7 +125,7 @@ test('Bevy web renderer omits skipped initial image nodes from the startup appli
         apply_atome_bevy_ops: (ops) => calls.push({ type: 'ops', ops })
     };
     const surface = dom.window.document.getElementById('eve_surface_project_initial_skip');
-    const node = imageNode('initial_menu_icon', '/icons/initial-menu.svg');
+    const node = imageNode('__eve_initial_menu_icon', '/icons/initial-menu.svg');
     const nextScene = scene([node]);
 
     await startBevyWebRenderer({
@@ -138,8 +140,8 @@ test('Bevy web renderer omits skipped initial image nodes from the startup appli
 
     assert.equal(calls.find((call) => call.type === 'run').scene.nodes.length, 0);
     assert.equal(afterStart.node_count, 0);
-    assert.equal(afterStart.virtual_scene.byId.has('initial_menu_icon'), false);
-    assert.deepEqual(afterStart.skipped_nodes.map((entry) => entry.id), ['initial_menu_icon']);
+    assert.equal(afterStart.virtual_scene.byId.has('__eve_initial_menu_icon'), false);
+    assert.deepEqual(afterStart.skipped_nodes.map((entry) => entry.id), ['__eve_initial_menu_icon']);
 
     failTexture = false;
     const retried = await startBevyWebRenderer({
@@ -155,10 +157,10 @@ test('Bevy web renderer omits skipped initial image nodes from the startup appli
 
     assert.equal(retried.synced, true);
     assert.equal(afterRetry.node_count, 1);
-    assert.equal(afterRetry.virtual_scene.byId.get('initial_menu_icon'), node);
+    assert.equal(afterRetry.virtual_scene.byId.get('__eve_initial_menu_icon'), node);
     assert.deepEqual(afterRetry.skipped_nodes, []);
     assert.equal(opsCall.ops[0].type, 'spawn');
-    assert.equal(opsCall.ops[0].node.id, 'initial_menu_icon');
+    assert.equal(opsCall.ops[0].node.id, '__eve_initial_menu_icon');
     assert.deepEqual(opsCall.ops[0].node.texture, texture(80, 100, 120));
 });
 
@@ -166,10 +168,10 @@ test('Bevy web renderer preserves the previous applied image when a resource tex
     let currentTexture = texture(20, 40, 60);
     let failTexture = false;
     const resolver = async () => {
-        if (failTexture) throw new Error('bevy_media_texture_image_decode_failed:menu_icon');
+        if (failTexture) throw new Error('bevy_media_texture_image_decode_failed:__eve_menu_icon');
         return currentTexture;
     };
-    const initialNode = imageNode('menu_icon', '/icons/menu-small.svg');
+    const initialNode = imageNode('__eve_menu_icon', '/icons/menu-small.svg');
     const { calls, surface } = await createHarness(resolver);
 
     await applyBevyWebRendererDiffs({
@@ -178,14 +180,14 @@ test('Bevy web renderer preserves the previous applied image when a resource tex
         virtualScene: scene([initialNode]),
         waitForPresentation: false
     });
-    assert.equal(readBevyWebRendererState(surface).virtual_scene.byId.get('menu_icon').content.source, '/icons/menu-small.svg');
+    assert.equal(readBevyWebRendererState(surface).virtual_scene.byId.get('__eve_menu_icon').content.source, '/icons/menu-small.svg');
 
-    const resizedNode = imageNode('menu_icon', '/icons/menu-large.svg', {
+    const resizedNode = imageNode('__eve_menu_icon', '/icons/menu-large.svg', {
         bounds: { x: 0, y: 0, width: 36, height: 36 }
     });
     const resourceOp = {
         type: VIRTUAL_SCENE_DIFF_TYPES.updateResource,
-        id: 'menu_icon',
+        id: '__eve_menu_icon',
         content: resizedNode.content,
         node: resizedNode
     };
@@ -198,8 +200,8 @@ test('Bevy web renderer preserves the previous applied image when a resource tex
     });
     const afterFailure = readBevyWebRendererState(surface);
 
-    assert.equal(afterFailure.virtual_scene.byId.get('menu_icon').content.source, '/icons/menu-small.svg');
-    assert.deepEqual(afterFailure.skipped_nodes.map((entry) => entry.id), ['menu_icon']);
+    assert.equal(afterFailure.virtual_scene.byId.get('__eve_menu_icon').content.source, '/icons/menu-small.svg');
+    assert.deepEqual(afterFailure.skipped_nodes.map((entry) => entry.id), ['__eve_menu_icon']);
     assert.equal(calls.filter((call) => call.type === 'ops').length, 1);
 
     currentTexture = texture(90, 120, 150);
@@ -213,11 +215,11 @@ test('Bevy web renderer preserves the previous applied image when a resource tex
     const afterRetry = readBevyWebRendererState(surface);
     const resourceOps = calls.filter((call) => call.type === 'ops').at(-1).ops;
 
-    assert.equal(afterRetry.virtual_scene.byId.get('menu_icon').content.source, '/icons/menu-large.svg');
+    assert.equal(afterRetry.virtual_scene.byId.get('__eve_menu_icon').content.source, '/icons/menu-large.svg');
     assert.deepEqual(afterRetry.skipped_nodes, []);
     assert.equal(resourceOps.length, 1);
     assert.equal(resourceOps[0].type, 'resource');
-    assert.equal(resourceOps[0].patch.id, 'menu_icon');
+    assert.equal(resourceOps[0].patch.id, '__eve_menu_icon');
     assert.deepEqual(resourceOps[0].patch.texture, texture(90, 120, 150));
 });
 
@@ -225,7 +227,7 @@ test('Bevy web renderer preserves the previous applied image when a resource tex
 test('a renderer diff invalidated while resolving textures never submits stale canvas operations', async () => {
     let finish; let current=true;
     const {calls,surface}=await createHarness(()=>new Promise(resolve=>{finish=resolve;}));
-    const node=imageNode('outgoing_project_image','/fixture.png');
+    const node=imageNode('__eve_outgoing_scene_image','/fixture.png');
     const pending=applyBevyWebRendererDiffs({surface,ops:[{type:VIRTUAL_SCENE_DIFF_TYPES.spawn,node}],virtualScene:scene([node]),waitForPresentation:false,isCurrent:()=>current});
     for(let i=0; i<20&&!finish; i++) await new Promise(resolve=>setTimeout(resolve,0));
     assert.equal(typeof finish,'function');current=false;finish(texture());

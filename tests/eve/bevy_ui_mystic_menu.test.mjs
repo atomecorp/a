@@ -10,7 +10,7 @@ import {
     MYSTIC_FLIP_EASE_PLATEAU, MYSTIC_FLIP_REDUCED_DURATION_MS, MYSTIC_FLIP_STAGGER_RATIO,
     MYSTIC_MAX_TILES, MYSTIC_SHADOW_PAD_PX,
     MYSTIC_CENTER_SIZE_RATIO, MYSTIC_SHADOW_FADE_MS,
-    MYSTIC_OPENING_MS, MYSTIC_SLOTS, MYSTIC_SLOT_NAMES, MYSTIC_TILE_GAP_PX,
+    MYSTIC_OPENING_MS, MYSTIC_SLOTS, MYSTIC_SLOT_NAMES, mysticTileGapPx,
     computeMysticLayout, planMysticTiles,
     resolveMysticCenterMetrics,
     resolveMysticFlipEase, resolveMysticGrid, resolveMysticLayoutMargin,
@@ -44,6 +44,8 @@ import { mapVirtualSceneStyleToBevyPatch } from '../../eVe/domains/rendering/bev
 
 // The one constant list a long press or a right click opens (2026-09-29): the
 // test reads it from the taxonomy, so a new entry is a new expectation.
+// The seam is the screen grid's joint, read live (no frozen constant any more).
+const MYSTIC_TILE_GAP_PX = mysticTileGapPx();
 const MYSTIC_FIXED_ITEMS = CONTEXT_MENUS.menus.mystic.fixed.map(({command,slot})=>({key:command,slot}));
 const TILE = 60;
 const STEP = TILE + MYSTIC_TILE_GAP_PX;
@@ -1116,7 +1118,8 @@ test('every Mystic element is skinned from the shared Atome tokens', () => {
     const surface = EVE_COMMON_SKIN_TOKENS.bevy.toolSurface;
     assert.equal(EVE_MYSTIC_SKIN_TOKENS.plate.background, surface.background);
     assert.equal(EVE_MYSTIC_SKIN_TOKENS.plate.backdropBlurPx, surface.backdrop.blurPx);
-    assert.equal(EVE_MYSTIC_SKIN_TOKENS.plate.backdropTint, surface.backdrop.tint);
+    // The tint is the person's glass read live: the same value, a fresh array.
+    assert.deepEqual(EVE_MYSTIC_SKIN_TOKENS.plate.backdropTint, surface.backdrop.tint);
     assert.equal(EVE_MYSTIC_SKIN_TOKENS.shadow.color, surface.shadow.color);
     assert.equal(EVE_MYSTIC_SKIN_TOKENS.shadow.blur, surface.shadow.blur);
     // The handle's box shadow is that same contact shadow: the menu paints one

@@ -18,6 +18,10 @@ permissions = [
   "allow-audio-mix-devices",
   "allow-audio-mix-cut-tail",
   "allow-audio-mix-module-state",
+  "allow-audio-mix-asset-load",
+  "allow-audio-mix-asset-unload",
+  "allow-audio-instrument-sample-load",
+  "allow-audio-instrument",
   "allow-audio-direct-apply",
   "allow-audio-direct-levels",
   "allow-audio-direct-cut-tail",
@@ -166,6 +170,26 @@ commands.allow = ["audio_mix_cut_tail"]
 identifier = "allow-audio-mix-module-state"
 description = "Enables the audio_mix_module_state command."
 commands.allow = ["audio_mix_module_state"]
+
+[[permission]]
+identifier = "allow-audio-mix-asset-load"
+description = "Enables the audio_mix_asset_load command."
+commands.allow = ["audio_mix_asset_load"]
+
+[[permission]]
+identifier = "allow-audio-mix-asset-unload"
+description = "Enables the audio_mix_asset_unload command."
+commands.allow = ["audio_mix_asset_unload"]
+
+[[permission]]
+identifier = "allow-audio-instrument-sample-load"
+description = "Enables the audio_instrument_sample_load command."
+commands.allow = ["audio_instrument_sample_load"]
+
+[[permission]]
+identifier = "allow-audio-instrument"
+description = "Enables the audio_instrument command."
+commands.allow = ["audio_instrument"]
 
 [[permission]]
 identifier = "allow-audio-direct-apply"

@@ -3,6 +3,8 @@ const feedback = vi.hoisted(() => ({ start: vi.fn(), stop: vi.fn(), transition: 
 // Registration and hardware are boundaries; the native tool handlers remain unmocked.
 vi.mock('../../eVe/intuition/runtime/tool.js', () => ({ registerUiAction: vi.fn() }));
 vi.mock('../../eVe/intuition/tools/action_recording_tools.js', () => ({}));
+// No Timeline view is mounted here, so a take is a free capture, not a timeline take.
+vi.mock('../../eVe/domains/rendering/project_view_surface_runtime.js', () => ({ readMountedProjectViewContent: () => null }));
 vi.mock('../../eVe/domains/media/api/video_recording_controller.js', () => ({
     getVideoRecordingControllerState: vi.fn(() => ({ recording: false })),
     startVideoRecordingSession: vi.fn(async () => ({ ok: true })), stopVideoRecordingSession: vi.fn()

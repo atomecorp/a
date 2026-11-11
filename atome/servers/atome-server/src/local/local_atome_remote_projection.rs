@@ -34,7 +34,15 @@ pub(super) fn ensure_schema(db: &Connection) -> Result<(), rusqlite::Error> {
          CREATE INDEX IF NOT EXISTS idx_state_current_parent_id
            ON state_current(json_extract(properties, '$.parent_id'));
          CREATE INDEX IF NOT EXISTS idx_state_current_parent_id_alias
-           ON state_current(json_extract(properties, '$.parentId'));",
+           ON state_current(json_extract(properties, '$.parentId'));
+         -- The events this device wrote that were already republished to the remote account
+         -- (`local_atome_sync_bootstrap.rs`); an index tried for it once (Nov. 2026) is let go.
+         DROP INDEX IF EXISTS idx_state_current_owner_updated;
+         DROP TABLE IF EXISTS remote_bootstrap_cursor;
+         CREATE TABLE IF NOT EXISTS remote_bootstrap_event_cursor (
+            local_user_id TEXT NOT NULL, remote_user_id TEXT NOT NULL, event_rowid INTEGER NOT NULL,
+            PRIMARY KEY (local_user_id, remote_user_id)
+         );",
     )?;
     // These sweeps mend rows written before the sync contract of Aug. 2026; every later write
     // projects type, parent, deletion and local media itself (`patch.rs`). A database is mended

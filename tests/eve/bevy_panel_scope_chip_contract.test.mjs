@@ -3,7 +3,7 @@ import { test } from 'vitest';
 
 import { normalizeScopeChipPresentation } from '../../atome/src/squirrel/components/scope_chip_contract.js';
 import { scopeChipGroupNode } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_scope_chips.js';
-import { BEVY_PANEL_TOKENS } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
+import { BEVY_PANEL_TOKENS, resolvePanelButtonMaterial } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
 import { INTERACTIVE_KINDS, SUPPORTED_KINDS } from '../../eVe/domains/rendering/bevy_ui_tree_normalization.js';
 
 const options = [
@@ -31,8 +31,11 @@ test('shared scope-chip builder uses native buttons with Select states and no di
     assert.equal(SUPPORTED_KINDS.has(events.kind), true);
     assert.equal(INTERACTIVE_KINDS.has(events.kind), true);
     assert.deepEqual(events.style.size[1], BEVY_PANEL_TOKENS.scopeChip.heightPx);
-    assert.deepEqual(events.style.background, BEVY_PANEL_TOKENS.buttonMaterial.pressed.background);
-    assert.deepEqual(todos.style.background, BEVY_PANEL_TOKENS.buttonMaterial.hover.background);
+    // Each state takes its look from the one panel button material owner.
+    assert.deepEqual(events.style.backdrop, resolvePanelButtonMaterial({ selected: true, pressed: true }).backdrop);
+    assert.deepEqual(todos.style.backdrop, resolvePanelButtonMaterial({ hovered: true, focused: true }).backdrop);
+    assert.notDeepEqual(todos.style.backdrop, resolvePanelButtonMaterial().backdrop);
+    assert.notDeepEqual(events.style.backdrop, todos.style.backdrop);
     assert.ok(todos.style.shadow);
     assert.equal(reminders.on, undefined);
     assert.equal(reminders.style.opacity, BEVY_PANEL_TOKENS.select.disabledOpacity);

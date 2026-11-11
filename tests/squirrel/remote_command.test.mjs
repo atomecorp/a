@@ -30,7 +30,8 @@ beforeAll(async () => {
     globalThis.atome = { tools: { v2Runtime: { invokeById: async (payload) => { invoked.push(payload); return { ok: true, status: 'playing' }; } } } };
     await import('../../atome/src/squirrel/atome/mcp.js');
     remote = await import('../../atome/src/squirrel/teleport/remote_command.js');
-});
+    // The first import transforms the whole MCP gateway graph.
+}, 60000);
 
 test('a spoken device name resolves by label, then by the platform it names, and says when it is ambiguous', () => {
     const { resolveSurfaceByName } = remote;
@@ -61,7 +62,7 @@ test('the target runs the tool through its own gateway as a restricted remote ac
     expect(result).toEqual({ ok: true, status: 'playing' });
     const payload = invoked.at(-1);
     expect(payload).toMatchObject({ tool_id: 'tv.open_channel', input: { channel: 'France 2' }, action: 'pointer.click',
-        source: { type: 'remote_command', from_surface_id: 's-phone' }, idempotency_key: 'remote_command:c2' });
+        source: { type: 'remote', layer: 'surface_remote_command', from_surface_id: 's-phone' }, idempotency_key: 'remote_command:c2' });
     expect(payload.actor).toMatchObject({ role: 'remote_surface', sandbox_profiles: ['remote_surface'] });
     expect(payload.actor.capabilities).not.toContain('runtime.sensitive');
 });

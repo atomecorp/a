@@ -26,8 +26,12 @@ test('the local host (Tauri, iOS) uses ws/api sync:push outbound and a persisten
 
 test('the local host authenticates and subscribes before projecting canonical sync events, iOS included', () => {
     const source = read('atome/servers/atome-server/src/local/local_atome_ws_sync.rs');
-    assert.match(source, /"type"\s*:\s*"auth"/);
-    assert.match(source, /"type"\s*:\s*"subscribe"/);
+    // The subscribe frames (single or batch) moved to their own owner, local_atome_ws_subscriptions.rs.
+    const subscriptions = read('atome/servers/atome-server/src/local/local_atome_ws_subscriptions.rs');
+    const auth = source.search(/"type"\s*:\s*"auth"/);
+    assert.ok(auth >= 0);
+    assert.ok(source.search(/subscriptions\.subscribe\(/) > auth, 'the socket authenticates before it subscribes');
+    assert.match(subscriptions, /"type"\s*:\s*"subscribe"/);
     // The iOS app runs this same host in process (no Swift sync client of its own).
     assert.match(read('platforms/ios/bevy-renderer/src/local_server.rs'), /local::prepare\(/);
 });

@@ -329,9 +329,10 @@ function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     token
                 });
             },
-            async getPending() {
+            // `statusOnly`: the sync state and whether deliveries wait, without the pending Atomes.
+            async getPending({ statusOnly = false } = {}) {
                 const token = getToken(tokenKey);
-                return getWs().send({ type: 'sync', action: 'get-pending', token });
+                return getWs().send({ type: 'sync', action: 'get-pending', token, ...(statusOnly ? { status_only: true } : {}) });
             },
             // Delivers the queued events of these atomes (and of their queued ancestors) now.
             async flush(data = {}) {

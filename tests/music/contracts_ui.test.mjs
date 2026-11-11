@@ -8,7 +8,9 @@ import { buildServiceCommandDefs } from '../../eVe/intuition/tools/core/tool_run
 import { serviceCommandHandlers } from '../../eVe/intuition/tools/core/tool_runtime_service_commands.js';
 import { createMcpContractHandlers } from '../../atome/src/squirrel/atome/mcp_handlers_contracts.js';
 import { resolveAccessPolicy } from '../../atome/src/squirrel/atome/mcp_security_policy.js';
-import { hasActorCapability, resolveActorProfile } from '../../atome/src/squirrel/atome/mcp_security.js';
+import { hasActorCapability } from '../../atome/src/squirrel/atome/mcp_security.js';
+// The actor's capabilities follow its transport (mcp_transport.js#resolveTransportActor replaced resolveActorProfile).
+import { resolveTransportActor } from '../../atome/src/squirrel/atome/mcp_transport.js';
 import { createConversationSession } from '../../atome/src/squirrel/ai/conversation_session.js';
 import { setEveLocale } from '../../eVe/i18n/i18n.js';
 import { EVE_EN_MUSIC_MESSAGES, EVE_FR_MUSIC_MESSAGES } from '../../eVe/i18n/languages_music.js';
@@ -25,7 +27,7 @@ test('contracts reject injected endpoints, ambiguous play inputs, tokens and for
 });
 test('every declared command has real Runtime and MCP registration, matching capabilities and write idempotency', () => {
     const defs = buildServiceCommandDefs(value => value, 'registered'), handlers = serviceCommandHandlers(), mcp = createMcpContractHandlers();
-    const owner = resolveActorProfile();
+    const owner = resolveTransportActor({ source: { type: 'ui', layer: 'music' } });
     for (const command of MUSIC_COMMANDS) {
         expect(defs.find(def => def.tool_id === command.name)?.input_schema).toEqual(command.input_schema);
         expect(typeof handlers[command.name]).toBe('function'); expect(typeof mcp[command.name]).toBe('function');
@@ -37,7 +39,10 @@ test('every declared command has real Runtime and MCP registration, matching cap
         }
     }
     expect(resolveAccessPolicy('runtime.tools.batch_call', { events: [{ tool_id: 'music.create_playlist' }] }).required_capabilities).toContain('music.write');
-    expect(resolveAccessPolicy('mcp.toolchains.execute', { steps: [{ method: 'music.add_tracks' }] }).required_capabilities).toContain('music.write');
+    // A toolchain step is judged as a request of its own (mcp_handlers_platform.js dispatches it through mcp.js): the chain
+    // needs only mcp.read, its music step still needs the write capability.
+    expect(resolveAccessPolicy('mcp.toolchains.execute', { steps: [{ method: 'music.add_tracks' }] }).required_capabilities).toEqual(['mcp.read']);
+    expect(resolveAccessPolicy('music.add_tracks', {}).required_capabilities).toContain('music.write');
 });
 test('a lost transport reply retains the stable receipt ID and a changed user cannot receive private results', async () => {
     let owner = 'alice';

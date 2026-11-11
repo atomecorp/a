@@ -33,11 +33,17 @@ const fixture = async ({ presentationFactory = createMatrixTemplateRuntime } = {
     const gateway = vi.fn(payload => runtime.invoke(payload.input)), onSaved = vi.fn(), refresh = vi.fn();
     const uiRuntime = { mountTree: vi.fn(async () => ({ ok: true })), unmountTree: vi.fn(async () => ({ ok: true })), updateTreeMotion: vi.fn() };
     let readProjection;
-    const control = createProgramNutritionControl({ id: 'nutrition', gateway, readActor: () => actor, onSaved, refresh,
+    // The meal's food advice (food_advice.verdicts) is its own tool: `gateway` records only the Programme's commands.
+    const advice = vi.fn(async () => ({ ok: true, verdicts: {}, marks: {} }));
+    const route = payload => (payload.tool_id.startsWith('food_advice.') ? advice(payload) : gateway(payload));
+    const control = createProgramNutritionControl({ id: 'nutrition', gateway: route, readActor: () => actor, onSaved, refresh,
         createId: () => 'food_' + ++sequence, now: () => '2030-01-07T10:01:00Z',
         createPresentation: options => { readProjection = options.readValues; return presentationFactory({ ...options, uiRuntime }); } });
     const nodes = () => control.build({ width: 600 }).flatMap(walk);
+    // Save, Now, Apply, Remove, Options and Done are the panel band's tools (#bandTools); the stage's choices stay in the content.
     const activate = async suffix => {
+        const tool = control.bandTools().find(value => value.key === 'nutrition_' + suffix);
+        if (tool) { expect(tool.disabled).toBe(false); tool.onSelect(); await new Promise(resolve => setTimeout(resolve, 0)); return; }
         const node = nodes().find(node => node.id === 'nutrition_' + suffix);
         walk(node).find(value => typeof value.on?.activate === 'function').on.activate();
         await new Promise(resolve => setTimeout(resolve, 0));
@@ -222,7 +228,8 @@ describe('explicit reusable Nutrition composition', () => {
         try {
             await f.activate('mode_habit'); f.input('habit', 'Fictitious habit');
             f.gateway.mockImplementationOnce(async payload => { expect((await f.runtime.invoke(payload.input)).ok).toBe(true); throw new Error('lost_ack'); });
-            await f.activate('save'); await vi.waitFor(() => expect(f.nodes().some(node => node.id === 'nutrition_save' && node.on?.activate)).toBe(true));
+            await f.activate('save');
+            await vi.waitFor(() => expect(f.readProjection().pending && f.control.bandTools().find(tool => tool.key === 'nutrition_save').disabled === false).toBe(true));
             const intent = structuredClone(f.gateway.mock.calls[0][0]); await f.activate('save'); await vi.waitFor(() => expect(f.onSaved).toHaveBeenCalledTimes(1));
             expect(f.gateway.mock.calls[1][0]).toEqual(intent); expect(f.records.size).toBe(1); expect(f.events.size).toBe(2);
         } finally { await f.close(); }
@@ -247,8 +254,9 @@ describe('explicit reusable Nutrition composition', () => {
     it('discards an unaccepted meal and prevents a replaced principal from saving or reopening private food choices', async () => {
         const f = await fixture();
         try {
-            await f.activate('mode_habit'); f.input('habit', 'Unsaved fictitious habit'); await f.activate('close');
-            expect(f.events.size).toBe(1); expect(f.gateway).not.toHaveBeenCalled();
+            // The band's Back folds the habit stage, then closes the editor from its first one.
+            await f.activate('mode_habit'); f.input('habit', 'Unsaved fictitious habit'); await f.control.back(); await f.control.back();
+            expect(f.control.isActive()).toBe(false); expect(f.events.size).toBe(1); expect(f.gateway).not.toHaveBeenCalled();
             await f.control.open(f.records.get('activity')); f.actor('bob'); expect(f.nodes()).toEqual([]);
             await expect(f.control.open(f.records.get('activity'))).rejects.toThrow('program_activity_reference_denied');
             expect(f.gateway).not.toHaveBeenCalled(); expect(f.events.size).toBe(1);
@@ -264,7 +272,7 @@ describe('explicit reusable Nutrition composition', () => {
             const nodes = configuration.build({ width: 600 }).flatMap(walk);
             nodes.find(node => node.id === 'configuration_minutes').on.focus({ x: 10, y: 10 });
             const editor = document.querySelector('#eve_hidden_text_service textarea'); editor.value = '9'; editor.dispatchEvent(new window.Event('input'));
-            nodes.find(node => node.id === 'configuration_save').on.activate();
+            configuration.bandTools().find(tool => tool.key === 'configuration_save').onSelect();
             await vi.waitFor(() => expect(f.records.get('activity').properties.program_activity.version).toBe(3));
             expect(f.records.get('activity').properties.program_activity.nutrition).toEqual(meal);
             expect(f.records.get('activity').properties.program_activity.involvement.minutes).toBe(9);

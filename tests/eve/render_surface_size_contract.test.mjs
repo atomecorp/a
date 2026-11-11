@@ -10,7 +10,6 @@ import {
 } from '../../eVe/domains/rendering/surface_runtime.js';
 import { resolveRenderSurfaceSize } from '../../eVe/domains/rendering/surface_size_runtime.js';
 import { mountActiveTextEditor, unmountActiveTextEditor } from '../../eVe/domains/rendering/hidden_text_service_runtime.js';
-import { resolveEffectivePanelViewport } from '../../eVe/intuition/runtime/eve_intuition/panel_layout_geometry.js';
 
 const setBox = (element, width, height) => {
     Object.defineProperty(element, 'clientWidth', {
@@ -31,6 +30,14 @@ const setBox = (element, width, height) => {
     });
 };
 
+// The project surface reads the viewport too: a host that fills the window
+// resizes with it, as in the app.
+const setViewportBox = (window, element, width, height) => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: height });
+    setBox(element, width, height);
+};
+
 const makeImageRecord = (id) => ({
     id,
     type: 'group',
@@ -45,7 +52,11 @@ const makeImageRecord = (id) => ({
     }
 });
 
-const createTestCompositor = (calls = []) => ({
+// The double writes the backing store of the canvas it was started on: a
+// renderer left by an earlier test must never write into the current document.
+const createTestCompositor = (calls = []) => {
+    let runSurface = null;
+    return {
     default: async () => {},
     resolve_bevy_media_texture: async () => ({
         width: 1,
@@ -54,6 +65,7 @@ const createTestCompositor = (calls = []) => ({
     }),
     run_atome_bevy_renderer: (canvasSelector, width, height, surfaceMetrics, initialNodes) => {
         const surface = globalThis.document?.querySelector?.(canvasSelector) || null;
+        runSurface = surface;
         const dpr = globalThis.window?.devicePixelRatio || 1;
         if (surface) {
             surface.width = surfaceMetrics.pixel_width;
@@ -94,21 +106,24 @@ const createTestCompositor = (calls = []) => ({
     apply_atome_bevy_resource: (payload) => calls.push({ type: 'resource', payload }),
     apply_atome_bevy_text_metadata: (payload) => calls.push({ type: 'text', payload }),
     apply_atome_bevy_surface: (payload) => {
-        const surface = globalThis.document?.querySelector?.('#eve_surface_project') || null;
-        const dpr = globalThis.window?.devicePixelRatio || 1;
+        const surface = runSurface;
+        const dpr = surface?.ownerDocument?.defaultView?.devicePixelRatio || 1;
         if (surface) {
             surface.width = payload.pixel_width || Math.round(payload.width * dpr);
             surface.height = payload.pixel_height || Math.round(payload.height * dpr);
         }
         calls.push({ type: 'surface', payload });
     }
-});
+    };
+};
 
 const flushBevyRun = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 test('Project scene render target uses host-sized surface dimensions', async () => {
     clearAllProjectScenes();
     const dom = new JSDOM('<!doctype html><html><body><main id="project"></main></body></html>');
+    // The started renderer waits for its frames to show a new size.
+    dom.window.requestAnimationFrame = (callback) => dom.window.setTimeout(() => callback(Date.now()), 0);
     Object.defineProperty(dom.window, 'devicePixelRatio', {
         configurable: true,
         value: 1.5
@@ -173,7 +188,7 @@ test('Project scene surface follows host resize without changing Atome logical b
     globalThis.document = dom.window.document;
     globalThis.window = dom.window;
     const host = dom.window.document.getElementById('project');
-    setBox(host, 640, 360);
+    setViewportBox(dom.window, host, 640, 360);
     const calls = [];
 
     const projection = await renderProjectScene({
@@ -221,25 +236,29 @@ test('Project scene surface follows host resize without changing Atome logical b
     assert.equal(canvasWidth, 960);
     assert.equal(canvasHeight, 540);
 
-    setBox(host, 1280, 720);
+    setViewportBox(dom.window, host, 1280, 720);
     resizeObservers.forEach((observer) => observer.callback([{ target: host }]));
-    assert.equal(calls.length, 1);
-    assert.equal(widthWrites, 0);
-    assert.equal(heightWrites, 0);
-    assert.equal(canvasWidth, 960);
-    assert.equal(canvasHeight, 540);
+    // Growing, the renderer takes the room at once: the engine sizes its own
+    // backing store (one write each, never by the surface runtime) while the CSS
+    // box waits for the burst to settle.
+    assert.equal(calls.length, 2);
+    assert.equal(widthWrites, 1);
+    assert.equal(heightWrites, 1);
+    assert.equal(canvasWidth, 1920);
+    assert.equal(canvasHeight, 1080);
     assert.equal(canvas.style.width, '640px');
     assert.equal(canvas.style.height, '360px');
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 200));
     await flushFrames();
 
-    assert.equal(widthWrites, 2);
-    assert.equal(heightWrites, 2);
+    assert.equal(widthWrites, 1);
+    assert.equal(heightWrites, 1);
     assert.equal(canvasWidth, 1920);
     assert.equal(canvasHeight, 1080);
     assert.equal(canvas.style.width, '1280px');
     assert.equal(canvas.style.height, '720px');
 
-    assert.equal(calls.length, 2);
+    assert.equal(calls.length, 2, 'the settled pass adds no second surface update');
     assert.deepEqual(calls.at(-1), {
         type: 'surface',
         payload: {
@@ -297,7 +316,7 @@ test('Project scene resize rendering is serialized and the latest surface size w
     globalThis.document = dom.window.document;
     globalThis.window = dom.window;
     const host = dom.window.document.getElementById('project');
-    setBox(host, 640, 360);
+    setViewportBox(dom.window, host, 640, 360);
     const calls = [];
     const projectionPromise = renderProjectScene({
         projectId: 'surface_resize_serial_project',
@@ -314,14 +333,19 @@ test('Project scene resize rendering is serialized and the latest surface size w
     assert.equal(calls[0].target.height, 360);
     const baselineCallCount = calls.length;
 
-    setBox(host, 1280, 720);
+    setViewportBox(dom.window, host, 1280, 720);
     resizeObservers.forEach((observer) => observer.callback([{ target: host }]));
-    setBox(host, 1440, 810);
+    setViewportBox(dom.window, host, 1440, 810);
     resizeObservers.forEach((observer) => observer.callback([{ target: host }]));
     await flushFrames();
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 200));
+    await flushFrames();
+    // Each growing notification gives the renderer its room at once, in order;
+    // the settled pass finds the latest size already shown and adds nothing.
     const resizeCalls = calls.slice(baselineCallCount).filter((call) => call.type === 'surface');
-    assert.equal(resizeCalls.length, 1, 'two ResizeObserver notifications must coalesce into one surface update');
-    assert.deepEqual(resizeCalls[0], {
+    assert.equal(resizeCalls.length, 2, 'growing notifications reach the renderer in order, the settled pass adds none');
+    assert.deepEqual(resizeCalls.map((call) => [call.payload.width, call.payload.height]), [[1280, 720], [1440, 810]]);
+    assert.deepEqual(resizeCalls.at(-1), {
         type: 'surface',
         payload: {
             width: 1440,
@@ -344,6 +368,8 @@ test('Project scene resize rendering is serialized and the latest surface size w
 test('Project scene render repairs backing-store drift without logical resize', async () => {
     clearAllProjectScenes();
     const dom = new JSDOM('<!doctype html><html><body><main id="project"></main></body></html>');
+    // The started renderer waits for its frames to show a new size.
+    dom.window.requestAnimationFrame = (callback) => dom.window.setTimeout(() => callback(Date.now()), 0);
     Object.defineProperty(dom.window, 'devicePixelRatio', {
         configurable: true,
         value: 1
@@ -445,15 +471,28 @@ test('Project render surface follows whichever viewport source actually changed'
     await new Promise((resolve) => dom.window.setTimeout(resolve, 200));
     assert.equal(surface.style.width, '1200px');
     assert.equal(surface.style.height, '700px');
+    // Once the burst settles the sizes resolve by consensus: a lone source that
+    // disagrees with the window and the host (a pinch zoom of the visual
+    // viewport) is out-voted and moves nothing.
     Object.defineProperty(visualViewport, 'width', { configurable: true, value: 390 });
     Object.defineProperty(visualViewport, 'height', { configurable: true, value: 463 });
     visualViewport.dispatchEvent(new dom.window.Event('resize'));
-    await new Promise((resolve) => dom.window.setTimeout(resolve, 20));
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 200));
+    assert.equal(surface.style.width, '1200px');
+    assert.equal(surface.style.height, '700px');
+    // The host following the visual viewport makes it the settled size.
+    setBox(view, 390, 463);
+    setBox(host, 390, 463);
+    visualViewport.dispatchEvent(new dom.window.Event('resize'));
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 200));
     assert.equal(surface.style.width, '390px');
     assert.equal(surface.style.height, '463px');
+    // Likewise the native viewport, once the host agrees with it.
     dom.window.__EVE_NATIVE_VIEWPORT__ = { width: 800, height: 568 };
+    setBox(view, 800, 568);
+    setBox(host, 800, 568);
     dom.window.dispatchEvent(new dom.window.CustomEvent('eve:native-viewport-resize'));
-    await new Promise((resolve) => dom.window.setTimeout(resolve, 20));
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 200));
     assert.equal(surface.style.width, '800px');
     assert.equal(surface.style.height, '568px');
     assert.equal(intents.length, 3, 'each distinct stabilized size must be published once');
@@ -490,9 +529,9 @@ test('Project render surface and panel follow the iOS keyboard viewport while te
     mountActiveTextEditor({ atomeId: 'panel_lab_text_input', documentRef: dom.window.document });
     Object.defineProperty(visualViewport, 'height', { configurable: true, value: 463 });
     setBox(view, 390, 463);
-    const keyboardPanelViewport = resolveEffectivePanelViewport(view);
-    assert.equal(keyboardPanelViewport.width, 390);
-    assert.equal(keyboardPanelViewport.height, 463);
+    // Panels are Bevy nodes laid on this project surface and sized from it
+    // (bevy_panel_runtime.js#surfaceForPanels): they follow the keyboard viewport with it.
+    assert.equal(surface.id, 'eve_surface_project');
     visualViewport.dispatchEvent(new dom.window.Event('resize'));
     await new Promise((resolve) => dom.window.setTimeout(resolve, 200));
     assert.equal(surface.style.height, '463px');

@@ -64,8 +64,9 @@ test('obsolete project responses cannot overwrite newer reads or leak into the n
     const state = { active: true, openGeneration: 1, sceneProjectId: 'scene', dataProjectId: 'scene' };
     let calls = 0;
     const data = createDashboardDataController({ state, adapters: { listMany: async () => ++calls === 1 ? pending.promise : new Map([['projects', projectItems('new')]]) } });
+    // A second plain open joins the read in flight (dashboard_data_controller.js#inflightReads); the newer read is a forced one.
     const first = data.loadVisibleItems(categories, { categoryIds: ['projects'] });
-    await data.loadVisibleItems(categories, { categoryIds: ['projects'] });
+    await data.loadVisibleItems(categories, { categoryIds: ['projects'], force: true });
     pending.resolve(new Map([['projects', projectItems('old')]])); await first;
     expect(state.itemsByCategory.get('projects')[0].id).toBe('new');
     const accountRead = deferred();

@@ -239,7 +239,7 @@ test('Contact selection rail supports additive drag and cancellation', async () 
     }
 });
 
-test('Contact compact footer preserves conditional multi-delete and partial-failure recovery', async () => {
+test('Contact band preserves conditional multi-delete and partial-failure recovery', async () => {
     const previousWindow = globalThis.window;
     const previousDocument = globalThis.document;
     const deleteCalls = [];
@@ -266,12 +266,13 @@ test('Contact compact footer preserves conditional multi-delete and partial-fail
     try {
         await contactSurface.handleEvent({ type: 'contact.refresh' });
         let snapshot = contactSurface.readState();
-        let fixed = contactSurface.buildFixedContent(snapshot, { emit: () => {}, bodyWidth: 388 });
-        assert.deepEqual(fixed, []);
-        const footer = contactSurface.buildFooterContent(snapshot, { emit: () => {} });
-        assert.deepEqual(footer.map(child => child.id), ['contact_transfer_toggle', 'contact_create_user', 'contact_search']);
-        assert.equal(visit(fixed, (node) => node.id === 'contact_delete'), null, 'Delete is absent at zero selection');
-        assert.equal(visit(footer, node => node.id === 'contact_select_all'), null);
+        const emitted = [];
+        const bandKeys = () => contactSurface.buildBandTools(contactSurface.readState(), { emit: (intent) => emitted.push(intent) });
+        let tools = bandKeys();
+        // At zero selection the band holds the book's tools: the search, Import, Fusion, Créer.
+        assert.deepEqual(tools.map((item) => item.key), ['contact_search', 'contact_import', 'contact_merge_duplicates', 'contact_create']);
+        assert.equal(tools.some((item) => item.key === 'contact_delete'), false, 'Delete is absent at zero selection');
+        assert.equal(tools.some((item) => item.key === 'contact_select_all'), false);
 
         contactSurface.buildContent(snapshot, { emit: () => {}, bodyWidth: 388 });
         await contactSurface.handleEvent({ type: 'contact.selection.press', value: 'local_a', event: { y: 8 } });
@@ -279,20 +280,19 @@ test('Contact compact footer preserves conditional multi-delete and partial-fail
         await contactSurface.handleEvent({ type: 'contact.selection.press', value: 'local_b', event: { y: 8 } });
         await contactSurface.handleEvent({ type: 'contact.selection.release', id: 'local_b' });
         snapshot = contactSurface.readState();
-        fixed = contactSurface.buildFixedContent(snapshot, { emit: () => {}, bodyWidth: 388 });
-        assert.deepEqual(fixed[0].children.map(child => child.id), ['contact_delete']);
-        assert.equal(visit(fixed, (node) => node.id === 'contact_delete').accessibility.label, 'Supprimer (2)');
+        tools = bandKeys();
+        // While cards are ticked, only what acts on them: Suppr., Export, Tout / Aucun — and Créer.
+        assert.deepEqual(tools.map((item) => item.key), ['contact_search', 'contact_delete', 'contact_export', 'contact_select_all', 'contact_create']);
+        const remove = tools.find((item) => item.key === 'contact_delete');
+        assert.equal(remove.lit, false);
 
-        await contactSurface.handleEvent({ type: 'contact.delete.request' });
-        fixed = contactSurface.buildFixedContent(contactSurface.readState(), { emit: () => {}, bodyWidth: 388 });
-        const confirmation = visit(fixed, (node) => node.id === 'contact_delete_confirmation');
-        assert.equal(confirmation.kind, 'column');
-        assert.deepEqual(confirmation.children.map((child) => child.id), [
-            'contact_delete_confirmation_text',
-            'contact_delete_confirmation_buttons'
-        ]);
-        assert.equal(visit(fixed, (node) => node.id === 'contact_add'), null, 'confirmation replaces the normal action bar');
-        assert.equal(contactSurface.readState().status, '', 'Contact notices stay out of the shared footer');
+        // Suppr. deletes at its second touch, through the one arming of every delete (bevy_ui_tools_band.js).
+        await remove.onSelect();
+        assert.equal(emitted.length, 0, 'the first touch only arms the deletion');
+        assert.equal(bandKeys().find((item) => item.key === 'contact_delete').lit, true, 'the armed delete is lit');
+        await bandKeys().find((item) => item.key === 'contact_delete').onSelect();
+        assert.deepEqual(emitted, [{ type: 'contact.delete.confirm' }]);
+        assert.equal('status' in contactSurface.readState(), false, 'Contact notices stay out of the shared band status');
         const result = await contactSurface.handleEvent({ type: 'contact.delete.confirm' });
         assert.equal(result.partial, true);
         assert.deepEqual(deleteCalls, ['local_a', 'local_b']);
@@ -343,11 +343,13 @@ test('Contact filters headless sources and handles zero, one, or multiple intera
     const emptyDom = installContactEnvironment({ items: [], current: { id: 'current_user', name: 'Current user' } });
     try {
         await contactSurface.handleEvent({ type: 'contact.refresh' });
-        await contactSurface.handleEvent({ type: 'contact.transfer.toggle' });
+        const tools = contactSurface.buildBandTools(contactSurface.readState(), { emit: () => {} });
+        assert.equal(tools.some((item) => item.key === 'contact_import'), false, 'without an interactive source the band offers no Import');
+        assert.deepEqual(await contactSurface.handleEvent({ type: 'contact.import.request' }), { ok: false, error: 'contacts_interactive_import_unavailable' });
         const content = contactSurface.buildContent(contactSurface.readState(), { emit: () => {}, bodyWidth: 388 });
-        assert.ok(visit(content, (node) => node.id === 'contact_import_unavailable_notice'));
-        assert.equal(visit(content, node => node.id === 'contact_import').on, undefined);
-        assert.equal((await contactSurface.handleEvent({ type: 'contact.import.request' })).ok, false);
+        assert.equal(visit(content, (node) => node.id === 'contact_transfer_notice').text, contactSurface.readState().transferNotice,
+            'the reason is said above the band');
+        assert.equal(contactSurface.readState().transferError, true);
     } finally {
         await contactSurface.onClose?.();
         emptyDom.window.close();
@@ -435,7 +437,7 @@ test('requested-contact hydration preserves manual virtual-list position', async
     } finally { cleanup?.(); globalThis.window = previousWindow; globalThis.document = previousDocument; dom.window.close(); }
 });
 
-test('Contact footer searches live through the shared editor and contact matcher', async () => {
+test('Contact band searches live through the shared editor and contact matcher', async () => {
     const previousWindow = globalThis.window, previousDocument = globalThis.document;
     const dom = installContactEnvironment({ items: [
         { id: 'ada', name: 'Ada', email: 'ada@example.test', source_provider: 'eve_contacts_local', source_writable: true },
@@ -444,8 +446,9 @@ test('Contact footer searches live through the shared editor and contact matcher
     const refresh = vi.fn();
     try {
         await contactSurface.handleEvent({ type: 'contact.refresh' });
-        const footer = contactSurface.buildFooterContent(contactSurface.readState(), { emit: () => {}, bodyWidth: 388 });
-        assert.equal(footer.find(child => child.id === 'contact_search').kind, 'text_input');
+        // The search field is the band's own field (bevy_panel_contact_actions.js#buildBandTools).
+        const search = contactSurface.buildBandTools(contactSurface.readState(), { emit: () => {} }).find(item => item.key === 'contact_search');
+        assert.equal(search.field.render({ id: 'contact_search', position: [0, 0], size: [240, 40] }).kind, 'text_input');
         await contactSurface.handleEvent({ type: 'contact.search.field.focus', key: 'query' }, { refresh });
         const { getActiveTextEditor } = await import('../../eVe/domains/rendering/hidden_text_service_runtime.js');
         const editor = getActiveTextEditor();

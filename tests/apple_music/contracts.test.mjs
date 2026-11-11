@@ -2,7 +2,10 @@ import { expect, test, vi } from 'vitest';
 import { APPLE_MUSIC_ASSISTANT_INSTRUCTIONS, APPLE_MUSIC_COMMANDS, APPLE_MUSIC_ERRORS, validateAppleMusicInput } from '../../atome/src/squirrel/apple_music/contracts.js';
 import { createMcpContractHandlers } from '../../atome/src/squirrel/atome/mcp_handlers_contracts.js';
 import { resolveAccessPolicy } from '../../atome/src/squirrel/atome/mcp_security_policy.js';
-import { resolveActorProfile, hasActorCapability, writeIdempotencyRecord, readIdempotencyRecord } from '../../atome/src/squirrel/atome/mcp_security.js';
+import { hasActorCapability, writeIdempotencyRecord, readIdempotencyRecord } from '../../atome/src/squirrel/atome/mcp_security.js';
+// The actor's capabilities follow its transport (mcp_transport.js#resolveTransportActor replaced resolveActorProfile).
+import { resolveTransportActor } from '../../atome/src/squirrel/atome/mcp_transport.js';
+const ui = { source: { type: 'ui', layer: 'apple_music' } };
 import { getSessionState, setSessionState } from '../../atome/src/squirrel/apis/unified/adole_api/session.js';
 import { createConversationSession } from '../../atome/src/squirrel/ai/conversation_session.js';
 import { createMcpAiRuntimeHandlers } from '../../atome/src/squirrel/atome/mcp_handlers_ai_runtime.js';
@@ -31,10 +34,11 @@ test('music MCP uses canonical Runtime V2, granular capabilities and write idemp
         calls.push(input); return { ok: true, result: { ok: true, playback: 'paused' } };
     } } } } };
     try {
-        await handlers['apple_music.pause']({ idempotency_key: 'once', source: { type: 'voice' } });
-        expect(calls[0]).toMatchObject({ tool_id: 'apple_music.pause', input: {}, meta: { idempotency_key: 'once' } });
+        // The transport (actor, source) reaches a handler in `__mcp`, as mcp.js#run sets it; params never name the caller.
+        await handlers['apple_music.pause']({ idempotency_key: 'once', __mcp: { actor: { actor_id: 'owner' }, source: { type: 'voice', layer: 'test' } } });
+        expect(calls[0]).toMatchObject({ tool_id: 'apple_music.pause', input: {}, meta: { idempotency_key: 'once' }, source: { type: 'voice' }, actor: { actor_id: 'owner' } });
         expect((await handlers['apple_music.search']({ query: 'A', script: 'bad' })).error).toBe('INVALID_ARGUMENT');
-        const actor = resolveActorProfile({});
+        const actor = resolveTransportActor(ui);
         for (const command of APPLE_MUSIC_COMMANDS) {
             for (const [method, params] of [[command.name, {}], ['runtime.tools.call', { tool_id: command.name }]]) {
                 const policy = resolveAccessPolicy(method, params);
@@ -48,8 +52,8 @@ test('music MCP uses canonical Runtime V2, granular capabilities and write idemp
 test('voice gets music listening tools immediately and preserves the same MCP execution path as television', async () => {
     const invoked = [], catalog = APPLE_MUSIC_COMMANDS.map(command => ({ name: command.name, description: command.description, parameters: command.input_schema }));
     const sessionOn = toolContext => createConversationSession({ actor: () => ({ id: 'alice' }), quota: { getSummary: () => ({}) }, toolContext,
-        mcp: async ({ method, params }) => ({ result: method === 'runtime.tools.list' ? { tools: catalog } : method === 'ai.tools.list' ? { tools: [] }
-            : (invoked.push(params), { ok: true, playback: 'opened_unconfirmed' }) }) });
+        mcp: async ({ method, params }, transport) => ({ result: method === 'runtime.tools.list' ? { tools: catalog } : method === 'ai.tools.list' ? { tools: [] }
+            : (invoked.push({ ...params, source: transport.source }), { ok: true, playback: 'opened_unconfirmed' }) }) });
     // A host without Apple Music (Web, desktop) contributes nothing: the assistant is never told to use it.
     const elsewhere = await sessionOn(async () => null).createVoiceTools({ signal: new AbortController().signal, deliver: async () => {} });
     expect(elsewhere.instructions).not.toContain('Apple Music:');
@@ -81,7 +85,7 @@ test('MusicKit commands are permitted from a consultation home without allowing 
     } finally { restoreProjectWorkModeValue('home', 'edit', { windowRef }); }
 });
 test('batch and toolchain policies retain the Apple Music write capability', () => {
-    const actor = resolveActorProfile({ actor: { capabilities: ['runtime.execute'] } });
+    const actor = resolveTransportActor({ ...ui, actor: { capabilities: ['runtime.execute'] } });
     const batch = resolveAccessPolicy('runtime.tools.batch_call', { events: [{ tool_id: 'apple_music.create_playlist', input: { name: 'A' } }] });
     expect(batch.required_capabilities).toContain('apple_music.write');
     expect(hasActorCapability(actor, batch.required_capabilities)).toBe(false);
@@ -89,26 +93,31 @@ test('batch and toolchain policies retain the Apple Music write capability', () 
         { method: 'runtime.tools.call', params: { tool_id: 'ui.capture.audio' } },
         { method: 'runtime.tools.call', params: { tool_id: 'apple_music.add_tracks' } }
     ] });
-    expect(chain.required_capabilities).toContain('apple_music.write');
+    // Each step is judged as a request of its own (mcp_handlers_platform.js#mcp.toolchains.execute dispatches it through mcp.js):
+    // the chain needs only mcp.read, its Apple Music step still needs the write capability.
+    expect(chain.required_capabilities).toEqual(['mcp.read']);
+    expect(resolveAccessPolicy('runtime.tools.call', { tool_id: 'apple_music.add_tracks' }).required_capabilities).toContain('apple_music.write');
 });
 test('batch execution inherits the caller actor, dry-run and stable per-step idempotency', async () => {
     const invokeBatch = vi.fn(async () => ({ ok: true })), previous = globalThis.window;
     globalThis.window = { document: {}, atome: { tools: { v2Runtime: { invokeBatch, invokeById: vi.fn() } } } };
     try {
-        await createMcpAiRuntimeHandlers()['runtime.tools.batch_call']({ actor: { id: 'alice' }, dry_run: true, idempotency_key: 'batch',
+        // The caller is the transport's (`__mcp.actor`); an event's own `actor` is never taken.
+        await createMcpAiRuntimeHandlers()['runtime.tools.batch_call']({ __mcp: { actor: { actor_id: 'alice' }, source: { type: 'ai', layer: 'test' } }, dry_run: true, idempotency_key: 'batch',
             events: [{ tool_id: 'apple_music.create_playlist', input: { name: 'A' }, actor: { id: 'other' } }] });
-        expect(invokeBatch.mock.calls[0][0][0]).toMatchObject({ actor: { id: 'alice' }, dry_run: true, meta: { idempotency_key: 'batch:0' } });
+        expect(invokeBatch.mock.calls[0][0][0]).toMatchObject({ actor: { actor_id: 'alice' }, dry_run: true, meta: { idempotency_key: 'batch:0' } });
     } finally { globalThis.window = previous; }
 });
 test('MCP idempotency receipts are isolated by the real Atome account and delegated actor', () => {
     const previous = getSessionState(), policy = resolveAccessPolicy('apple_music.create_playlist');
-    const params = { idempotency_key: 'same', actor: { id: 'assistant' } };
+    // The delegated actor is the transport's (resolveTransportActor), a separate argument now, never a request param.
+    const params = { idempotency_key: 'same' }, assistant = { actor_id: 'assistant' };
     try {
         setSessionState({ mode: 'authenticated', user: { id: 'alice' } }, { persist: false, silent: true });
-        writeIdempotencyRecord('apple_music.create_playlist', params, policy, { playlist_id: 'private' });
-        expect(readIdempotencyRecord('apple_music.create_playlist', params, policy).result.playlist_id).toBe('private');
-        expect(readIdempotencyRecord('apple_music.create_playlist', { ...params, actor: { id: 'other' } }, policy)).toBeNull();
+        writeIdempotencyRecord('apple_music.create_playlist', params, policy, assistant, { playlist_id: 'private' });
+        expect(readIdempotencyRecord('apple_music.create_playlist', params, policy, assistant).result.playlist_id).toBe('private');
+        expect(readIdempotencyRecord('apple_music.create_playlist', params, policy, { actor_id: 'other' })).toBeNull();
         setSessionState({ mode: 'authenticated', user: { id: 'bob' } }, { persist: false, silent: true });
-        expect(readIdempotencyRecord('apple_music.create_playlist', params, policy)).toBeNull();
+        expect(readIdempotencyRecord('apple_music.create_playlist', params, policy, assistant)).toBeNull();
     } finally { setSessionState(previous, { persist: false, silent: true }); }
 });

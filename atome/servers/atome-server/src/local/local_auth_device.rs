@@ -335,8 +335,11 @@ fn bind(
                 &JsonMap::new(),
             )?;
         }
+        // A resume that changes nothing writes nothing: rewriting the same grant cost every launch a
+        // synchronous commit (0.44 s on a phone).
         tx.execute("INSERT INTO auth_local_grants (grant_id,local_principal,remote_principal,key_id,key_scope,generation,locked,remote_session_id,remote_session_generation) VALUES (?1,?2,?3,?4,?5,?6,0,?7,?8)
-            ON CONFLICT(remote_principal,key_id) DO UPDATE SET locked=0,generation=excluded.generation,remote_session_id=excluded.remote_session_id,remote_session_generation=excluded.remote_session_generation",
+            ON CONFLICT(remote_principal,key_id) DO UPDATE SET locked=0,generation=excluded.generation,remote_session_id=excluded.remote_session_id,remote_session_generation=excluded.remote_session_generation
+            WHERE locked<>0 OR generation<>excluded.generation OR remote_session_id IS NOT excluded.remote_session_id OR remote_session_generation IS NOT excluded.remote_session_generation",
             rusqlite::params![grant,principal,remote_id,key_id,scope,generation,remote_session_id,remote_session_generation]).map_err(|_| "local_account_write_failed")?;
         tx.commit().map_err(|_| "local_account_write_failed")?;
         (grant, principal, generation)

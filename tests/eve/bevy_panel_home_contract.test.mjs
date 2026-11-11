@@ -11,7 +11,8 @@ import { createHomeAccessRuntime } from "../../eVe/intuition/runtime/bevy_panel/
 import { handleHomeVaultEvent } from "../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_vault_runtime.js";
 import { resolveBevyPanelGeometry } from "../../eVe/intuition/runtime/bevy_panel/bevy_panel_layout.js";
 import { setMainMenuRuntime } from "../../eVe/intuition/ribbon/bevy_ui_product_registry.js";
-import { buildHomeContent, buildHomeFixedContent } from "../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_view.js";
+import * as homeView from "../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_view.js";
+const { buildHomeBandTools, buildHomeContent } = homeView;
 import { normalizeVisualPreferences } from '../../eVe/intuition/tools/user_visual_preferences_model.js';
 
 const baseState = (overrides = {}) => ({
@@ -73,25 +74,18 @@ const editing = {
 
 const flatten = (nodes = []) => nodes.flatMap((entry) => [entry, ...flatten(entry?.children || [])]);
 
-test('Home keeps logout on the left and requires a separate confirmation; Cancel has no hold action', () => {
-    const events = [];
-    const build = pending => buildHomeFixedContent(baseState({ sessionExitPending: pending }), { emit: event => events.push(event.type), bodyWidth: 320 });
-    const initial = build(false)[0];
-    assert.equal(initial.children[0].id, 'home_session_exit');
-    assert.equal(initial.children[0].hold_delay_ms, 1000);
-    initial.children[0].on.activate();
-    assert.deepEqual(events, ['home.session.exit']);
-    const confirmed = build(true)[0];
-    assert.equal(confirmed.children.at(-1).id, 'home_session_confirm');
-    assert.equal(confirmed.children[0].on.long_press, undefined);
-    confirmed.children[0].on.activate();
-    confirmed.children.at(-1).on.activate();
-    initial.children[0].on.long_press();
-    assert.deepEqual(events, ['home.session.exit', 'home.session.exit', 'home.session.confirm', 'home.session.hold']);
+// Logging out left Home: it is the Atom's gesture on the Dashboard (bevy_panel_home_view.js, dashboard_eve_assistant_choices.js).
+test('Home never offers logout: no fixed session row, no session node, an empty band for a signed-in owner', () => {
+    assert.equal('buildHomeFixedContent' in homeView, false);
+    const state = baseState();
+    const all = flatten(['identity', 'bio', 'profile', 'settings'].flatMap(expanded => buildHomeContent({ ...state, expanded }, { emit: () => {}, bodyWidth: 452, editing })));
+    assert.equal(all.some(entry => /^home_session_/.test(entry?.id || '')), false);
+    assert.deepEqual(buildHomeBandTools({ ...readHomePanelState(), focus: 'card' }, { emit: () => {} }), []);
 });
 
 test('Home is the card of the current user with a collapsed Settings accordion below it', () => {
-    const state = baseState();
+    // The privacy rules read the runtime's snapshot (bevy_panel_home_privacy.js#readState); without it they say unavailable.
+    const state = baseState({ privacy: readHomePanelState().privacy });
     const nodes = buildHomeContent(state, { emit: () => {}, bodyWidth: 452, editing });
     const all = flatten([
         ...nodes,
@@ -99,7 +93,6 @@ test('Home is the card of the current user with a collapsed Settings accordion b
         ...buildHomeContent({ ...state, expanded: 'profile' }, { emit: () => {}, bodyWidth: 452, editing }),
         ...buildHomeContent({ ...state, expanded: 'settings' }, { emit: () => {}, bodyWidth: 452, editing })
     ]);
-    const fixed = buildHomeFixedContent(state, { emit: () => {}, bodyWidth: 452 });
 
     assert.equal(homeSurface.surfaceKey, 'home');
     assert.equal(homeSurface.surfaceId, 'eve_bevy_panel_home');
@@ -124,6 +117,8 @@ test('Home is the card of the current user with a collapsed Settings accordion b
         'home_settings_preferences_accordion',
         'home_settings_level_accordion',
         'home_settings_passkeys_accordion',
+        // Home › My hardware (bevy_panel_home_hardware.js): this device's name and the account's other devices.
+        'home_settings_hardware_accordion',
         'home_settings_security_accordion',
         'home_settings_privacy_accordion'
     ]);
@@ -149,9 +144,6 @@ test('Home is the card of the current user with a collapsed Settings accordion b
     assert.ok(all.some((entry) => entry.id === 'home_handedness'));
     assert.ok(all.some((entry) => entry.id === 'home_accessibility_auditory'));
     assert.ok(all.some((entry) => entry.id === 'home_server_select'));
-    assert.equal(fixed[0].id, 'home_session_buttons');
-    assert.equal(fixed[0].children[0].id, 'home_session_exit');
-    assert.equal(fixed[0].children.some(child => child.id === 'home_session_confirm'), false);
     assert.equal(profileDisplayName(state.profile), 'Ada');
 });
 
@@ -177,19 +169,23 @@ test('the card of somebody else holds only their shared card and never any setti
     assert.equal(localAll.some((entry) => entry.id === 'home_settings_accordion'), false);
 });
 
-test('only the handedness, the accordion side and the expertise levels remain visual preferences', () => {
-    assert.deepEqual(normalizeVisualPreferences({}), {
-        handedness: 'right', accordionDirection: 'down', masteryLevel: 'beginner', activityLevels: {}, mysticAutoSize: true, dashboardStyle: 'auto'
-    });
-    assert.deepEqual(normalizeVisualPreferences({
+// The visual preferences grew (text ratio, grid joint, glass, colours: user_visual_preferences_model.js, user 4 Nov. 2026)
+// and their defaults moved (accordion up, R3's advanced level, hence eVe Pro); what stays is that a retired key never survives.
+test('visual preferences keep only their listed keys; retired settings and styles fall back to the level', () => {
+    const defaults = normalizeVisualPreferences({});
+    assert.deepEqual([defaults.handedness, defaults.accordionDirection, defaults.masteryLevel, defaults.activityLevels, defaults.mysticAutoSize, defaults.dashboardStyle],
+        ['right', 'up', 'advanced', {}, true, 'eve']);
+    const legacy = normalizeVisualPreferences({
         handedness: 'left', renderStyle: 'liquid', navigationTaxonomy: 'modern',
         mysticRoundness: 0, mysticTileGap: 4, mysticOpeningMs: 6000, liquidTheme: 'eau'
-    }), { handedness: 'left', accordionDirection: 'down', masteryLevel: 'beginner', activityLevels: {}, mysticAutoSize: true, dashboardStyle: 'auto' },
-    'retired settings are dropped on the next save');
-    assert.equal(normalizeVisualPreferences({ accordionDirection: 'up' }).accordionDirection, 'up');
-    assert.equal(normalizeVisualPreferences({ dashboardStyle: 'eve' }).dashboardStyle, 'eve');
-    assert.equal(normalizeVisualPreferences({ dashboardStyle: 'mystic' }).dashboardStyle, 'eve_basic');
-    assert.equal(normalizeVisualPreferences({ dashboardStyle: 'unknown' }).dashboardStyle, 'eve_basic');
+    });
+    assert.deepEqual(legacy, normalizeVisualPreferences({ handedness: 'left' }), 'retired settings are dropped on the next save');
+    ['renderStyle', 'navigationTaxonomy', 'mysticRoundness', 'mysticTileGap', 'mysticOpeningMs', 'liquidTheme'].forEach(key => assert.equal(key in legacy, false, key));
+    assert.equal(normalizeVisualPreferences({ accordionDirection: 'down' }).accordionDirection, 'down');
+    assert.equal(normalizeVisualPreferences({ dashboardStyle: 'eve_basic' }).dashboardStyle, 'eve_basic');
+    assert.equal(normalizeVisualPreferences({ dashboardStyle: 'mystic' }).dashboardStyle, 'eve');
+    assert.equal(normalizeVisualPreferences({ dashboardStyle: 'mystic', masteryLevel: 'beginner' }).dashboardStyle, 'eve_basic');
+    assert.equal(normalizeVisualPreferences({ dashboardStyle: 'unknown', masteryLevel: 'beginner' }).dashboardStyle, 'eve_basic');
 });
 
 test('the shared card defaults to the name, the first name, the nickname and the photo', () => {
@@ -440,7 +436,10 @@ test('Home overlays a confirmed Contact update without discarding stored section
 
 test('Home list additions retain blank stable rows immediately above the canonical add action', async () => {
     const runtimeSource = fs.readFileSync(new URL('../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_runtime.js', import.meta.url), 'utf8');
-    assert.match(runtimeSource, /home\.field\.focus'[\s\S]*`\$\{path\}\.\$\{itemIndex\}\.label`/, 'A newly added Home list row must immediately focus its first canonical field');
+    // The list rows moved to the profile editor (bevy_panel_home_profile_editor.js); the runtime hands it the canonical focus.
+    const editorSource = fs.readFileSync(new URL('../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_profile_editor.js', import.meta.url), 'utf8');
+    assert.match(runtimeSource, /createHomeProfileEditor\(\{[\s\S]*focusField: \(field, refresh\) => editing\.handle\(\{ type: 'home\.field\.focus', field/);
+    assert.match(editorSource, /focusField\(`\$\{path\}\.\$\{itemIndex\}\.label`/, 'A newly added Home list row must immediately focus its first canonical field');
     assert.match(runtimeSource, /home\.credential\.add'[\s\S]*home\.field\.focus'[\s\S]*credentials\.\$\{credentialId\}\.name/, 'A newly added credential must immediately focus its name field');
     const sections = [
         ['custom_fields', 'home_custom_fields', 'identity'],
@@ -468,38 +467,32 @@ test('Home list additions retain blank stable rows immediately above the canonic
     }
 });
 
-test('Home opening geometry follows handedness, side centering and compact mobile sizing', () => {
+// The panel now opens at its foot, above the ribbon, its slab laid on the one screen grid (bevy_panel_layout.js, D5), and a
+// phone takes it edge to edge (phonePlacement): the contract kept is the mirror of the hand, the foot and the phone's width.
+test('Home opening geometry follows handedness, rests above the ribbon and fills a phone', () => {
     const previousWindow = globalThis.window;
-    globalThis.window = {};
-    const desktopSurface = { getBoundingClientRect: () => ({ width: 1024, height: 768 }) };
+    const open = (handedness, width, height) => {
+        globalThis.window = { innerWidth: width, innerHeight: height, __eveIntuitionXState: { handedness } };
+        setMainMenuRuntime({ handedness, getReservedHeight: () => 74 });
+        return resolveBevyPanelGeometry({
+            surface: { getBoundingClientRect: () => ({ width, height }) },
+            defaultGeometry: homeSurface.defaultGeometry,
+            allowMobileFloating: true,
+            openAtHandednessEdge: true
+        });
+    };
     try {
-        setMainMenuRuntime({ handedness: 'left', getReservedHeight: () => 74 });
-        globalThis.window.__eveIntuitionXState = { handedness: 'left' };
-        const left = resolveBevyPanelGeometry({
-            surface: desktopSurface,
-            defaultGeometry: homeSurface.defaultGeometry,
-            allowMobileFloating: true,
-            openAtHandednessEdge: true
-        });
-        assert.deepEqual([left.x, left.y, left.width, left.height], [0, 37, 480, 620]);
-
-        setMainMenuRuntime({ handedness: 'right', getReservedHeight: () => 74 });
-        globalThis.window.__eveIntuitionXState = { handedness: 'right' };
-        const right = resolveBevyPanelGeometry({
-            surface: desktopSurface,
-            defaultGeometry: homeSurface.defaultGeometry,
-            allowMobileFloating: true,
-            openAtHandednessEdge: true
-        });
-        assert.deepEqual([right.x, right.y, right.width, right.height], [544, 37, 480, 620]);
-
-        const mobile = resolveBevyPanelGeometry({
-            surface: { getBoundingClientRect: () => ({ width: 390, height: 844 }) },
-            defaultGeometry: homeSurface.defaultGeometry,
-            allowMobileFloating: true,
-            openAtHandednessEdge: true
-        });
-        assert.deepEqual([mobile.x, mobile.y, mobile.width, mobile.height], [20, 75, 370, 620]);
+        const left = open('left', 1024, 768), right = open('right', 1024, 768);
+        assert.equal(left.mobile, false);
+        assert.ok(left.x < right.x);
+        assert.equal(left.x, 1024 - (right.x + right.width), 'the right hand mirrors the left');
+        assert.deepEqual([left.y, left.height, left.width], [right.y, right.height, right.width]);
+        assert.equal(left.height, 620);
+        assert.equal(left.y + left.height, 768 - left.toolboxReservedHeight, 'its foot rests on the ribbon reserve');
+        const mobile = open('left', 390, 844);
+        assert.equal(mobile.mobile, true);
+        assert.deepEqual([mobile.placement.left, mobile.placement.width], [0, 390], 'a phone gives it the whole width');
+        assert.equal(mobile.y + mobile.height, 844 - mobile.toolboxReservedHeight);
     } finally {
         if (previousWindow === undefined) delete globalThis.window;
         else globalThis.window = previousWindow;

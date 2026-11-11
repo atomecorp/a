@@ -328,7 +328,8 @@ test('the shared pointer route applies the release on the panel control and neve
         hoverTarget: null,
         pointerTarget: null,
         focusTarget: null,
-        pendingTextActivation: null
+        pendingTextActivation: null,
+        touchObservers: new Set()
     };
     const runtime = createBevyUiPointerRuntime({
         state,
@@ -367,7 +368,8 @@ test('a held palette gesture previews the choice under the finger and reverts wh
         capturedPointerHandlers: new Map(),
         paletteHoverTarget: null,
         hoverTarget: null,
-        pointerTarget: null
+        pointerTarget: null,
+        touchObservers: new Set()
     };
     const names = [];
     const previews = [];

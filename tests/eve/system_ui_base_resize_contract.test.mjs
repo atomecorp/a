@@ -84,10 +84,13 @@ console.log(JSON.stringify({
         panelMaterialShadowBlur: BEVY_PANEL_TOKENS.material.shadow.blur,
         panelControlShadowBlur: BEVY_PANEL_TOKENS.controlMaterial.shadow.blur,
         panelActionShadowBlur: BEVY_PANEL_TOKENS.actionButton.shadow.blur,
-        panelActionFocusSpread: BEVY_PANEL_TOKENS.actionButton.focusShadow.spread,
-        panelInputFocusSpread: BEVY_PANEL_TOKENS.input.focusShadow.spread,
-        panelSelectFocusSpread: BEVY_PANEL_TOKENS.select.focusShadow.spread,
-        buttonFocusSpread: EVE_BUTTON_SKIN_TOKENS.bevyButton.focusShadow.spread,
+        // A keyboard focus takes the hover look and draws no ring of its own:
+        // the lengths a control is painted with are its shadow, radius and glyph.
+        panelActionOffsetY: BEVY_PANEL_TOKENS.actionButton.shadow.offset[1],
+        panelActionRadius: BEVY_PANEL_TOKENS.actionButton.radiusPx,
+        panelSelectChevron: BEVY_PANEL_TOKENS.select.chevronSizePx,
+        buttonSurfaceShadowBlur: EVE_BUTTON_SKIN_TOKENS.bevyButton.surface.shadow.blur,
+        buttonRadius: EVE_BUTTON_SKIN_TOKENS.bevyButton.radiusPx,
         toolboxRowRadius: EVE_TOOL_SKIN_TOKENS.toolbox.rowRadiusPx,
         subtoolBorderRadius: EVE_TOOL_SKIN_TOKENS.metrics.subtoolBorderRadiusPx,
         dashboardContentRadius: DASHBOARD_VISUAL_TOKENS.metrics.contentRadius,
@@ -151,8 +154,8 @@ describe('System UI base resize contract', () => {
         // A box that follows the base while its corner and drop shadow do not is
         // still a frozen surface: the whole paint must move together.
         for (const name of ['surfaceShadowBlur', 'panelMaterialShadowBlur', 'panelControlShadowBlur',
-            'panelActionShadowBlur', 'buttonFocusSpread', 'panelActionFocusSpread', 'panelInputFocusSpread',
-            'panelSelectFocusSpread', 'commonRadiusXs', 'commonRadiusSm', 'commonRadiusMd', 'commonRadiusLg',
+            'panelActionShadowBlur', 'panelActionOffsetY', 'panelActionRadius', 'panelSelectChevron',
+            'buttonSurfaceShadowBlur', 'buttonRadius', 'commonRadiusXs', 'commonRadiusSm', 'commonRadiusMd', 'commonRadiusLg',
             'commonLabelShadowBlur', 'commonLabelShadowOffsetY', 'toolboxRowRadius', 'subtoolBorderRadius',
             'dashboardContentRadius']) {
             expect(alternate.lengths[name], `${name} must follow the base`).toBeCloseTo(scale(authoredLengths[name]), 6);

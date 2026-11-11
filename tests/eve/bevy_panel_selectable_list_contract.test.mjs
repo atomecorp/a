@@ -4,13 +4,13 @@ import { test } from 'vitest';
 import { normalizeSelectableListPresentation } from '../../atome/src/squirrel/components/selectable_list_contract.js';
 import { projectBevyUiTreeRecords } from '../../eVe/domains/rendering/bevy_ui_overlay_record_projection.js';
 import { createBevyUiPointerRuntime } from '../../eVe/domains/rendering/bevy_ui_pointer_runtime.js';
-import { createBevyUiScrollRuntime } from '../../eVe/domains/rendering/bevy_ui_scroll_runtime.js';
+import { createTestScrollRuntime } from './bevy_scroll_engine_double.mjs';
 import { INTERACTIVE_KINDS, SUPPORTED_KINDS } from '../../eVe/domains/rendering/bevy_ui_tree_normalization.js';
 import {
     hierarchicalSelectableListNode,
     selectableListGroupNode
 } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_selectable_list.js';
-import { BEVY_PANEL_TOKENS, resolveListRowTokens } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
+import { BEVY_PANEL_TOKENS, hoverSurface, resolveListRowTokens, selectedSurface } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
 
 const options = [
     { value: 'first', label: 'List item' },
@@ -85,11 +85,17 @@ test('shared selectable-list builder uses native buttons, existing Select states
         [first, second, unavailable].map((row) => row.style.position),
         [0, 1, 2].map((index) => [0, index * (optionHeightPx + menuGapPx)])
     );
+    // A focused row takes the hover look (AGENTS.md rule 15): the shared control material, halfway lit.
     assert.deepEqual(first.style.background, BEVY_PANEL_TOKENS.controlMaterial.background);
-    assert.deepEqual(first.style.shadow, BEVY_PANEL_TOKENS.select.focusShadow);
+    const hovered = { ...BEVY_PANEL_TOKENS.controlMaterial, ...hoverSurface(BEVY_PANEL_TOKENS.controlMaterial) };
+    assert.deepEqual(first.style.shadow, hovered.shadow, 'the hover keeps the material\'s own drop shadow');
+    assert.deepEqual(first.style.tint ?? first.style.background, hovered.tint ?? hovered.background);
     assert.deepEqual(second.style.background, BEVY_PANEL_TOKENS.controlMaterial.background);
-    assert.ok(findNode(group, 'list_option_1_selected_mark_short'));
-    assert.ok(findNode(group, 'list_option_1_selected_mark_long'));
+    // The one selected look (AGENTS.md rule 15): the row's own face lit and pressed in, never a check mark beside it.
+    const selected = { ...BEVY_PANEL_TOKENS.controlMaterial, ...selectedSurface(BEVY_PANEL_TOKENS.controlMaterial) };
+    assert.deepEqual(second.style.surfacePaint, selected.surfacePaint);
+    assert.deepEqual(second.style.tint ?? second.style.background, selected.tint ?? selected.background);
+    assert.equal(findNode(group, 'list_option_1_selected_mark_short'), null);
     assert.equal(first.on.activate instanceof Function, true);
     assert.equal(unavailable.on, undefined);
     assert.equal(unavailable.style.opacity, BEVY_PANEL_TOKENS.select.disabledOpacity);
@@ -100,7 +106,7 @@ test('selectable-list buttons use the canonical pointer press-release-activate l
     const canvas = { setPointerCapture: () => {}, releasePointerCapture: () => {} };
     const target = { treeId: 'selectable_list_tree', nodeId: 'list_option_1', kind: 'button', box: {}, scrollAncestors: [] };
     const runtime = createBevyUiPointerRuntime({
-        state: { lastSurfacePoints: new Map(), pointerTarget: null, focusTarget: null, hoverTarget: null, pendingTextActivation: null },
+        state: { lastSurfacePoints: new Map(), pointerTarget: null, focusTarget: null, hoverTarget: null, pendingTextActivation: null, touchObservers: new Set() },
         hitTestTrees: () => target,
         localEventForTarget: (_, type) => ({ type }),
         emitUiEvents: (events) => emitted.push(...events),
@@ -169,7 +175,7 @@ test('canonical pointer hold hands a row drag ownership only after the delay and
     const target = { treeId: 'info', nodeId: 'row', kind: 'button', box: {}, scrollAncestors: ['scroll'] };
     const state = {
         lastSurfacePoints: new Map(), pointerTarget: null, focusTarget: null,
-        hoverTarget: null, pendingTextActivation: null,
+        hoverTarget: null, pendingTextActivation: null, touchObservers: new Set(),
         handlers: new Map([
             ['info:row:long_press', () => {}],
             ['info:row:drag', () => {}],
@@ -217,7 +223,7 @@ test('canonical pointer hold hands a row drag ownership only after the delay and
 
 test('canonical Bevy scroll owner emits window position metadata for every virtualized panel list', () => {
     const emitted = [];
-    const scroll = createBevyUiScrollRuntime({
+    const scroll = createTestScrollRuntime({
         refreshTree: async () => null,
         emitTargetEvent: (target, eventName, point, delta) => emitted.push({ target, eventName, point, delta }),
         requestFrame: () => 0

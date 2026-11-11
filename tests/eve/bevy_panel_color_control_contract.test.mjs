@@ -18,6 +18,9 @@ const { BEVY_PANEL_TOKENS } = await import('../../eVe/intuition/runtime/bevy_pan
 const { COLOR_CONTROL_CHANNELS, colorWheelTexture, createColorControlRuntime, hsvToRgb } =
     await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_color_control.js');
 const { createColorPanelSurface } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_color_runtime.js');
+const { SYSTEM_UI_METRICS } = await import('../../eVe/elements/system_ui_tokens.js');
+const { BEVY_MENU_TOKENS } = await import('../../eVe/intuition/ribbon/bevy_ui_menu_surface.js');
+const { SLIDER_MARK_ROOM_PX } = await import('../../eVe/intuition/shared/bevy_ui_slider_gauge.js');
 
 const findNode = (value, id) => {
     const nodes = Array.isArray(value) ? value : [value];
@@ -47,31 +50,35 @@ test('the Couleur surface drops its duplicate heading and keeps the accessible l
 
 test('brightness and opacity bars paint and answer on the same box, with clamped handles', () => {
     const width = 320;
-    const knob = BEVY_PANEL_TOKENS.unitScalePx(18);
-    const trackHeight = BEVY_PANEL_TOKENS.unitScalePx(32);
+    // Each bar is the shared slider gauge, half a tool high; its bubble keeps
+    // centred in the last half tool of the travel, so it never leaves the gauge.
+    const knob = BEVY_MENU_TOKENS.toolSlider.markSizePx;
+    const trackHeight = SYSTEM_UI_METRICS.halfUnitPx;
+    const knobInset = (SLIDER_MARK_ROOM_PX - knob) / 2;
     const control = createColorControlRuntime({ id: 'color', label: 'Color', initial: { r: 0, g: 0, b: 0, a: 0 } });
     let tree = control.buildNode(control.readState(), () => {}, { width });
 
     ['value', 'opacity'].forEach((kind) => {
-        const image = findNode(tree, `color_${kind}_image`);
+        const gauge = findNode(tree, `color_${kind}_gauge`);
         const capture = findNode(tree, `color_${kind}_capture`);
-        assert.deepEqual(image.style.position, [0, 0], `${kind} paint is absolute in its stack`);
+        assert.equal(findNode(gauge, `color_${kind}_fill`)?.kind, 'image', `${kind} paints its own colour scale`);
+        assert.deepEqual(gauge.style.position, [0, 0], `${kind} paint is absolute in its stack`);
         assert.deepEqual(capture.style.position, [0, 0], `${kind} capture overlays the painted bar`);
-        assert.deepEqual(capture.style.size, image.style.size);
+        assert.deepEqual(capture.style.size, gauge.style.size);
         assert.deepEqual(capture.style.size, [width, trackHeight]);
         assert.equal(typeof capture.on.palette_choose, 'function', `${kind} answers panel quick mode`);
     });
 
-    const knobAt = (kind) => findNode(tree, `color_${kind}_knob`);
-    assert.equal(knobAt('value').style.position[0], 0, 'the handle never overflows the left end');
-    assert.equal(knobAt('opacity').style.position[0], 0);
-    assert.deepEqual(knobAt('value').style.shadow, BEVY_PANEL_TOKENS.buttonMaterial.knobShadow);
-    assert.deepEqual(knobAt('value').style.background, BEVY_PANEL_TOKENS.buttonMaterial.dot);
+    const knobAt = (kind) => findNode(tree, `color_${kind}_mark`);
+    assert.equal(knobAt('value').style.position[0], knobInset, 'the handle never overflows the left end');
+    assert.equal(knobAt('opacity').style.position[0], knobInset);
+    assert.deepEqual(knobAt('value').style.shadow, BEVY_MENU_TOKENS.toolSlider.fillShadow);
+    assert.deepEqual(knobAt('value').style.background, BEVY_MENU_TOKENS.toolSlider.mark);
 
     control.setChannels({ r: 255, g: 255, b: 255, a: 100 });
     tree = control.buildNode(control.readState(), () => {}, { width });
-    assert.equal(knobAt('value').style.position[0], width - knob, 'the handle never overflows the right end');
-    assert.equal(knobAt('opacity').style.position[0], width - knob);
+    assert.equal(knobAt('value').style.position[0], width - knob - knobInset, 'the handle never overflows the right end');
+    assert.equal(knobAt('opacity').style.position[0], width - knob - knobInset);
 });
 
 test('the wheel texture is generated above the render device scale', () => {

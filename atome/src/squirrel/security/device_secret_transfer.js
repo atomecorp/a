@@ -23,8 +23,14 @@ export const moveDeviceSecretsToAccount = async ({ userId, storage, security, re
         const record = await local.read(entryId);
         if (entryId === openAiEntry) {
             const key = String(record.value?.apiKey ?? record.value ?? '').trim();
+            // A key the account already holds wins over the device's, as for settings
+            // (device_settings_transfer); the device copy only fills an empty account.
+            const held = key && (await request('credential.status', {}, { expectedPrincipal: principal }))?.configured === true;
             // A key the provider refuses opens nothing anywhere: it is not carried over.
-            if (key) await request('credential.store', { key }, { expectedPrincipal: principal }).catch((error) => {
+            // Any other answer than a confirmed store keeps it here for a later load.
+            if (key && !held) await request('credential.store', { key }, { expectedPrincipal: principal }).then((result) => {
+                if (result?.configured !== true) throw new Error('provider_credential_store_unconfirmed');
+            }, (error) => {
                 if (error?.message !== 'invalid_api_key') throw error;
             });
         } else await security.storeToken(entryId, record.value, metadata);

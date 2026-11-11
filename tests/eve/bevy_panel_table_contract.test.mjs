@@ -105,7 +105,9 @@ test('shared panel Table composes the native passive table kind from panel token
     assert.deepEqual(header.style.background, BEVY_PANEL_TOKENS.controlMaterial.background);
     assert.deepEqual(header.style.radius_corners, [BEVY_PANEL_TOKENS.radiusPx, BEVY_PANEL_TOKENS.radiusPx, 0, 0]);
     assert.equal(findNode(table, 'table_fixture_header_cell_name_label').text, 'Name');
-    assert.equal(findNode(table, 'table_fixture_header_cell_name_label').style.opacity, tokens.headerLabelOpacity);
+    // A full-opacity header label carries no opacity of its own.
+    assert.equal(findNode(table, 'table_fixture_header_cell_name_label').style.opacity,
+        tokens.headerLabelOpacity === 1 ? undefined : tokens.headerLabelOpacity);
 
     assert.deepEqual(firstRow.style.position, [0, tokens.headerHeightPx]);
     assert.deepEqual(firstRow.style.background, BEVY_PANEL_TOKENS.controlMaterial.background);
@@ -187,13 +189,21 @@ test('an open Select popup paints above the whole table that follows it in body 
 });
 
 test('a floating option keeps pointer routing where it overlaps the passive table', () => {
-    const select = selectNode({
-        id: 'overlap_select',
-        options: [{ value: 'fr', label: 'French' }, { value: 'en', label: 'English' }],
-        value: 'fr',
-        expanded: true,
-        on: { optionActivate: () => {} }
-    });
+    // The options unfold on the accordion side: this fixture opens them downward, under the field.
+    const previousWindow = globalThis.window;
+    globalThis.window = { __eveProfilePreferences: { visual: { accordionDirection: 'down' } } };
+    let select;
+    try {
+        select = selectNode({
+            id: 'overlap_select',
+            options: [{ value: 'fr', label: 'French' }, { value: 'en', label: 'English' }],
+            value: 'fr',
+            expanded: true,
+            on: { optionActivate: () => {} }
+        });
+    } finally {
+        globalThis.window = previousWindow;
+    }
     const table = tableNode({ id: 'overlap_table', columns, rows, width: 400 });
     const root = {
         id: 'overlap_root',

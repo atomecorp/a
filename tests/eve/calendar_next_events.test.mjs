@@ -60,15 +60,17 @@ test('a canonical source read error stays an error through search and next', asy
     expect(await service.calendarSearch('')).toMatchObject({ ok: false, error: 'restoration_not_ready' });
 });
 
-test('Calendar reads more than 10000 records in complete 1000-row pages without a duplicate project scan', async () => {
+// The whole calendar in one storage-order read of 250-row pages (calendar_api.js EVENT_PAGE): sorting the
+// account's 16 000 events by date for each page held the phone's local vault 1.2 s.
+test('Calendar reads more than 10000 records in one cursor-paged read without a duplicate project scan', async () => {
     const rows = Array.from({ length: 11005 }, (_, index) => ({ atome_id: `event-${index}`, type: 'calendar_event',
         properties: { title: `Event ${index}`, start: '2026-10-20T09:00:00Z', alarms: [] } }));
-    const read = vi.fn(async (project, { offset, limit }) => rows.slice(offset, offset + limit));
+    const read = vi.fn(async () => rows);
     globalThis.window = { Atome: { listStateCurrent: read } };
     const result = await CalendarAPI.listEvents({ projectId: 'project' });
     expect(result.ok).toBe(true); expect(result.items).toHaveLength(11005);
-    expect(read).toHaveBeenCalledTimes(12);
-    expect(read.mock.calls.every(([project, options]) => project === null && options.pageSize === 1000 && options.limit === 1000)).toBe(true);
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(read.mock.calls[0]).toEqual([null, expect.objectContaining({ atomeType: 'calendar_event', storageOrder: true, pageSize: 250 })]);
     expect((await CalendarAPI.listEvents()).items.map(item => item.id)).toEqual(result.items.map(item => item.id));
 }, 15000);
 

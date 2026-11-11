@@ -38,17 +38,20 @@ import { buildMainMenuRecordingVisualNodes } from '../../eVe/intuition/ribbon/be
 import { createMainMenuRecordingVisualRuntime } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_recording_visual_runtime.js';
 import { buildAtomeContextualEditTree } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_model.js';
 import { buildBevyMainMenuTree } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
-import { BEVY_MENU_TOKENS, resolvePaletteAccentColor } from '../../eVe/intuition/ribbon/bevy_ui_menu_surface.js';
+import { BEVY_MENU_TOKENS, resolveBevyMenuFamilyColor } from '../../eVe/intuition/ribbon/bevy_ui_menu_surface.js';
+import { resolveToolFamily } from '../../eVe/intuition/shared/tool_family.js';
 
+// The name cell is a scroll area (`row_name_scroll`), so a long name can scroll inside its column.
 const childPositions = (tree) => Object.fromEntries(
-    tree.children.map((child) => [child.id.replace('row_', ''), child.style.position[0]])
+    tree.children.map((child) => [child.id.replace('row_', '').replace(/_scroll$/, ''), child.style.position[0]])
 );
 
 describe('urgent campaign contracts', () => {
     // 2026-09-29: the Mystic is one constant list whatever the object is. `font`
-    // left the Mystic — it stays reachable from the text rail.
+    // left the Mystic — it stays reachable from the text rail. Its south slot is
+    // Create (context_menus.json `mystic.fixed`).
     it('resolves the one constant Mystic list through the shared JSON owner',()=>{
-        const FIXED=['ai','capture','import','communicate','dashboard','new_project','copy','paste','delete','play','utilities','info','activity'];
+        const FIXED=['ai','capture','import','communicate','create','new_project','copy','paste','delete','play','utilities','info','activity'];
         for(const kind of ['audio','video','image','shape','text']) {
             const keys=resolveContextMenu({context:{kind,selected:true,level:'advanced'}}).map(item=>item.key);
             expect(keys).toEqual(FIXED);
@@ -58,24 +61,25 @@ describe('urgent campaign contracts', () => {
             const keys=resolveContextMenu({context:{kind,selected:true,level:'advanced',capabilities:['playback']}}).map(item=>item.key);
             expect(keys).toEqual(FIXED);
         }
-        // The lasso keeps its own creation table: drawing a region creates, it
-        // does not select.
+        // The lasso opens the same composition: gesture ownership changes the
+        // action target, never tile identity, slot or order.
         expect(resolveContextMenu({context:{type:'lasso',selected:true,level:'advanced'}}).map(item=>item.key))
-            .toEqual(['ai','capture','text','molecule','shape','copy','paste','delete']);
+            .toEqual(FIXED);
     });
 
+    // The verbs are labels: they start with a capital, like every menu label.
     it('uses localized verbs for all contextual Mystic actions', () => {
         expect(EVE_DEFAULT_MESSAGES.en).toMatchObject({
-            'eve.menu.communicate': 'communicate',
-            'eve.menu.couleur': 'colorize',
-            'eve.menu.size': 'resize',
-            'eve.menu.font': 'set font'
+            'eve.menu.communicate': 'Communicate',
+            'eve.menu.couleur': 'Colorize',
+            'eve.menu.size': 'Resize',
+            'eve.menu.font': 'Set font'
         });
         expect(EVE_DEFAULT_MESSAGES.fr).toMatchObject({
-            'eve.menu.communicate': 'communiquer',
-            'eve.menu.couleur': 'colorer',
-            'eve.menu.size': 'redimensionner',
-            'eve.menu.font': 'changer la police'
+            'eve.menu.communicate': 'Communiquer',
+            'eve.menu.couleur': 'Colorer',
+            'eve.menu.size': 'Redimensionner',
+            'eve.menu.font': 'Changer la police'
         });
     });
 
@@ -120,8 +124,11 @@ describe('urgent campaign contracts', () => {
             .toEqual(redNodes.find((node) => node.id.endsWith('record_action_background')).style.background);
     });
 
-    it('resolves the temporal stretch palette accent', () => {
-        expect(resolvePaletteAccentColor('list_occurrence_stretch')).toEqual(resolvePaletteAccentColor('time'));
+    // A palette carries no accent bar any more: its colour is its family's glass tint.
+    it('resolves the temporal stretch palette to the time family tint', () => {
+        const tint = (key) => resolveBevyMenuFamilyColor({ family: resolveToolFamily({ key }) });
+        expect(resolveToolFamily({ key: 'list_occurrence_stretch' })).toBe(resolveToolFamily({ key: 'time' }));
+        expect(tint('list_occurrence_stretch')).toEqual(tint('time'));
     });
 
     it('splits current text and rebases rich spans without carrying editor state', () => {

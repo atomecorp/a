@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
-import { test, vi } from 'vitest';
+import { beforeAll, test, vi } from 'vitest';
 
 import { createPanelTextEditingRuntime } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_text_editing.js';
 import { getTextServiceState, mountActiveTextEditor, unmountActiveTextEditor } from '../../eVe/domains/rendering/hidden_text_service_runtime.js';
@@ -19,8 +19,17 @@ const installDom = () => {
     const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost', pretendToBeVisual: true });
     globalThis.window = dom.window;
     globalThis.document = dom.window.document;
+    // Modules dispatch their custom events on this window: they must be its own class.
+    globalThis.CustomEvent = dom.window.CustomEvent;
     return dom;
 };
+
+// A long press loads the canonical Mystic context graph on first use: load it once
+// outside the individual timeout budgets, as the application has it by then.
+beforeAll(async () => {
+    installDom();
+    await import('../../eVe/intuition/mystic/context.js');
+}, 60000);
 
 const createRuntime = () => {
     const state = { text: 'bonjour' };
@@ -89,7 +98,7 @@ const pointerFocusFixture = ({ targetKind = 'panel' } = {}) => {
             [`focus_panel:${target.nodeId}:activate`, () => {}]
         ]),
         lastSurfacePoints: new Map(), pointerTarget: null,
-        focusTarget: { ...input, canvas }, hoverTarget: null, pendingTextActivation: null
+        focusTarget: { ...input, canvas }, hoverTarget: null, pendingTextActivation: null, touchObservers: new Set()
     };
     const runtime = createBevyUiPointerRuntime({
         state, now: () => clock,

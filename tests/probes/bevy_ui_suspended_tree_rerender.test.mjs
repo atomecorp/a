@@ -48,7 +48,8 @@ test('a suspended BevyUI tree stays invisible when a late owner update rerenders
     assert.equal(diagnostics.suspended, true);
     assert.equal(diagnostics.opacity, 0);
     assert.deepEqual(projections, [1, 0]);
+    // Native subtree ops address the tree's root node, not the tree id.
     assert.deepEqual(nativeOps.at(-1), {
-        type: 'set_subtree_opacity', id: 'menu_tree', opacity: 0
+        type: 'set_subtree_opacity', id: 'menu_root', opacity: 0
     });
 });

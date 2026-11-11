@@ -50,6 +50,8 @@ describe('Dashboard preferences', () => {
         const source = new Map(categories.map((category) => [category.id, [
             { id: `${category.id}-one`, category_id: category.id }
         ]]));
+        // The calendar row shows only what is ongoing or to come (itemsForRender drops an ended or undated appointment).
+        source.set('calendar', [{ id: 'calendar-one', category_id: 'calendar', payload: { start: new Date(Date.now() + 86400000) } }]);
         // Trois items filtres : la cascade repart de la rangee Projects puis deborde
         // sur Calendar et News, dans l'ordre du rail.
         source.set('projects', [

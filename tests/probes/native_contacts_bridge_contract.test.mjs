@@ -27,5 +27,5 @@ test('desktop bundle declares Contacts permission and scoped framework dependenc
 
     assert.match(plist, /<key>NSContactsUsageDescription<\/key>/);
     assert.match(build, /CARGO_CFG_TARGET_OS.*Ok\("macos"\)/);
-    assert.match(build, /"Foundation", "Contacts", "EventKit"/);
+    assert.match(build, /"Foundation",\s*"Contacts",\s*"EventKit"/);
 });

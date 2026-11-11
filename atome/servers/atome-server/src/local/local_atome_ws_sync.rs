@@ -10,6 +10,8 @@ use std::collections::HashSet;
 use tokio::time::{Duration, Instant, interval, sleep};
 use tokio_tungstenite::tungstenite::Message;
 
+const MEDIA_RECOVERY_PERIOD: Duration = Duration::from_secs(120);
+
 fn credential_for(state: &LocalAtomeState, user: &str) -> Option<RemoteSyncCredential> {
     state
         .remote_sync_credentials
@@ -148,9 +150,11 @@ async fn connected_session(
     let mut maintenance = interval(Duration::from_secs(10));
     let mut projection_tick = interval(Duration::from_millis(500));
     // The durable metadata projection is also the media recovery source. A slow
-    // file never holds a replay acknowledgement or the socket heartbeat open.
+    // file never holds a replay acknowledgement or the socket heartbeat open. Its pass reads
+    // every projected state: it waits out the launch and comes back every few minutes.
     let media_recovery = async {
         loop {
+            sleep(MEDIA_RECOVERY_PERIOD).await;
             if let Err(error) = super::local_atome_sync_media::recover_inbound_media(
                 state,
                 endpoint,
@@ -161,7 +165,6 @@ async fn connected_session(
             {
                 eprintln!("[sync-media] recovery deferred: {error}");
             }
-            sleep(Duration::from_secs(30)).await;
         }
     };
     tokio::pin!(media_recovery);

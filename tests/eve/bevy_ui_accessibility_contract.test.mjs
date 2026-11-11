@@ -3,6 +3,8 @@ import { JSDOM } from 'jsdom';
 import { createBevyUiAccessibilityRuntime } from '../../eVe/domains/rendering/bevy_ui_accessibility_runtime.js';
 import { createBevyUiRuntimeState } from '../../eVe/domains/rendering/bevy_ui_runtime_state.js';
 import { normalizeBevyUiTree, createEveBevyUiRuntime } from '../../eVe/domains/rendering/bevy_ui_runtime.js';
+import { hoverSurface } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
+import { isSurfacePointerStart } from '../../eVe/domains/rendering/surface_hit_target_runtime.js';
 
 const documents = [];
 afterEach(() => documents.splice(0).forEach(dom => dom.window.close()));
@@ -172,11 +174,33 @@ describe('canonical BevyUI accessibility projection', () => {
         const element = dom.window.document.querySelector('button'); expect(element.getAttribute('aria-label')).toBe('open');
         element.focus(); await new Promise(resolve => setTimeout(resolve, 10)); element.click(); expect(calls).toEqual(['activate']);
         expect(runtime.state.sourceTrees.get('matrix').tree.root.children[0].style.border).toBeUndefined();
-        expect(runtime.state.trees.get('matrix').tree.root.children[0].style.border).toEqual([2, 2, 2, 2]);
+        // The keyboard focus takes the hover look (never a border) on the projected tree only.
+        const focusedStyle = runtime.state.trees.get('matrix').tree.root.children[0].style;
+        expect(focusedStyle.border).toBeUndefined();
+        expect(focusedStyle.background).toEqual(hoverSurface({}).background);
+        expect(runtime.state.sourceTrees.get('matrix').tree.root.children[0].style.background).toBeUndefined();
         await runtime.setTreeOpacity({ id: 'matrix', opacity: 0 }); expect(dom.window.document.querySelector('button')).toBeNull();
         await runtime.setTreeOpacity({ id: 'matrix', opacity: 1 }); expect(dom.window.document.querySelector('button')).not.toBeNull();
         await runtime.setTreeSuspended({ id: 'matrix', suspended: true }); expect(dom.window.document.querySelector('button')).toBeNull();
         await runtime.setTreeSuspended({ id: 'matrix', suspended: false }); expect(dom.window.document.querySelector('button')).not.toBeNull();
         await runtime.unmountTree({ id: 'matrix' }); expect(dom.window.document.querySelector('[id^="eve_bevy_semantics_"]')).toBeNull();
+    });
+});
+
+// VoiceOver activates a control with a click on its semantic element, which lies over the canvas: the surface's own click
+// routing (the Mystic grid's plates) took it for a touch and swallowed it (iPad, 11 Nov. 2026: Retour did nothing).
+describe('a click on a semantic control', () => {
+    it('is the control\'s, never a touch on the surface beneath it', () => {
+        const f = fixture([button('Retour')]);
+        const element = f.find('Retour');
+        f.canvas.getBoundingClientRect = () => ({ left: 0, top: 0, right: 400, bottom: 400, width: 400, height: 400 });
+        f.dom.window.document.elementFromPoint = () => f.canvas;
+        const seen = [];
+        element.addEventListener('click', event => seen.push(isSurfacePointerStart(f.canvas, event)));
+        element.dispatchEvent(new f.dom.window.MouseEvent('click', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }));
+        expect(seen).toEqual([false]);
+        expect(f.emitted.map(event => [event.node_id, event.event])).toEqual([['native_Retour', 'activate']]);
+        // A touch on the canvas itself stays the surface's.
+        expect(isSurfacePointerStart(f.canvas, { target: f.canvas, clientX: 10, clientY: 10 })).toBe(true);
     });
 });

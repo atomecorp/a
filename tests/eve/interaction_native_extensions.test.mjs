@@ -13,10 +13,19 @@ describe('Native Interaction editor', () => {
     afterEach(() => vi.unstubAllGlobals());
     it('builds real Matrix numeric controls and labelled fixed panel actions', () => {
         const context = { emit: vi.fn(), bodyWidth: 360 };
-        expect(matrixSettingsSurface.buildContent({}, context).length).toBe(4);
-        expect(() => matrixSettingsSurface.buildFixedContent({}, context)).not.toThrow();
+        // Rows, columns and gap are three tool sliders in one grid (dashboard_band_sliders.js), then the headers switch.
+        const content = matrixSettingsSurface.buildContent({}, context);
+        expect(content.map(node => node.id)).toEqual(['matrix_values', 'matrix_headers']);
+        const walk = node => [node, ...(node.children || []).flatMap(walk)];
+        expect(walk(content[0]).filter(node => node.kind === 'tool_slider').map(node => node.id))
+            .toEqual(['matrix_values_rows', 'matrix_values_columns', 'matrix_values_gap']);
+        // The panels' fixed actions are tools of their foot band, each labelled.
+        const matrixTools = matrixSettingsSurface.buildBandTools({}, context);
+        expect(matrixTools.map(tool => tool.key)).toEqual(['matrix_apply']);
         expect(() => panelOpenSurface.buildContent({}, context)).not.toThrow();
-        expect(() => panelOpenSurface.buildFixedContent({}, context)).not.toThrow();
+        const openTools = panelOpenSurface.buildBandTools({}, context);
+        expect(openTools.map(tool => tool.key)).toEqual(['panel_open_execute']);
+        expect([...matrixTools, ...openTools].every(tool => typeof tool.label === 'string' && tool.label.length > 0)).toBe(true);
     });
     it('keeps bindings, work modes and order when editing a zoned hold interaction', async () => {
         const record = { atome_id: 'binding', type: 'interaction', project_id: 'p', properties: {

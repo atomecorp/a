@@ -55,7 +55,16 @@ test('assistant input reserves ribbon space and replaces Atom content until tear
         assert.ok(atom.width > atomBefore.width + 250);
         assert.equal(atom.x + atom.iconOffsetX, atomBefore.x + atomBefore.iconOffsetX);
         assert.ok(neighbor.x < neighborBefore.x);
-        assert.equal(findNode(expanded.root, atom.item.id + '_icon'), null);
+        // The Atom's own label gives way to the field; its logo is kept, faded as the assistant appears
+        // (assistant_dock.js `iconOpacity`): whole before any reveal, gone once she has fully appeared.
+        assert.equal(findNode(expanded.root, atom.item.id + '_label'), null);
+        assert.equal(findNode(expanded.root, atom.item.id + '_icon').style.opacity, 1);
+        const motions = [];
+        h.window.eveBevyUiRuntime.updateTreeMotion = async payload => { motions.push(payload); };
+        await dock.reveal(1);
+        assert.deepEqual(motions.at(-1), { id: 'eve_bevy_ui_main_menu', updates: [{ nodeId: atom.item.id + '_icon', style: { opacity: 0 } }] });
+        await dock.refresh();
+        assert.equal(findNode(tree().root, atom.item.id + '_icon').style.opacity, 0);
         const field = findNode(expanded.root, 'assistant_prompt_field');
         assert.ok(field); assert.equal(inputMode, 'text');
         field.on.activate(); assert.equal(inputMode, 'text');

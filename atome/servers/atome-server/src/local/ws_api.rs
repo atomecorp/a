@@ -58,8 +58,16 @@ pub(super) async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
     let mut provider = ProviderRelay::default();
     let mut sync_events = super::sync_event_sender().subscribe();
     let mut observed_token: Option<String> = None;
+    // A frame relayed to the network (a library thumbnail, atome.one's account frames) takes
+    // seconds: it is answered aside, so the reads behind it never wait (the vault's frames keep
+    // their order). Its answer comes back here.
+    let (relayed_tx, mut relayed) = tokio::sync::mpsc::unbounded_channel::<JsonValue>();
     loop {
         let msg = tokio::select! {
+            Some(reply) = relayed.recv() => {
+                if socket.send(Message::Text(reply.to_string().into())).await.is_err() { break; }
+                continue;
+            },
             notification = sync_events.recv() => {
                 if let Ok(payload) = notification
                     && matches!(payload["type"].as_str(), Some("sync:status" | "sync:projection-ready")) {
@@ -153,6 +161,13 @@ pub(super) async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
                     continue;
                 }
 
+                if relayed_aside(msg_type) {
+                    let (state, relayed_tx) = (state.clone(), relayed_tx.clone());
+                    tokio::spawn(async move {
+                        let _ = relayed_tx.send(answer(data, &state).await);
+                    });
+                    continue;
+                }
                 if socket
                     .send(Message::Text(answer(data, &state).await.to_string().into()))
                     .await
@@ -170,6 +185,10 @@ pub(super) async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
     }
 
     println!("🔌 WebSocket API connection closed");
+}
+
+fn relayed_aside(msg_type: &str) -> bool {
+    super::public_relay::PUBLIC_TYPES.contains(&msg_type) || super::public_relay::ACCOUNT_TYPES.contains(&msg_type)
 }
 
 /// The answer to one `/ws/api` frame that needs no connection of its own: the page's

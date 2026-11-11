@@ -28,7 +28,6 @@ final class AppNativeMediaCaptureController: NSObject {
     // and its frames feed the same bounded JPEG slots as the recorder's preview.
     let cameraPreviewState = AppNativeVideoPreviewState()
     var cameraPreviewActive = false
-    static let cameraPreviewSourceId = "native_camera_preview"
 
     var activeCameraPosition: AVCaptureDevice.Position = .back
     weak var previewWebView: WKWebView?
@@ -40,16 +39,23 @@ final class AppNativeMediaCaptureController: NSObject {
              "media_video_record_start",
              "media_video_record_stop",
              "media_video_record_state",
-             "media_video_preview_frame",
              "media_video_record_cancel",
              "media_video_record_ack",
              "media_camera_switch",
              "media_camera_preview_start",
-             "media_camera_preview_frame",
              "media_camera_preview_stop":
             return true
         default:
             return barcodeCommands.contains(command)
+        }
+    }
+
+    // The live preview's latest frame for `atome:///__native/media_preview/<video|camera>.jpg` (AudioSchemeHandler).
+    func latestPreviewFrame(kind: String, after: UInt64) -> (jpeg: Data, sequence: UInt64, width: Int, height: Int)? {
+        switch kind {
+        case "video": return videoRecorder.previewState.latestFrame(after: after)
+        case "camera": return cameraPreviewState.latestFrame(after: after)
+        default: return nil
         }
     }
 
@@ -73,8 +79,6 @@ final class AppNativeMediaCaptureController: NSObject {
             stopVideoRecording(payload: payload, completion: completion)
         case "media_video_record_state":
             readVideoRecordingState(completion: completion)
-        case "media_video_preview_frame":
-            readVideoPreviewFrame(completion: completion)
         case "media_video_record_cancel":
             cancelVideoRecording(payload: payload, completion: completion)
         case "media_video_record_ack":
@@ -83,8 +87,6 @@ final class AppNativeMediaCaptureController: NSObject {
             switchCamera(payload: payload, completion: completion)
         case "media_camera_preview_start":
             startCameraPreview(payload: payload, completion: completion)
-        case "media_camera_preview_frame":
-            readCameraPreviewFrame(completion: completion)
         case "media_camera_preview_stop":
             stopCameraPreview(completion: completion)
         case _ where Self.barcodeCommands.contains(command):

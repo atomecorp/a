@@ -48,7 +48,8 @@ test('move.relative adds exactly 300 px to left, preserves top, and commits once
         project_id: 'project_voice',
         props: { left: '420px', top: '80px' }
     });
-    assert.deepEqual(commits[0][1], { refreshState: false });
+    // The commit names its writer on the command bus (R-109): the tool and its caller's source.
+    assert.deepEqual(commits[0][1], { refreshState: false, source: '', tool_id: 'ui.move' });
 });
 
 test('move.relative never mutates an absent, locked, or numerically invalid target', async () => {

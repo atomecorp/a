@@ -367,10 +367,11 @@ export const createVoiceAssistantSessionController = ({
     };
 
     const pause = async () => {
-        ++state.generation;
+        const generation = ++state.generation;
         clearTranscriptTimers();
         await stopActiveChannels('assistant_text_focus');
-        if (state.active) setPhase('idle');
+        // A resume asked meanwhile owns the session: a late « idle » would read as her hanging up.
+        if (state.active && generation === state.generation) setPhase('idle');
         return cloneState(state);
     };
     const resume = async () => {

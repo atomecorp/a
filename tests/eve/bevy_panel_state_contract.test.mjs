@@ -27,7 +27,8 @@ test('canonical Squirrel panel-state contract requires a supported status and lo
     assert.deepEqual(presentation, { status: 'error', title: 'Unable to load', message: 'Please try again later.' });
     assert.throws(() => normalizePanelStatePresentation({ status: 'unknown', title: 'Title', message: 'Message' }), /squirrel_panel_state_status_unsupported:unknown/);
     assert.throws(() => normalizePanelStatePresentation({ status: 'empty', title: '', message: 'Message' }), /squirrel_panel_state_title_required/);
-    assert.throws(() => normalizePanelStatePresentation({ status: 'empty', title: 'Title', message: '' }), /squirrel_panel_state_message_required/);
+    // The message is optional: a state its title alone says shows no second line.
+    assert.deepEqual(normalizePanelStatePresentation({ status: 'empty', title: 'Title', message: '' }), { status: 'empty', title: 'Title', message: '' });
 });
 
 test('shared panel-state builder uses the passive native empty_state kind and token-owned semantic tones', () => {

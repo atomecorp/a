@@ -33,7 +33,10 @@ const fixture = () => {
     const control = createProgramActivityConfigurationControl({ id: 'configuration', gateway, readActor: () => actor,
         createId: () => 'activity_' + ++sequence, now: () => '2030-01-07T10:00:00Z', onCreated });
     const nodes = () => control.build({ width: 240, refresh }).flatMap(walk);
-    const activate = suffix => nodes().find(node => node.id === 'configuration_' + suffix).on.activate();
+    // New, Save and Back are panel band tools (#build shows nothing while closed); chips stay in the content tree.
+    const band = { new: () => control.open(refresh), save: () => control.bandTools(refresh).find(tool => tool.key === 'configuration_save').onSelect(),
+        cancel: () => control.back(refresh) };
+    const activate = suffix => band[suffix] ? band[suffix]() : nodes().find(node => node.id === 'configuration_' + suffix).on.activate();
     const input = (key, value) => {
         nodes().find(node => node.id === 'configuration_' + key).on.focus({ x: 10, y: 10 });
         const editor = dom.window.document.querySelector('#eve_hidden_text_service textarea');
@@ -82,7 +85,7 @@ describe('native standalone health activity configuration', () => {
             expect(activity).toEqual({ version: 1, brick_id: 'meditation', title: 'Fictitious meditation',
                 involvement: { minutes: 15.5, basis: 'week', days: [1, 4], rhythm: 2 } });
             expect((await f.runtime.invoke({ operation: 'activity_read' })).activities).toHaveLength(1);
-            expect(f.nodes().map(node => node.id)).toEqual(['configuration_new', 'configuration_new_label']);
+            expect(f.nodes()).toEqual([]); expect(f.control.bandTools(vi.fn())).toEqual([]);
         } finally { f.close(); }
     });
     it('edits the same native activity, preserves the original event and does not change its brick identity', async () => {
@@ -162,7 +165,7 @@ describe('native standalone health activity configuration', () => {
                 expect(result.ok).toBe(true); throw new Error('acknowledgement_lost');
             });
             f.configure();
-            const save = f.nodes().find(node => node.id === 'configuration_save').on.activate;
+            const save = () => f.activate('save');
             save(); save();
             await vi.waitFor(() => expect(f.writes).toHaveLength(1));
             expect(f.gateway).toHaveBeenCalledTimes(1);
@@ -188,8 +191,8 @@ describe('native standalone health activity configuration', () => {
             f.activate('save');
             await vi.waitFor(() => expect(f.writes).toHaveLength(1));
             f.control.close(); release();
-            await vi.waitFor(() => expect(f.nodes().some(node => node.id === 'configuration_new')).toBe(true));
-            expect(f.onCreated).not.toHaveBeenCalled();
+            await vi.waitFor(() => expect(f.gateway).toHaveBeenCalledTimes(1)); await Promise.resolve();
+            expect(f.control.isActive()).toBe(false); expect(f.nodes()).toEqual([]); expect(f.onCreated).not.toHaveBeenCalled();
         } finally { f.close(); }
     });
     it('links one configured activity to two health objectives through the existing native commands without copying it', async () => {
@@ -198,24 +201,26 @@ describe('native standalone health activity configuration', () => {
         const surface = createProgramPanelSurface({ call: f.gateway, readActor: f.readActor, readProjects: async () => [...f.records.values()].filter(record => record.type === 'project') });
         try {
             f.configure(); f.activate('save'); await vi.waitFor(() => expect(f.onCreated).toHaveBeenCalledTimes(1));
-            const state = surface.readState();
-            state.tab = 'activities'; state.selectedActivityId = f.onCreated.mock.calls[0][0];
-            state.library = await f.runtime.invoke({ operation: 'activity_read' });
-            for (const [id, family, owner = 'alice'] of [['p', 'health'], ['q', 'health'], ['music', 'creation'], ['foreign', 'health', 'bob']]) {
-                const record = { id, type: 'project', owner_id: owner, properties: { name: id, project_intent: { family, goal: 'free' } } };
-                f.records.set(id, record); state.projectChoices.push(record);
-            }
-            const nodes = () => surface.buildContent(state, { bodyWidth: 600, refresh: vi.fn(), emit: intent => { void surface.handleEvent(intent); } }).flatMap(walk);
+            for (const [id, family, owner = 'alice'] of [['p', 'health'], ['q', 'health'], ['music', 'creation'], ['foreign', 'health', 'bob']])
+                f.records.set(id, { id, type: 'project', owner_id: owner, properties: { name: id, project_intent: { family, goal: 'free' } } });
+            // readState is a snapshot: the tab, library and selection move only through the surface's own intents.
+            await surface.handleEvent({ type: 'program.tab', value: 'activities' });
+            await surface.handleEvent({ type: 'program.shared_select', value: f.onCreated.mock.calls[0][0] });
+            const emit = intent => { void surface.handleEvent(intent); };
+            const nodes = () => surface.buildContent(surface.readState(), { bodyWidth: 600, refresh: vi.fn(), emit }).flatMap(walk);
+            const band = () => surface.buildBandTools(surface.readState(), { emit, refresh: vi.fn() });
             expect(nodes().filter(node => node.id.startsWith('program_shared_objective_chip_') && node.on?.activate)).toHaveLength(2);
             for (const objectiveId of ['p', 'q']) {
-                // Native choice and button dispatch the same public command intentions.
+                // Native choice and band Link dispatch the same public command intentions.
+                expect(band().find(tool => tool.key === 'program_link').disabled).toBe(true);
                 nodes().find(node => node.id === 'program_shared_objective_chip_0').on.activate();
-                nodes().find(node => node.id === 'program_shared_link').on.activate();
-                await vi.waitFor(() => expect(state.library.links.some(record => record.properties.program_activity_link.objective_id === objectiveId)).toBe(true));
-                await vi.waitFor(() => expect(state.busy).toBe(false));
+                band().find(tool => tool.key === 'program_link').onSelect();
+                await vi.waitFor(() => expect(surface.readState().library.links.some(record => record.properties.program_activity_link.objective_id === objectiveId)).toBe(true));
+                await vi.waitFor(() => expect(surface.readState().busy).toBe(false));
             }
-            expect(state.library.activities).toHaveLength(1); expect(state.library.links).toHaveLength(2);
-            expect(state.library.results).toHaveLength(0); expect(state.library.occurrences).toHaveLength(0);
+            const { library } = surface.readState();
+            expect(library.activities).toHaveLength(1); expect(library.links).toHaveLength(2);
+            expect(library.results).toHaveLength(0); expect(library.occurrences).toHaveLength(0);
             expect(f.gateway.mock.calls.filter(([request]) => request.input.operation === 'activity_link').map(([request]) => request.input.objective_id)).toEqual(['p', 'q']);
         } finally { surface.onClose(); f.close(); }
     });
@@ -226,12 +231,13 @@ describe('native standalone health activity configuration', () => {
         const surface = createProgramPanelSurface({ call: f.gateway, readActor: f.readActor, readProjects });
         try {
             f.configure(); f.activate('save'); await vi.waitFor(() => expect(f.onCreated).toHaveBeenCalledTimes(1));
-            const state = surface.readState(); state.tab = 'activities';
-            await surface.handleEvent({ type: 'program.shared_reload' }); expect(state.projectChoices).toHaveLength(0);
+            const state = () => surface.readState(); // A snapshot per read.
+            await surface.handleEvent({ type: 'program.tab', value: 'activities' });
+            await surface.handleEvent({ type: 'program.shared_reload' }); expect(state().projectChoices).toHaveLength(0);
             f.records.set('new_goal', { id: 'new_goal', type: 'project', owner_id: 'alice', properties: { name: 'New fictitious health objective', project_intent: { family: 'health', goal: 'free' } } });
-            await surface.handleEvent({ type: 'program.shared_reload' }); expect(state.projectChoices.map(record => record.id)).toEqual(['new_goal']);
+            await surface.handleEvent({ type: 'program.shared_reload' }); expect(state().projectChoices.map(record => record.id)).toEqual(['new_goal']);
             readProjects.mockRejectedValueOnce(new Error('synthetic_unavailable'));
-            await surface.handleEvent({ type: 'program.shared_reload' }); expect(state.projectChoices).toHaveLength(0); expect(state.notice).not.toBe('');
+            await surface.handleEvent({ type: 'program.shared_reload' }); expect(state().projectChoices).toHaveLength(0); expect(state().notice).not.toBe('');
             expect(f.writes).toHaveLength(1); // Project metadata refresh never mutates ordering or activities.
         } finally { surface.onClose(); f.close(); }
     });
@@ -244,9 +250,9 @@ describe('native standalone health activity configuration', () => {
             const result = await f.runtime.invoke({ operation: 'activity_create', activity_id: 'nutrition', recorded_at: '2030-01-07T10:00:00Z',
                 activity: { brick_id: 'nutrition', title: 'Fictitious nutrition', involvement: { minutes: 0, basis: 'day', days: [], rhythm: 1 } } });
             expect(result.ok).toBe(true);
-            const state = surface.readState(); state.tab = 'activities'; state.library = await f.runtime.invoke({ operation: 'activity_read' });
+            await surface.handleEvent({ type: 'program.tab', value: 'activities' }, { refresh }); // Loads the library, as the tab does.
             await surface.handleEvent({ type: 'program.shared_select', value: 'nutrition' }, { refresh });
-            const nodes = () => surface.buildContent(state, { emit: vi.fn(), bodyWidth: 600, refresh }).flatMap(walk);
+            const nodes = () => surface.buildContent(surface.readState(), { emit: vi.fn(), bodyWidth: 600, refresh }).flatMap(walk);
             await vi.waitFor(() => expect(nodes().filter(node => node.id === 'program_activity_collection_nutrition_question')).toHaveLength(1));
             expect(nodes().some(node => node.id === 'program_activity_collection_nutrition_preferences')).toBe(true);
             expect(nodes().some(node => node.id === 'program_activity_collection_nutrition_journal')).toBe(false);
@@ -254,5 +260,32 @@ describe('native standalone health activity configuration', () => {
                 project_id: '', activity_id: 'nutrition', operation: 'collection_read' } }));
             expect(f.writes).toHaveLength(1); // Opening the question neither reads a preference nor mutates it.
         } finally { surface.onClose(); f.close(); }
+    });
+});
+
+describe('a Sport form the exercise cannot carry', () => {
+    it('is read without it, and never offered: a load kept on push-ups (iPhone, 30 Oct. 2026) no longer stops the start', async () => {
+        const { trainingActivityAsRead } = await import('../../eVe/domains/programs/project_program_model.js');
+        const { trainingFormGoalTargets, validateTrainingForms } = await import('../../eVe/domains/training/training_form.js');
+        const { trainingExercise } = await import('../../atome/src/shared/training_catalog.js');
+        const kept = { exercise_id: 'push_up', level: 3, use_custom: true, custom: { sets: 5, reps: [12, 15], rest_s: 60 },
+            forms: { load: { step: 1, to: 0, count: 8, over: 'sets', shape: 'blocks', from: 0 } } };
+        expect(trainingActivityAsRead(kept).forms).toBeNull();
+        const pushUp = trainingExercise('push_up');
+        expect(trainingFormGoalTargets(pushUp.kind, null, pushUp)).toEqual([]);
+        expect(() => validateTrainingForms(kept.forms, pushUp)).toThrow('TRAINING_FORM_INVALID');
+        // A weighted exercise keeps its load form.
+        const bench = trainingExercise('bench_press');
+        expect(trainingFormGoalTargets(bench.kind, null, bench)).toEqual(['load']);
+    });
+    it('reads without every other setting the exercise cannot carry, so it starts, revises and stays valid', async () => {
+        const { trainingActivityAsRead, validateActivity } = await import('../../eVe/domains/programs/project_program_model.js');
+        const kept = { exercise_id: 'push_up', level: 2, execution: 'unilateral', load_step_kg: 2.5 };
+        const read = trainingActivityAsRead(kept);
+        expect(read.execution).toBeUndefined();
+        expect(read.load_step_kg).toBeUndefined();
+        expect(() => validateActivity({ brick_id: 'sport', title: 'push_up', involvement: { minutes: 30, basis: 'week', days: [], rhythm: 3 }, training: read })).not.toThrow();
+        // What it can carry stays.
+        expect(trainingActivityAsRead({ exercise_id: 'push_up', level: 2, execution: 'bilateral' }).execution).toBe('bilateral');
     });
 });

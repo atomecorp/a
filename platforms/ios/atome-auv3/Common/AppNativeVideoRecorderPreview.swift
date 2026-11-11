@@ -2,7 +2,8 @@
 //  AppNativeVideoRecorderPreview.swift
 //  Bounded latest-frame adapter for the live camera preview.
 //
-//  The WebView receives JPEG frames (960 px long edge, up to 30 fps) and turns
+//  The WebView fetches JPEG frames (960 px long edge, up to 30 fps) on the atome://
+//  scheme (AudioSchemeHandler, /__native/media_preview/) and turns
 //  them into a MediaStream that the shared Bevy video route presents as an
 //  external texture. Raw 96 px BGRA frames at 15 fps were upscaled to the
 //  whole preview: blurry and choppy.
@@ -112,36 +113,15 @@ final class AppNativeVideoPreviewState: NSObject, AVCaptureVideoDataOutputSample
         ]
     }
 
-    func framePayload(sourceId: String) -> [String: Any] {
+    // The latest frame as JPEG bytes when it is newer than `after` (the atome:// scheme serves it as is,
+    // never as text in a script evaluated per frame: 30 such scripts a second froze the WebView, iPad, 11 Nov. 2026).
+    func latestFrame(after: UInt64) -> (jpeg: Data, sequence: UInt64, width: Int, height: Int)? {
         os_unfair_lock_lock(&stateLock)
-        guard active, publishedSlot >= 0 else {
-            os_unfair_lock_unlock(&stateLock)
-            return [
-                "success": true,
-                "available": false,
-                "source_id": sourceId
-            ]
-        }
+        defer { os_unfair_lock_unlock(&stateLock) }
+        guard active, publishedSlot >= 0 else { return nil }
         let slot = slots[publishedSlot]
-        let jpeg = slot.jpeg
-        let metadata: [String: Any] = [
-            "success": true,
-            "available": true,
-            "source_id": sourceId,
-            "sequence": NSNumber(value: slot.sequence),
-            "width": slot.width,
-            "height": slot.height,
-            "byte_length": jpeg.count,
-            "pixel_format": "jpeg",
-            "encoding": "base64",
-            "timestamp_sec": slot.timestampSeconds,
-            "orientation": slot.orientation,
-            "mirrored": slot.mirrored
-        ]
-        os_unfair_lock_unlock(&stateLock)
-        var payload = metadata
-        payload["bytes_base64"] = jpeg.base64EncodedString()
-        return payload
+        guard slot.sequence > after else { return nil }
+        return (slot.jpeg, slot.sequence, slot.width, slot.height)
     }
 
     func captureOutput(_ output: AVCaptureOutput,

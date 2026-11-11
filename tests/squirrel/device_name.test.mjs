@@ -10,6 +10,8 @@ const storage = new Map();
 const thisDevice = { current: 'device-mac' };
 
 vi.mock('../../atome/src/squirrel/apis/unified/adole.js', () => ({
+    // The settings view reaches the auth core, which names both adapters when it loads.
+    TauriAdapter: {},
     FastifyAdapter: {
         getToken: () => 'token',
         ws: { connectionGeneration: 1, send: async (message) => { sent.push(message); return { success: true, surfaces: [] }; } }
@@ -99,7 +101,7 @@ test('Home › My hardware reads and renames through the same owner, and restore
     const hardware = createHomeHardwareRuntime({ state, setNotice: (text, error) => notices.push({ text, error }) });
 
     expect(await hardware.refresh()).toEqual({ ok: true });
-    expect(state.hardware).toEqual({ deviceName: 'Chrome · Mac', devices: others });
+    expect(state.hardware).toEqual({ ...emptyHomeHardware(), deviceName: 'Chrome · Mac', devices: others });
     expect(hardware.owns('hardware.deviceName')).toBe(true);
 
     state.hardware.deviceName = 'Mac du bureau';
@@ -111,7 +113,8 @@ test('Home › My hardware reads and renames through the same owner, and restore
     expect(await hardware.commit()).toMatchObject({ ok: false, error: 'surface_name_required' });
     expect(state.hardware.deviceName).toBe('Mac du bureau');
     expect(notices.at(-1).error).toBe(true);
-});
+    // Its first import transforms the whole Home panel graph, like the section test below.
+}, 60000);
 
 test('the section shows the name field and the other devices; a guest gets the account notice', async () => {
     const { buildHomeSettingsFocus } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_settings_view.js');

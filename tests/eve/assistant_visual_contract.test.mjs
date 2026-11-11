@@ -20,6 +20,10 @@ import { eveT } from '../../eVe/i18n/i18n.js';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+// What a square's state reads as: its ground, its glass tint and its inner (pressed-in) shadows.
+const surfaceLook = node => ({ background: node.style.background ?? null, tint: node.style.backdrop?.tint ?? null,
+    insets: node.style.surfacePaint?.insetShadows ?? [] });
+
 test('assistant visual contract defines deterministic vowel morphs', () => {
     const morphs = ['A', 'E', 'I', 'O', 'U'].map(assistantMorphForVowel);
     assert.equal(new Set(morphs.map((morph) => morph.join(','))).size, 5);
@@ -102,12 +106,22 @@ test('each level emits exactly N equal-cadence idle pulses in the six-slot cycle
 
 test('reduced motion stops idle animation and redraws an explicit level change', async () => {
     const frames = new Map(), renders = [], subscriptions = new Map();
-    const events = { addEventListener: (type, handler) => subscriptions.set(type, handler),
-        removeEventListener: (type, handler) => { assert.equal(subscriptions.get(type), handler); subscriptions.delete(type); } };
+    // As on the DOM, one type holds several listeners (the voice announcer's wait beside the runtime's keys), and
+    // removing a listener never added is a no-op (the announcer clears its wait before arming it). Every listener
+    // added must be removed by dispose (checked at the end).
+    const events = { addEventListener: (type, handler) => subscriptions.set(type, new Set([...(subscriptions.get(type) || []), handler])),
+        removeEventListener: (type, handler) => {
+            const handlers = subscriptions.get(type);
+            handlers?.delete(handler);
+            if (handlers && !handlers.size) subscriptions.delete(type);
+        } };
     let time = 0, sequence = 0;
     const runtime = createEveAssistantRuntime({
         dockFactory: () => ({ open: async()=>{}, close: async()=>{}, refresh:()=>{}, blur:()=>{} }),
-        env: { ...events, matchMedia: () => ({ matches: true, ...events }) },
+        // Her own sentences are pre-rendered voice lines (voice_lines.js): the ready sentence is required, so the
+        // session gets the one-player double instead of a fetch of the line files.
+        env: { ...events, matchMedia: () => ({ matches: true, ...events }),
+            __eveVoiceLines: { prepare: async () => {}, stop: async () => {}, subscribeFrames: () => () => {}, say: async () => ({ promise: Promise.resolve() }) } },
         providerResolver: async () => ({ ok: true, providerId: 'local' }),
         voiceApiResolver: () => ({ orchestrator: { bridge: { kind: 'mcp' } }, ensureReady: async()=>true,
             createSession: async()=>({session_id:'visual'}), subscribe:()=>()=>{}, subscribeTtsFrames:()=>()=>{}, subscribeInputFrames:()=>()=>{},
@@ -333,7 +347,9 @@ test('assistant microphone square turns the live input on, lights it, then cuts 
         const glyph = () => findNode(trees.at(-1).root, 'assistant_prompt_accessory_microphone_icon');
         const send = () => findNode(trees.at(-1).root, 'assistant_prompt_accessory_submit');
         assert.equal(glyph().image.source, './assets/images/icons/mute.svg');
-        const mutedFill = [...square().style.background];
+        // On the glass material a lit square is its backdrop tint and its pressed-in shadow
+        // (bevy_panel_tokens.js#selectedSurface), never its background alone.
+        const mutedFill = surfaceLook(square());
         // The square is the shared accessory, so its own activation is the
         // ordinary one: it turns the live input on without a second gesture.
         await square().on.activate();
@@ -341,15 +357,15 @@ test('assistant microphone square turns the live input on, lights it, then cuts 
         assert.equal(glyph().image.source, './assets/images/icons/microphone.svg');
         // Live reads differently BOTH ways — glyph and lit fill — so a muted
         // microphone can never be mistaken for a live one.
-        assert.notDeepEqual(square().style.background, mutedFill);
-        assert.notDeepEqual(square().style.background, send().style.background);
+        assert.notDeepEqual(surfaceLook(square()), mutedFill);
+        assert.notDeepEqual(surfaceLook(square()), surfaceLook(send()));
         // The very same square cuts the microphone: the session leaves the voice
         // lane, so glyph and fill both read muted again. A live square can never
         // survive the click that silenced it.
         await square().on.activate();
         assert.equal(microphoneActive, false);
         assert.equal(glyph().image.source, './assets/images/icons/mute.svg');
-        assert.deepEqual(square().style.background, mutedFill);
+        assert.deepEqual(surfaceLook(square()), mutedFill);
     } finally { await dock.close(); dom.restore(); }
 });
 
@@ -447,7 +463,7 @@ test('assistant history square hides and shows the conversations column', async 
         assert.ok(existsSync(resolve(process.cwd(), 'atome/src/assets/images/icons/time.svg')));
         const onOpen = reveals.length;
         const square = () => findNode(trees.at(-1).root, 'assistant_prompt_accessory_history');
-        const shownFill = [...square().style.background];
+        const shownFill = surfaceLook(square());
         await square().on.activate();
         // Hiding the column is a view change: the messages stay in the runtime,
         // which is why the dock can be folded and reopened on them.
@@ -455,10 +471,10 @@ test('assistant history square hides and shows the conversations column', async 
         assert.equal(node('assistant_history_turn_0'), null);
         assert.equal(reveals.length, onOpen);
         // The square carries its own state: hidden reads unlit, shown reads lit.
-        assert.notDeepEqual(square().style.background, shownFill);
+        assert.notDeepEqual(surfaceLook(square()), shownFill);
         await square().on.activate();
         assert.ok(node('assistant_history'));
-        assert.deepEqual(square().style.background, shownFill);
+        assert.deepEqual(surfaceLook(square()), shownFill);
         // Showing it again lands on the last message, exactly like opening it.
         assert.equal(reveals.length, onOpen + 1);
         assert.equal(reveals.at(-1).nodeId, 'assistant_history_turn_1');

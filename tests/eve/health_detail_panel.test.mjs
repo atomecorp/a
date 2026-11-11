@@ -133,7 +133,7 @@ test('daily totals draw measured interval bars and recorded progression while mi
         status: 'value', days: [{ range, reading: { state: 'value', value: 170, period: range } }],
         detail: { bands: [], points: [{ start: range.from, end: range.from + 3600000, value: 120 },
             { start: range.from + 3 * 3600000, end: range.to, value: 50 }] } }, { emit: () => {}, bodyWidth: 300 });
-    const graph = nodes.find(node => node.id === 'health_detail_graph');
+    const graph = nodes.flatMap(walk).find(node => node.id === 'health_detail_graph');
     expect(graph.children.filter(node => node.id.includes('_bar_'))).toHaveLength(2);
     expect(graph.children.filter(node => node.id.includes('_1_line_'))).toHaveLength(0);
     const progression = graph.children.filter(node => node.id.includes('_1_point_'));

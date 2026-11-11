@@ -5,6 +5,7 @@ import { createRenderScene, hitTestRenderScene } from '../../eVe/domains/renderi
 import { createVirtualSceneTree } from '../../eVe/domains/rendering/virtual_scene_contract.js';
 import { mapVirtualSceneTreeToBevyPayload } from '../../eVe/domains/rendering/bevy_projection_adapter.js';
 import { resolveComposedInteractionTarget } from '../../eVe/domains/rendering/surface_interaction_runtime.js';
+import { resolveResizeHandle } from '../../eVe/domains/rendering/surface_pointer_runtime.js';
 
 const members = [
     { id: 'a', type: 'shape', parent_id: 'm', properties: { left: '120px', top: '110px', width: '100px', height: '80px' } },
@@ -68,13 +69,18 @@ test('an edited structural ancestor exposes a media leaf through three nested Mo
     expect(resolveComposedInteractionTarget(scene, leaf, (id) => id === 'outer' || id === 'sibling').id).toBe('leaf');
 });
 
-test('selected Molecule resize handles remain available while its empty body cannot drag', () => {
+// Invisible resize bands were removed (2026-09-14): a selected Molecule is
+// resized with Alt/Option from one of its members, never from its empty body.
+test('selected Molecule resize remains available while its empty body cannot drag', () => {
     const scene = createRenderScene([owner, ...members].map((r) => normalizeRenderAtom(r, { selectedIds: ['m'] })));
     scene.byId.get('m').visual.selected = true;
-    const options = { includeSelectedResizeHandles: true };
-    expect(hitTestRenderScene(scene, { x: 270, y: 150 }, options)).toBeNull();
-    expect(hitTestRenderScene(scene, { x: 270, y: 190 }, options)?.id).toBe('m');
+    expect(hitTestRenderScene(scene, { x: 270, y: 150 })).toBeNull();
     expect(hitTestRenderScene(scene, { x: 270, y: 190 })).toBeNull();
+    const member = hitTestRenderScene(scene, { x: 200, y: 150 });
+    const target = resolveComposedInteractionTarget(scene, member);
+    expect(target?.id).toBe('m');
+    expect(resolveResizeHandle(target, { altKey: true })).toEqual({ axisX: 'e', axisY: 's' });
+    expect(resolveResizeHandle(target, {})).toBeNull();
 });
 
 

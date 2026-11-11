@@ -169,7 +169,8 @@ test('project covers retain the actual wallpaper decoder and advancing frame sou
                 video.__flushVideoFrame(step * 80);
                 assert.equal(calls.videos.length, 1, 'navigation never creates a second decoder');
                 assert.equal(calls.cancelVideoFrame, 0, 'navigation never disposes the frame callback');
-                assert.equal(video.paused, false);
+                // An opaque cover hides every frame, so the kept decoder freezes under it and plays again when the cover clears.
+                assert.equal(video.paused, cover[3] >= 1);
                 assert.equal(video.isConnected, true);
                 assert.equal(dom.window.__EVE_BEVY_VIDEO_SOURCE_FOR_ID__('__eve_surface_background_video'), video);
                 assert.deepEqual(payloads.at(-1).cover, cover);

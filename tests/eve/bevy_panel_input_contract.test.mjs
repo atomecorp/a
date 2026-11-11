@@ -55,7 +55,8 @@ test('shared panel input builder owns geometry, state paint, and selection proje
     // A focused field takes the hover look of its own ground (AGENTS.md rule 15).
     const ground = { ...BEVY_PANEL_TOKENS.surfaces.input, background: BEVY_PANEL_TOKENS.input.idleBackground };
     assert.deepEqual(focused.style.background, hoverSurface(ground).background);
-    assert.deepEqual(focused.style.shadow, BEVY_PANEL_TOKENS.input.focusShadow);
+    assert.deepEqual(focused.style.shadow, textInputNode({ id: 'field', value: 'Hello' }).style.shadow,
+        'the focus adds no glow of its own: its look is the hover ground');
     assert.equal(findNode([focused], 'field_text').text, 'Hello');
     assert.deepEqual(findNode([focused], 'field_text').style.position, [10, 0]);
     const layout = createTextEditingLayout({
@@ -145,7 +146,8 @@ const editingFixture = async ({ value = '', multiline = false, masked = false } 
         });
     };
     runtime.handle({type:'first_type.field.focus',key:'field',event:{x:10,y:15}}, {refresh,patchText});
-    const editor = dom.window.document.querySelector('#eve_hidden_text_service textarea');
+    // The one hidden editor: a textarea, or a single-line input for a secure field (hidden_text_service_runtime.js).
+    const editor = dom.window.document.querySelector('#eve_hidden_text_service [data-role="active-text-editor"]');
     return { runtime, dom, editor, read:()=>draft, records:()=>[...records.values()], rebuilds:()=>rebuilds, patches:()=>patches,
         input(next, inputType='insertText') { editor.value=next; editor.setSelectionRange(next.length,next.length); editor.dispatchEvent(new dom.window.InputEvent('input',{bubbles:true,inputType})); },
         close() { runtime.stop(); dom.window.close(); globalThis.window=previousWindow; globalThis.document=previousDocument; } };
@@ -224,7 +226,7 @@ test('empty and populated fields have an inset tint without a permanent outline'
         assert.deepEqual(idle.style.background, [0, 0, 0, .14]);
         assert.deepEqual(focused.style.background, hoverSurface(idle.style).background);
         assert.equal(idle.style.backdrop, null);
-        assert.equal(idle.style.surfacePaint.border.color[3], 0);
+        assert.equal(idle.style.surfacePaint?.border, undefined, 'no state draws a border (AGENTS.md rule 15)');
         assert.equal(idle.style.border, undefined);
         assert.deepEqual(idle.style.size, focused.style.size);
     }

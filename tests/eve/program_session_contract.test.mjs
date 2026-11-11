@@ -176,31 +176,39 @@ const nativeFixture = async () => {
         readActor: f.dependencies.actor, createId: () => 'native_' + ++serial, now: () => date(minute++), refresh: vi.fn() });
     const walk = node => [node, ...(node.children || []).flatMap(walk)];
     const nodes = () => control.build({ width: 240 }).flatMap(walk);
-    const press = suffix => { const node = nodes().find(node => node.id === 'session_ui_' + suffix); expect(node).toBeDefined(); node.on.activate(); };
+    // Its commands are panel band tools (#bandTools); Open and Back are the panel's own; the session's choices stay content.
+    const tool = suffix => control.bandTools().find(value => value.key === 'session_ui_' + suffix && !value.disabled);
+    const has = suffix => Boolean(tool(suffix)) || nodes().some(node => node.id === 'session_ui_' + suffix && node.on?.activate);
+    const press = suffix => {
+        if (suffix === 'open') return control.open();
+        if (suffix === 'back') return control.back();
+        const command = tool(suffix); if (command) return command.onSelect();
+        const node = nodes().find(node => node.id === 'session_ui_' + suffix); expect(node).toBeDefined(); node.on.activate();
+    };
     const type = (key, value) => {
         nodes().find(node => node.id === 'session_ui_' + key).on.focus({ x: 10, y: 10 });
         const editor = dom.window.document.querySelector('#eve_hidden_text_service textarea');
         editor.value = value; editor.dispatchEvent(new dom.window.Event('input'));
     };
     press('open'); await vi.waitFor(() => expect(nodes().some(node => node.id === 'session_ui_existing_session')).toBe(true));
-    press('existing_session'); await vi.waitFor(() => expect(nodes().some(node => node.id === 'session_ui_start' && node.on?.activate)).toBe(true));
-    return { ...f, control, nodes, press, type, gateway, close: () => { control.destroy(); dom.window.close(); } };
+    press('existing_session'); await vi.waitFor(() => expect(has('start')).toBe(true));
+    return { ...f, control, nodes, press, type, gateway, has, tool, close: () => { control.destroy(); dom.window.close(); } };
 };
 describe('native session commands and editor composition', () => {
     it('uses the same native correction and undo after finish while removing advancement and restart controls', async () => {
         const f = await nativeFixture();
         try {
-            f.press('start'); await vi.waitFor(() => expect(f.nodes().some(node => node.id === 'session_ui_mark')).toBe(true));
+            f.press('start'); await vi.waitFor(() => expect(f.has('mark')).toBe(true));
             f.type('actual', '4'); f.press('mark'); f.press('confirm');
             await vi.waitFor(async () => expect((await f.runtime.invoke({ operation: 'session_read', activity_id: 'activity', session_id: 'session' })).state.current_step_id).toBe('second'));
             f.press('skip'); f.press('confirm');
             await vi.waitFor(async () => expect((await f.runtime.invoke({ operation: 'session_read', activity_id: 'activity', session_id: 'session' })).state.current_step_id).toBe('third'));
-            f.press('skip'); f.press('confirm'); await vi.waitFor(() => expect(f.nodes().some(node => node.id === 'session_ui_finish' && node.on?.activate)).toBe(true));
+            f.press('skip'); f.press('confirm'); await vi.waitFor(() => expect(f.has('finish')).toBe(true));
             f.press('finish'); f.press('confirm'); await vi.waitFor(() => expect(f.nodes().some(node => node.id === 'session_ui_time')).toBe(true));
             const original = structuredClone((await f.runtime.invoke({ operation: 'activity_read' })).results[0].original);
-            expect(f.nodes().some(node => ['mark', 'start', 'resume', 'pause', 'stop', 'finish', 'undo'].some(key => node.id === 'session_ui_' + key))).toBe(false);
+            expect(['mark', 'start', 'resume', 'pause', 'stop', 'finish', 'undo'].some(f.has)).toBe(false);
             f.press('correction_chip_0'); f.type('actual', '3'); f.press('correct');
-            await vi.waitFor(() => expect(f.nodes().some(node => node.id === 'session_ui_undo' && node.on?.activate)).toBe(true));
+            await vi.waitFor(() => expect(f.has('undo')).toBe(true));
             expect((await f.runtime.invoke({ operation: 'session_read', activity_id: 'activity', session_id: 'session' })).state.steps[0].actual.value).toBe(3);
             f.press('undo'); await vi.waitFor(async () => expect((await f.runtime.invoke({ operation: 'session_read', activity_id: 'activity', session_id: 'session' })).state.steps[0].actual.value).toBe(4));
             const view = await f.runtime.invoke({ operation: 'activity_read' }); expect(view.realized_count).toBe(1); expect(view.results[0].original).toEqual(original);
@@ -209,12 +217,12 @@ describe('native session commands and editor composition', () => {
     it('requires a distinct confirmation gesture, ignores double presses, keeps units and corrects without rewriting the plan', async () => {
         const f = await nativeFixture();
         try {
-            f.press('start'); await vi.waitFor(() => expect(f.nodes().some(node => node.id === 'session_ui_mark')).toBe(true));
+            f.press('start'); await vi.waitFor(() => expect(f.has('mark')).toBe(true));
             f.type('actual', '4');
-            const mark = f.nodes().find(node => node.id === 'session_ui_mark').on.activate;
+            const mark = f.tool('mark').onSelect;
             mark(); mark();
             expect(f.gateway.mock.calls.filter(([request]) => request.input.operation === 'session_transition')).toHaveLength(1);
-            const confirm = f.nodes().find(node => node.id === 'session_ui_confirm').on.activate;
+            const confirm = f.tool('confirm').onSelect;
             confirm(); confirm();
             await vi.waitFor(() => expect(f.nodes().some(node => node.id === 'session_ui_correction_chip_0')).toBe(true));
             expect(f.gateway.mock.calls.filter(([request]) => request.input.session_transition?.action === 'confirm')).toHaveLength(1);
@@ -235,28 +243,28 @@ describe('native session commands and editor composition', () => {
                 await new Promise(resolve => { release = resolve; }); expect(result.ok).toBe(true); throw new Error('acknowledgement_lost'); });
             f.press('start');
             await vi.waitFor(() => expect(f.records.has(programSessionTransitionId('session', 1))).toBe(true));
-            release(); await vi.waitFor(() => expect(f.nodes().some(node => node.id === 'session_ui_retry' && node.on?.activate)).toBe(true));
+            release(); await vi.waitFor(() => expect(f.has('retry')).toBe(true));
             const saved = structuredClone(f.gateway.mock.calls.at(-1)[0]);
-            f.press('retry'); await vi.waitFor(() => expect(f.nodes().some(node => node.id === 'session_ui_mark')).toBe(true));
+            f.press('retry'); await vi.waitFor(() => expect(f.has('mark')).toBe(true));
             expect(f.gateway.mock.calls.at(-1)[0]).toEqual(saved); expect(f.events.size).toBe(3);
             let releaseClosed;
             f.gateway.mockImplementationOnce(async payload => { const result = await f.runtime.invoke(payload.input);
                 await new Promise(resolve => { releaseClosed = resolve; }); return result; });
             f.press('pause'); await vi.waitFor(() => expect(f.records.has(programSessionTransitionId('session', 2))).toBe(true));
-            f.control.close(); releaseClosed();
-            await vi.waitFor(() => expect(f.nodes().some(node => node.id === 'session_ui_open')).toBe(true));
-            f.actor('bob'); expect(f.nodes().some(node => node.id === 'session_ui_mark')).toBe(false);
-            expect(f.nodes().some(node => node.id === 'session_ui_open')).toBe(true);
+            f.control.close(); releaseClosed(); await new Promise(resolve => setTimeout(resolve, 0));
+            // Closed, it lays nothing: the late result neither reopens it nor brings back its commands.
+            expect(f.control.isActive()).toBe(false); expect(f.nodes()).toEqual([]); expect(f.control.bandTools()).toEqual([]);
+            f.actor('bob'); f.press('open'); expect(f.has('mark')).toBe(false);
         } finally { f.close(); }
     });
     it('does not accept blank preparation as a step and releases the active editor at teardown', async () => {
         const f = await nativeFixture();
         try {
-            f.press('back'); await vi.waitFor(() => expect(f.nodes().some(node => node.id === 'session_ui_new' && node.on?.activate)).toBe(true));
+            f.press('back'); await vi.waitFor(() => expect(f.has('new')).toBe(true));
             f.press('new'); f.press('prepare'); expect(f.nodes().some(node => node.id === 'session_ui_error')).toBe(true);
             expect(f.records.size).toBe(2);
             f.type('steps', 'Fictitious one\nFictitious two\nFictitious three'); f.press('prepare');
-            await vi.waitFor(() => expect(f.nodes().some(node => node.id === 'session_ui_start')).toBe(true));
+            await vi.waitFor(() => expect(f.has('start')).toBe(true));
             expect([...f.records.values()].filter(record => record.properties.program_session)).toHaveLength(2);
             expect(f.gateway.mock.calls.at(-1)[0].input.session_steps).toHaveLength(3);
         } finally { f.close(); }

@@ -6,7 +6,8 @@ import { createUserWorkspaceRuntime } from '../../eVe/intuition/tools/user_works
 import { createUserHomePanelRuntime } from '../../eVe/intuition/tools/user_home_panel_runtime.js';
 import { getFirstLaunchRuntime } from '../../eVe/domains/user/first_launch_runtime.js';
 import * as panelRuntime from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js';
-import { buildHomeFixedContent } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_view.js';
+import * as homeView from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_view.js';
+import { disconnectHomeSession } from '../../eVe/intuition/tools/user.js';
 import { getSessionState, setSessionState, clearSessionState, resetWorkspaceForNextUser } from '../../atome/src/squirrel/apis/unified/adole_api/session.js';
 
 const transport = vi.hoisted(() => ({ presentations: [], cleanup: null, install: vi.fn(async () => ({ ok: true, project_id: 'goals' })) }));
@@ -70,20 +71,30 @@ describe('logout first-launch ownership', () => {
         expect(getSessionState()).toMatchObject({ mode: 'authenticated', user: { id: 'existing' } });
         expect(f.gate.isWorkspaceActiveForMainMenu()).toBe(true);
     });
-    it('keeps adoption choices and logout inside the standard Home fixed strip', async () => {
+    // Logging out left Home (bevy_panel_home_view.js): it is the Atom's gesture on the Dashboard, whose red confirmation calls
+    // dashboard_mystic_runtime.js `disconnect` → user.js#disconnectHomeSession → the canonical session owner, once.
+    it('keeps the guest adoption in the Home band and ends the session only through the Atom disconnect path', async () => {
         const f = await setup();
+        expect('buildHomeFixedContent' in homeView).toBe(false);
         f.api.security.guestAdoptionStatus = () => ({ pending: false });
         const actions = [];
-        const fixed = buildHomeFixedContent({ guest: false, busy: false, sessionBusy: false }, {
-            emit: event => actions.push(event), bodyWidth: 452
-        });
-        expect(fixed).toHaveLength(1);
-        expect(fixed[0].kind).toBe('column');
-        expect(fixed[0].style.size[0]).toBe(452);
-        expect(fixed[0].style.size[1]).toBeGreaterThanOrEqual(fixed[0].children.reduce((sum, entry) => sum + entry.style.size[1], 0));
-        const find = entries => entries.flatMap(entry => [entry, ...find(entry.children || [])]);
-        find(fixed).find(entry => entry.id === 'home_session_exit').on.activate();
-        expect(actions).toEqual([{ type: 'home.session.exit' }]);
+        const band = homeView.buildHomeBandTools({ guest: false, busy: false, hardware: {} }, { emit: event => actions.push(event) });
+        expect(band.map(tool => tool.key)).toEqual(['home_guest_adoption_accept', 'home_guest_adoption_decline']);
+        band.forEach(tool => tool.onSelect());
+        expect(actions).toEqual([{ type: 'home.guest.adopt' }, { type: 'home.guest.decline' }]);
+        const atom = { startCountdown: ({ complete }) => complete() };
+        expect(await disconnectHomeSession(atom)).toEqual({ ok: false, error: 'user_logout_session_required' });
+        f.api.auth.logout = vi.fn(async () => ({ ok: true }));
+        setSessionState({ mode: 'authenticated', user: { id: 'existing' } }, { persist: false, silent: true });
+        const [first, second] = [disconnectHomeSession(atom), disconnectHomeSession(atom)];
+        expect(second).toBe(first);
+        expect(await first).toEqual({ ok: true });
+        expect(f.api.auth.logout).toHaveBeenCalledTimes(1);
+        f.api.security.leaveGuest = vi.fn(async () => ({ ok: true }));
+        setSessionState({ mode: 'anonymous', user: { id: 'guest' } }, { persist: false, silent: true });
+        expect(await disconnectHomeSession(atom)).toEqual({ ok: true });
+        expect(f.api.security.leaveGuest).toHaveBeenCalledWith({ discard: false });
+        setSessionState({ mode: 'logged_out', user: null }, { persist: false, silent: true });
     });
     it('admits a restored account without waiting for persisted first-launch progress', async () => {
         const f = await setup(); transport.cleanup = null;
@@ -137,12 +148,16 @@ describe('logout first-launch ownership', () => {
         await f.home.openLoginSequenceAfterAuthCheck();
         // Use the public catalogue for this session-coordinator test; template
         // installation and durable guest projects are exercised by real Web UI.
-        f.win.Atome = { listStateCurrent: vi.fn(async () => []) };
+        // The guest's beginner level is stored at once (first_launch_runtime.js#enterGuest): its profile goes through the
+        // canonical profile write (profile_api.js#upsertUserProfile), the guest session its principal.
+        f.api.atomes = {}; f.api.auth.current = async () => ({ logged: true, anonymous: true, user: getSessionState().user });
+        f.win.Atome = { listStateCurrent: vi.fn(async () => []), commit: vi.fn(async () => ({ ok: true })) };
         const result = await transport.presentations.at(-1).activate({ operation: 'guest', value: '' });
         expect(result).toMatchObject({ ok: true });
         expect(f.api.security.startGuest).toHaveBeenCalledTimes(1);
         expect(f.flow().state).toMatchObject({ stage: 'goals', guest: true, guestId: 'local-guest', accountId: '' });
         expect(f.win.__eveProfilePreferences.visual.masteryLevel).toBe('beginner');
+        expect(f.win.Atome.commit).toHaveBeenCalledWith(expect.objectContaining({ atome_id: 'local-guest', type: 'guest_workspace', scope: 'global' }), expect.anything());
         expect(f.gate.isWorkspaceActiveForMainMenu()).toBe(false);
         f.gate.syncMainMenuAuthContent({ force: true });
         expect(f.flow().isOpen()).toBe(true); expect(transport.presentations.at(-1).destroy).not.toHaveBeenCalled();

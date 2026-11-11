@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
+// The active life profiles filter the projects row (dashboard_data_adapters.js#listProjectItems); none is active here.
+vi.mock('../../eVe/domains/life_profiles/life_profile_runtime.js', () => ({ getLifeProfileRuntime: () => ({ ensure: async () => [], visible: () => true }) }));
 import { createDashboardDataAdapters } from '../../eVe/domains/dashboard/dashboard_data_adapters.js';
 
 test('a shared generic-source failure keeps successful Dashboard categories and reports only failed sources', async () => {

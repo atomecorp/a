@@ -14,6 +14,9 @@ const content = { toolbox: { children: roots }, ...Object.fromEntries(roots.map(
     type: 'tool', tool_id: `tool.main.${key}`, label: key, icon: key
 }])) };
 
+// The person's level as the product publishes it (window.__eveProfilePreferences): the menus read the home's style from it.
+const levelWindow = level => ({ __eveProfilePreferences: { visual: { masteryLevel: level } } });
+
 const listTree = (level, mixed) => {
     vi.stubGlobal('window', { __eveProfilePreferences: { visual: { masteryLevel: level } } });
     const records = [{ id: 'audio', type: 'audio', properties: { mute: mixed, solo: mixed, peaks: [0.2, 0.8] } }];
@@ -30,8 +33,8 @@ const listTree = (level, mixed) => {
 for (const level of ['intermediate', 'advanced']) {
     test(`${level} preserves its existing toolbar, options and List projection`, () => {
         expect({
-            visibility: resolveMainMenuVisibility({ level }),
-            items: buildBevyMainMenuItems(content, { levelVisibility: resolveMainMenuVisibility({ level }) }),
+            visibility: resolveMainMenuVisibility({ level, windowRef: levelWindow(level) }),
+            items: buildBevyMainMenuItems(content, { levelVisibility: resolveMainMenuVisibility({ level, windowRef: levelWindow(level) }) }),
             options: resolveViewOptions({ level }),
             behaviors: resolveLevelBehaviors({ level })
         }).toMatchSnapshot();
@@ -42,7 +45,7 @@ for (const level of ['intermediate', 'advanced']) {
 test('beginner toolbar contains Atom alone, including an active palette', () => {
     for (const activePaletteKey of ['', 'create']) {
         expect(buildBevyMainMenuItems(content, {
-            activePaletteKey, levelVisibility: resolveMainMenuVisibility({ level: 'beginner' })
+            activePaletteKey, levelVisibility: resolveMainMenuVisibility({ level: 'beginner', windowRef: levelWindow('beginner') })
         }).map(item => item.key)).toEqual(['atome']);
     }
 });
@@ -75,12 +78,15 @@ test('beginner List composes only requested tools, including Import, without wid
         projectRecord: { capabilities: { create: false } } } })).toEqual([]);
     expect(projectViewListRailToolKeys({ context: { ...context, type: 'project' } })).not.toContain('delete');
     for (const level of ['intermediate', 'advanced']) {
-        expect(projectViewListRailToolKeys({ context: { level }, toolKeys: ['delete', 'copy', 'paste', 'size', 'info', 'teleport', 'play', 'couleur'] }))
-            .toEqual(['play', 'couleur']);
+        // The teleport mode owns List row drags too (project_view_list_options.js): its case stays.
+        expect(projectViewListRailToolKeys({ context: { level }, toolKeys: ['delete', 'copy', 'paste', 'size', 'info', 'teleport', 'teleport_return', 'play', 'couleur'] }))
+            .toEqual(['teleport', 'play', 'couleur']);
     }
 });
 
 test('only beginner creation receives List and explicit views remain authoritative', () => {
+    // A creation also reads the life profiles active on this device (life_profile_runtime.js, a browser runtime): none here.
+    vi.stubGlobal('window', { localStorage: globalThis.localStorage, dispatchEvent: () => true, addEventListener: () => {} });
     for (const level of ['beginner', 'intermediate', 'advanced']) {
         const windowRef = { __eveProfilePreferences: { visual: { masteryLevel: level } } };
         const properties = { name: 'Project', background: '#abcdef' };

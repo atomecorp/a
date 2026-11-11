@@ -49,14 +49,20 @@ const panelRecords = async (records, count) => {
     return Math.max(...[...records.values()].map(record => record.properties.renderLayer));
 };
 
-test('Mystic paints above the real panel stack, including after another panel opens', async () => {
+test('Mystic paints above the panels open when it opened, and under a panel opened after it', async () => {
     const records = setup();
     let panelTop = await panelRecords(records, 1);
     const menu = renderer();
-    await menu.mount({ key: 'mystic' });
-    expect(records.get(menu.recordId('mystic')).properties.renderLayer).toBeGreaterThan(panelTop);
+    await menu.mount({ key: 'mystic', opening: true });
+    const opened = records.get(menu.recordId('mystic')).properties.renderLayer;
+    expect(opened).toBeGreaterThan(panelTop);
+    // A panel opened after the Mystic lies over it: the last opened is on top.
     panelTop = await panelRecords(records, 3);
     await menu.mount({ key: 'mystic' });
+    expect(records.get(menu.recordId('mystic')).properties.renderLayer).toBe(opened);
+    expect(panelTop).toBeGreaterThan(opened);
+    // Its next opening clears the whole real panel stack again, and stays put frame after frame.
+    await menu.mount({ key: 'mystic', opening: true });
     const depth = records.get(menu.recordId('mystic')).properties.renderLayer;
     expect(depth).toBeGreaterThan(panelTop);
     for (let frame = 0; frame < 4; frame++) await menu.mount({ key: 'mystic' });
@@ -65,13 +71,17 @@ test('Mystic paints above the real panel stack, including after another panel op
     expect(records.has(menu.recordId('mystic'))).toBe(false);
 });
 
-test('Mystic returns to its workspace band when underlying panels disappear', async () => {
+test('Mystic returns to its workspace band at its next opening once underlying panels disappear', async () => {
     const records = setup();
     await panelRecords(records, 1);
     const menu = renderer();
-    await menu.mount({ key: 'mystic' });
+    await menu.mount({ key: 'mystic', opening: true });
+    const opened = records.get(menu.recordId('mystic')).properties.renderLayer;
+    expect(opened).toBeGreaterThan(1300);
     for (const [id, record] of records) if (record.properties.layer === 'panel') records.delete(id);
     await menu.mount({ key: 'mystic' });
+    expect(records.get(menu.recordId('mystic')).properties.renderLayer).toBe(opened);
+    await menu.mount({ key: 'mystic', opening: true });
     expect(records.get(menu.recordId('mystic')).properties.renderLayer).toBe(1300);
 });
 

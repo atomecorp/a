@@ -43,7 +43,9 @@ const setup = ({ streams, origin = 'https://atome.one', canPlayHls = true } = {}
         loadPlacement: async () => () => ({ left: 40, top: 30, width: 320, height: 180, rotation: 0 }),
         notify: message => notices.push(message), startTimeoutMs: 50 });
     const settle = () => new Promise(resolve => setTimeout(resolve, 0));
-    return { win, player, attempts, youtubeCalls, notices, tick, settle, menu, menuReady };
+    // The player opens its modules on first use: wait for the n-th attempt (bounded), not a fixed number of turns.
+    const attempted = async (count) => { for (let turn = 0; attempts.length < count && turn < 200; turn++) await settle(); };
+    return { win, player, attempts, youtubeCalls, notices, tick, settle, attempted, menu, menuReady };
 };
 
 test('only streams the page can open are tried: plain http is skipped on https and iOS pages', () => {
@@ -54,15 +56,15 @@ test('only streams the page can open are tried: plain http is skipped on https a
 });
 
 test('a channel falls through failing streams and plays the first working one in place', async () => {
-    const { win, player, attempts, tick, settle } = setup({ streams: [
+    const { win, player, attempts, tick, settle, attempted } = setup({ streams: [
         { kind: 'hls', url: 'https://dead.test/x.m3u8', secure: true },
         { kind: 'hls', url: 'http://relay.test/x.m3u8', secure: false },
         { kind: 'hls', url: 'https://live.test/x.m3u8', secure: true }] });
     const playing = player.play('tv1');
-    await settle(); await settle();
+    await attempted(1);
     expect(attempts[0].src).toBe('https://dead.test/x.m3u8');
     attempts[0].dispatchEvent(new win.Event('error'));
-    await settle(); await settle();
+    await attempted(2);
     // The http relay was never tried on an https page.
     expect(attempts[1].src).toBe('https://live.test/x.m3u8');
     expect(win.document.querySelectorAll('video')).toHaveLength(1);
@@ -90,9 +92,9 @@ test('the registry or leaving the project stops the channel', async () => {
         (win) => stopSelectedProjectMediaPlayback(win, 'tv1'),
         (win) => win.dispatchEvent(new win.CustomEvent('eve:workspace-mode-changed', { detail: { mode: 'dashboard' } }))
     ]) {
-        const { win, player, attempts, settle } = setup({ streams: [{ kind: 'hls', url: 'https://live.test/x.m3u8', secure: true }] });
+        const { win, player, attempts, settle, attempted } = setup({ streams: [{ kind: 'hls', url: 'https://live.test/x.m3u8', secure: true }] });
         const playing = player.play('tv1');
-        await settle(); await settle();
+        await attempted(1);
         attempts[0].dispatchEvent(new win.Event('playing'));
         await playing;
         await leave(win);
@@ -121,22 +123,22 @@ test('a channel with no playable stream reports it and leaves nothing behind', a
 });
 
 test('an idle TV Atome starts from the media reader Play; Pause on it does nothing', async () => {
-    const { win, player, attempts, settle } = setup({ streams: [{ kind: 'hls', url: 'https://live.test/x.m3u8', secure: true }] });
+    const { win, player, attempts, settle, attempted } = setup({ streams: [{ kind: 'hls', url: 'https://live.test/x.m3u8', secure: true }] });
     expect(await player.handlesAtomeId('tv1')).toBe(true);
     expect((await player.transport('pause', 'tv1')).handled).toBe(true);
     expect(win.document.querySelector('video')).toBeNull();
     const pending = player.transport('toggle', 'tv1');
-    await settle(); await settle();
+    await attempted(1);
     attempts[0].dispatchEvent(new win.Event('playing'));
     expect(await pending).toMatchObject({ ok: true, handled: true, action: 'play', latched: true });
 });
 
 test('TV fullscreen hides the menu, restores the original video size, and releases it on Stop', async () => {
-    const { win, player, attempts, settle, menu, menuReady } = setup({
+    const { win, player, attempts, settle, attempted, menu, menuReady } = setup({
         streams: [{ kind: 'hls', url: 'https://live.test/x.m3u8', secure: true }] });
     await menuReady;
     const playing = player.play('tv1');
-    await settle(); await settle();
+    await attempted(1);
     attempts[0].dispatchEvent(new win.Event('playing'));
     await playing;
     const video = win.document.querySelector('video');

@@ -34,6 +34,7 @@ import {
 } from './unified_rendering_test_helpers.mjs';
 import { createProjectPreviewRuntime } from '../../eVe/domains/rendering/project_preview_runtime.js';
 import { resolveProjectPreviewCaptureGeometry } from '../../eVe/domains/rendering/bevy_project_preview_capture_frame.js';
+import { resolveProjectPreviewContentBounds } from '../../eVe/domains/rendering/project_preview_content_bounds.js';
 import {
     clearBevyMediaTextureCache,
     readBevyMediaTextureCache,
@@ -193,7 +194,6 @@ test('RenderAtom media projection keeps the canonical record owner over stale me
         properties: {
             kind: 'audio_recording',
             media_url: '/api/recordings/shared.wav?media_user_id=stale_owner',
-            media_user_id: 'stale_owner',
             width: 100,
             height: 40
         }
@@ -301,7 +301,12 @@ test('project preview runtime bounds thumbnail density independently from the pr
         assert.equal(frames[0].target.devicePixelRatio, 1);
         assert.equal(frames[0].target.pixelWidth, 640);
         assert.equal(frames[0].target.pixelHeight, 400);
-        assert.deepEqual(frames[0].sourceViewport, { width: 1280, height: 720 });
+        // The thumbnail frames the content, not the screen: the content box at the
+        // screen's ratio (an object off-screen or a view zoom never crops it).
+        const contentViewport = resolveProjectPreviewContentBounds([makeRecord('preview_image', 'image', 1)], { width: 1280, height: 720 });
+        assert.equal(contentViewport.from, 'content');
+        assert.ok(Math.abs(contentViewport.width / contentViewport.height - 1280 / 720) < 1e-9);
+        assert.deepEqual(frames[0].sourceViewport, contentViewport);
         assert.equal(frames[0].sourceBackground, null);
         assert.equal(frames[1].sourceBackground, null);
         assert.deepEqual(
@@ -310,7 +315,7 @@ test('project preview runtime bounds thumbnail density independently from the pr
                 width: frames[0].target.pixelWidth,
                 height: frames[0].target.pixelHeight
             }).size,
-            { width: 640, height: 360, sourceWidth: 1280, sourceHeight: 720 }
+            { width: 640, height: 360, sourceWidth: contentViewport.width, sourceHeight: contentViewport.height }
         );
     } finally {
         if (previousWindow === undefined) delete globalThis.window;
@@ -415,7 +420,8 @@ test('Rendering surfaces and text bridge stay bounded', () => {
     assert.equal(document.querySelectorAll('canvas.eve-render-surface').length, 2);
     assert.equal(listenerCount, 8);
     assert.equal(getRenderSurfaceState(projectSurface).scene.atoms.length, 100);
-    assert.equal(getRenderSurfaceState(projectSurface).listenerCount, 7);
+    // The surface's declared interaction budget (bindSurfaceInteractions), bound once however often it is ensured.
+    assert.equal(getRenderSurfaceState(projectSurface).listenerCount, 8);
 
     const rootA = ensureHiddenTextServiceRoot(document);
     const rootB = ensureHiddenTextServiceRoot(document);
@@ -459,7 +465,8 @@ test('Project view overlay routes Bevy surface interception without DOM dashboar
 
     assert.equal(calls.length, 1);
     assert.equal(calls[0].phase, 'pointerdown');
-    assert.deepEqual(calls[0].point, { x: 42, y: 55 });
+    // A project-surface point is a project point that also carries its screen point (identity view here).
+    assert.deepEqual(calls[0].point, { x: 42, y: 55, screen: { x: 42, y: 55 } });
     assert.equal(event.defaultPrevented, true);
 });
 
@@ -530,6 +537,12 @@ test('Text bridge commits the live value and measured frame on canonical editor 
     editor.value = 'Committed by blur';
     editor.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
     editor.blur();
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 0));
+    // Scene text retains its session across a blur (a style tool may hold the
+    // attention); the live value is committed by the explicit validation, Tab.
+    assert.equal(commits.length, 0);
+    assert.equal(bridge.getState().activeEditorCount, 1);
+    editor.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
     await new Promise((resolve) => dom.window.setTimeout(resolve, 0));
     assert.equal(commits.length, 1);
     assert.equal(commits[0].props.text, 'Committed by blur');

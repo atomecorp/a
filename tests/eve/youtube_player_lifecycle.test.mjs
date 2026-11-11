@@ -299,6 +299,8 @@ test('the main menu glow stops painting while YouTube fullscreen holds its suspe
     const { runtime, menu, menuReady, win } = setup();
     const previousWindow = globalThis.window;
     globalThis.window = win;
+    // The main menu resolves its tools for the person's published Dashboard style.
+    win.__eveProfilePreferences = { visual: { dashboardStyle: 'mystic' } };
     const patches = [];
     const menuRuntime = createBevyUiMainMenuRuntime({
         content: { toolbox: { children: ['find'] }, find: { atome_tool: true,

@@ -63,8 +63,10 @@ import { FastifyAdapter } from './adole.js';
 // Only the application's own document owns the session: a frame it embeds (the
 // project preview capture renderer) shares its storage, and its bootstrap, without
 // the native bridge, failed and erased the stored session (a guest lost on relaunch).
+// The event is the window's own kind, so any window it is sent on (a frame, a headless DOM) accepts it.
 if (globalThis.window?.top === globalThis.window) void auth.tryAutoLogin().catch(error => {
-  globalThis.window?.dispatchEvent(new CustomEvent('squirrel:phone-login-error', { detail: { code: error.message || 'local_authorization_unavailable' } }));
+  const PageEvent = globalThis.window?.CustomEvent || CustomEvent;
+  globalThis.window?.dispatchEvent(new PageEvent('squirrel:phone-login-error', { detail: { code: error.message || 'local_authorization_unavailable' } }));
 });
 
 const isAnonymousMode = () => getSessionState().mode === 'anonymous';

@@ -120,6 +120,10 @@ class AudioSchemeHandler: NSObject, WKURLSchemeHandler {
             serveServerInfo(task: urlSchemeTask)
             return
         }
+        if path.hasPrefix("/__native/media_preview/") {
+            serveMediaPreviewFrame(url: url, path: path, task: urlSchemeTask)
+            return
+        }
         // The isolated preview origin of a page with its JavaScript (PagePreviewServer.swift, D18 item 11).
         if path == "/page_preview/origin" {
             servePagePreviewOrigin(task: urlSchemeTask)
@@ -373,6 +377,29 @@ class AudioSchemeHandler: NSObject, WKURLSchemeHandler {
         if complete(task, response: response, data: data) {
             Self.recordResponse(bytes: data.count)
         }
+    }
+
+    // The live camera's latest JPEG frame (video_native_preview_stream.js), newer than `after`, else 204.
+    private func serveMediaPreviewFrame(url: URL, path: String, task: WKURLSchemeTask) {
+        let kind = URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent
+        let after = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?.first(where: { $0.name == "after" })?.value.flatMap { UInt64($0) } ?? 0
+        guard let frame = AppNativeMediaCaptureController.shared.latestPreviewFrame(kind: kind, after: after) else {
+            let response = HTTPURLResponse(url: url, statusCode: 204, httpVersion: "HTTP/1.1", headerFields: [
+                "Cache-Control": "no-store", "Content-Length": "0"
+            ])!
+            _ = complete(task, response: response, data: Data())
+            return
+        }
+        let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: [
+            "Content-Type": "image/jpeg",
+            "Content-Length": String(frame.jpeg.count),
+            "Cache-Control": "no-store",
+            "X-Atome-Sequence": String(frame.sequence),
+            "X-Atome-Width": String(frame.width),
+            "X-Atome-Height": String(frame.height)
+        ])!
+        _ = complete(task, response: response, data: frame.jpeg)
     }
 
     private func servePagePreviewOrigin(task: WKURLSchemeTask) {

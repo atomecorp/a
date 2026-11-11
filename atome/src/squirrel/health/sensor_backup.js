@@ -34,16 +34,26 @@ export function createSensorBackup({ sensors, keys, files, store, actor, crypto 
         if (!reply.ok) throw failed(reply.error || 'health_sensors_failed');
         return reply;
     };
-    const copies = async () => {
+    // Every copy is described in one declared property (`sensor_backups`, a map of slot → copy): the type gate refuses
+    // any undeclared key, so a key per file was never written (atome_property_unknown, iPhone, 11 Nov. 2026).
+    const described = async () => {
         const record = await store.read(sensorBackupsId(principal()));
-        const props = record?.properties || record?.props || {};
-        return Object.values(props).filter(value => value?.version === 1 && FILE.test(String(value.file)));
+        const own = (record?.properties || record?.props || {}).sensor_backups;
+        return own && typeof own === 'object' && !Array.isArray(own) ? own : {};
     };
-    const describe = async (file, value) => {
-        const id = sensorBackupsId(principal()), at = new Date(now()).toISOString(), changeId = `${id}:${createId()}`;
-        const result = await store.commit({ kind: 'set', id: changeId, tx_id: changeId, actor: principal(), atome_id: id, type: 'record', scope: 'global',
-            props: { source_domain: 'sensor_backup', [slotOf(file)]: value, updated_iso: at } });
-        if (result?.ok === false) throw failed('health_sensors_storage_unavailable');
+    const copies = async () => Object.values(await described()).filter(value => value?.version === 1 && FILE.test(String(value.file)));
+    // One description written at a time, each on the latest map, so no copy is lost between two writes.
+    let writing = Promise.resolve();
+    const describe = (file, value) => {
+        const task = writing.then(async () => {
+            const id = sensorBackupsId(principal()), at = new Date(now()).toISOString(), changeId = `${id}:${createId()}`;
+            const { [slotOf(file)]: _gone, ...others } = await described();
+            const result = await store.commit({ kind: 'set', id: changeId, tx_id: changeId, actor: principal(), atome_id: id, type: 'record', scope: 'global',
+                props: { source_domain: 'sensor_backup', sensor_backups: value === null ? others : { ...others, [slotOf(file)]: value }, updated_iso: at } });
+            if (result?.ok === false) throw failed('health_sensors_storage_unavailable');
+        });
+        writing = task.then(() => {}, () => {});
+        return task;
     };
 
     async function send(ring, { file, bytes }) {

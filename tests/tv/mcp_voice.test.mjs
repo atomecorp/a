@@ -7,7 +7,8 @@ import { createConversationSession } from '../../atome/src/squirrel/ai/conversat
 
 test('direct MCP contracts validate inputs and use the canonical audited command route', async () => {
     const handlers = createMcpContractHandlers();
-    assert.equal(Object.keys(handlers).length, 10);
+    // Every contract family now registers its direct methods (mcp_contract_families.js): each TV command has its own.
+    assert.ok(TV_COMMANDS.every(command => typeof handlers[command.name] === 'function'));
     assert.equal((await handlers['tv.open_channel']({ channel: 'fr2', source_url: 'https://bad.example' })).error, 'INVALID_ARGUMENT');
     assert.equal((await handlers['tv.get_state']()).error, 'NO_ACTIVE_CLIENT');
     const calls = [];
@@ -15,7 +16,8 @@ test('direct MCP contracts validate inputs and use the canonical audited command
         calls.push(payload); return { ok: true, result: { ok: true, playback: 'opened_unconfirmed' } };
     } } } } };
     try {
-        await handlers['tv.open_channel']({ channel: 'fr2', fullscreen: false });
+        // The transport reaches a handler in `__mcp`, as mcp.js#run sets it.
+        await handlers['tv.open_channel']({ channel: 'fr2', fullscreen: false, __mcp: { actor: { actor_id: 'u' }, source: { type: 'voice', layer: 'test' } } });
         assert.equal(calls[0].tool_id, 'tv.open_channel'); assert.equal(calls[0].input.channel, 'fr2'); assert.equal(calls[0].input.fullscreen, false);
         for (const command of TV_COMMANDS) {
             assert.deepEqual(resolveAccessPolicy(command.name).required_capabilities, [command.capability]);
@@ -26,8 +28,9 @@ test('direct MCP contracts validate inputs and use the canonical audited command
 test('voice context supplies fullscreen by default, preserves small-window requests and deduplicates calls', async () => {
     const invocations = [];
     const session = createConversationSession({ actor: () => ({ id: 'u' }), quota: { getSummary: () => ({}) },
-        mcp: async ({ method, params }) => ({ result: method === 'runtime.tools.list' ? { tools: TV_COMMANDS.map(c => ({ name: c.name, description: c.description, parameters: c.input_schema })) }
-            : method === 'ai.tools.list' ? { tools: [] } : (invocations.push(params), { ok: true, playback: 'opened_unconfirmed' }) }),
+        // The source is the transport's (second argument), never a param (conversation_session.js#callMcp).
+        mcp: async ({ method, params }, transport) => ({ result: method === 'runtime.tools.list' ? { tools: TV_COMMANDS.map(c => ({ name: c.name, description: c.description, parameters: c.input_schema })) }
+            : method === 'ai.tools.list' ? { tools: [] } : (invocations.push({ ...params, source: transport.source }), { ok: true, playback: 'opened_unconfirmed' }) }),
         request: async () => { throw new Error('Voice tool execution must not request a second provider response'); } });
     const voice = await session.createVoiceTools({ signal: new AbortController().signal, deliver: async () => {} });
     await voice.execute({ call_id: 'discover', name: 'atome_tool_search', arguments: '{"query":"tv.open_channel"}' });
@@ -60,8 +63,10 @@ test('viewing commands are always at hand; an open tool adds its commands and on
 });
 
 test('the assistant actor may watch television and YouTube but still needs confirmation to publish', async () => {
-    const { resolveActorProfile, hasActorCapability } = await import('../../atome/src/squirrel/atome/mcp_security.js');
-    const actor = resolveActorProfile({ actor: { user_id: 'u' } });
+    const { hasActorCapability } = await import('../../atome/src/squirrel/atome/mcp_security.js');
+    // The assistant's capabilities follow its transport (mcp_transport.js#resolveTransportActor replaced resolveActorProfile).
+    const { resolveTransportActor } = await import('../../atome/src/squirrel/atome/mcp_transport.js');
+    const actor = resolveTransportActor({ source: { type: 'ai', layer: 'assistant' }, actor: { user_id: 'u' } });
     for (const tool of ['tv.open_channel', 'tv.list_channels', 'youtube.play', 'youtube.search']) {
         const policy = resolveAccessPolicy('runtime.tools.call', { tool_id: tool });
         assert.equal(hasActorCapability(actor, policy.required_capabilities), true, tool);

@@ -4,6 +4,15 @@ import {
     subscribeCanonicalProjectChanges
 } from '../../eVe/domains/dashboard/dashboard_project_change_events.js';
 import { createDashboardCreationActions } from '../../eVe/domains/dashboard/dashboard_creation_actions.js';
+import { dashboardDefaultTarget } from '../../eVe/domains/dashboard/dashboard_progression_catalog.js';
+
+// A guided health project composes its engagement control (system_template_runtime.js) before it opens:
+// in Node there is no canonical state, so the owner is observed instead.
+const engagement = vi.hoisted(() => ({ calls: [] }));
+vi.mock('../../eVe/domains/templates/system_template_runtime.js', async (importOriginal) => ({
+    ...await importOriginal(),
+    ensureObjectiveEngagement: async (projectId) => { engagement.calls.push(projectId); return { ok: true }; }
+}));
 
 afterEach(() => vi.useRealTimers());
 
@@ -56,7 +65,9 @@ it('guided creation carries the full intent into the canonical creator and opens
         newsCreator: async () => async options => { calls.push(['news', options]); return { ok: true, project: { id: 'draft' } }; },
         openProject: async item => { calls.push(['open', item]); return { ok: true }; } });
     await actions.createGuidedProject({ family: 'health', goal: 'journal' });
-    expect(calls[0][1].properties.project_intent).toEqual({ family: 'health', goal: 'journal', objective_id: 'OBJ-08' });
+    expect(calls[0][1].properties.project_intent).toEqual({ family: 'health', goal: 'journal', objective_id: 'OBJ-08',
+        target: dashboardDefaultTarget('journal') });
+    expect(engagement.calls).toEqual(['guided']);
     expect(calls[1]).toEqual(['open', { payload: { id: 'guided' } }]);
     calls.length = 0;
     await actions.createGuidedProject({ family: 'publication', goal: 'everyone' });

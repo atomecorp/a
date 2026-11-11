@@ -228,8 +228,6 @@ final class AppNativeVideoRecorder: NSObject, AVCaptureFileOutputRecordingDelega
                     "project_atome_id": self.projectAtomeId ?? "",
                     "camera_position": self.cameraPositionName(self.cameraPosition),
                     "mime_type": "video/quicktime",
-                    "preview_source_id": self.previewSourceId,
-                    "preview_command": "media_video_preview_frame",
                     "preview_pixel_format": "jpeg",
                     "preview_max_dimension": AppNativeVideoPreviewState.maximumDimension,
                     "preview_max_fps": AppNativeVideoPreviewState.maximumFps

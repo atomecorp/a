@@ -2,6 +2,7 @@ import { getSessionState } from '../apis/unified/adole_api/session.js';
 import { importData, reconcileImport, sameImportValue, importPatchChanges, compareImportVersion } from './import_reconciliation.js';
 
 export const IMPORT_ORIGIN_TYPE = 'import_origin';
+const IMPORT_PAGE = 100;
 export const IMPORT_SOURCE_TYPE = 'import_source_state';
 export const importRecordProps = row => row?.properties || row?.particles || {};
 export const importRecordId = row => row?.atome_id || row?.id;
@@ -95,16 +96,17 @@ export function createCanonicalImport({ type, api = () => globalThis.window?.Ato
     };
     const readTable = async (recordType, context) => {
         const rows = [];
-        // Import bookkeeping reaches tens of thousands of rows (contacts and
-        // calendars share the origins): 1000-row pages keep a full read to a few
-        // dozen requests instead of hundreds.
-        for (let offset = 0; ; offset += 1000) {
+        // Import bookkeeping reaches tens of thousands of rows (contacts and calendars share
+        // the origins): pages of 100 walked from a cursor each read their own rows only (a
+        // cold first page of 250 contacts held a phone's vault 0.6 s at launch).
+        for (let offset = 0, after = null; ; offset += IMPORT_PAGE) {
             context.check();
-            const page = await context.store.listStateCurrent(null, { atomeType: recordType, includeDeleted: true, limit: 1000, pageSize: 1000, offset });
+            const page = await context.store.listStateCurrent(null, { atomeType: recordType, includeDeleted: true, storageOrder: true, after, limit: IMPORT_PAGE, pageSize: IMPORT_PAGE, offset });
             context.check();
             if (!Array.isArray(page)) throw new Error('canonical_import_read_invalid');
             rows.push(...page.filter(row => !row.owner_id || String(row.owner_id) === context.owner));
-            if (page.length < 1000) break;
+            if (page.next === undefined ? page.length < IMPORT_PAGE : page.next === null) break;
+            after = page.next ?? null;
         }
         return rows;
     };

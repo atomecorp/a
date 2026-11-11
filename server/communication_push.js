@@ -10,7 +10,8 @@ export function setCommunicationPushProvider(vaultProvider) {
     supervisor = vaultProvider;
 }
 
-const ask = (operation, payload) => {
+// Always a promise: callers fire-and-forget a delivery with `.catch`, which a synchronous throw would escape.
+const ask = async (operation, payload) => {
     if (!supervisor) throw new Error('communication_push_provider_missing');
     return supervisor.service(`push:${operation}`, payload);
 };

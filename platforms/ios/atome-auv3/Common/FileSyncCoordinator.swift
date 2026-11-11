@@ -101,6 +101,21 @@ final class FileSyncCoordinator {
         }
     }
 
+    /// A capture just written in the app group (a take, a photo) is served by the local server from the person's
+    /// storage (`iCloudFileManager.getCurrentStorageURL`): it is placed there before the capture answers, so its URL
+    /// never answers 404 while the full sync runs (iPad, 11 Nov. 2026: about 0.9 s after each take, and the list's
+    /// decoders that asked in that time stayed broken). A copy on the same volume is a clone. Serialised with the sync.
+    func publishNow(_ source: URL, relativePath: String) throws {
+        guard !relativePath.isEmpty, let storage = iCloudFileManager.shared.getCurrentStorageURL() else { return }
+        let target = storage.appendingPathComponent(relativePath, isDirectory: false).standardizedFileURL
+        guard target.resolvingSymlinksInPath().path != source.resolvingSymlinksInPath().standardizedFileURL.path else { return }
+        try queue.sync {
+            try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if fm.fileExists(atPath: target.path) { try fm.removeItem(at: target) }
+            try fm.copyItem(at: source, to: target)
+        }
+    }
+
     // Blocking sync (used by /sync_now endpoint) returns stats
     func blockingSync() -> (changed: Int, deleted: Int, roots: [String]) {
         var changed = 0

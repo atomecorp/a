@@ -4,12 +4,14 @@ import {getProjectWorkMode,setProjectWorkMode} from '../../eVe/domains/rendering
 import {resolveContextMenu} from '../../eVe/intuition/menu/context_menu_resolver.js';
 test('the Mystic is one constant list in edit, and the project background reads like the rest',()=>{
  const keys=context=>resolveContextMenu({context}).map(item=>item.key);
- const FIXED=['ai','find','capture','import','communicate','dashboard','new_project','copy','paste','delete','play','utilities','info','activity'];
+ // `menus.mystic.fixed` word for word: Créer took the south rung, Find and the Dashboard left the list.
+ const FIXED=['ai','capture','import','communicate','create','new_project','copy','paste','delete','play','utilities','info','activity'];
  // Le fond de projet est lisible (2026-09-29) : sa tuile Play pilote le
  // transport du projet entier, la liste y gagne `play` au meme rang.
  assert.deepEqual(keys({type:'project'}),FIXED);
  assert.deepEqual(keys({type:'surface_item'}),FIXED);
- assert.deepEqual(keys({type:'text_field'}),FIXED);
+ // A text field is the one exception: its Mystic is its clipboard alone.
+ assert.deepEqual(keys({type:'text_field'}),['copy','paste']);
  assert.deepEqual(keys({type:'dashboard'}),FIXED);
  assert.deepEqual(keys({type:'lasso',selected:true}),FIXED);
  assert.deepEqual(keys({type:'tool',tool:'shape'}),FIXED);

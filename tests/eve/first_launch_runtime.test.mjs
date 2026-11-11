@@ -26,7 +26,9 @@ const fixture = (initial = { preferences: { visual: { masteryLevel: 'advanced' }
     });
     const loadProfile = vi.fn(async () => ({ ok: true, profile }));
     const installTemplate = vi.fn(async key => ({ ok: true, project_id: key }));
-    window.Atome = { listStateCurrent: async key => FIRST_LAUNCH_TEMPLATES[key].atoms.map(a => ({ id: a.ref, type: a.type, properties: a.props })) };
+    // An objective's Finish reads its project for its kept deadline and challenge (objective_preparation.js#configureObjective).
+    window.Atome = { listStateCurrent: async key => FIRST_LAUNCH_TEMPLATES[key].atoms.map(a => ({ id: a.ref, type: a.type, properties: a.props })),
+        getStateCurrent: async id => ({ id, type: 'project', properties: {} }) };
     const flow = createFirstLaunchRuntime({ currentUser: () => current,
         loadProfile, saveProfile: async next => { profile = structuredClone(next); saves.push(profile); return { ok: true }; },
         installTemplate, createTemplate, finish,
@@ -210,14 +212,17 @@ describe('first-launch canonical lifecycle', () => {
         expect(f.renders).toEqual(['access', 'goals']); expect(f.guest).toHaveBeenCalledTimes(1);
         expect(window.__eveProfilePreferences.visual.masteryLevel).toBe('beginner');
         expect(window.__eveProfilePreferences.custom).toBeUndefined();
-        expect(f.loadProfile).not.toHaveBeenCalled(); expect(f.saves).toHaveLength(0);
+        // Its beginner profile is stored at once (first_launch_runtime.js#enterGuest), never read from the account's.
+        expect(f.loadProfile).not.toHaveBeenCalled(); expect(f.saves).toHaveLength(1);
+        expect(f.saves[0].preferences).toMatchObject({ visual: { masteryLevel: 'beginner' }, first_launch: { step: 'goals' } });
+        expect(f.saves[0].preferences.custom).toBeUndefined();
         expect(window.AdoleAPI.auth.payPhoneLogin).not.toHaveBeenCalled();
         expect(window.AdoleAPI.auth.resendPhoneLogin).not.toHaveBeenCalled();
         expect(f.createTemplate).not.toHaveBeenCalled(); expect(owners.create).not.toHaveBeenCalled();
         await f.flow.close();
         await f.flow.open(); expect(f.flow.state.busy).toBe(false); expect(f.flow.state.stage).toBe('access');
     });
-    it.each(['nutrition', 'movement', 'journal'])('finishes the guest %s goal through the canonical project and home owners', async goal => {
+    it.each(['weight', 'movement', 'journal'])('finishes the guest %s goal through the canonical project and home owners', async goal => {
         const f = fixture(); await f.flow.open(); await f.flow.handle({ operation: 'guest' });
         expect(await f.flow.handle({ operation: 'goal', value: goal })).toMatchObject({ ok: true });
         expect(owners.create).toHaveBeenCalledWith({ family: 'health', goal }); expect(f.flow.state.stage).toBe('objective');
@@ -241,7 +246,8 @@ describe('first-launch canonical lifecycle', () => {
         expect(f.flow.state.bricks).toEqual(['meditation', 'nutrition']);
         await f.flow.handle({ operation: 'finish' });
         expect(f.finish).toHaveBeenCalledWith({ projectId: 'basic', homeId: 'basic' });
-        expect(f.saves).toHaveLength(0); expect(f.loadProfile).not.toHaveBeenCalled();
+        // Its beginner profile at entry, then its completion; never the account's profile.
+        expect(f.saves).toHaveLength(2); expect(f.loadProfile).not.toHaveBeenCalled();
     });
     it('serializes guest entry and keeps failed entry retryable on Access', async () => {
         const f = fixture(); await f.flow.open(); let release;
@@ -385,14 +391,17 @@ describe('first-launch canonical lifecycle', () => {
     });
     it('uses the authenticated profile instead of another account’s completed published preferences', async () => {
         window.__eveProfilePreferences = { first_launch: { version: 1, step: 'complete' } };
-        const f = fixture(); await f.flow.authenticated({ user, newAccount: true });
+        // A new account that chose no level starts as a beginner (first_launch_model.js#firstLaunchProfile).
+        const f = fixture({ preferences: { custom: 'preserved' } }); await f.flow.authenticated({ user, newAccount: true });
         expect(f.flow.state.stage).toBe('welcome'); expect(f.profile().preferences.visual.masteryLevel).toBe('beginner');
+        expect(f.profile().preferences.custom).toBe('preserved');
         await f.flow.handle({ operation: 'goals' }); await f.flow.authenticated({ user, newAccount: true });
         expect(f.flow.state.stage).toBe('goals');
     });
     it('resumes sleep selection, persists canonical configuration, and completes with one Basic instance', async () => {
         const f = fixture(); await f.flow.authenticated({ user });
-        expect(f.profile().preferences.visual.masteryLevel).toBe('beginner');
+        // A level the person already chose stays theirs (first_launch_model.js#firstLaunchProfile).
+        expect(f.profile().preferences.visual.masteryLevel).toBe('advanced');
         await f.flow.handle({ operation: 'goals' }); await f.flow.handle({ operation: 'goal', value: 'sleep' });
         f.draft('hours', 9); await f.flow.handle({ operation: 'configure_sleep' });
         expect(owners.gateway).toHaveBeenCalledWith(expect.objectContaining({ tool_id: 'project.program.commit', input: expect.objectContaining({ sleep_preferences: expect.objectContaining({ hours: 9 }) }) }));
@@ -454,7 +463,7 @@ describe('first-launch canonical lifecycle', () => {
         expect(f.saves).toHaveLength(1);
     });
     // Every goal walks its objective's screen; its Finish writes the objective's settings and schedule, then ends on the home.
-    it.each(['nutrition', 'movement', 'journal'])('walks the %s objective screen, then ends onboarding on the home', async goal => {
+    it.each(['weight', 'movement', 'journal'])('walks the %s objective screen, then ends onboarding on the home', async goal => {
         const f = fixture(); await f.flow.authenticated({ user }); await f.flow.handle({ operation: 'goals' });
         await f.flow.handle({ operation: 'goal', value: goal }); expect(owners.create).toHaveBeenCalledWith({ family: 'health', goal });
         expect(f.flow.state.stage).toBe('objective'); expect(f.finish).not.toHaveBeenCalled();

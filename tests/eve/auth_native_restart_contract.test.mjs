@@ -152,9 +152,11 @@ test('failed desktop session recovery settles authentication instead of blocking
 });
 
 test('the canonical background starts before login can request its first pixels', () => {
-    const source = read('eVe/eVe.js');
-    const critical = source.slice(source.indexOf('const eveSequentialModules'), source.indexOf('const eveDeferredModules'));
-    const deferred = source.slice(source.indexOf('const eveDeferredModules'), source.indexOf('let deferredModulesPromise'));
+    // The boot module lists live in eVe/eve_boot_modules.js (data read by eVe.js#startEve).
+    const source = read('eVe/eve_boot_modules.js');
+    const critical = source.slice(source.indexOf('export const EVE_SEQUENTIAL_MODULES'), source.indexOf('export const EVE_DEFERRED_MODULES'));
+    const deferred = source.slice(source.indexOf('export const EVE_DEFERRED_MODULES'));
+    expect(read('eVe/eVe.js')).toContain('modules: EVE_SEQUENTIAL_MODULES');
     expect(critical.indexOf("id: 'eve.user_background'")).toBeGreaterThanOrEqual(0);
     expect(critical.indexOf("id: 'eve.user_background'")).toBeLessThan(critical.indexOf("id: 'eve.bootstrap'"));
     expect(deferred).not.toContain("id: 'eve.user_background'");

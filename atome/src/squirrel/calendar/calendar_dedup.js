@@ -80,14 +80,9 @@ export function planCalendarDedup({ calendars = [], events = [], origins = [] } 
 }
 
 const readAll = async (api, atomeType, owner) => {
-    const rows = [];
-    for (let offset = 0; ; offset += 1000) {
-        const page = await api.listStateCurrent(null, { atomeType, limit: 1000, pageSize: 1000, offset });
-        if (!Array.isArray(page)) throw new Error('calendar_dedup_read_invalid');
-        rows.push(...page.filter(row => !owner || !row.owner_id || String(row.owner_id) === owner));
-        if (page.length < 1000) break;
-    }
-    return rows;
+    const rows = await api.listStateCurrent(null, { atomeType, storageOrder: true, limit: Number.MAX_SAFE_INTEGER, pageSize: 250 });
+    if (!Array.isArray(rows)) throw new Error('calendar_dedup_read_invalid');
+    return rows.filter(row => !owner || !row.owner_id || String(row.owner_id) === owner);
 };
 
 // `dryRun`: the plan's counts, nothing written. `onProgress(done, total)`.

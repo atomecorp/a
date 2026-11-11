@@ -3,7 +3,8 @@ import { JSDOM } from 'jsdom';
 import { test, vi } from 'vitest';
 
 vi.mock('../../eVe/domains/rendering/project_view_surface_runtime.js', () => ({
-    playProjectViewSelection: async (selectionIds) => ({ ok: true, selectionIds })
+    playProjectViewSelection: async (selectionIds) => ({ ok: true, selectionIds }),
+    readProjectViewSurfaceState: () => ({ mounted: false, projectId: null, mode: null })
 }));
 
 import { createAtomeContextualRailDefinitionInvocationRuntime } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_rail_definition_invocation_runtime.js';

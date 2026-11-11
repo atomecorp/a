@@ -39,7 +39,8 @@ describe('System UI base unit contract', () => {
         expect(metricsSource.match(/SYSTEM_UI_TOOL_UNIT_PX = 60/g)).toHaveLength(1);
         const toolSkin = source('../../eVe/elements/skin/tool_skin.js');
         expect(toolSkin).not.toMatch(/toolSizePx:\s*\d/);
-        expect(toolSkin).toMatch(/toolSizePx:\s*UNIT_PX/);
+        // The tool is drawn inside its grid cell: the unit less the grid joint, read live.
+        expect(toolSkin).toMatch(/get toolSizePx\(\) \{ return UNIT_PX - systemUiGridJointPx\(\); \}/);
         const panelSkin = source('../../eVe/elements/skin/panel_skin.js');
         expect(panelSkin).not.toMatch(/(?:inputHeightPx|rowHeightPx|headerHeightPx|controlHeightPx|optionHeightPx|agendaRowHeightPx|resultRowHeightPx|bodyHeightPx):\s*\d/);
         const bevyTokens = source('../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js');

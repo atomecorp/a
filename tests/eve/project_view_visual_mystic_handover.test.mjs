@@ -111,7 +111,9 @@ const createHarness = ({ visualPanel = null, type = 'video', composite = false }
 
     harness.pointerState = {
         lastSurfacePoints: new Map(), pointerTarget: null, focusTarget: null,
-        hoverTarget: null, pendingTextActivation: null, handlers
+        hoverTarget: null, pendingTextActivation: null, handlers,
+        // Who watches every primary touch (bevy_ui_runtime_state.js): nobody here.
+        touchObservers: new Set()
     };
     const pointerRuntime = createBevyUiPointerRuntime({
         state: harness.pointerState,

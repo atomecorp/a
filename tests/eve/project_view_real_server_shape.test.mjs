@@ -5,9 +5,21 @@ import { createProjectViewMatrixContent } from "../../eVe/domains/rendering/proj
 
 
 
-import { enterProjectViewLevel, resetProjectViewNavigation } from "../../eVe/domains/rendering/project_view_navigation.js";
+import { enterProjectViewLevel, invokeProjectViewNavigation, resetProjectViewNavigation } from "../../eVe/domains/rendering/project_view_navigation.js";
+import * as toolGateway from '../../eVe/intuition/runtime/tool_gateway.js';
 import { readCurrentInsertionTarget } from "../../eVe/domains/rendering/project_view_insertion_target.js";
 import { compileProjectViewTransportPlan } from '../../eVe/domains/rendering/project_view_transport_plan.js';
+
+// A Matrix load resumes its level through the registered `ui.matrix.navigation`
+// command; route it to the real handler with a project that has no saved level.
+const routeNavigationToHandler = (projectId) => vi.spyOn(toolGateway, 'invokeToolGateway').mockImplementation((payload) => {
+    assert.equal(payload.tool_id, 'ui.matrix.navigation');
+    return invokeProjectViewNavigation(payload.input, {
+        windowRef: { __eveWorkspaceMode: { mode: 'project', projectId } },
+        actor: () => 'matrix_principal',
+        read: async (id) => id === projectId ? { id, type: 'project', properties: { name: 'Project' } } : null
+    });
+});
 
 test('Matrix transports the full nested hierarchy independently of visible cells', async () => {
     const projectId = 'nested_matrix';
@@ -18,13 +30,16 @@ test('Matrix transports the full nested hierarchy independently of visible cells
     ].map(record => ({ ...record, meta: { project_id: projectId } }));
     const matrix = createProjectViewMatrixContent({ requestRefresh() {} });
     resetProjectViewNavigation(projectId);
-    await matrix.load({ projectId, readList: async () => records });
-    assert.deepEqual(matrix.levelChildren().map(record => record.id), ['outer']);
-    const loaded = await matrix.transportRecords();
-    assert.equal(loaded.records.length, 5);
-    const plan = compileProjectViewTransportPlan({ rootId: 'outer', records: loaded.records });
-    assert.equal(plan.durationSeconds, 5);
-    assert.equal(plan.leaves.length, 3);
+    const gateway = routeNavigationToHandler(projectId);
+    try {
+        await matrix.load({ projectId, readList: async () => records });
+        assert.deepEqual(matrix.levelChildren().map(record => record.id), ['outer']);
+        const loaded = await matrix.transportRecords();
+        assert.equal(loaded.records.length, 5);
+        const plan = compileProjectViewTransportPlan({ rootId: 'outer', records: loaded.records });
+        assert.equal(plan.durationSeconds, 5);
+        assert.equal(plan.leaves.length, 3);
+    } finally { gateway.mockRestore(); }
 });
 
 
@@ -188,6 +203,7 @@ test('Matrix activate handlers keep distinct cell identities through cumulative 
     globalThis.window = dom.window;
     const selection = await import('../../eVe/intuition/runtime/selection.js');
     selection.syncSelectionState([]);
+    const gateway = routeNavigationToHandler('matrix_cumulative');
     try {
         const matrix = createProjectViewMatrixContent({ requestRefresh: () => {} });
         await matrix.load({ projectId: 'matrix_cumulative', readList: async () => ['first', 'second'].map((id) => ({
@@ -202,6 +218,6 @@ test('Matrix activate handlers keep distinct cell identities through cumulative 
         await buildTiles()[1].on.activate({ meta_key: true });
         assert.deepEqual(matrix.readState().selectedIds, ['first', 'second']);
     } finally {
-        selection.syncSelectionState([]); dom.window.close(); globalThis.window = previousWindow;
+        gateway.mockRestore(); selection.syncSelectionState([]); dom.window.close(); globalThis.window = previousWindow;
     }
 });

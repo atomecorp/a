@@ -4,8 +4,10 @@ import { test } from 'vitest';
 import { normalizeBevyUiTree } from '../../eVe/domains/rendering/bevy_ui_tree_normalization.js';
 import { createBackgroundPanelSurface } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_background_runtime.js';
 import { createColorPanelSurface } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_color_runtime.js';
+import { colorWheelTexture, createColorControlRuntime } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_color_control.js';
 import { BEVY_PANEL_COMPONENTS, panelComponent } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_component_registry.js';
-import { notificationTableNode } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_notification_table.js';
+import { buildAccordionList } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_accordion_list.js';
+import { resolveListRowTokens } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
 import { createShadowPanelSurface } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_shadow_runtime.js';
 import {
     resolveTimelineScope,
@@ -71,24 +73,27 @@ test('History and Timeline share project scope, actions and subscription lifecyc
     }
 });
 
-test('notification surfaces share one table geometry and keep domain callbacks injected', () => {
+// The notification table was retired: Communication's inbox and Contacts both
+// draw the shared list of Atome (one accordion row per record), each panel only
+// injecting how to name, unfold and activate its own records.
+test('notification surfaces share one list geometry and keep domain callbacks injected', () => {
     const opened = [];
-    const table = notificationTableNode({
-        id: 'probe_notifications', width: 360,
-        columns: [
-            { id: 'date', label: 'Date', flex: 2 },
-            { id: 'name', label: 'Name', flex: 2 },
-            { id: 'message', label: 'Message', flex: 3 },
-            { id: 'actions', label: 'Actions', flex: 2 }
-        ],
-        rows: [{ id: 'n1', unread: true, date: 'now', name: 'Ada', message: 'Hello', actions: [] }],
-        onActivate: (id) => opened.push(id)
-    });
-    const row = findNode(table, 'probe_notifications_row_n1');
-    assert.ok(findNode(table, 'probe_notifications_header'));
-    assert.ok(findNode(table, 'probe_notifications_row_n1_unread'));
-    row.on.activate();
-    assert.deepEqual(opened, ['n1']);
+    const list = ({ prefix, label }) => buildAccordionList({
+        prefix, bodyWidth: 360,
+        entries: [{ id: 'n1', label, expanded: false, selectable: false }],
+        buildBody: () => [],
+        activate: (entry) => () => opened.push(`${prefix}:${entry.id}`)
+    }).node;
+    const inbox = list({ prefix: 'probe_notifications', label: '● Ada · Hello' });
+    const contacts = list({ prefix: 'probe_contacts', label: 'Ada' });
+    const rowHeight = resolveListRowTokens('tall').heightPx;
+    const header = findNode(inbox, 'probe_notifications_accordion_n1_header');
+    assert.equal(inbox.id, 'probe_notifications_accordion_list');
+    assert.deepEqual(findNode(inbox, 'probe_notifications_entry_n1').style.size, [360, rowHeight]);
+    assert.deepEqual(header.style.size, findNode(contacts, 'probe_contacts_accordion_n1_header').style.size);
+    assert.equal(findNode(inbox, 'probe_notifications_accordion_n1_label').text, '● Ada · Hello');
+    header.on.activate();
+    assert.deepEqual(opened, ['probe_notifications:n1']);
 });
 
 test('shadow embeds the same complete color control and keeps alpha while selecting a swatch', async () => {
@@ -118,10 +123,19 @@ test('Color, Shadow and Background mount the identical complete component tree',
     const colorNode = findNode(color.buildContent(color.readState(), { bodyWidth: 358, emit }), 'color');
     const shadowNode = findNode(shadow.buildContent(shadow.readState(), { bodyWidth: 358, emit }), 'shadow_color');
     const backgroundNode = findNode(background.buildContent(background.readState(), { bodyWidth: 400, emit }), 'background_colorBase');
-    assert.deepEqual(treeShape(shadowNode), treeShape(colorNode));
-    assert.deepEqual(treeShape(backgroundNode), treeShape(colorNode));
+    // Shadow and Background embed the titled control; the Couleur panel lays the
+    // same shared control compactly, without the heading its footer carries.
+    assert.deepEqual(treeShape(backgroundNode), treeShape(shadowNode));
+    // Each probe holds its panel's colour, so the same swatch is ticked.
+    const initial = { r: 12, g: 34, b: 56, a: 100 };
+    const titled = createColorControlRuntime({ id: 'probe_titled', label: 'Color', initial });
+    assert.deepEqual(treeShape(shadowNode), treeShape(titled.buildNode(titled.readState(), emit, { width: 358 })));
+    const compact = createColorControlRuntime({ id: 'probe_compact', label: 'Color',
+        initial: { r: 248, g: 248, b: 248, a: 100 }, showTitle: false });
+    assert.deepEqual(treeShape(colorNode), treeShape(compact.buildNode(compact.readState(), emit, { width: 358, compact: true })));
     const normalized = normalizeBevyUiTree({ id: 'color_control_probe', tree: colorNode });
-    assert.equal(findNode(normalized.root, 'color_wheel_image').image.texture.width, 192);
+    // Normalization keeps the shared wheel texture, generated above the device scale.
+    assert.equal(findNode(normalized.root, 'color_wheel_image').image.texture.width, colorWheelTexture().width);
 });
 
 test('the mobile color wheel publishes live color changes through the canonical runtime', async () => {

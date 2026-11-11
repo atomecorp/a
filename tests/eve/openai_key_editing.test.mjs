@@ -35,7 +35,7 @@ const fixture = async () => {
     await handleHomeCardEvent({ type: 'home.accordion.toggle', section: 'settings' });
     await handleHomeCardEvent({ type: 'home.subaccordion.toggle', section: 'settings.passkeys' });
     await handleHomeCardEvent({ type: 'home.field.focus', field: 'security.aiKeys.openai', event: {} }, { refresh() {} });
-    const editor = dom.window.document.querySelector('#eve_hidden_text_service textarea');
+    const editor = dom.window.document.querySelector('#eve_hidden_text_service [data-role="active-text-editor"]');
     expect(editor).not.toBeNull();
     return { dom, editor, close() { release(); dom.window.close(); Object.assign(globalThis, previous); } };
 };
@@ -79,19 +79,19 @@ for (const outcome of ['focused', 'cancelled', 'unavailable']) test('requested O
         revealNodeId: 'home_key_openai_api', focusField: 'security.aiKeys.openai', onHomeNavigationReady: task => { ready = task; } }, refresh });
     try {
         await vi.waitFor(() => expect(readHomePanelState().loading).toBe(false));
-        expect(dom.window.document.querySelector('#eve_hidden_text_service textarea')).toBeNull();
+        expect(dom.window.document.querySelector('#eve_hidden_text_service [data-role="active-text-editor"]')).toBeNull();
         if (outcome === 'cancelled') release();
         paint(); const result = await ready;
         if (outcome === 'cancelled') {
             expect(result.cancelled).toBe(true); expect(panels.reveal).not.toHaveBeenCalled();
-            expect(dom.window.document.querySelector('#eve_hidden_text_service textarea')).toBeNull();
+            expect(dom.window.document.querySelector('#eve_hidden_text_service [data-role="active-text-editor"]')).toBeNull();
         } else if (outcome === 'unavailable') {
             expect(result).toEqual({ ok: false, error: 'home_focus_target_unavailable' });
-            expect(dom.window.document.querySelector('#eve_hidden_text_service textarea')).toBeNull();
+            expect(dom.window.document.querySelector('#eve_hidden_text_service [data-role="active-text-editor"]')).toBeNull();
         } else {
             expect(result.ok).toBe(true);
             expect(panels.reveal).toHaveBeenCalledWith(expect.objectContaining({ nodeId: 'home_key_openai_api' }));
-            const editor = dom.window.document.querySelector('#eve_hidden_text_service textarea');
+            const editor = dom.window.document.querySelector('#eve_hidden_text_service [data-role="active-text-editor"]');
             expect(dom.window.document.activeElement).toBe(editor); expect(editor.value).toBe('');
         }
         expect(calls.store).not.toHaveBeenCalled(); expect(calls.save).not.toHaveBeenCalled();
@@ -130,7 +130,7 @@ test('a refused key save preserves the replacement draft for a retry', async () 
         const result = await handleHomeCardEvent({ type: 'home.field.blur', field: 'security.aiKeys.openai' });
         expect(result.ok).toBe(false);
         await handleHomeCardEvent({ type: 'home.field.focus', field: 'security.aiKeys.openai', event: {} }, { refresh() {} });
-        expect(f.dom.window.document.querySelector('#eve_hidden_text_service textarea').value).toBe('fixture-refused-key');
+        expect(f.dom.window.document.querySelector('#eve_hidden_text_service [data-role="active-text-editor"]').value).toBe('fixture-refused-key');
         expect(calls.save).not.toHaveBeenCalled();
     } finally { f.close(); }
 });
@@ -201,7 +201,8 @@ test('an absent selected model remains selected after the key is saved',async()=
 for (const kind of ['credential', 'mail']) test(`${kind} composes the same secure editor and pre-close save without Enter`, async () => {
  const f=await fixture();
  try {
-  const input=async(field,value)=>{await handleHomeCardEvent({type:'home.field.focus',field,event:{}},{refresh(){}});f.editor.value=value;f.editor.dispatchEvent(new f.dom.window.Event('input',{bubbles:true}));};
+  // A secret is typed in the masked editor, a name in the text one: the editor is read again at each focus.
+  const input=async(field,value)=>{await handleHomeCardEvent({type:'home.field.focus',field,event:{}},{refresh(){}});const editor=f.dom.window.document.querySelector('#eve_hidden_text_service [data-role="active-text-editor"]');editor.value=value;editor.dispatchEvent(new f.dom.window.Event('input',{bubbles:true}));};
   let field;
   if(kind==='credential') {
    await handleHomeCardEvent({type:'home.credential.add'},{refresh(){}});

@@ -11,7 +11,7 @@ export async function getWorkspaceSyncStatus() {
     if (!principal || !['authenticated', 'anonymous'].includes(session.mode)) throw new Error('local_authorization_required');
     let status;
     if (isTauriRuntime()) {
-        const result = await TauriAdapter.sync.getPending();
+        const result = await TauriAdapter.sync.getPending({ statusOnly: true });
         if (result?.ok !== true && result?.success !== true) throw new Error(result?.error || 'sync_status_unavailable');
         const data = result.data || result;
         status = { ...(data.sync_status || {}), pending_delivery_count: data.pending_delivery_count };

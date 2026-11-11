@@ -189,8 +189,9 @@ describe('purposeful Programme collection through canonical Atomes', () => {
         await nodes.find(item => item.id === 'collection_brick').children.find(item => item.on?.activate
             && item.children?.some(label => label.text === 'Nutrition'))?.on.activate();
         await vi.waitFor(() => expect(gateway.mock.calls.some(([payload]) => payload.input.brick_id === 'nutrition')).toBe(true));
-        await vi.waitFor(() => expect(walk(control.build({ box })).some(item => item.id === 'collection_later')).toBe(true));
-        await walk(control.build({ box })).find(item => item.id === 'collection_later').on.activate();
+        // A Matrix cell has no panel band: the answers are its foot band's tools, `<id>_band_<tool key>`.
+        await vi.waitFor(() => expect(walk(control.build({ box })).some(item => item.id === 'collection_band_collection_later')).toBe(true));
+        await walk(control.build({ box })).find(item => item.id === 'collection_band_collection_later').on.activate();
         await vi.waitFor(() => expect(f.writes).toHaveLength(1));
         control.destroy();
         control = createProgramCollectionControl({ id: 'collection', projectId: 'p', interactive: () => true, refresh, gateway });
@@ -214,7 +215,7 @@ describe('purposeful Programme collection through canonical Atomes', () => {
         expect(walk(control.build({ box })).filter(item => item.id === 'collection_question')).toHaveLength(1);
         await walk(control.build({ box })).find(item => item.id === 'collection_preferences').on.activate();
         await vi.waitFor(() => expect(f.writes).toHaveLength(1));
-        await vi.waitFor(() => expect(walk(control.build({ box })).find(item => item.id === 'collection_save')?.on?.activate).toBeTypeOf('function'));
+        await vi.waitFor(() => expect(walk(control.build({ box })).find(item => item.id === 'collection_band_collection_save')?.on?.activate).toBeTypeOf('function'));
         f.preference('starting_state', 'Updated canonical fact');
         listener({ event: { payload: { props: { program_preference: f.records.get(programPreferenceId('alice', 'starting_state')).properties.program_preference } } } });
         await vi.waitFor(() => expect(walk(control.build({ box })).some(item => item.id === 'collection_sources' && item.text.includes('Updated canonical fact'))).toBe(true));
@@ -227,7 +228,7 @@ describe('purposeful Programme collection through canonical Atomes', () => {
         const control = createProgramCollectionControl({ id: 'collection', projectId: 'p', interactive: () => true, refresh: vi.fn(), gateway });
         try {
             control.build({ box }).on.activate();
-            await vi.waitFor(() => expect(walk(control.build({ box })).some(item => item.id === 'collection_save')).toBe(true));
+            await vi.waitFor(() => expect(walk(control.build({ box })).some(item => item.id === 'collection_band_collection_save')).toBe(true));
             const nodes = walk(control.build({ box }));
             nodes.find(item => item.id === 'collection_answer').on.focus({ x: 10, y: 10 });
             const editor = dom.window.document.querySelector('#eve_hidden_text_service textarea');
@@ -235,7 +236,7 @@ describe('purposeful Programme collection through canonical Atomes', () => {
             expect(editor.style.pointerEvents).toBe('none');
             const value = 'Déclaration fictive longue. '.repeat(35);
             editor.value = value;
-            nodes.find(item => item.id === 'collection_save').on.activate();
+            nodes.find(item => item.id === 'collection_band_collection_save').on.activate();
             await vi.waitFor(() => expect(f.records.get(programPreferenceId('alice', 'starting_state'))?.properties.program_preference.value).toBe(value.trim()));
             await vi.waitFor(() => expect(walk(control.build({ box })).some(item => item.id === 'collection_sources')).toBe(true));
             const source = walk(control.build({ box })).find(item => item.id === 'collection_sources');
@@ -252,18 +253,18 @@ describe('purposeful Programme collection through canonical Atomes', () => {
         const control = createProgramCollectionControl({ id: 'collection', projectId: 'p', interactive: () => true, refresh: vi.fn(), gateway, eventBus });
         try {
             control.build({ box }).on.activate();
-            await vi.waitFor(() => expect(walk(control.build({ box })).some(item => item.id === 'collection_save')).toBe(true));
+            await vi.waitFor(() => expect(walk(control.build({ box })).some(item => item.id === 'collection_band_collection_save')).toBe(true));
             walk(control.build({ box })).find(item => item.id === 'collection_brick_chip_1').on.activate();
             await vi.waitFor(() => expect(walk(control.build({ box })).some(item => item.id === 'collection_sources')).toBe(true));
             f.records.get('source').deleted = true;
             listener({ event: { kind: 'delete', atome_id: 'source' } });
             expect(walk(control.build({ box })).some(item => item.id === 'collection_sources')).toBe(false);
-            await vi.waitFor(() => expect(walk(control.build({ box })).some(item => item.id === 'collection_save')).toBe(true));
+            await vi.waitFor(() => expect(walk(control.build({ box })).some(item => item.id === 'collection_band_collection_save')).toBe(true));
             expect(await f.invoke('collection_read', { brick_id: 'nutrition' })).toMatchObject({ sources: [], manual_available: true });
             const permissionId = programDataPermissionId('alice', 'p:nutrition', 'journal');
             f.records.get(permissionId).deleted = true;
             listener({ event: { kind: 'delete', atome_id: permissionId } });
-            await vi.waitFor(() => expect(walk(control.build({ box })).some(item => item.id === 'collection_save')).toBe(true));
+            await vi.waitFor(() => expect(walk(control.build({ box })).some(item => item.id === 'collection_band_collection_save')).toBe(true));
             expect(await f.invoke('collection_read', { brick_id: 'nutrition' })).toMatchObject({ sources: [], permissions: { journal: false } });
         } finally { control.destroy(); }
     });
@@ -286,10 +287,10 @@ describe('purposeful Programme collection through canonical Atomes', () => {
             uiRuntime: { mountTree: async input => { handlers.clear(); tree = normalizeBevyUiTree({ id: input.id, tree: input.tree, handlers }); }, unmountTree: async () => {} } });
         try {
             await runtime.open(); await handlers.get('collection_matrix:collection_open:activate')();
-            await vi.waitFor(() => expect(walk(tree.root).some(item => item.id === 'collection_save')).toBe(true));
+            await vi.waitFor(() => expect(walk(tree.root).some(item => item.id === 'collection_band_collection_save')).toBe(true));
             expect(walk(tree.root).filter(item => item.id === 'collection_question')).toHaveLength(1);
-            expect(walk(tree.root).find(item => item.id === 'collection_save')).not.toHaveProperty('on');
-            expect(handlers.get('collection_matrix:collection_save:activate')).toBeTypeOf('function');
+            expect(walk(tree.root).find(item => item.id === 'collection_band_collection_save')).not.toHaveProperty('on');
+            expect(handlers.get('collection_matrix:collection_band_collection_save:activate')).toBeTypeOf('function');
             await runtime.setEmbeddedProjection({ bounds: { x: 0, y: 0, width: 390, height: 700 }, refresh: vi.fn() });
             expect(walk(runtime.readEmbeddedProjection()).some(item => item.id === 'collection_open')).toBe(true);
         } finally { await runtime.destroy(); dom.window.close(); }

@@ -25,6 +25,7 @@ import {
     setMysticPointerLock
 } from '../../eVe/intuition/mystic/context_pointer_lock.js';
 import { createTestCompositor, installDom } from './unified_rendering_test_helpers.mjs';
+import { createScrollEngineProvider } from './bevy_scroll_engine_double.mjs';
 
 const createSurface = () => {
     const dom = new JSDOM('<!doctype html><canvas id="eve_surface_project"></canvas>');
@@ -69,7 +70,7 @@ test('BevyUI drop routing keeps File objects transient and releases its canvas l
 test('BevyUI image prewarming hydrates without mounting or projecting a tree', async () => {
     const surface = createSurface();
     let resolutions = 0;
-    const runtime = createEveBevyUiRuntime({
+    const runtime = createEveBevyUiRuntime({ scrollEngine: createScrollEngineProvider(),
         imageResolverFactory: () => async () => {
             resolutions += 1;
             return { width: 1, height: 1, rgba: [255, 255, 255, 255] };
@@ -107,7 +108,7 @@ test('BevyUI initial mount does not depend on a host animation-frame continuatio
         apply_atome_bevy_ui_ops: () => null,
         drain_atome_bevy_ui_events: () => []
     };
-    const runtime = createEveBevyUiRuntime({
+    const runtime = createEveBevyUiRuntime({ scrollEngine: createScrollEngineProvider(),
         moduleProvider: async () => module,
         nativeUiEnabled: true,
         imageResolverFactory: () => async () => ({
@@ -150,7 +151,7 @@ test('BevyUI initial mount does not depend on a host animation-frame continuatio
 test('BevyUI latest render cancels image hydration from the superseded tree', async () => {
     const surface = createSurface();
     let oldResolverStarted = false;
-    const runtime = createEveBevyUiRuntime({
+    const runtime = createEveBevyUiRuntime({ scrollEngine: createScrollEngineProvider(),
         imageResolverFactory: () => async (node) => {
             if (node.id === 'blocked_image') {
                 oldResolverStarted = true;
@@ -259,7 +260,7 @@ test('BevyUI runtime sends mount/update/unmount ops without creating component D
         read_atome_bevy_ui_diagnostics: () => ({ mounted_trees: 1, mounted_nodes: 2 }),
         drain_atome_bevy_ui_events: () => []
     };
-    const runtime = createEveBevyUiRuntime({
+    const runtime = createEveBevyUiRuntime({ scrollEngine: createScrollEngineProvider(),
         moduleProvider: async () => module,
         nativeUiEnabled: true,
         requestFrame: () => 0
@@ -307,7 +308,7 @@ test('BevyUI scale reconciliation cannot supersede a newer product tree with sta
         read_atome_bevy_web_diagnostics: () => ({ ui_viewport_width: viewportWidth }),
         drain_atome_bevy_ui_events: () => []
     };
-    const runtime = createEveBevyUiRuntime({
+    const runtime = createEveBevyUiRuntime({ scrollEngine: createScrollEngineProvider(),
         moduleProvider: async () => module,
         nativeUiEnabled: true,
         requestFrame: (callback) => {
@@ -354,7 +355,7 @@ test('BevyUI scale reconciliation cannot supersede a newer product tree with sta
 test('BevyUI runtime uses the project overlay path without native WASM UI ops by default', async () => {
     const surface = createSurface();
     let moduleRequested = false;
-    const runtime = createEveBevyUiRuntime({
+    const runtime = createEveBevyUiRuntime({ scrollEngine: createScrollEngineProvider(),
         moduleProvider: async () => {
             moduleRequested = true;
             return { apply_atome_bevy_ui_ops: () => {} };
@@ -396,7 +397,7 @@ test('BevyUI panel translation moves flattened overlay content exactly once', as
     clearAllProjectScenes();
     const surface = createSurface();
     surface.getBoundingClientRect = () => ({ left: 0, top: 0, right: 240, bottom: 160, width: 240, height: 160 });
-    const runtime = createEveBevyUiRuntime({ imageResolverFactory: () => async () => null, requestFrame: () => 0 });
+    const runtime = createEveBevyUiRuntime({ scrollEngine: createScrollEngineProvider(), imageResolverFactory: () => async () => null, requestFrame: () => 0 });
     const treeId = 'panel_motion_fixture';
     await runtime.mountTree({
         id: treeId,
@@ -434,7 +435,7 @@ test('BevyUI moved clipping surface carries its descendant clip and text badge',
     clearAllProjectScenes();
     const surface = createSurface();
     surface.getBoundingClientRect = () => ({ left: 0, top: 0, right: 400, bottom: 400, width: 400, height: 400 });
-    const runtime = createEveBevyUiRuntime({ imageResolverFactory: () => async () => null, requestFrame: () => 0 });
+    const runtime = createEveBevyUiRuntime({ scrollEngine: createScrollEngineProvider(), imageResolverFactory: () => async () => null, requestFrame: () => 0 });
     const treeId = 'media_drag_clip_fixture';
     const thumbnailPx = BEVY_PANEL_TOKENS.listRow.dragThumbnailSizePx;
     // Deux cartes glissées forment un paquet : la boîte de l'aperçu grandit d'un
@@ -510,7 +511,7 @@ test('BevyUI explicit vertical drag handlers take priority over ancestor scrolli
     const surface = dom.window.document.getElementById('eve_surface_project');
     surface.getBoundingClientRect = () => ({ left: 0, top: 0, right: 200, bottom: 200, width: 200, height: 200 });
     const received = [];
-    const runtime = createEveBevyUiRuntime({
+    const runtime = createEveBevyUiRuntime({ scrollEngine: createScrollEngineProvider(),
         imageResolverFactory: () => async () => null,
         requestFrame: () => 0
     });
@@ -559,7 +560,7 @@ test('a menu starts at its prepared opacity and retains a fade across tree refre
     const projections = [];
     const nativeOps = [];
     const surface = createSurface();
-    const runtime = createEveBevyUiRuntime({ requestFrame: () => 0, nativeUiEnabled: true,
+    const runtime = createEveBevyUiRuntime({ scrollEngine: createScrollEngineProvider(), requestFrame: () => 0, nativeUiEnabled: true,
         moduleProvider: async () => ({ apply_atome_bevy_ui_ops: ops => nativeOps.push(...ops), drain_atome_bevy_ui_events: () => [] }),
         overlayProjector: {
         clear: async () => null,
@@ -580,7 +581,7 @@ test('BevyUI tree suspension retains projection records and disables hit-testing
     const surface = createSurface();
     surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 200, height: 200 });
     const projections = [];
-    const runtime = createEveBevyUiRuntime({
+    const runtime = createEveBevyUiRuntime({ scrollEngine: createScrollEngineProvider(),
         requestFrame: () => 0,
         overlayProjector: {
             clear: async () => null,
@@ -633,7 +634,7 @@ test('BevyUI runtime resolves image nodes into texture payloads before WASM ops'
         apply_atome_bevy_ui_ops: (ops) => calls.push(...ops),
         drain_atome_bevy_ui_events: () => []
     };
-    const runtime = createEveBevyUiRuntime({
+    const runtime = createEveBevyUiRuntime({ scrollEngine: createScrollEngineProvider(),
         moduleProvider: async () => module,
         nativeUiEnabled: true,
         imageResolverFactory: () => async (node) => {
@@ -786,7 +787,7 @@ test('BevyUI runtime keeps WASM tree in logical UI units like the CSS hit-test t
         apply_atome_bevy_ui_ops: (ops) => calls.push(...ops),
         drain_atome_bevy_ui_events: () => []
     };
-    const runtime = createEveBevyUiRuntime({
+    const runtime = createEveBevyUiRuntime({ scrollEngine: createScrollEngineProvider(),
         moduleProvider: async () => module,
         nativeUiEnabled: true,
         requestFrame: () => 0
@@ -820,7 +821,7 @@ test('BevyUI runtime drains renderer events into stored JS handlers', async () =
             { tree_id: 'ui_tree', node_id: 'open_button', kind: 'button', event: 'activate' }
         ]
     };
-    const runtime = createEveBevyUiRuntime({
+    const runtime = createEveBevyUiRuntime({ scrollEngine: createScrollEngineProvider(),
         moduleProvider: async () => module,
         nativeUiEnabled: true,
         requestFrame: () => 0
@@ -860,7 +861,7 @@ test('BevyUI discards the underlying control release when a primary press become
     globalThis.document = dom.window.document;
     const received = [];
     try {
-        const runtime = createEveBevyUiRuntime({
+        const runtime = createEveBevyUiRuntime({ scrollEngine: createScrollEngineProvider(),
             imageResolverFactory: () => async () => null,
             requestFrame: () => 0
         });
@@ -925,7 +926,7 @@ test('BevyUI emits one activation for pointer input and ignores delayed compatib
     globalThis.document = dom.window.document;
     const received = [];
     try {
-        const runtime = createEveBevyUiRuntime({
+        const runtime = createEveBevyUiRuntime({ scrollEngine: createScrollEngineProvider(),
             imageResolverFactory: () => async () => null,
             requestFrame: () => 0
         });
@@ -1051,7 +1052,7 @@ for (const kind of ['text_input', 'icon_button']) test(`BevyUI ${kind} focus wai
     try {
         const surface = ensureRenderSurface({ zone: 'project', host });
         surface.getBoundingClientRect = host.getBoundingClientRect;
-        const runtime = createEveBevyUiRuntime({
+        const runtime = createEveBevyUiRuntime({ scrollEngine: createScrollEngineProvider(),
             imageResolverFactory: () => async () => null,
             requestFrame: () => 0
         });
@@ -1178,7 +1179,7 @@ test('BevyUI overlay updates keep stable icon records without duplicate textures
     let rect = { width: 240, height: 240 };
     surface.getBoundingClientRect = () => ({ left: 0, top: 0, right: rect.width, bottom: rect.height, ...rect });
     const texture = { width: 2, height: 1, rgba: [211, 211, 211, 255, 211, 211, 211, 160] };
-    const runtime = createEveBevyUiRuntime({
+    const runtime = createEveBevyUiRuntime({ scrollEngine: createScrollEngineProvider(),
         imageResolverFactory: () => async () => texture,
         requestFrame: () => 0
     });
@@ -1223,7 +1224,7 @@ test('BevyUI runtime ignores stale async overlay renders so latest icon texture 
         }
         throw new Error(`pending_texture_resolution_missing:${count}`);
     };
-    const runtime = createEveBevyUiRuntime({
+    const runtime = createEveBevyUiRuntime({ scrollEngine: createScrollEngineProvider(),
         imageResolverFactory: () => async (node) => new Promise((resolve) => pending.push({ id: node.id, resolve })),
         requestFrame: () => 0
     });

@@ -19,7 +19,8 @@ describe('Dashboard Help', () => {
         const item = { key: 'activity', label: 'aide sport', onSelect() {} };
         const source = createDashboardSearchSource({ labelItem: entry => entry, t: key => key,
             everyone: async () => [], eventItems: async () => [], projects: async () => [],
-            activity: () => [item], gpsItems: async () => [], foundItem: entry => entry });
+            activity: () => [item], gpsItems: async () => [], foundItem: entry => entry, media: async () => [],
+            owned: { find: async () => [], around: async () => [] }, registryFound: async () => [], isBasic: () => false });
         const result = await source({ query: 'aide', scopes: ['activities'] });
         expect(result.map(entry => entry.key)).toEqual(['help', 'activity']);
     });

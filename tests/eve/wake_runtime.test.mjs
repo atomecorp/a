@@ -1,5 +1,10 @@
 import { test, expect, vi } from 'vitest';
 import { createWakeRuntime } from '../../atome/src/squirrel/voice/wake_runtime.js';
+import { setSessionState } from '../../atome/src/squirrel/apis/unified/adole_api/session.js';
+// eVe's assistant serves an account only: standby is exercised for a signed-in user.
+const signIn = () => setSessionState({ mode: 'authenticated', user: { id: 'u1' } }, { persist: false, silent: true });
+const signOut = () => setSessionState({ mode: 'logged_out' }, { persist: false, silent: true });
+signIn();
 const tick = async () => { for (let i=0; i<15; i++) await Promise.resolve(); };
 function fixture(preferences) {
     const env = new EventTarget(); env.document = new EventTarget(); env.document.visibilityState='visible';
@@ -108,4 +113,13 @@ test('enrollment suspends standby and restarts it afterwards',async()=>{
     f.backend.openCollector=vi.fn(async()=>{throw new Error('wake_engine_failed');});
     await expect(f.runtime.enroll({prompt:async()=>{}})).rejects.toThrow('wake_engine_failed');
     expect(f.close).toHaveBeenCalledTimes(1); expect(f.start).toHaveBeenCalledTimes(2); await f.runtime.dispose();
+});
+test('a guest is not served: standby never acquires until an account signs in',async()=>{
+    signOut();
+    try {
+        const f=fixture({}); await tick();
+        expect(f.backend.create).not.toHaveBeenCalled(); expect(f.runtime.getState().phase).toBe('suspended');
+        signIn(); f.env.dispatchEvent(new Event('squirrel:auth-checked')); await tick();
+        expect(f.start).toHaveBeenCalledTimes(1); expect(f.runtime.getState().phase).toBe('listening'); await f.runtime.dispose();
+    } finally { signIn(); }
 });

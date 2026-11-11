@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import { BEVY_PANEL_TOKENS as T, BEVY_WORKSPACE_PANEL_TOKENS as W } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
 import { SYSTEM_UI_METRICS } from '../../eVe/elements/system_ui_tokens.js';
 import { accordionNode } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_accordion.js';
@@ -12,6 +12,7 @@ import { hierarchicalSelectableListNode, virtualizedHierarchicalSelectableListNo
 import { applyTreeScrollLayout } from '../../eVe/domains/rendering/bevy_ui_scroll_layout.js';
 import { createProjectViewFooter } from '../../eVe/domains/rendering/project_view_footer.js';
 import { buildProjectViewSurfaceTree } from '../../eVe/domains/rendering/project_view_surface_tree.js';
+import { panelBandHeight, panelBandReserve, panelBandTool } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_band.js';
 import { createContactActionsRuntime } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_contact_actions.js';
 import { layoutForNode } from '../../eVe/domains/rendering/bevy_ui_layout_runtime.js';
 import { normalizeBevyUiTree } from '../../eVe/domains/rendering/bevy_ui_tree_normalization.js';
@@ -32,20 +33,19 @@ test('filled disclosure colours match their own branch, including closed nested 
         const parent = accordionNode({ id: 'coloured_parent', label: 'Parent', width: 340, direction, handedness,
             expanded: true, bodyHeight: child.style.size[1], bodyChildren: [child] });
         const rail = panelHierarchyNode({ id: 'coloured', width: 340, children: [parent], handedness });
-        assert.equal(T.hierarchy.lineWidthPx, 2);
-        assert.equal(T.hierarchy.returnLengthPx, 2);
+        // The nesting reads through the symbols alone: the rail beside the cells is gone (bevy_panel_hierarchy.js).
+        assert.deepEqual(Object.keys(T.hierarchy), ['colors']);
         const rootGlyph = find(rail, 'coloured_parent_chevron_triangle');
         near(rootGlyph.style.size[1] * (direction === "up" || direction === "down" ? 10 : 12) / 14, T.accordion.headerHeightPx * 0.28);
         const childGlyph = find(rail, 'coloured_child_chevron_triangle');
-        assert.deepEqual(rootGlyph.image.tint, find(rail, 'coloured_parent_return_end').style.background);
+        assert.deepEqual(rootGlyph.image.tint, T.hierarchy.colors[0]);
         assert.equal(hex(rootGlyph.image.tint), '#f28c29');
         assert.equal(hex(childGlyph.image.tint), '#2a80ed');
-        assert.equal(find(rail, 'coloured_child_return_end'), undefined);
         const records = projectBevyUiTreeRecords({ tree: { root: rail }, treeId: 'coloured', workspaceLayer: 'panel' });
         const glyph = records.find(record => record.id.endsWith('_coloured_parent_chevron_triangle_image'));
         assert.equal(glyph.type, 'image');
         assert.equal(glyph.properties.rotate, direction === 'up' ? -90 : 90);
-        assert.ok(walk(rail).filter(n => n.id.includes('_return_')).every(n => n.paintOnly === true && !n.on));
+        assert.equal(walk(rail).some(n => /_(return|segment)_/.test(n.id)), false, 'no rail is drawn beside the cells');
     }
 });
 
@@ -76,7 +76,7 @@ test('fixed List symbols scale with cells and empty Molecules remain passive squ
     }
 });
 
-test('virtual List retains an offscreen parent rail without changing scroll extent or row geometry', () => {
+test('virtual List keeps an offscreen parent\'s leaf colour without a rail, scroll extent or row geometry change', () => {
     for (const direction of ['up', 'down']) for (const handedness of ['left', 'right']) {
         const entries = [{ id: 'parent', label: 'Parent', depth: 0, hasChildren: true, expanded: true },
             ...Array.from({ length: 39 }, (_, i) => ({ id: 'leaf_' + i, label: 'Leaf', depth: 1 }))]
@@ -91,13 +91,7 @@ test('virtual List retains an offscreen parent rail without changing scroll exte
         assert.equal(find(list.node, `window_entry_${parentIndex}`), undefined);
         const leaf = walk(list.node).find(n => n.id.endsWith('_hierarchy_square'));
         assert.deepEqual(leaf.style.background, T.hierarchy.colors[1], 'offscreen parent still owns leaf colour');
-        const start = find(list.node, `window_entry_${parentIndex}_return_start`);
-        const end = find(list.node, `window_entry_${parentIndex}_return_end`);
-        assert.equal(hex(start.style.background), '#2a80ed');
-        assert.equal(hex(end.style.background), '#2a80ed');
-        assert.ok(end.style.position[1] > start.style.position[1]);
-        near(start.style.position[1], direction === 'up' ? -3 : 29);
-        near(end.style.position[1], 39 * 64 + (direction === 'up' ? 29 : 61));
+        assert.equal(walk(list.node).some(n => /_(return|segment)_/.test(n.id)), false, 'no rail is drawn beside the rows');
         assert.deepEqual(find(list.node, `window_entry_${visibleStart}`).style.size, [400, 60]);
         const scrollEntries = new Map([['window_tree:window_virtual_list', { offsetY: visibleStart * 64 }]]);
         const scrolled = applyTreeScrollLayout({ tree: list.node, treeId: 'window_tree', entries: scrollEntries });
@@ -106,15 +100,12 @@ test('virtual List retains an offscreen parent rail without changing scroll exte
         assert.equal(scroll.maxY, 40 * 60 + 39 * 4 - 120);
         assert.equal(scroll.offsetY, visibleStart * 64);
         const records = projectBevyUiTreeRecords({ tree: { root: scrolled }, treeId: 'window_tree', workspaceLayer: 'projectView' });
-        const segment = records.find(record => record.id.includes('window_hierarchy_segment_'));
-        assert.ok(segment);
-        assert.equal(segment.properties.width, 2);
-        const clip = segment.properties.clip;
-        assert.ok(segment.properties.left >= clip.x && segment.properties.left + 2 <= clip.x + clip.width);
+        assert.ok(records.length);
+        assert.equal(records.some(record => /_(return|segment)_/.test(record.id)), false);
     }
 });
 
-test('List project header reuses row material and root rail while keeping its existing placement', () => {
+test('List project header reuses row material and the root symbol colour while keeping its existing placement', () => {
     const previous = globalThis.window;
     try {
         for (const direction of ['up', 'down']) for (const handedness of ['left', 'right']) for (const collapsed of [false, true]) {
@@ -142,25 +133,8 @@ test('List project header reuses row material and root rail while keeping its ex
             near(glyph.style.size[1] * (collapsed ? 12 : 10) / 14, 60 * 0.28);
             assert.equal(hex(glyph.image.tint), '#f28c29');
             assert.equal(glyph.style.rotation, collapsed ? (handedness === 'left' ? 0 : 180) : (direction === 'up' ? -90 : 90));
-            const marks = walk(root).filter(n => n.id.includes('_segment_'));
-            assert.equal(marks.length, collapsed ? 0 : 1);
-            if (!collapsed) {
-                const start = find(root, 'project_view_footer_band_return_start');
-                const end = find(root, 'project_view_footer_band_return_end');
-                const top = marks[0].style.position[1], bottom = top + marks[0].style.size[1];
-                near(start.style.position[1], top); near(end.style.position[1] + end.style.size[1], bottom);
-                const headerReturn = direction === 'up' ? end : start;
-                near(headerReturn.style.position[0], handedness === 'left' ? -4 : band.style.size[0]);
-                near(headerReturn.style.size[0], 4);
-                near(headerReturn.style.position[1] + 1, band.style.size[1] / 2);
-                const childReturn = direction === 'up' ? start : end;
-                const body = find(tree.root, 'eve_bevy_ui_project_view_body');
-                const content = find(tree.root, 'eve_bevy_ui_project_view_content');
-                near(childReturn.style.position[1] + root.style.position[1],
-                    content.style.position[1] + body.style.position[1] + (direction === 'up' ? -3 : 121));
-                assert.ok(childReturn.style.size[0] > band.style.size[0] / 2);
-            }
-            if (!collapsed) assert.deepEqual(marks[0].style.background, glyph.image.tint);
+            // Open or folded, the header's symbol alone tells the level: no rail runs to the tracks.
+            assert.equal(walk(root).some(n => /_(return|segment)_/.test(n.id)), false);
         }
     } finally { globalThis.window = previous; }
 });
@@ -180,7 +154,7 @@ test('panel surfaces share the approved glass, opaque white ink and semantic hie
     for (const [key, surface] of Object.entries(T.surfaces)) {
         if (key === 'input') {
             assert.deepEqual(surface.background, [0,0,0,.14]); assert.equal(surface.backdrop, null);
-            assert.equal(surface.surfacePaint.border.color[3],0); continue;
+            assert.equal(surface.surfacePaint.border,undefined,'an inset tint, never an outline'); continue;
         }
         assert.equal(surface.surfacePaint.gradient, null);
         assert.deepEqual(surface.background, [0,0,0,0]);
@@ -197,23 +171,24 @@ test('panel surfaces share the approved glass, opaque white ink and semantic hie
 
 test('standard rows, photo cards and minimum controls use the existing unit', () => {
     const unit = SYSTEM_UI_METRICS.scalePx(60);
-    assert.equal(T.radiusPx,unit/4); assert.equal(T.inputHeightPx,unit/2);
+    // One radius rule (AGENTS.md rule 14): 3 px for every corner that is not a disc.
+    assert.equal(T.radiusPx,SYSTEM_UI_METRICS.radiusPx); assert.equal(T.radiusPx,3); assert.equal(T.inputHeightPx,unit/2);
     assert.equal(T.accordion.headerHeightPx,unit); assert.equal(T.contactIdentity.photoHeightPx,unit);
-    assert.equal(T.footerHeightPx,unit); assert.equal(T.closeSizePx,unit/2);
+    assert.equal(T.footerHeightPx,unit); assert.equal(T.backSizePx,unit/2);
     const tiny = buttonNode({id:'small_control',text:'+',width:8,height:8});
-    assert.deepEqual(tiny.style.size,[unit/2,unit/2]); assert.equal(tiny.style.radius,unit/4);
+    assert.deepEqual(tiny.style.size,[unit/2,unit/2]); assert.equal(tiny.style.radius,T.radiusPx);
     assert.equal(W.radiusPx,3); assert.equal(W.hierarchy,undefined);
     assert.equal(textInputNode({id:'workspace_input',panelTokens:W,value:'original'}).style.backdrop.blurPx,16);
     assert.equal(textInputNode({id:'panel_input',value:'dark'}).style.surfacePaint.gradient,null);
     assert.equal(tileMediaCardNode({id:'workspace_tile',panelTokens:W,label:'Original'}).style.surfacePaint.gradient,null);
     assert.equal(tileMediaCardNode({id:'workspace_tile',panelTokens:W,label:'Original'}).style.backdrop.blurPx,16);
     assert.equal(tileMediaCardNode({id:'panel_tile',label:'Panel'}).style.surfacePaint.gradient,null);
-    const legacy=projectBevyUiTreeRecords({tree:normalizeBevyUiTree({id:'legacy',tree:node('legacy_border','panel',{
-        size:[100,40],background:[0,0,0,0],border:[1,1,1,1],border_color:[1,1,1,1]})}),treeId:'legacy'});
-    assert.equal(legacy.length,0);
+    // A border the user did not name is refused, never silently painted (AGENTS.md rule 15, design_charter.js).
+    assert.throws(()=>normalizeBevyUiTree({id:'legacy',tree:node('legacy_border','panel',{
+        size:[100,40],background:[0,0,0,0],border:[1,1,1,1],border_color:[1,1,1,1]})}),/design_charter_border_forbidden/);
 });
 
-for (const direction of ['up','down']) for (const handedness of ['left','right']) test(`four disclosure levels share a passive rail in the existing inset (${direction}, ${handedness})`, () => {
+for (const direction of ['up','down']) for (const handedness of ['left','right']) test(`four disclosure levels alternate their symbol colours at full width, without a rail (${direction}, ${handedness})`, () => {
     const width=340;
     let child=node('deep_content','panel',{size:[width,30]});
     for(let level=5;level>=2;level--) {
@@ -230,25 +205,10 @@ for (const direction of ['up','down']) for (const handedness of ['left','right']
         assert.deepEqual(body.style.padding,[0,0,0,0]);
         if(direction==='up') assert.ok(header.style.position[1]>=body.style.position[1]+body.style.size[1]);
         else assert.ok(body.style.position[1]>=header.style.size[1]);
-        assert.equal(hex(find(rail,'level_'+level+'_return_start').style.background),level%2===0?'#f28c29':'#2a80ed');
+        assert.equal(hex(find(rail,'level_'+level+'_chevron_triangle').image.tint),level%2===0?'#f28c29':'#2a80ed');
     }
-    const segments=walk(rail).filter(node=>node.id.includes('_segment_'));
-    assert.equal(new Set(segments.map(segment=>segment.style.position[0])).size,1);
-    const axis=handedness==='left'?-3:width+3;
-    segments.forEach(segment=>{
-        near(segment.style.position[0]+segment.style.size[0]/2,axis);
-        assert.equal(segment.on,undefined);
-    });
-    const returns=walk(rail).filter(node=>node.id.includes('_return_'));
-    assert.equal(returns.length,12);
-    returns.forEach(ret=>{
-        assert.equal(ret.on,undefined);
-        assert.equal(ret.paintOnly,true);
-        if(ret.id.endsWith('_hook')) assert.deepEqual(ret.style.size,[2,6]);
-        else { near(ret.style.size[1],2);
-            if(handedness==='left') near(ret.style.position[0],-4);
-            else near(ret.style.position[0]+ret.style.size[0],width+4); }
-    });
+    // The rail beside the cells is gone (bevy_panel_hierarchy.js): no segment, no return, nothing to touch.
+    assert.equal(walk(rail).some(node=>/_(return|segment)_/.test(node.id)),false);
     const normalized=normalizeBevyUiTree({id:'hierarchy_tree',tree:rail});
     assert.ok(projectBevyUiTreeRecords({tree:normalized,treeId:'hierarchy_tree',workspaceLayer:'panel'}).length);
 });
@@ -268,13 +228,14 @@ test('photo, field and footer contents are vertically centred in their actual la
         registerFieldWidth:()=>{},displayValue:()=> 'Ada',fieldView:()=>({})},emit:()=>{}});
     const boxes=layoutForNode(field,{x:0,y:0,width:340,height:T.inputHeightPx}).childBoxes;
     boxes.forEach(box=>near(box.y+box.height/2,T.inputHeightPx/2));
-    const tree=buildBevyPanelTree({id:'centred',title:'Contacts',surfaceSize:{width:800,height:600},geometry:{left:0,top:0,width:420,height:360},
-        bodyChildren:[],onClose:()=>{},onResize:()=>{},footerChildren:[buttonNode({id:'all',text:'Select all',width:102})]});
-    const footer=find(tree.root,'centred_footer'); const close=find(footer,'centred_footer_close_indicator');
-    near(close.style.position[1]+close.style.size[1]/2,T.footerHeightPx/2);
-    const label=find(footer,'centred_footer_status'); assert.equal(label.style.text_vertical_align,'center');
-    near(label.style.position[1]+label.style.size[1]/2,T.footerHeightPx/2);
-    const selection=find(footer,'all'); near(selection.style.position[1]+selection.style.size[1]/2,T.footerHeightPx/2);
+    const tree=buildBevyPanelTree({id:'centred',title:'Contacts',name:'Contacts',surfaceSize:{width:800,height:600},geometry:{x:0,y:0,width:420,height:360},
+        bodyChildren:[],onClose:()=>{},onResize:()=>{},bandItems:[panelBandTool('all',{onSelect:()=>{}})]});
+    const footer=find(tree.root,'centred_footer'),height=footer.style.size[1];
+    assert.equal(height,panelBandHeight());
+    const close=find(footer,'centred_footer_close'); near(close.style.position[1]+close.style.size[1]/2,height/2);
+    const label=find(footer,'centred_footer_name'); assert.equal(label.style.text_vertical_align,'center');
+    near(label.style.position[1]+label.style.size[1]/2,height/2);
+    const selection=find(footer,'centred_footer_all'); near(selection.style.position[1]+selection.style.size[1]/2,height/2);
 });
 
 test('material survives normalization and the native bridge, while removal is explicit', () => {
@@ -305,67 +266,72 @@ test('flat hierarchical lists use real depths without consuming another indentat
     const list=hierarchicalSelectableListNode({id:'flat',width:340,entries,handedness,onToggle:()=>{}}).node;
     const rail=panelHierarchyNode({id:'flat_rail',width:340,children:[list],gap:0,handedness});
     assert.equal(walk(rail).some(node=>node.id.endsWith('_level_number')),false);
-    assert.deepEqual(walk(rail).filter(node=>node.id.endsWith('_return_start')).map(node=>hex(node.style.background)),
+    // Each row's own depth colours its symbol (listHierarchy.levelOffset), with no rail beside the rows.
+    assert.deepEqual(walk(rail).filter(node=>node.id.endsWith('_hierarchy_chevron_triangle')).map(node=>hex(node.image.tint)),
         direction==='up'?['#2a80ed','#f28c29']:['#f28c29','#2a80ed']);
+    assert.equal(walk(rail).some(node=>/_(return|segment)_/.test(node.id)),false);
     assert.equal(find(list,'flat_entry_0').style.size[0],find(list,'flat_entry_2').style.size[0]);
-    const childStart=find(rail,'flat_entry_1_return_start').style.position[1];
-    const childEnd=find(rail,'flat_entry_1_return_end').style.position[1];
-    const childMid=(childStart+childEnd)/2+T.hierarchy.lineWidthPx/2;
-    const shared=walk(rail).find(node=>node.id.includes('_segment_')&&node.style.position[1]<=childMid
-        &&node.style.position[1]+node.style.size[1]>=childMid);
-    assert.equal(hex(shared.style.background),'#2a80ed');
-    near(shared.style.position[0]+T.hierarchy.lineWidthPx/2,handedness==='left'?-3:343);
     }
 });
 
 test('contact commands fit narrow and wide bands without a footer selection action', () => {
-    const snapshot={loading:false,importBusy:false,importSources:[],selectedIds:[],selectableCount:2,allSelected:false,mode:'book'};
+    const snapshot={loading:false,importBusy:false,importSources:[],selectedIds:[],selectableCount:2,allSelected:false,mode:'book',query:''};
     const actions=createContactActionsRuntime({state:{},reload:()=>{},setNotice:()=>{},contactForId:()=>{},contactId:()=>{},deletable:()=>false});
+    const editing={registerField:()=>{},fieldView:()=>({})};
+    // The Contact commands lie in the panel's foot band (bevy_panel_contact_actions.js#buildBandTools), never a footer row.
+    assert.equal(actions.buildFixedContent,undefined); assert.equal(actions.buildFooterContent,undefined);
+    const tools=actions.buildBandTools(snapshot,{emit:()=>{},editing});
+    assert.equal(tools.some(tool=>tool.key==='contact_select_all'),false,'nothing ticked, no selection action');
     for(const width of [200,380,600]) {
-        const band=actions.buildFixedContent(snapshot,{emit:()=>{},bodyWidth:width})[0];
-        const commands=walk(band).filter(node=>node.kind==='button');
-        assert.ok(commands.some(node=>node.id==='contact_create_user')); assert.ok(commands.some(node=>node.id==='contact_add'));
-        for(const row of band.children) {
-            const boxes=layoutForNode(row,{x:0,y:0,width,height:T.actionButton.heightPx}).childBoxes;
-            boxes.forEach(box=>{assert.ok(box.x>=0); assert.ok(box.x+box.width<=width+0.001); assert.ok(box.width>=2*T.radiusPx);});
-        }
-        assert.ok(commands.every(node=>node.accessibility.label));
+        const tree=buildBevyPanelTree({id:'contact_fit',title:'Contacts',surfaceSize:{width:800,height:600},
+            geometry:{x:0,y:0,width,height:360},bodyChildren:[],onClose:()=>{},bandItems:tools});
+        const band=find(tree.root,'contact_fit_footer');
+        const commands=band.children.filter(node=>node.on?.activate||node.kind==='text_input');
+        assert.ok(commands.some(node=>node.id==='contact_fit_footer_contact_create'));
+        assert.ok(commands.some(node=>node.id==='contact_fit_footer_close'));
+        commands.forEach(node=>{
+            assert.ok(node.style.position[0]>=0); assert.ok(node.style.position[0]+node.style.size[0]<=band.style.size[0]+0.001);
+            assert.ok(node.style.size[0]>=2*T.radiusPx); assert.ok(node.accessibility.label,node.id);
+        });
+        assert.equal(walk(band).some(node=>node.id.endsWith('contact_select_all')),false);
     }
-    assert.equal(actions.buildFooterContent,undefined);
-    assert.equal(walk(actions.buildFixedContent(snapshot,{emit:()=>{},bodyWidth:380})[0]).some(node=>node.id==='contact_select_all'),false);
 });
 
-test('compact footer retains centered title, inset close, edge grips and bottom-only corners', () => {
-    for(const handedness of ['right','left']) for(const width of [120,200,320,420]) {
+test('compact foot band retains its centred name, corner close, drag room and edge grips inside one glass', () => {
+    const previous=globalThis.window;
+    try { for(const handedness of ['right','left']) for(const width of [120,200,320,420]) {
+        globalThis.window={innerWidth:800,innerHeight:600,__eveIntuitionXState:{handedness}};
         const calls=[];
-        const tree=buildBevyPanelTree({id:'compact',title:'Contacts',handedness,
+        const tree=buildBevyPanelTree({id:'compact',title:'Contacts',name:'Contacts',
             surfaceSize:{width:800,height:600},geometry:{x:0,y:0,width,height:360},
             bodyChildren:[],onClose:()=>calls.push('close'),onDrag:()=>calls.push('drag'),
             onResize:(_event,edge)=>calls.push(edge)});
+        const height=panelBandHeight(),pad=T.paddingPx;
         const footer=find(tree.root,'compact_footer');
-        assert.deepEqual(footer.style.size,[width,60]);
-        assert.deepEqual(footer.style.radius_corners,[0,0,8,8]);
-        assert.equal(find(tree.root,'compact_body').style.size[1],300);
+        // The band lies inside the slab, inset by the padding (AGENTS.md rule 13): one glass, one radius.
+        assert.deepEqual(footer.style.size,[width-2*pad,height]);
+        assert.deepEqual(footer.style.position,[pad,360-pad-height]);
+        assert.equal(find(tree.root,'compact_panel').style.radius,T.shellRadiusPx);
+        assert.equal(find(tree.root,'compact_body').style.size[1],360-panelBandReserve());
         assert.equal(find(footer,'compact_footer_level_badge'),undefined);
-        const close=find(footer,'compact_footer_close'),disc=find(footer,'compact_footer_close_indicator');
-        assert.deepEqual(disc.style.size,[30,30]);
-        near(close.style.position[1]+disc.style.position[1]+15,30);
-        near(handedness==='left' ? close.style.position[0]+disc.style.position[0] :
-            width-close.style.position[0]-disc.style.position[0]-30,T.paddingPx);
-        const label=find(footer,'compact_footer_status');
-        near(label.style.position[0]+label.style.size[0]/2,width/2);
-        near(label.style.position[1]+label.style.size[1]/2,30);
+        const close=find(footer,'compact_footer_close');
+        assert.deepEqual(close.style.size,[height,height]);
+        near(handedness==='left'?close.style.position[0]:footer.style.size[0]-close.style.position[0]-height,0);
+        const label=find(footer,'compact_footer_name');
+        if(width>=320) assert.ok(label,'a name that fits is shown');
+        if(label) {
+            assert.equal(label.style.text_vertical_align,'center');
+            near(label.style.position[0]+label.style.size[0]/2,footer.style.size[0]/2);
+            near(label.style.position[1]+label.style.size[1]/2,height/2);
+        }
         const drag=find(footer,'compact_footer_drag');
         assert.ok(handedness==='left' ? drag.style.position[0]>=close.style.position[0]+close.style.size[0] :
             drag.style.position[0]+drag.style.size[0]<=close.style.position[0]);
-        const left=find(footer,'compact_footer_resize_left'),right=find(footer,'compact_footer_resize');
+        const left=find(tree.root,'compact_footer_resize_left'),right=find(tree.root,'compact_footer_resize');
         near(left.style.position[0],0); near(right.style.position[0]+right.style.size[0],width);
         close.on.activate(); drag.on.drag({}); left.on.drag({}); right.on.drag({});
         assert.deepEqual(calls,['close','drag','left','right']);
-        const records=projectBevyUiTreeRecords({tree:normalizeBevyUiTree({id:'compact_tree',tree:tree.root}),treeId:'compact_tree'});
-        const projected=records.find(record=>record.id.endsWith('_compact_footer'));
-        assert.deepEqual(projected.properties.corner_radii,[0,0,8,8]);
-    }
+    } } finally { globalThis.window=previous; }
 });
 
 test('closed sections have no hierarchy decoration or reserved column', () => {
@@ -376,17 +342,17 @@ test('closed sections have no hierarchy decoration or reserved column', () => {
     assert.deepEqual(rail.children[0].style.position,[0,0]);
 });
 
-test('rail limits connect header centre to revealed content in either direction', () => {
+test('an open section joins its header to its revealed content in either direction, without rail limits', () => {
     for(const direction of ['up','down']) {
         const accordion=accordionNode({id:'limit',width:340,label:'Section',expanded:true,direction,
             bodyHeight:120,bodyChildren:[node('limit_child','panel',{size:[340,120]})]});
         const rail=panelHierarchyNode({id:'limit_rail',width:340,children:[accordion]});
-        const header=find(accordion,'limit_header');
-        const start=find(rail,'limit_return_start'),end=find(rail,'limit_return_end');
-        near((direction==='up'?end:start).style.position[1]+T.hierarchy.lineWidthPx/2,
-            header.style.position[1]+header.style.size[1]/2);
-        near((direction==='up'?start:end).style.position[1]+T.hierarchy.lineWidthPx/2,
-            direction==='up'?-T.gapPx/2:accordion.style.size[1]+T.gapPx/2);
+        const header=find(rail,'limit_header'),body=find(rail,'limit_body');
+        // Up: the content stacks above the header, against it; down: right under it (AGENTS.md rule 14).
+        if(direction==='up') near(body.style.position[1]+body.style.size[1],header.style.position[1]);
+        else near(body.style.position[1],header.style.position[1]+header.style.size[1]);
+        assert.equal(find(rail,'limit_return_start'),undefined); assert.equal(find(rail,'limit_return_end'),undefined);
+        assert.equal(hex(find(rail,'limit_chevron_triangle').image.tint),'#f28c29');
     }
 });
 
@@ -408,7 +374,8 @@ test('production projection gives all content the complete symmetric body width'
         near(header.style.size[0],shell.style.size[0]-2*T.paddingPx);
         assert.equal(widths.at(-1),header.style.size[0]);
         const body=find(tree.root,'eve_bevy_panel_width_fixture_body');
-        assert.deepEqual(body.style.radius_corners,[T.shellRadiusPx,T.shellRadiusPx,0,0]);
+        // The foot band lies inside the one glass silhouette: the body keeps every corner of the slab.
+        assert.deepEqual(body.style.radius_corners,[T.shellRadiusPx,T.shellRadiusPx,T.shellRadiusPx,T.shellRadiusPx]);
         const records=projectBevyUiTreeRecords({tree:normalizeBevyUiTree({id:tree.id,tree}),treeId:tree.id,workspaceLayer:'panel'});
         const headerRecord=records.find(record=>record.id.endsWith('_width_header_header'));
         // Record projection snaps paint coordinates to pixels; layout remains exact.
@@ -439,9 +406,18 @@ test('real Monitor lines and values stay opaque while input placeholders fade wi
     const {createProgramPanelSurface}=await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_program_runtime.js');
     const {initialProgram}=await import('../../eVe/domains/programs/project_program_model.js');
     const {buildBevyToolSliderNode}=await import('../../eVe/intuition/shared/bevy_ui_tool_slider.js');
-    const surface=createProgramPanelSurface({surfaceKey:'white_monitor',call:async()=>({ok:false})});
-    Object.assign(surface.readState(),{tab:'monitor',data:{program:initialProgram('sleep'),observations:[],events:[],revisions:[]}});
-    const content=surface.buildContent(surface.readState(),{bodyWidth:500,emit:()=>{}});
+    // readState is a snapshot: the panel's data comes from its own read (onOpen → project.program.read → hydrate).
+    const data={ok:true,program:initialProgram('sleep'),observations:[],events:[],revisions:[]};
+    const surface=createProgramPanelSurface({surfaceKey:'white_monitor',readProjects:async()=>[],
+        call:async payload=>(payload.tool_id==='project.program.read'?structuredClone(data):{ok:false})});
+    const {JSDOM}=await import('jsdom'),dom=new JSDOM('<body></body>',{url:'http://localhost'});
+    vi.stubGlobal('window',dom.window); vi.stubGlobal('document',dom.window.document);
+    let content;
+    try {
+        surface.onOpen({context:{project_id:'p',tab:'monitor'},refresh:()=>{}});
+        await vi.waitFor(()=>assert.ok(surface.readState().data?.program));
+        content=surface.buildContent(surface.readState(),{bodyWidth:500,emit:()=>{}});
+    } finally { surface.onClose?.(); dom.window.close(); vi.unstubAllGlobals(); }
     const root=buildBevyPanelTree({id:'white',title:'Moniteur',surfaceSize:{width:900,height:800},
         geometry:{x:0,y:0,width:600,height:600},bodyChildren:[...content,
             ...['age','weight','height'].map(id=>textInputNode({id,placeholder:id,value:''})),

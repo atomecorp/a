@@ -2,6 +2,7 @@ import { expect, test, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { createBevyUiScrollRuntime, locateBevyUiNode } from '../../eVe/domains/rendering/bevy_ui_scroll_runtime.js';
 import { createEveBevyUiRuntime } from '../../eVe/domains/rendering/bevy_ui_runtime.js';
+import { projectBevyUiTreeRecords } from '../../eVe/domains/rendering/bevy_ui_overlay_record_projection.js';
 import { createEmbeddedSurfaceRuntime } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_embedded_surface.js';
 import { node } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tree_primitives.js';
 import { accordionNode } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_accordion.js';
@@ -12,9 +13,22 @@ import { bevyPanelRuntimeState as state, openBevyPanelSurface, closeBevyPanelSur
 import { setMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_product_registry.js';
 import { BEVY_PANEL_TOKENS as T } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
 
+// The renderer owns every list's motion (bevy_ui_scroll_runtime.js): the real scroll state needs its WASM,
+// loaded here from the local files (bevy_renderer_wasm_test_helpers.mjs).
+vi.mock('../../eVe/domains/rendering/bevy_web_renderer_module_loader.js', async (importOriginal) =>
+    (await import('./bevy_renderer_wasm_test_helpers.mjs')).withLocalBevyRenderer(importOriginal));
+
 const scrollTree = (height = 200) => ({ id: 'scroll', disableScaleWatch: true, root: node('band', 'scroll_area', {
     size: [300, height], overflow: 'scroll_y'
 }, [node('content', 'panel', { size: [300, 1000] }, [node('field', 'text_input', { position: [0, 700], size: [250, 40] })])]) });
+// The renderer moves a list only once its projection described it (bevy_ui_project_overlay_runtime.js `describe`):
+// the projected tree is described here as the overlay projector does.
+const describeScroll = (scroll, tree, treeId) => {
+    const collector = scroll.collector(treeId);
+    projectBevyUiTreeRecords({ tree, treeId, workspaceLayer: 'panel', scroll: collector });
+    collector.describe();
+    return tree;
+};
 const scrollHit = (tree, treeId, nodeId = 'field') => ({ treeId,
     ...locateBevyUiNode({ node: tree.root, nodeId }),
     nodeId, kind: 'text_input'
@@ -34,7 +48,7 @@ test('automatic reveal and restore do not create user scroll; a wheel invalidate
         expect(scroll.userRevision(tree.id)).toBe(0);
         scroll.announcePreparedScroll({ treeId: tree.id, scrollIntent: intent });
         expect(events).toHaveLength(1);
-        const restored = scroll.prepareTree({ tree, treeId: tree.id, scrollIntent: { userRevision: 0, restore: snapshot } });
+        const restored = describeScroll(scroll, scroll.prepareTree({ tree, treeId: tree.id, scrollIntent: { userRevision: 0, restore: snapshot } }), tree.id);
         expect(restored.root.style.scroll).toEqual([0, 0]);
         scroll.wheel(scrollHit(restored, tree.id), { delta_y: -20 });
         expect(scroll.userRevision(tree.id)).toBe(1);
@@ -49,7 +63,7 @@ test('touch takeover counts once and later travel/inertia do not invalidate thei
     const scroll = createBevyUiScrollRuntime({ refreshTree: () => {}, emitTargetEvent: () => {},
         requestFrame: callback => { frames.push(callback); return frames.length; }, cancelFrame: () => {}, now: () => time });
     try {
-        const tree = scroll.applyTree({ tree: scrollTree(), treeId: 'touch' });
+        const tree = describeScroll(scroll, scroll.applyTree({ tree: scrollTree(), treeId: 'touch' }), 'touch');
         scroll.begin(scrollHit(tree, 'touch'), { x: 10, y: 150 });
         time = 16; scroll.drag({ x: 10, y: 145 });
         expect(scroll.userRevision('touch')).toBe(0);
@@ -92,12 +106,17 @@ const panelFixture = async ({ keyboard = false, direction = 'up', waitForOpen = 
     Object.defineProperty(dom.window, 'visualViewport', { value: viewport, configurable: true });
     const key = 'scroll_intent_fixture', id = `eve_bevy_panel_${key}`;
     const projected = [], inputs = [];
-    const scroll = createBevyUiScrollRuntime({ refreshTree: () => {}, emitTargetEvent: () => {}, requestFrame: () => 1 });
+    // The renderer's offsets are read on the frames the runtime asks for: they run once a gesture was sent.
+    const frames = [];
+    const scroll = createBevyUiScrollRuntime({ refreshTree: () => {}, emitTargetEvent: () => {},
+        requestFrame: (callback) => { frames.push(callback); return frames.length; }, cancelFrame: () => {} });
+    const runFrames = () => frames.splice(0).forEach((callback) => callback());
     let source = null;
     const project = async input => {
         const anchor = scroll.captureNodeAnchor({ tree: source, treeId: id, nodeId: input.preserveNodeId });
         source = input.tree;
         const tree = scroll.prepareTree({ tree: source, treeId: id, anchor, scrollIntent: input.scrollIntent });
+        describeScroll(scroll, tree, id);
         projected.push(tree); inputs.push(input);
         scroll.announcePreparedScroll({ treeId: id, scrollIntent: input.scrollIntent });
         return tree;
@@ -143,7 +162,11 @@ const panelFixture = async ({ keyboard = false, direction = 'up', waitForOpen = 
         fieldBox: key => locateBevyUiNode({ node: projected.at(-1).root, nodeId: key }),
         activate: nodeId => locateBevyUiNode({ node: projected.at(-1).root, nodeId }).node.on.activate(),
         focus: key => locateBevyUiNode({ node: projected.at(-1).root, nodeId: key }).node.on.focus({ x: 10, y: 10 }),
-        wheel: (delta, nodeId = keyboard ? 'first' : 'section_header') => scroll.wheel(scrollHit(projected.at(-1), id, nodeId), { delta_y: delta }),
+        wheel: (delta, nodeId = keyboard ? 'first' : 'section_header') => {
+            const handled = scroll.wheel(scrollHit(projected.at(-1), id, nodeId), { delta_y: delta });
+            runFrames();
+            return handled;
+        },
         changeContent: () => { bodyHeight += 250; },
         resize: async next => { height = next; viewport.dispatchEvent(new dom.window.Event('resize')); await new Promise(resolve => setTimeout(resolve, 130)); await vi.waitFor(() => expect(mounted.refreshPromise).toBeNull()); },
         cleanup: async () => { editing.stop(); await closeBevyPanelSurface(key); state.definitions.delete(key); state.runtime = null;
@@ -215,10 +238,12 @@ test.each([false, true])('keyboard closing restores positions only without manua
         if (manual) { fixture.wheel(-45); await fixture.refresh(); }
         await fixture.resize(844);
         const restored = fixture.scroll.captureState(fixture.id);
+        // The positions are compared, not whether a thumb is still lit (it rests after its own delay).
+        const positions = ({ offsets }) => offsets.map(({ nodeId, x, y }) => ({ nodeId, x, y }));
         if (manual) {
             expect(fixture.inputs.slice(count).some(input => input.scrollIntent?.restore)).toBe(false);
-            expect(restored.offsets).not.toEqual(before.offsets);
-        } else expect(restored.offsets).toEqual(before.offsets);
+            expect(positions(restored)).not.toEqual(positions(before));
+        } else expect(positions(restored)).toEqual(positions(before));
         expect(getActiveTextEditor()).toBe(editor);
         expect(editor.value).toBe('bonjour !');
     } finally { await fixture.cleanup(); }

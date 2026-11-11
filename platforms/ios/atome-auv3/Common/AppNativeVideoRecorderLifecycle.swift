@@ -182,7 +182,6 @@ extension AppNativeVideoRecorder {
             "terminal": terminal["terminal"] ?? false
         ]
         payload.merge(previewState.statusPayload()) { current, _ in current }
-        payload["preview_source_id"] = previewSourceId
         return payload
     }
 
@@ -201,20 +200,6 @@ extension AppNativeVideoRecorder {
         expectsAudio = false
         discardOnStop = false
         stopRequestedBeforeStart = false
-    }
-
-    var previewSourceId: String {
-        let identity = projectAtomeId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return identity.isEmpty ? "native_video_preview" : "native_video_preview_\(identity)"
-    }
-
-    func readPreviewFrame(completion: @escaping Completion) {
-        sessionQueue.async {
-            self.complete(
-                completion,
-                payload: self.previewState.framePayload(sourceId: self.previewSourceId)
-            )
-        }
     }
 
     func finishEarly(error: String) {

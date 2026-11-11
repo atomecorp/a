@@ -42,12 +42,13 @@ pub async fn handle_sync_message(
                 remote_url,
                 environment_fingerprint,
             ) {
-                Ok(()) => match super::local_atome_sync_worker::enqueue_current_user_state_sync(
-                    state,
-                    user_id,
-                    remote_user_id,
-                ) {
-                    Ok(state_republished) => response(
+                Ok(()) => {
+                    let state_republishing = super::local_atome_sync_worker::schedule_current_user_state_sync(
+                        state,
+                        user_id,
+                        remote_user_id,
+                    );
+                    response(
                         "sync",
                         &message,
                         true,
@@ -55,12 +56,11 @@ pub async fn handle_sync_message(
                             "configured": true,
                             "remote_user_id": remote_user_id,
                             "environment_fingerprint": environment_fingerprint,
-                            "state_republished": state_republished
+                            "state_republishing": state_republishing
                         })),
                         None,
-                    ),
-                    Err(error) => response("sync", &message, false, None, Some(error)),
-                },
+                    )
+                }
                 Err(error) => response("sync", &message, false, None, Some(error)),
             }
         }
@@ -169,9 +169,11 @@ pub async fn handle_sync_message(
                     Some("Database unavailable".into()),
                 );
             };
+            // Read by the home's status every few seconds: only « none or some » matters, so the
+            // count stops at 1 000 instead of walking a queue of tens of thousands each time.
             let pending_delivery_count = match db.query_row(
-                "SELECT COUNT(*) FROM sync_queue WHERE target_server = 'fastify' AND status != 'synced'
-                 AND json_extract(payload, '$.actor.id') = ?1", [user_id], |row| row.get::<_, i64>(0)
+                "SELECT COUNT(*) FROM (SELECT 1 FROM sync_queue WHERE target_server = 'fastify' AND status != 'synced'
+                 AND json_extract(payload, '$.actor.id') = ?1 LIMIT 1000)", [user_id], |row| row.get::<_, i64>(0)
             ) {
                 Ok(count) => count,
                 Err(error) => return response("sync", &message, false, None, Some(error.to_string())),
@@ -201,6 +203,10 @@ pub async fn handle_sync_message(
                     }
                     _ => {}
                 }
+            }
+            if message.get("status_only").and_then(JsonValue::as_bool) == Some(true) {
+                return response("sync", &message, true,
+                    Some(json!({"pending_delivery_count": pending_delivery_count, "sync_status": sync_status})), None);
             }
             // The count and the oldest rows: the whole list (3.7 MB for an iPhone account) was
             // serialized to the page at every status read, ~345 ms of frozen page each time.
@@ -295,6 +301,10 @@ mod tests {
             data["sync_status"]["last_error_code"],
             "property_write_denied"
         );
+        // The home's status read: the state and the deliveries' count, not the pending Atomes.
+        let status = handle_sync_message(json!({"action":"get-pending","status_only":true}), "account-a", &state).await.data.unwrap();
+        assert_eq!((status["pending_delivery_count"].as_i64(), status.get("changes").is_none()), (Some(1), true));
+        assert_eq!(status["sync_status"]["last_error_code"], "property_write_denied");
         state.db.lock().unwrap().execute("UPDATE sync_queue SET status='synced' WHERE json_extract(payload,'$.actor.id')='account-a'", []).unwrap();
         let data = handle_sync_message(request, "account-a", &state)
             .await

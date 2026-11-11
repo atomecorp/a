@@ -188,7 +188,9 @@ test('Record captures into the existing project owner without creating a child M
                         tracks: [{
                             track_id: 'track_root', section_id: 'section_root', role: 'content', empty_slot: true
                         }],
-                        clips: [{ clip_id: 'legacy_clip', track_id: 'track_root' }]
+                        // A new performance replaces only the previous one
+                        // (its capture-origin clips); other clips stay.
+                        clips: [{ clip_id: 'legacy_clip', track_id: 'track_root', origin: 'action_capture' }]
                     }
                 };
             },

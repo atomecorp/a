@@ -15,7 +15,7 @@ import { createTextEditingLayout } from '../../eVe/domains/rendering/text_editin
 const installRecordingCanvas = (windowRef) => {
     const draws = [];
     const fills = [];
-    windowRef.HTMLCanvasElement.prototype.getContext = function getContext() {
+    const createContext = function createContext() {
         return {
             font: '10px sans-serif',
             beginPath: () => {}, clearRect: () => {}, clip: () => {}, rect: () => {},
@@ -29,6 +29,20 @@ const installRecordingCanvas = (windowRef) => {
                 return { width: String(text || '').length * size * familyScale };
             }
         };
+    };
+    windowRef.HTMLCanvasElement.prototype.getContext = createContext;
+    // Text textures are painted off screen and handed over as an ImageBitmap.
+    windowRef.OffscreenCanvas = class RecordingOffscreenCanvas {
+        constructor(width, height) {
+            this.width = width;
+            this.height = height;
+        }
+        getContext() {
+            return createContext.call(this);
+        }
+        transferToImageBitmap() {
+            return { width: this.width, height: this.height };
+        }
     };
     return { draws, fills };
 };

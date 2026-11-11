@@ -36,7 +36,8 @@ afterEach(() => { globalThis.window = previousWindow; });
 test('an eVe template becomes usable without waiting for an unrelated work-project bootstrap', async () => {
     const openWorkspaceDashboardAndMainMenu = vi.fn(async () => ({ ok: true, route: 'dashboard_eve' }));
     const ensureProjectReady = vi.fn(() => new Promise(() => {}));
-    const open = createWorkspaceBootstrapOpen({ openWorkspaceDashboardAndMainMenu, publishNativeBootMilestone() {} });
+    const open = createWorkspaceBootstrapOpen({ openWorkspaceDashboardAndMainMenu, publishNativeBootMilestone() {},
+        waitForHomePreferences: async () => ({ ok: true }), followRestore: () => () => {} });
     expect(await open({ source: 'startup', ensureProjectReady })).toMatchObject({ ok: true, route: 'dashboard_eve', resumed: false });
     expect(ensureProjectReady).not.toHaveBeenCalled(); expect(openWorkspaceDashboardAndMainMenu).toHaveBeenCalledOnce();
     boot.onboarding = true;

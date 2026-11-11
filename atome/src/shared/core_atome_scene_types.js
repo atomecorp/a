@@ -151,6 +151,8 @@ export const CORE_SCENE_ATOME_TYPES = Object.freeze([
             ...ATOME_MEDIA_SCHEMA,
             name: { type: 'string' },
             poster_source: { type: 'string' },
+            // Its still (a data URL), written once (eVe/domains/dashboard/dashboard_take_stills.js).
+            media_poster_data_url: { type: 'string' },
             captions: { type: 'array' }
         }
     }),

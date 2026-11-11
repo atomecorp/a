@@ -3,6 +3,8 @@ use super::local_atome::{
     list_sync_queue_for_actor, list_sync_queue_for_atomes, mark_sync_queue_done,
     mark_sync_queue_error, mark_sync_queue_syncing,
 };
+pub(crate) use super::local_atome_sync_bootstrap::schedule_current_user_state_sync;
+#[cfg(test)]
 pub(crate) use super::local_atome_sync_bootstrap::enqueue_current_user_state_sync;
 use super::local_atome_sync_media::upload_outbound_media;
 use chrono::Utc;

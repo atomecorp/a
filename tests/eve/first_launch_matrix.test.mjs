@@ -50,7 +50,10 @@ describe('first launch canonical composition', () => {
         expect(firstLaunchRequired({ id: 'new', first_launch_version: 1 }, {})).toBe(true);
         const old = { preferences: { visual: { masteryLevel: 'advanced' }, background: { source: 'owned' } } };
         const seeded = firstLaunchProfile(old, firstLaunchProgress(), { initialize: true });
-        expect(seeded.preferences.visual.masteryLevel).toBe('beginner'); expect(old.preferences.visual.masteryLevel).toBe('advanced');
+        // A new account starts as a beginner; a level the person already chose stays theirs (first_launch_model.js#firstLaunchProfile).
+        expect(seeded.preferences.visual.masteryLevel).toBe('advanced'); expect(old.preferences.visual.masteryLevel).toBe('advanced');
+        expect(firstLaunchProfile({ preferences: { visual: {} } }, firstLaunchProgress(), { initialize: true }).preferences.visual.masteryLevel).toBe('beginner');
+        expect(firstLaunchProfile({ preferences: {} }, firstLaunchProgress()).preferences.visual).toBeUndefined();
         expect(seeded.preferences.background).toEqual(old.preferences.background);
         expect(firstLaunchRequired({ first_launch_version: 1 }, { first_launch: { version: 1, step: 'complete' } })).toBe(false);
         expect(firstLaunchRequired({}, { first_launch: { version: 1, step: 'sleep' } })).toBe(true);
@@ -147,7 +150,8 @@ it('hydrates the default identity SVG in light gray and retains personal photo p
     } finally { dom.window.close(); }
 });
 import { buildDashboardCardRecords } from '../../eVe/domains/dashboard/dashboard_card_records.js';
-import { buildBevyToolSliderNode } from '../../eVe/intuition/shared/bevy_ui_tool_slider.js';
+import { buildBevyToolSliderNode, createBevyToolSliderHandlers } from '../../eVe/intuition/shared/bevy_ui_tool_slider.js';
+import { matrixSliderLineWidth } from '../../eVe/domains/matrix/matrix_slider_info.js';
 import { applyTreeScrollLayout } from '../../eVe/domains/rendering/bevy_ui_scroll_layout.js';
 import { locateBevyUiNode } from '../../eVe/domains/rendering/bevy_ui_scroll_runtime.js';
 import { hitTestBevyUiNode } from '../../eVe/domains/rendering/bevy_ui_hit_test_runtime.js';
@@ -161,7 +165,8 @@ it('projects persisted Axum identities through every authenticated first-launch 
     try {
         for (const stage of ['welcome', 'profile', 'goals', 'sleep', 'program']) {
             const key = `first_launch_${stage}`;
-            const records = FIRST_LAUNCH_TEMPLATES[key].atoms.filter(atom => atom.props.template_control?.kind !== 'atom').map(atom => ({
+            // The Atom's cell (`logo`) is laid as its slot; its disc is the first-launch presentation's (renderSlot).
+            const records = FIRST_LAUNCH_TEMPLATES[key].atoms.map(atom => ({
                 atome_id: atom.ref, parent_id: atom.parent_ref || 'template-project', properties: { kind: atom.type, ...atom.props }
             }));
             const runtime = createMatrixTemplateRuntime({ treeId: key, records, uiRuntime,
@@ -173,9 +178,10 @@ it('projects persisted Axum identities through every authenticated first-launch 
                 const nodes = walk(trees.at(-1).root);
                 expect(nodes.some(node => node.id.includes('undefined'))).toBe(false);
                 expect(nodes.some(node => node.id === 'logo')).toBe(['welcome', 'profile'].includes(stage));
+                // The goals lie on the Mystic grid (first_launch_goal_grid.js): their Template has no command of its own.
                 const button = nodes.find(node => node.on?.activate);
-                expect(button).toBeDefined(); await button.on.activate();
-                await Promise.resolve(); expect(actions.length).toBeGreaterThan(0);
+                if (stage === 'goals') expect(button).toBeUndefined();
+                else { expect(button).toBeDefined(); await button.on.activate(); await Promise.resolve(); expect(actions.length).toBeGreaterThan(0); }
                 await runtime.updateRecords(records.map(record => ({ ...record })));
                 expect(walk(trees.at(-1).root).some(node => node.id === 'logo')).toBe(['welcome', 'profile'].includes(stage));
             } finally { await runtime.destroy(); }
@@ -200,9 +206,10 @@ it('projects native panel controls and Dashboard material without a private skin
                 const cards = nodes.filter(node => node.on?.activate);
                 expect(cards).toHaveLength(2); expect(cards[0].style.size).toEqual(cards[1].style.size);
                 expect(cards[0].style.size.every(size => size % 60 === 0)).toBe(true);
-                expect(cards[0].overlayRecord.properties.material.shadow).toBe(EVE_COMMON_SKIN_TOKENS.bevy.systemSurface.shadow);
+                // Every tile wears the tools' glass (dashboard_glass_material.js, V6.1 validated 2 Nov. 2026), not the panels' surface.
+                expect(cards[0].overlayRecord.properties.material.shadow).toBe(EVE_COMMON_SKIN_TOKENS.bevy.toolSurface.shadow);
                 expect(cards.every(card => card.overlayRecordLayout === 'node_box')).toBe(true);
-                expect(cards[0].overlayRecord.properties.material.backdrop.blurPx).toBe(EVE_COMMON_SKIN_TOKENS.bevy.systemSurface.backdrop.blurPx);
+                expect(cards[0].overlayRecord.properties.material.backdrop.blurPx).toBe(EVE_COMMON_SKIN_TOKENS.bevy.toolSurface.backdrop.blurPx);
             }
             if (key === 'first_launch_billing') {
                 expect(nodes.filter(node => node.kind === 'radio')).toHaveLength(6);
@@ -210,7 +217,7 @@ it('projects native panel controls and Dashboard material without a private skin
                 expect(glasses).toHaveLength(7);
                 for (const glass of glasses) {
                     expect(glass.style.radius).toBe(DASHBOARD_VISUAL_TOKENS.metrics.contentRadius);
-                    expect(glass.overlayRecord.properties.material.shadow).toBe(EVE_COMMON_SKIN_TOKENS.bevy.systemSurface.shadow);
+                    expect(glass.overlayRecord.properties.material.shadow).toBe(EVE_COMMON_SKIN_TOKENS.bevy.toolSurface.shadow);
                 }
                 expect(nodes.some(node => node.id === 'header')).toBe(false);
                 const content = walk(nodes.find(node => node.id === 'actions'));
@@ -243,7 +250,10 @@ it('projects native panel controls and Dashboard material without a private skin
                 // Its goals lie on the Mystic grid (first_launch_goal_grid.js): the Template keeps its title alone.
                 expect(nodes.filter(node => node.on?.activate)).toHaveLength(0);
                 expect(nodes.some(node => node.id === 'title_slot')).toBe(true);
-                expect(nodes.find(node => node.id === 'header').style.size[1]).toBe(SYSTEM_UI_METRICS.unitPx);
+                // Docked, its rows count in half tools (first_launch_presentation.js#dockedHeight): its header, title and notice, is one tool high.
+                expect(nodes.some(node => node.id === 'header')).toBe(true);
+                expect(FIRST_LAUNCH_TEMPLATES.first_launch_goals.atoms.find(atom => atom.ref === 'header').props.matrix_cell.row_span
+                    * SYSTEM_UI_METRICS.halfUnitPx).toBe(SYSTEM_UI_METRICS.unitPx);
             }
             if (key === 'first_launch_profile') {
                 const photo = nodes.find(node => node.id === 'photo');
@@ -259,7 +269,7 @@ it('projects native panel controls and Dashboard material without a private skin
                 expect(EVE_EN_FIRST_LAUNCH_MESSAGES['eve.first_launch.nickname']).toBe('Nickname (optional)');
                 const glass = nodes.find(node => node.overlayRecord?.properties.material?.backdrop);
                 expect(glass.style.radius).toBe(DASHBOARD_VISUAL_TOKENS.metrics.contentRadius);
-                expect(glass.overlayRecord.properties.material.shadow).toBe(EVE_COMMON_SKIN_TOKENS.bevy.systemSurface.shadow);
+                expect(glass.overlayRecord.properties.material.shadow).toBe(EVE_COMMON_SKIN_TOKENS.bevy.toolSurface.shadow);
                 for (const input of inputs) {
                     expect(input.style.size[1]).toBe(BEVY_PANEL_TOKENS.inputHeightPx);
                     expect(input.style.radius).toBe(BEVY_PANEL_TOKENS.radiusPx);
@@ -275,17 +285,34 @@ it('projects native panel controls and Dashboard material without a private skin
                 expect(projected.find(record => record.id.endsWith('_name_text_text')).properties.zIndex).toBeGreaterThan(background.properties.zIndex);
             }
             if (key === 'first_launch_sleep') {
-                expect(nodes.filter(node => node.kind === 'tool_slider')).toHaveLength(3);
-                expect(nodes.filter(node => node.overlayRecord?.properties.material?.backdrop)).toHaveLength(6);
+                // Hours, wake time, effort and preparation (first_launch_template_catalog.js#first_launch_sleep).
+                expect(nodes.filter(node => node.kind === 'tool_slider').map(node => node.id)).toEqual(['hours', 'wakeMinutes', 'effort', 'preparationMinutes']);
+                // One glass per card: header, identity, the four sliders, community, actions.
+                expect(nodes.filter(node => node.overlayRecord?.properties.material?.backdrop)).toHaveLength(8);
                 expect(nodes.find(node => node.id === 'age').style.radius).toBe(BEVY_PANEL_TOKENS.radiusPx);
-                for (const [id, expected] of [['hours', 10.5], ['effort', 76], ['preparationMinutes', 85]]) {
-                    const slider = nodes.find(node => node.id === id), native = buildBevyToolSliderNode({ id, orientation: 'horizontal', expanded: true, availableLength: 344,
-                        sliderOptions: { showBounds: true, lengthPx: 'fill', valueInsetPx: DASHBOARD_VISUAL_TOKENS.metrics.gap } });
+                for (const id of ['hours', 'effort', 'preparationMinutes']) {
+                    // An open slider lies on its card's row, half a tool thick, along the card less its gaps (matrix_template_runtime.js).
+                    const control = FIRST_LAUNCH_TEMPLATES.first_launch_sleep.atoms.find(atom => atom.ref === id).props.template_control, { min, max, step } = control;
+                    // Its line is the card, less the « i » of an explained setting (matrix_slider_info.js), less its gaps.
+                    const gap = DASHBOARD_VISUAL_TOKENS.metrics.gap, length = matrixSliderLineWidth(control, 6 * SYSTEM_UI_METRICS.unitPx, SYSTEM_UI_METRICS.unitPx, gap) - 2 * gap;
+                    const value = { hours: 8, effort: 50, preparationMinutes: 10 }[id]; // readValues above
+                    const slider = nodes.find(node => node.id === id), native = buildBevyToolSliderNode({ id, orientation: 'horizontal', expanded: true, value, min, max, step,
+                        itemSize: SYSTEM_UI_METRICS.halfUnitPx, availableLength: length,
+                        sliderOptions: { showBounds: true, lengthPx: 'fill', valueInsetPx: DASHBOARD_VISUAL_TOKENS.metrics.margin } });
                     expect(slider.style.size).toEqual(native.style.size);
-                    for (const suffix of ['background', 'rail', 'thumb']) {
+                    // The shared gauge's parts (bevy_ui_tool_slider.js): its ground, gauge, fill and mark.
+                    for (const suffix of ['background', 'gauge', 'fill', 'mark']) {
                         const actual = nodes.find(node => node.id === `${id}_${suffix}`).style, standard = walk(native).find(node => node.id === `${id}_${suffix}`).style;
                         for (const property of ['size', 'radius', 'background']) expect(actual[property]).toEqual(standard[property]);
                     }
+                    // The same 90 px travel sets what the shared slider handlers set (its whole range along its own length).
+                    let session = null, expected = null;
+                    const shared = createBevyToolSliderHandlers({ definition: { sliderValue: value, sliderFollowsValue: true, sliderMin: min, sliderMax: max,
+                        sliderStep: step, sliderOrientation: 'horizontal', sliderOptions: { showBounds: true, lengthPx: 'fill' } },
+                    read: () => session, write: next => { session = next; }, itemSize: () => SYSTEM_UI_METRICS.halfUnitPx, gap: () => DASHBOARD_VISUAL_TOKENS.metrics.gap,
+                    availableLength: () => length, refresh: () => {}, change: next => { expected = next; } });
+                    shared.press({}); shared.drag({ delta_x: 90 }); shared.release();
+                    expect(expected).not.toBe(value);
                     slider.on.press({}); slider.on.drag({ delta_x: 90 }); slider.on.release();
                     expect(draft.at(-1)).toEqual([id, expected]);
                 }
@@ -294,7 +321,8 @@ it('projects native panel controls and Dashboard material without a private skin
                 const short = { ...tree, root: { ...tree.root, style: { ...tree.root.style, size: [390, 650] },
                     children: [{ ...scroll, style: { ...scroll.style, size: [390, 650] } }] } };
                 const entries = new Map(), before = applyTreeScrollLayout({ tree: short, treeId: key, entries });
-                const entry = [...entries.values()][0]; expect(entry.maxY).toBe(90);
+                // Its scroll range is what its content overflows the 650 px viewport by.
+                const entry = [...entries.values()][0]; expect(entry.maxY).toBe(scroll.children[0].style.size[1] - 650); expect(entry.maxY).toBeGreaterThan(0);
                 entry.offsetY = entry.maxY;
                 const after = applyTreeScrollLayout({ tree: short, treeId: key, entries });
                 const beforeBox = locateBevyUiNode({ node: before.root, nodeId: 'back' }).box;
@@ -305,7 +333,7 @@ it('projects native panel controls and Dashboard material without a private skin
             if (key === 'first_launch_sms' || key === 'first_launch_welcome') {
                 const glass = nodes.find(node => node.overlayRecord?.properties.material?.backdrop);
                 expect(glass.style.radius).toBe(DASHBOARD_VISUAL_TOKENS.metrics.contentRadius);
-                expect(glass.overlayRecord.properties.material.shadow).toBe(EVE_COMMON_SKIN_TOKENS.bevy.systemSurface.shadow);
+                expect(glass.overlayRecord.properties.material.shadow).toBe(EVE_COMMON_SKIN_TOKENS.bevy.toolSurface.shadow);
                 expect(nodes.filter(node => node.kind === 'text_input')).toHaveLength(0);
                 for (const id of key === 'first_launch_sms' ? ['resend', 'back'] : ['profile', 'skip']) {
                     const action = nodes.find(node => node.id === id);
@@ -351,7 +379,8 @@ it('projects native panel controls and Dashboard material without a private skin
                 expect(submitted).toHaveLength(1);
                 await typed.destroy();
             }
-            if (key === 'first_launch_program') expect(nodes.filter(node => node.kind === 'checkbox')).toHaveLength(3);
+            // The daily-events option, then the nap, meditation and nutrition bricks (first_launch_template_catalog.js#first_launch_program).
+            if (key === 'first_launch_program') expect(nodes.filter(node => node.kind === 'checkbox')).toHaveLength(4);
             await runtime.destroy();
         }
     } finally { dom.window.close(); globalThis.window = previousWindow; globalThis.document = previousDocument; }

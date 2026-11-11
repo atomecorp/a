@@ -7,6 +7,7 @@ import { createInfoPanelSurface } from '../../eVe/intuition/runtime/bevy_panel/b
 import { hierarchyEntries } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_info_model.js';
 import { executeBootstrapDuplicateOperation } from '../../eVe/intuition/tools/core/tool_runtime_atome_mutation.js';
 import { buildAtomeContextualEditTree, ATOME_CONTEXTUAL_EDIT_TREE_ID } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_model.js';
+import { BEVY_MENU_TOKENS } from '../../eVe/intuition/ribbon/bevy_ui_menu_surface.js';
 import { createAtomeContextualToolDropRuntime } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_tool_drop_runtime.js';
 import { createAtomeContextualRailModelRuntime } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_rail_model_runtime.js';
 import { projectViewPlayback } from '../../eVe/domains/rendering/project_view_playback_runtime.js';
@@ -414,8 +415,11 @@ test('Info migration retires every HTML source and keeps only a DOM-free Bevy br
     assert.doesNotMatch(`${runtimeSource}\n${viewSource}`, /info\.page\.(previous|next)|eve\.info\.page\./);
     assert.match(sharedListSource, /virtualizedHierarchicalSelectableListNode/);
     assert.match(sharedListSource, /createSelectableListDragSession/);
-    assert.match(finderRuntimeSource, /createSelectableListDragSession/);
-    assert.doesNotMatch(finderRuntimeSource, /activeToolDragPayload/);
+    // Finder keeps the shared transfer lifecycle; its gestures own the shared drag session.
+    const finderInteractionsSource = source('eVe/intuition/runtime/bevy_panel/bevy_panel_finder_interactions.js');
+    assert.match(finderRuntimeSource, /createSelectableListTransferRuntime/);
+    assert.match(finderInteractionsSource, /createSelectableListDragSession/);
+    assert.doesNotMatch(`${finderRuntimeSource}\n${finderInteractionsSource}`, /activeToolDragPayload/);
 });
 
 test('the historical line registry covers all 3,033 Infos HTML lines without gaps or overlaps', () => {
@@ -504,7 +508,7 @@ test('Info applies SelectionAPI events immediately and projects Contact-style pr
 
 test('Info drag transports the selected renderable atomes through ui.duplicate and rejects clicks or UI drops', async () => {
     const previousWindow = globalThis.window;
-    globalThis.window = { __eveWorkspaceMode: { mode: 'project' } };
+    globalThis.window = { __eveWorkspaceMode: { mode: 'project', projectId: 'project_a' } };
     const invocations = [];
     const applied = [];
     const surface = {
@@ -685,7 +689,7 @@ test('Info loads selected atomes from other pages before starting one typed grou
         scrollLeft: 0, scrollTop: 0
     };
     const previousWindow = globalThis.window;
-    globalThis.window = { __eveWorkspaceMode: { mode: 'project' } };
+    globalThis.window = { __eveWorkspaceMode: { mode: 'project', projectId: 'project_a' } };
     try {
         const runtime = createInfoPanelSurface({
             readOne: async (id) => {
@@ -718,7 +722,7 @@ test('Info loads selected atomes from other pages before starting one typed grou
 
 test('Info drag rejects the whole selected batch when one canonical source cannot be resolved', async () => {
     const previousWindow = globalThis.window;
-    globalThis.window = { __eveWorkspaceMode: { mode: 'project' } };
+    globalThis.window = { __eveWorkspaceMode: { mode: 'project', projectId: 'project_a' } };
     let invocations = 0;
     const surface = {
         getBoundingClientRect: () => ({ left: 0, top: 0, right: 800, bottom: 600, width: 800, height: 600 }),
@@ -979,8 +983,10 @@ test('Finder contextual tool drop opens a Bevy insertion slot and reorders canon
         surface, activeAtomeId: 'shape_a', definitions, itemSize: 52, mainMenuHeight: 52, toolDropPreviewIndex: 1
     });
     assert.equal(Math.abs(find([tree.root], 'atome_contextual_tool_detail').style.position[1]), 0);
-    assert.deepEqual(find([tree.root], 'atome_contextual_tool_size').style.position, [0, 104]);
-    assert.equal(find([tree.root], `${ATOME_CONTEXTUAL_EDIT_TREE_ID}_rail`).style.size[1], 208);
+    // The insertion slot is one more tile, each tile a seam (`toolGapPx`) from the next.
+    const step = 52 + BEVY_MENU_TOKENS.toolGapPx;
+    assert.deepEqual(find([tree.root], 'atome_contextual_tool_size').style.position, [0, 2 * step]);
+    assert.equal(find([tree.root], `${ATOME_CONTEXTUAL_EDIT_TREE_ID}_rail`).style.size[1], (4 * 52) + (3 * BEVY_MENU_TOKENS.toolGapPx));
 
     const state = {
         activeAtomeId: 'shape_a', activeKind: 'shape', railScrollOffsetPx: 0,
@@ -1028,30 +1034,39 @@ test('Finder contextual tool drop rejects non-contextual Bevy targets without co
     assert.equal(commits, 0);
 });
 
-test('Finder tools expose hold, drag, release and cancel with the shared active payload', async () => {
+test('Finder tools expose press, drag and release on their thumbnail with the shared active payload', async () => {
+    // A row's thumbnail is its drag handle once a project can receive it; the row's hold is the choice (Choix).
+    const previousWindow = globalThis.window;
+    globalThis.window = { __eveWorkspaceMode: { mode: 'project', projectId: 'project_a' } };
     const calls = [];
-    const runtime = createFinderPanelSurface({
-        startToolDrag: (payload) => calls.push(['start', payload]),
-        previewToolDrag: (payload, event) => { calls.push(['preview', payload, event]); return { ok: true }; },
-        commitToolDrag: async (payload, event) => { calls.push(['commit', payload, event]); return { ok: true }; },
-        cancelToolDrag: () => calls.push(['cancel']), clearToolDrag: () => calls.push(['clear']),
-        events: { on: () => () => true }
-    });
-    runtime.state.scope = 'tools';
-    runtime.state.records = [{
-        id: 'tool_ui.code', type: 'tool', name: 'Code', projectId: null,
-        properties: { tool_id: 'ui.code', tool_key: 'code', tool_registry_version: 2, name: 'Code' }, raw: {}
-    }];
-    const emitted = [];
-    const content = runtime.surface.buildContent(runtime.readState(), { bodyWidth: 430, emit: (event) => emitted.push(event) });
-    const row = find(content, 'finder_row_id_tool_ui_code');
-    row.on.long_press({ client_x: 10, client_y: 10 });
-    row.on.drag({ client_x: 20, client_y: 20 });
-    row.on.release({ client_x: 30, client_y: 30 });
-    for (const event of emitted) await runtime.handleEvent(event);
-    assert.deepEqual(emitted.map(({ type }) => type), ['finder.row.drag_start', 'finder.row.drag_move', 'finder.row.drag_end']);
-    assert.deepEqual(calls.map(([type]) => type), ['start', 'preview', 'commit', 'clear']);
-    assert.equal(calls[0][1].tool_key, 'code');
+    try {
+        const runtime = createFinderPanelSurface({
+            previewToolDrag: (payload, event) => { calls.push(['preview', payload, event]); return { ok: true }; },
+            commitToolDrag: async (payload, event) => { calls.push(['commit', payload, event]); return { ok: true }; },
+            cancelToolDrag: () => calls.push(['cancel']), clearToolDrag: () => calls.push(['clear']),
+            resolveDropPoint: () => null, closePanel: async () => {},
+            events: { on: () => () => true }
+        });
+        runtime.state.scope = 'tools';
+        runtime.state.records = [{
+            id: 'tool_ui.code', type: 'tool', name: 'Code', projectId: null,
+            properties: { tool_id: 'ui.code', tool_key: 'code', tool_registry_version: 2, name: 'Code' }, raw: {}
+        }];
+        const emitted = [];
+        const content = runtime.surface.buildContent(runtime.readState(), { bodyWidth: 430, emit: (event) => emitted.push(event) });
+        assert.equal(typeof find(content, 'finder_list_entry_0').on.long_press, 'function');
+        const thumbnail = find(content, 'finder_list_entry_0_preview');
+        thumbnail.on.press({ client_x: 10, client_y: 10 });
+        thumbnail.on.drag({ client_x: 40, client_y: 40 });
+        thumbnail.on.release({ client_x: 60, client_y: 60 });
+        for (const event of emitted) await runtime.handleEvent(event);
+        assert.deepEqual(emitted.map(({ type }) => type), ['finder.row.drag_start', 'finder.row.drag_move', 'finder.row.drag_end']);
+        assert.deepEqual(calls.map(([type]) => type), ['preview', 'commit', 'cancel', 'clear']);
+        assert.equal(calls[0][1].tool_key, 'code');
+        assert.equal(calls[1][1].tool_key, 'code');
+    } finally {
+        globalThis.window = previousWindow;
+    }
 });
 
 test('Finder project activation delegates the selected identity to the canonical workspace owner', async () => {

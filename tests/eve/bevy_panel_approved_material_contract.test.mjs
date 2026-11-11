@@ -6,6 +6,7 @@ import { segmentedControlNode } from '../../eVe/intuition/runtime/bevy_panel/bev
 import { BEVY_PANEL_TOKENS as T } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
 import { buildBevyIconButtonNode } from '../../eVe/intuition/shared/bevy_ui_icon_button.js';
 import { projectBevyUiTreeRecords } from '../../eVe/domains/rendering/bevy_ui_overlay_record_projection.js';
+import { SYSTEM_UI_METRICS } from '../../eVe/elements/system_ui_tokens.js';
 
 test('panel material leaves the shared icon source, tint and geometry intact in every state', () => {
     for (const state of ['idle','active','hovered','pressed','focused','disabled']) {
@@ -13,16 +14,18 @@ test('panel material leaves the shared icon source, tint and geometry intact in 
         const shared=buildBevyIconButtonNode(options), panel=panelIconButtonNode(options);
         assert.deepEqual(panel.children[1],shared.children[1]);
         assert.deepEqual(panel.style.size,shared.style.size);
-        assert.equal(panel.children[0].style.surfacePaint.border.color[3],0);
+        assert.equal(panel.children[0].style.surfacePaint?.border,undefined,"no state draws a border (AGENTS.md rule 15)");
         assert.notDeepEqual(panel.children[0].style,shared.children[0].style);
     }
 });
 
-test('action states have one common rounded surface, an explicit selection outline, and disabled actions cannot activate', () => {
+test('action states have one common rounded surface, a sunken selection without outline, and disabled actions cannot activate', () => {
     for (const state of ['idle','primary','hovered','pressed','focused','disabled']) {
         const tree=buttonNode({id:'action',text:'Valider',width:120,[state]:true,onActivate:()=>{}});
-        assert.equal(tree.style.surfacePaint.border.color[3],0);
-        assert.deepEqual(tree.style.border,['primary','hovered'].includes(state)?[1,1,1,1]:undefined);
+        assert.equal(tree.style.surfacePaint?.border,undefined,"no state draws a border (AGENTS.md rule 15)");
+        assert.equal(tree.style.border,undefined);
+        // The selection and the press are a look of their own (sunken), never an outline.
+        assert.equal((tree.style.surfacePaint?.insetShadows?.length||0)>0,['primary','pressed'].includes(state));
         const records=projectBevyUiTreeRecords({tree:{root:tree},treeId:'state',workspaceLayer:'panel'});
         const surface=records.find(record=>record.id==='__eve_bevy_ui_state_action');
         assert.equal(surface.properties.width,120);
@@ -38,7 +41,7 @@ test('switch and checkbox paint follows the indicator, never the hit column', ()
         const tree=toggleableRowNode({id:'choice',kind,label:'Choix',[state]:true});
         assert.equal(tree.children.some(child=>child.id==='choice_background'),false);
         const indicator=tree.children.find(child=>child.id==='choice_indicator');
-        assert.equal(indicator.style.surfacePaint.border.color[3],0);
+        assert.equal(indicator.style.surfacePaint?.border,undefined,"no state draws a border (AGENTS.md rule 15)");
         assert.ok(indicator.style.size[0]<=tree.style.size[0]);
         assert.ok(indicator.style.size[1]<=tree.style.size[1]);
         const records=projectBevyUiTreeRecords({tree:{root:tree},treeId:'choice',workspaceLayer:'panel'});
@@ -57,7 +60,7 @@ test('segmented selection has an inset rounded surface within the original inter
 });
 
 // Exercise projected paint: partial corner geometry alone cannot round glass.
-test('every panel paints one complete glass silhouette with the Dashboard cell radius', () => {
+test('every panel paints one complete glass silhouette with the charter radius', () => {
     for (const options of [{}, {footerVisible:false}, {hideFooter:true},
         {fixedChildren:[buttonNode({id:'fixed',text:'OK'})]},
         {footerVisible:false,fixedChildren:[buttonNode({id:'fixed',text:'OK'})]}]) {
@@ -66,7 +69,8 @@ test('every panel paints one complete glass silhouette with the Dashboard cell r
             bodyChildren:[buttonNode({id:'body_action',text:'OK'})],...options});
         const records=projectBevyUiTreeRecords({tree,treeId:'rounded',workspaceLayer:'panel'});
         const shell=records.find(record=>record.id==='__eve_bevy_ui_rounded_rounded_panel');
-        assert.equal(shell.properties.corner_radius,8);
+        // The one charter radius (AGENTS.md rule 14) the Dashboard cells declare too.
+        assert.equal(shell.properties.corner_radius,SYSTEM_UI_METRICS.radiusPx);
         assert.equal(shell.properties.shape,'rounded_rect');
         assert.equal(shell.properties.material.backdrop.blur_px,T.material.backdrop.blurPx);
         assert.deepEqual(shell.properties.material.backdrop.tint,T.material.backdrop.tint);

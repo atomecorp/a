@@ -9,7 +9,7 @@ import { WORKSPACE_SCENE_LAYER_IDS } from "../../eVe/domains/rendering/workspace
 import { clearAllProjectScenes, getProjectSceneState, reconcileProjectSceneRecordsByPrefix, renderProjectScene } from "../../eVe/domains/rendering/project_scene_runtime.js";
 
 import { buildBevyMainMenuTree } from "../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js";
-import { BEVY_MENU_TOKENS } from "../../eVe/intuition/ribbon/bevy_ui_menu_surface.js";
+import { BEVY_MENU_TOKENS, resolveBevyMenuFamilyColor } from "../../eVe/intuition/ribbon/bevy_ui_menu_surface.js";
 
 import { createTestCompositor, installDom } from "./unified_rendering_test_helpers.mjs";
 import { overlayMenuContent as menuContent, findNode as findTreeNode } from "./bevy_ui_main_menu_test_helpers.mjs";
@@ -102,7 +102,8 @@ test('BevyUI main menu overlay projects the 70px menu atomically without droppin
     assert.equal(recordsById.has('__eve_dashboard_card_media_projects_alpha'), true);
     assert.equal(recordsById.has('__eve_dashboard_card_title_projects_alpha'), true);
     assert.equal(recordsById.get('__eve_dashboard_card_title_projects_alpha')?.properties?.text, 'Alpha Project');
-    assert.equal(menuRecords.length, 24);
+    // Each tool projects its ground, its label and its glyph; Atome projects its glyph alone.
+    assert.equal(menuRecords.length, (iconRecords.length - 1) * 3 + 1);
     assert.equal(iconRecords.length, 8);
     assert.equal(menuRecords.every((record) => record.parent_id || record.properties?.parent_id), true);
     assert.equal(menuRecords.every((record) => record.properties?.layer === 'mainMenu'), true);
@@ -184,7 +185,7 @@ test('BevyUI dashboard overlay replaces its complete snapshot atomically', async
     assert.equal(records.get('__eve_bevy_ui_dashboard_bevy_ui___eve_dashboard_header_projects')?.properties?.text, 'Projects');
     assert.equal(secondIds.length, 2);
 });
-test('BevyUI main menu projects one semantic accent capsule per palette group', async () => {
+test('BevyUI main menu marks each palette group with its folded corner and family glass', async () => {
     clearAllProjectScenes();
     const dom = projectDom();
     const host = dom.window.document.getElementById('project');
@@ -219,17 +220,22 @@ test('BevyUI main menu projects one semantic accent capsule per palette group', 
     };
     const baseState = { latchedByToolId: new Map(), externalOpenByToolId: new Map() };
     const closedTree = buildBevyMainMenuTree({ content, surface, itemSize: 60, state: baseState });
-    const captureAccentId = 'eve_bevy_ui_main_menu_palette_capture_accent';
-    const modeAccent = findTreeNode(closedTree.root, 'eve_bevy_ui_main_menu_palette_mode_accent');
-    const viewAccent = findTreeNode(closedTree.root, 'eve_bevy_ui_main_menu_palette_view_accent');
-    const tokens = BEVY_MENU_TOKENS.paletteAccent;
-    assert.deepEqual(findTreeNode(closedTree.root, captureAccentId)?.style.size, [54, tokens.thicknessPx]);
-    assert.equal(findTreeNode(closedTree.root, 'eve_bevy_ui_main_menu_palette_capture_backplate'), null);
-    assert.deepEqual(viewAccent.style.background, [89 / 255, 199 / 255, 211 / 255, 1]);
-    assert.deepEqual(modeAccent.style.background, [210 / 255, 121 / 255, 223 / 255, 1]);
-    assert.equal(modeAccent.style.position[0] - (viewAccent.style.position[0] + viewAccent.style.size[0]), 6);
-    assert.equal(findTreeNode(closedTree.root, 'eve_bevy_ui_main_menu_palette_find_accent'), null);
-    assert.equal(findTreeNode(closedTree.root, 'eve_bevy_ui_main_menu_palette_atome_accent'), null);
+    // A palette group is marked by its folded corner (`_corner`) and its family's glass: no accent capsule, no backplate.
+    const allIds = (node, acc = []) => { if (node) { acc.push(node.id); (node.children || []).forEach((child) => allIds(child, acc)); } return acc; };
+    const captureCornerId = 'eve_bevy_ui_main_menu_tool_capture_corner';
+    const familyOf = { capture: 'creation', mode: 'system', view: 'consultation' };
+    assert.deepEqual(allIds(closedTree.root).filter((id) => /_(corner|accent|backplate)$/.test(id)).sort(),
+        Object.keys(familyOf).map((key) => `eve_bevy_ui_main_menu_tool_${key}_corner`).sort());
+    for (const [key, family] of Object.entries(familyOf)) {
+        const corner = findTreeNode(closedTree.root, `eve_bevy_ui_main_menu_tool_${key}_corner`);
+        assert.match(corner.image.source, /^data:image\/svg\+xml/, `${key}:corner`);
+        assert.deepEqual(findTreeNode(closedTree.root, `eve_bevy_ui_main_menu_tool_${key}_background`).style.backdrop.tint,
+            resolveBevyMenuFamilyColor({ family }), `${key}:family glass`);
+    }
+    assert.equal(findTreeNode(closedTree.root, 'eve_bevy_ui_main_menu_tool_find_corner'), null);
+    assert.equal(findTreeNode(closedTree.root, 'eve_bevy_ui_main_menu_tool_atome_corner'), null);
+    assert.deepEqual(findTreeNode(closedTree.root, 'eve_bevy_ui_main_menu_tool_find_background').style.backdrop.tint,
+        BEVY_MENU_TOKENS.surface.material.backdrop.tint, 'a plain tool keeps the common glass');
 
     const expandedTree = buildBevyMainMenuTree({
         content,
@@ -250,9 +256,12 @@ test('BevyUI main menu projects one semantic accent capsule per palette group', 
         assert.deepEqual(expandedStyle.backdrop, closedStyle.backdrop, `${id}:backdrop`);
         assert.equal(expandedStyle.z_index, closedStyle.z_index, `${id}:surface-layer`);
     }
-    assert.deepEqual(findTreeNode(expandedTree.root, captureAccentId)?.style.size, [tokens.thicknessPx, 174]);
-    assert.equal(findTreeNode(expandedTree.root, 'eve_bevy_ui_main_menu_palette_capture_backplate'), null);
-    assert.equal(findTreeNode(expandedTree.root, 'eve_bevy_ui_main_menu_tool_capture__import_palette_accent'), null);
+    // The open palette keeps its parent's fold; its children are plain choices, never folded nor accented.
+    assert.ok(findTreeNode(expandedTree.root, captureCornerId));
+    assert.deepEqual(findTreeNode(expandedTree.root, 'eve_bevy_ui_main_menu_tool_capture').style.translation, [0, 2],
+        'the open parent takes the selected look: a sunk translation');
+    assert.deepEqual(allIds(expandedTree.root).filter((id) => /_(accent|backplate)$/.test(id)), []);
+    assert.equal(findTreeNode(expandedTree.root, 'eve_bevy_ui_main_menu_tool_capture__import_corner'), null);
     const paletteItemIds = new Set([
         'eve_bevy_ui_main_menu_tool_capture',
         'eve_bevy_ui_main_menu_tool_capture__import',
@@ -315,10 +324,12 @@ test('BevyUI main menu projects one semantic accent capsule per palette group', 
         previousIds: pressedIds
     });
     assert.equal(closedIds.every((id) => expandedIds.includes(id)), true);
-    assert.equal(
-        expandedIds.length,
-        closedIds.length + 7,
-        'only the two new palette controls and the newly painted active parent shell may spawn'
+    // The open parent keeps its own records (its state is a sunk translation, not a new shell paint).
+    assert.deepEqual(
+        expandedIds.filter((id) => !closedIds.includes(id)),
+        ['photo', 'import'].flatMap((key) => ['background', 'label_text', 'icon_image'].map((part) => (
+            `__eve_bevy_ui_eve_bevy_ui_main_menu_eve_bevy_ui_main_menu_tool_capture__${key}_${part}`))),
+        'only the two new palette controls may spawn'
     );
     const openingBatches = compositorCalls.filter((call) => Array.isArray(call.ops));
     const openingOps = openingBatches.flatMap((call) => call.ops);
@@ -332,10 +343,9 @@ test('BevyUI main menu projects one semantic accent capsule per palette group', 
         'palette opening must add and move only the main-menu prefix instead of rebuilding the Dashboard scene'
     );
     const records = projectedState.records;
-    const projectedAccent = records.find((record) => record.id.endsWith(`_${captureAccentId}`));
-    assert.equal(projectedAccent?.properties?.width, tokens.thicknessPx);
-    assert.equal(projectedAccent?.properties?.height, 174);
-    assert.equal(projectedAccent?.properties?.color, 'rgba(255,107,107,1)');
+    assert.equal(records.some((record) => record.id.endsWith(`_${captureCornerId}_image`) || record.id.endsWith(`_${captureCornerId}`)), true,
+        'the open palette projects its folded corner');
+    assert.equal(records.some((record) => /_(accent|backplate)(_|$)/.test(record.id)), false);
 
     compositorCalls.length = 0;
     const motionResult = await patchBevyUiTreeMotion({
@@ -367,8 +377,8 @@ test('BevyUI main menu projects one semantic accent capsule per palette group', 
     assert.equal(closingBatches.length, 1, 'palette closing must stay one atomic renderer batch');
     assert.equal(
         closingOps.filter((operation) => operation.type === 'despawn').length,
-        7,
-        'closing removes the two palette controls and the active parent shell paint'
+        6,
+        'closing removes the two palette controls'
     );
     assert.equal(closingOps.some((operation) => String(operation.id || operation.payload?.id || '').includes('__eve_dashboard_sentinel')), false);
     assert.equal(restoredState.projection?.render_result?.direct_prefix, true);

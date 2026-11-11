@@ -72,13 +72,20 @@ test('the full iOS catalog survives native capability discovery and HealthKit re
         assert.match(read(`platforms/ios/atome-auv3/application/${file}`), /<key>com.apple.developer.healthkit<\/key>\s*<true\/>/);
     }
     const plist = read('platforms/ios/atome-auv3/application/Info.plist');
-    // Both purpose strings (App Store validation, altool 90683). The only
-    // write is the training workout, saved through its builder: no direct
-    // save or delete anywhere.
+    // Both purpose strings (App Store validation, altool 90683). The writes
+    // are the training workout, saved through its builder, and a meditation's
+    // mindful minutes, one sample saved behind its own grant: no other direct
+    // save and no delete anywhere.
     assert.ok(plist.includes('NSHealthShareUsageDescription'));
     assert.ok(plist.includes('NSHealthUpdateUsageDescription'));
     assert.ok(!/healthStore\.(save|delete)\(/.test(controller + read('platforms/ios/atome-auv3/Common/AppNativeHealthQueries.swift')));
-    assert.ok(!/store\.(save|delete)|deleteObjects/.test(workout));
+    assert.ok(!/store\.delete|deleteObjects/.test(workout));
+    const directSaves = [...workout.matchAll(/store\.save\(/g)];
+    assert.equal(directSaves.length, 1, 'the mindful sample is the only direct HealthKit save');
+    const saveMindful = workout.slice(workout.indexOf('private func saveMindful('), workout.indexOf('private static func activityType('));
+    assert.ok(saveMindful.includes('store.save(sample)'));
+    assert.ok(saveMindful.includes('store.authorizationStatus(for: Self.mindfulType) == .sharingAuthorized'));
+    assert.ok(saveMindful.includes('HKCategorySample(type: Self.mindfulType'));
 });
 
 test('authorization checks necessity and rejects unknown status before presenting the system sheet', () => {

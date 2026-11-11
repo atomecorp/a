@@ -176,18 +176,25 @@ beforeAll(async () => { await import('../../eVe/intuition/runtime/bevy_panel/bev
 describe('native programme panel composition', () => {
     it('builds exactly two shared sliders and toggles units without changing stored input', async () => {
         const { createProgramPanelSurface } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_program_runtime.js');
-        const surface = createProgramPanelSurface({ call: async () => ({ ok: true }) });
-        const state = surface.readState();
-        state.data = { program: initialProgram('sleep'), observations: [], events: [], revisions: [] };
-        state.involvement = structuredClone(involvement);
-        const nodes = surface.buildContent(state, { emit: () => {}, refresh: () => {}, bodyWidth: 600 });
-        const flatten = nodes => nodes.flatMap(node => [node, ...flatten(node.children || [])]);
-        const all = flatten(nodes);
-        expect(all.filter(node => node.id === 'program_time' || node.id === 'program_rhythm')).toHaveLength(2);
-        const original = structuredClone(state.involvement);
-        await surface.handleEvent({ type: 'program.unit', value: 'week' }, { refresh: () => {} });
-        await surface.handleEvent({ type: 'program.unit', value: 'day' }, { refresh: () => {} });
-        expect(state.involvement).toEqual(original);
+        // readState is a snapshot: the panel's data comes from its own read (onOpen → project.program.read → hydrate).
+        const { JSDOM } = await import('jsdom'), dom = new JSDOM('<body></body>', { url: 'http://localhost' });
+        vi.stubGlobal('window', dom.window); vi.stubGlobal('document', dom.window.document);
+        const data = { ok: true, program: { ...initialProgram('sleep'), involvement: structuredClone(involvement) }, observations: [], events: [], revisions: [] };
+        const surface = createProgramPanelSurface({ readProjects: async () => [],
+            call: async payload => (payload.tool_id === 'project.program.read' ? structuredClone(data) : { ok: true }) });
+        const refresh = vi.fn(), release = surface.onOpen({ context: { project_id: 'p' }, refresh });
+        try {
+            await vi.waitFor(() => expect(surface.readState().involvement).toEqual(involvement));
+            const nodes = surface.buildContent(surface.readState(), { emit: () => {}, refresh: () => {}, bodyWidth: 600 });
+            const flatten = nodes => nodes.flatMap(node => [node, ...flatten(node.children || [])]);
+            const all = flatten(nodes);
+            expect(all.filter(node => node.id === 'program_time' || node.id === 'program_rhythm')).toHaveLength(2);
+            const original = structuredClone(surface.readState().involvement);
+            await surface.handleEvent({ type: 'program.unit', value: 'week' }, { refresh: () => {} });
+            expect(surface.readState().displayUnit).toBe('week');
+            await surface.handleEvent({ type: 'program.unit', value: 'day' }, { refresh: () => {} });
+            expect(surface.readState().involvement).toEqual(original);
+        } finally { release(); dom.window.close(); vi.unstubAllGlobals(); }
         surface.onClose();
         expect(surface.readState().data).toBeNull(); expect(surface.readState().actions).toEqual([]);
     });

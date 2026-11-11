@@ -2,6 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { CONTEXT_MENUS, validateContextMenus, loadContextMenus } from '../../eVe/intuition/menu/context_menus_loader.js';
 import { resolveContextMenu, resolveContextMenuContext } from '../../eVe/intuition/menu/context_menu_resolver.js';
+import { createPrompterRailContent } from '../../eVe/intuition/tools/prompter/prompter_rail_content.js';
 import { resolveMasteryLevel } from '../../eVe/intuition/tools/user_visual_preferences_model.js';
 const keys = (context, menu = 'mystic') => resolveContextMenu({context, menu}).map(entry => entry.key);
 // The Mystic is not contextual any more (2026-09-29): one constant list, in the
@@ -136,8 +137,9 @@ test('both compositions filter canonical object and property grants without conf
  assert.deepEqual(keys({ ...context, projectRecord:{capabilities:{create:false}} }, 'mystic'), MYSTIC_FIXED);
  // The sidebar remains contextual and continues to filter access.
  const result = keys(context, 'sidebar');
- assert.ok(!result.includes('font')); assert.ok(!result.includes('size'));
- assert.ok(keys({ ...context, records:[writable] }, 'sidebar').includes('font'));
+ // A text's look (its font among it) lies in its « Style » palette (prompter_rail_content.js, 2026-10-29).
+ assert.ok(!result.includes('text_style')); assert.ok(!result.includes('size'));
+ assert.ok(keys({ ...context, records:[writable] }, 'sidebar').includes('text_style'));
  assert.ok(keys({ ...context, records:[writable] }, 'sidebar').includes('size'));
 });
 
@@ -252,12 +254,16 @@ test('the three object effects take their one place: rounding, then shadow, then
  // La forme arrondit ses pointes, porte une ombre, et sert de masque.
  assert.deepEqual(group('shape'), ['rounding', 'shadow', 'mask']);
  // Le texte et le dessin vectoriel ne s'arrondissent pas : ils n'ont pas de cadre
- // a arrondir, seulement des glyphes et des points. Tous deux masquent.
- assert.deepEqual(group('text'), ['shadow', 'mask'], 'text has no frame to round');
+ // a arrondir, seulement des glyphes et des points. Tous deux masquent. Le texte
+ // range son ombre et son masque dans sa palette « Style » (2026-10-29).
+ assert.deepEqual(group('text'), [], 'text keeps its effects in its Style palette');
+ assert.ok(rail('text').includes('text_style'));
+ const style = createPrompterRailContent({ t: (_key, fallback) => fallback }).text_style.children;
+ assert.deepEqual(style.filter(key => ['rounding', 'shadow', 'mask'].includes(key)), ['shadow', 'mask'], 'text has no frame to round');
  assert.deepEqual(group('svg'), ['shadow', 'mask'], 'a vector drawing rounds its own points, never its box');
  // Les trois effets se rangent SOUS l'ordre (z_order) : on range, puis on
- // arrondit et on ombre, puis on masque.
- for (const kind of ['shape', 'text', 'image', 'video', 'svg', 'sound']) {
+ // arrondit et on ombre, puis on masque (le texte les porte dans sa palette Style).
+ for (const kind of ['shape', 'image', 'video', 'svg', 'sound']) {
   const list = rail(kind);
   const rounding = list.indexOf('rounding');
   assert.ok(list.indexOf('z_order') < (rounding < 0 ? list.indexOf('shadow') : rounding),

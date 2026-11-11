@@ -106,7 +106,8 @@ describe('User tool canonical command', () => {
         try {
             await h.runtime.showFully();
             const expected = ['capture', 'create', 'find', 'communicate', 'calendar', 'view', 'help', 'contact'];
-            expect(h.runtime.measure().itemCount).toBe(expected.length + 1);
+            // In a project the band keeps Organize beside the Atom (its way back to the Dashboard, rule 13).
+            expect(h.runtime.measure().itemCount).toBe(expected.length + 2);
             expect(h.runtime.state.lastTree.items.map(item => item.key)).toEqual(expect.arrayContaining(expected));
             expect(h.runtime.measure().treeMounted).toBe(true);
             expect(h.runtime.measure().reservedHeight).toBeGreaterThan(0);
@@ -118,14 +119,15 @@ describe('User tool canonical command', () => {
                     restoreProjectWorkModeValue('expert-toolbar', mode, { windowRef: h.window });
                     await waitFrame();
                     expect(h.runtime.measure().workContext).toBe(mode);
-                    expect(h.runtime.state.lastTree.items.map(item => item.key)).toEqual(['atome', ...expected]);
+                    expect(h.runtime.state.lastTree.items.map(item => item.key)).toEqual(['atome', 'organize', ...expected]);
                     for (const level of ['advanced', 'beginner', 'advanced']) {
                         const preferences = { visual: { masteryLevel: level } };
                         h.window.__eveProfilePreferences = preferences;
                         h.window.dispatchEvent(new h.window.CustomEvent('eve:profile-preferences-updated', {
                             detail: { preferences }
                         }));
-                        const keys = level === 'beginner' ? ['atome'] : ['atome', ...expected];
+                        // A beginner keeps every root of context_menus.json `main` except Calendar (intermediate).
+                        const keys = ['atome', 'organize', ...expected.filter(key => level !== 'beginner' || key !== 'calendar')];
                         expect(h.runtime.state.lastTree.items.map(item => item.key), `${view}/${mode}/${level}`).toEqual(keys);
                         expect(h.runtime.measure().itemCount).toBe(keys.length);
                         expect(h.runtime.measure().reservedHeight).toBeGreaterThan(0);
@@ -306,7 +308,9 @@ describe('shared User disconnect owner', () => {
         vi.resetModules();
         let session = { mode: 'authenticated', user: { id: 'self' } }, finish;
         const logout = vi.fn(async () => ({ ok: true }));
-        vi.doMock('../../atome/src/squirrel/apis/unified/adole_api/session.js', () => ({ getSessionState: () => session }));
+        vi.doMock('../../atome/src/squirrel/apis/unified/adole_api/session.js', async () => ({
+            ...await vi.importActual('../../atome/src/squirrel/apis/unified/adole_api/session.js'), getSessionState: () => session
+        }));
         vi.doMock('../../eVe/intuition/tools/user_home_panel_runtime.js', () => ({ createUserHomePanelRuntime: () => ({}) }));
         vi.doMock('../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_actions.js', async () => ({
             ...await vi.importActual('../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_actions.js'), logoutHomeSession: logout

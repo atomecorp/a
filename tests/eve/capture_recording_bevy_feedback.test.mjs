@@ -6,6 +6,7 @@ import { createMainMenuRecordingVisualRuntime } from "../../eVe/intuition/ribbon
 
 import { createAudioScopeFrame } from "../../eVe/domains/media/api/audio_browser_recorder_worklet.js";
 import { normalizeBevyUiTree } from "../../eVe/domains/rendering/bevy_ui_tree_normalization.js";
+import { BEVY_MENU_TOKENS } from "../../eVe/intuition/ribbon/bevy_ui_menu_surface.js";
 
 const surface = {
     clientWidth: 640,
@@ -123,7 +124,8 @@ test('recording feedback keeps the main menu visible and projects the preview in
         handlers: {}
     });
     assert.deepEqual(tree.visualItems.map((item) => item.key), ['photo', 'video', 'audio', 'capture', 'atome']);
-    assert.equal(tree.layout.width, 120, 'the perpendicular capture palette keeps the two-tool menu width');
+    // Two root tools and the one seam between them (the band case carries its seam, toolGapPx).
+    assert.equal(tree.layout.width, 2 * 60 + BEVY_MENU_TOKENS.toolGapPx, 'the perpendicular capture palette keeps the two-tool menu width');
     const audioItem = findNode(tree.root, (node) => node.id.endsWith('capture__audio'));
     assert.ok(audioItem);
     assert.equal(audioItem.children.some((node) => node.id.endsWith('_icon')), false);

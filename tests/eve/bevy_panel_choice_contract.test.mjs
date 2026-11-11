@@ -14,7 +14,7 @@ import {
     selectionRailPosition,
     toggleableRowNode
 } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_choice.js';
-import { BEVY_PANEL_TOKENS } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
+import { BEVY_PANEL_TOKENS, pressedSurface } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
 
 const tokens = BEVY_PANEL_TOKENS.choice;
 const rowWidth = tokens.controlColumnPx
@@ -114,9 +114,11 @@ test('the selected state is a distinct indicator treatment reusing the shared ch
     const on = toggleableRowNode({ id: 'on', kind: 'checkbox', label: 'A', checked: true });
 
     assert.equal(findNode(off, 'off_selected_mark'), null);
-    assert.ok(findNode(on, 'on_selected_mark_short'));
-    assert.ok(findNode(on, 'on_selected_mark_long'));
-    assert.deepEqual(findNode(on, 'on_indicator').style.background, BEVY_PANEL_TOKENS.buttonMaterial.selected.background);
+    // A checked box says so with the canonical check glyph alone, in the same hollow (bevy_panel_choice.js#indicatorLook).
+    const mark = findNode(on, 'on_selected_mark');
+    assert.equal(mark.kind, 'image');
+    assert.match(mark.image.source, /check\.svg$/);
+    assert.deepEqual(findNode(on, 'on_indicator').style.backdrop, findNode(off, 'off_indicator').style.backdrop);
     assert.deepEqual(findNode(off, 'off_indicator').style.background, BEVY_PANEL_TOKENS.buttonMaterial.idle.background);
 
     const group = radioGroupNode({ id: 'rg', options: radioOptions, value: 'right' });
@@ -137,14 +139,18 @@ test('the complete visual-state matrix reuses the approved panel material', () =
     const disabled = toggleableRowNode({ id: 'd', kind: 'checkbox', label: 'A', disabled: true, on: { activate: () => {} } });
     const radio = findNode(radioGroupNode({ id: 'r', options: radioOptions, value: 'left' }), 'r_left');
     const toggle = toggleableRowNode({ id: 't', kind: 'switch', label: 'A' });
+    const hovered = toggleableRowNode({ id: 'h', kind: 'checkbox', label: 'A', hovered: true });
+    const look = BEVY_PANEL_TOKENS.buttonMaterial.idle;
 
     assert.deepEqual(idle.style.background, BEVY_PANEL_TOKENS.colors.transparent);
     assert.deepEqual(pressed.style.translation, BEVY_ICON_BUTTON_TOKENS.pressedTranslation);
-    assert.deepEqual(findNode(focused, 'f_indicator').style.shadows.at(-1), BEVY_PANEL_TOKENS.buttonMaterial.focusShadow);
-    assert.deepEqual(findNode(pressed, 'p_indicator').style.backdrop, findNode(selected, 's_indicator').style.backdrop);
-    assert.deepEqual(findNode(selected, 's_indicator').style.border,[1,1,1,1]);
+    // A keyboard focus shows the hover ground; a press lightens the hollow; no state is outlined (AGENTS.md rule 15).
+    assert.deepEqual(findNode(focused, 'f_indicator').style.backdrop, findNode(hovered, 'h_indicator').style.backdrop);
+    assert.notDeepEqual(findNode(focused, 'f_indicator').style.backdrop, findNode(idle, 'i_indicator').style.backdrop);
+    assert.deepEqual(findNode(pressed, 'p_indicator').style.backdrop, pressedSurface(look).backdrop);
+    assert.equal(findNode(selected, 's_indicator').style.border, undefined);
     assert.equal(findNode(radio, 'r_left_background'), null, 'the approved Radio has no coloured backing plate');
-    assert.deepEqual(findNode(radio, 'r_left_indicator').style.background, BEVY_PANEL_TOKENS.buttonMaterial.selected.background);
+    assert.deepEqual(findNode(radio, 'r_left_indicator_dot').style.background, BEVY_PANEL_TOKENS.buttonMaterial.dot);
     assert.deepEqual(findNode(toggle, 't_indicator').style.background, BEVY_PANEL_TOKENS.buttonMaterial.idle.background);
     assert.equal(disabled.style.opacity, BEVY_ICON_BUTTON_TOKENS.disabled.opacity);
     assert.equal(disabled.on, undefined, 'a disabled control must expose no handler');
@@ -156,7 +162,7 @@ test('native choice controls activate through the canonical pointer route', () =
     const canvas = { setPointerCapture: () => {}, releasePointerCapture: () => {} };
     const target = { treeId: 'choice_tree', nodeId: 'choice_row', kind: 'checkbox', box: {}, scrollAncestors: [] };
     const runtime = createBevyUiPointerRuntime({
-        state: { lastSurfacePoints: new Map(), pointerTarget: null, focusTarget: null, hoverTarget: null, pendingTextActivation: null },
+        state: { lastSurfacePoints: new Map(), pointerTarget: null, focusTarget: null, hoverTarget: null, pendingTextActivation: null, touchObservers: new Set() },
         hitTestTrees: () => target,
         localEventForTarget: (_, type) => ({ type }),
         emitUiEvents: (events) => emitted.push(...events),
@@ -196,14 +202,14 @@ test('approved Radio paint follows the disc geometry, with no rectangular plate 
         assert.equal(findNode(row,'radio_choice_background'),null);
         const indicator=findNode(row,'radio_choice_indicator');
         assert.equal(indicator.style.radius,tokens.radioSizePx/2);
-        assert.deepEqual(indicator.style.border,['selected','hovered'].includes(state)?[1,1,1,1]:undefined);
-        assert.equal(indicator.style.surfacePaint.border.color[3],0);
+        assert.equal(indicator.style.border,undefined,'no state draws a border (AGENTS.md rule 15)');
+        assert.equal(indicator.style.surfacePaint?.border,undefined);
         const records=projectBevyUiTreeRecords({tree:{root:row},treeId:'radio_states',workspaceLayer:'panel'});
         const disc=records.find(record=>record.id.endsWith('_radio_choice_indicator'));
         assert.equal(disc.properties.corner_radius,tokens.radioSizePx/2);
         assert.equal(disc.properties.width,tokens.radioSizePx);
         assert.equal(disc.properties.height,tokens.radioSizePx);
         if(state==='selected') assert.deepEqual(findNode(row,'radio_choice_indicator_dot').style.background,BEVY_PANEL_TOKENS.buttonMaterial.dot);
-        if(state==='focused') assert.ok(indicator.style.shadows.includes(BEVY_PANEL_TOKENS.buttonMaterial.focusShadow));
+        if(state==='focused') assert.deepEqual(indicator.style.backdrop,findNode(radioGroupNode({id:'radio',options:[{value:'choice',label:'Radio'}],hoveredValue:'choice'}),'radio_choice_indicator').style.backdrop);
     }
 });

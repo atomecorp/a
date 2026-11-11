@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { beforeAll, test } from 'vitest';
 import { JSDOM } from 'jsdom';
+
+import { loadAudioKernels } from '../../atome/src/application/audio_runtime/audio_kernels.js';
 
 import { createEveBevyUiRuntime } from '../../eVe/domains/rendering/bevy_ui_runtime.js';
 import { layoutForNodeCached, nodeBox } from '../../eVe/domains/rendering/bevy_ui_layout_runtime.js';
@@ -17,6 +20,16 @@ import {
     renderProjectScene
 } from '../../eVe/domains/rendering/project_scene_runtime.js';
 import { createTestCompositor, installDom } from './unified_rendering_test_helpers.mjs';
+import { createScrollEngineProvider } from './bevy_scroll_engine_double.mjs';
+
+// The Calendar reads its occurrences from the calendar engine compiled into
+// squirrel_audio_wasm: whoever reads events loads it first.
+beforeAll(async () => {
+    await loadAudioKernels({
+        moduleUrl: new URL('../../atome/src/wasm/squirrel_audio_wasm.js', import.meta.url).href,
+        binary: readFileSync(new URL('../../atome/src/wasm/squirrel_audio_wasm_bg.wasm', import.meta.url))
+    });
+});
 
 const createSurface = () => {
     const dom = new JSDOM('<!doctype html><canvas id="eve_surface_project"></canvas>');
@@ -270,7 +283,8 @@ test('Calendar deep scroll keeps late-hour grid records mounted through the real
     const runtime = createEveBevyUiRuntime({
         imageResolverFactory: () => async () => ({ width: 1, height: 1, rgba: [255, 255, 255, 255] }),
         requestFrame: (callback) => { frames.push(callback); return frames.length; },
-        cancelFrame: () => {}
+        cancelFrame: () => {},
+        scrollEngine: createScrollEngineProvider()
     });
     await runtime.mountTree({ id: panelTree.id, surface, tree: panelTree });
     for (let index = 0; index < 10; index += 1) {
@@ -318,14 +332,15 @@ test('Calendar deep scroll keeps late-hour grid records mounted through the real
     const recordsAfterOpacity = getProjectSceneState('__eve_dashboard_workspace__').records;
     assert.equal(recordsAfterOpacity.some((record) => record.id.includes('calendar_hour_23')), true, 'style refresh keeps the current deep-scroll projection');
 
-    assert.equal(runtime.revealTreeNode({ id: panelTree.id, nodeId: 'calendar_range_navigation', marginPx: 0 }), true);
+    // The range title heads the scrolling view (the range navigation lives in the panel's fixed header).
+    assert.equal(runtime.revealTreeNode({ id: panelTree.id, nodeId: 'calendar_range_title', marginPx: 0 }), true);
     while (frames.length) {
         const callbacks = frames.splice(0);
         callbacks.forEach((callback) => callback(32));
         await new Promise((resolve) => setTimeout(resolve, 0));
     }
     const recordsAtTop = getProjectSceneState('__eve_dashboard_workspace__').records;
-    assert.equal(recordsAtTop.some((record) => record.id.includes('calendar_today')), true);
+    assert.equal(recordsAtTop.some((record) => record.id.includes('calendar_range_title')), true);
     assert.equal(recordsAtTop.some((record) => record.id.includes('calendar_hour_0')), true);
     await runtime.unmountTree(panelTree.id);
 });
@@ -344,7 +359,8 @@ test('Calendar empty geometry receives real double-clicks in month, week, and da
         editorMode: 'none', quickDraft: false, selectedEventId: '', draft: {}
     });
     const runtime = createEveBevyUiRuntime({
-        imageResolverFactory: () => async () => ({ width: 1, height: 1, rgba: [255, 255, 255, 255] })
+        imageResolverFactory: () => async () => ({ width: 1, height: 1, rgba: [255, 255, 255, 255] }),
+        scrollEngine: createScrollEngineProvider()
     });
     const pointForNode = (treeId, nodeId) => {
         const root = runtime.state.trees.get(treeId)?.tree?.root;

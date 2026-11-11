@@ -52,6 +52,8 @@ test('settled project surface rejects a late stale native viewport resize', asyn
         Object.defineProperty(visualViewport, 'height', { configurable: true, value: 600 });
         Object.defineProperty(dom.window, 'visualViewport', { configurable: true, value: visualViewport });
         dom.window.__EVE_NATIVE_VIEWPORT__ = { width: 800, height: 600 };
+        // The main menu composes its entries from the published profile (level and Dashboard style).
+        dom.window.__eveProfilePreferences = { visual: { masteryLevel: 'advanced', dashboardStyle: 'eve' } };
         dom.window.requestAnimationFrame = (callback) => dom.window.setTimeout(() => callback(Date.now()), 0);
         dom.window.cancelAnimationFrame = (id) => dom.window.clearTimeout(id);
 
@@ -88,8 +90,10 @@ test('settled project surface rejects a late stale native viewport resize', asyn
             dom.window.dispatchEvent(new dom.window.Event('resize'));
             await new Promise((resolve) => dom.window.setTimeout(resolve, 20));
         }
-        assert.equal(surface.style.width, '1200px');
-        assert.equal(surface.style.height, '700px');
+        // Without a renderer resizer the canvas keeps its size for the whole burst
+        // (cropped, never stretched): the layout owners are told once it settles.
+        assert.equal(surface.style.width, '800px');
+        assert.equal(surface.style.height, '600px');
         assert.equal(publications.length, 0, 'live resize must not rebuild UI trees at intermediate sizes');
 
         dom.window.dispatchEvent(new dom.window.CustomEvent('eve:native-viewport-resize'));

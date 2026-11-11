@@ -7,9 +7,10 @@ import { projectBevyUiTreeRecords } from '../../eVe/domains/rendering/bevy_ui_ov
 import { normalizeBevyUiTree } from '../../eVe/domains/rendering/bevy_ui_tree_normalization.js';
 import { clearAllProjectScenes, getProjectSceneState } from '../../eVe/domains/rendering/project_scene_runtime.js';
 import {
-    buildAtomeContextualEditTree
+    buildAtomeContextualEditTree, contextualRailColumn
 } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_model.js';
 import { BEVY_MENU_TOKENS } from '../../eVe/intuition/ribbon/bevy_ui_menu_surface.js';
+import { resolveBevyMenuPalettePlatePad } from '../../eVe/intuition/ribbon/bevy_ui_menu_palette.js';
 import { buildBevyUiMysticTree } from '../../eVe/intuition/ribbon/bevy_ui_mystic_model.js';
 import { buildBevyMainMenuTree } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
 import { createAtomeContextualEditRuntime } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_runtime.js';
@@ -127,7 +128,7 @@ test('all three Bevy menu trees stay outside the workspace backdrop capture', ()
     assert.equal(workspaceRecords.every((record) => record.properties.presentation === false), true);
 });
 
-test('Atome contextual edit keeps only the handed tool rail and 3x slider', () => {
+test('Atome contextual edit keeps only the handed tool rail and a square slider trigger', () => {
     const surface = { getBoundingClientRect: () => ({ width: 800, height: 600 }) };
     const records = [{ id: 'a', properties: { left: 40, top: 50, width: 200, height: 120 } }, {
         id: 'b', properties: { left: 300, top: 70, width: 160, height: 90 }
@@ -140,21 +141,29 @@ test('Atome contextual edit keeps only the handed tool rail and 3x slider', () =
     const right = buildAtomeContextualEditTree(input);
     const rail = findNode(right.root, 'eve_bevy_panel_atome_contextual_edit_rail');
     const railShadow = findNode(right.root, 'eve_bevy_panel_atome_contextual_edit_rail_shadow');
-    assert.deepEqual(rail.style.position, [740, 360]);
-    assert.equal(railShadow.style.shadow, BEVY_MENU_TOKENS.surface.material.shadow);
-    assert.deepEqual(railShadow.style.position, rail.style.position);
-    assert.deepEqual(railShadow.style.size, rail.style.size);
+    // The rail lies in the one screen grid: the last column for a right hand, its foot in the row above the ribbon's.
+    const { grid, x: railX } = contextualRailColumn({ surface, width: 800, height: 600 });
+    const railBottom = Math.floor(grid.bottom - grid.cell - grid.joint / 2);
+    assert.equal(right.layout.bottom, railBottom);
+    assert.deepEqual(rail.style.position, [railX, railBottom - rail.style.size[1]]);
+    // No shared rail halo: one light contact shadow behind each tile.
+    assert.equal(railShadow, null);
+    assert.deepEqual(findNode(rail, 'atome_contextual_tool_size_background').style.shadow, BEVY_MENU_TOKENS.toolShadow);
     assert.equal(findNode(right.root, 'atome_contextual_edit_a_surface'), null);
     assert.equal(findNode(right.root, 'atome_contextual_edit_a_outline'), null);
     assert.equal(findNode(right.root, 'atome_contextual_edit_a_footer'), null);
     assert.equal(findNode(right.root, 'atome_contextual_edit_a_close'), null);
     assert.equal(findNode(right.root, 'atome_contextual_edit_a_drag'), null);
     assert.equal(rail.children.length, 1);
-    assert.deepEqual(findNode(rail, 'atome_contextual_tool_size_background').style.size, [60, 60]);
+    // A slider is a square trigger like any tool, even expanded: its real slider is shown beside the rail as a preview.
+    const toolSize = right.layout.itemSize;
+    assert.deepEqual(findNode(rail, 'atome_contextual_tool_size_background').style.size, [toolSize, toolSize]);
     assert.equal(findNode(right.root, 'atome_contextual_edit_b_footer'), null);
-    assert.equal(findNode(rail, 'atome_contextual_tool_size').style.size[1], 180);
+    assert.deepEqual(findNode(rail, 'atome_contextual_tool_size').style.size, [toolSize, toolSize]);
+    assert.deepEqual(rail.style.size, [toolSize, toolSize]);
     const left = buildAtomeContextualEditTree({ ...input, handedness: 'left' });
-    assert.equal(findNode(left.root, 'eve_bevy_panel_atome_contextual_edit_rail').style.position[0], 0);
+    assert.equal(findNode(left.root, 'eve_bevy_panel_atome_contextual_edit_rail').style.position[0],
+        contextualRailColumn({ surface, width: 800, height: 600, handedness: 'left' }).x);
 });
 
 test('horizontal and vertical tools share the same material structure and relative layer contract', () => {
@@ -217,22 +226,26 @@ test('contextual rail remains below the main menu at their shared boundary', () 
     );
 });
 
-test('contextual palettes keep the semantic accent on the rail interior in both handedness modes', () => {
+test('contextual palettes carry the folded corner mark, never an accent bar, in both handedness modes', () => {
     const input = {
         surface: { getBoundingClientRect: () => ({ width: 800, height: 600 }) },
         activeAtomeId: 'a',
         definitions: [{ key: 'mode', toolType: 'palette', children: [{ key: 'perform', toolType: 'standard' }] }],
         activePaletteKey: 'mode'
     };
-    const right = buildAtomeContextualEditTree(input);
-    const left = buildAtomeContextualEditTree({ ...input, handedness: 'left' });
-    const rightAccent = findNode(right.root, 'atome_contextual_tool_mode_palette_accent');
-    const leftAccent = findNode(left.root, 'atome_contextual_tool_mode_palette_accent');
-    const verticalPosition = BEVY_MENU_TOKENS.paletteAccent.insetPx;
-    assert.deepEqual(rightAccent.style.position, [BEVY_MENU_TOKENS.paletteAccent.insetPx, verticalPosition]);
-    assert.deepEqual(leftAccent.style.position, [60 - BEVY_MENU_TOKENS.paletteAccent.insetPx - BEVY_MENU_TOKENS.paletteAccent.thicknessPx, verticalPosition]);
-    assert.equal(rightAccent.style.size[1], 60 - BEVY_MENU_TOKENS.paletteAccent.insetPx * 2);
-    assert.equal(leftAccent.style.size[1], 60 - BEVY_MENU_TOKENS.paletteAccent.insetPx * 2);
+    for (const handedness of ['right', 'left']) {
+        const tree = buildAtomeContextualEditTree({ ...input, handedness });
+        const corner = findNode(tree.root, 'atome_contextual_tool_mode_corner');
+        const pad = resolveBevyMenuPalettePlatePad();
+        const toolSize = tree.layout.itemSize;
+        assert.ok(corner, handedness);
+        // The plate bleeds past the tile for its shadow by the same pad on every side.
+        assert.deepEqual(corner.style.position, [-pad, -pad], handedness);
+        assert.deepEqual(corner.style.size, [toolSize + pad * 2, toolSize + pad * 2], handedness);
+        assert.equal(findNode(tree.root, 'atome_contextual_tool_mode_palette_accent'), null, handedness);
+        // A palette's choice is a plain tool: no fold of its own.
+        assert.equal(findNode(tree.root, 'atome_contextual_tool_mode_perform_corner'), null, handedness);
+    }
 });
 
 test('a contextual palette slot keeps its own icon and label while the child in force reads pressed', () => {
@@ -257,19 +270,22 @@ test('a contextual palette slot keeps its own icon and label while the child in 
     assert.equal(other.style.translation, undefined);
 });
 
-test('Mystic palette accents are individual rounded top arcs', () => {
+test('Mystic palettes carry an individual folded corner over each petal', () => {
     const tree = buildBevyUiMysticTree({
         surface: { getBoundingClientRect: () => ({ width: 800, height: 600 }) },
         items: [{ key: 'mode', type: 'palette' }, { key: 'view', type: 'palette' }]
     });
     const petals = tree.root.children.filter((node) => node.kind === 'icon_button' && node.mystic);
-    const accents = petals.map((petal) => findNode(petal, `${petal.id}_accent`));
-    assert.equal(accents.length, 2);
-    assert.equal(accents.every(Boolean), true);
-    assert.equal(accents.every((accent) => accent.style.radius === BEVY_MENU_TOKENS.shape.mysticRadiusPx), true);
+    const corners = petals.map((petal) => findNode(petal, `${petal.id}_corner`));
+    assert.equal(corners.length, 2);
+    assert.equal(corners.every(Boolean), true);
+    assert.equal(petals.every((petal) => findNode(petal, `${petal.id}_accent`) === null), true);
+    // Each fold lies over its own petal, at its origin and at its size.
+    assert.equal(corners.every((corner, index) => corner.style.position[0] === 0 && corner.style.position[1] === 0
+        && corner.style.size[0] === petals[index].style.size[0] && corner.style.size[1] === petals[index].style.size[1]), true);
+    assert.equal(corners.every((corner) => /^data:image\/svg\+xml/.test(corner.image.source)), true);
     assert.equal(petals.every((petal) => petal.style.radius === BEVY_MENU_TOKENS.shape.mysticRadiusPx), true);
     assert.equal(petals.every((petal) => petal.style.shadow === null), true);
-    assert.equal(accents.every((accent) => accent.style.position[1] === Math.max(BEVY_MENU_TOKENS.paletteAccent.insetPx, 6)), true);
 });
 
 test('Atome contextual edition has no per-atome footer or solid editor chrome', () => {
@@ -318,7 +334,10 @@ test('Atome contextual rail projects visible tool records inside the lateral rai
     const tool = projected.records.find((record) => record.id.includes('atome_contextual_tool_detail_background'));
     const toolIcon = projected.records.find((record) => record.id.includes('atome_contextual_tool_detail_icon_image'));
     const toolLabel = projected.records.find((record) => record.id.includes('atome_contextual_tool_detail_label_text'));
-    assert.deepEqual([tool.properties.left, tool.properties.top, tool.properties.width, tool.properties.height], [740, 480, 60, 60]);
+    // The single case stands at the rail's foot, in the grid's last column, one tool high.
+    const toolSize = tree.layout.itemSize;
+    assert.deepEqual([tool.properties.left, tool.properties.top, tool.properties.width, tool.properties.height],
+        [contextualRailColumn({ surface, width: 800, height: 600 }).x, tree.layout.bottom - toolSize, toolSize, toolSize]);
     assert.ok(toolIcon.properties.renderLayer > tool.properties.renderLayer);
     assert.ok(toolLabel.properties.renderLayer > tool.properties.renderLayer);
     assert.equal(projected.records.some((record) => record.id.includes('atome_contextual_edit_a_footer')), false);
@@ -565,7 +584,7 @@ test('clicking another atome or project background exits edition without consumi
     }
 });
 
-test('selecting a Molecule member keeps the Molecule as contextual edition owner', () => {
+test('selecting a member of an edited Molecule gives the member its rail while the Molecule stays in edition', () => {
     const dom = new JSDOM('');
     const oldWindow = globalThis.window;
     globalThis.window = dom.window;
@@ -589,9 +608,12 @@ test('selecting a Molecule member keeps the Molecule as contextual edition owner
         dom.window.dispatchEvent(new dom.window.CustomEvent('adole-atome-selected', {
             detail: { selected: [member.id], atomeId: member.id }
         }));
-        assert.equal(runtime.readState().activeAtomeId, owner.id);
+        // The selection is the rail's truth: the member takes a selection rail, the open Molecule keeps its edition.
+        assert.equal(runtime.readState().activeAtomeId, member.id);
+        assert.equal(runtime.readState().contextLevel, 'selection');
         assert.equal(runtime.isEditing(owner.id), true);
-        assert.equal(runtime.hasContext(member.id), false);
+        assert.equal(runtime.hasContext(member.id), true);
+        assert.equal(runtime.isEditing(member.id), false);
     } finally {
         dom.window.close();
         globalThis.window = oldWindow;
@@ -722,7 +744,7 @@ test('Structured member context promotes in place to canvas tools when Natural v
     assert.equal(runtime.readState().activeAtomeId, record.id);
 });
 
-test('Atome contextual Size slider pins on click and closes only after a transient direct drag', async () => {
+test('Atome contextual Size trigger pins its real slider beside the rail on a tap and folds it on a click', async () => {
     const records = [{ id: 'text_a', properties: { kind: 'text', text: 'Styled', left: 20, top: 20, width: 160, height: 60 } }];
     const scene = { project_id: 'project', records, text: null };
     const rendered = [];
@@ -744,36 +766,41 @@ test('Atome contextual Size slider pins on click and closes only after a transie
     });
     runtime.enter({ atomeId: 'text_a', kind: 'text' });
     await runtime.render();
-    let slider = findNode(rendered.at(-1).root, 'atome_contextual_tool_size');
-    slider.on.press({ y: 26 });
-    slider.on.release();
-    await runtime.render();
-    slider = findNode(rendered.at(-1).root, 'atome_contextual_tool_size');
-    assert.equal(slider.style.size[1], 156);
-    assert.equal(invocations.length, 0);
+    const trigger = () => findNode(rendered.at(-1).root, 'atome_contextual_tool_size');
+    const preview = () => findNode(rendered.at(-1).root, 'atome_contextual_tool_size_preview');
+    const itemSize = rendered.at(-1).layout.itemSize;
+    // A slider is a square trigger: only the manual entry and the tap stay on it.
+    assert.deepEqual(trigger().style.size, [itemSize, itemSize]);
+    assert.equal(typeof trigger().on.press, 'undefined');
+    assert.equal(preview(), null);
 
-    slider.on.press({ y: 30 });
-    slider.on.drag({ delta_y: -16 });
-    slider.on.release();
+    trigger().on.activate();
     await runtime.render();
-    slider = findNode(rendered.at(-1).root, 'atome_contextual_tool_size');
-    assert.equal(slider.style.size[1], 156);
+    assert.ok(preview(), 'a tap pins the real slider beside the rail');
+    assert.deepEqual(trigger().style.size, [itemSize, itemSize], 'the trigger keeps its square');
+    assert.equal(invocations.length, 0, 'opening the slider changes no value');
+
+    // The 3x slider: three tool rows tall, one joint inward of the rail.
+    const gap = BEVY_MENU_TOKENS.toolGapPx;
+    assert.deepEqual(preview().style.size, [itemSize, itemSize * 3 + gap * 2]);
+    assert.equal(preview().style.position[0], rendered.at(-1).layout.x - itemSize - gap);
+
+    // A drag on the pinned slider sets the value through the tool's route and keeps it pinned.
+    preview().on.press({ y: 30 });
+    preview().on.drag({ delta_y: -16 });
+    preview().on.release();
+    await runtime.render();
     assert.deepEqual(invocations.map((entry) => entry.payload.phase), ['start', 'frame', 'end']);
+    assert.ok(preview(), 'a drag keeps the pinned slider open');
 
-    slider.on.press({ y: 140 });
-    slider.on.release();
-    await runtime.render();
-    slider = findNode(rendered.at(-1).root, 'atome_contextual_tool_size');
-    assert.equal(slider.style.size[1], 52);
-
+    // A click on it (no travel) folds it away and changes nothing.
     invocations.length = 0;
-    slider.on.press({ y: 26 });
-    slider.on.drag({ delta_y: -16 });
-    slider.on.release();
+    preview().on.press({ y: 30 });
+    preview().on.release();
     await runtime.render();
-    slider = findNode(rendered.at(-1).root, 'atome_contextual_tool_size');
-    assert.equal(slider.style.size[1], 52);
-    assert.deepEqual(invocations.map((entry) => entry.payload.phase), ['start', 'frame', 'end']);
+    assert.equal(preview(), null);
+    assert.equal(invocations.length, 0);
+    assert.deepEqual(trigger().style.size, [itemSize, itemSize]);
 });
 
 test('Dashboard mode clears contextual edit chrome and project return keeps it closed', async () => {
@@ -826,6 +853,8 @@ test('Dashboard mode clears contextual edit chrome and project return keeps it c
         await runtime.render();
         assert.equal(mounts, 2);
 
+        // Run the frame the re-entry left pending: renders coalesce into one frame at a time.
+        if (renderFrameCallback) { renderFrameCallback(); await runtime.render(); }
         renderFrameCallback = null;
         const hiddenEditor = window.document.createElement('textarea');
         hiddenEditor.setAttribute('data-role', 'active-text-editor');

@@ -76,13 +76,16 @@ test('beginner video uses one preview destination, the GPU stream route, and nev
     const register = vi.fn(async () => ({ ok: true, dispose: vi.fn() }));
     const runtime = createCaptureRecordingFeedbackRuntime({ projectVisualResolver: () => ({ runtime: panel, projectId }),
         mainMenuResolver: () => ({ setToolRecordingVisual: vi.fn() }), previewOpener, videoStreamRegistrar: register,
-        videoStateResolver: () => ({ readNativePreviewFrame: vi.fn() }),
-        nativePreviewStreamFactory: () => ({ stream: {}, firstFrameReady: Promise.resolve({ width: 960, height: 540 }), dispose: vi.fn() }) });
+        videoStateResolver: () => ({ readNativePreviewJpeg: vi.fn() }),
+        nativePreviewStreamFactory: () => ({ stream: {}, firstFrameReady: Promise.resolve({ width: 960, height: 540 }), dispose: vi.fn() }),
+        // One camera: the Visual shows no camera switch (Node has no media devices to enumerate).
+        cameraSourceCounter: async () => 1 });
     const session = await runtime.startCaptureVisualSession({ kind: 'video' });
     const video = children(panel.build({ width: 800, height: 240 })).find(node => node.id.endsWith('_recording_video'));
     expect(video.overlayRecord.type).toBe('video');
     expect(video.overlayRecord.bevyTexture).toBeUndefined();
-    expect(video.style.size).toEqual([800, 240]);
+    // The picture keeps the camera's 960 × 540 ratio within the Visual's height.
+    expect(video.style.size).toEqual([240 * 960 / 540, 240]);
     expect(register.mock.calls[0][0].id).toBe('__eve_bevy_ui_eve_bevy_ui_project_view_project_view_visual_preview_recording_video');
     expect(previewOpener).not.toHaveBeenCalled();
     view.__currentProject.id = 'other_project';

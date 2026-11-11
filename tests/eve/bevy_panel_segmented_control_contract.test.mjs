@@ -8,7 +8,7 @@ import { createBevyUiPointerRuntime } from '../../eVe/domains/rendering/bevy_ui_
 import { INTERACTIVE_KINDS, SUPPORTED_KINDS } from '../../eVe/domains/rendering/bevy_ui_tree_normalization.js';
 import { EVE_DEFAULT_MESSAGES } from '../../eVe/i18n/languages.js';
 import { segmentedControlNode } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_segmented_control.js';
-import { BEVY_PANEL_TOKENS } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
+import { BEVY_PANEL_TOKENS, resolvePanelButtonMaterial } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
 
 const options = [
     { value: 'list', label: 'List' },
@@ -52,10 +52,13 @@ test('shared segmented builder composes native BevyUI primitives with token-owne
     assert.deepEqual(control.style.size, [BEVY_PANEL_TOKENS.inputWidthPx, BEVY_PANEL_TOKENS.segmentedControl.heightPx]);
     assert.deepEqual([list, table, natural].map((segment) => segment.style.size[0]), [119, 119, 120]);
     assert.deepEqual([list, table, natural].map((segment) => segment.style.position[0]), [0, 119, 238]);
-    assert.deepEqual(findNode(table, 'view_mode_segment_1_surface').style.background, BEVY_PANEL_TOKENS.buttonMaterial.selected.background);
-    assert.deepEqual(findNode(list, 'view_mode_segment_0_surface').style.background, BEVY_PANEL_TOKENS.buttonMaterial.pressed.background);
-    assert.deepEqual(findNode(natural, 'view_mode_segment_2_surface').style.background, BEVY_PANEL_TOKENS.buttonMaterial.hover.background);
-    assert.deepEqual(findNode(natural, 'view_mode_segment_2_surface').style.shadows.at(-1), BEVY_PANEL_TOKENS.buttonMaterial.focusShadow);
+    // Each state takes its look from the one panel button material owner; a focus shows the hover ground.
+    const look = (id) => findNode(control, id).style.backdrop;
+    assert.deepEqual(look('view_mode_segment_1_surface'), resolvePanelButtonMaterial({ selected: true }).backdrop);
+    assert.deepEqual(look('view_mode_segment_0_surface'), resolvePanelButtonMaterial({ pressed: true }).backdrop);
+    assert.deepEqual(look('view_mode_segment_2_surface'), resolvePanelButtonMaterial({ hovered: true, focused: true }).backdrop);
+    assert.equal(new Set(['view_mode_segment_0_surface', 'view_mode_segment_1_surface', 'view_mode_segment_2_surface']
+        .map((id) => JSON.stringify(look(id)))).size, 3, 'pressed, selected and hovered stay distinct');
     assert.equal(findNode(control, 'view_mode_segment_1_divider'), null);
     assert.equal(list.on.activate instanceof Function, true);
 
@@ -72,7 +75,7 @@ test('segmented buttons activate through the canonical pointer lifecycle', () =>
     const canvas = { setPointerCapture: () => {}, releasePointerCapture: () => {} };
     const target = { treeId: 'segmented_tree', nodeId: 'segment_table', kind: 'button', box: {}, scrollAncestors: [] };
     const runtime = createBevyUiPointerRuntime({
-        state: { lastSurfacePoints: new Map(), pointerTarget: null, focusTarget: null, hoverTarget: null, pendingTextActivation: null },
+        state: { lastSurfacePoints: new Map(), pointerTarget: null, focusTarget: null, hoverTarget: null, pendingTextActivation: null, touchObservers: new Set() },
         hitTestTrees: () => target,
         localEventForTarget: (_, type) => ({ type }),
         emitUiEvents: (events) => emitted.push(...events),
@@ -82,4 +85,11 @@ test('segmented buttons activate through the canonical pointer lifecycle', () =>
     runtime.routePointerEvent({ canvas, phase: 'pointerdown', point: { x: 12, y: 12 }, event: { pointerId: 12 } });
     runtime.routePointerEvent({ canvas, phase: 'pointerup', point: { x: 12, y: 12 }, event: { pointerId: 12 } });
     assert.deepEqual(emitted.map((event) => event.type), ['press', 'focus', 'release', 'activate']);
+});
+
+test('each segment is a named choice with its state for VoiceOver (training levels on the iPad)', () => {
+    const control = segmentedControlNode({ id: 'levels', width: 400, value: '2',
+        options: [{ value: '1', label: '1' }, { value: '2', label: '2' }, { value: 'custom', label: 'Perso' }], on: { activate: () => {} } });
+    assert.deepEqual(control.children.map(child => child.accessibility), [
+        { role: 'radio', label: '1', checked: false }, { role: 'radio', label: '2', checked: true }, { role: 'radio', label: 'Perso', checked: false }]);
 });

@@ -30,9 +30,12 @@ function usedSince(file, cutoff, timeOf) {
     return entries(file).some(entry => usedSince(path.join(file, entry.name), cutoff, timeOf));
 }
 
-// Cargo target directories of the project, bounded and never inside staging copies.
+// Cargo target directories of the project, bounded and never inside staging copies:
+// the workspace's own `target/` (the Tauri and squirrel build) and nested crates' targets.
 function cargoTargets(root) {
     const targets = [];
+    const workspaceTarget = path.join(root, 'target');
+    if (fs.existsSync(path.join(workspaceTarget, 'CACHEDIR.TAG'))) targets.push(workspaceTarget);
     const visit = (directory, depth) => {
         for (const entry of entries(directory)) {
             if (!entry.isDirectory() || entry.name.startsWith('.') || entry.name === 'node_modules') continue;

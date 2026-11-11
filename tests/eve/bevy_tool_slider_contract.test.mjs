@@ -82,7 +82,8 @@ test('a tool slider owns its vertical drag instead of starting panel scroll', ()
     const canvas = { setPointerCapture: () => {}, releasePointerCapture: () => {} };
     const target = { treeId: 'panel', nodeId: 'slider', kind: 'tool_slider', box: {}, scrollAncestors: [{}] };
     const runtime = createBevyUiPointerRuntime({
-        state: { lastSurfacePoints: new Map(), pointerTarget: null, focusTarget: null, hoverTarget: null, pendingTextActivation: null },
+        // The runtime state's fields the router reads (bevy_ui_runtime_state.js), touch observers included.
+        state: { lastSurfacePoints: new Map(), pointerTarget: null, focusTarget: null, hoverTarget: null, pendingTextActivation: null, touchObservers: new Set() },
         hitTestTrees: () => target,
         localEventForTarget: (_, type, __, delta) => ({ type, delta }),
         emitUiEvents: (events) => emitted.push(...events),
@@ -97,7 +98,8 @@ test('a tool slider owns its vertical drag instead of starting panel scroll', ()
     runtime.routePointerEvent({ canvas, phase: 'pointermove', point: { x: 10, y: 70 }, event: { pointerId: 4 } });
     runtime.routePointerEvent({ canvas, phase: 'pointerup', point: { x: 10, y: 70 }, event: { pointerId: 4 } });
     assert.deepEqual(scrollCalls, { begin: 0, drag: 0, end: 0 });
-    assert.deepEqual(emitted.map((event) => event.type), ['press', 'focus', 'drag', 'release', 'activate']);
+    // A release after a real travel is never a tap (bevy_ui_pointer_runtime.js: `moved`): the slider is set, not activated.
+    assert.deepEqual(emitted.map((event) => event.type), ['press', 'focus', 'drag', 'release']);
 });
 
 test('shared horizontal slider is its gauge and its value, without a compact icon', () => {
@@ -119,25 +121,29 @@ test('shared horizontal slider retains its native square until expanded and form
     assert.ok(findNode(open, 'compact_gauge')); assert.equal(findNode(open, 'compact_icon'), null);
 });
 
-test('a held palette gesture opens on press and selects the release target exactly once', () => {
+// Nothing opens on the press (bevy_ui_pointer_runtime.js): a swipe toward the options reveals them on its first travel
+// (`palette_slide_open`), and the release chooses under the finger.
+test('a palette slide opens on its first travel and selects the release target exactly once', () => {
     const emitted = [];
     const canvas = { setPointerCapture: () => {}, releasePointerCapture: () => {} };
     const parent = { treeId: 'menu', nodeId: 'palette', kind: 'icon_button', box: {} };
     const child = { treeId: 'menu', nodeId: 'choice', kind: 'icon_button', box: {} };
     let hit = parent;
-    const handlers = new Map([['menu:palette:palette_open', () => {}], ['menu:choice:palette_choose', () => {}]]);
+    const handlers = new Map([['menu:palette:palette_slide_open', () => {}], ['menu:choice:palette_choose', () => {}]]);
     const runtime = createBevyUiPointerRuntime({
-        state: { handlers, lastSurfacePoints: new Map(), pointerTarget: null, focusTarget: null, hoverTarget: null },
+        state: { handlers, lastSurfacePoints: new Map(), pointerTarget: null, focusTarget: null, hoverTarget: null, touchObservers: new Set() },
         hitTestTrees: () => hit,
         localEventForTarget: (target, type) => ({ node: target.nodeId, type }),
         emitUiEvents: events => emitted.push(...events),
         scrollRuntime: { begin: () => {}, drag: () => false, end: () => false, hover: () => {}, wheel: () => false }
     });
     runtime.routePointerEvent({ canvas, phase: 'pointerdown', point: {x:20,y:20}, event: {pointerId:1} });
+    assert.equal(emitted.filter(event => event.type.startsWith('palette_')).length, 0);
+    runtime.routePointerEvent({ canvas, phase: 'pointermove', point: {x:20,y:80}, event: {pointerId:1} });
     hit = child;
     runtime.routePointerEvent({ canvas, phase: 'pointerup', point: {x:20,y:80}, event: {pointerId:1} });
     assert.deepEqual(emitted.filter(event => event.type.startsWith('palette_')), [
-        {node:'palette',type:'palette_open'}, {node:'choice',type:'palette_choose'}
+        {node:'palette',type:'palette_slide_open'}, {node:'choice',type:'palette_choose'}
     ]);
     assert.equal(emitted.filter(event => event.type === 'activate').length, 0);
 });

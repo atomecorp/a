@@ -109,7 +109,7 @@ describe('canonical local guest profile', () => {
     });
     it('does not save a stale guest editor into a newly authenticated account', async () => {
         setSessionState({ mode: 'authenticated', user: { id: other }, backend: 'fastify' });
-        expect((await persistHomeProfile({ guest: true, userId: owner, profile: { name: 'Old guest' } })).ok).toBe(false);
+        expect((await persistHomeProfile({ guest: true, userId: owner, base: {}, profile: { name: 'Old guest' } })).ok).toBe(false);
         expect(cloud).not.toHaveBeenCalled(); expect(await getGuestAtome(other, other)).toBeUndefined();
     });
     it('keeps guest profile history outside the project import and preserves it on completion', async () => {
@@ -224,6 +224,11 @@ it('saves contacts, the principal card and personal calendar through the same du
     const { CalendarAPI } = await import('../../eVe/intuition/tools/calendar_api.js');
     const { eventCache } = await import('../../eVe/intuition/tools/calendar_engine_state.js');
     const { synchronizeBrowserWorkspace } = await import('../../atome/src/squirrel/apis/unified/adole_api/browser_workspace.js');
+    // The calendar engine is the audio module's: a Node test names its copy (no page serves /wasm).
+    const { loadCalendarEngine } = await import('../../atome/src/squirrel/calendar/icalendar.js');
+    const { readFileSync } = await import('node:fs');
+    await loadCalendarEngine({ moduleUrl: new URL('../../atome/src/wasm/squirrel_audio_wasm.js', import.meta.url).href,
+        binary: readFileSync(new URL('../../atome/src/wasm/squirrel_audio_wasm_bg.wasm', import.meta.url)) });
     setSessionState({ mode:'authenticated', user:{ id:owner }, backend:'fastify' });
     Object.assign(window.Atome, { getStateCurrent, listStateCurrent });
     await upsertUserProfile({ name:'Principal saved locally', email:'principal@example.test' });

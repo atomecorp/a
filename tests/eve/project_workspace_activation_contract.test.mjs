@@ -22,6 +22,16 @@ vi.mock('../../eVe/domains/rendering/project_preview_runtime.js', () => ({
     warmProjectPreviewCapture: previewRuntime.warmProjectPreviewCapture
 }));
 
+// These activations use a headless main-menu double (its own `measure()` is the
+// visibility authority): the shared BevyUI runtime only receives the tree
+// suspension and opacity, and has no real overlay to diagnose.
+const installHeadlessMenuOverlay = (window) => {
+    window.eveBevyUiRuntime = {
+        setTreeSuspended: async () => ({ ok: true }),
+        setTreeOpacity: async () => ({ ok: true })
+    };
+};
+
 test('Dashboard project activation delegates workspace and menu ownership once', async () => {
     const calls = [];
     const runtime = createDashboardActionRuntime({
@@ -50,11 +60,25 @@ test('Dashboard project activation delegates workspace and menu ownership once',
 
 test('Dashboard routes Contacts by stable identity and leaves unsupported cards inert', async () => {
     const opened = [];
+    const conversations = [];
+    const activated = [];
+    // A Contact tile opens the quick contact (conversation) from its stable identity;
+    // a News tile IS a project tile and opens through the project activation.
     const runtime = createDashboardActionRuntime({
         openPanel: async (surfaceKey, context) => {
             opened.push({ surfaceKey, context });
             return { ok: true, surface_key: surfaceKey };
-        }
+        },
+        openConversation: async (input) => {
+            conversations.push(input);
+            return { ok: true };
+        },
+        loadProjectRuntime: async () => ({
+            activateProjectWorkspace: async (project) => {
+                activated.push(project.id);
+                return { ok: true, projectId: project.id };
+            }
+        })
     });
 
     const openedContact = await runtime.activateItemAction({
@@ -65,27 +89,21 @@ test('Dashboard routes Contacts by stable identity and leaves unsupported cards 
         }
     });
     assert.equal(openedContact.ok, true);
-    assert.deepEqual(opened, [{
-        surfaceKey: 'contact',
-        context: {
-            contactId: 'contact_stable_id',
-            source: { type: 'dashboard_contact_item' }
-        }
-    }]);
+    assert.deepEqual(conversations, [{ contactId: 'contact_stable_id' }]);
 
-    assert.deepEqual(await runtime.activateItemAction({
+    await assert.rejects(runtime.activateItemAction({
         category: { id: 'contacts' },
         item: { id: 'phone_projection', payload: { phone: '0600000000' } }
-    }), { ok: true, ignored: 'dashboard_contact_identity_missing' });
-    assert.deepEqual(await runtime.activateItemAction({ category: { id: 'news' }, item: { id: 'news_1' } }), {
-        ok: true,
-        ignored: 'dashboard_item_action_unsupported'
-    });
+    }), /dashboard_contact_identity_missing/);
+    const news = await runtime.activateItemAction({ category: { id: 'news' }, item: { id: 'news_1' } });
+    assert.equal(news.ok, true);
+    assert.deepEqual(activated, ['news_1']);
     assert.deepEqual(await runtime.activateItemAction({ category: { id: 'monitor' }, item: { id: 'monitor_1' } }), {
         ok: true,
         ignored: 'dashboard_item_action_unsupported'
     });
-    assert.equal(opened.length, 1, 'unsupported and phone-only cards must not open a panel');
+    assert.equal(conversations.length, 1, 'phone-only cards must not open a contact');
+    assert.equal(opened.length, 0, 'unsupported cards must not open a panel');
 });
 
 test('Dashboard Contact context reveals only the requested stable identity', async () => {
@@ -107,14 +125,25 @@ test('Dashboard Contact context reveals only the requested stable identity', asy
         auth: { getCurrentInfo: () => ({ id: 'current_user', name: 'Current', phone: '0600000000' }) },
         directory: { list: async () => ({ entries: [] }) }
     };
-    const openFor = (contactId) => new Promise((resolve) => {
-        contactSurface.onOpen({ context: { contactId }, refresh: resolve });
-    });
+    // The panel refreshes while the book loads, then once with the reveal of the
+    // requested row (header preserved and pinned), then a last plain refresh.
+    const openFor = async (contactId) => {
+        const refreshes = [];
+        contactSurface.onOpen({ context: { contactId }, refresh: async (options) => { refreshes.push(options); } });
+        for (let waited = 0; waited < 2000 && (contactSurface.readState().loading || !refreshes.length); waited += 5) {
+            await new Promise((resolve) => setTimeout(resolve, 5));
+        }
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        return refreshes.filter((options) => options?.preserveNodeId);
+    };
 
     try {
-        assert.deepEqual(await openFor('contact_stable'), { preserveNodeId: 'contact_accordion_contact_stable' });
+        assert.deepEqual(await openFor('contact_stable'), [{
+            preserveNodeId: 'contact_accordion_contact_stable_header',
+            pinNodeId: 'contact_accordion_contact_stable_header'
+        }]);
         assert.equal(contactSurface.readState().expandedId, 'contact_stable');
-        await openFor('0600000000');
+        assert.deepEqual(await openFor('0600000000'), [], 'phone display data reveals no row');
         assert.equal(contactSurface.readState().expandedId, '', 'phone display data cannot select a contact');
     } finally {
         await contactSurface.onClose();
@@ -128,6 +157,7 @@ test('Project workspace activation restores the project surface and main menu', 
     const { window, document } = installMockBrowserEnv();
     globalThis.window = window;
     globalThis.document = document;
+    installHeadlessMenuOverlay(window);
     window.requestAnimationFrame = (callback) => {
         callback();
         return 0;
@@ -180,8 +210,14 @@ test('Project workspace activation restores the project surface and main menu', 
     window.eveToolBase = {
         loadProjectAtomes: async (projectId, options) => {
             calls.push({ name: 'loadProjectAtomes', projectId, options });
-            const layer = document.createElement('div');
-            layer.id = `project_view_${projectId}`;
+            // The activation prepares the project layer before the read; the loader
+            // hides it again so the arrival has to restore it.
+            let layer = document.getElementById(`project_view_${projectId}`);
+            if (!layer) {
+                layer = document.createElement('div');
+                layer.id = `project_view_${projectId}`;
+                view.appendChild(layer);
+            }
             layer.style.display = 'none';
             layer.style.visibility = 'hidden';
             layer.style.pointerEvents = 'none';
@@ -190,7 +226,6 @@ test('Project workspace activation restores the project surface and main menu', 
             canvas.style.visibility = 'hidden';
             canvas.style.pointerEvents = 'none';
             layer.appendChild(canvas);
-            view.appendChild(layer);
             return [{ id: 'media_alpha', project_id: projectId }];
         },
         getProjectSceneState: () => ({
@@ -237,13 +272,15 @@ test('Project workspace activation restores the project surface and main menu', 
     );
     assert.equal(calls.some((entry) => entry.name === 'renderProjectScene'), false,
         'activation must reuse the authoritative projection owned by loadProjectAtomes');
-    assert.deepEqual(calls.map((entry) => entry.name), ['setCurrent', 'commit', 'loadProjectAtomes', 'showFully']);
+    // The current-project record is written once the project is presented, never ahead of its own records.
+    assert.deepEqual(calls.map((entry) => entry.name), ['setCurrent', 'loadProjectAtomes', 'showFully', 'commit']);
 }, 10_000);
 
 test('the latest overlapping project activation remains the canonical foreground owner', async () => {
     const { window, document } = installMockBrowserEnv();
     globalThis.window = window;
     globalThis.document = document;
+    installHeadlessMenuOverlay(window);
     window.requestAnimationFrame = (callback) => {
         callback();
         return 0;
@@ -310,6 +347,7 @@ test('Project workspace activation records preview warmup failure without delayi
     const { window, document } = installMockBrowserEnv();
     globalThis.window = window;
     globalThis.document = document;
+    installHeadlessMenuOverlay(window);
     window.requestAnimationFrame = (callback) => {
         callback();
         return 0;
@@ -364,6 +402,7 @@ test('Project workspace activation from dashboard claims the project surface ins
     const { window, document } = installMockBrowserEnv();
     globalThis.window = window;
     globalThis.document = document;
+    installHeadlessMenuOverlay(window);
     window.requestAnimationFrame = (callback) => {
         callback();
         return 0;
@@ -464,11 +503,12 @@ test('Project workspace activation from dashboard claims the project surface ins
             reason: 'workspace_activation'
         }
     );
+    // The current-project record is written once the project is presented.
     assert.deepEqual(calls.map((entry) => entry.name), [
         'setCurrent',
-        'commit',
         'loadProjectAtomes',
-        'showFully'
+        'showFully',
+        'commit'
     ]);
 });
 

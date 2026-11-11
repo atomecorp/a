@@ -30,13 +30,14 @@ const railOf = (tool, win, catalog = content) => buildArmedToolRailDefinitions({
     tool, projectId: 'rail_project', win, content: catalog
 });
 
-test('Page exposes its six formats in canonical order, with only the current one lit', () => {
+test('Page exposes its nine formats in canonical order, with only the current one lit', () => {
     const seen = [];
     const win = { eveProjectViewCreationApi: { readPageFormat: () => 'a4' } };
     const definitions = railOf('page', win);
     assert.deepEqual(definitions.map((definition) => definition.key), [
         'page_format_free', 'page_format_sixteen_nine', 'page_format_four_three',
-        'page_format_three_two', 'page_format_a4', 'page_format_square'
+        'page_format_three_two', 'page_format_a4', 'page_format_a3', 'page_format_a5',
+        'page_format_letter', 'page_format_square'
     ]);
     assert.deepEqual(definitions.filter((definition) => definition.active).map((definition) => definition.key),
         ['page_format_a4'], 'the current format, read from its owner, is the only lit case');

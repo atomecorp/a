@@ -1,6 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { TauriWebSocket } from '../../atome/src/squirrel/apis/unified/adole_websocket.js';
 
+// websocket_health.js declares a socket dead after a 10 s silent deadline.
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 const connected = () => {
     vi.useFakeTimers(); vi.stubGlobal('WebSocket', { OPEN: 1 });
@@ -16,7 +17,7 @@ test('a silent OPEN socket is retired after one shared health probe', async () =
         const probe = transport.verifyConnection();
         expect(transport.verifyConnection()).toBe(probe);
         expect(socket.send).toHaveBeenCalledExactlyOnceWith('{"type":"ping"}');
-        await vi.advanceTimersByTimeAsync(3000);
+        await vi.advanceTimersByTimeAsync(10000);
         expect(await probe).toBe(false);
         expect(socket.close).toHaveBeenCalledTimes(1);
         expect(transport.isConnected).toBe(false);
@@ -32,7 +33,7 @@ test('a slow operation does not discard a socket that answers its health probe',
         await vi.advanceTimersByTimeAsync(20);
         expect((await result).error).toBe('Request timeout');
         transport.handleMessage('{"type":"pong"}');
-        await vi.advanceTimersByTimeAsync(3000);
+        await vi.advanceTimersByTimeAsync(10000);
         expect(transport.socket).toBe(socket); expect(socket.close).not.toHaveBeenCalled();
         expect(transport.isConnected).toBe(true);
         expect(transport.reconnectTimer).toBeNull();

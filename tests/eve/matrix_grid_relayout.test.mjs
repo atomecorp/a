@@ -254,7 +254,9 @@ describe('Matrix canonical navigation resume', () => {
         expect((await invokeProjectViewNavigation({ operation: 'restore' }, deps)).ok).toBe(true);
         expect(readNavigationState().current.id).toBe('parent');
         records.find(record => record.id === navigationId).meta = { deleted_at: '2026-10-13' };
-        expect((await invokeProjectViewNavigation({ operation: 'restore' }, deps)).ok).toBe(false);
+        // A refused saved position resumes at the project root, never the deleted path (project_view_navigation.js: resuming is a convenience).
+        expect(await invokeProjectViewNavigation({ operation: 'restore' }, deps)).toMatchObject({ ok: true, found: false, restore_error: 'project_view_navigation_record_denied' });
+        expect(readNavigationState().current.id).toBe(projectId);
     });
     it('retains newer view memory while a canonical save is awaiting acknowledgement', async () => {
         let acknowledge;
@@ -444,10 +446,11 @@ describe('Matrix temporary native slider expansion', () => {
             const f = await fixture(columns, width, lengthPx);
             try {
                 const before = f.slots(); expect(f.slider().style.size).toEqual([60, 60]);
-                f.slider().on.press({ x: 30, y: 30 }); await f.runtime.render();
+                // A press alone opens nothing (the gesture chooses its shape); a click opens the bar, pinned (bevy_ui_tool_slider.js).
+                f.slider().on.press({ x: 30, y: 30 }); await f.runtime.render(); expect(f.slider().style.size).toEqual([60, 60]);
+                f.slider().on.release(); await f.runtime.render(); expect(f.runtime.state.sliders.minutes.pinned).toBe(true);
                 expect(f.slider().style.size).toEqual([expectedWidth, 60]); expectNoOverlap(f.slots());
                 expect(f.slots().some(slot => slot.y > 128)).toBe(true); expect(f.records).toEqual(f.original);
-                f.slider().on.release(); await f.runtime.render(); expect(f.runtime.state.sliders.minutes.pinned).toBe(true);
                 f.slider().on.press({ x: 10, y: 30 }); f.slider().on.release(); await f.runtime.render();
                 expect(f.slider().style.size).toEqual([60, 60]); expect(f.slots()).toEqual(before); expect(f.commits).toEqual([]);
             } finally { await f.close(); }

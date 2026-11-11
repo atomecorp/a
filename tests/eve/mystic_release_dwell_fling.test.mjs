@@ -68,6 +68,15 @@ const tileNodeId = (harness, key) => {
     return node?.id || null;
 };
 
+// The centre of a mounted tile, where a finger really lifts over it: a taxonomy
+// slot (capture is east) can move an unplaced tool to another cell.
+const tilePoint = (harness, key) => {
+    const node = harness.mounted.get('eve_bevy_ui_mystic')?.root?.children
+        ?.find((candidate) => candidate.id.includes(`_${key}_`));
+    const [x, y] = node.style.position, [width, height] = node.style.size;
+    return { clientX: x + width / 2, clientY: y + height / 2 };
+};
+
 const closeMenu = async (mystic) => { await mystic.close(); };
 
 const waitForOpen = async (predicate, timeoutMs = 3000) => {
@@ -79,42 +88,59 @@ const waitForOpen = async (predicate, timeoutMs = 3000) => {
     return false;
 };
 
+// Only navigation is an automatic destination (bevy_ui_mystic_dwell.js#isAutoOpenItem): a palette opens on the
+// stationary dwell; a plain tool, even marked `hoverActivate`, only grows under the finger and runs on release.
+const dwellPalette = (onSelect) => ({ key: 'find', label: 'Find', type: 'palette', hoverActivate: true,
+    children: [{ key: 'found', label: 'Found', onSelect }] });
+
 test('an automatic destination opens on the stationary dwell, never on a hover', { timeout: 20000 }, async () => {
     const harness = makeHarness();
-    let calls = 0;
-    const mystic = await openMenu(harness, [{ key: 'find', hoverActivate: true, onSelect: () => { calls += 1; } }]);
+    let childCalls = 0;
+    const mystic = await openMenu(harness, [dwellPalette(() => { childCalls += 1; })]);
     assert.equal(await settledPhase(mystic, 'open'), true);
     harness.setHit(tileNodeId(harness, 'find'));
-    mystic.updateHover({ clientX: 384, clientY: 240, allowActivation: true });
+    mystic.updateHover({ ...tilePoint(harness, 'find'), allowActivation: true });
     await wait(200);
-    assert.equal(calls, 0, 'a held hover must not open a persistent tool any more');
+    assert.equal(mystic.measure().stackDepth, 0, 'a held hover must not open a destination any more');
     await wait(MYSTIC_AUTO_OPEN_DWELL_MS - 200 + 200);
-    assert.equal(calls, 1, 'the stationary dwell opens the persistent tool exactly once');
+    assert.equal(mystic.measure().stackDepth, 1, 'the stationary dwell opens the palette exactly once');
+    assert.equal(childCalls, 0, 'and it fires none of its children');
     await closeMenu(mystic);
+
+    // A plain tool is no automatic destination: the same dwell leaves it to the release.
+    let calls = 0;
+    const plain = await openMenu(harness, [{ key: 'find', hoverActivate: true, onSelect: () => { calls += 1; } }]);
+    assert.equal(await settledPhase(plain, 'open'), true);
+    harness.setHit(tileNodeId(harness, 'find'));
+    plain.updateHover({ ...tilePoint(harness, 'find'), allowActivation: true });
+    await wait(MYSTIC_AUTO_OPEN_DWELL_MS + 200);
+    assert.equal(calls, 0, 'a dwell never runs a plain tool');
+    assert.equal(plain.isOpen(), true);
+    await closeMenu(plain);
 });
 
 test('a crossing, a leaving hover or a moving hover never opens a destination', { timeout: 20000 }, async () => {
     const harness = makeHarness();
-    let calls = 0;
-    const mystic = await openMenu(harness, [{ key: 'find', hoverActivate: true, onSelect: () => { calls += 1; } }]);
+    const mystic = await openMenu(harness, [dwellPalette(() => {})]);
     assert.equal(await settledPhase(mystic, 'open'), true);
+    const { clientX, clientY } = tilePoint(harness, 'find');
     // Crossing the tile on the way to a tool placed after it: nothing opens.
     harness.setHit(tileNodeId(harness, 'find'));
-    mystic.updateHover({ clientX: 384, clientY: 240, allowActivation: true });
+    mystic.updateHover({ clientX, clientY, allowActivation: true });
     await wait(300);
     harness.setHit(null);
     mystic.updateHover({ clientX: 60, clientY: 440, allowActivation: true });
     await wait(MYSTIC_AUTO_OPEN_DWELL_MS);
-    assert.equal(calls, 0, 'leaving the tile before the dwell cancels the automatic open');
+    assert.equal(mystic.measure().stackDepth, 0, 'leaving the tile before the dwell cancels the automatic open');
     // A slow slide inside the same tile re-arms the dwell from the new point.
     harness.setHit(tileNodeId(harness, 'find'));
-    mystic.updateHover({ clientX: 384, clientY: 240, allowActivation: true });
+    mystic.updateHover({ clientX, clientY, allowActivation: true });
     await wait(MYSTIC_AUTO_OPEN_DWELL_MS - 300);
-    mystic.updateHover({ clientX: 384 + MYSTIC_AUTO_OPEN_DWELL_TOLERANCE_PX * 4, clientY: 240, allowActivation: true });
+    mystic.updateHover({ clientX: clientX + MYSTIC_AUTO_OPEN_DWELL_TOLERANCE_PX * 4, clientY, allowActivation: true });
     await wait(400);
-    assert.equal(calls, 0, 'a move inside the tile restarts the dwell instead of opening');
+    assert.equal(mystic.measure().stackDepth, 0, 'a move inside the tile restarts the dwell instead of opening');
     await wait(MYSTIC_AUTO_OPEN_DWELL_MS);
-    assert.equal(calls, 1, 'the dwell still opens once the hover really stops');
+    assert.equal(mystic.measure().stackDepth, 1, 'the dwell still opens once the hover really stops');
     await closeMenu(mystic);
 });
 
@@ -152,7 +178,7 @@ test('a release fires the tool or the palette under the finger, never the centre
     const mystic = await openMenu(harness, items);
     assert.equal(await settledPhase(mystic, 'open'), true);
     harness.setHit(tileNodeId(harness, 'leaf'));
-    assert.equal(mystic.releaseAt({ clientX: 384, clientY: 240 }), true);
+    assert.equal(mystic.releaseAt(tilePoint(harness, 'leaf')), true);
     await wait(50);
     assert.equal(toolCalls, 1, 'releasing on a tool launches it exactly once');
 
@@ -164,7 +190,7 @@ test('a release fires the tool or the palette under the finger, never the centre
     assert.equal(second.isOpen(), true, 'a mouse-up on the centre leaves the menu open');
     assert.equal(second.measure().stackDepth, 0);
     harness.setHit(tileNodeId(harness, 'capture'));
-    assert.equal(second.releaseAt({ clientX: 384, clientY: 240 }), true);
+    assert.equal(second.releaseAt(tilePoint(harness, 'capture')), true);
     assert.equal(await settledPhase(second, 'opening'), true);
     assert.equal(second.measure().stackDepth, 1, 'releasing on a palette opens its submenu');
     assert.equal(childCalls, 0, 'the palette release never fires a child on its own');
@@ -288,6 +314,9 @@ const { setMysticRuntime } = await import('../../eVe/intuition/ribbon/bevy_ui_pr
 const gesture = { open: false, holding: false, hoverOptions: [], releases: [], directions: [] };
 setMysticRuntime({
     isOpen: () => gesture.open,
+    // The Flower of these gestures is the radial menu, never a grid-anchored one.
+    isGrid: () => false,
+    isHosted: () => false,
     close: async () => { gesture.open = false; },
     openAt: (options) => { gesture.open = true; gesture.holding = options.holding; },
     updateHover: (options) => { gesture.hoverOptions.push(options); return null; },
@@ -419,7 +448,7 @@ test('a Flower opened from a BevyUI node keeps the held click to itself', { time
     assert.equal(move.defaultPrevented, true, 'the held move is cancelled for every owner below');
     assert.deepEqual(
         gesture.hoverOptions.at(-1),
-        { clientX: 420, clientY: 300, allowActivation: false, dwell: true },
+        { clientX: 420, clientY: 300, allowActivation: false, dwell: true, light: true },
         'the menu still follows the finger, without activating on the way'
     );
 
@@ -474,7 +503,7 @@ test('a Flower opened by a right-click keeps the two fingers to itself', { timeo
     assert.equal(move.defaultPrevented, true, 'the held secondary move is cancelled for every owner below');
     assert.deepEqual(
         gesture.hoverOptions.at(-1),
-        { clientX: 420, clientY: 300, allowActivation: false, dwell: true },
+        { clientX: 420, clientY: 300, allowActivation: false, dwell: true, light: true },
         'the menu still follows the two fingers, without activating on the way'
     );
 
