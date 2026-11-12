@@ -387,56 +387,64 @@ impl VaultRouter {
     ) -> Result<Vec<JsonValue>, String> {
         let states = self.ask(owner, "state:list", json!({})).await?;
         let states = states.as_array().cloned().unwrap_or_default();
-        let by_id: std::collections::HashMap<String, &JsonValue> = states
-            .iter()
-            .map(|state| {
-                (
-                    state_atome_id(state).map(js::string).unwrap_or_default(),
-                    state,
-                )
-            })
-            .collect();
-        let private = |id: &str| by_id.get(id).is_some_and(|state| is_private_program(state));
-        let parent_of = |id: &str| {
-            by_id
-                .get(id)
-                .map(|state| js::id(state_parent_id(state)))
-                .unwrap_or_default()
-        };
-        let within = |state: &JsonValue| {
-            let start = js::id(state_atome_id(state));
-            let mut cursor = start.clone();
-            let mut visited = HashSet::new();
-            while !cursor.is_empty() && !visited.contains(&cursor) {
-                if cursor == root {
-                    if cursor != start && private(&cursor) {
-                        return false;
-                    }
-                    let mut parent = parent_of(&cursor);
-                    let mut ancestors = HashSet::new();
-                    while !parent.is_empty() && ancestors.insert(parent.clone()) {
-                        if private(&parent) {
-                            return false;
-                        }
-                        parent = parent_of(&parent);
-                    }
-                    return true;
-                }
-                if private(&cursor) {
+        Ok(states_within_root(&states, root))
+    }
+}
+
+/// The states of one owner's listing under `root`, none inside a programme (a programme root shows itself alone).
+/// Pure: a caller walking several shares of one owner lists that owner's vault once.
+pub fn states_within_root(states: &[JsonValue], root: &str) -> Vec<JsonValue> {
+    let by_id: std::collections::HashMap<String, &JsonValue> = states
+        .iter()
+        .map(|state| {
+            (
+                state_atome_id(state).map(js::string).unwrap_or_default(),
+                state,
+            )
+        })
+        .collect();
+    let private = |id: &str| by_id.get(id).is_some_and(|state| is_private_program(state));
+    let parent_of = |id: &str| {
+        by_id
+            .get(id)
+            .map(|state| js::id(state_parent_id(state)))
+            .unwrap_or_default()
+    };
+    let within = |state: &JsonValue| {
+        let start = js::id(state_atome_id(state));
+        let mut cursor = start.clone();
+        let mut visited = HashSet::new();
+        while !cursor.is_empty() && !visited.contains(&cursor) {
+            if cursor == root {
+                if cursor != start && private(&cursor) {
                     return false;
                 }
-                visited.insert(cursor.clone());
-                cursor = parent_of(&cursor);
+                let mut parent = parent_of(&cursor);
+                let mut ancestors = HashSet::new();
+                while !parent.is_empty() && ancestors.insert(parent.clone()) {
+                    if private(&parent) {
+                        return false;
+                    }
+                    parent = parent_of(&parent);
+                }
+                return true;
             }
-            false
-        };
-        Ok(states
-            .iter()
-            .filter(|state| within(state))
-            .cloned()
-            .collect())
-    }
+            if private(&cursor) {
+                return false;
+            }
+            visited.insert(cursor.clone());
+            cursor = parent_of(&cursor);
+        }
+        false
+    };
+    states
+        .iter()
+        .filter(|state| within(state))
+        .cloned()
+        .collect()
+}
 
+impl VaultRouter {
     pub async fn authorize_shared_create(
         &self,
         principal: &str,

@@ -349,13 +349,21 @@ impl VaultRouter {
                 vec![json!(principal)],
             )
             .await?;
+        // One listing per owner, whatever the number of its shares: each share listed the owner's
+        // whole vault again (14 conversation media shared by one person: 14 full listings, minutes
+        // on a large vault, `vault_request_timeout:state:list`).
+        let mut listings: std::collections::HashMap<String, Vec<JsonValue>> = Default::default();
         for share in active {
-            let states = self
-                .states_within_shared_root(
-                    &js::id(share.get("owner_id")),
-                    &js::string(&share["atome_id"]),
-                )
-                .await?;
+            let owner = js::id(share.get("owner_id"));
+            if !listings.contains_key(&owner) {
+                let listed = self.ask(&owner, "state:list", json!({})).await?;
+                listings.insert(
+                    owner.clone(),
+                    listed.as_array().cloned().unwrap_or_default(),
+                );
+            }
+            let states =
+                shares::states_within_root(&listings[&owner], &js::string(&share["atome_id"]));
             for state in states {
                 let id = shares::state_atome_id(&state)
                     .map(js::string)
