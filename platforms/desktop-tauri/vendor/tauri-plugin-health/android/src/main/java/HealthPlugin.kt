@@ -85,7 +85,20 @@ class HealthPlugin(private val activity: Activity) : Plugin(activity) {
         private val EXERCISE_TYPES = mapOf(
             "strength" to ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING,
             "core" to ExerciseSessionRecord.EXERCISE_TYPE_CALISTHENICS,
-            "cardio" to ExerciseSessionRecord.EXERCISE_TYPE_HIGH_INTENSITY_INTERVAL_TRAINING
+            "cardio" to ExerciseSessionRecord.EXERCISE_TYPE_HIGH_INTENSITY_INTERVAL_TRAINING,
+            // A discipline's practice (atome/src/shared/training_disciplines.js trainingDisciplineWorkout).
+            "walking" to ExerciseSessionRecord.EXERCISE_TYPE_WALKING,
+            "running" to ExerciseSessionRecord.EXERCISE_TYPE_RUNNING,
+            "rowing" to ExerciseSessionRecord.EXERCISE_TYPE_ROWING_MACHINE,
+            "cycling" to ExerciseSessionRecord.EXERCISE_TYPE_BIKING,
+            "mixed_cardio" to ExerciseSessionRecord.EXERCISE_TYPE_OTHER_WORKOUT,
+            "functional" to ExerciseSessionRecord.EXERCISE_TYPE_CALISTHENICS,
+            "flexibility" to ExerciseSessionRecord.EXERCISE_TYPE_STRETCHING,
+            "yoga" to ExerciseSessionRecord.EXERCISE_TYPE_YOGA,
+            "hiking" to ExerciseSessionRecord.EXERCISE_TYPE_HIKING,
+            "dance" to ExerciseSessionRecord.EXERCISE_TYPE_DANCING,
+            "martial_arts" to ExerciseSessionRecord.EXERCISE_TYPE_MARTIAL_ARTS,
+            "other" to ExerciseSessionRecord.EXERCISE_TYPE_OTHER_WORKOUT
         )
         private val SPECS: Map<String, Spec> = mapOf(
             "steps" to Spec(StepsRecord::class, "${HC}READ_STEPS", "sum", StepsRecord.COUNT_TOTAL),

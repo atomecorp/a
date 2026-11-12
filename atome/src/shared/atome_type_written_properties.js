@@ -111,7 +111,7 @@ export const ATOME_WRITTEN_PROPERTIES = Object.freeze({
         mute: B, mute_strength: N, natural_height: N, natural_width: N, naturalHeight: N, naturalWidth: N,
         nominal_fps: N, order: N, orientation: S, original_name: ANY, overflow: S, pending: B, recording_id: S,
         render_layer: N, render_order: N, renderLayer: N, renderOrder: N, rotate: N, rounding_enabled: B,
-        size: ANY, size_bytes: N, solo: B, source_height: N, source_rect: O, source_width: N, sourceHeight: N,
+        size: ANY, size_bytes: N, solo: B, source_height: N, source_in_seconds: N, source_out_seconds: N, source_rect: O, source_width: N, sourceHeight: N,
         sourceWidth: N, storage_root: S, text: ANY, thumbnail_ref: S, top: ANY, video_codec: S,
         video_track_count: N, visual_ref: S, visual_status: S, width: ANY, z_index: N, zIndex: N
     },

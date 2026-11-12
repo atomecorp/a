@@ -19,6 +19,85 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 
 ## Entrées à exécuter
 
+### R-133 — Accueil eVe Pro : la tuile Capture devient l'outil « Enr. » de la bande ; bande « Finder » élargie corrigée (2026-11-12)
+- Statut : ATTENTE UTILISATEUR (question posée le 12 nov. au 2e compte rendu : le trou laissé par Capture dans la rangée des tuiles en paysage ; le code est fait).
+- Demande (session Claude du 12 nov., 3 images) : la tuile Capture quitte l'accueil ; un outil Enr. dans la bande, 3e case depuis la
+  droite (4e depuis la gauche pour un droitier) ; un tap ouvre la rubrique Capture comme la tuile ; un appui glissé la montre et le
+  relâcher sur une plaque (Vidéo…) lance la prise. Champ élargi depuis la loupe : le Close à gauche, à la place de la loupe ; les
+  outils couverts rétrécissent, animés, en un trait chacun dans la case du côté où ils étaient (à droite sous Capture).
+- FAIT : `dashboard_record_tool.js` (nouveau), `dashboard_communication_input.js` (case d'Enr., Close dans la case de la loupe, traits
+  du côté des outils, morphes outil → trait et retour, fondu du Close sur toute sa descendance), `dashboard_finder_band_motion.js`
+  (`morphs`), `dashboard_mystic_runtime.js` (`openCapture`, rubrique tenue), `dashboard_mystic_grid.js` (`capture` dans `PRO_UNSEEN`),
+  code mort de la tuile Capture retiré, i18n `record_tool`, AGENTS.md règles 12-13. Tests : `tests/eve/dashboard_record_tool_finder_band.test.mjs`
+  9/9, suite `tests/eve` 3273/3273. Sonde app réelle Web : `temp/record_tool_2026-11-12/record_tool.probe.mjs` 13/13 (Enr. en 4e case,
+  Close à la place de la loupe, 3 traits à droite sous Capture, tap → rubrique, glisser-relâcher sur Vidéo → « Enregistrement vidéo… »).
+- FAIT (2e demande, 12 nov.) : rond d'Enr. en rouge d'enregistrement (`BEVY_MENU_TOKENS.surface.recordingIcon`) ; accueil Pro debout
+  refait : Activité · V · Média, Projets · Contacts, Moniteur au centre en bas (ancienne place de Capture), Capture invisible entre
+  Projets et Contacts (`dashboard_home_matrix.js`) ; la proposition Réglages sous le V garde sa case. Sonde 13/13, capture
+  `temp/probe_reports/dashboard_enhancement/record_tool_2026-11-12/01_home_band.png`.
+- Reste : ta réponse sur le paysage (trou de Capture entre Projets et Moniteur dans la rangée des tuiles) ; vérification sur iPhone,
+  Android et Tauri.
+
+### R-132 — Pouls illisible (Moniteur, Sport) et absent des cartes Marche / Fitness (2026-11-12)
+- Statut : ATTENTE UTILISATEUR — l'utilisateur dit (12 nov., 2e essai) que le pouls ne s'affiche toujours pas alors que ses données sont
+  dans Santé. Ajouté ensuite : lecture vide → `getRequestStatusForAuthorization` (`AppNativeHealthController.swift#checkEmptyRead`) ;
+  jamais demandé → `permission_required` → le Moniteur redemande seul (`askHostFor`) ; demande d'accès = tous les types du catalogue ;
+  séances Sport / discipline redemandent une fois. Build Debug installé ; journal `Health read reply … access=`. NON VÉRIFIÉ : deux
+  écoutes (4 et 10 min) sans ouverture du Moniteur. À faire : ouvrir le Moniteur avec `idevicesyslog -n -p atome` en écoute ;
+  `access=unknowable` + 0 mesure = lecture refusée (Réglages › Santé › atome › Lecture), sinon la fiche s'ouvre.
+  VÉRIFIÉ sur l'iPhone par WebDriverAgent (12 nov.) : Réglages › Confidentialité et sécurité › Santé › atome › « Autoriser la
+  lecture » : « Fréquence cardiaque » = « Aucun », tous les autres types = « Accès limité » (iOS 27 : Aucun / Accès limité /
+  Accès complet). L'interrupteur « Fréquence cardiaque » en bas de page est l'ÉCRITURE (activée), d'où la confusion. Pas de
+  mauvais câblage de nomenclature : marche moy. et VFC sont d'autres types, autorisés. iOS ne re-présente jamais la feuille
+  pour un type déjà répondu : seul un choix dans cet écran le corrige. Écran laissé ouvert pour l'utilisateur.
+- Demande (session Claude du 12 nov., captures Pompes « Aucune mesure », Moniteur « Fréquence… Aucune donnée », Marche et Fitness sans
+  Pouls, montre à 82 BPM) : « corrige surtout le problème de fréquence cardiaque qui n'est pas relu » ; « la fréquence cardiaque doit
+  être pratiquement tout le temps » sur les séances.
+- Cause prouvée sur l'iPhone 17 Pro (build Debug, `idevicesyslog -n`) : la requête du pouls répond `ok` avec 0 mesure sur 7 jours, et
+  healthd « delivering 0 samples » sans parcourir la base, alors que la même app reçoit dans la même seconde 20 mesures de saturation
+  (la plus récente à 26 min), 5 d'IMC, 147 de sommeil. C'est le refus de LECTURE de la fréquence cardiaque, que HealthKit cache. Aucun
+  code ne peut l'accorder. À faire par toi : Réglages › Santé › Accès aux données et appareils › atome › « Fréquence cardiaque »
+  dans la section LECTURE (pas écriture), puis rouvrir le Moniteur. Diagnostic gardé : `AppNativeHealthController.swift#read`
+  journalise `samples=N newest_min_ago=M` par moniteur.
+- FAIT (code) : carte Marche dehors (`dashboard_training_cardio_session.js#silenceRows`) : ligne Pouls toujours là (valeur fraîche,
+  raison, sinon « — »), aussi avec un trajet ; carte discipline (Fitness, Yoga, Vélo…, `dashboard_training_discipline_card.js`,
+  `_view.js`) : ligne Pouls (la brique `trainingScreenReadRow` de Pompes, à la place de « Régler ») pendant la pratique, moyenne
+  à la fin, enregistrée en `heart_rate_bpm` source watch/device ; la pratique est reflétée en séance santé (`health_workout.js`,
+  types `trainingDisciplineWorkout` de `training_disciplines.js`, Swift `activityType`, Kotlin `EXERCISE_TYPES`) pour que la
+  montre mesure à la cadence d'entraînement ; ✕ ou fermeture la jette. Preuves : `temp/heart_2026-11-12/discipline_pulse.check.mjs`
+  3/3, `cardio_pulse.check.mjs` OK, Biome, build iOS Debug installé, Android `:tauri-plugin-health:compileReleaseKotlin`
+  BUILD SUCCESSFUL (JAVA_HOME=/opt/homebrew/opt/openjdk@21, ANDROID_HOME=/opt/homebrew/share/android-commandlinetools ; 4
+  avertissements préexistants, aucun sur `EXERCISE_TYPES`). Non vérifié : essai d'une séance Fitness réelle sur l'iPhone et sur Android.
+
+### R-131 — Listes de prises : tête de lecture, appui long (onde, rognage, renommer), Aucun, Préc./Suiv., une seule logique (2026-11-12)
+- Statut : OUVERT (poignées B, aperçu rogné et scrub audible vérifiés sur ton iPhone ; reste ton essai)
+- Source : toi, 12 nov., Captures › Audio : « Suppr. ne supprime pas » ; la preview sans curseur qui avance, curseur déplaçable ; appui long : la forme d'onde au-dessus, navigable, rognage du début et de la fin effectif à la lecture, renommer au clavier ; un outil pour désélectionner ; « Suiv. » pendant la lecture joue la suivante, à l'arrêt ne joue pas ; « une seule source de vérité pour toutes les opérations de liste… audio, vidéo, texte… midi ».
+- Fait (Suppr.) : déjà corrigé ce matin (R-130) ; revérifié en vraie app (deux touchers, la ligne cochée part).
+- Fait (tête de lecture) : la lecture des listes ne nourrissait pas la tête de lecture commune (`project_audio_playback_progress_runtime`). `record_preview_playback.js` la démarre, la met en pause, la place au glisser et l'arrête.
+- Fait (appui long) : `eVe/domains/dashboard/dashboard_take_hold.js` (nouveau) : pour un son, l'onde au-dessus de la ligne (toucher ou glisser = écouter depuis là), deux bulles au pied pour le début et la fin, partie gardée en surbrillance, écrite en `trim_in` / `trim_out` sur l'Atome (la source jamais coupée). La lecture rognée est commune au panneau et au rendu (`eVe/domains/media/shared/media_record_trim.js`, lu aussi par `render_atom.js`), audio et vidéo. La durée affichée suit le rognage. Renommer : le champ de l'accueil (`dashboard_stage_name.js`, même saisie que le nom d'un effet, `dashboard_effect_panel.js#askFxName`).
+- Fait (appui long en outils, toi, 12 nov. : « l'action est sous forme d'outil… pas sous forme de liste ») : plus aucune ligne d'action ; Rogner (allumé, il montre les bulles), Nom et Suppr. (deux touchers, `toolsBandDeleteTool`) sont dans la bande du pied, à côté du ✕. `dashboard_hold_options.js` donne à l'élément tenu `retool()` et `choose(action)` (son outil agit comme une ligne : l'appui long se ferme, puis il agit) ; `dashboard_mystic_item_actions.js` accepte un appui long sans ligne quand l'élément apporte ses outils. Les autres appuis longs (effets, Thalasso, Beauté, médias de la bibliothèque…) gardent leurs lignes : non traités ici.
+- Fait (tous les appuis longs en outils, toi : « oui passe tous les appuis longs », puis choix D sur maquettes) : `dashboard_hold_options.js` pose chaque action d'un appui long (une quarantaine d'écrans : projets, contacts, objectifs, effets, instruments, santé, médias, prises…) en outil de la bande du pied, à côté du ✕ ; Suppr. s'allume au premier toucher et agit au second ; un outil qui déplie (« Ajouter à une liste », Profils) s'allume et pose ses lignes sur le panneau. Restent des lignes (ton choix) : les objectifs en cours (`listed`) et les activités en cours (`row`). Débordement : maquettes A (pages →), B (réduit à 5), C (lignes pour le surplus), D (bande sur deux rangées, comportement existant) dans `temp/hold_band_mockup/report_*/` ; tu as choisi D, rien à coder de plus. Favori sans glyphe dans la bande (`favorite.svg` absent) : alias vers `heart.svg` (`menu_model.js#normalizeIconKey`). Règle 13 d'`AGENTS.md` complétée. Preuves : sonde `temp/hold_band_mockup/project_hold.probe.mjs` (projet : outils sur deux rangées, aucune ligne, cœur, Suppr. en deux touchers supprime) ; 34 fichiers Vitest liés verts (346). Revue écran par écran (toi : « oui ») en vraie app : sonde D36 adaptée aux outils (`temp/d18_delete/d36/support.mjs#holdRows` lit la bande) : projet, objectif (accueil eVe Basic), média, liste de médias, trajet GPS, machine, série gardée : outils, Suppr. allumé au 1er toucher, désarmé par un toucher ailleurs, supprimé au 2e, toujours absent après rechargement (`report_bandtools*`). Sonde `temp/hold_band_mockup/screens.probe.mjs` : contact (7 outils, Profils allumé déplie ses profils en lignes, se replie au 2e toucher), son de la Médiathèque (« Ajouter à une liste » allumé, « Nouvelle liste » en ligne), événement (Suppr. en deux touchers). Non atteints par les sondes : instrument, chaîne d'effets, effet enregistré : la tuile Capture n'est pas sur l'accueil de ce compte de test (ni eVe ni eVe Basic) ; même code commun, non vus en vrai.
+- Fait (Aucun) : l'outil standard « Aucun » ajouté à la bande de choix de toutes les listes (`bevy_panel_list_choice.js`).
+- Fait (Préc./Suiv.) : en lecture, la suivante joue ; à l'arrêt ou en pause, elle est montrée sans jouer (`dashboard_takes_list.js#cycle`).
+- Une seule logique : toutes les listes de prises et de créations (audio, vidéo, photo, MIDI, texte, dessin) passent par `dashboard_takes_list.js` et `createListChoice` ; l'onde de rognage seulement pour un son, rien à lire pour un média fixe.
+- Preuves : `tests/eve/dashboard_takes_hold_crop.test.mjs` 7/7 ; 19 fichiers Vitest liés verts (218) ; sonde vraie app `temp/takes_fixes_2026-11-12/takes_fixes.probe.mjs` ALL OK (22 points, aucune erreur de page ; appui long : aucune ligne, Rogner/Nom/Suppr. dans la bande, Suppr. de l'appui long en deux touchers), captures `temp/probe_reports/dashboard_enhancement/takes_fixes_2026_11_12/`. Garde `vitest_manifest_guard` « sorted » déjà en échec avant (ordre `dashboard_personal_import` / `dashboard_panel_foot_rows` sur HEAD).
+- Fait (12 nov. soir, ton retour iPhone : image parasite, « renommer… tout disparaît », pas de lecture dans l'appui long, rognage perdu) — corrigé ET vérifié sur ton iPhone 17 Pro (build Debug installée, pilotée par WebDriverAgent + inspecteur Web) :
+  - Image parasite : mesurée sur le téléphone (enregistrement image par image des arbres) : au premier appui long, l'accueil (`eve_matrix`) était redessiné et la bande vidée ~300 ms avant le panneau. Deux causes : la liste qui se ferme pour l'appui long prévenait la scène (fin de la prise en cours, remise à zéro de sa sélection) qui redessinait l'accueil et la bande ; et l'arrêt natif de l'enregistrement en cours (~300 ms) se faisait liste déjà retirée. `dashboard_mystic_stage.js` : ni accueil ni bande redessinés entre une page fermée pour la suivante et celle-ci (`changed`, `retool` gardés par `replacing`) ; la page remplacée finit ce qu'elle a à finir encore visible, puis part. Après : liste retirée → panneau monté en 14 ms, bande jamais retirée, accueil jamais redessiné entre.
+  - Renommer : la chaîne marchait (nom gardé), mais l'écran se vidait (un écran de saisie séparé, sans la prise). Nom est maintenant un outil du panneau, agissant sur place : allumé, le champ du bas devient le nom de la prise (indice : son nom actuel), la prise restant affichée au-dessus ; Retour garde le nom tapé, la ligne le montre aussitôt (`dashboard_take_hold.js`, `own.compose` relié par `dashboard_hold_options.js`). Clavier monté, la forme d'onde et la ligne suivent le panneau au lieu de rester dessous. Vérifié : appui long → Nom → toucher le champ → clavier → « Test téléphone » → Retour → « Test téléphone · 0:03 », gardé après relance de l'app.
+  - Lire / Arrêter dans l'appui long : outil standard ; allumé « Arrêter » pendant la lecture, la tête avance, revient à « Lire » à la fin. Vérifié sur le téléphone.
+  - Rognage perdu : cause, le serveur refusait `trim_in` / `trim_out` (champs non déclarés sur `audio_recording`). Le rognage s'écrit maintenant dans les champs canoniques `source_in_seconds` / `source_out_seconds` (ceux de la timeline), déclarés aussi sur `video_recording` (registre régénéré) ; lus en premier par `media_record_trim.js`. Refusé, il revient à ce qui est gardé au lieu de paraître fait. Vérifié sur le téléphone : 0:07 rogné à 0:03 ; lecture depuis la liste 3,7 s (pas 7 s) ; Rogner rouvert : poignée de début toujours au milieu ; après relance de l'app : toujours 0:03.
+  - Poignées : maquettes A (pinces), B (cadre façon découpe iOS), C (ligne et pastille) aux couleurs réelles dans `temp/crop_handles_mockup/handles.png` ; en attente de ton choix (règle 16), rien codé.
+  - Tests : `tests/eve/dashboard_takes_hold_crop.test.mjs` 9/9 (dont le nom sur place et le refus de `trim_in` par la passerelle) ; fichiers liés verts ; biome propre sur les fichiers touchés.
+  - À savoir : ouvrir Captures › Audio lance aussi un enregistrement ; mes passages ont donc laissé quelques prises « Audio · 0:0x » sur ton téléphone (non supprimées sans ton accord).
+- Reste : ton choix de poignées ; ton essai. Non vérifié : Tauri, Android.
+
+- Fait (12 nov. nuit, ton retour : « poignées c'est la B », « au retour l'aperçu affiche l'intégralité… afficher que la partie sélectionnée », « rétablir le scrub… on doit entendre le son ») — vérifié sur ton iPhone 17 Pro :
+  - Poignées B (dashboard_take_hold.js) : Rogner encadre la partie gardée en accent cyan (bande fine en haut et en bas, bord épais à chaque extrémité avec son chevron tourné vers l'intérieur), glissées au doigt (0:12 → 0:07 sur l'iPhone, écrit au lâcher).
+  - Aperçu de la liste = la partie gardée seule ; l'appui long garde la forme d'onde entière. Les pics sont coupés là où ils sont dessinés (`waveform_window`, media_record_trim.js#keptWindowRecord → render_atom `peaksWindow` → bevy_media_texture_resolver.js), car l'`uv_rect` ne fenêtrait pas les ondes des panneaux. Tête de lecture et ligne de défilement de la liste suivent la partie gardée (`progress({ kept: true })`).
+  - Scrub audible (record_preview_playback.js#scrubSound) : en glissant, le son repart sous le doigt au plus toutes les 90 ms, jamais relancé au même endroit ; mesuré sur l'iPhone : départs 7,9 → 8,8 → 9,8 → 10,9 → 12,1 → 12,3 s (fin gardée) pendant le glissement. Même chemin pour l'onde de l'appui long (toucher = lecture depuis là).
+  - Tests : dashboard_takes_hold_crop (12) ; 62 suites liées, 451 tests verts ; biome propre sur les fichiers touchés.
+  - Prises « Audio · 0:0x » de test créées sur l'iPhone par l'ouverture de la liste Audio (elle lance un enregistrement) : non supprimées sans ton accord.
+
 ### R-130 — Listes Captures : rangées qui se défont au glisser, Suppr. inutile, suppression des cases cochées ; rouleaux Sport (2026-11-12)
 - Statut : OUVERT (reste ton essai sur l'iPhone avec une build qui contient ces correctifs ; le renderer Web est reconstruit)
 - Source : toi, 12 nov., trois captures de Captures › Audio : « quand je saisis… une ligne au milieu… des artefacts… les ondes ne sont pas au bon endroit… surtout quand je reste fixe » ; « l'outil delete… ne sert à rien » ; « quand je sélectionne plusieurs lignes… si je fais supprimer, ça ne marche pas » ; « les barillets dans Sport… un tout petit peu d'inertie… plus rapides… pas trop rapide ».

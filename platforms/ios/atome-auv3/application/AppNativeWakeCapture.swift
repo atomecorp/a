@@ -10,8 +10,8 @@ extension AppNativeAudioController {
         }
         let token = captureGate.begin()
         wakeCaptureToken = token
-        requestMicrophonePermission { granted in
-            self.queue.async {
+        requestMicrophonePermission { [self] granted in
+            self.queue.async { [self] in
                 guard self.captureGate.accepts(token) else {
                     self.complete(completion, payload: ["active": false], error: "wake_capture_cancelled")
                     return

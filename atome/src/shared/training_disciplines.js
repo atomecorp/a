@@ -149,6 +149,12 @@ export const trainingDiscipline = id => {
     if (!found) throw fail('TRAINING_DISCIPLINE_UNKNOWN');
     return found;
 };
+// The platform workout a practice under way is mirrored as (#squirrel/health/health_workout.js), so the watch measures its
+// heart rate at workout rate; a person's own activity and a discipline not listed are `other`.
+const DISCIPLINE_WORKOUTS = Object.freeze({ walk: 'walking', run: 'running', strength: 'strength', rower: 'rowing', bike: 'cycling',
+    indoor_cardio: 'mixed_cardio', fitness: 'functional', mobility: 'flexibility', yoga_pilates: 'yoga', balance: 'flexibility', outdoor: 'hiking',
+    dance: 'dance', combat: 'martial_arts' });
+export const trainingDisciplineWorkout = id => DISCIPLINE_WORKOUTS[id] || 'other';
 // The discipline a catalogue exercise belongs to (a strength or core exercise to Musculation, a stretch to Mobilité…).
 export const trainingDisciplineOfExercise = exerciseId => TRAINING_DISCIPLINES.find(discipline => discipline.exercises.includes(exerciseId))?.id || null;
 

@@ -7,7 +7,10 @@
 // `prepare()` may show the system write sheet: call it only for a session the
 // user is starting, before `start`.
 
-const WORKOUT_ACTIVITIES = Object.freeze(['strength', 'core', 'cardio']);
+// The exercise kinds of Sport, then the disciplines' workouts (#shared/training_disciplines.js trainingDisciplineWorkout);
+// each host maps every one (AppNativeHealthWorkout.swift `activityType`, HealthPlugin.kt `EXERCISE_TYPES`).
+const WORKOUT_ACTIVITIES = Object.freeze(['strength', 'core', 'cardio', 'walking', 'running', 'rowing', 'cycling', 'mixed_cardio', 'functional',
+    'flexibility', 'yoga', 'hiking', 'dance', 'martial_arts', 'other']);
 
 // One host write: refused when the host has no health store or the account is not linked.
 const healthWrite = ({ call, context, loadLinkStatus, describe }, failure) => async (command, payload = {}) => {

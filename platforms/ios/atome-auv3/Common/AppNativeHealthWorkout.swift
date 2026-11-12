@@ -140,6 +140,19 @@ final class HealthWorkoutRecorder {
         case "strength": return .traditionalStrengthTraining
         case "core": return .coreTraining
         case "cardio": return .highIntensityIntervalTraining
+        // A discipline's practice (atome/src/shared/training_disciplines.js trainingDisciplineWorkout).
+        case "walking": return .walking
+        case "running": return .running
+        case "rowing": return .rowing
+        case "cycling": return .cycling
+        case "mixed_cardio": return .mixedCardio
+        case "functional": return .functionalStrengthTraining
+        case "flexibility": return .flexibility
+        case "yoga": return .yoga
+        case "hiking": return .hiking
+        case "dance": return .cardioDance
+        case "martial_arts": return .martialArts
+        case "other": return .other
         default: return nil
         }
     }

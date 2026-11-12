@@ -318,7 +318,12 @@ final class AppNativeHealthController {
         let wantsMotion = false
         #endif
         #if canImport(HealthKit)
-        let readTypes = Set(specs.filter { $0.kind != .pedometer }.flatMap { Array($0.authorizationTypes() ?? []) })
+        // One sheet for every monitor of the catalogue (user, 2026-11-12: « sélectionner tous les capteurs »): a type
+        // shown later is never left unasked, and the sheet's « Tout activer » covers them all. Only an asked monitor
+        // decides whether a sheet is needed; the system shows only the types not answered yet.
+        let asked = Set(specs.filter { $0.kind != .pedometer }.flatMap { Array($0.authorizationTypes() ?? []) })
+        let readTypes = asked.isEmpty ? asked : asked.union(HealthMonitorTable.specs.values.filter { $0.kind != .pedometer }
+            .flatMap { Array($0.authorizationTypes() ?? []) })
         Self.log.debug("Authorization read_types=\(readTypes.map { $0.identifier }.sorted().joined(separator: ","), privacy: .public)")
         guard HKHealthStore.isHealthDataAvailable() || readTypes.isEmpty else {
             accessInFlight = false
@@ -435,16 +440,43 @@ final class AppNativeHealthController {
             guard let spec = HealthMonitorTable.spec(id) else { continue }
             group.enter()
             Self.log.debug("Health read started monitor=\(id, privacy: .public)")
-            readOne(spec, from: start, to: end, history: history) { result in
-                Self.log.debug("Health read reply monitor=\(id, privacy: .public) status=\(result["status"] as? String ?? "error", privacy: .public)")
-                lock.lock(); results[key] = result; lock.unlock()
-                group.leave()
+            readOne(spec, from: start, to: end, history: history) { read in
+                self.checkEmptyRead(spec, read) { result in
+                    let samples = (result["samples"] as? [[String: Any]]) ?? []
+                    let newest = samples.compactMap { $0["end"] as? Double }.max().map { Int((Date().timeIntervalSince1970 * 1000 - $0) / 60000) }
+                    Self.log.notice("Health read reply monitor=\(id, privacy: .public) status=\(result["status"] as? String ?? "error", privacy: .public) samples=\(samples.count) newest_min_ago=\(newest ?? -1) access=\(result["access"] as? String ?? "-", privacy: .public)")
+                    lock.lock(); results[key] = result; lock.unlock()
+                    group.leave()
+                }
             }
         }
         group.notify(queue: stateQueue) {
             // A reply computed for an older generation is never delivered.
             self.current(generation) ? reply(["results": results]) : fail("health_context_changed")
         }
+    }
+
+    // HealthKit answers an unasked or refused read with an empty result, never an error. An empty HealthKit read is
+    // checked here: a type whose read was never asked (a type added after the first sheet, an access reset) answers
+    // `permission_required`, so the page asks for it instead of showing « no data » forever.
+    private func checkEmptyRead(_ spec: HealthMonitorSpec, _ result: [String: Any], completion: @escaping ([String: Any]) -> Void) {
+        #if canImport(HealthKit)
+        let empty = result["status"] as? String == "ok" && result["hasData"] as? Bool != true
+            && ((result["samples"] as? [Any])?.isEmpty ?? true) && ((result["intervals"] as? [Any])?.isEmpty ?? true)
+            && ((result["sessions"] as? [Any])?.isEmpty ?? true)
+        guard spec.kind != .pedometer, empty, let types = spec.authorizationTypes() else { return completion(result) }
+        healthStore.getRequestStatusForAuthorization(toShare: [], read: types) { status, _ in
+            var checked = result
+            if status == .shouldRequest {
+                checked = ["status": "permission_required", "reason": "health_read_not_asked", "access": "not_determined"]
+            } else {
+                checked["access"] = "unknowable"
+            }
+            completion(checked)
+        }
+        #else
+        completion(result)
+        #endif
     }
 
     private func readOne(_ spec: HealthMonitorSpec, from: Date, to: Date, history: Bool = false, completion: @escaping ([String: Any]) -> Void) {

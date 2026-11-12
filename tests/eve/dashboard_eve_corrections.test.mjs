@@ -46,11 +46,13 @@ test('eVe Pro reads like the decision grid and eVe Basic lays its four tiles as 
         const place = dashboardHomeMatrixPlace(matrix(basic), ref);
         return place[1] === row && place[0] === column && place[2] === 2;
     });
-    // eVe Pro: the time and the weather, the wide Agenda, then Activity · the V logo · Média, Projects · Moniteur · Contacts, Capture.
+    // eVe Pro: the time and the weather, the wide Agenda, then Activity · the V logo · Média, Projects · Contacts, the Moniteur
+    // under them at the centre; Capture laid unseen between Projects and Contacts, its record tool in the band (user, 12 Nov. 2026).
     expect(['clock', 'weather', 'next_event'].map(ref => dashboardHomeMatrixPlace(matrix(false), ref)))
         .toEqual([[0, 0, 3, 1], [3, 0, 3, 1], [0, 1, 6, 1]]);
     expect([2, 4, 6].map(row => [0, 2, 4].map(column => at(false, row, column)))).toEqual([
-        ['activity', 'session', 'media'], ['projects', 'monitor_0', 'contacts'], [undefined, 'capture', undefined]]);
+        ['activity', 'session', 'media'], ['projects', undefined, 'contacts'], [undefined, 'monitor_0', undefined]]);
+    expect(dashboardHomeMatrixPlace(matrix(false), 'capture')).toEqual([2, 4, 2, 2]);
     expect(dashboardHomeMatrixPlace(matrix(false), 'settings')).toBeNull();
     // eVe Basic: the chosen monitor above the V logo, Contacts left, the Agenda right, Objectives under it.
     expect(dashboardHomeMatrixNeighbours(matrix(true), shown(true, { monitors: 1 })))
