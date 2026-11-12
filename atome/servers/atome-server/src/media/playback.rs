@@ -276,27 +276,43 @@ pub fn cache_target(source: &Path, name: &str) -> (PathBuf, String) {
     (directory.join(&cached), cached)
 }
 
+/// The file ffmpeg writes before it becomes `output`: `.partial-<name>` beside it.
+fn partial_path(output: &Path) -> PathBuf {
+    let name = output
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    output.with_file_name(format!(".partial-{name}"))
+}
+
 async fn ffmpeg(arguments: &[&str], source: &Path, output: &Path) -> Result<(), String> {
     if let Some(parent) = output.parent() {
         fs::create_dir_all(parent)
             .await
             .map_err(|e| format!("video_normalization_failed: {e}"))?;
     }
+    // ffmpeg writes a hidden sibling (same extension: it names the format), renamed into place
+    // only once complete. Written in place, a run killed half way (its request dropped: the
+    // future goes, `kill_on_drop` kills ffmpeg, the cleanup below never runs) left a copy
+    // without its `moov` that passed for the playable one, and was served for good.
+    let partial = partial_path(output);
     let run = tokio::process::Command::new("ffmpeg")
         .args(["-y", "-hide_banner", "-loglevel", "error", "-i"])
         .arg(source)
         .args(arguments)
-        .arg(output)
+        .arg(&partial)
         .kill_on_drop(true)
         .output();
     let result = match tokio::time::timeout(FFMPEG_TIMEOUT, run).await {
-        Ok(Ok(finished)) if finished.status.success() => return Ok(()),
+        Ok(Ok(finished)) if finished.status.success() => match fs::rename(&partial, output).await {
+            Ok(()) => return Ok(()),
+            Err(error) => error.to_string(),
+        },
         Ok(Ok(finished)) => String::from_utf8_lossy(&finished.stderr).trim().to_string(),
         Ok(Err(error)) => error.to_string(),
         Err(_) => "ffmpeg timed out".into(),
     };
-    // A failed run leaves no partial output that would pass for the playable copy.
-    let _ = fs::remove_file(output).await;
+    let _ = fs::remove_file(&partial).await;
     Err(format!(
         "video_normalization_failed: {}",
         if result.is_empty() {
@@ -404,4 +420,19 @@ pub async fn ensure_cache(
     })
     .await;
     made.map(|()| Some((cached, cached_name)))
+}
+
+#[cfg(test)]
+mod partial_tests {
+    use super::*;
+
+    #[test]
+    fn partial_copy_keeps_the_extension_beside_the_output() {
+        let partial = partial_path(Path::new("/u/recordings/.video_cache/video_1.mp4"));
+        assert_eq!(
+            partial,
+            PathBuf::from("/u/recordings/.video_cache/.partial-video_1.mp4")
+        );
+        assert_eq!(lower_file_extension(&partial.to_string_lossy()), "mp4");
+    }
 }

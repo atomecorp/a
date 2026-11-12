@@ -3,7 +3,7 @@
 // Each handler answers its own '<type>-response' frame.
 import db from '../database/adole.js';
 import { findUserById } from './auth_users.js';
-import { isWsApiPrincipalProvisioned } from './wsApiIdentity.js';
+import { isWsApiPrincipalProvisioned, resolveWsApiPrincipal } from './wsApiIdentity.js';
 import { handleShareMessage } from './sharing_message_api.js';
 import { executeShellCommand } from './shell.js';
 
@@ -31,7 +31,11 @@ export async function handleWsContactRequest({ data, connection, safeSend, commu
 
 export async function handleWsShareRequest({ data, connection, safeSend, communicationRelations, syncSharingService }) {
   const requestId = data.requestId || data.request_id;
-  const userId = connection?._wsApiUserId ? String(connection._wsApiUserId) : null;
+  // The token the request carries binds the connection (as an atome request does): a share sent
+  // right after a reconnection, before the socket's own auth, is not refused.
+  let userId = null;
+  try { userId = resolveWsApiPrincipal(connection, data); } catch { userId = null; }
+  if (!userId && connection?._wsApiUserId) userId = String(connection._wsApiUserId);
   if (!userId) {
     safeSend({
       type: 'share-response',

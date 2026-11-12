@@ -19,6 +19,51 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 
 ## Entrées à exécuter
 
+### R-134 — Comm/Visio : appel dans la conversation, appels manqués/refusés, envois audio/vidéo, Joint, suppressions, badge (2026-11-12)
+- Statut : EN COURS (session Claude du 12 nov. ; vérification sur iPhone et iPad en cours).
+- Demande (session Claude du 12 nov., liste validée) : Visio (vidéos qui se recalent à la rotation, image « Moi » au bon ratio,
+  bascule avant/arrière, une seule bande d'outils, panneau dessiné selon les règles Atome et à la bonne taille sur iPad) ; appels
+  manqués/sans réponse marqués, refus volontaire visible chez l'appelant avec message vocal envoyé ; envoi audio
+  (`share_owner_required`, « 0:0 »), vidéo « En attente », Joint (« Request timeout »), prise en attente écoutable/supprimable/
+  envoyable, rogner par appui long avec aperçu ; liste : suppression refusée/lente sur iPad, enveloppe lente en deux touchers,
+  badge enveloppe à la reconnexion, ouverture sur le dernier message. Rotation : testée par l'utilisateur.
+- FAIT (code, eVe 2ead5592, a 8485c9db0, serveur atome.one déployé le 12 nov.) :
+  - serveur local : médias lus dans le groupe d'app (`media_read_failed` iPad), lignes `failed` relivrées, erreurs du flush remontées ;
+  - partage relancé tant que l'enregistrement est en cours de livraison (`share_owner_required` = course, vérifié sur iPad) ;
+    délai du partage 30 s ; propriétés `conversation_*` déclarées sur les enregistrements (le passage `sent` était refusé :
+    `atome_property_unknown`, vérifié sur iPad) ;
+  - serveur Visio : refus ou sonnerie sans réponse laissent une ligne à l'appelant (`call-declined`, avec le mode d'appel) ;
+  - Joint : bibliothèque lue type par type (la liste entière prenait 8,9 s sur iPad), sans les photos de contacts ;
+  - suppression groupée en parallèle, notifications inconnues comptées comme supprimées ;
+  - Visio dans la conversation (scène calée sur la taille réelle des vidéos, ma vignette en coin, bascule de caméra) ;
+  - prises : appui long = tenue (lecture, rognage, suppression, retour).
+- Vérifié sur appareil (12 nov.) : appel audio iPad → iPhone, ligne « sans réponse » en rouge côté iPad, message vocal reçu et lu
+  sur l'iPhone (0:21), conversation iPhone ouverte en un toucher sur le dernier message.
+- Vérifié aussi (build du 12 nov. 22 h) : Visio iPad → iPhone décrochée : sur l'iPad l'appel s'affiche dans la conversation
+  (grande scène, vidéo distante au bon ratio, ma vignette en coin, une seule bande Micro/Caméra/Basc./Ajout/Racc.) ; Basc. passe
+  à la caméra arrière (`facing: environment`, vue sur l'iPhone) ; badge enveloppe affiché sur l'iPhone à l'arrivée d'un message.
+- Corrigé ensuite (eVe, non encore poussé à cette ligne) : panneau Visio du correspondant resté ouvert après le raccroché (fermé
+  quand l'appel finit, participants vidés, appel à deux terminé quand le dernier part) ; pile des notifications vidée au démarrage
+  quand le serveur n'avait pas encore répondu (plus d'enveloppe ni de lignes d'appel après un redémarrage) : relue jusqu'à réponse.
+- Vérifié sur la build 5 (12 nov. 22 h 20-22 h 40) : enveloppe et lignes d'appel présentes au démarrage sur les deux appareils ;
+  suppression groupée iPad (4 appels + 1 message cochés, Suppr. deux fois : 11 → 6 en moins d'1 s ; l'écran garde les anciennes
+  lignes ~3 s avant de se redessiner) ; prise vidéo iPad (appui maintenu sur Visio) → « Message vidéo · 0:03 » en attente, appui
+  long = Lire / Suppr. / Retour, Lire montre la vidéo sous la ligne, Envoi → reçue sur l'iPhone ; prise vidéo iPhone → reçue sur
+  l'iPad (22:38).
+- Trouvé et corrigé (12 nov. 22 h 45) : une vidéo REÇUE ne se lisait pas (arrêt muet) : la copie lisible du serveur
+  (`.video_cache/*.mp4`, HEVC → H.264) était tronquée, sans `moov` : ffmpeg écrivait la copie finale en place et, la requête
+  abandonnée (`kill_on_drop`), le nettoyage ne passait jamais ; la copie cassée était ensuite servie pour de bon (~30 fichiers
+  cassés sur atome.one depuis le 7 nov., tailles en multiples de 256 Kio + 48). `media/playback.rs` : ffmpeg écrit
+  `.partial-<nom>` puis renomme. Client : un décodage en erreur n'est plus muet (`record_preview_playback.js` `onEnded(id,
+  { failed })`), une vidéo reçue est re-téléchargée une fois (`force`) puis relue, sinon « lecture impossible ». Partage envoyé
+  juste après une reconnexion (`share_request_auth_required`, vu après le redéploiement) : le `share` porte le jeton, le serveur
+  le lit comme une requête `atome`.
+- Constaté, non traité (hors liste) : le coffre de l'iPhone pèse 3,8 Go pour 3,9 Go de RAM ; `state:list` y a pris 144 s et
+  `state:list` iPad 23 s juste après le redémarrage (disque à 94 %) : l'envoi iPhone restait « En attente » pendant ce temps.
+- Reste : titre de conversation iPhone affiché en numéro (« +33663694055 ») au lieu du nom ; vignette noire d'une prise vidéo
+  iPad ; premier toucher d'Envoi parfois ignoré sur iPhone (liste en train de défiler) ; défaut de rendu iPad : après la fermeture
+  du clavier ou une suppression, les bulles restent à leur place d'avant (et débordent au-dessus du panneau) un moment (moteur Bevy).
+
 ### R-133 — Accueil eVe Pro : la tuile Capture devient l'outil « Enr. » de la bande ; bande « Finder » élargie corrigée (2026-11-12)
 - Statut : ATTENTE UTILISATEUR (question posée le 12 nov. au 2e compte rendu : le trou laissé par Capture dans la rangée des tuiles en paysage ; le code est fait).
 - Demande (session Claude du 12 nov., 3 images) : la tuile Capture quitte l'accueil ; un outil Enr. dans la bande, 3e case depuis la

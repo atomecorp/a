@@ -105,6 +105,7 @@ function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                 return getWs().send({
                     type: 'share',
                     action: 'request',
+                    token: getToken(tokenKey),
                     target_user_id: data.target_user_id || data.targetUserId || null,
                     target_phone: data.target_phone || data.targetPhone || null,
                     atome_ids: data.atome_ids || data.atomeIds || [],
