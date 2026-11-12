@@ -132,3 +132,14 @@ extension AVAudioSession.Category {
     /// A category with an input route: the session is recording or ready to.
     var recordsAudio: Bool { self == .playAndRecord || self == .record || self == .multiRoute }
 }
+
+// A video take with sound holds the session as a capture (AppNativeVideoRecorder.audioSessionOwner).
+extension AppNativeAudioController: AppNativeCaptureAudioSessionOwner {
+    func acquireCaptureAudioSession(_ consumerId: String) throws {
+        try queue.sync { try acquireAudioSessionConsumer(consumerId, kind: .musicCapture) }
+    }
+
+    func releaseCaptureAudioSession(_ consumerId: String) {
+        queue.async { self.releaseAudioSessionConsumer(consumerId) }
+    }
+}

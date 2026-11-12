@@ -6,7 +6,21 @@
 import AVFoundation
 
 // Lifecycle state is confined to sessionQueue; preview frames use their own lock.
+/// The standalone app's owner of the shared audio session (`AppNativeAudioController`). Nil in the
+/// AUv3, whose host owns the session: the capture session then configures it itself, as before.
+protocol AppNativeCaptureAudioSessionOwner: AnyObject {
+    func acquireCaptureAudioSession(_ consumerId: String) throws
+    func releaseCaptureAudioSession(_ consumerId: String)
+}
+
 final class AppNativeVideoRecorder: NSObject, AVCaptureFileOutputRecordingDelegate, @unchecked Sendable {
+    /// Set by the app. A video take with sound borrows the session from it for its time: a capture
+    /// session left to configure the shared session itself (PlayAndRecord, VideoRecording mode)
+    /// left it, once stopped, where the next audio take's input never started (`'!pri'`,
+    /// « Recording start timed out before the input stream became ready »).
+    static weak var audioSessionOwner: AppNativeCaptureAudioSessionOwner?
+    static let audioSessionConsumerId = "video_capture"
+    var holdsAudioSession = false
     typealias Completion = ([String: Any], String?) -> Void
 
     let sessionQueue = DispatchQueue(label: "atome.app.native_video_recorder.session", qos: .userInitiated)
@@ -119,7 +133,12 @@ final class AppNativeVideoRecorder: NSObject, AVCaptureFileOutputRecordingDelega
     private func configureSession(includeAudio: Bool, payload: [String: Any]) throws {
         expectsAudio = includeAudio
         let session = AVCaptureSession()
-        session.automaticallyConfiguresApplicationAudioSession = true
+        let owner = includeAudio ? Self.audioSessionOwner : nil
+        session.automaticallyConfiguresApplicationAudioSession = owner == nil
+        if let owner {
+            try owner.acquireCaptureAudioSession(Self.audioSessionConsumerId)
+            holdsAudioSession = true
+        }
         session.beginConfiguration()
         session.sessionPreset = .high
 

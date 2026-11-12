@@ -190,6 +190,10 @@ extension AppNativeVideoRecorder {
         previewState.stop()
         session?.stopRunning()
         session = nil
+        if holdsAudioSession {
+            holdsAudioSession = false
+            Self.audioSessionOwner?.releaseCaptureAudioSession(Self.audioSessionConsumerId)
+        }
         movieOutput = nil
         activeDevice = nil
         outputURL = nil

@@ -107,6 +107,7 @@ final class AppPageHost {
         }
         WebViewManager.midiController = midiController
         AppNativeMediaCaptureController.shared.attachPreviewHost(webView: webView)
+        AppNativeVideoRecorder.audioSessionOwner = AppNativeAudioController.shared
         AppNativeStreamingView.shared.attach(webView: webView)
         NativePersonalImport.shared.openSettings = AppPageHost.openSettings
         // This app's page in Settings: Motion & Fitness and Health access.
