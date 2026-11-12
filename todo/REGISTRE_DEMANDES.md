@@ -58,9 +58,23 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   { failed })`), une vidéo reçue est re-téléchargée une fois (`force`) puis relue, sinon « lecture impossible ». Partage envoyé
   juste après une reconnexion (`share_request_auth_required`, vu après le redéploiement) : le `share` porte le jeton, le serveur
   le lit comme une requête `atome`.
-- Constaté, non traité (hors liste) : le coffre de l'iPhone pèse 3,8 Go pour 3,9 Go de RAM ; `state:list` y a pris 144 s et
-  `state:list` iPad 23 s juste après le redémarrage (disque à 94 %) : l'envoi iPhone restait « En attente » pendant ce temps.
-- Reste : titre de conversation iPhone affiché en numéro (« +33663694055 ») au lieu du nom ; vignette noire d'une prise vidéo
+- Trouvé et corrigé (12 nov. 23 h) : après une prise vidéo, toute prise audio échouait (« Recording start timed out before the
+  input stream became ready », `'!pri'`) : la session de capture configurait seule la session audio partagée (PlayAndRecord,
+  mode VideoRecording) et la laissait, arrêtée, sans entrée. Elle l'emprunte désormais au coordinateur de l'app
+  (`AppNativeVideoRecorder.audioSessionOwner`, consommateur `video_capture`) ; l'AUv3 garde l'ancien comportement. Vérifié
+  sur iPad (build 7) : prise vidéo puis prise audio, piste son de la vidéo présente, session rendue en lecture.
+- Lenteur serveur : `list_states` avec partages listait le coffre entier du propriétaire UNE FOIS PAR PARTAGE (14 médias reçus
+  d'une personne = 14 listes complètes ; coffre iPhone de 3,8 Go : `state:list` jusqu'à 144 s, envois « En attente »,
+  `vault_request_timeout:state:list`) : une liste par propriétaire. La copie lisible d'une vidéo est faite à part de la requête
+  (`tokio::spawn`) : un lecteur qui abandonne ne tue plus ffmpeg (la copie n'était jamais faite sur un serveur chargé).
+  39 copies cassées mises de côté sur atome.one dans `/opt/a/temp/broken_video_cache_20261112/` (régénérées à la lecture).
+- Vérifié (build 6-7) : prise audio → appui long → forme d'onde, Lire / Rogner / Suppr. / Retour ; Rogner montre les deux
+  poignées, la gauche tirée assombrit le début ; Lire (pré-écoute) joue la partie gardée (« Arrêter ») ; vidéo reçue de
+  l'iPhone relue sur l'iPad après re-téléchargement (copie serveur régénérée, 959 929 octets valides).
+- Constaté, non traité : le coffre de l'iPhone pèse 3,8 Go pour 3,9 Go de RAM (lectures disque permanentes).
+- Reste : prises en attente perdues quand l'app redémarre (brouillons non repris) ; message « Média indisponible » posé en
+  tête de liste, hors de vue quand on lit en bas ; aperçu de l'enveloppe « Visio sans réponse » alors que le dernier message
+  est une vidéo ; titre de conversation iPhone affiché en numéro (« +33663694055 ») au lieu du nom ; vignette noire d'une prise vidéo
   iPad ; premier toucher d'Envoi parfois ignoré sur iPhone (liste en train de défiler) ; défaut de rendu iPad : après la fermeture
   du clavier ou une suppression, les bulles restent à leur place d'avant (et débordent au-dessus du panneau) un moment (moteur Bevy).
 
