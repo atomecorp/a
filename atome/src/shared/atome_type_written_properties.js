@@ -17,6 +17,10 @@ export const ATOME_COMMON_PROPERTY_SCHEMA = Object.freeze({
     teleport_controller_surface_id: S, teleport_persist: B
 });
 
+// A recording made in a conversation (eVe/domains/media/api/media_persistence_service.js): the person it is for,
+// its message and whether it left (`draft` → `sent`, setConversationMediaSendStatus).
+const CONVERSATION_MEDIA = Object.freeze({ conversation_contact_id: S, conversation_message_id: ANY, conversation_send_status: S });
+
 export const ATOME_WRITTEN_PROPERTIES = Object.freeze({
     calendar: {
         coaching: ANY
@@ -76,6 +80,7 @@ export const ATOME_WRITTEN_PROPERTIES = Object.freeze({
         file_name: ANY, file_path: ANY, is_public: ANY, mime_type: ANY, original_name: ANY, size: ANY
     },
     sound: {
+        ...CONVERSATION_MEDIA,
         ai_generation: O, background: ANY, backgroundColor: S, bg: ANY, channels: N, color: S, container: S,
         created_iso: S, duration: N, duration_sec: N, duration_seconds: N, file_name: S, file_path: S, fileName: S,
         filePath: S, font_size: ANY, font_weight: ANY, fontSize: ANY, fontWeight: ANY, frame_count: N, height: ANY,
@@ -89,6 +94,7 @@ export const ATOME_WRITTEN_PROPERTIES = Object.freeze({
         waveform_ref: S, width: ANY, z_index: N, zIndex: N
     },
     audio_recording: {
+        ...CONVERSATION_MEDIA,
         accessibility: O, background: ANY, backgroundColor: S, bg: ANY, channels: N, color: ANY, container: S,
         created_iso: S, duration: N, duration_sec: N, duration_seconds: N, file_name: S, file_path: S, fileName: S,
         filePath: S, font_size: ANY, font_weight: ANY, fontSize: ANY, fontWeight: ANY, frame_count: N, height: ANY,
@@ -101,6 +107,7 @@ export const ATOME_WRITTEN_PROPERTIES = Object.freeze({
         top: ANY, visual_ref: S, visual_status: S, waveform_peaks: A, waveform_ref: S, width: ANY, z_index: N, zIndex: N
     },
     video_recording: {
+        ...CONVERSATION_MEDIA,
         accessibility: O, audio_codec: S, audio_track_count: N, background: ANY, backgroundColor: ANY, bg: ANY,
         codecs: A, color: ANY, container: S, corner_radii: ANY, corner_radius: N, created_iso: S, duration: N,
         duration_sec: N, duration_seconds: N, file_name: S, file_path: S, fileName: S, filePath: S, font_size: ANY,

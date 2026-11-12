@@ -467,7 +467,8 @@ fn queued_parent_id(item: &SyncQueueItem) -> Option<String> {
 }
 
 // Delivers now, ahead of the rest of the queue, what a share of `atome_ids` needs on the
-// server: their queued events and those of their queued ancestors, ancestors first. Without
+// server: their queued events and those of their queued ancestors, ancestors first; a row
+// given up earlier (`failed`) is tried again, since the person asks for it now. Without
 // it, a recording made offline waits behind a whole workspace republication and its share
 // is refused (`share_owner_required`).
 pub(crate) async fn deliver_atomes(
@@ -517,14 +518,27 @@ pub(crate) async fn deliver_atomes(
         .filter(|item| taken.insert(item.queue_id))
         .collect();
     let (mut delivered, mut failed) = (0usize, 0usize);
+    let mut errors = Vec::<String>::new();
     for item in ordered {
+        let queue_id = item.queue_id;
         if deliver_item(state, &remote_url, item).await {
             delivered += 1;
-        } else {
-            failed += 1;
+            continue;
+        }
+        failed += 1;
+        // The share that follows would only say `share_owner_required`: the cause goes back.
+        if let Ok(db) = state.db.lock()
+            && let Ok(error) = db.query_row(
+                "SELECT COALESCE(error_message, '') FROM sync_queue WHERE queue_id = ?1",
+                [queue_id],
+                |row| row.get::<_, String>(0),
+            )
+            && !error.is_empty()
+        {
+            errors.push(error);
         }
     }
-    Ok(json!({ "delivered": delivered, "failed": failed }))
+    Ok(json!({ "delivered": delivered, "failed": failed, "errors": errors }))
 }
 
 pub async fn run(state: LocalAtomeState, remote_url: String) {

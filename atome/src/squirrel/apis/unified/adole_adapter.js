@@ -120,7 +120,9 @@ function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     writable_properties: data.writable_properties || data.writableProperties
                         || data.allowed_properties || data.allowedProperties || null,
                     expires_at: data.expires_at || data.expiresAt || null
-                });
+                // Un partage ecrit dans les coffres du serveur (plusieurs secondes chacun) : les
+                // dix secondes par defaut le donnaient perdu (`Request timeout`) alors qu'il aboutissait.
+                }, { timeoutMs: 30000 });
             },
             async updateRights(data) {
                 return getWs().send({

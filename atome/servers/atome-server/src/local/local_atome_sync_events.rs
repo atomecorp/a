@@ -174,7 +174,7 @@ pub(in crate::local) fn list_sync_queue_for_atomes(
              FROM sync_queue
              WHERE target_server = ?1
                AND json_extract(payload, '$.actor.id') = ?2
-               AND status IN ('pending', 'error')
+               AND status IN ('pending', 'error', 'failed')
                AND atome_id IN ({marks})
              ORDER BY created_at ASC, queue_id ASC"
         ))

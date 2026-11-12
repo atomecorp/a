@@ -298,7 +298,13 @@ pub(super) async fn download_recording_handler(
         }
     };
 
-    let target_path = state.project_root.join(&rel);
+    // iOS: a native capture sits in the vault's folder (the app group), not the files' root.
+    let target_path = match &state.atome_state {
+        Some(atome_state) if atome_state.storage_root() == state.project_root.as_path() => {
+            atome_state.media_file(Path::new(&rel))
+        }
+        _ => state.project_root.join(&rel),
+    };
     println!(
         "[download_recording_handler] recording_id={}, user_id={}, rel={}, project_root={:?}, target_path={:?}, exists={}",
         recording_id,

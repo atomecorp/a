@@ -31,8 +31,8 @@ fn remember_media_outcome(key: &str, refused: bool) {
     }
 }
 
+// The file's path from the root (`data/users/<id>/...`); `LocalAtomeState::media_file` places it.
 fn local_media_path(
-    storage_root: &Path,
     local_user_id: &str,
     properties: &serde_json::Map<String, JsonValue>,
 ) -> Option<PathBuf> {
@@ -59,8 +59,7 @@ fn local_media_path(
         return None;
     }
     Some(
-        storage_root
-            .join("data")
+        Path::new("data")
             .join("users")
             .join(local_user_id)
             .join(relative_path),
@@ -153,9 +152,10 @@ pub(super) async fn upload_outbound_media(
     if already_remote {
         return Ok(());
     }
-    let Some(path) = local_media_path(state.storage_root(), local_user_id, properties) else {
+    let Some(relative) = local_media_path(local_user_id, properties) else {
         return Ok(());
     };
+    let path = state.media_file(&relative);
     let bytes = tokio::fs::read(&path)
         .await
         .map_err(|error| format!("media_read_failed:{}:{}", path.display(), error))?;
@@ -191,12 +191,8 @@ pub(super) async fn upload_outbound_media(
         .header("X-Mime-Type", mime_type)
         .header("X-Atome-Id", &atome_id)
         .header("X-Atome-Type", atome_type);
-    let user_media_root = state
-        .storage_root()
-        .join("data")
-        .join("users")
-        .join(local_user_id);
-    if let Ok(relative_path) = path.strip_prefix(user_media_root) {
+    let user_media_root = Path::new("data").join("users").join(local_user_id);
+    if let Ok(relative_path) = relative.strip_prefix(user_media_root) {
         upload = upload.header(
             "X-File-Path",
             relative_path.to_string_lossy().replace('\\', "/"),
@@ -457,21 +453,11 @@ mod tests {
             "file_path": "data/users/local-user/Downloads/photo été.png"
         });
         assert_eq!(
-            local_media_path(
-                Path::new("/workspace"),
-                "local-user",
-                properties.as_object().unwrap(),
-            ),
-            Some(
-                Path::new("/workspace/data/users/local-user/Downloads/photo été.png").to_path_buf()
-            )
+            local_media_path("local-user", properties.as_object().unwrap()),
+            Some(Path::new("data/users/local-user/Downloads/photo été.png").to_path_buf())
         );
         assert_eq!(
-            local_media_path(
-                Path::new("/workspace"),
-                "local-user",
-                json!({ "file_path": "../../secret" }).as_object().unwrap(),
-            ),
+            local_media_path("local-user", json!({ "file_path": "../../secret" }).as_object().unwrap()),
             None
         );
 

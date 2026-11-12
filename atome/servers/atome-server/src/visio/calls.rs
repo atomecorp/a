@@ -177,21 +177,29 @@ impl Visio {
                 if self.state().metas[&room_id].owned_by(user) {
                     return Err("visio_decline_denied".into());
                 }
-                if status == "ringing" {
-                    return Ok(self.finish(&room_id, "recording").await);
-                }
                 let reason = text(input, "reason").unwrap_or_else(|| "declined".into());
-                let owner = self.state().metas[&room_id]
-                    .owner
-                    .clone()
-                    .unwrap_or_default();
+                let (owner, mode) = {
+                    let state = self.state();
+                    let meta = &state.metas[&room_id];
+                    (meta.owner.clone().unwrap_or_default(), meta.call_mode.clone())
+                };
+                // The caller keeps a line of it (« refused », « no answer ») in their history,
+                // a ringing call too: it turns to its message (`recording`) at the same time.
                 let notice = json!({ "kind": "call-declined", "message": reason,
-                    "extra": { "room_id": room_id, "reason": reason } });
-                self.social
-                    .notifier
-                    .notify(&owner, Some(user), &notice)
-                    .await?;
-                Ok(self.state().metas[&room_id].snapshot())
+                    "extra": { "room_id": room_id, "reason": reason, "call_mode": mode } });
+                let snapshot = if status == "ringing" {
+                    Some(self.finish(&room_id, "recording").await)
+                } else {
+                    None
+                };
+                // Already turned to its message (the ring's end told the caller): no second line.
+                if status != "recording" {
+                    self.social
+                        .notifier
+                        .notify(&owner, Some(user), &notice)
+                        .await?;
+                }
+                Ok(snapshot.unwrap_or_else(|| self.state().metas[&room_id].snapshot()))
             }
             "cancel" => {
                 let (announced, frames) = {
@@ -297,8 +305,20 @@ impl Visio {
             ))
             .await;
             // Its own handle goes first: aborting it would stop this very task mid-announce.
-            self.state().timers.remove(&room_id);
+            let unanswered = {
+                let mut state = self.state();
+                state.timers.remove(&room_id);
+                state.metas.get(&room_id).filter(|meta| meta.status_is("ringing")).map(|meta| {
+                    (meta.owner.clone().unwrap_or_default(), meta.invites.first().cloned(), meta.call_mode.clone())
+                })
+            };
             self.finish(&room_id, "recording").await;
+            // Nobody answered: the caller keeps a « no answer » line in their history.
+            if let Some((owner, Some(callee), mode)) = unanswered {
+                let notice = json!({ "kind": "call-declined", "message": "missed",
+                    "extra": { "room_id": room_id, "reason": "missed", "call_mode": mode } });
+                let _ = self.social.notifier.notify(&owner, Some(&callee), &notice).await;
+            }
         })
         .abort_handle()
     }

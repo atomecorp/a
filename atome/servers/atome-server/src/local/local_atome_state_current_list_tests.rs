@@ -6,6 +6,7 @@ fn state() -> LocalAtomeState {
     LocalAtomeState {
         db: Arc::new(crate::local::local_vault::LocalVault::new(db)),
         storage_root: PathBuf::new(),
+        media_fallback_root: None,
         recent_request_ids: Arc::new(Mutex::new(DedupeCache::new(32))),
         remote_sync_credentials: Arc::new(Mutex::new(HashMap::new())),
         sync_progress: Arc::new(Mutex::new(HashMap::new())),

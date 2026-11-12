@@ -318,9 +318,11 @@ pub fn create_state(
     journal_mode: &str,
 ) -> Result<LocalAtomeState, rusqlite::Error> {
     let conn = init_database(&data_dir, journal_mode)?;
+    let media_fallback_root = (data_dir != storage_root).then(|| data_dir.clone());
     Ok(LocalAtomeState {
         db: Arc::new(crate::local::local_vault::LocalVault::new(conn)),
         storage_root,
+        media_fallback_root,
         recent_request_ids: Arc::new(Mutex::new(DedupeCache::new(2000))),
         remote_sync_credentials: Arc::new(Mutex::new(HashMap::new())),
         sync_progress: Arc::new(Mutex::new(HashMap::new())),
