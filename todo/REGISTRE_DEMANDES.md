@@ -20,7 +20,8 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 ## Entrées à exécuter
 
 ### R-134 — Comm/Visio : appel dans la conversation, appels manqués/refusés, envois audio/vidéo, Joint, suppressions, badge (2026-11-12)
-- Statut : EN COURS (session Claude du 12 nov. ; vérification sur iPhone et iPad en cours).
+- Statut : ATTENTE UTILISATEUR (13 nov. 0 h 50 : tout est déployé — eVe e145f700, a 8c9025b8f, serveur atome.one déploiement 5 ;
+  build 7 sur iPhone et iPad ; reste le test de rotation par l'utilisateur et la liste « Reste » ci-dessous).
 - Demande (session Claude du 12 nov., liste validée) : Visio (vidéos qui se recalent à la rotation, image « Moi » au bon ratio,
   bascule avant/arrière, une seule bande d'outils, panneau dessiné selon les règles Atome et à la bonne taille sur iPad) ; appels
   manqués/sans réponse marqués, refus volontaire visible chez l'appelant avec message vocal envoyé ; envoi audio
@@ -71,12 +72,22 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 - Vérifié (build 6-7) : prise audio → appui long → forme d'onde, Lire / Rogner / Suppr. / Retour ; Rogner montre les deux
   poignées, la gauche tirée assombrit le début ; Lire (pré-écoute) joue la partie gardée (« Arrêter ») ; vidéo reçue de
   l'iPhone relue sur l'iPad après re-téléchargement (copie serveur régénérée, 959 929 octets valides).
+- Vérifié après le déploiement 5 (12-13 nov.) : vidéo iPad de 22:30 lue sur l'iPhone (copie serveur refaite en tâche à part,
+  1 976 158 octets, 3,35 s, valide ; la surface vidéo s'affiche sous la ligne) ; prise audio iPad en attente envoyée (00:47),
+  reçue sur l'iPhone, conversation iPhone placée sur ce dernier message. Le premier Envoi juste après le redémarrage du
+  serveur a échoué en `vault_request_timeout:state:list` (coffre de l'iPad froid : 24,6 s, la même requête SQL prend 0,5 s
+  à chaud) ; le second est passé. L'avis d'erreur n'était pas visible (voir « Reste »).
 - Constaté, non traité : le coffre de l'iPhone pèse 3,8 Go pour 3,9 Go de RAM (lectures disque permanentes).
 - Reste : prises en attente perdues quand l'app redémarre (brouillons non repris) ; message « Média indisponible » posé en
   tête de liste, hors de vue quand on lit en bas ; aperçu de l'enveloppe « Visio sans réponse » alors que le dernier message
   est une vidéo ; titre de conversation iPhone affiché en numéro (« +33663694055 ») au lieu du nom ; vignette noire d'une prise vidéo
   iPad ; premier toucher d'Envoi parfois ignoré sur iPhone (liste en train de défiler) ; défaut de rendu iPad : après la fermeture
-  du clavier ou une suppression, les bulles restent à leur place d'avant (et débordent au-dessus du panneau) un moment (moteur Bevy).
+  du clavier ou une suppression, les bulles restent à leur place d'avant (et débordent au-dessus du panneau) un moment (moteur Bevy) ; sur
+  iPhone, après une vidéo lue puis une prise audio touchée, la liste reste vide jusqu'au prochain glissement (non reproduit
+  sur iPad) ; juste après un redémarrage du serveur, le premier `state:list` d'un coffre froid dépasse les 10 s
+  (`vaults.rs` `REQUEST_TIMEOUT`) : l'envoi échoue une fois ; `state:list` sans `limit` ne rend que les 1000 états les plus
+  récents (un partage dont les états sont plus anciens peut en manquer) ; libellé de l'appel audio et avis de refus non
+  revérifiés sur la build 7.
 
 ### R-133 — Accueil eVe Pro : la tuile Capture devient l'outil « Enr. » de la bande ; bande « Finder » élargie corrigée (2026-11-12)
 - Statut : ATTENTE UTILISATEUR (question posée le 12 nov. au 2e compte rendu : le trou laissé par Capture dans la rangée des tuiles en paysage ; le code est fait).
