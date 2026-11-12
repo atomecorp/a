@@ -139,6 +139,8 @@ struct RecordState {
     /// The described offset of every list the base depends on, read with it.
     base_offsets: Vec<(String, f64)>,
     applied: Option<(RecordPose, f32)>,
+    /// Described again since it was last read: read once before any shortcut on its last pose.
+    recheck: bool,
 }
 
 /// A list's place as the browser reads it.
@@ -212,7 +214,8 @@ impl ScrollTree {
             .records
             .into_iter()
             .map(|record| {
-                let state = previous.remove(&record.id).unwrap_or_default();
+                let mut state = previous.remove(&record.id).unwrap_or_default();
+                state.recheck = true;
                 (record, state)
             })
             .collect();
@@ -269,9 +272,12 @@ impl ScrollTree {
                 *state = RecordState::default();
                 continue;
             };
-            // Out of view at its last pose and at this frame's: nothing to read nor lay. A description it
-            // got meanwhile is seen once it comes into view.
-            if let (Some(base), Some((applied, _))) = (&state.base, &state.applied)
+            // Out of view at its last pose and at this frame's: nothing to read nor lay. A record described
+            // again is read first: its last pose may come from a layout the description replaced (a list laid
+            // at another offset), and judged by it the record would stay unread, standing still where the
+            // browser laid it while its list moves (user, 12 Nov. 2026: waveforms left behind their rows).
+            if !state.recheck
+                && let (Some(base), Some((applied, _))) = (&state.base, &state.applied)
                 && !visible(applied)
                 && present_record(spec, base, &state.base_offsets, &self.areas)
                     .is_none_or(|(pose, _)| !visible(&pose))
@@ -279,6 +285,7 @@ impl ScrollTree {
                 continue;
             }
             let shown = RecordPose::read(world, entity);
+            state.recheck = false;
             // Described again since the last pose (or never presented): its state is the new base.
             let described = match (&state.applied, &shown) {
                 (None, _) => true,
@@ -421,18 +428,24 @@ pub(crate) fn present_record(
             .find(|(area, _)| area == id)
             .map(|(_, v)| *v)
     };
+    // The pose moves from where its base was read (`base_offsets`); the chain's clips and the lists' boxes
+    // come with the description, laid at each list's described offset: each moves from its own. Equal
+    // while the base was read at the description; a base kept from an earlier one (the browser left the
+    // record as the renderer laid it) would otherwise cut it with clips a whole jump away.
     let mut clip = ScrollClip::default();
     let mut dy = 0.0_f32;
+    let mut clip_dy = 0.0_f32;
     for link in &spec.chain {
         if let Some(id) = &link.area {
             let area = areas.get(id)?;
-            if let Some(fades) = edge_fades(area, dy) {
+            if let Some(fades) = edge_fades(area, clip_dy) {
                 clip.fades.push(fades);
             }
             dy += (described(id)? - area.motion.shown()) as f32;
+            clip_dy += (area.spec.offset - area.motion.shown()) as f32;
         }
         if let Some(link_clip) = &link.clip {
-            clip.intersect(&link_clip.moved(dy));
+            clip.intersect(&link_clip.moved(clip_dy));
         }
     }
     let mut opacity = spec.opacity;

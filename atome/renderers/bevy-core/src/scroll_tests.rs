@@ -191,3 +191,52 @@ fn a_record_moves_with_its_list_and_keeps_the_clips_it_lies_in() {
     );
     assert_eq!(opacity, 0.8);
 }
+
+// User, 12 Nov. 2026: a row's waveform stood still while its list moved. Its base had been read with the list at
+// its top (offset 0); the tree was then described with the list revealed at 256, its clips laid there. Moved from
+// the base's offset, those clips missed the record a whole jump away: judged out of view, it was never laid again.
+#[test]
+fn a_base_kept_from_an_earlier_description_is_cut_by_the_clips_where_they_now_lie() {
+    let card = ScrollClip {
+        rect: Some([0.0, 487.0, 300.0, 40.0]),
+        ..ScrollClip::default()
+    };
+    let spec = ScrollRecordSpec {
+        id: "thumbnail".into(),
+        opacity: 1.0,
+        role: ScrollRecordRole::Content,
+        area: None,
+        chain: vec![
+            ScrollChainLink {
+                area: None,
+                clip: Some(ScrollClip {
+                    rect: Some([0.0, 480.0, 300.0, 210.0]),
+                    ..ScrollClip::default()
+                }),
+            },
+            ScrollChainLink {
+                area: Some("list".into()),
+                clip: Some(card),
+            },
+        ],
+    };
+    let mut areas = HashMap::new();
+    let mut area = AreaState::new(ScrollAreaSpec {
+        id: "list".into(),
+        motion: MOTION,
+        area_box: [0.0, 480.0, 300.0, 210.0],
+        max: 1000.0,
+        offset: 256.0,
+        jump: false,
+        edge_mask: None,
+        thumb_travel: 0.0,
+    });
+    area.motion_mut().wheel(-108.0);
+    areas.insert("list".to_string(), area);
+    // Read at offset 0: 256 px lower than where the description lays it.
+    let base = pose(743.0, [0.0, 743.0, 300.0, 40.0]);
+    let (shown, _) = present_record(&spec, &base, &[("list".to_string(), 0.0)], &areas).unwrap();
+    // Shown at offset 148 from either description: 743 − 148 = 487 + (256 − 148) = 595.
+    assert_eq!(shown.position, [10.0, 595.0]);
+    assert_eq!(shown.clip, Some([0.0, 595.0, 300.0, 40.0]));
+}

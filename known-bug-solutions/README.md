@@ -10,6 +10,8 @@ the established solution before attempting a new implementation.
 
 | Symptom | Folder |
 | --- | --- |
+| A list (Captures › Audio, Vidéo) dragged by a row: thumbnails left behind, a waveform a row away from its name, rows overlapping, worst held still | [list-rows-split-while-dragging](list-rows-split-while-dragging/README.md) |
+| A list over the Dashboard moves when a box is ticked; the next tick lands a row away; Suppr. on ticked rows deletes nothing or the wrong ones | [list-jumps-when-band-changes](list-jumps-when-band-changes/README.md) |
 | A drag on a roller (Sport values, medication Heure/Dose, a date or time) scrolls the panel instead of turning the roller | [roller-drag-scrolls-panel](roller-drag-scrolls-panel/README.md) |
 | Web stack: some mutations of a burst fail at once with `SQLITE_BUSY` (database is locked); a probe keeps 11–13 of 20 messages | [central-db-busy-between-two-servers](central-db-busy-between-two-servers/README.md) |
 | Android update stays on its launch cover; native ADOLE initialization reports `no such column: thread_ref` | [native-news-schema-upgrade](native-news-schema-upgrade/README.md) |

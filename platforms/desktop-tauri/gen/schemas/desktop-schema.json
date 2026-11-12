@@ -351,10 +351,10 @@
           "markdownDescription": "Lets the main webview take the assistant request opened by the atome://assistant link.\n#### This permission set includes:\n\n- `allow-assistant-request-take`"
         },
         {
-          "description": "Allows the main webview to use the native Kira audio engine commands.\n#### This permission set includes:\n\n- `allow-audio-init`\n- `allow-audio-load-clip`\n- `allow-audio-load-clip-from-bytes`\n- `allow-audio-has-clip`\n- `allow-audio-play`\n- `allow-audio-play-instance`\n- `allow-audio-schedule-instances`\n- `allow-audio-measure-input-latency`\n- `allow-audio-render-clock`\n- `allow-audio-mix-apply`\n- `allow-audio-mix-levels`\n- `allow-audio-mix-devices`\n- `allow-audio-mix-cut-tail`\n- `allow-audio-mix-module-state`\n- `allow-audio-direct-apply`\n- `allow-audio-direct-levels`\n- `allow-audio-direct-cut-tail`\n- `allow-audio-direct-module-state`\n- `allow-audio-direct-measure-latency`\n- `allow-audio-stop`\n- `allow-audio-stop-instance`\n- `allow-audio-set-voice-end`\n- `allow-audio-destroy-clip`\n- `allow-audio-set-volume`\n- `allow-audio-set-pan`\n- `allow-audio-set-playback-rate`\n- `allow-audio-wake-start`\n- `allow-audio-wake-stop`\n- `allow-audio-wake-read`\n- `allow-audio-voice-start`\n- `allow-audio-voice-stop`\n- `allow-audio-voice-set-phrases`\n- `allow-audio-voice-set-speaking`\n- `allow-audio-voice-set-listening`\n- `allow-audio-voice-set-wake-verifier`\n- `allow-audio-voice-read`\n- `allow-audio-record-start`\n- `allow-audio-record-stop`\n- `allow-audio-get-levels`\n- `allow-audio-get-scope`\n- `allow-audio-shutdown`",
+          "description": "Allows the main webview to use the native Kira audio engine commands.\n#### This permission set includes:\n\n- `allow-audio-init`\n- `allow-audio-load-clip`\n- `allow-audio-load-clip-from-bytes`\n- `allow-audio-has-clip`\n- `allow-audio-play`\n- `allow-audio-play-instance`\n- `allow-audio-schedule-instances`\n- `allow-audio-measure-input-latency`\n- `allow-audio-render-clock`\n- `allow-audio-mix-apply`\n- `allow-audio-mix-levels`\n- `allow-audio-mix-devices`\n- `allow-audio-mix-cut-tail`\n- `allow-audio-mix-module-state`\n- `allow-audio-mix-asset-load`\n- `allow-audio-mix-asset-unload`\n- `allow-audio-instrument-sample-load`\n- `allow-audio-instrument`\n- `allow-audio-direct-apply`\n- `allow-audio-direct-levels`\n- `allow-audio-direct-cut-tail`\n- `allow-audio-direct-module-state`\n- `allow-audio-direct-measure-latency`\n- `allow-audio-stop`\n- `allow-audio-stop-instance`\n- `allow-audio-set-voice-end`\n- `allow-audio-destroy-clip`\n- `allow-audio-set-volume`\n- `allow-audio-set-pan`\n- `allow-audio-set-playback-rate`\n- `allow-audio-wake-start`\n- `allow-audio-wake-stop`\n- `allow-audio-wake-read`\n- `allow-audio-voice-start`\n- `allow-audio-voice-stop`\n- `allow-audio-voice-set-phrases`\n- `allow-audio-voice-set-speaking`\n- `allow-audio-voice-set-listening`\n- `allow-audio-voice-set-wake-verifier`\n- `allow-audio-voice-read`\n- `allow-audio-record-start`\n- `allow-audio-record-stop`\n- `allow-audio-get-levels`\n- `allow-audio-get-scope`\n- `allow-audio-shutdown`",
           "type": "string",
           "const": "audio-engine",
-          "markdownDescription": "Allows the main webview to use the native Kira audio engine commands.\n#### This permission set includes:\n\n- `allow-audio-init`\n- `allow-audio-load-clip`\n- `allow-audio-load-clip-from-bytes`\n- `allow-audio-has-clip`\n- `allow-audio-play`\n- `allow-audio-play-instance`\n- `allow-audio-schedule-instances`\n- `allow-audio-measure-input-latency`\n- `allow-audio-render-clock`\n- `allow-audio-mix-apply`\n- `allow-audio-mix-levels`\n- `allow-audio-mix-devices`\n- `allow-audio-mix-cut-tail`\n- `allow-audio-mix-module-state`\n- `allow-audio-direct-apply`\n- `allow-audio-direct-levels`\n- `allow-audio-direct-cut-tail`\n- `allow-audio-direct-module-state`\n- `allow-audio-direct-measure-latency`\n- `allow-audio-stop`\n- `allow-audio-stop-instance`\n- `allow-audio-set-voice-end`\n- `allow-audio-destroy-clip`\n- `allow-audio-set-volume`\n- `allow-audio-set-pan`\n- `allow-audio-set-playback-rate`\n- `allow-audio-wake-start`\n- `allow-audio-wake-stop`\n- `allow-audio-wake-read`\n- `allow-audio-voice-start`\n- `allow-audio-voice-stop`\n- `allow-audio-voice-set-phrases`\n- `allow-audio-voice-set-speaking`\n- `allow-audio-voice-set-listening`\n- `allow-audio-voice-set-wake-verifier`\n- `allow-audio-voice-read`\n- `allow-audio-record-start`\n- `allow-audio-record-stop`\n- `allow-audio-get-levels`\n- `allow-audio-get-scope`\n- `allow-audio-shutdown`"
+          "markdownDescription": "Allows the main webview to use the native Kira audio engine commands.\n#### This permission set includes:\n\n- `allow-audio-init`\n- `allow-audio-load-clip`\n- `allow-audio-load-clip-from-bytes`\n- `allow-audio-has-clip`\n- `allow-audio-play`\n- `allow-audio-play-instance`\n- `allow-audio-schedule-instances`\n- `allow-audio-measure-input-latency`\n- `allow-audio-render-clock`\n- `allow-audio-mix-apply`\n- `allow-audio-mix-levels`\n- `allow-audio-mix-devices`\n- `allow-audio-mix-cut-tail`\n- `allow-audio-mix-module-state`\n- `allow-audio-mix-asset-load`\n- `allow-audio-mix-asset-unload`\n- `allow-audio-instrument-sample-load`\n- `allow-audio-instrument`\n- `allow-audio-direct-apply`\n- `allow-audio-direct-levels`\n- `allow-audio-direct-cut-tail`\n- `allow-audio-direct-module-state`\n- `allow-audio-direct-measure-latency`\n- `allow-audio-stop`\n- `allow-audio-stop-instance`\n- `allow-audio-set-voice-end`\n- `allow-audio-destroy-clip`\n- `allow-audio-set-volume`\n- `allow-audio-set-pan`\n- `allow-audio-set-playback-rate`\n- `allow-audio-wake-start`\n- `allow-audio-wake-stop`\n- `allow-audio-wake-read`\n- `allow-audio-voice-start`\n- `allow-audio-voice-stop`\n- `allow-audio-voice-set-phrases`\n- `allow-audio-voice-set-speaking`\n- `allow-audio-voice-set-listening`\n- `allow-audio-voice-set-wake-verifier`\n- `allow-audio-voice-read`\n- `allow-audio-record-start`\n- `allow-audio-record-stop`\n- `allow-audio-get-levels`\n- `allow-audio-get-scope`\n- `allow-audio-shutdown`"
         },
         {
           "description": "Allows the main webview to use the single gated in-app purchase command. The purchase grants nothing by itself: the server verifies it with the store.\n#### This permission set includes:\n\n- `allow-billing-invoke`",
@@ -465,6 +465,18 @@
           "markdownDescription": "Enables the audio_init command."
         },
         {
+          "description": "Enables the audio_instrument command.",
+          "type": "string",
+          "const": "allow-audio-instrument",
+          "markdownDescription": "Enables the audio_instrument command."
+        },
+        {
+          "description": "Enables the audio_instrument_sample_load command.",
+          "type": "string",
+          "const": "allow-audio-instrument-sample-load",
+          "markdownDescription": "Enables the audio_instrument_sample_load command."
+        },
+        {
           "description": "Enables the audio_load_clip command.",
           "type": "string",
           "const": "allow-audio-load-clip",
@@ -487,6 +499,18 @@
           "type": "string",
           "const": "allow-audio-mix-apply",
           "markdownDescription": "Enables the audio_mix_apply command."
+        },
+        {
+          "description": "Enables the audio_mix_asset_load command.",
+          "type": "string",
+          "const": "allow-audio-mix-asset-load",
+          "markdownDescription": "Enables the audio_mix_asset_load command."
+        },
+        {
+          "description": "Enables the audio_mix_asset_unload command.",
+          "type": "string",
+          "const": "allow-audio-mix-asset-unload",
+          "markdownDescription": "Enables the audio_mix_asset_unload command."
         },
         {
           "description": "Enables the audio_mix_cut_tail command.",
