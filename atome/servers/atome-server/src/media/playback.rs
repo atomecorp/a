@@ -393,33 +393,46 @@ pub async fn ensure_cache(
         return Ok(None);
     };
     let (cached, cached_name) = cache_target(source, name);
-    let made = once(&cached, || async {
-        if normalization == Normalization::Remux {
-            ffmpeg(
-                &[MAP.as_slice(), &["-c", "copy", "-movflags", "+faststart"]].concat(),
-                source,
-                &cached,
-            )
-            .await
-        } else {
-            // H.264 8-bit yuv420p with no fixed profile or level (so past 720p), faststart.
-            let encode = [
-                "-c:v",
-                "libx264",
-                "-pix_fmt",
-                "yuv420p",
-                "-movflags",
-                "+faststart",
-                "-c:a",
-                "aac",
-                "-b:a",
-                "128k",
-            ];
-            ffmpeg(&[MAP.as_slice(), &encode].concat(), source, &cached).await
-        }
-    })
-    .await;
+    // Made apart from the request that asked: a player that gives up (its request dropped, often
+    // on a busy server) no longer kills the run half way, so the next request finds the copy made.
+    let (source, target) = (source.to_path_buf(), cached.clone());
+    let job = tokio::spawn(async move {
+        once(&target, || make_playable(normalization, &source, &target)).await
+    });
+    let made = job
+        .await
+        .map_err(|error| format!("video_normalization_failed: {error}"))?;
     made.map(|()| Some((cached, cached_name)))
+}
+
+async fn make_playable(
+    normalization: Normalization,
+    source: &Path,
+    cached: &Path,
+) -> Result<(), String> {
+    if normalization == Normalization::Remux {
+        ffmpeg(
+            &[MAP.as_slice(), &["-c", "copy", "-movflags", "+faststart"]].concat(),
+            source,
+            cached,
+        )
+        .await
+    } else {
+        // H.264 8-bit yuv420p with no fixed profile or level (so past 720p), faststart.
+        let encode = [
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+        ];
+        ffmpeg(&[MAP.as_slice(), &encode].concat(), source, cached).await
+    }
 }
 
 #[cfg(test)]
