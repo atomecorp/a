@@ -158,8 +158,10 @@ pub(super) async fn answer(connection: Arc<Connection>, message: JsonValue) {
             json!({ "success": false, "error": error }),
         ))
     };
+    // The token the request carries binds the connection (as an atome request does): a share sent
+    // right after a reconnection, before the socket's own auth, was refused (`share_request_auth_required`).
     let front = match connection
-        .connection_of(json!({ "message": message }))
+        .connection_of(json!({ "message": message, "signed": true }))
         .await
     {
         Ok(front) => front,
@@ -168,16 +170,21 @@ pub(super) async fn answer(connection: Arc<Connection>, message: JsonValue) {
     if let Some(session_error) = front.get("session_error") {
         return connection.reply(session_error.clone()).await;
     }
-    let Some(user) = front
+    let signed = front
         .get("principal")
         .and_then(JsonValue::as_str)
-        .map(str::to_string)
-    else {
+        .map(str::to_string);
+    let Some(user) = signed.clone().or_else(|| connection.attached()) else {
         return connection
             .reply(refused("share_request_auth_required"))
             .await;
     };
-    if front.get("provisioned") != Some(&json!(true)) {
+    let provisioned = if signed.is_some() {
+        front.get("provisioned") == Some(&json!(true))
+    } else {
+        connection.provisioned(&user).await.unwrap_or(false)
+    };
+    if !provisioned {
         return connection
             .reply(refused("remote_account_not_provisioned"))
             .await;
