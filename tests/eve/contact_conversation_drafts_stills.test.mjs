@@ -75,3 +75,35 @@ describe('a received video whose local copy gives no frame', () => {
         expect(none.report().failed).toEqual({ v: 'no_frame' });
     });
 });
+
+describe('the video playing in the thread', () => {
+    it('slides sideways only: a finger going up or down on it scrolls the thread', async () => {
+        const { buildContactConversationContent } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_contact_conversation_view.js');
+        const record = { atome_id: 'v1', atome_type: 'video_recording', properties: { kind: 'video_recording', media_kind: 'video', media_url: '/api/recordings/v1.mov', media_width: 1920, media_height: 1080, duration: 2 } };
+        const scrub = { nodes: () => [], handlers: () => ({ press() {}, drag() {}, release() {} }) };
+        const selection = { has: () => false, isPressed: () => false, setRanges() {} };
+        const state = { contact: { id: 'ana', name: 'Ana' }, contactId: 'ana', history: { items: [{ message_id: 'm1', box: 'inbox', from_id: 'ana', timestamp: '2026-11-13T07:00:00Z', media: [{ id: 'v1', type: 'video_recording', media_kind: 'video', media_url: '/api/recordings/v1.mov', duration: 2 }] }] },
+            takes: [], attachItems: [], attachPicked: [], call: { phase: 'idle' }, memo: { phase: 'idle' }, playing: { id: 'm1', kind: 'video', record }, now: Date.now() };
+        const content = buildContactConversationContent(state, { emit: () => {}, bodyWidth: 600, bodyHeight: 800, selections: { attach: selection, takes: selection }, scrub, treeId: 't', collection: null });
+        const found = [];
+        const walk = (n) => { if (!n || typeof n !== 'object') return; if (n.id === 'contact_conversation_review_touch' || String(n.id || '').endsWith('_touch')) found.push(n); (n.children || []).forEach(walk); };
+        (Array.isArray(content) ? content : [content]).forEach(walk);
+        const touch = found.find(n => n.on?.drag);
+        expect(touch?.on.drag.sideways).toBe(true);
+    }, 20000);
+});
+
+describe('a video opened under the last row', () => {
+    it('is brought into view by its first repaint only, its row kept in place', async () => {
+        const { createConversationMedia } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_contact_conversation_media.js');
+        const record = { atome_id: 'v1', atome_type: 'video_recording', properties: { media_kind: 'video', media_url: '/api/recordings/v1.mov' } };
+        const state = { history: { items: [] }, takes: [{ mediaId: 'v1', kind: 'video', record }], call: { phase: 'idle' }, playing: null, access: '' };
+        let options = [];
+        const playEntry = async (entry) => { state.playing = entry; options.push(media.kept()); options.push(media.kept()); return { ok: true }; };
+        const media = createConversationMedia({ state, playEntry, stopPlayback: async () => {}, recordingMemo: () => false, setNotice() {}, repaint() {}, errorText: String, treeId: 'eve_bevy_panel_test', refresh() {}, scrub: {} });
+        await media.playRow('v1');
+        expect(options[0]?.revealNodeId).toBe('contact_conversation_review_frame');
+        expect(options[0]?.preserveNodeId).toBeTruthy();
+        expect(options[1]?.revealNodeId).toBeUndefined();
+    }, 20000);
+});
