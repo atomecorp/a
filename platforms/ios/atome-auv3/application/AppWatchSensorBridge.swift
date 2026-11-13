@@ -151,7 +151,12 @@ final class AppWatchSensorBridge: NSObject, HealthSensorWatchLink, HealthWorkout
     }
 
     // A card's action the watch queued while this iPhone was out of its reach (WatchLink.swift#send): taken as a message.
+    // A heart rate measured while this iPhone was out of reach comes the same way (R-142), kept if it is still the newest.
     func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
+        if let heart = userInfo["heart"] as? [String: Any], let bpm = (heart["bpm"] as? NSNumber)?.doubleValue,
+           let at = (heart["at"] as? NSNumber)?.doubleValue {
+            return AppNativeHealthController.shared.watchHeartRate(bpm: bpm, at: Date(timeIntervalSince1970: at / 1000))
+        }
         guard let request = userInfo["link"] as? [String: Any] else { return }
         WatchLinkInbox.shared.received(request)
     }

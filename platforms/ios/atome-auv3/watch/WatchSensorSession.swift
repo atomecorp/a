@@ -322,11 +322,25 @@ final class WatchSensorSession: NSObject, WCSessionDelegate, HKWorkoutSessionDel
         let bpm = quantity.doubleValue(for: HKUnit.count().unitDivided(by: .minute()))
         queue.addOperation {
             if self.writer != nil { self.write("heart_rate", self.origin + interval.end.timeIntervalSince(self.startedAt), [bpm]) }
-            // Live to the iPhone while it asks for the heart rate; a reading missed while it is unreachable is not queued.
-            guard self.heartSession != nil, WCSession.default.isReachable else { return }
-            WCSession.default.sendMessage(["heart": ["bpm": bpm, "at": interval.end.timeIntervalSince1970 * 1000]], replyHandler: nil) { error in
-                Self.log.error("Watch heart rate not sent: \(error.localizedDescription, privacy: .public)")
-            }
+            // Live to the iPhone while it asks for the heart rate. Out of its reach (the app in the background, the screen
+            // locked), one reading every few seconds is queued and delivered when it can be (R-142: they were lost).
+            guard self.heartSession != nil else { return }
+            let heart: [String: Any] = ["heart": ["bpm": bpm, "at": interval.end.timeIntervalSince1970 * 1000]]
+            if WCSession.default.isReachable {
+                WCSession.default.sendMessage(heart, replyHandler: nil) { error in
+                    Self.log.error("Watch heart rate not sent: \(error.localizedDescription, privacy: .public)")
+                    self.queueHeart(heart, at: interval.end)
+                }
+            } else { self.queueHeart(heart, at: interval.end) }
+        }
+    }
+
+    private var heartQueuedAt = Date.distantPast
+    private func queueHeart(_ heart: [String: Any], at end: Date) {
+        queue.addOperation {
+            guard end.timeIntervalSince(self.heartQueuedAt) >= 5 else { return }
+            self.heartQueuedAt = end
+            WCSession.default.transferUserInfo(heart)
         }
     }
 
