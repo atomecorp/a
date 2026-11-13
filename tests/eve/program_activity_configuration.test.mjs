@@ -280,12 +280,12 @@ describe('a Sport form the exercise cannot carry', () => {
     });
     it('reads without every other setting the exercise cannot carry, so it starts, revises and stays valid', async () => {
         const { trainingActivityAsRead, validateActivity } = await import('../../eVe/domains/programs/project_program_model.js');
-        const kept = { exercise_id: 'push_up', level: 2, execution: 'unilateral', load_step_kg: 2.5 };
+        const kept = { exercise_id: 'crunch', level: 2, execution: 'unilateral', load_step_kg: 2.5 };
         const read = trainingActivityAsRead(kept);
         expect(read.execution).toBeUndefined();
         expect(read.load_step_kg).toBeUndefined();
-        expect(() => validateActivity({ brick_id: 'sport', title: 'push_up', involvement: { minutes: 30, basis: 'week', days: [], rhythm: 3 }, training: read })).not.toThrow();
+        expect(() => validateActivity({ brick_id: 'sport', title: 'crunch', involvement: { minutes: 30, basis: 'week', days: [], rhythm: 3 }, training: read })).not.toThrow();
         // What it can carry stays.
-        expect(trainingActivityAsRead({ exercise_id: 'push_up', level: 2, execution: 'bilateral' }).execution).toBe('bilateral');
+        expect(trainingActivityAsRead({ exercise_id: 'crunch', level: 2, execution: 'bilateral' }).execution).toBe('bilateral');
     });
 });
