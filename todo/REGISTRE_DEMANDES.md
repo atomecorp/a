@@ -19,6 +19,43 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 
 ## Entrées à exécuter
 
+### R-138 — Sport : après un changement de Forme ou de Force, le panneau suivant bloque ; vérifier tout le parcours (2026-11-13)
+- Statut : OUVERT (à faire avec R-136 au retour de l'utilisateur ; « tu ne codes pas, tu regardes », 13 nov.).
+- Source : toi, 13 nov. : quand je change ma forme ou ma force puis veux relancer un exercice ou passer au panneau
+  suivant, ça bloque ; je dois fermer le panneau et le rouvrir (ou passer par une autre appli, ou toucher ailleurs) pour
+  débloquer. Demande : vérifier le parcours complet (changer les paramètres, relancer, passer au suivant) sans lag ni
+  blocage, puis le tester à fond.
+- Pistes lues dans le code (13 nov., non prouvées) :
+  1. Redessin bloqué : un panneau ne redessine qu'une fois à la fois (`bevy_panel_runtime.js` `refresh` →
+     `mounted.refreshPromise`). Si une projection (`projectPanelStack`) ne se termine jamais, chaque appel suivant reçoit
+     la même promesse et rien ne se redessine plus. Fermer puis rouvrir crée un nouveau montage, ce qui débloque :
+     correspond au symptôme. Chaque écriture du ressenti lance 3 redessins presque simultanés (le `await repaint()` de
+     `write`, `followFeelingToday` → `paint`, puis la fin d'intention de `dispatchPanelIntent`).
+  2. Fenêtre d'invocation : tant qu'un toucher asynchrone n'est pas fini (l'écriture du ressenti, jusqu'à 4 s :
+     `INVOCATION_WINDOW_MS`), un panneau ouvert à ce moment est intégré DANS le panneau courant (`claimHost`,
+     `bevy_panel_embedded_surface.js`) au lieu de s'ouvrir : le panneau suivant semble ne pas venir.
+  3. Rangée qui se replie pendant le geste : choisir un niveau replie la rangée (`settle` → `ui.open.delete`) pendant que
+     la case et son rail viennent d'être pressés ; `preserveNodeId` désigne alors un nœud disparu. Le champ « Autre » de
+     la rangée n'est pas arrêté (`editing.stop()`) quand un choix la replie, seulement par `toggle`.
+  4. Lié à R-136 : rien ne se redessine tant que l'écriture n'est pas finie.
+- Test prévu : sur iPhone et iPad, changer Forme, puis Force, puis Lancer et passer au panneau suivant, plusieurs fois
+  et vite ; après Forme seule, puis après Force seule ; noter chaque blocage avec l'état du panneau
+  (`refreshPromise` en cours, invocation ouverte, focus du champ).
+
+### R-137 — Sport : total des durées d'exercice de la journée, à jour en continu, consultable à tout moment (2026-11-13)
+- Statut : OUVERT (à faire au retour de l'utilisateur ; nouvelle fonction demandée le 13 nov.).
+- Source : toi, 13 nov. : une fonction qui additionne au fur et à mesure toutes les durées d'exercice de la journée,
+  toutes activités sportives confondues, avec un statut immédiat (« aujourd'hui : 35 min ») que l'on consulte quand on
+  veut et que l'on peut vérifier (le détail par activité), pour savoir à tout instant le temps passé.
+- Existant (lu le 13 nov.) : le Journal (`dashboard_training_journal.js`) montre les minutes PAR séance
+  (`active_minutes`, histogramme des 12 dernières) et les pratiques importées (`totals.active_s`) ; Résultats
+  (`dashboard_results_model.js`) place les séances du jour (`sessions`, `workout_duration`) sans en faire le total. Aucun
+  total du jour, toutes activités confondues, n'existe.
+- À concevoir : une seule source (séances eVe terminées et en cours, pratiques importées, sans doublon entre une séance
+  eVe et la même séance importée), mise à jour à chaque séance finie et pendant une séance en cours ; un affichage
+  immédiat (carte Sport ou Résultats, à valider) avec le détail vérifiable ; une commande lisible par l'assistant
+  (« combien de temps de sport aujourd'hui ? »). Maquette ou emplacement à te proposer avant de coder.
+
 ### R-136 — Sport : lag au réglage de la Force juste après la Forme, au lancement d'une activité (2026-11-13)
 - Statut : OUVERT (à faire au retour de l'utilisateur, iPhone présent ; reporté à sa demande le 13 nov.).
 - Source : toi, 13 nov. : « quand je lance une nouvelle activité, il me demande ma forme et ma force… la forme c'est
