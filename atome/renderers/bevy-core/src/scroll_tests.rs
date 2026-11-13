@@ -125,6 +125,17 @@ fn a_press_catches_a_glide_and_a_jump_takes_the_described_offset() {
     assert_eq!(motion.offset(), 600.0);
 }
 
+#[test]
+fn a_press_on_a_glide_that_looks_still_stops_it_and_is_a_tap() {
+    let mut motion = list(100.0);
+    motion.press(300.0, 0.0);
+    motion.drag(296.0, 100.0);
+    motion.release(104.0);
+    assert!(motion.is_gliding());
+    assert!(!motion.catch_glide());
+    assert!(!motion.is_moving());
+}
+
 fn pose(y: f32, clip: [f32; 4]) -> RecordPose {
     RecordPose {
         position: [10.0, y],

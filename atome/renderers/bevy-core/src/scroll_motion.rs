@@ -19,6 +19,10 @@ pub struct ScrollMotionSpec {
     pub bounce_spring_per_ms: f64,
 }
 
+/// A glide slower than this (px/ms, 250 px/s) looks still: a press on it stops it and is a tap.
+const CAUGHT_GLIDE_PX_PER_MS: f64 = 0.25;
+/// A bounce stretched less than this looks settled: a press on it is a tap.
+const CAUGHT_STRETCH_PX: f64 = 4.0;
 /// A stretch under half a pixel is none.
 const STRETCH_EPSILON_PX: f64 = 0.5;
 /// A wheel's notches keep a list moving until none came for this long.
@@ -131,14 +135,16 @@ impl ScrollMotion {
         (1.0 - 1.0 / ((past * self.spec.rubber) / self.viewport + 1.0)) * self.viewport
     }
 
-    /// A press on a list still gliding: true, and a glide stops where it shows (a bounce ends by itself).
+    /// A press on a list still gliding: a glide stops where it shows (a bounce ends by itself). True (the
+    /// press only stops it, no tap) while the list visibly moves: a glide's slow tail, which looks still,
+    /// swallowed the first tap on a row or a tool (Envoi touched twice, iPhone, 12 Nov. 2026).
     pub fn catch_glide(&mut self) -> bool {
         match self.phase {
-            Phase::Glide { .. } => {
+            Phase::Glide { velocity, .. } => {
                 self.phase = Phase::Rest;
-                true
+                velocity.abs() >= CAUGHT_GLIDE_PX_PER_MS
             }
-            Phase::Bounce { .. } => true,
+            Phase::Bounce { .. } => self.stretch.abs() >= CAUGHT_STRETCH_PX,
             _ => false,
         }
     }
