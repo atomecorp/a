@@ -106,8 +106,12 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   - envoi juste après un redémarrage du serveur : passé du premier coup (déploiement 7). Envoyer un texte envoie aussi les
     prises en attente (comportement voulu du code : « Tout part d'un coup ») : les 6 anciennes prises de test de l'iPad
     sont parties ainsi vers l'iPhone à 08:07.
-- Reste : coffre iPhone de 3,8 Go et anciennes sauvegardes (~50 Go)
-  non touchés (données de l'utilisateur) ; petite forme d'onde absente sur les messages audio reçus (iPhone).
+  - forme d'onde des messages audio (13 nov. 9 h 30) : la ligne n'avait aucun pic (le fichier reçu n'existe qu'au
+    serveur ; l'aperçu n'en lisait rien). Les pics sont lus une fois depuis la copie locale, avec un nouvel essai après
+    une minute en cas d'échec (`bevy_panel_contact_conversation_waveforms.js`, injectés par l'historique). Ils sont
+    ramenés à leur point le plus fort : les prises de test, presque muettes (pic 0,005), donnaient un trait plat.
+    Vérifié sur l'iPhone (reçus) et sur l'iPad (envoyés) : chaque ligne audio montre son onde.
+- Reste : coffre iPhone de 3,8 Go et anciennes sauvegardes (~50 Go) non touchés (données de l'utilisateur).
 
 ### R-133 — Accueil eVe Pro : la tuile Capture devient l'outil « Enr. » de la bande ; bande « Finder » élargie corrigée (2026-11-12)
 - Statut : ATTENTE UTILISATEUR (question posée le 12 nov. au 2e compte rendu : le trou laissé par Capture dans la rangée des tuiles en paysage ; le code est fait).
