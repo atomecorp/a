@@ -49,3 +49,27 @@ test('disconnect settles an active probe and ignores a late pong', async () => {
     transport.handleMessage('{"type":"pong"}');
     expect(transport.heartbeat).toBeNull(); expect(vi.getTimerCount()).toBe(0);
 });
+
+// A deployment restarts the server: the reconnection that finds it down must try again by itself.
+test('a reconnection that finds the server down is tried again, and an open resets the back-off', async () => {
+    vi.resetModules();
+    const online = vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
+    vi.doMock('../../atome/src/squirrel/apis/unified/adole_connection.js', async (original) => ({ ...(await original()), checkConnection: online }));
+    const { TauriWebSocket: Fresh } = await import('../../atome/src/squirrel/apis/unified/adole_websocket.js');
+    vi.useFakeTimers();
+    const sockets = [];
+    class FakeSocket { static OPEN = 1; constructor() { this.readyState = 0; sockets.push(this); } send() {} close() {} }
+    vi.stubGlobal('WebSocket', FakeSocket);
+    const transport = new Fresh('wss://synthetic/ws/api', 'fastify');
+    try {
+        transport.reconnectAttempt = 3;
+        expect(await transport.connect()).toBe(false);
+        expect(sockets).toHaveLength(0);
+        expect(transport.reconnectTimer).not.toBeNull();
+        await vi.advanceTimersByTimeAsync(8000);
+        expect(sockets).toHaveLength(1);
+        sockets[0].readyState = 1; sockets[0].onopen();
+        expect(transport.isConnected).toBe(true);
+        expect(transport.reconnectAttempt).toBe(0);
+    } finally { transport.dispose(); vi.doUnmock('../../atome/src/squirrel/apis/unified/adole_connection.js'); }
+});

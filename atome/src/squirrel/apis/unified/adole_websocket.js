@@ -78,7 +78,10 @@ class TauriWebSocket {
     async openConnection() {
         if (this.backend === 'fastify') {
             const online = await checkConnection('fastify');
-            if (!online || this.disposed) return false;
+            if (this.disposed) return false;
+            // The server restarting (a deployment): tried again later, as a closed socket is, or the link stayed
+            // down until the app came back to the foreground (no message, no call arrived meanwhile).
+            if (!online) { if (this.socket?.readyState !== WebSocket.OPEN) this.handleDisconnect({ socket: this.socket }); return false; }
         }
         if (this.disposed) return false;
         if (this.socket?.readyState === WebSocket.OPEN) {
@@ -97,6 +100,8 @@ class TauriWebSocket {
                     this.clearConnectionTimer();
                     clearTimeout(this.reconnectTimer);
                     this.reconnectTimer = null;
+                    // Open again: the next loss starts its back-off from one second, not from where the last one stopped.
+                    this.reconnectAttempt = 0;
                     this.isConnecting = false;
                     this.isConnected = true;
                     this.connectionGeneration += 1;
