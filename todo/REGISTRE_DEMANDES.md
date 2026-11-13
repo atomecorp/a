@@ -19,6 +19,36 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 
 ## Entrées à exécuter
 
+### R-141 — Sport : recherche « HIT » sans résultat, tuiles muettes ensuite, Sprint HIIT impossible à ouvrir dans Cardio (2026-11-13)
+- Statut : OUVERT (à faire au retour de l'utilisateur ; code lu le 13 nov., rien codé).
+- Source : toi, 13 nov. : dans Sport, recherche « HIT » dans le champ du bas → les tuiles Musculation, Cardio… mais pas
+  le résultat ; un toucher sur ces tuiles ne fait rien ; revenu en arrière, dans Cardio, « Sprint HIIT » ne s'ouvre pas
+  non plus. Question : la recherche a-t-elle tout cassé, ou est-ce la catégorie ?
+- Lu dans le code :
+  1. « HIT » ne peut pas trouver « Sprint HIIT » : la recherche demande que chaque mot tapé soit CONTENU dans le nom
+     (`i18n/search_text.js#searchMatches`), et « hit » n'est pas dans « hiit ». Aucune tolérance aux fautes, pas de nom
+     de recherche « HIT » (`searchNames` de `exercisePlate` : le nom complet seulement).
+  2. Les tuiles affichées sont le niveau Sport ENTIER, pas un résultat : la recherche d'un niveau (`mysticLevelFind` →
+     `findBelow`, `bevy_ui_mystic_grid_filter.js`) lance en même temps la lecture de chaque palette (`Promise.all` sans
+     garde). Dans Sport, ces lectures appellent des outils qui LÈVENT une erreur en cas d'échec (`call` de
+     `dashboard_training.js`) : `training.list_favorites`, `training.list_exercises`, les Machines, et `coaches.find`
+     (l'annuaire des coachs, sur le réseau, une fois par discipline et à chaque touche). Une seule qui échoue fait
+     échouer toute la recherche : l'erreur est signalée (`mystic:filter`) et la grille reste entière, ce qui correspond
+     à « les tuiles sans le résultat ».
+  3. Tuiles muettes, puis Sprint HIIT qui ne s'ouvre plus : ouvrir Cardio relit `training.list_exercises` + `coaches.find`
+     (`withCoaches`), ouvrir un exercice lit son profil par les outils `training.*`. Si ces outils échouent ou restent
+     sans réponse, les trois symptômes ont la même cause : la recherche n'aurait rien cassé, elle aurait seulement
+     révélé une couche Sport en panne. Autre piste : le blocage de panneau de R-138 (redessin jamais fini).
+  4. Écarté : le catalogue de Sprint HIIT (`treadmill_hiit`, sans `distance`) ; les calculs d'allure qui lisent
+     `exercise.distance.speed_kmh` ne servent que pour le but « distance », que la validation refuse à un exercice
+     sans distance (`trainingCardioGoals`, `trainingCardio`).
+- Test prévu : relever les erreurs signalées (`mystic:filter`, `dashboard:training`) et le temps de réponse de
+  `training.list_exercises`, `training.list_favorites` et `coaches.find` ; ouvrir Cardio puis Sprint HIIT avant toute
+  recherche, puis après ; rechercher « HIIT » et « HIT ».
+- Corrections visées : une palette qui échoue ne fait plus échouer la recherche (chaque lecture gardée, le reste
+  montré) ; « HIT » trouve Sprint HIIT (nom de recherche ou tolérance aux fautes) ; pas d'appel à l'annuaire des coachs
+  à chaque touche ; une erreur d'ouverture affichée au lieu d'un toucher muet ; la cause de la panne des outils Sport.
+
 ### R-140 — Sport : rappel vocal à chaque fin de série d'augmenter la charge selon la progression choisie (2026-11-13)
 - Statut : OUVERT (à faire au retour de l'utilisateur ; code lu le 13 nov., rien codé).
 - Source : toi, 13 nov. : la progression choisie dans le sélecteur (+5 kg, +2,5 kg…) ; à chaque fin de série, que la
