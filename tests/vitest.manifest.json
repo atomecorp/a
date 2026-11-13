@@ -190,6 +190,7 @@
   "tests/eve/dashboard_takes_hold_crop.test.mjs",
   "tests/eve/dashboard_takes_view_played.test.mjs",
   "tests/eve/dashboard_tile_slide_lift.test.mjs",
+  "tests/eve/dashboard_feeling_block_immediate.test.mjs",
   "tests/eve/dashboard_training_disc_label.test.mjs",
   "tests/eve/dashboard_training_heading_a11y.test.mjs",
   "tests/eve/dashboard_upcoming_calendar.test.mjs",
