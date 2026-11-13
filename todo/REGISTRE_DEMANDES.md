@@ -19,6 +19,47 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 
 ## Entrées à exécuter
 
+### R-136 — Sport : lag au réglage de la Force juste après la Forme, au lancement d'une activité (2026-11-13)
+- Statut : OUVERT (à faire au retour de l'utilisateur, iPhone présent ; reporté à sa demande le 13 nov.).
+- Source : toi, 13 nov. : « quand je lance une nouvelle activité, il me demande ma forme et ma force… la forme c'est
+  instantané, la force (le deuxième événement) se met à laguer, c'est très long ». Attendu : les deux instantanés.
+- Chemin (lu le 13 nov.) : carte d'exercice → `dashboard_training_feeling.js` (bloc `start`, `immediate: true`) →
+  `dashboard_feeling_block.js` `choose` → `settle` → `write` → outil `health_feeling.set` →
+  `atome/src/squirrel/health/health_feeling.js` `set` (écritures en file : relit l'enregistrement du jour, ajoute l'entrée,
+  `Atome.commit({ refreshState: true, realtimeBroadcast: true })`) → listeners.
+- Pistes, à mesurer (non prouvées) :
+  1. `write` efface le brouillon AVANT d'attendre l'écriture, et ne repeint qu'après. La valeur touchée n'apparaît donc
+     qu'une fois le commit, la relecture (`refreshState`) et les listeners finis : l'écran attend le réseau ou le stockage.
+  2. La 2e écriture attend la 1re dans la file de `health_feeling.set`, et ce qu'elle a lancé : diffusion temps réel,
+     relecture d'état, `emitAtomeChanged`, et pour chaque écriture DEUX repeints de la carte (`await repaint()` du bloc
+     plus `followFeelingToday` → `paint`), ainsi que `load()` du moniteur Résultats s'il est actif
+     (`bevy_panel_results_runtime.js:118`).
+  3. Différence création/mise à jour : la 1re écriture crée l'enregistrement du jour (relecture « absent », 1 à 3 ms mesurés
+     sur iPad), la 2e relit un enregistrement existant puis le met à jour.
+- Mesure : relectures « absent » à 1–3 ms sur iPad (lecture seule). Le chronométrage des deux écritures sur le compte de
+  test a été refusé par le garde-fou (écriture de données santé) : à faire avec ton accord, ou par des traces de durée
+  ajoutées sur le chemin (lecture, commit, relecture, listeners, repeint), puis en réglant Forme puis Force sur l'iPhone.
+- Correction visée : la valeur s'affiche au toucher (brouillon gardé jusqu'à l'écriture confirmée), l'écriture en
+  arrière-plan, un seul repeint par écriture.
+
+### R-135 — Comm : envoyer texte, vidéo (appui long) ou fichier PENDANT un appel audio ou visio, sans le couper (2026-11-13)
+- Statut : OUVERT (reporté par toi le 13 nov. : « notre tâche, on va la réaliser plus tard », iPhone absent).
+- Source : toi, 13 nov. : pendant un appel, prendre une vidéo par appui long et l'envoyer sans couper l'appel ; envoyer
+  un texte ou un fichier, à la même personne ou à une autre, en mode audio comme en mode visio ; faire le bilan.
+- Bilan du code (13 nov., non testé sur appareils, l'iPhone étant devenu indisponible) :
+  - appel décroché dans la conversation : la bande ne montre que les outils de l'appel (micro, caméra, autre caméra,
+    ajouter, raccrocher, Retour) (`bevy_panel_contact_conversation_runtime.js#bandItems`) ; Audio/Visio (prise par appui long)
+    et Joint sont éteints pendant un appel (`recordToolSpec` `callBusy`, `attachEnabled`) ;
+  - texte dans la même conversation : le champ du bas du Dashboard reste, `canSend` ne regarde pas l'appel ; NON essayé ;
+  - Retour : la conversation se ferme et l'appel continue dans le panneau Visio (`onClose` → `openCallPanel`) ;
+    une conversation rouverte (même personne ou autre) retrouve ses outils ; NON essayé : prise caméra/micro pendant que
+    l'appel les tient (iOS peut couper la piste de l'appel), coexistence à l'écran du panneau Visio et de la conversation.
+  - incident d'essai : l'appel audio de l'iPad est passé aussitôt en « enregistrement du message » (iPhone injoignable) ;
+    message annulé, rien d'envoyé.
+- À faire : essai réel iPad ↔ iPhone (appel audio puis visio ; pendant l'appel : texte, vidéo par appui long, Joint, vers
+  la même personne puis une autre ; l'appel ne doit pas couper), puis rendre ces envois possibles dans la bande de l'appel
+  sans couper caméra ni micro.
+
 ### R-134 — Comm/Visio : appel dans la conversation, appels manqués/refusés, envois audio/vidéo, Joint, suppressions, badge (2026-11-12)
 - Statut : ATTENTE UTILISATEUR (13 nov. 8 h : la liste « Reste » du 13 nov. 0 h 50 est traitée et vérifiée sur iPad et iPhone ;
   voir « Traité le 13 nov. » et le petit « Reste » en fin d'entrée).
