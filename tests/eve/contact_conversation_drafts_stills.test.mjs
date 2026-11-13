@@ -45,3 +45,33 @@ describe('the stills of a conversation\'s videos', () => {
         expect(changed).toHaveBeenCalledTimes(1);
     });
 });
+
+describe('a video take waiting in the conversation', () => {
+    it('shows its still in its row, not a decoder of its first frame', async () => {
+        const { buildConversationHistoryNodes } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_contact_conversation_history.js');
+        const record = { atome_id: 'v1', atome_type: 'video_recording', type: 'video_recording',
+            properties: { kind: 'video_recording', media_kind: 'video', media_url: '/api/recordings/v1.mov', media_width: 1920, media_height: 1080, duration: 2 } };
+        const poster = 'data:image/jpeg;base64,still';
+        const nodes = buildConversationHistoryNodes({ history: { items: [] }, width: 600, emit: () => {},
+            takes: [{ mediaId: 'v1', kind: 'video', record }], posterOf: id => (id === 'v1' ? poster : '') });
+        const overlays = [];
+        const walk = (n) => { if (!n || typeof n !== 'object') return; if (n.overlayRecord) overlays.push(n.overlayRecord); (n.children || []).forEach(walk); };
+        (Array.isArray(nodes) ? nodes : [nodes]).forEach(walk);
+        expect(overlays.some(o => o.type === 'image' && o.properties?.source === poster)).toBe(true);
+    }, 20000);
+});
+
+describe('a received video whose local copy gives no frame', () => {
+    it('is fetched again once, and its still made from the fresh copy', async () => {
+        const make = vi.fn(async record => (record.properties.media_url === '/api/recordings/fresh.mov' ? 'data:image/jpeg;base64,fresh' : ''));
+        const repair = vi.fn(async record => ({ ...record, properties: { ...record.properties, media_url: '/api/recordings/fresh.mov' } }));
+        const stills = createConversationStills({ make, repair });
+        await stills.ensure([{ id: 'rx', type: 'video_recording', properties: { media_url: 'https://server/api/uploads/rx.mov' } }]);
+        expect(stills.posterOf('rx')).toBe('data:image/jpeg;base64,fresh');
+        expect(repair).toHaveBeenCalledTimes(1);
+        expect(stills.report().failed).toEqual({});
+        const none = createConversationStills({ make: async () => '', repair: async () => null });
+        await none.ensure([{ id: 'v', type: 'video_recording', properties: {} }]);
+        expect(none.report().failed).toEqual({ v: 'no_frame' });
+    });
+});
