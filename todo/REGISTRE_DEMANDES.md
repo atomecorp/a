@@ -19,6 +19,14 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 
 ## Entrées à exécuter
 
+### R-143 — Dashboard : les tuiles changent de taille quand le téléphone passe en paysage (2026-11-13)
+
+- Statut : FAIT (priorité utilisateur).
+- Source : « quand je retourne, les dalles, les tuiles ont plus la même taille… tu ne devras jamais changer de taille ».
+- Cause : la cellule était recalculée pour chaque orientation (`resolveSystemUiCell` sur la place libre du moment), et en paysage le téléphone aplatissait les tuiles en 2 × 1,5 (choix L1).
+- Correctif : `dashboardDeviceCell` (une cellule par appareil = min(debout, couché), l'autre orientation mémorisée dans `eve.dashboard.home_orientation_fits.v1`, sinon estimée en tournant l'écran et ses marges) ; paysage téléphone = tuiles 2 × 2 en deux rangées à côté de la colonne heure/météo/Agenda, le reste en dessous. AGENTS.md règle 12 mise à jour.
+- Vérif : iPhone 17 Pro 64/64, iPhone SE 59/59 (Basic 52/52), iPad 11 71/71 ; vitest 3747/3747.
+
 ### R-142 — Sport : pouls figé (96 au lieu de 130) puis « Aucune mesure » pendant Sprint HIIT (2026-11-13)
 - Statut : OUVERT (à faire au retour de l'utilisateur ; code lu le 13 nov., rien codé).
 - Source : toi, 13 nov., 2 captures (`~/.claude/uploads/3a485638-3c69-450a-afa5-d22e4f841ef8/f18213d4-image.png` :
