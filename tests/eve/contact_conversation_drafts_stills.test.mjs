@@ -139,3 +139,31 @@ describe('a still that could not be made', () => {
         expect(stills.posterOf('v')).toBe('data:image/jpeg;base64,late');
     });
 });
+
+describe('a sound received in the conversation', () => {
+    it('has its peaks read once from its local copy, tried again after a minute, scaled to its loudest point and drawn by its row', async () => {
+        const { createConversationWaveforms } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_contact_conversation_waveforms.js');
+        let clock = 0, works = false;
+        const localize = vi.fn(async url => `/api/recordings/${url.split('/').pop()}`);
+        const read = vi.fn(async (source) => (works ? [0.001, 0.004, 0.002] : null));
+        const changed = vi.fn();
+        const waveforms = createConversationWaveforms({ localize, read, changed, now: () => clock });
+        const sound = { id: 'a1', type: 'audio_recording', properties: { media_url: 'https://server/api/uploads/a1.wav' } };
+        await waveforms.ensure([sound]); await waveforms.ensure([sound]);
+        expect(read).toHaveBeenCalledTimes(1);
+        expect(read).toHaveBeenCalledWith('/api/recordings/a1.wav', 'a1');
+        works = true; clock = 61000;
+        await waveforms.ensure([sound]);
+        expect(waveforms.peaksOf('a1')).toEqual([0.25, 1, 0.5]); // a quiet take drawn to its loudest point
+        expect(changed).toHaveBeenCalledTimes(1);
+
+        const { buildConversationHistoryNodes } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_contact_conversation_history.js');
+        const history = { items: [{ message_id: 'm1', box: 'inbox', from_id: 'ana', timestamp: '2026-11-13T08:00:00Z',
+            media: [{ id: 'a1', type: 'audio_recording', media_kind: 'sound', duration: 2, media_url: 'https://server/api/uploads/a1.wav' }] }] };
+        const nodes = buildConversationHistoryNodes({ history, width: 600, emit: () => {}, peaksOf: waveforms.peaksOf });
+        const overlays = [];
+        const walk = (n) => { if (!n || typeof n !== 'object') return; if (n.overlayRecord) overlays.push(n.overlayRecord); (n.children || []).forEach(walk); };
+        nodes.forEach(walk);
+        expect(overlays.some(o => Array.isArray(o.properties?.peaks) && o.properties.peaks.length === 3)).toBe(true);
+    }, 20000);
+});
