@@ -19,6 +19,32 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 
 ## Entrées à exécuter
 
+### R-139 — Sport : bips ratés, sautés ou en rafale quand Atome n'est plus au premier plan (2026-11-13)
+- Statut : OUVERT (à faire au retour de l'utilisateur ; code lu le 13 nov., rien codé).
+- Source : toi, 13 nov. : Atome passé en arrière-plan (autre appli), j'entends les bips, mais certains manquent, d'autres
+  sautent, d'autres reviennent ; le timing n'est plus correct hors du premier plan. Attendu : des bips exacts, au premier
+  plan comme en arrière-plan.
+- Chemin lu : `dashboard_training_session.js` (minuteur de page `setInterval(tick, 250 ms)` → `syncBeeps` → les bips
+  des 1,5 s à venir, `BEEP_HORIZON_MS`) → `training_sound.js#createTrainingBeeps` (`place` : chaque bip posé sur
+  l'horloge de rendu du moteur natif, `scheduleVoices`) ; le moteur natif tourne en arrière-plan (`UIBackgroundModes` :
+  `audio`).
+- Cause probable (non prouvée sur appareil) : le moteur sonne juste, mais c'est la PAGE qui lui donne les bips, 1,5 s à
+  l'avance, à chaque tic de 250 ms. En arrière-plan, iOS ralentit ou suspend les minuteurs JavaScript de la WebView :
+  1. tic en retard de plus de 1,5 s : le bip dont l'instant est déjà rendu est abandonné (« jamais joué en retard »,
+     `frame < rendered`) → bips RATÉS ;
+  2. tics regroupés au réveil : plusieurs bips posés d'un coup, une partie déjà passée → bips qui SAUTENT puis
+     REVIENNENT ;
+  3. la lecture d'horloge qui garde la sortie éveillée (`AWAKE_READ_MS` 2 s, contre la mise en veille de la sortie
+     native après 5 s de silence, `output_idle.rs`) passe aussi par ce minuteur : sans elle, la sortie s'endort pendant un
+     repos, ses frames s'arrêtent et la grille des bips se décale (le défaut du 11 nov. sur iPad) ;
+  4. le passage d'une étape à la suivante, la baisse de la musique (`duck`, `setTimeout`) et les trois « tut » de fin de
+     série (`setTimeout`) dépendent aussi des minuteurs de page.
+- Piste de correction (à valider) : donner au moteur natif TOUT le plan de bips de l'étape en cours (et des suivantes
+  connues) d'avance, et non 1,5 s ; garder la sortie éveillée côté natif pendant une séance ; vérifier le réalignement au
+  retour au premier plan (`visibilitychange`) ; ne plus dépendre d'un tic de page pour un son.
+- Test prévu : séance avec repos et séries chronométrées, Atome en arrière-plan (autre appli, écran verrouillé), sur
+  iPhone et iPad ; noter chaque bip (attendu / entendu / décalage), puis comparer avec le premier plan.
+
 ### R-138 — Sport : après un changement de Forme ou de Force, le panneau suivant bloque ; vérifier tout le parcours (2026-11-13)
 - Statut : OUVERT (à faire avec R-136 au retour de l'utilisateur ; « tu ne codes pas, tu regardes », 13 nov.).
 - Source : toi, 13 nov. : quand je change ma forme ou ma force puis veux relancer un exercice ou passer au panneau
