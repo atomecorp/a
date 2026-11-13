@@ -96,9 +96,18 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   - iPhone : la vidéo ouverte sous la dernière ligne se montre (elle s'ouvrait sous la bande, d'où la « liste vide ») ; un doigt
     vertical posé sur une vidéo en cours fait défiler le fil (avant : avalé par l'avance rapide) ; vidéo puis audio : vérifié ;
   - clavier iPad fermé : rendu juste en 0,4 s (non reproduit).
-- Reste : titre de conversation iPhone en numéro (le compte iPad n'a pas de nom : le nommer demande l'accord de l'utilisateur) ;
-  six anciennes prises de test restaurées en attente sur l'iPad, une sur l'iPhone (à envoyer ou supprimer par l'utilisateur) ;
-  coffre iPhone de 3,8 Go et anciennes sauvegardes (~50 Go) non touchés (données de l'utilisateur).
+  - titre iPhone : la fiche du carnet portait le numéro comme nom ; un numéro n'est plus pris pour un nom
+    (`contact_model.js#hasPersonName`), la carte partagée du contact accepté nomme la personne (« Godard », vérifié iPhone) ;
+    la bande d'accueil se renomme quand le carnet est lu (« Contact » avant, vérifié iPad) ;
+  - lien serveur : une reconnexion qui trouvait le serveur arrêté (déploiement) n'était jamais relancée
+    (`adole_websocket.js`), et la pile des notifications n'était pas relue à la réouverture : vérifié après le
+    déploiement 9, message iPad reçu en direct sur l'iPhone sans relance ;
+  - image fixe ratée (serveur en redémarrage) retentée après une minute (vérifié iPhone : vidéos reçues avec vignette) ;
+  - envoi juste après un redémarrage du serveur : passé du premier coup (déploiement 7). Envoyer un texte envoie aussi les
+    prises en attente (comportement voulu du code : « Tout part d'un coup ») : les 6 anciennes prises de test de l'iPad
+    sont parties ainsi vers l'iPhone à 08:07.
+- Reste : une ancienne prise de test en attente sur l'iPhone ; coffre iPhone de 3,8 Go et anciennes sauvegardes (~50 Go)
+  non touchés (données de l'utilisateur) ; petite forme d'onde absente sur les messages audio reçus (iPhone).
 
 ### R-133 — Accueil eVe Pro : la tuile Capture devient l'outil « Enr. » de la bande ; bande « Finder » élargie corrigée (2026-11-12)
 - Statut : ATTENTE UTILISATEUR (question posée le 12 nov. au 2e compte rendu : le trou laissé par Capture dans la rangée des tuiles en paysage ; le code est fait).
