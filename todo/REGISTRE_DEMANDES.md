@@ -19,6 +19,47 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 
 ## Entrées à exécuter
 
+### R-149 — Dashboard : l'outil Enr. sur tous les écrans, avec l'Atome et la recherche (2026-11-13)
+
+- Statut : FAIT
+- Source : demande utilisateur du 13 nov. 2026 (capture de l'accueil eVe Pro) : « cet outil d'enregistrement doit être conservé sur tous les dashboards […] la bande de base, au minimum : l'outil Atome, l'outil enregistrement, l'outil de recherche, tout le temps ». Puis « on verra comment corriger » (placement à revoir ensuite).
+- Fait : `dashboard_communication_input.js#bandLayout` pose Enr. sur tout écran eVe Pro (accueil, rubriques, scène, Capture), en 3ᵉ case depuis l'extrémité, sinon juste avant le coin ← ⌂ → ; la loupe garde toujours une case ; le micro puis Aide/Partout/Messages cèdent leur case quand la place manque. Sous une rubrique ouverte, le toucher passe par `dashboard_footer_navigation.js#touchAt` → `dashboard_record_tool.js#touchAt` (ouvre Capture). Règle 13 d'AGENTS.md mise à jour. Test : `tests/eve/dashboard_record_tool_finder_band.test.mjs` (11/11).
+- Preuve : sondes app réelle `temp/record_everywhere_2026-11-13/tour.probe.mjs` (accueil, 5 rubriques, Capture, Enr. touché sous une rubrique → Capture ; debout et couché, 0 échec) et `deep.probe.mjs` (Sport › Souplesse › Ischios carte d'exercice, Bien-être › Sieste, Projets › Liste, Média › Vidéos, Contacts › Carnet, Moniteur › Résultats ; 0 échec) ; captures `temp/probe_reports/dashboard_enhancement/record_everywhere*_2026-11-13/`.
+
+### R-150 — eVe Basic : Enr. et la loupe permanents aussi (2026-11-13)
+
+- Statut : FAIT
+- Source : suite de R-149 ; réponse utilisateur du 13 nov. 2026 : « Oui, Basic aussi ».
+- Fait : `dashboard_mystic_runtime.js` donne Enr. aux deux styles et ne masque plus le champ d'eVe Basic (le réglage « Champ de saisie (eVe Basique) » de Réglages › Visuel, devenu sans effet, est retiré : modèle, vue, runtime, i18n, `registry/source/placements.json`, registre régénéré). La tuile Capture de l'accueil Basic est gardée (non demandé).
+- Preuve : `temp/record_everywhere_2026-11-13/basic.probe.mjs` (accueil Basic, Agenda › Loisirs › Cinéma, Objectifs › Plan, Contacts › Boutiques › Achats : Atome + Enr. + loupe partout, 0 échec ; captures `temp/probe_reports/dashboard_enhancement/record_everywhere_basic_2026-11-13/`) ; vitest help_dashboard, workspace_eve_startup, dashboard_eve_corrections, dashboard_record_tool_finder_band 33/33 ; `registry:check` ok.
+- Choix fait, à revoir si tu veux : quand la place manque (téléphone debout, ← ⌂ → affichés, assistante en conversation), le micro cède sa case à Enr. et à la loupe.
+
+### R-148 — Projet : Trouver déplie son champ dans le ruban, le Finder au-dessus sans champ ; clavier iOS absent (2026-11-13)
+
+- Statut : FAIT (code et tests) — reste à voir sur l'iPhone que le clavier monte bien au toucher de Trouver.
+- Source : toi, 13 nov., 2 captures : le Finder ouvert par Trouver avec son champ 🔍 | Filtre | × dans le panneau,
+  sans clavier iOS ; la référence est l'écran « Rechercher » du Dashboard (champ dans la bande, panneau au-dessus).
+  « Pas Atom compliant […] un seul composant qui se comporte de la même manière ». Remplace R-007 Q7 (champ dans la bande du panneau).
+- Cause : Trouver (`bevy_ui_main_menu_finder_tool.js`) ouvrait le panneau et focalisait le champ de sa bande
+  (`finderRuntime.focusQuery`), un focus interne au panneau, sans session du service de texte caché ; le ruban refusait
+  aussi toute largeur à Trouver (`setToolExternalOpen`).
+- Correctif : Trouver est une « ribbon input tool » comme Communication, Agenda et Aide (`createRibbonInputTool`) : le
+  champ se déplie dans le ruban (session de texte caché, focus pendant le toucher), le Finder s'ouvre au-dessus
+  (`panel.openOnExpand`) sans carré « panneau » (`panel.square: false`), la recherche garde ses mots après Entrée
+  (`keepValueOnSubmit`). Le champ sort de la bande du Finder (`bevy_panel_finder_band.js`) ; le Finder reçoit les mots du
+  ruban (`editQuery`, `submitQuery`) ; ouvert par TV, une vidéo en ligne ou une commande, il déplie ce même champ avec
+  ses mots (`eve:surface-state`, `eve:finder-query`) ; son ✕ replie le champ.
+- Preuves : `tests/eve/ribbon_finder_input_tool.test.mjs` 4/4, `tests/eve/finder_media_input.test.mjs` 3/3 (TV, YouTube par
+  le champ du ruban) ; 15 fichiers liés (ruban, Mystic, TV, Finder, garde du manifeste) 162/162 ; Biome sans erreur.
+- Non vérifié : le clavier iOS et le rendu sur appareil (Web, Tauri, iPhone non lancés dans cette session).
+
+### R-147 — Dashboard : tuiles et outils rétrécis (cellule 64 → 42 px sur iPhone 17 Pro) après un aller-retour paysage (2026-11-13)
+
+- Statut : CODÉ, à vérifier sur l'iPhone après une nouvelle build (sonde Node `temp/tile_size_2026-11-13/probe_fix.mjs` : 64 px debout et couché sur trois allers-retours). Correction : `surface_size_runtime.js#readDeviceScreen` (taille + insets de l'appareil en une lecture) utilisé par `dashboard_mystic_geometry.js#frameOf` et `bevy_ui_main_menu_viewport_fit.js#resolveBevyMainMenuScreenCell` / `resolveBevyMainMenuGridInsets` ; clé `home_orientation_fits.v2` (les valeurs v1 empoisonnées sont abandonnées).
+- Preuve (iPhone, inspecteur + rotation WDA, `temp/tile_size_2026-11-13/`) : `localStorage['eve.dashboard.home_orientation_fits.v1']` = `{"pro:402x874":{"standing":64,"lying":42}}` ; rotation reproduite : debout→couché écrit d'abord `standing:37` puis `lying:74` ; couché→debout écrit `lying:42` puis `standing:64`.
+- Cause : `dashboard_mystic_geometry.js#frameOf` est appelé quand la fenêtre a déjà tourné mais pas encore le canevas (`eve_surface_project` 874×402 alors que `innerWidth×innerHeight` = 402×874). `readRenderSurfaceSafeAreaInsets` mélange les insets natifs de la nouvelle orientation avec le rectangle de l'ancienne (droite = 472 px, ou bas = 492 px). `dashboard_home_matrix.js#dashboardDeviceCell` (commit 07736784, R-143) enregistre cette mesure fausse pour toujours sous la clé de l'appareil, puis prend `min(debout, couché)`.
+- À faire : ne mesurer et n'enregistrer que quand le canevas et la fenêtre sont dans la même orientation (ou ne pas enregistrer du tout : la cellule de l'orientation tournée se calcule déjà, `turned`) ; purger la valeur empoisonnée des appareils.
+
 ### R-146 — Sport : choix « un côté après l'autre / les deux à la fois » pour tout exercice de bras ou de jambes (2026-11-13)
 
 - Statut : OUVERT (déjà demandé, mal couvert).
@@ -37,16 +78,33 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 - Constat (captures Sprint HIIT, iPhone) : le grand titre « Sprint HIIT » au-dessus du panneau répète l'en-tête de la carte ; les tuiles du panneau ne montent pas jusqu'en haut ; la zone entre « Niveau » et le disque ne fait qu'environ 2,5 lignes, donc Forme/Force puis But/Voir sont coupés et il faut faire défiler une zone minuscule.
 - Proposition : supprimer le grand titre et monter le panneau en haut ; sous « Niveau », une rangée d'outils (jusqu'à 6 : Forme, Réglages, Mode, Progression, Sons…) ; chaque outil remplace le contenu de la zone au-dessus du disque (une seule chose à la fois, plein espace) au lieu d'une pile qui défile.
 
+### R-144 — Accueil eVe Pro debout : l'heure, la météo et l'Agenda trop loin du haut (2026-11-13)
+
+- Statut : CODÉ, vérification visuelle sur l'appareil à faire (le bundle du simulateur est figé, non reconstruit ici).
+- Source : toi, 13 nov., capture de l'accueil iPhone (`~/.claude/uploads/2ff6612f-1f3e-4fe3-bab7-612209abe50f/c205404d-image.png`) :
+  « si on a l'opportunité d'insérer un rang de plus… on peut le monter d'un cran sans déroger à la règle ».
+- Cause : la rangée du haut (la « strip », 1 cellule) est réservée à la marque des profils et au titre ; elle est vide au
+  1er écran de l'accueil, d'où l'heure à 136 pt du haut sur un iPhone 393 × 852.
+- Validé (choix A1) : au 1er écran, l'heure, la météo et l'Agenda montent dans la strip vide, sur la grille ; ailleurs
+  (rubrique, scène, appui long sur une tuile) ils redescendent d'un cran. Rejetés : A2 (monter partout, il faudrait déplacer
+  la marque) et C (zone extensible, casse le tableau unique).
+- Code : `dashboard_home_matrix.js#dashboardHomeMatrix` (`stripFree`, `rise`), `dashboard_mystic_geometry.js` (`isStripFree`),
+  `dashboard_mystic_runtime.js#homeFirstScreen` (un seul prédicat pour la géométrie et la marque des profils) ; AGENTS.md règle 12.
+- Vérif : vitest `tests/eve/dashboard_eve_corrections.test.mjs` (nouveau test) et `bevy_ui_main_menu_contract`, 38/38 ; Biome OK.
+  Calcul : iPhone 393 × 852, l'heure passe de 136 pt à 74 pt du haut ; 402 × 874, de 136 à 72 ; SE 375 × 667, de 128 à 69.
+- Reste : le voir sur l'appareil ; le changement de cran est instantané (aucune animation de position n'existe pour les
+  cellules de l'accueil) ; une glissade animée serait un ajout à valider.
+
 ### R-143 — Dashboard : les tuiles changent de taille quand le téléphone passe en paysage (2026-11-13)
 
 - Statut : FAIT (priorité utilisateur).
 - Source : « quand je retourne, les dalles, les tuiles ont plus la même taille… tu ne devras jamais changer de taille ».
 - Cause : la cellule était recalculée pour chaque orientation (`resolveSystemUiCell` sur la place libre du moment), et en paysage le téléphone aplatissait les tuiles en 2 × 1,5 (choix L1).
 - Correctif : `dashboardDeviceCell` (une cellule par appareil = min(debout, couché), l'autre orientation mémorisée dans `eve.dashboard.home_orientation_fits.v1`, sinon estimée en tournant l'écran et ses marges) ; paysage téléphone = tuiles 2 × 2 en deux rangées à côté de la colonne heure/météo/Agenda, le reste en dessous. AGENTS.md règle 12 mise à jour.
-- Vérif : iPhone 17 Pro 64/64, iPhone SE 59/59 (Basic 52/52), iPad 11 71/71 ; vitest 3747/3747.
+- Vérif : iPhone 17 Pro 64/64, iPhone SE 59/59 (Basic 52/52), iPad 11 71/71 ; vitest 3747/3747 ; vérifié à l'écran sur l'iPhone (portrait et paysage, mêmes tuiles) et l'iPad couché.
 
 ### R-142 — Sport : pouls figé (96 au lieu de 130) puis « Aucune mesure » pendant Sprint HIIT (2026-11-13)
-- Statut : OUVERT (à faire au retour de l'utilisateur ; code lu le 13 nov., rien codé).
+- Statut : CODÉ le 13 nov. (pouls relu toutes les 10 s pendant une séance ; mesures de la montre mises en file — transferUserInfo, une toutes les 5 s — quand l'iPhone est injoignable). Reste : annoncer clairement quand l'app Exercice d'Apple occupe la montre. Essai avec la montre à faire.
 - Source : toi, 13 nov., 2 captures (`~/.claude/uploads/3a485638-3c69-450a-afa5-d22e4f841ef8/f18213d4-image.png` :
   carte Sprint HIIT en Pause 1:42, « Pouls · Aucune mesure » ; `fbbd20d5-image.jpg` : la montre, app Exercice d'Apple en
   cours, 20:05, 136 bpm). Au lancement le pouls affiché était juste (96) ; au bout d'une minute il n'avait pas bougé (130
@@ -79,7 +137,7 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   explication ; garder les mesures envoyées pendant une coupure.
 
 ### R-141 — Sport : recherche « HIT » sans résultat, tuiles muettes ensuite, Sprint HIIT impossible à ouvrir dans Cardio (2026-11-13)
-- Statut : OUVERT (à faire au retour de l'utilisateur ; code lu le 13 nov., rien codé).
+- Statut : CODÉ le 13 nov. (« HIT » trouve « HIIT » : lettre doublée tapée une fois ; une palette qui échoue n'empêche plus la recherche ; annuaire des coachs gardé 5 min, attendu 1,5 s au plus, jamais bloquant).
 - Source : toi, 13 nov. : dans Sport, recherche « HIT » dans le champ du bas → les tuiles Musculation, Cardio… mais pas
   le résultat ; un toucher sur ces tuiles ne fait rien ; revenu en arrière, dans Cardio, « Sprint HIIT » ne s'ouvre pas
   non plus. Question : la recherche a-t-elle tout cassé, ou est-ce la catégorie ?
@@ -109,7 +167,7 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   à chaque touche ; une erreur d'ouverture affichée au lieu d'un toucher muet ; la cause de la panne des outils Sport.
 
 ### R-140 — Sport : rappel vocal à chaque fin de série d'augmenter la charge selon la progression choisie (2026-11-13)
-- Statut : OUVERT (à faire au retour de l'utilisateur ; code lu le 13 nov., rien codé).
+- Statut : CODÉ le 13 nov. (à chaque repos entre deux séries chargées sans changement prévu : « Pense à augmenter ta charge de N kilos », N = le Pas ; muet si Pas = « — » ou sur une machine ; le rappel « ajoute/enlève » garde la priorité).
 - Source : toi, 13 nov. : la progression choisie dans le sélecteur (+5 kg, +2,5 kg…) ; à chaque fin de série, que la
   voix prévienne : « Attention, augmente ton poids de 2,5 », un petit rappel pour penser à le faire.
 - Existant (lu le 13 nov.) : un rappel existe depuis le 11 nov. (« N'oublie pas : ajoute 5 kilos »,
@@ -130,7 +188,7 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   le rappel est dit à chaque fin de série, au bon moment, sans couvrir les bips.
 
 ### R-139 — Sport : bips ratés, sautés ou en rafale quand Atome n'est plus au premier plan (2026-11-13)
-- Statut : OUVERT (à faire au retour de l'utilisateur ; code lu le 13 nov., rien codé).
+- Statut : CODÉ le 13 nov. (page cachée : bips confiés au moteur 10 s d'avance au lieu de 1,5 s, jamais plus que ses 12 voix). Essai en arrière-plan à faire.
 - Source : toi, 13 nov. : Atome passé en arrière-plan (autre appli), j'entends les bips, mais certains manquent, d'autres
   sautent, d'autres reviennent ; le timing n'est plus correct hors du premier plan. Attendu : des bips exacts, au premier
   plan comme en arrière-plan.
@@ -156,7 +214,7 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   iPhone et iPad ; noter chaque bip (attendu / entendu / décalage), puis comparer avec le premier plan.
 
 ### R-138 — Sport : après un changement de Forme ou de Force, le panneau suivant bloque ; vérifier tout le parcours (2026-11-13)
-- Statut : OUVERT (à faire avec R-136 au retour de l'utilisateur ; « tu ne codes pas, tu regardes », 13 nov.).
+- Statut : CODÉ le 13 nov. (le verrou de redessin d'un panneau est toujours libéré : une construction qui lève ou une projection qui ne finit pas ne bloque plus le panneau, chien de garde 4 s signalé `panel_refresh_stalled` ; plus de fenêtre d'invocation ouverte par l'écriture du ressenti ; champ « Autre » arrêté au repli). Essai utilisateur.
 - Source : toi, 13 nov. : quand je change ma forme ou ma force puis veux relancer un exercice ou passer au panneau
   suivant, ça bloque ; je dois fermer le panneau et le rouvrir (ou passer par une autre appli, ou toucher ailleurs) pour
   débloquer. Demande : vérifier le parcours complet (changer les paramètres, relancer, passer au suivant) sans lag ni
@@ -179,7 +237,7 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   (`refreshPromise` en cours, invocation ouverte, focus du champ).
 
 ### R-137 — Sport : total des durées d'exercice de la journée, à jour en continu, consultable à tout moment (2026-11-13)
-- Statut : OUVERT (à faire au retour de l'utilisateur ; nouvelle fonction demandée le 13 nov.).
+- Statut : CODÉ le 13 nov. (« Aujourd'hui · N min » en tête du Suivi, séances eVe + pratiques + imports Strava, une séance importée en double écartée ; `training_day_total.js`, test `training_day_total`).
 - Source : toi, 13 nov. : une fonction qui additionne au fur et à mesure toutes les durées d'exercice de la journée,
   toutes activités sportives confondues, avec un statut immédiat (« aujourd'hui : 35 min ») que l'on consulte quand on
   veut et que l'on peut vérifier (le détail par activité), pour savoir à tout instant le temps passé.
@@ -193,7 +251,7 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   (« combien de temps de sport aujourd'hui ? »). Maquette ou emplacement à te proposer avant de coder.
 
 ### R-136 — Sport : lag au réglage de la Force juste après la Forme, au lancement d'une activité (2026-11-13)
-- Statut : OUVERT (à faire au retour de l'utilisateur, iPhone présent ; reporté à sa demande le 13 nov.).
+- Statut : CODÉ le 13 nov. (la valeur s'affiche au toucher, l'écriture part en arrière-plan, l'une après l'autre ; plus de double repeint ; test `dashboard_feeling_block_immediate`). Essai sur l'iPhone par l'utilisateur (écriture de données santé réelles).
 - Source : toi, 13 nov. : « quand je lance une nouvelle activité, il me demande ma forme et ma force… la forme c'est
   instantané, la force (le deuxième événement) se met à laguer, c'est très long ». Attendu : les deux instantanés.
 - Chemin (lu le 13 nov.) : carte d'exercice → `dashboard_training_feeling.js` (bloc `start`, `immediate: true`) →
@@ -225,7 +283,7 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   arrière-plan, un seul repeint par écriture.
 
 ### R-135 — Comm : envoyer texte, vidéo (appui long) ou fichier PENDANT un appel audio ou visio, sans le couper (2026-11-13)
-- Statut : OUVERT (reporté par toi le 13 nov. : « notre tâche, on va la réaliser plus tard », iPhone absent).
+- Statut : CODÉ le 13 nov. (« Écrire » dans la bande de l'appel décroché → conversation avec Texte et Joint, l'appel continue ; « Appel » revient à l'écran de l'appel ; Joint permis pendant un appel décroché). Prise vidéo/audio par appui long toujours éteinte pendant l'appel (caméra et micro tenus par l'appel). Essai réel iPad ↔ iPhone à faire.
 - Source : toi, 13 nov. : pendant un appel, prendre une vidéo par appui long et l'envoyer sans couper l'appel ; envoyer
   un texte ou un fichier, à la même personne ou à une autre, en mode audio comme en mode visio ; faire le bilan.
 - Bilan du code (13 nov., non testé sur appareils, l'iPhone étant devenu indisponible) :
