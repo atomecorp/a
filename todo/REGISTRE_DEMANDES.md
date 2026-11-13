@@ -19,6 +19,24 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 
 ## Entrées à exécuter
 
+### R-146 — Sport : choix « un côté après l'autre / les deux à la fois » pour tout exercice de bras ou de jambes (2026-11-13)
+
+- Statut : OUVERT (déjà demandé, mal couvert).
+- Constat code : le roller « Mode » existe (`dashboard_training_resume_controls.js#mode`) mais `training_resume.js#trainingExecutionModes` ne l'offre qu'aux exercices de force avec haltères en paire (`load_per: 'dumbbell'`, 16 exercices) ; un exercice `per_side` (fente, step-up, pont une jambe…) est forcé « unilatéral », tous les autres (machines, câble, barre, poids du corps) forcés « bilatéral ». Et le roller est rangé dans la rangée Progression, peu visible.
+- À faire : offrir les deux modes à tout exercice qui fait travailler bras ou jambes (catalogue : marquer `limbs: 'arm'|'leg'`), garder le défaut actuel, rendre l'option visible dans l'onglet paramètres (R-144) ; reps et charge « par côté » en unilatéral (déjà géré par `trainingResumeUnits`).
+
+### R-145 — Sport : pouvoir choisir « 0 / ne pas augmenter » dans le pas de progression (2026-11-13)
+
+- Statut : OUVERT.
+- Constat code : le sélecteur « Pas » de la carte (`dashboard_training_card.js#stepSlider`) va de `TRAINING_LOAD_STEP_LIMITS[0]` = 0,25 kg à 10 kg (`atome/src/shared/training_catalog.js:333`) : aucune case vide/0, on augmente forcément. Le pas sert aussi de grille aux rollers de charge, donc 0 ne peut pas y être stocké tel quel.
+- À faire : une première case vide « — » = pas d'augmentation (progression maintenue, `progression.enabled=false`), la grille des rollers gardant le pas de l'équipement ; le rappel vocal R-140 se tait dans ce cas.
+
+### R-144 — Sport : carte d'exercice trop serrée, options invisibles, titre en double (2026-11-13)
+
+- Statut : OUVERT — design à valider.
+- Constat (captures Sprint HIIT, iPhone) : le grand titre « Sprint HIIT » au-dessus du panneau répète l'en-tête de la carte ; les tuiles du panneau ne montent pas jusqu'en haut ; la zone entre « Niveau » et le disque ne fait qu'environ 2,5 lignes, donc Forme/Force puis But/Voir sont coupés et il faut faire défiler une zone minuscule.
+- Proposition : supprimer le grand titre et monter le panneau en haut ; sous « Niveau », une rangée d'outils (jusqu'à 6 : Forme, Réglages, Mode, Progression, Sons…) ; chaque outil remplace le contenu de la zone au-dessus du disque (une seule chose à la fois, plein espace) au lieu d'une pile qui défile.
+
 ### R-143 — Dashboard : les tuiles changent de taille quand le téléphone passe en paysage (2026-11-13)
 
 - Statut : FAIT (priorité utilisateur).
