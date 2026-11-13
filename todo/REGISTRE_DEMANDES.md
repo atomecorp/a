@@ -19,6 +19,27 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 
 ## Entrées à exécuter
 
+### R-140 — Sport : rappel vocal à chaque fin de série d'augmenter la charge selon la progression choisie (2026-11-13)
+- Statut : OUVERT (à faire au retour de l'utilisateur ; code lu le 13 nov., rien codé).
+- Source : toi, 13 nov. : la progression choisie dans le sélecteur (+5 kg, +2,5 kg…) ; à chaque fin de série, que la
+  voix prévienne : « Attention, augmente ton poids de 2,5 », un petit rappel pour penser à le faire.
+- Existant (lu le 13 nov.) : un rappel existe depuis le 11 nov. (« N'oublie pas : ajoute 5 kilos »,
+  `dashboard_training_card.js#announce` + `loadChangeWords`, clés `eve.training.voice.add_load` / `remove_load`). Il n'est
+  dit QUE si :
+  1. le son de séance est allumé (`state.sound`) ;
+  2. la charge PRÉVUE de la série suivante diffère de celle de la série d'avant
+     (`training_machine_sets.js#trainingLoadChangeBefore`, au début du repos ou entre deux séries).
+  Le « Pas » du sélecteur (1,25 · 2,5 · 5 kg, `load_step_kg`, `stepSlider`) règle seulement le cran du réglage de la
+  charge : il ne crée aucune hausse d'une série à l'autre. Une séance à charge égale sur toutes ses séries ne dit donc
+  jamais rien : c'est sans doute pourquoi tu n'entends aucun rappel.
+- À décider avec toi : quand dire « augmente de N kg » quand le plan n'a pas de hausse prévue (à chaque série, ou
+  seulement quand la série précédente est réussie, c'est-à-dire toutes ses répétitions faites ?) ; N = le Pas choisi ou
+  la progression de la liste ; si la nouvelle charge est appliquée d'elle-même aux séries suivantes ; formulation
+  (« Attention, pense à augmenter ton poids de 2,5 kilos ») ; en mode voix comme en mode bips.
+- Lié à R-139 : en arrière-plan, l'annonce passe par des minuteurs de page (annonce après les trois « tut »).
+- Test prévu : séance de musculation avec un Pas de 2,5 et de 5 kg, son allumé, au premier plan puis en arrière-plan ;
+  le rappel est dit à chaque fin de série, au bon moment, sans couvrir les bips.
+
 ### R-139 — Sport : bips ratés, sautés ou en rafale quand Atome n'est plus au premier plan (2026-11-13)
 - Statut : OUVERT (à faire au retour de l'utilisateur ; code lu le 13 nov., rien codé).
 - Source : toi, 13 nov. : Atome passé en arrière-plan (autre appli), j'entends les bips, mais certains manquent, d'autres
