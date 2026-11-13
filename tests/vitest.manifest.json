@@ -147,6 +147,7 @@
   "tests/eve/communication_call_session.test.mjs",
   "tests/eve/communication_notifications_publications.test.mjs",
   "tests/eve/conditions_integrations.test.mjs",
+  "tests/eve/contact_conversation_call_writing_band.test.mjs",
   "tests/eve/contact_conversation_drafts_stills.test.mjs",
   "tests/eve/contact_favorites.test.mjs",
   "tests/eve/contact_model_identity_contract.test.mjs",
