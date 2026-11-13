@@ -19,6 +19,39 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 
 ## Entrées à exécuter
 
+### R-142 — Sport : pouls figé (96 au lieu de 130) puis « Aucune mesure » pendant Sprint HIIT (2026-11-13)
+- Statut : OUVERT (à faire au retour de l'utilisateur ; code lu le 13 nov., rien codé).
+- Source : toi, 13 nov., 2 captures (`~/.claude/uploads/3a485638-3c69-450a-afa5-d22e4f841ef8/f18213d4-image.png` :
+  carte Sprint HIIT en Pause 1:42, « Pouls · Aucune mesure » ; `fbbd20d5-image.jpg` : la montre, app Exercice d'Apple en
+  cours, 20:05, 136 bpm). Au lancement le pouls affiché était juste (96) ; au bout d'une minute il n'avait pas bougé (130
+  sur la montre), puis la ligne a dit « Aucune mesure ». Attendu : un pouls rafraîchi en continu, jamais perdu.
+- Chemin lu :
+  - carte : `dashboard_training_session.js#listenHeart` (abonnement `heart_rate` du propriétaire santé) ; « frais » =
+    moins de 2 min (`FRESH_HEART_RATE_MS`), sinon « Aucune mesure » après 30 s sans mesure fraîche (`HEART_SILENCE_MS`) ;
+  - lecture : `atome/src/squirrel/health/health_owner.js` (relecture toutes les 60 s, `DEFAULT_POLL_MS`, plus les signaux
+    natifs `health_observe`) → `health_read` natif (dernier échantillon de Santé) ;
+  - direct : l'app Atome de la MONTRE ouvre sa propre séance d'entraînement (`watch/WatchSensorSession.swift`,
+    `HKWorkoutSession` + `HKLiveWorkoutBuilder`) et envoie chaque mesure à l'iPhone (`sendMessage` « heart ») →
+    `AppWatchSensorBridge.swift` → `AppNativeHealthWorkout.swift#watchHeartRate` (gardé si une séance eVe a démarré la
+    montre, `watchSession`) → signal `heart_rate` → la lecture suivante y ajoute la mesure de la montre
+    (`withWatchHeart`, fraîche 120 s).
+- Causes probables (non prouvées) :
+  1. L'app Exercice d'Apple tournait sur la montre (capture 2). watchOS n'accepte qu'UNE séance d'entraînement à la
+     fois : celle d'Atome ne démarre pas (« Watch workout not started ») ou s'arrête. Plus de pouls en direct : il ne
+     reste que les échantillons que la montre recopie dans Santé de l'iPhone, par paquets, avec plusieurs minutes de
+     retard. Le 96 du départ vieillit, puis passe « Aucune mesure » au bout de 2 min.
+  2. Une mesure envoyée quand l'iPhone n'est pas joignable (`WCSession.isReachable` faux : Atome en arrière-plan,
+     écran verrouillé) est perdue, jamais mise en file (`WatchSensorSession.swift`, « not queued »).
+  3. La mesure n'est gardée que si une séance eVe a démarré la montre (`watchSession`) : si l'enregistrement de séance
+     (`health_workout` start) n'a pas eu lieu pour ce lancement, chaque mesure est ignorée.
+  4. Côté page, signal et relecture passent par la WebView : en arrière-plan, mêmes ralentissements que R-139.
+- À vérifier au test : journaux de la montre et de l'iPhone (`WatchSensors`, séance montre démarrée ou refusée,
+  messages « heart » reçus), avec puis SANS l'app Exercice d'Apple ouverte ; Atome au premier plan puis en arrière-plan.
+- Corrections visées : un pouls rafraîchi au moins toutes les quelques secondes pendant la séance ; quand la séance
+  Atome ne peut pas démarrer sur la montre parce qu'une autre tourne, le dire clairement (« Une séance Exercice est en
+  cours sur la montre ») ou lire ses mesures autrement ; ne jamais passer de « 96 » figé à « Aucune mesure » sans
+  explication ; garder les mesures envoyées pendant une coupure.
+
 ### R-141 — Sport : recherche « HIT » sans résultat, tuiles muettes ensuite, Sprint HIIT impossible à ouvrir dans Cardio (2026-11-13)
 - Statut : OUVERT (à faire au retour de l'utilisateur ; code lu le 13 nov., rien codé).
 - Source : toi, 13 nov. : dans Sport, recherche « HIT » dans le champ du bas → les tuiles Musculation, Cardio… mais pas
