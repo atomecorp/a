@@ -20,8 +20,8 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 ## Entrées à exécuter
 
 ### R-134 — Comm/Visio : appel dans la conversation, appels manqués/refusés, envois audio/vidéo, Joint, suppressions, badge (2026-11-12)
-- Statut : ATTENTE UTILISATEUR (13 nov. 0 h 50 : tout est déployé — eVe e145f700, a 8c9025b8f, serveur atome.one déploiement 5 ;
-  build 7 sur iPhone et iPad ; reste le test de rotation par l'utilisateur et la liste « Reste » ci-dessous).
+- Statut : ATTENTE UTILISATEUR (13 nov. 8 h : la liste « Reste » du 13 nov. 0 h 50 est traitée et vérifiée sur iPad et iPhone ;
+  voir « Traité le 13 nov. » et le petit « Reste » en fin d'entrée).
 - Demande (session Claude du 12 nov., liste validée) : Visio (vidéos qui se recalent à la rotation, image « Moi » au bon ratio,
   bascule avant/arrière, une seule bande d'outils, panneau dessiné selon les règles Atome et à la bonne taille sur iPad) ; appels
   manqués/sans réponse marqués, refus volontaire visible chez l'appelant avec message vocal envoyé ; envoi audio
@@ -78,16 +78,27 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   serveur a échoué en `vault_request_timeout:state:list` (coffre de l'iPad froid : 24,6 s, la même requête SQL prend 0,5 s
   à chaud) ; le second est passé. L'avis d'erreur n'était pas visible (voir « Reste »).
 - Constaté, non traité : le coffre de l'iPhone pèse 3,8 Go pour 3,9 Go de RAM (lectures disque permanentes).
-- Reste : prises en attente perdues quand l'app redémarre (brouillons non repris) ; message « Média indisponible » posé en
-  tête de liste, hors de vue quand on lit en bas ; aperçu de l'enveloppe « Visio sans réponse » alors que le dernier message
-  est une vidéo ; titre de conversation iPhone affiché en numéro (« +33663694055 ») au lieu du nom ; vignette noire d'une prise vidéo
-  iPad ; premier toucher d'Envoi parfois ignoré sur iPhone (liste en train de défiler) ; défaut de rendu iPad : après la fermeture
-  du clavier ou une suppression, les bulles restent à leur place d'avant (et débordent au-dessus du panneau) un moment (moteur Bevy) ; sur
-  iPhone, après une vidéo lue puis une prise audio touchée, la liste reste vide jusqu'au prochain glissement (non reproduit
-  sur iPad) ; juste après un redémarrage du serveur, le premier `state:list` d'un coffre froid dépasse les 10 s
-  (`vaults.rs` `REQUEST_TIMEOUT`) : l'envoi échoue une fois ; `state:list` sans `limit` ne rend que les 1000 états les plus
-  récents (un partage dont les états sont plus anciens peut en manquer) ; libellé de l'appel audio et avis de refus non
-  revérifiés sur la build 7.
+- Traité le 13 nov. (2e demande : « corrige tout ça », eVe 792edcbe → la ligne `eVe:` d'a 6e66bd8f6, serveur a 8ba633093
+  déployé, puis déploiement 7 pour le client web) :
+  - serveur : `state:list` d'un partage lit la seule branche partagée (`state:within`, requête récursive, limite 20 000),
+    plus de liste du coffre entier limitée à 1000 ; index `idx_state_current_updated` ; sauvegarde du déploiement en
+    `nice`/`ionice` (0 délai de coffre pendant le déploiement 6) ; l'envoi est relancé une fois sur `vault_request_timeout` ;
+  - avis d'erreur de la conversation dans la partie fixe, au-dessus de la bande (plus hors de vue) ;
+  - prises en attente reprises au redémarrage (brouillons `conversation_send_status: draft`, URL recalée sur le port local
+    courant), supprimées marquées `removed` (vérifié iPad : supprimée, absente après relance) ;
+  - enveloppe : mon propre appel sans réponse n'est plus l'aperçu (vérifié iPad) ;
+  - images fixes des vidéos faites sur l'appareil (plusieurs instants, la mieux éclairée) et montrées par les lignes
+    (`stillPreview`) : vignettes des prises iPad (plus noires), vidéos envoyées et reçues ; une vidéo reçue dont la copie
+    locale est cassée (copie `.video_cache` tronquée du 12 nov.) est reprise du serveur (vérifié iPad : vignette et lecture) ;
+  - suppression : les lignes partent tout de suite (vérifié iPad, < 0,5 s) ;
+  - premier toucher d'Envoi : une liste qui semble immobile n'avale plus le toucher (moteur `scroll_motion.rs`), vérifié iPhone :
+    Envoi en un toucher, vidéo reçue sur l'iPad avec sa vignette ;
+  - iPhone : la vidéo ouverte sous la dernière ligne se montre (elle s'ouvrait sous la bande, d'où la « liste vide ») ; un doigt
+    vertical posé sur une vidéo en cours fait défiler le fil (avant : avalé par l'avance rapide) ; vidéo puis audio : vérifié ;
+  - clavier iPad fermé : rendu juste en 0,4 s (non reproduit).
+- Reste : titre de conversation iPhone en numéro (le compte iPad n'a pas de nom : le nommer demande l'accord de l'utilisateur) ;
+  six anciennes prises de test restaurées en attente sur l'iPad, une sur l'iPhone (à envoyer ou supprimer par l'utilisateur) ;
+  coffre iPhone de 3,8 Go et anciennes sauvegardes (~50 Go) non touchés (données de l'utilisateur).
 
 ### R-133 — Accueil eVe Pro : la tuile Capture devient l'outil « Enr. » de la bande ; bande « Finder » élargie corrigée (2026-11-12)
 - Statut : ATTENTE UTILISATEUR (question posée le 12 nov. au 2e compte rendu : le trou laissé par Capture dans la rangée des tuiles en paysage ; le code est fait).

@@ -107,3 +107,19 @@ describe('a video opened under the last row', () => {
         expect(options[1]?.revealNodeId).toBeUndefined();
     }, 20000);
 });
+
+describe('the title of a conversation whose card holds a number alone', () => {
+    it('is the name their newest message carries, never a number, an id or a handle', async () => {
+        const { conversationHeardName, conversationTitleIsNumber } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_contact_conversation_title.js');
+        expect(conversationTitleIsNumber('+33663694055')).toBe(true);
+        expect(conversationTitleIsNumber('Ana')).toBe(false);
+        expect(conversationHeardName([
+            { fromName: 'Old', date: '2026-11-12T10:00:00Z' },
+            { fromName: '+33663694055', date: '2026-11-13T10:00:00Z' },
+            { fromName: 'cf98e858-8634-4585-aae8-5ab8e9bab631', date: '2026-11-13T09:00:00Z' },
+            { fromName: 'Godard', date: '2026-11-13T08:00:00Z' }
+        ])).toBe('Godard');
+        expect(conversationHeardName([{ fromName: '@ana' }, { fromName: 'user_ebc65737-7801-40f1-b2b4-83299619ac91' }])).toBe('');
+        expect(conversationHeardName([{ fromId: 'u1', fromName: 'user_ebc65737-7801-40f1-b2b4-83299619ac91' }], n => (n.fromId === 'u1' ? 'Godard' : ''))).toBe('Godard');
+    });
+});
