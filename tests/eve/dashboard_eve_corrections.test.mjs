@@ -61,6 +61,21 @@ test('eVe Pro reads like the decision grid and eVe Basic lays its four tiles as 
         .toEqual({ above: '', below: 'monitor_0', left: 'activity', right: 'media' });
 });
 
+// The home's first screen leaves the top strip empty: the time, the weather and the Agenda rise into it, one cell nearer
+// the top, on the same cell, the tiles unmoved; elsewhere they step back under it (choice A1, user 13 Nov. 2026).
+test('the pinned time, weather and Agenda rise into the empty top strip on the first screen only', () => {
+    const pinned = options => ['clock', 'weather', 'next_event', 'activity', 'last_project']
+        .map(ref => dashboardHomeMatrixPlace(dashboardHomeMatrix({ width: 360, height: 760, ...options }), ref));
+    // 760 / 60 = 12 whole cells: the strip, two spare rows, the block of eight, the band.
+    expect(pinned({})).toEqual([[0, -2, 3, 1], [3, -2, 3, 1], [0, -1, 6, 1], [0, 2, 2, 2], [0, -4, 2, 2]]);
+    expect(pinned({ stripFree: true })).toEqual([[0, -3, 3, 1], [3, -3, 3, 1], [0, -2, 6, 1], [0, 2, 2, 2], [0, -5, 2, 2]]);
+    const free = dashboardHomeMatrix({ width: 360, height: 760, stripFree: true });
+    expect([free.cell, free.spare, free.rise]).toEqual([60, 2, 3]);
+    // eVe Basic pins nothing; a phone lying has no strip: neither moves.
+    expect(dashboardHomeMatrix({ width: 360, height: 760, basic: true, stripFree: true }).rise).toBe(0);
+    expect(dashboardHomeMatrix({ width: 760, height: 360, stripFree: true }).places.clock).toEqual([0, 0, 3, 1]);
+});
+
 test('a restored launch starts solo, an explicit connection starts with the grid, and a home revisit retains its revealed state', () => {
     forgetDashboardEveEntry('owner');
     expect(takeDashboardEveEntry('owner')).toEqual({ mode: 'solo', arrive: true });
