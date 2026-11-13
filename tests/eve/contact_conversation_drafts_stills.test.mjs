@@ -123,3 +123,19 @@ describe('the title of a conversation whose card holds a number alone', () => {
         expect(conversationHeardName([{ fromId: 'u1', fromName: 'user_ebc65737-7801-40f1-b2b4-83299619ac91' }], n => (n.fromId === 'u1' ? 'Godard' : ''))).toBe('Godard');
     });
 });
+
+describe('a still that could not be made', () => {
+    it('is tried again after a minute, not at every repaint', async () => {
+        let clock = 0, works = false;
+        const make = vi.fn(async () => (works ? 'data:image/jpeg;base64,late' : ''));
+        const stills = createConversationStills({ make, now: () => clock });
+        const records = [{ id: 'v', type: 'video_recording', properties: {} }];
+        await stills.ensure(records);
+        await stills.ensure(records);
+        expect(make).toHaveBeenCalledTimes(1);
+        works = true; clock = 61000;
+        await stills.ensure(records);
+        expect(make).toHaveBeenCalledTimes(2);
+        expect(stills.posterOf('v')).toBe('data:image/jpeg;base64,late');
+    });
+});
