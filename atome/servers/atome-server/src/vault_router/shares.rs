@@ -385,9 +385,16 @@ impl VaultRouter {
         owner: &str,
         root: &str,
     ) -> Result<Vec<JsonValue>, String> {
-        let states = self.ask(owner, "state:list", json!({})).await?;
-        let states = states.as_array().cloned().unwrap_or_default();
+        let states = self.branch_states(owner, root).await?;
         Ok(states_within_root(&states, root))
+    }
+
+    // `root` and everything under it in `owner`'s vault, read as one branch (never the whole vault).
+    pub async fn branch_states(&self, owner: &str, root: &str) -> Result<Vec<JsonValue>, String> {
+        let states = self
+            .ask(owner, "state:within", json!({ "root_atome_id": root }))
+            .await?;
+        Ok(states.as_array().cloned().unwrap_or_default())
     }
 }
 

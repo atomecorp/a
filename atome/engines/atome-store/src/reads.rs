@@ -131,6 +131,40 @@ pub fn get_state_current(db: &Connection, atome_id: Option<&str>) -> Result<Json
     Ok(row.as_ref().map_or(JsonValue::Null, projected))
 }
 
+// The states of one branch of this vault: `root` and everything under it (`atomes.parent_id`,
+// indexed), deleted ones left out. A share reads its branch alone, never the whole vault
+// (a full listing of a large vault took minutes, and stopped at its 1000 newest states).
+pub const BRANCH_LIMIT: i64 = 20000;
+pub fn list_branch_states(
+    db: &Connection,
+    root: &str,
+    owner_id: &str,
+) -> Result<Vec<JsonValue>, String> {
+    let root = root.trim();
+    if root.is_empty() {
+        return Ok(Vec::new());
+    }
+    let sql = "WITH RECURSIVE branch(id) AS (
+             SELECT ?1
+             UNION
+             SELECT a.atome_id FROM atomes a JOIN branch b ON a.parent_id = b.id
+         )
+         SELECT sc.*, a.atome_type AS atome_type, a.parent_id AS parent_id, a.created_at AS created_at,
+                COALESCE(sc.owner_id, a.owner_id) AS owner_id
+         FROM branch JOIN state_current sc ON sc.atome_id = branch.id
+         LEFT JOIN atomes a ON a.atome_id = sc.atome_id
+         WHERE a.deleted_at IS NULL
+           AND COALESCE(json_extract(sc.properties, '$.__deleted'), 0) <> 1
+           AND (COALESCE(sc.owner_id, a.owner_id) = ?2 OR COALESCE(sc.owner_id, a.owner_id) IS NULL)
+         LIMIT ?3";
+    let limit = BRANCH_LIMIT;
+    let refs: [&dyn rusqlite::ToSql; 3] = [&root, &owner_id, &limit];
+    Ok(query_objects(db, sql, &refs)?
+        .iter()
+        .map(projected)
+        .collect())
+}
+
 pub struct StateFilter {
     pub project_id: Option<String>,
     pub owner_id: Option<String>,
@@ -196,7 +230,7 @@ pub fn list_state_current(db: &Connection, filter: &StateFilter) -> Result<Vec<J
     let after = filter.after.as_ref().filter(|_| filter.oldest);
     if let Some((updated_at, atome_id)) = after {
         condition = format!(
-            "{} (COALESCE(sc.updated_at, '') > ? OR (COALESCE(sc.updated_at, '') = ? AND sc.atome_id > ?))",
+            "{} (sc.updated_at > ? OR (sc.updated_at = ? AND sc.atome_id > ?))",
             if condition.is_empty() {
                 "WHERE".to_string()
             } else {
@@ -207,10 +241,13 @@ pub fn list_state_current(db: &Connection, filter: &StateFilter) -> Result<Vec<J
         params.push(SqlValue::Text(updated_at.clone()));
         params.push(SqlValue::Text(atome_id.clone()));
     }
+    // Both keys in one direction, on the bare column (`updated_at` is NOT NULL): the walk follows
+    // `idx_state_current_updated` and stops at the page, instead of reading every row's properties
+    // to sort them (a 68 000-state vault: `state:list` 198 s).
     let order = if filter.oldest {
-        "COALESCE(sc.updated_at, '') ASC, sc.atome_id ASC"
+        "sc.updated_at ASC, sc.atome_id ASC"
     } else {
-        "sc.updated_at DESC, sc.atome_id"
+        "sc.updated_at DESC, sc.atome_id DESC"
     };
     params.push(SqlValue::Integer(filter.limit));
     params.push(SqlValue::Integer(if filter.oldest {
@@ -225,7 +262,7 @@ pub fn list_state_current(db: &Connection, filter: &StateFilter) -> Result<Vec<J
          FROM state_current sc LEFT JOIN atomes a ON a.atome_id = sc.atome_id
          WHERE sc.atome_id IN (
              SELECT sc.atome_id FROM state_current sc LEFT JOIN atomes a ON a.atome_id = sc.atome_id {condition}
-             GROUP BY sc.atome_id ORDER BY {order} LIMIT ? OFFSET ?)
+             ORDER BY {order} LIMIT ? OFFSET ?)
          ORDER BY {order}"
     );
     let refs: Vec<&dyn rusqlite::ToSql> =
@@ -234,4 +271,75 @@ pub fn list_state_current(db: &Connection, filter: &StateFilter) -> Result<Vec<J
         .iter()
         .map(projected)
         .collect())
+}
+
+#[cfg(test)]
+mod branch_tests {
+    use super::*;
+
+    fn store() -> Connection {
+        let db = Connection::open_in_memory().expect("db");
+        crate::prepare_schema(&db).expect("schema");
+        db.execute_batch(
+            "INSERT INTO atomes (atome_id, atome_type, parent_id, owner_id, creator_id) VALUES
+               ('me', 'user', NULL, 'me', 'me'), ('root', 'project', NULL, 'me', 'me'), ('child', 'shape', 'root', 'me', 'me'),
+               ('grand', 'shape', 'child', 'me', 'me'), ('gone', 'shape', 'root', 'me', 'me'),
+               ('other', 'shape', NULL, 'me', 'me');
+             UPDATE atomes SET deleted_at = datetime('now') WHERE atome_id = 'gone';
+             INSERT INTO state_current (atome_id, owner_id, properties, updated_at) VALUES
+               ('root', 'me', '{}', '2026-01-01'), ('child', 'me', '{}', '2026-01-02'),
+               ('grand', 'me', '{}', '2026-01-03'), ('gone', 'me', '{}', '2026-01-04'),
+               ('other', 'me', '{}', '2026-01-05');",
+        )
+        .expect("rows");
+        db
+    }
+
+    #[test]
+    fn a_branch_holds_its_root_and_everything_under_it_alone() {
+        let db = store();
+        let mut ids: Vec<String> = list_branch_states(&db, "root", "me")
+            .expect("branch")
+            .iter()
+            .map(|state| state["id"].as_str().unwrap_or("").to_string())
+            .collect();
+        ids.sort();
+        assert_eq!(ids, ["child", "grand", "root"]);
+        assert!(list_branch_states(&db, "", "me").expect("empty").is_empty());
+    }
+
+    #[test]
+    fn the_listing_walks_newest_and_oldest_first() {
+        let db = store();
+        let filter = |oldest: bool, after: Option<(String, String)>| StateFilter {
+            project_id: None,
+            owner_id: Some("me".into()),
+            atome_type: None,
+            exclude_system: false,
+            include_deleted: false,
+            limit: 2,
+            offset: 0,
+            oldest,
+            after,
+        };
+        let ids = |states: Vec<JsonValue>| {
+            states
+                .iter()
+                .map(|s| s["id"].as_str().unwrap_or("").to_string())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            ids(list_state_current(&db, &filter(false, None)).unwrap()),
+            ["other", "grand"]
+        );
+        assert_eq!(
+            ids(list_state_current(&db, &filter(true, None)).unwrap()),
+            ["root", "child"]
+        );
+        let next = filter(true, Some(("2026-01-02".into(), "child".into())));
+        assert_eq!(
+            ids(list_state_current(&db, &next).unwrap()),
+            ["grand", "other"]
+        );
+    }
 }

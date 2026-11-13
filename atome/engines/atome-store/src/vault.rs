@@ -214,6 +214,12 @@ impl Vault<'_> {
             "communication:threads" => {
                 communication::query_listing_threads(db, self.principal_id, payload)
             }
+            "state:within" => reads::list_branch_states(
+                db,
+                &field_text(payload, &["root_atome_id", "rootAtomeId"]).unwrap_or_default(),
+                self.principal_id,
+            )
+            .map(JsonValue::Array),
             "state:list" => {
                 let oldest = payload.get("order").and_then(JsonValue::as_str) == Some("oldest");
                 let after = payload

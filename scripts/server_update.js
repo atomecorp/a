@@ -258,6 +258,15 @@ function ensureSystemdUnit({ serviceName, envFile }) {
     run(`systemctl enable ${serviceName}`, { allowFailure: true });
 }
 
+function commandExists(name) {
+    try {
+        execSync(`command -v ${name}`, { stdio: 'ignore', shell: '/bin/bash' });
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
 function backupPaths({ backupRoot, envFile, pathsToBackup }) {
     ensureDir(backupRoot, 0o755);
 
@@ -276,7 +285,10 @@ function backupPaths({ backupRoot, envFile, pathsToBackup }) {
     const existing = pathsToBackup.filter((p) => fileExists(p));
     if (existing.length > 0) {
         const rels = existing.map((p) => path.relative(projectRoot, p));
-        run(`tar -czf ${tarPath} ${rels.map((p) => `'${p}'`).join(' ')}`, { cwd: projectRoot, allowFailure: true });
+        // At the lowest disk and CPU priority: the archive (minutes of reads) otherwise starved the live
+        // vaults, whose requests then missed their 10 s delay (`vault_request_timeout`) during every update.
+        const gentle = commandExists('ionice') ? 'nice -n 19 ionice -c 3 ' : 'nice -n 19 ';
+        run(`${gentle}tar -czf ${tarPath} ${rels.map((p) => `'${p}'`).join(' ')}`, { cwd: projectRoot, allowFailure: true });
     }
 
     log(`Backup created: ${backupDir}`);

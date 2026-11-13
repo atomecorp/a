@@ -454,6 +454,8 @@ CREATE TABLE IF NOT EXISTS state_current (
 
 CREATE INDEX IF NOT EXISTS idx_state_current_project ON state_current(project_id);
 CREATE INDEX IF NOT EXISTS idx_state_current_owner ON state_current(owner_id);
+-- Listing order (newest or oldest change first): the page is walked on it, never sorted.
+CREATE INDEX IF NOT EXISTS idx_state_current_updated ON state_current(updated_at, atome_id);
 CREATE INDEX IF NOT EXISTS idx_state_current_json_type ON state_current(LOWER(COALESCE(json_extract(properties, '$.type'), '')));
 CREATE INDEX IF NOT EXISTS idx_state_current_json_kind ON state_current(LOWER(COALESCE(json_extract(properties, '$.kind'), '')));
 
