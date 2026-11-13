@@ -106,7 +106,7 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
   - envoi juste après un redémarrage du serveur : passé du premier coup (déploiement 7). Envoyer un texte envoie aussi les
     prises en attente (comportement voulu du code : « Tout part d'un coup ») : les 6 anciennes prises de test de l'iPad
     sont parties ainsi vers l'iPhone à 08:07.
-- Reste : une ancienne prise de test en attente sur l'iPhone ; coffre iPhone de 3,8 Go et anciennes sauvegardes (~50 Go)
+- Reste : coffre iPhone de 3,8 Go et anciennes sauvegardes (~50 Go)
   non touchés (données de l'utilisateur) ; petite forme d'onde absente sur les messages audio reçus (iPhone).
 
 ### R-133 — Accueil eVe Pro : la tuile Capture devient l'outil « Enr. » de la bande ; bande « Finder » élargie corrigée (2026-11-12)
