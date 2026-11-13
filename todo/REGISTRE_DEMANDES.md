@@ -39,6 +39,15 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 - Mesure : relectures « absent » à 1–3 ms sur iPad (lecture seule). Le chronométrage des deux écritures sur le compte de
   test a été refusé par le garde-fou (écriture de données santé) : à faire avec ton accord, ou par des traces de durée
   ajoutées sur le chemin (lecture, commit, relecture, listeners, repeint), puis en réglant Forme puis Force sur l'iPhone.
+- Inspection du code, suite (13 nov.) :
+  - confirmé : un traitement asynchrone ne redessine le panneau qu'à sa fin (`bevy_panel_projection.js#dispatchPanelIntent` :
+    `result.then(finish)`). Le choix n'apparaît donc qu'après lecture, commit, relecture d'état et listeners, et rien
+    ne s'affiche entre-temps ;
+  - chaque écriture déclenche : 2 repeints de la carte (chacun `activityCardChanged` → Live Activity et montre), le
+    signal « atome modifié » à toutes les vues, et `load()` du moniteur Résultats s'il est ouvert ;
+  - la 1re lecture tombe sur le cache « absent » (pas d'aller-retour) ; la commande lui retire ce cache, donc la 2e lecture
+    fait un vrai aller-retour, suivi du commit et de la relecture : un aller-retour de plus que la 1re ;
+  - aucune file globale côté transport (`requestWsOnly` n'en est pas une) ; seule `health_feeling.set` sérialise ses écritures.
 - Correction visée : la valeur s'affiche au toucher (brouillon gardé jusqu'à l'écriture confirmée), l'écriture en
   arrière-plan, un seul repeint par écriture.
 
