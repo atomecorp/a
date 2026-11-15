@@ -19,6 +19,13 @@ d'exécution, `.claude/hooks/registre_stop_guard.mjs`), puis la source, ce qui e
 
 ## Entrées à exécuter
 
+### R-175 — Rail du fond de projet : Photo, Colorer, Multipiste retirés ; Activité en bas ; Gestes en rouge (2026-11-15)
+
+- Statut : FAIT (15 nov. 2026).
+- Demande (toi, 15 nov.) : sur le fond d'un projet vide, retirer Photo (déjà dans la bande du bas), Colorer et Multipiste ; Activité tout en bas, à la place de Multipiste ; Gestes en rouge, pour qu'on comprenne que c'est un enregistreur.
+- Fait, prouvé (Web, vraie app, `temp/rail_fond/steps/s01_ground.mjs`, capture `temp/rail_fond/shots/s01_ground.png`) : rail de haut en bas Gestes (glyphe rouge), Template, Tout sélectionner, Zoom, 100 %, Tout voir, Infos, Média, Activité. Fichiers : `context_menus.json` (`sidebar.objects.project`), `project_background_rail_runtime.js`, `atome_contextual_rail_order.js`, `atome_contextual_edit_model.js` (`recorder`), `project_view_surface_context_runtime.js`.
+- Réponse (toi, 15 nov.) : « Dans Activité ». Fait, prouvé (`temp/rail_fond/steps/s04_multitrack.mjs`, captures `temp/rail_fond/shots/s04_activity.png`, `s04_multitrack.png`) : Activité › Multipiste (premier choix) › Timeline, Cellules, Scène, Mixage ; Timeline passe le projet en vue Timeline.
+
 ### R-173 — CB sociale : trois modes (CB à fréquences virtuelles, Appel aléatoire, Bouteille à la mer) (2026-11-15)
 - Statut : ATTENTE UTILISATEUR — décisions prises et cahier des charges rédigé le 15 nov. : `temp/cb_sociale_2026-11-15/CAHIER_DES_CHARGES.md`, `AIPD.md` (ébauche) et `PROMPT.md` (prompt d'exécution, lots L0 à L6). Reste : ta validation du cahier. Aucun code.
 - Demande (toi, 15 nov.) : « il me faut des mockups avant de valider et placer cette fonction », puis le prompt complet « CB sociale » (3 modes, portée 5/50/500 km/Monde, 50 tests d'acceptation) ; « vérifie qu'il n'y ait pas d'incompatibilité… pose-moi des questions ». Le prompt interdit d'ajouter la fonction au ToDo principal sans validation : cette entrée ne fait que tracer la demande.
