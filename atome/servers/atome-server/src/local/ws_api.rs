@@ -188,7 +188,8 @@ pub(super) async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
 }
 
 fn relayed_aside(msg_type: &str) -> bool {
-    super::public_relay::PUBLIC_TYPES.contains(&msg_type) || super::public_relay::ACCOUNT_TYPES.contains(&msg_type)
+    super::public_relay::PUBLIC_TYPES.contains(&msg_type)
+        || super::public_relay::ACCOUNT_TYPES.contains(&msg_type)
 }
 
 /// The answer to one `/ws/api` frame that needs no connection of its own: the page's

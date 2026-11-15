@@ -13,6 +13,21 @@ export const alarmRingtoneSound = (ringtone) => {
     if (!ALARM_RINGTONES.includes(ringtone)) throw new Error(`alarm_ringtone_unknown:${ringtone}`);
     return `alarm_${ringtone}`;
 };
+// A sound of the person's own (an mp3, the sound of an mp4…) rung by an alarm: `ringtone: 'media'` with its
+// `ringtone_media` ({ atome_id, label }). Its name is also its key on the phone, which keeps a copy of it
+// (calendar_alarm_sound.js). It rings in passes of 30 s, the longest a phone's notification sound lasts.
+export const ALARM_MEDIA_RINGTONE = 'media';
+export const ALARM_MEDIA_RING_PERIOD_MS = 30000;
+export const alarmMediaSound = (atomeId) => {
+    const id = String(atomeId || '').trim();
+    if (!id) throw new Error('alarm_ringtone_media_missing');
+    return `alarm_media_${id.replace(/[^A-Za-z0-9]/g, '_').slice(0, 80)}`;
+};
+// The sound an alarm rings (its built-in ringtone or the person's), or '' when it rings none.
+export const alarmSoundOf = (alarm = {}) => {
+    if (!alarm?.ringtone) return '';
+    return alarm.ringtone === ALARM_MEDIA_RINGTONE ? alarmMediaSound(alarm.ringtone_media?.atome_id) : alarmRingtoneSound(alarm.ringtone);
+};
 // Each sound and the period of its ring: one ring, then the silence before the next one
 // (a ringtone that already lasts its period loops without a gap).
 const SOUNDS = Object.freeze({
@@ -32,15 +47,21 @@ const SOURCE_LAYER = 'notification_sound';
 export const createNotificationSoundPlayer = ({ env = globalThis, audio = getAudioPlaybackAPI(env), fetchImpl = (url) => env.fetch(url) } = {}) => {
     // A sound is decoded once and stays loaded: the next ding starts at once.
     const loaded = new Map();
+    // The person's sounds, named by `define` with what reads their bytes.
+    const defined = new Map();
     let ring = null;
+    const bytesOf = async (name) => {
+        if (defined.has(name)) return defined.get(name).read();
+        const response = await fetchImpl(new URL(SOUNDS[name].file, SOUND_ROOT).href);
+        if (!response.ok) throw new Error(`notification_sound_unavailable:${name}`);
+        return new Uint8Array(await response.arrayBuffer());
+    };
+    const periodOf = name => (defined.has(name) ? ALARM_MEDIA_RING_PERIOD_MS : SOUNDS[name]?.ringPeriodMs);
     const load = (name) => {
-        const file = SOUNDS[name]?.file;
-        if (!file) return Promise.reject(new Error(`notification_sound_unknown:${name}`));
+        if (!SOUNDS[name]?.file && !defined.has(name)) return Promise.reject(new Error(`notification_sound_unknown:${name}`));
         if (!loaded.has(name)) {
             const assetId = `__notification_sound_${name}`;
-            loaded.set(name, fetchImpl(new URL(file, SOUND_ROOT).href).then(async (response) => {
-                if (!response.ok) throw new Error(`notification_sound_unavailable:${name}`);
-                const bytes = new Uint8Array(await response.arrayBuffer());
+            loaded.set(name, bytesOf(name).then(async (bytes) => {
                 await audio.loadTransientAsset({ assetId, bytes, source_layer: SOURCE_LAYER });
                 return assetId;
             }).catch((error) => { loaded.delete(name); throw error; }));
@@ -60,10 +81,12 @@ export const createNotificationSoundPlayer = ({ env = globalThis, audio = getAud
     };
     return Object.freeze({
         play: (name) => start(name),
+        // A sound of the person's: `read()` gives its bytes once, when it first sounds.
+        define(name, read) { if (!defined.has(name)) defined.set(name, { read }); },
         // Rings until `stopRing()`; a new ring replaces the current one. The ring is
         // owned at once, so a stop that comes while its sound still loads is not missed.
         async ring(name) {
-            const period = SOUNDS[name]?.ringPeriodMs;
+            const period = periodOf(name);
             if (!period) throw new Error(`notification_sound_not_a_ring:${name}`);
             const previous = ring;
             const current = { name, started: false, timer: env.setInterval(() => {

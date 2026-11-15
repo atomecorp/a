@@ -5,6 +5,7 @@ mod auth_device;
 mod code_workspace;
 mod dev_logging;
 mod local_http_navigation;
+mod native_alarms;
 mod native_billing;
 mod native_clipboard;
 mod native_communication;
@@ -306,6 +307,8 @@ pub fn run() {
             native_health::health_invoke,
             native_billing::billing_invoke,
             native_communication::notifications_invoke,
+            native_alarms::alarms_invoke,
+            native_alarms::device_calendar_invoke,
             streaming_view::streaming_view_invoke,
             taxonomy_editor::taxonomy_read,
             taxonomy_editor::taxonomy_save,

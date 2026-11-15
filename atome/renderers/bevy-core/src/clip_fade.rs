@@ -3,8 +3,10 @@
 //! band painted over the content: the part of an atom a fade reaches is drawn as a mesh cut in strips across the
 //! fade, each vertex carrying the mask in its colour's alpha — a sprite (shape, text, icon, shadow) through its
 //! polygon relay, whose colour material multiplies by it, a glass surface through its own mesh, whose shader does.
-//! A fade is `[x, y, width, height, top, bottom, curve]` in the clip's frame: `top` px under the area's top edge and
-//! `bottom` px above its bottom edge, the mask `1 - (1 - t)^curve` (t: 0 on the edge, 1 a ramp inside it).
+//! A fade is `[x, y, width, height, top, bottom, curve, left, right]` in the clip's frame (`ClipFade`): `top` px under
+//! the area's top edge, `bottom` px above its bottom edge, `left` px inside its left edge and `right` px inside its right
+//! edge (a row that scrolls sideways: the project's ribbon), the mask `1 - (1 - t)^curve` (t: 0 on the edge, 1 a ramp
+//! inside it). The mesh is cut in strips across every ramp it meets, in both directions.
 
 use bevy::{
     asset::RenderAssetUsages,
@@ -20,7 +22,7 @@ use crate::{
     clip_polygon::{
         clip_convex_polygon, upsert_sprite_polygon_proxy, write_polygon_into_entity_mesh,
     },
-    components::{AtomeClipFades, AtomeLocalTransform},
+    components::{AtomeClipFades, AtomeLocalTransform, ClipFade},
 };
 
 /// Linear pieces of each eased ramp: twelve strips over a tool's 60 px keep the curve within a level or two of 255.
@@ -32,43 +34,77 @@ fn ramp(t: f32, curve: f32) -> f32 {
     1.0 - (1.0 - t.clamp(0.0, 1.0)).powf(curve.max(0.01))
 }
 
-/// The mask at `y` (the fade frame): every fade's ramps multiplied, 1 away from them.
-pub(crate) fn fade_alpha(fades: &[[f32; 7]], y: f32) -> f32 {
+/// One axis of a fade: its start, its length and the ramps inside its two edges.
+#[derive(Clone, Copy)]
+struct Axis {
+    start: f32,
+    length: f32,
+    near: f32,
+    far: f32,
+}
+
+/// The vertical (`top`, `bottom`) and horizontal (`left`, `right`) axes of a fade.
+fn axes(fade: &ClipFade) -> [Axis; 2] {
+    let [x, y, width, height, top, bottom, _, left, right] = *fade;
+    [
+        Axis {
+            start: y,
+            length: height,
+            near: top,
+            far: bottom,
+        },
+        Axis {
+            start: x,
+            length: width,
+            near: left,
+            far: right,
+        },
+    ]
+}
+
+/// The mask of one axis at `at`: 1 away from its ramps.
+fn axis_alpha(axis: Axis, at: f32, curve: f32) -> f32 {
+    let near = if axis.near > 0.0 {
+        ramp((at - axis.start) / axis.near, curve)
+    } else {
+        1.0
+    };
+    let far = if axis.far > 0.0 {
+        ramp((axis.start + axis.length - at) / axis.far, curve)
+    } else {
+        1.0
+    };
+    near * far
+}
+
+/// The mask at `point` (the fade frame): every fade's ramps multiplied, 1 away from them.
+pub(crate) fn fade_alpha(fades: &[ClipFade], point: Vec2) -> f32 {
     fades.iter().fold(1.0, |alpha, fade| {
-        let [_, top, _, height, upper, lower, curve] = *fade;
-        let from_top = if upper > 0.0 {
-            ramp((y - top) / upper, curve)
-        } else {
-            1.0
-        };
-        let from_bottom = if lower > 0.0 {
-            ramp((top + height - y) / lower, curve)
-        } else {
-            1.0
-        };
-        alpha * from_top * from_bottom
+        let [vertical, horizontal] = axes(fade);
+        alpha * axis_alpha(vertical, point.y, fade[6]) * axis_alpha(horizontal, point.x, fade[6])
     })
 }
 
-/// Whether a fade's ramps reach the span `[from, to]` (the fade frame).
-fn reaches(fades: &[[f32; 7]], from: f32, to: f32) -> bool {
+/// Whether a ramp of axis `index` (0 vertical, 1 horizontal) reaches the span `[from, to]` (the fade frame).
+fn reaches(fades: &[ClipFade], index: usize, from: f32, to: f32) -> bool {
     fades.iter().any(|fade| {
-        let [_, top, _, height, upper, lower, _] = *fade;
-        (upper > 0.0 && from < top + upper) || (lower > 0.0 && to > top + height - lower)
+        let axis = axes(fade)[index];
+        (axis.near > 0.0 && from < axis.start + axis.near)
+            || (axis.far > 0.0 && to > axis.start + axis.length - axis.far)
     })
 }
 
-/// The strips' edges inside `(from, to)`: every ramp cut in `RAMP_STRIPS`.
-fn cuts(fades: &[[f32; 7]], from: f32, to: f32) -> Vec<f32> {
+/// The strips' edges of axis `index` inside `(from, to)`: every ramp cut in `RAMP_STRIPS`.
+fn cuts(fades: &[ClipFade], index: usize, from: f32, to: f32) -> Vec<f32> {
     let mut lines: Vec<f32> = fades
         .iter()
         .flat_map(|fade| {
-            let [_, top, _, height, upper, lower, _] = *fade;
-            (0..=RAMP_STRIPS).flat_map(move |index| {
-                let share = index as f32 / RAMP_STRIPS as f32;
+            let axis = axes(fade)[index];
+            (0..=RAMP_STRIPS).flat_map(move |step| {
+                let share = step as f32 / RAMP_STRIPS as f32;
                 [
-                    (upper > 0.0).then_some(top + upper * share),
-                    (lower > 0.0).then_some(top + height - lower * share),
+                    (axis.near > 0.0).then_some(axis.start + axis.near * share),
+                    (axis.far > 0.0).then_some(axis.start + axis.length - axis.far * share),
                 ]
             })
         })
@@ -78,6 +114,20 @@ fn cuts(fades: &[[f32; 7]], from: f32, to: f32) -> Vec<f32> {
     lines.sort_by(f32::total_cmp);
     lines.dedup_by(|a, b| (*a - *b).abs() < 1.0e-3);
     lines
+}
+
+/// The edges of the strips along axis `index` over the span of `points`: none when no ramp of that axis reaches it.
+fn strip_edges(fades: &[ClipFade], index: usize, points: &[Vec2]) -> Option<Vec<f32>> {
+    let along = |point: &Vec2| if index == 0 { point.y } else { point.x };
+    let from = points.iter().map(along).fold(f32::INFINITY, f32::min);
+    let to = points.iter().map(along).fold(f32::NEG_INFINITY, f32::max);
+    if !reaches(fades, index, from, to) {
+        return None;
+    }
+    let mut edges = vec![from];
+    edges.extend(cuts(fades, index, from, to));
+    edges.push(to);
+    Some(edges)
 }
 
 /// The frame an atom is drawn in and the fades' own: an atom-frame point (its unturned box, top-left 0,0, y down)
@@ -147,36 +197,42 @@ impl FadeFrame {
 pub(crate) fn faded_polygon_mesh(
     polygon: &[Vec2],
     visible: [f32; 4],
-    fades: &[[f32; 7]],
+    fades: &[ClipFade],
     frame: FadeFrame,
     uv_of: impl Fn(Vec2) -> [f32; 2],
 ) -> Option<(Mesh, Vec<[f32; 4]>)> {
     let across: Vec<Vec2> = polygon.iter().map(|point| frame.to_fade(*point)).collect();
-    let from = across
-        .iter()
-        .map(|point| point.y)
-        .fold(f32::INFINITY, f32::min);
-    let to = across
-        .iter()
-        .map(|point| point.y)
-        .fold(f32::NEG_INFINITY, f32::max);
-    if across.len() < 3 || !reaches(fades, from, to) {
+    if across.len() < 3 {
         return None;
     }
-    let mut edges = vec![from];
-    edges.extend(cuts(fades, from, to));
-    edges.push(to);
+    let rows = strip_edges(fades, 0, &across);
+    let columns = strip_edges(fades, 1, &across);
+    if rows.is_none() && columns.is_none() {
+        return None;
+    }
+    let whole = vec![-ACROSS, ACROSS];
+    let (rows, columns) = (
+        rows.unwrap_or_else(|| whole.clone()),
+        columns.unwrap_or(whole),
+    );
+    let cells: Vec<[Vec2; 4]> = rows
+        .windows(2)
+        .flat_map(|row| {
+            columns.windows(2).map(move |column| {
+                [
+                    Vec2::new(column[0], row[0]),
+                    Vec2::new(column[1], row[0]),
+                    Vec2::new(column[1], row[1]),
+                    Vec2::new(column[0], row[1]),
+                ]
+            })
+        })
+        .collect();
     let center = Vec2::new(visible[0] + visible[2] / 2.0, visible[1] + visible[3] / 2.0);
     let (mut positions, mut uvs, mut colors, mut indices) =
         (Vec::new(), Vec::new(), Vec::new(), Vec::new());
-    for band in edges.windows(2) {
-        let strip = [
-            Vec2::new(-ACROSS, band[0]),
-            Vec2::new(ACROSS, band[0]),
-            Vec2::new(ACROSS, band[1]),
-            Vec2::new(-ACROSS, band[1]),
-        ];
-        let piece = clip_convex_polygon(&across, &strip);
+    for cell in &cells {
+        let piece = clip_convex_polygon(&across, cell);
         if piece.len() < 3 {
             continue;
         }
@@ -188,7 +244,7 @@ pub(crate) fn faded_polygon_mesh(
         for (point, fade_point) in local.iter().zip(piece.iter()) {
             positions.push([point.x - center.x, center.y - point.y, 0.0]);
             uvs.push(uv_of(*point));
-            colors.push([1.0, 1.0, 1.0, fade_alpha(fades, fade_point.y)]);
+            colors.push([1.0, 1.0, 1.0, fade_alpha(fades, *fade_point)]);
         }
         // Counter-clockwise front faces, as `polygon_mesh` winds its fan (y flipped).
         let count = local.len();
@@ -288,15 +344,19 @@ mod clip_fade_tests {
     use super::*;
     use bevy::mesh::VertexAttributeValues;
 
-    const HOME: [f32; 7] = [0.0, 100.0, 300.0, 400.0, 60.0, 60.0, 2.2];
+    const HOME: ClipFade = [0.0, 100.0, 300.0, 400.0, 60.0, 60.0, 2.2, 0.0, 0.0];
+
+    fn at(y: f32) -> Vec2 {
+        Vec2::new(150.0, y)
+    }
 
     #[test]
     fn the_mask_is_clear_on_an_edge_and_whole_a_ramp_inside() {
-        assert!(fade_alpha(&[HOME], 100.0).abs() < 1.0e-6);
-        assert!((fade_alpha(&[HOME], 160.0) - 1.0).abs() < 1.0e-6);
-        assert!((fade_alpha(&[HOME], 300.0) - 1.0).abs() < 1.0e-6);
-        assert!(fade_alpha(&[HOME], 500.0).abs() < 1.0e-6);
-        let quarter = fade_alpha(&[HOME], 115.0);
+        assert!(fade_alpha(&[HOME], at(100.0)).abs() < 1.0e-6);
+        assert!((fade_alpha(&[HOME], at(160.0)) - 1.0).abs() < 1.0e-6);
+        assert!((fade_alpha(&[HOME], at(300.0)) - 1.0).abs() < 1.0e-6);
+        assert!(fade_alpha(&[HOME], at(500.0)).abs() < 1.0e-6);
+        let quarter = fade_alpha(&[HOME], at(115.0));
         assert!(
             (quarter - (1.0 - 0.75f32.powf(2.2))).abs() < 1.0e-5,
             "eased: {quarter}"
@@ -305,9 +365,9 @@ mod clip_fade_tests {
 
     #[test]
     fn a_closed_edge_leaves_its_side_whole() {
-        let bottom_only = [0.0, 100.0, 300.0, 400.0, 0.0, 60.0, 2.2];
-        assert!((fade_alpha(&[bottom_only], 100.0) - 1.0).abs() < 1.0e-6);
-        assert!(!reaches(&[bottom_only], 100.0, 400.0));
+        let bottom_only = [0.0, 100.0, 300.0, 400.0, 0.0, 60.0, 2.2, 0.0, 0.0];
+        assert!((fade_alpha(&[bottom_only], at(100.0)) - 1.0).abs() < 1.0e-6);
+        assert!(!reaches(&[bottom_only], 0, 100.0, 400.0));
     }
 
     #[test]
@@ -340,7 +400,7 @@ mod clip_fade_tests {
             // Back to the screen: the quad is centred on its visible box, y up.
             let screen_y = 80.0 + 70.0 - position[1];
             assert!(
-                (color[3] - fade_alpha(&[HOME], screen_y)).abs() < 1.0e-4,
+                (color[3] - fade_alpha(&[HOME], Vec2::new(0.0, screen_y))).abs() < 1.0e-4,
                 "mask at {screen_y}: {}",
                 color[3]
             );
@@ -367,6 +427,72 @@ mod clip_fade_tests {
                 "front faces"
             );
         }
+    }
+
+    #[test]
+    fn a_row_fades_sideways_inside_its_left_and_right_edges_only() {
+        // The ribbon's band, 200 px wide from x 75, half a tool (30 px) at each edge that hides tools.
+        let band: ClipFade = [75.0, 0.0, 200.0, 64.0, 0.0, 0.0, 2.2, 30.0, 30.0];
+        assert!(fade_alpha(&[band], Vec2::new(75.0, 32.0)).abs() < 1.0e-6);
+        assert!((fade_alpha(&[band], Vec2::new(105.0, 32.0)) - 1.0).abs() < 1.0e-6);
+        assert!(fade_alpha(&[band], Vec2::new(275.0, 10.0)).abs() < 1.0e-6);
+        assert!(
+            (fade_alpha(&[band], Vec2::new(175.0, 0.0)) - 1.0).abs() < 1.0e-6,
+            "no vertical ramp"
+        );
+        // A tile cut at the band's left edge (x 75..103 visible) is drawn in columns carrying the mask.
+        let tile = [
+            Vec2::new(36.0, 0.0),
+            Vec2::new(64.0, 0.0),
+            Vec2::new(64.0, 64.0),
+            Vec2::new(36.0, 64.0),
+        ];
+        let (mesh, _) = faded_polygon_mesh(
+            &tile,
+            [36.0, 0.0, 28.0, 64.0],
+            &[band],
+            FadeFrame::upright([39.0, 0.0]),
+            |_| [0.0, 0.0],
+        )
+        .expect("the left ramp reaches the tile");
+        let Some(VertexAttributeValues::Float32x4(colors)) = mesh.attribute(Mesh::ATTRIBUTE_COLOR)
+        else {
+            panic!("colours")
+        };
+        let Some(VertexAttributeValues::Float32x3(positions)) =
+            mesh.attribute(Mesh::ATTRIBUTE_POSITION)
+        else {
+            panic!("positions")
+        };
+        for (position, color) in positions.iter().zip(colors.iter()) {
+            let screen_x = 39.0 + 36.0 + 14.0 + position[0];
+            assert!(
+                (color[3] - fade_alpha(&[band], Vec2::new(screen_x, 0.0))).abs() < 1.0e-4,
+                "mask at {screen_x}: {}",
+                color[3]
+            );
+        }
+        assert!(
+            colors.iter().any(|color| color[3] < 0.01),
+            "clear on the edge"
+        );
+        // A tile in the middle of the band keeps its ordinary quad.
+        let middle = [
+            Vec2::ZERO,
+            Vec2::new(64.0, 0.0),
+            Vec2::new(64.0, 64.0),
+            Vec2::new(0.0, 64.0),
+        ];
+        assert!(
+            faded_polygon_mesh(
+                &middle,
+                [0.0, 0.0, 64.0, 64.0],
+                &[band],
+                FadeFrame::upright([140.0, 0.0]),
+                |_| [0.0, 0.0]
+            )
+            .is_none()
+        );
     }
 
     #[test]

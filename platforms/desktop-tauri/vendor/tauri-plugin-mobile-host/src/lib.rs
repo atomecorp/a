@@ -21,7 +21,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
         .build()
 }
 
-// The app's authentication, notification and streaming-view owners validate their contracts.
+// The app's authentication, notification, streaming-view, alarm and calendar owners validate their contracts.
 // This plugin registers no JavaScript command and adds no identity authority.
 pub fn call<R: Runtime>(
     _app: &AppHandle<R>,
@@ -30,7 +30,13 @@ pub fn call<R: Runtime>(
 ) -> Result<Value, String> {
     if !matches!(
         method,
-        "authDevice" | "notifications" | "streamingView" | "contacts" | "openAppSettings"
+        "authDevice"
+            | "notifications"
+            | "streamingView"
+            | "contacts"
+            | "openAppSettings"
+            | "alarms"
+            | "deviceCalendar"
     ) {
         return Err("mobile_host_command_invalid".into());
     }

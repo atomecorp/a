@@ -243,17 +243,71 @@ impl VaultRouter {
         .await?;
         self.register_stream(&committed, &owner).await?;
         let inserted = committed.get("inserted") == Some(&JsonValue::Bool(true));
-        // A media deleted, by any path: its stored bytes go with it (media/removal.rs, D36).
-        if inserted && normalized.get("kind").and_then(JsonValue::as_str) == Some("delete") {
-            crate::media::removal::remove_deleted_media(
-                &self.central,
-                self.storage.clone(),
-                &owner,
-                &atome_id,
-            )
-            .await?;
+        if inserted {
+            let kind = normalized.get("kind").and_then(JsonValue::as_str);
+            self.media_lifecycle(kind, &owner, &atome_id).await?;
         }
         Ok(json!({ "event": committed, "inserted": inserted, "vaultPrincipalId": owner }))
+    }
+
+    // A media deleted, by any path: its stored bytes leave their place, kept aside, unless another
+    // live atome of the vault names the same file (a duplicate keeps its source's); its restore
+    // (an undo) puts them back (media/removal.rs, D36).
+    async fn media_lifecycle(
+        &self,
+        kind: Option<&str>,
+        owner: &str,
+        atome_id: &str,
+    ) -> Result<(), String> {
+        match kind {
+            Some("delete") if !self.file_held_elsewhere(owner, atome_id).await? => {
+                crate::media::removal::remove_deleted_media(
+                    &self.central,
+                    self.storage.clone(),
+                    owner,
+                    atome_id,
+                )
+                .await
+            }
+            Some("restore") => {
+                crate::media::removal::restore_deleted_media(
+                    &self.central,
+                    self.storage.clone(),
+                    owner,
+                    atome_id,
+                )
+                .await
+            }
+            _ => Ok(()),
+        }
+    }
+
+    // Whether a live atome of `owner`'s vault other than `atome_id` names `atome_id`'s file.
+    async fn file_held_elsewhere(&self, owner: &str, atome_id: &str) -> Result<bool, String> {
+        let state = self
+            .ask(owner, "state:get", json!({ "atome_id": atome_id }))
+            .await?;
+        let name = ["file_name", "fileName"].iter().find_map(|key| {
+            state
+                .get("properties")
+                .and_then(|properties| properties.get(*key))
+                .or_else(|| state.get(*key))
+                .and_then(JsonValue::as_str)
+                .map(str::trim)
+                .filter(|name| !name.is_empty())
+                .map(str::to_string)
+        });
+        let Some(name) = name else {
+            return Ok(false);
+        };
+        let holders = self
+            .ask(owner, "files:described", json!({ "file_names": [name] }))
+            .await?;
+        Ok(holders
+            .as_array()
+            .into_iter()
+            .flatten()
+            .any(|holder| holder.get("atome_id").and_then(JsonValue::as_str) != Some(atome_id)))
     }
 
     async fn commit_batch(
@@ -402,6 +456,11 @@ impl VaultRouter {
                 .flatten()
             {
                 self.register_stream(event, principal).await?;
+                // Undo of a delete: its bytes come back; redo: they leave again.
+                if let Some(atome_id) = event.get("atome_id").and_then(JsonValue::as_str) {
+                    let kind = event.get("kind").and_then(JsonValue::as_str);
+                    self.media_lifecycle(kind, principal, atome_id).await?;
+                }
             }
         }
         Ok(result)

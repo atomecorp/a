@@ -74,6 +74,7 @@ const definitions = {
         web_shop_id: { ...id, description: 'A web shop\'s page (web_shops), with the user\'s plan there.' },
         product_id: { ...id, description: 'With web_shop_id or alone: a declared supplement to put in a plan (the screens\' Achat).' },
         shopping_item_id: { ...id, description: 'With web_shop_id or alone: a Mes courses item (its label in title) to put in a plan.' },
+        view: { type: 'string', enum: ['all', 'favorites', 'purchases', 'sales'], description: 'Every shop, the favourites, the purchases or the sales made.' },
         sell: { type: 'boolean', description: 'Nouvelle vente, its card already holding title and content_ids (an instrument of the user and its sounds).' },
         title: fields.title, content_ids: fields.content_ids }, [],
         'Show Boutiques: a sale\'s page (on the conversation with peer_id), a seller\'s shop, the user\'s own shop (mine), every shop, or Nouvelle vente (sell).', false, 'control']

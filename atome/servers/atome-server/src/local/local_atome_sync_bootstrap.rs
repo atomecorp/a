@@ -19,14 +19,27 @@ fn running() -> &'static Mutex<HashSet<String>> {
 }
 
 /// Starts the pass on its own thread, once at a time per account; false when one is under way.
-pub(crate) fn schedule_current_user_state_sync(state: &LocalAtomeState, local_user_id: &str, remote_user_id: &str) -> bool {
+pub(crate) fn schedule_current_user_state_sync(
+    state: &LocalAtomeState,
+    local_user_id: &str,
+    remote_user_id: &str,
+) -> bool {
     let key = format!("{local_user_id}:{remote_user_id}");
-    if !running().lock().map(|mut set| set.insert(key.clone())).unwrap_or(false) {
+    if !running()
+        .lock()
+        .map(|mut set| set.insert(key.clone()))
+        .unwrap_or(false)
+    {
         return false;
     }
-    let (state, local_user_id, remote_user_id) = (state.clone(), local_user_id.to_string(), remote_user_id.to_string());
+    let (state, local_user_id, remote_user_id) = (
+        state.clone(),
+        local_user_id.to_string(),
+        remote_user_id.to_string(),
+    );
     std::thread::spawn(move || {
-        if let Err(error) = enqueue_current_user_state_sync(&state, &local_user_id, &remote_user_id) {
+        if let Err(error) = enqueue_current_user_state_sync(&state, &local_user_id, &remote_user_id)
+        {
             eprintln!("remote state bootstrap failed: {error}");
         }
         if let Ok(mut set) = running().lock() {
@@ -55,7 +68,9 @@ pub(crate) fn enqueue_current_user_state_sync(
             )
             .map_err(|error| error.to_string())?;
         let end: i64 = db
-            .query_row("SELECT COALESCE(MAX(rowid), 0) FROM events", [], |row| row.get(0))
+            .query_row("SELECT COALESCE(MAX(rowid), 0) FROM events", [], |row| {
+                row.get(0)
+            })
             .map_err(|error| error.to_string())?;
         (cursor, end)
     };
@@ -115,7 +130,10 @@ fn enqueue_states(
         ))
         .map_err(|error| error.to_string())?;
     let values = [local_user_id.to_string().into(), from.into(), to.into()];
-    let values: Vec<rusqlite::types::Value> = values.into_iter().take(statement.parameter_count()).collect();
+    let values: Vec<rusqlite::types::Value> = values
+        .into_iter()
+        .take(statement.parameter_count())
+        .collect();
     let states = statement
         .query_map(rusqlite::params_from_iter(values), |row| {
             Ok((
@@ -221,11 +239,16 @@ mod tests {
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../temp")
             .join(format!("native-state-bootstrap-{}", uuid::Uuid::new_v4()));
-        let state = super::super::local_atome::create_state(root.clone(), root.clone(), "WAL").unwrap();
+        let state =
+            super::super::local_atome::create_state(root.clone(), root.clone(), "WAL").unwrap();
         {
             let db = state.db.lock().unwrap();
             let put = |id: &str, project: Option<&str>, at: String, props: &str, edited: bool| {
-                db.execute("INSERT INTO atomes (atome_id,atome_type,owner_id) VALUES (?1,'note','acc')", [id]).unwrap();
+                db.execute(
+                    "INSERT INTO atomes (atome_id,atome_type,owner_id) VALUES (?1,'note','acc')",
+                    [id],
+                )
+                .unwrap();
                 db.execute("INSERT INTO state_current (atome_id,owner_id,project_id,properties,updated_at,version) VALUES (?1,'acc',?2,?3,?4,1)",
                     rusqlite::params![id, project, props, at]).unwrap();
                 if edited {
@@ -233,31 +256,64 @@ mod tests {
                         rusqlite::params![format!("e-{id}"), id]).unwrap();
                 }
             };
-            put("acc", None, "2026-01-01T00:00:00Z".into(), r#"{"eve_profile":{}}"#, false);
+            put(
+                "acc",
+                None,
+                "2026-01-01T00:00:00Z".into(),
+                r#"{"eve_profile":{}}"#,
+                false,
+            );
             // A project is created before what it holds (its event comes first), whatever its update time.
-            put("proj-a", Some("proj-a"), "2026-01-03T00:00:00Z".into(), "{}", true);
+            put(
+                "proj-a",
+                Some("proj-a"),
+                "2026-01-03T00:00:00Z".into(),
+                "{}",
+                true,
+            );
             for index in 0..250 {
-                put(&format!("note-{index:03}"), Some("proj-a"), format!("2026-01-02T00:{:02}:{:02}Z", index / 60, index % 60), "{}", true);
+                put(
+                    &format!("note-{index:03}"),
+                    Some("proj-a"),
+                    format!("2026-01-02T00:{:02}:{:02}Z", index / 60, index % 60),
+                    "{}",
+                    true,
+                );
             }
             put("foreign", None, "2026-01-01T00:00:00Z".into(), "{}", false);
         }
-        assert_eq!(enqueue_current_user_state_sync(&state, "acc", "remote").unwrap(), 252);
+        assert_eq!(
+            enqueue_current_user_state_sync(&state, "acc", "remote").unwrap(),
+            252
+        );
         let queued: Vec<String> = {
             let db = state.db.lock().unwrap();
-            let mut statement = db.prepare("SELECT atome_id FROM sync_queue ORDER BY queue_id").unwrap();
-            statement.query_map([], |row| row.get(0)).unwrap().collect::<Result<_, _>>().unwrap()
+            let mut statement = db
+                .prepare("SELECT atome_id FROM sync_queue ORDER BY queue_id")
+                .unwrap();
+            statement
+                .query_map([], |row| row.get(0))
+                .unwrap()
+                .collect::<Result<_, _>>()
+                .unwrap()
         };
         assert_eq!(&queued[..3], ["acc", "proj-a", "note-000"]);
         assert_eq!(queued.last().unwrap(), "note-249");
         assert_eq!(queued.iter().collect::<HashSet<_>>().len(), 252);
-        assert_eq!(enqueue_current_user_state_sync(&state, "acc", "remote").unwrap(), 0);
+        assert_eq!(
+            enqueue_current_user_state_sync(&state, "acc", "remote").unwrap(),
+            0
+        );
         // The next pass reads only what this device edited since this one.
         {
             let db = state.db.lock().unwrap();
             db.execute("UPDATE state_current SET properties = '{\"title\":\"b\"}', version = 2, updated_at = '2026-02-01T00:00:00Z' WHERE atome_id = 'note-007'", []).unwrap();
             db.execute("INSERT INTO events (id,atome_id,kind,actor,stream_id,sequence,source) VALUES ('e-again','note-007','set','{\"id\":\"acc\"}','s',999,'tauri')", []).unwrap();
         }
-        assert_eq!(enqueue_current_user_state_sync(&state, "acc", "remote").unwrap(), 1);
+        assert_eq!(
+            enqueue_current_user_state_sync(&state, "acc", "remote").unwrap(),
+            1
+        );
         let _ = std::fs::remove_dir_all(root);
     }
 }

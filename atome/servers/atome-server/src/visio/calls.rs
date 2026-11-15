@@ -181,7 +181,10 @@ impl Visio {
                 let (owner, mode) = {
                     let state = self.state();
                     let meta = &state.metas[&room_id];
-                    (meta.owner.clone().unwrap_or_default(), meta.call_mode.clone())
+                    (
+                        meta.owner.clone().unwrap_or_default(),
+                        meta.call_mode.clone(),
+                    )
                 };
                 // The caller keeps a line of it (« refused », « no answer ») in their history,
                 // a ringing call too: it turns to its message (`recording`) at the same time.
@@ -308,16 +311,28 @@ impl Visio {
             let unanswered = {
                 let mut state = self.state();
                 state.timers.remove(&room_id);
-                state.metas.get(&room_id).filter(|meta| meta.status_is("ringing")).map(|meta| {
-                    (meta.owner.clone().unwrap_or_default(), meta.invites.first().cloned(), meta.call_mode.clone())
-                })
+                state
+                    .metas
+                    .get(&room_id)
+                    .filter(|meta| meta.status_is("ringing"))
+                    .map(|meta| {
+                        (
+                            meta.owner.clone().unwrap_or_default(),
+                            meta.invites.first().cloned(),
+                            meta.call_mode.clone(),
+                        )
+                    })
             };
             self.finish(&room_id, "recording").await;
             // Nobody answered: the caller keeps a « no answer » line in their history.
             if let Some((owner, Some(callee), mode)) = unanswered {
                 let notice = json!({ "kind": "call-declined", "message": "missed",
                     "extra": { "room_id": room_id, "reason": "missed", "call_mode": mode } });
-                let _ = self.social.notifier.notify(&owner, Some(&callee), &notice).await;
+                let _ = self
+                    .social
+                    .notifier
+                    .notify(&owner, Some(&callee), &notice)
+                    .await;
             }
         })
         .abort_handle()

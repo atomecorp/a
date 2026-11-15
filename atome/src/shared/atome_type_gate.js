@@ -2,7 +2,8 @@
 // declared in CORE_ATOME_TYPE_DEFINITIONS (#shared/core_atome_types.js), and a property when its type's
 // schema declares it (`allow_unknown_properties: false`, every type). The server's event commit
 // (database/adole_event_log.js#appendEvent) refuses any other type or property before anything is stored,
-// so a typo or an invented type or key never becomes durable truth. The native servers (Axum, Swift) apply
+// so a typo or an invented type or key never becomes durable truth, nor does a project `set` that would
+// create an atome without saying what it is (`assertSetTargetDeclared`). The native servers (Axum, Swift) apply
 // the same rules from eVe/registry/generated/atome_types.json, generated from this owner.
 
 import { CORE_ATOME_TYPE_DEFINITIONS, CORE_ATOME_TYPE_IDS } from './core_atome_types.js';
@@ -12,6 +13,7 @@ import { EVENT_META_PROPERTY_KEYS } from './adole_event_contract.js';
 
 export const ATOME_TYPE_UNKNOWN = 'atome_type_unknown';
 export const ATOME_PROPERTY_UNKNOWN = 'atome_property_unknown';
+export const ATOME_SET_TARGET_MISSING = 'atome_set_target_missing';
 
 // A copy's provenance, carried by the copy of an atome of any type (server/shop_delivery.js#copyProject).
 const COPY_PROVENANCE_PROPERTY_KEYS = ['shared_from', 'original_atome_id', 'share_type', 'shop_order_id'];
@@ -49,4 +51,20 @@ export function unknownAtomeProperties(type, patch) {
 export function assertKnownAtomeProperties(type, patch) {
     const keys = unknownAtomeProperties(type, patch);
     if (keys.length) refuse(ATOME_PROPERTY_UNKNOWN, { type: String(type), keys });
+}
+
+const declares = value => value !== undefined && value !== null && String(value).trim() !== '';
+
+// A `set` creates its atome only when it says what the atome is: its type, else its kind. A partial
+// write (a position, a colour, an order) aimed at an id the store does not hold — a selection gone
+// stale, a clip id, a creation still waiting on the device — would otherwise create an atome of
+// that fragment alone: a typeless frame in the project, selectable and drawing nothing. The write
+// is refused (`atome_set_target_missing`) and nothing is stored; the device's queue tries it again
+// once the creation has arrived. Only a write into a project (`projectId`) is held to it: account-global
+// records (preferences, profile) and project-less records keep their own rules.
+export function assertSetTargetDeclared({ kind, patch, declaredType = null, targetExists = false, projectId = null } = {}) {
+    if (targetExists || !declares(projectId) || String(kind || '').toLowerCase() !== 'set') return;
+    if (!patch || typeof patch !== 'object') return;
+    if (declares(declaredType) || declares(patch.type) || declares(patch.atome_type) || declares(patch.kind)) return;
+    refuse(ATOME_SET_TARGET_MISSING, { keys: Object.keys(patch).sort() });
 }

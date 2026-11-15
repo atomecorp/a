@@ -3,9 +3,9 @@ use super::local_atome::{
     list_sync_queue_for_actor, list_sync_queue_for_atomes, mark_sync_queue_done,
     mark_sync_queue_error, mark_sync_queue_syncing,
 };
-pub(crate) use super::local_atome_sync_bootstrap::schedule_current_user_state_sync;
 #[cfg(test)]
 pub(crate) use super::local_atome_sync_bootstrap::enqueue_current_user_state_sync;
+pub(crate) use super::local_atome_sync_bootstrap::schedule_current_user_state_sync;
 use super::local_atome_sync_media::upload_outbound_media;
 use chrono::Utc;
 use futures_util::{SinkExt, StreamExt};
@@ -79,6 +79,46 @@ fn prune_local_only_queue(db: &Connection) -> Result<usize, String> {
         [],
     )
     .map_err(|error| error.to_string())
+}
+
+// A creation whose file could not be read was once given up for good (`failed`): the
+// server then received the atome's later moves alone and made a typeless ghost of them.
+// Those rows go back to the queue, where a missing file is now waited for (below).
+fn requeue_media_read_failures(db: &Connection) -> Result<usize, String> {
+    db.execute(
+        "UPDATE sync_queue
+         SET status = 'pending', next_retry_at = NULL
+         WHERE target_server = ?1 AND status = 'failed'
+           AND COALESCE(error_message, '') LIKE 'media_read_failed%'",
+        [TARGET_SERVER],
+    )
+    .map_err(|error| error.to_string())
+}
+
+// Attempts an event waits for what it needs (with backoff, about a quarter of an hour): a
+// creation for its file (iCloud still downloading it, a take still being written), after
+// which it goes to the server without its bytes, so the atome exists there typed, visible
+// and deletable rather than never; a change for its atome's creation to reach the server
+// (`atome_set_target_missing`), after which an atome that never arrives is given up.
+const TARGET_WAIT_ATTEMPTS: i64 = 21;
+
+// Whether an event whose file cannot be read goes on without it: its atome is deleted here
+// (its bytes left with it, the creation and its deletion still belong to the history), or
+// it has waited long enough.
+fn deliver_without_media(state: &LocalAtomeState, atome_id: &str, attempts: i64) -> bool {
+    if attempts >= TARGET_WAIT_ATTEMPTS {
+        return true;
+    }
+    let Ok(db) = state.db.lock() else {
+        return false;
+    };
+    db.query_row(
+        "SELECT COALESCE(json_extract(properties, '$.__deleted'), 0) = 1
+         FROM state_current WHERE atome_id = ?1",
+        [atome_id],
+        |row| row.get::<_, bool>(0),
+    )
+    .unwrap_or(false)
 }
 
 fn recover_interrupted_queue(db: &Connection) -> Result<usize, String> {
@@ -389,14 +429,26 @@ async fn deliver_item(state: &LocalAtomeState, remote_url: &str, item: SyncQueue
     if let Err(error) =
         upload_outbound_media(state, endpoint, &local_user_id, &credential, &mut event).await
     {
-        record_error(
-            state,
-            item.queue_id,
-            attempts,
-            &error,
-            is_permanent_refusal(&error),
+        let atome_id = event
+            .get("atome_id")
+            .and_then(JsonValue::as_str)
+            .unwrap_or("")
+            .to_string();
+        if !(error.starts_with("media_read_failed")
+            && deliver_without_media(state, &atome_id, attempts))
+        {
+            record_error(
+                state,
+                item.queue_id,
+                attempts,
+                &error,
+                is_permanent_refusal(&error, attempts),
+            );
+            return false;
+        }
+        eprintln!(
+            "[sync-media] {atome_id} delivered without its bytes after {attempts} attempts: {error}"
         );
-        return false;
     }
     let outcome = send_event(state, endpoint, &local_user_id, &credential, event).await;
     // A republication id carries the digest of the state it publishes: the server holding
@@ -428,17 +480,19 @@ async fn deliver_item(state: &LocalAtomeState, remote_url: &str, item: SyncQueue
             item.queue_id,
             attempts,
             &error,
-            is_permanent_refusal(&error),
+            is_permanent_refusal(&error, attempts),
         );
     }
     false
 }
 
-// Refusals no retry can change: the server rejects this exact event, or its local file is
-// gone. Retrying them forever only delays the rest of the queue; the row stays `failed`.
-fn is_permanent_refusal(error: &str) -> bool {
+// Refusals no retry can change: the server rejects this exact event, or the atome a change
+// is aimed at never reached it. The row stays `failed`. A file that cannot be read is not
+// one: dropping that event dropped the atome's creation, and its later changes made a
+// typeless ghost on the server (`deliver_without_media`).
+fn is_permanent_refusal(error: &str, attempts: i64) -> bool {
     matches!(error, "event_id_conflict" | "property_write_denied")
-        || error.starts_with("media_read_failed")
+        || (error.contains("atome_set_target_missing") && attempts >= TARGET_WAIT_ATTEMPTS)
 }
 
 // `remote-state-bootstrap-v2:<remote user>:<atome>:<digest>` (the atome id may hold colons).
@@ -542,6 +596,11 @@ pub(crate) async fn deliver_atomes(
 }
 
 pub async fn run(state: LocalAtomeState, remote_url: String) {
+    // The bytes of deletions no longer undoable (media/trash.rs), synced or not.
+    let users = state.storage_root().join("data").join("users");
+    if let Err(error) = crate::media::trash::purge(&users, crate::media::trash::KEEP) {
+        eprintln!("[sync-media] trash purge failed: {error}");
+    }
     if remote_url.trim().is_empty() {
         return;
     }
@@ -549,6 +608,7 @@ pub async fn run(state: LocalAtomeState, remote_url: String) {
     state.db.foreground().await;
     if let Ok(db) = state.db.lock() {
         let _ = recover_interrupted_queue(&db);
+        let _ = requeue_media_read_failures(&db);
         let _ = prune_local_only_queue(&db);
     }
 

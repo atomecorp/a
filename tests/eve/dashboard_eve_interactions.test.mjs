@@ -94,15 +94,15 @@ test('automatic voice preparation stays solo; touches on her disc make her answe
     } finally { active = false; await atom.destroy(); setSessionState({ mode: 'logged_out' }, { persist: false, silent: true }); }
 });
 
-// The V6.1 band: the field's glass on whole cells of the screen grid, the Messages tool (a square tool, its badge the count
+// The V6.1 band: the field's glass on whole cells of the screen grid, the status tool (R-154) (a square tool, its badge the count
 // of what waits, red while something urgent waits) beside it; while the field is being typed in, the tools it covers fold
 // into thin traits before it (the « Finder » band) and the draft and its selection stay as they are.
 test('the lower band contains only the real field and a square urgent count, preserving drafts and selection', async () => {
     let rows = [], disturbed = false, focused = true;
-    const draft = 'Unfinished search', selection = { start: 3, end: 8 }, patch = vi.fn(), openMessages = vi.fn();
+    const draft = 'Unfinished search', selection = { start: 3, end: 8 }, patch = vi.fn(), openMessages = vi.fn(), openReceived = vi.fn();
     bindCommData({ readNotifications: () => rows, patch, isDoNotDisturb: () => disturbed });
     const editing = { registerField: vi.fn(), fieldView: () => ({ focused, selection }) };
-    const projection = createDashboardCommunicationInput({ treeId: 'home', readDraft: () => draft, openMessages, refresh() {}, env: {} });
+    const projection = createDashboardCommunicationInput({ treeId: 'home', readDraft: () => draft, openMessages, openReceived, refresh() {}, env: {} });
     const build = () => projection.build({ kind: 'text', value_key: 'search', label_key: 'eve.dashboard.mystic.search_everything' },
         { box: { width: 376, height: 60 }, editing, emit() {} }, 'field');
     // A cell of 60: a tool of 55, every part inside its cells by half the joint.
@@ -120,22 +120,23 @@ test('the lower band contains only the real field and a square urgent count, pre
         rows = [{ id: 'old', unread: true, priority: 'urgent', fromName: 'Alice', message: 'An urgent message' }];
         notifications.changed();
         let tree = build();
-        expect(tree.children.map(child => child.id)).toEqual(['field_glass', 'field_traits', 'field_trait_messages']);
+        expect(tree.children.map(child => child.id)).toEqual(['field_glass', 'field_traits', 'field_trait_status']);
         expect(find(tree, 'field_glass').style.size[0]).toBe((Math.round(376 / cell) - 1) * cell - (cell - tool));
         kept(tree);
         focused = false;
         tree = build();
-        const button = find(tree, 'field_messages');
-        expect(tree.children.map(child => child.id)).toEqual(['field_glass', 'field_messages']);
+        const button = find(tree, 'field_status');
+        expect(tree.children.map(child => child.id)).toEqual(['field_glass', 'field_status']);
         expect(button.style.size).toEqual([tool, tool]);
-        expect(find(button, 'field_messages_badge_count').text).toBe('1');
-        expect(find(button, 'field_messages_badge').style.background).toEqual(BEVY_PANEL_TOKENS.actionButton.destructiveBackground);
+        expect(find(button, 'field_status_badge_count').text).toBe('1');
+        expect(find(button, 'field_status_badge').style.background).toEqual(BEVY_PANEL_TOKENS.actionButton.destructiveBackground);
         kept(tree);
-        button.on.activate(); expect(openMessages).toHaveBeenCalledTimes(1);
+        // One person waiting: the status tool's touch opens what they sent (R-154).
+        button.on.activate(); expect(openReceived).toHaveBeenCalledTimes(1); expect(openMessages).not.toHaveBeenCalled();
         expect(patch).not.toHaveBeenCalled(); expect(rows[0].unread).toBe(true);
         expect(editing.fieldView().selection).toBe(selection); expect(draft).toBe('Unfinished search');
         disturbed = true; notifications.changed();
-        expect(build().children.map(child => child.id)).toEqual(['field_glass', 'field_messages']);
+        expect(build().children.map(child => child.id)).toEqual(['field_glass', 'field_status']);
     } finally { projection.destroy(); }
 });
 
@@ -205,20 +206,20 @@ test('idle notification text stays in the field, personal urgent cannot turn the
         { box: { width: 376, height: 60 }, editing: { registerField() {}, fieldView: () => ({ focused: false }) }, emit() {} }, 'field');
     try {
         const red = BEVY_PANEL_TOKENS.actionButton.destructiveBackground;
-        const badge = () => find(build(), 'field_messages_badge');
+        const badge = () => find(build(), 'field_status_badge');
         await projection.start();
-        expect(build().children.map(child => child.id)).toEqual(['field_glass', 'field_messages']);
+        expect(build().children.map(child => child.id)).toEqual(['field_glass', 'field_status']);
         expect(find(build(), 'field_text').text).toContain('Only the message');
-        expect(find(badge(), 'field_messages_badge_count').text).toBe('1');
+        expect(find(badge(), 'field_status_badge_count').text).toBe('1');
         expect(badge().style.background).not.toEqual(red);
         rows = [...rows, { id: 'vip', unread: true, priority: 'urgent', message: 'Urgent message' }]; notifications.changed();
-        expect(build().children.map(child => child.id)).toEqual(['field_glass', 'field_messages']);
+        expect(build().children.map(child => child.id)).toEqual(['field_glass', 'field_status']);
         expect(JSON.stringify(build())).toContain('Urgent message');
-        expect(find(badge(), 'field_messages_badge_count').text).toBe('2');
+        expect(find(badge(), 'field_status_badge_count').text).toBe('2');
         expect(badge().style.background).toEqual(red);
         disturbed = true;
         expect(JSON.stringify(build())).not.toContain('Urgent message');
-        expect(find(build(), 'field_messages')).toBeTruthy();
+        expect(find(build(), 'field_status')).toBeTruthy();
         rows = rows.map(row => ({ ...row, unread: false })); notifications.changed();
         expect(build().children.map(child => child.id)).toEqual(['field_glass']);
         expect(projection.messages()).toHaveLength(2);

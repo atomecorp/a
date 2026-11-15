@@ -247,9 +247,23 @@ fn assert_event_properties(
     let Some(patch) = event_property_patch(event) else {
         return Ok(());
     };
-    let atome_type = match declared_type(raw) {
+    let declared = declared_type(raw);
+    let atome_id = event.get("atome_id").and_then(JsonValue::as_str);
+    // `normalize` already cleared the project of an account-global event.
+    let in_project = event
+        .get("project_id")
+        .and_then(JsonValue::as_str)
+        .is_some_and(|project| !project.trim().is_empty());
+    type_gate::assert_set_target_declared(
+        &kind_of(event),
+        &patch,
+        declared.is_some(),
+        in_project,
+        || atome_id.map_or(Ok(false), |atome_id| type_gate::atome_exists(db, atome_id)),
+    )?;
+    let atome_type = match declared {
         Some(declared) => Some(canonical::js_string(&declared)),
-        None => match event.get("atome_id").and_then(JsonValue::as_str) {
+        None => match atome_id {
             Some(atome_id) => type_gate::stored_type(db, atome_id)?,
             None => None,
         },

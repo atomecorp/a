@@ -457,7 +457,10 @@ mod tests {
             Some(Path::new("data/users/local-user/Downloads/photo été.png").to_path_buf())
         );
         assert_eq!(
-            local_media_path("local-user", json!({ "file_path": "../../secret" }).as_object().unwrap()),
+            local_media_path(
+                "local-user",
+                json!({ "file_path": "../../secret" }).as_object().unwrap()
+            ),
             None
         );
 

@@ -114,12 +114,14 @@ export const createShareLists = ({ vaultRouter, get, revoke, notifyPrincipal, de
             if (!row || ![String(row.principal_id), String(row.owner_id)].includes(String(principalId))) fail('share_request_not_found');
             const source = await sourceOf(row);
             // Any other root (a position, a project) is shared as it is: its share alone, no list to read.
+            // Worked on together (more than read granted): shared live, said so on the request (R-161 N4).
+            const live = !readOnly(row);
             if (!source) return { ok: true, share_id: row.share_id, status: row.status, share_type: row.share_type, owner_id: row.owner_id, list: null,
-                receipt: null, pending: row.status === 'pending' };
+                receipt: null, pending: row.status === 'pending', live };
             const receipt = await receiptOf(row);
             const version = listVersionOf(source.view, receipt);
             const diff = receipt ? listDiff(receipt.entries || [], source.view.entries) : { entries: source.view.entries, removed: [] };
-            return { ok: true, share_id: row.share_id, status: row.status, share_type: row.share_type, owner_id: row.owner_id,
+            return { ok: true, share_id: row.share_id, status: row.status, share_type: row.share_type, owner_id: row.owner_id, live,
                 list: { ...source.view, version, entries: diff.entries, removed: diff.removed },
                 receipt: receipt ? { status: receipt.status, accepted_version: receipt.accepted_version, refused_version: receipt.refused_version || 0 } : null,
                 pending: row.status === 'pending' || Boolean(receipt && receipt.status === 'linked' && version > receipt.accepted_version

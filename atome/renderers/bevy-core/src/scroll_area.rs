@@ -12,10 +12,11 @@
 //! their bases and nothing is laid any more.
 use std::collections::HashMap;
 
+use bevy::ecs::change_detection::Tick;
 use bevy::prelude::*;
 use serde::Deserialize;
 
-use crate::components::{AtomeEntityTable, AtomeVisualOpacity};
+use crate::components::{AtomeEntityTable, AtomeLogicalPosition, AtomeVisualOpacity};
 use crate::record_pose::RecordPose;
 use crate::render_ops::{apply_style, apply_transform};
 use crate::scroll_motion::{ScrollMotion, ScrollMotionSpec};
@@ -32,7 +33,7 @@ pub struct ScrollClip {
     #[serde(default)]
     pub rounded: Vec<[f32; 8]>,
     #[serde(default)]
-    pub fades: Vec<[f32; 7]>,
+    pub fades: Vec<crate::components::ClipFade>,
 }
 
 impl ScrollClip {
@@ -139,6 +140,9 @@ struct RecordState {
     /// The described offset of every list the base depends on, read with it.
     base_offsets: Vec<(String, f64)>,
     applied: Option<(RecordPose, f32)>,
+    /// The entity and the write tick of its position when last read or laid here: a later write is the
+    /// browser's, describing it again.
+    laid: Option<(Entity, Tick)>,
     /// Described again since it was last read: read once before any shortcut on its last pose.
     recheck: bool,
 }
@@ -285,15 +289,22 @@ impl ScrollTree {
                 continue;
             }
             let shown = RecordPose::read(world, entity);
-            state.recheck = false;
-            // Described again since the last pose (or never presented): its state is the new base.
-            let described = match (&state.applied, &shown) {
-                (None, _) => true,
-                (Some((applied, _)), Some(shown)) => applied != shown,
-                (Some(_), None) => true,
-            };
+            let rechecked = std::mem::take(&mut state.recheck);
+            // The browser lays a record again only where its pose changes: its last pose (the base) holds for
+            // every description that follows until it writes another. Written (or never presented), the record's
+            // state is the new base; described again, written or not, the base holds for the offsets of that
+            // description. A rail level replaced by another put the same tool at the same place on screen: not
+            // written again, it kept the offsets of the former level and was drawn a whole scroll away (user,
+            // 14 Nov. 2026: an empty band in the rail, its tools moved into one another).
+            let written = position_tick(world, entity);
+            let described = state.applied.is_none()
+                || shown.is_none()
+                || state.laid != written.map(|tick| (entity, tick));
+            state.laid = written.map(|tick| (entity, tick));
             if described {
                 state.base = shown;
+            }
+            if described || rechecked {
                 state.base_offsets = referenced_areas(spec)
                     .filter_map(|id| self.areas.get(id).map(|a| (id.clone(), a.spec.offset)))
                     .collect();
@@ -329,7 +340,10 @@ impl ScrollTree {
             }
             self.patches += 1;
             state.applied = RecordPose::read(world, entity).map(|pose| (pose, opacity));
+            state.laid = position_tick(world, entity).map(|tick| (entity, tick));
         }
+        // What the browser writes from now on carries a later tick than every pose read or laid here.
+        world.increment_change_tick();
         Ok(())
     }
 
@@ -357,6 +371,13 @@ fn referenced_areas(spec: &ScrollRecordSpec) -> impl Iterator<Item = &String> {
         .iter()
         .filter_map(|link| link.area.as_ref())
         .chain(spec.area.as_ref())
+}
+
+fn position_tick(world: &World, entity: Entity) -> Option<Tick> {
+    world
+        .entity(entity)
+        .get_change_ticks::<AtomeLogicalPosition>()
+        .map(|ticks| ticks.changed)
 }
 
 fn visible(pose: &RecordPose) -> bool {
@@ -397,7 +418,7 @@ fn opacity_patch(id: &str, opacity: f32) -> AtomeStylePatch {
 }
 
 /// A list's edge mask at the offset it shows: each edge fades only while it hides content.
-fn edge_fades(area: &AreaState, dy: f32) -> Option<[f32; 7]> {
+fn edge_fades(area: &AreaState, dy: f32) -> Option<crate::components::ClipFade> {
     let [height, curve] = area.spec.edge_mask?;
     let offset = area.motion.offset();
     let max = area.motion.max();
@@ -412,7 +433,7 @@ fn edge_fades(area: &AreaState, dy: f32) -> Option<[f32; 7]> {
         0.0
     };
     let [x, y, w, h] = area.spec.area_box;
-    (top > 0.0 || bottom > 0.0).then_some([x, y + dy, w, h, top, bottom, curve])
+    (top > 0.0 || bottom > 0.0).then_some([x, y + dy, w, h, top, bottom, curve, 0.0, 0.0])
 }
 
 /// The pose and opacity a record shows at its lists' live offsets.

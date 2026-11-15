@@ -1,7 +1,9 @@
 // ADOLE type gate of the event commit (`append.rs`) — the same rules and error codes as the Fastify
 // owner `atome/src/shared/atome_type_gate.js` (called by `database/adole_event_log.js`): a
 // declared type must be known (`atome_type_unknown`), and a property must be declared by the
-// atome's type, the one the event declares or else the stored one (`atome_property_unknown`).
+// atome's type, the one the event declares or else the stored one (`atome_property_unknown`); and a
+// project `set` aimed at an atome held nowhere must say what it creates, its type or kind
+// (`atome_set_target_missing`), so a partial write never creates a typeless ghost atome.
 // The types come from `eVe/registry/generated/atome_types.json`, generated from the JS owner
 // (`npm run registry:build`), never from a list kept here.
 
@@ -16,6 +18,7 @@ pub const ATOME_TYPES_JSON: &str =
 pub struct AtomeTypeCatalog {
     type_unknown: String,
     property_unknown: String,
+    set_target_missing: String,
     envelope: HashSet<String>,
     ungated_kinds: HashSet<String>,
     // A type's declared properties; `None` when the type accepts any property.
@@ -68,6 +71,7 @@ pub fn parse_catalog(text: &str) -> Result<AtomeTypeCatalog, String> {
     Ok(AtomeTypeCatalog {
         type_unknown: error_code("type_unknown")?,
         property_unknown: error_code("property_unknown")?,
+        set_target_missing: error_code("set_target_missing")?,
         envelope: strings(document.get("envelope_keys")),
         ungated_kinds: strings(document.get("ungated_kinds")),
         types,
@@ -121,6 +125,41 @@ pub fn assert_known_properties(
     Ok(())
 }
 
+/// Whether the store holds `atome_id` at all, in its envelope or its projection.
+pub fn atome_exists(conn: &Connection, atome_id: &str) -> Result<bool, String> {
+    conn.query_row(
+        "SELECT EXISTS (SELECT 1 FROM atomes WHERE atome_id = ?1)
+            OR EXISTS (SELECT 1 FROM state_current WHERE atome_id = ?1)",
+        [atome_id],
+        |row| row.get::<_, bool>(0),
+    )
+    .map_err(|error| error.to_string())
+}
+
+/// `assertSetTargetDeclared`: a `set` into a project, on an atome held nowhere, names its type or kind.
+/// `target_exists` is asked last, only for a typeless project `set`: the store is read for that case
+/// alone, not for every event of a replay.
+pub fn assert_set_target_declared(
+    kind: &str,
+    patch: &JsonMap<String, JsonValue>,
+    declared: bool,
+    in_project: bool,
+    target_exists: impl FnOnce() -> Result<bool, String>,
+) -> Result<(), String> {
+    if !in_project || !kind.eq_ignore_ascii_case("set") || declared {
+        return Ok(());
+    }
+    let names = |key: &str| match patch.get(key) {
+        None | Some(JsonValue::Null) => false,
+        Some(JsonValue::String(text)) => !text.trim().is_empty(),
+        Some(_) => true,
+    };
+    if ["type", "atome_type", "kind"].iter().any(|key| names(key)) || target_exists()? {
+        return Ok(());
+    }
+    Err(catalog()?.set_target_missing.clone())
+}
+
 /// The kinds that write no new property (`ATOME_UNGATED_EVENT_KINDS`).
 pub fn is_ungated_kind(kind: &str) -> Result<bool, String> {
     Ok(catalog()?.ungated_kinds.contains(kind))
@@ -152,7 +191,7 @@ mod tests {
         let mut commit = |atome_id: &str, kind: &str, props: JsonValue| {
             sequence += 1;
             let event = json!({ "id": format!("e{sequence}"), "atome_id": atome_id, "kind": kind,
-                "actor": { "type": "user", "id": "owner" }, "payload": { "props": props } });
+                "project_id": "p", "actor": { "type": "user", "id": "owner" }, "payload": { "props": props } });
             append_events(&db, &[event], &options).map(|_| ())
         };
         assert_eq!(
@@ -187,9 +226,25 @@ mod tests {
             commit("stored-shape", "delete", json!({ "legacy_key": 1 })),
             Ok(())
         );
+        // A partial write on an atome held nowhere would create a typeless ghost: refused.
         assert_eq!(
-            commit("unknown-atome", "set", json!({ "anything": 1 })),
+            commit("unknown-atome", "set", json!({ "left": 116, "top": 52 })),
+            Err("atome_set_target_missing".into())
+        );
+        assert_eq!(
+            commit("unknown-atome", "set", json!({ "kind": "video_recording" })),
             Ok(())
         );
+        assert_eq!(
+            commit("unknown-atome", "set", json!({ "left": 116 })),
+            Ok(())
+        );
+        // Account-global and project-less records keep their own rules.
+        let global = json!({ "id": "e-global", "atome_id": "pref", "kind": "set", "scope": "global",
+            "project_id": "p", "actor": { "type": "user", "id": "owner" }, "payload": { "props": { "anything": 1 } } });
+        assert!(append_events(&db, &[global], &options).is_ok());
+        let loose = json!({ "id": "e-loose", "atome_id": "loose", "kind": "set",
+            "actor": { "type": "user", "id": "owner" }, "payload": { "props": { "label": "x" } } });
+        assert!(append_events(&db, &[loose], &options).is_ok());
     }
 }

@@ -221,6 +221,22 @@ async fn run() -> Result<i32, String> {
         user_root: config.user_root.clone(),
         uploads_tmp: config.project_root.join("data").join("uploads_tmp"),
     });
+    // The bytes of deletions no longer undoable (media/trash.rs): erased at start, then daily.
+    let trash_root = config.user_root.clone();
+    tokio::spawn(async move {
+        let mut daily = tokio::time::interval(std::time::Duration::from_secs(24 * 60 * 60));
+        loop {
+            daily.tick().await;
+            let root = trash_root.clone();
+            let purged = tokio::task::spawn_blocking(move || {
+                atome_server::media::trash::purge(&root, atome_server::media::trash::KEEP)
+            })
+            .await;
+            if let Ok(Err(error)) = purged {
+                eprintln!("[media] trash purge failed: {error}");
+            }
+        }
+    });
     let router = VaultRouter::new(
         vaults.clone(),
         Central::open(&config.central)?,

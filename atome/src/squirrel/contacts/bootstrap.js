@@ -8,9 +8,10 @@ import { saveExportFile } from '../shared/file_export.js';
 import { CONTACTS_V1_ARCHITECTURE_DECISION } from './connector_contract.js';
 import { createIcloudContactsConnector } from './icloud_connector.js';
 import { createLocalContactsSource } from './local_source.js';
-import { createMacosContactsSource } from './macos_source.js';
 import { createContactsService } from './service.js';
 import { emitPerfEvent, perfElapsedMs, perfLog, perfNowMs } from '../../utils/perf_runtime.js';
+import { getSessionState } from '../apis/unified/adole_api/session.js';
+import { reportRuntimeError } from '../runtime_errors.js';
 
 const SERVICE_KEY = '__SQUIRREL_CONTACTS_SERVICE__';
 const API_KEY = '__SQUIRREL_CONTACTS_API__';
@@ -48,6 +49,20 @@ const getOrCreateService = (env) => {
     });
     env[SERVICE_KEY] = service;
     return service;
+};
+
+// The cards still naming their photo by a stored file get it inline (local_source.js#inlineStoredPhotos),
+// once per account and page, after the book's first read: their tiles were empty on every other device.
+const storedPhotoPasses = new Set();
+const inlineStoredPhotosOnce = (env) => {
+    const owner = getSessionState()?.user?.id;
+    if (!owner || storedPhotoPasses.has(owner)) return;
+    storedPhotoPasses.add(owner);
+    void getOrCreateService(env).inlineStoredContactPhotos().then((result) => {
+        if (!result?.ok) throw new Error(result?.error || 'contacts_stored_photos_failed');
+        if (result.pending) storedPhotoPasses.delete(owner);
+        if (result.inlined || result.removed) dispatchPeopleDirectoryUpdated(env, { action: 'photos', inlined: result.inlined, removed: result.removed });
+    }).catch((error) => { storedPhotoPasses.delete(owner); reportRuntimeError(error, 'contacts:stored-photos'); });
 };
 
 const resolveSecureAuthOptions = async (env, options = {}) => {
@@ -244,6 +259,7 @@ export const createGlobalContactsApi = ({
         async ensureReady(options = {}) {
             const service = getOrCreateService(env);
             const syncResult = await service.syncPull(buildPrimarySyncOptions(options));
+            if (syncResult?.ok === true) inlineStoredPhotosOnce(env);
             if (syncResult?.ok === true && Array.isArray(syncResult.items) && syncResult.items.length) {
                 return syncResult;
             }

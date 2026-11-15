@@ -54,7 +54,8 @@ self.atomeLocalMediaResponse = async function (request) {
     try { name = decodeURIComponent(url.pathname.slice('/api/uploads/'.length)); }
     catch { return new Response(null, { status: 400 }); }
     const file = await read('squirrel_guest_workspace_v1', 'files', `${owner}:${name}`);
-    if (!file) return keepRead(request, owner, name);
+    // A deleted media's bytes stay marked until purged (guest_workspace_store.js#dropDeletedFiles): never served.
+    if (!file || file.deleted_at) return keepRead(request, owner, name);
     const blob = file.blob;
     const headers = { 'Content-Type': blob.type || 'application/octet-stream', 'Cache-Control': 'no-store', 'Accept-Ranges': 'bytes' };
     const range = request.headers.get('Range');

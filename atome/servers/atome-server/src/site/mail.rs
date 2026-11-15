@@ -155,12 +155,12 @@ impl Site {
         let domains: Vec<JsonValue> = self
             .store
             .central
-            .all("SELECT domain, state, expires_at, auto_renew, mail_json FROM site_domains WHERE owner_id = ?".into(), vec![json!(owner)])
+            .all("SELECT domain, state, expires_at, auto_renew, mail_json, created_at FROM site_domains WHERE owner_id = ?".into(), vec![json!(owner)])
             .await?
             .into_iter()
             .map(|row| {
                 let domain = js::text(row.get("domain"));
-                json!({ "domain": domain, "state": row["state"], "expires_at": row["expires_at"], "auto_renew": row["auto_renew"] == json!(1),
+                json!({ "domain": domain, "state": row["state"], "expires_at": row["expires_at"], "created_at": row["created_at"], "auto_renew": row["auto_renew"] == json!(1),
                     "renew": Self::renewal_price(&domain), "boxes": records_of(&row, "mail_json") })
             })
             .collect();

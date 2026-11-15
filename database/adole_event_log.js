@@ -7,7 +7,12 @@
 import { v4 as uuidv4 } from 'uuid';
 import { query, safeParseJson, serializeJson, withTransaction } from './adole_db_core.js';
 import { eventPropertyPatch, resolveEventPayload } from '../atome/src/shared/adole_event_contract.js';
-import { assertKnownAtomeProperties, assertKnownAtomeType, ATOME_UNGATED_EVENT_KINDS } from '../atome/src/shared/atome_type_gate.js';
+import {
+    assertKnownAtomeProperties,
+    assertKnownAtomeType,
+    assertSetTargetDeclared,
+    ATOME_UNGATED_EVENT_KINDS
+} from '../atome/src/shared/atome_type_gate.js';
 import { eventMutations, eventConflicts, enqueueSyncOperation } from './adole_api_instances.js';
 import { applyEventToStateCurrent, resolveActorId } from './adole_state_projection.js';
 import { isProjectAtome, resolveEventProjectId } from './adole_event_containment.js';
@@ -37,8 +42,15 @@ async function assertEventProperties(rawEvent, event, options) {
     if (options.storedTruth === true || ATOME_UNGATED_EVENT_KINDS.includes(String(event.kind).toLowerCase())) return;
     const patch = eventPropertyPatch(event);
     if (!patch) return;
-    const type = declaredEventType(rawEvent)
-        ?? (await query('get', 'SELECT atome_type FROM atomes WHERE atome_id = ?', [event.atome_id]))?.atome_type;
+    const declared = declaredEventType(rawEvent);
+    const stored = event.atome_id
+        ? await query('get', 'SELECT atome_type FROM atomes WHERE atome_id = ?', [event.atome_id])
+        : null;
+    // A creation that names no type or kind, aimed at an atome held nowhere, is refused (no ghost atome).
+    const targetExists = Boolean(stored) || Boolean(event.atome_id && !declared
+        && await query('get', 'SELECT 1 AS found FROM state_current WHERE atome_id = ?', [event.atome_id]));
+    assertSetTargetDeclared({ kind: event.kind, patch, declaredType: declared, targetExists, projectId: event.project_id });
+    const type = declared ?? stored?.atome_type;
     if (type) assertKnownAtomeProperties(type, patch);
 }
 

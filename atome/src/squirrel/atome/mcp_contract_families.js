@@ -164,7 +164,7 @@ export const MCP_CONTRACT_FAMILIES = Object.freeze([
     // A capture turns the camera or the microphone on, a delete takes items out of the project: the user's to allow.
     { id: 'captures', commands: CAPTURE_COMMANDS, validate: validateCaptureInput, noClient: 'PRESENTATION_UNAVAILABLE',
         confirmed: ['captures.start', 'captures.delete'], instructions: CAPTURE_ASSISTANT_INSTRUCTIONS,
-        preload: ['captures.state', 'captures.show', 'captures.play', 'captures.stop', 'captures.camera'] },
+        preload: ['captures.state', 'captures.show', 'captures.play', 'captures.stop', 'captures.close', 'captures.camera'] },
     // Lighting an effect turns the microphone on, a delete takes an effect or an instrument away for good: the user's to allow.
     { id: 'audio_fx', commands: AUDIO_FX_COMMANDS, validate: validateAudioFxInput, noClient: 'HOST_UNSUPPORTED',
         confirmed: ['audio_fx.start', 'audio_fx.delete', 'audio_fx.instrument_delete', 'audio_fx.delete_preset'], instructions: AUDIO_FX_ASSISTANT_INSTRUCTIONS,

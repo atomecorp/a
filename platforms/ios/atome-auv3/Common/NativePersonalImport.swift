@@ -177,7 +177,9 @@ final class NativePersonalImport {
         let start = calendar.date(from: DateComponents(year: startYear, month: 1, day: 1))!
         let end = calendar.date(from: DateComponents(year: endYear, month: 1, day: 1))!
         let selected = Set(payload["collections"] as? [String] ?? [])
-        let collections = events.calendars(for: .event).filter { selected.isEmpty || selected.contains($0.calendarIdentifier) }
+        // eVe's own « eVe » calendar (NativeDeviceCalendar.swift) holds eVe's appointments: never imported back.
+        let exported = UserDefaults.standard.string(forKey: "atome_device_calendar_id")
+        let collections = events.calendars(for: .event).filter { $0.calendarIdentifier != exported && (selected.isEmpty || selected.contains($0.calendarIdentifier)) }
         let predicate = events.predicateForEvents(withStart: start, end: end, calendars: collections)
         let items = events.events(matching: predicate).map { event -> [String: Any] in
             // EventKit queries return instances; use an immutable occurrence identity.

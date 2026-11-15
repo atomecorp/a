@@ -33,17 +33,37 @@ export async function persistContactPhoto(contact, context) {
     return { ...contact, photo, photo_asset_id: id, user_face: photo };
 }
 
-export async function exportContactPhoto(contact, context) {
-    if (!contact.photo_asset_id || String(contact.photo || '').startsWith('data:')) return contact;
+/**
+ * The photo of a card that names it by a stored file (`photo_asset_id`, every
+ * import before 24 Oct 2026), read from the server, which holds every media of
+ * the account (AGENTS.md rule 21): the card's own path was bound to the device
+ * that imported it. Answers the inline photo, or '' when the server has no such
+ * image (the photo is gone); a server out of reach throws, to be read again later.
+ */
+export async function readStoredContactPhoto(contact, context) {
     const asset = await context.store.getStateCurrent(contact.photo_asset_id);
     context.check();
-    const props = asset?.properties || {};
-    if (asset?.owner_id && String(asset.owner_id) !== context.owner) throw new Error('contact_photo_owner_invalid');
-    const { readMediaAssetBytes } = await import('../../../../eVe/domains/media/asset_box_file_upload.js');
-    const bytes = await readMediaAssetBytes({ fileName: props.file_name, ownerId: context.owner });
+    if (!asset) throw new Error('contact_photo_asset_unavailable');
+    if (asset.owner_id && String(asset.owner_id) !== context.owner) throw new Error('contact_photo_owner_invalid');
+    const props = asset.properties || {};
+    if (!/^image\/(jpeg|png|webp)$/.test(props.mime_type) || !props.media_url) return '';
+    const { fetchAuthorizedMedia } = await import('../../../../eVe/domains/media/api/media_api_auth.js');
+    const response = await fetchAuthorizedMedia(props.media_url, { signal: AbortSignal.timeout(15000) });
     context.check();
-    if (!/^image\/(jpeg|png|webp)$/.test(props.mime_type)) throw new Error('contact_photo_mime_invalid');
+    if (response.status === 404) return '';
+    if (!response.ok) throw new Error(`contact_photo_read_failed:${response.status}`);
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    context.check();
     let binary = '';
     for (let offset = 0; offset < bytes.length; offset += 0x8000) binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
-    return { ...contact, photo: `data:${props.mime_type};base64,${btoa(binary)}` };
+    const photo = `data:${props.mime_type};base64,${btoa(binary)}`;
+    return EMBEDDED_PHOTO.test(photo) && photo.length <= 1024 * 1024 ? photo : '';
+}
+
+/** A card whose photo is a stored file of the account (see readStoredContactPhoto). */
+export const hasStoredContactPhoto = contact => !!contact.photo_asset_id && !String(contact.photo || '').startsWith('data:');
+
+export async function exportContactPhoto(contact, context) {
+    if (!hasStoredContactPhoto(contact)) return contact;
+    return { ...contact, photo: await readStoredContactPhoto(contact, context) };
 }

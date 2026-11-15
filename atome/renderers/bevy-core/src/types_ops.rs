@@ -25,7 +25,7 @@ pub struct AtomeTransformPatch {
     pub clip_rounded_rects: Vec<[f32; 8]>,
     /// The scroll areas' edge fades over the atom (`AtomeClipFades`).
     #[serde(default)]
-    pub clip_fades: Vec<[f32; 7]>,
+    pub clip_fades: Vec<crate::components::ClipFade>,
 }
 
 #[derive(Clone, Debug, Deserialize)]

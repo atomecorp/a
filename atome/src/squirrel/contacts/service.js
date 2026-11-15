@@ -72,11 +72,11 @@ export const createContactsService = ({
         syncState.cursor = toText(meta.cursor || '') || syncState.cursor || null;
         syncState.ingested = contactIndex.size;
         syncState.source_count = resolveSources().length;
-        return Array.from(contactIndex.values()).sort((left, right) => {
-            const aa = `${left.name || ''} ${left.first_name || ''} ${left.nickname || ''}`.trim().toLowerCase();
-            const bb = `${right.name || ''} ${right.first_name || ''} ${right.nickname || ''}`.trim().toLowerCase();
-            return aa.localeCompare(bb);
-        });
+        // One collator and one key per contact: `localeCompare` builds a collator at each comparison (R-163).
+        const collator = new Intl.Collator();
+        return Array.from(contactIndex.values())
+            .map(entry => ({ entry, key: `${entry.name || ''} ${entry.first_name || ''} ${entry.nickname || ''}`.trim().toLowerCase() }))
+            .sort((left, right) => collator.compare(left.key, right.key)).map(({ entry }) => entry);
     };
 
     const syncFromSources = async (mode = 'initial', options = {}) => {
@@ -211,6 +211,7 @@ export const createContactsService = ({
     const updateLocalContact = (id, changes, options) => mutatePrimary('updateContact', id, changes, options);
     const deleteLocalContact = (id, options) => mutatePrimary('deleteContact', id, options);
     const mergeDuplicateContacts = () => mutatePrimary('mergeDuplicates');
+    const inlineStoredContactPhotos = () => mutatePrimary('inlineStoredPhotos');
 
     const resolvePushContactPayload = (options = {}) => {
         if (options?.contact && typeof options.contact === 'object') {
@@ -334,6 +335,9 @@ export const createContactsService = ({
         },
         mergeDuplicateContacts() {
             return mergeDuplicateContacts();
+        },
+        inlineStoredContactPhotos() {
+            return inlineStoredContactPhotos();
         },
         selectPersonalContact(id) { return mutatePrimary('selectPersonalContact', id); },
         pushContactToSource(sourceId, options = {}) {

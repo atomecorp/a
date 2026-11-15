@@ -4,7 +4,7 @@ vi.mock('../../eVe/intuition/runtime/tool_gateway.js', () => ({ invokeToolGatewa
 vi.mock('../../eVe/domains/dashboard/dashboard_workspace_mode.js', () => ({ ensureDashboardWorkspaceSurface: owners.surface }));
 vi.mock('../../eVe/domains/dashboard/dashboard_creation_actions.js', () => ({ createDashboardCreationActions: () => ({ createGuidedProject: owners.create }) }));
 vi.mock('../../eVe/intuition/tools/media.js', () => ({ requestMediaSelection: owners.media }));
-vi.mock('../../eVe/intuition/runtime/project_media_import_runtime.js', () => ({ readSelectionItemAsFile: owners.readFile, readImageFileAsDataUrl: owners.readImage }));
+vi.mock('../../eVe/intuition/runtime/project_media_import_runtime.js', () => ({ readSelectionItemAsFile: owners.readFile, readImageFileAsScaledDataUrl: owners.readImage }));
 import { createFirstLaunchRuntime } from '../../eVe/domains/user/first_launch_runtime.js';
 import { FIRST_LAUNCH_TEMPLATES } from '../../eVe/domains/templates/first_launch_template_catalog.js';
 import { buildMatrixToolDefinitions } from '../../eVe/intuition/tools/core/tool_runtime_bootstrap_matrix_defs.js';

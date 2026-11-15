@@ -1,6 +1,16 @@
 use serde_json::{Value, json};
 use tauri::{AppHandle, Runtime, WebviewWindow};
 
+// The canonical main page (the local server's own origin): the only caller of the phone's host commands.
+pub(crate) fn is_canonical_main_window<R: Runtime>(window: &WebviewWindow<R>) -> bool {
+    window.label() == "main"
+        && window.url().is_ok_and(|url| {
+            url.scheme() == "http"
+                && matches!(url.host_str(), Some("127.0.0.1" | "localhost"))
+                && url.port() == Some(3000)
+        })
+}
+
 #[tauri::command]
 pub async fn notifications_invoke<R: Runtime>(
     app: AppHandle<R>,
@@ -8,13 +18,7 @@ pub async fn notifications_invoke<R: Runtime>(
     command: String,
     payload: Value,
 ) -> Result<Value, String> {
-    if window.label() != "main"
-        || !window.url().is_ok_and(|url| {
-            url.scheme() == "http"
-                && matches!(url.host_str(), Some("127.0.0.1" | "localhost"))
-                && url.port() == Some(3000)
-        })
-    {
+    if !is_canonical_main_window(&window) {
         return Err("notifications_window_forbidden".into());
     }
     if !cfg!(target_os = "android") {

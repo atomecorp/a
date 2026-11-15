@@ -5,7 +5,7 @@ import { MEDIA_LIST_ENTRIES_MAX, MEDIA_LIST_ENTRY_SCHEMA, MEDIA_LIST_KINDS, MEDI
 // run by eVe/domains/media/media_list_runtime.js — the same owner as Médias › Listes, the rubrics' Listes tools and
 // a media's hold « Ajouter à une liste ».
 export const MEDIA_LIST_ERRORS = Object.freeze(['INVALID_ARGUMENT', 'AUTH_REQUIRED', 'NOT_FOUND', 'NAME_TAKEN', 'LIST_FULL',
-    'VERSION_CONFLICT', 'PRESENTATION_UNAVAILABLE', 'NOT_PLAYING', 'WRITE_FAILED']);
+    'VERSION_CONFLICT', 'PRESENTATION_UNAVAILABLE', 'NOT_PLAYING', 'WRITE_FAILED', 'NOT_OWNER']);
 // What a picture's touches do, by voice or MCP (D23): films.control and projects.media share these words.
 export const MEDIA_CONTROL_ACTIONS = Object.freeze(['play', 'pause', 'rewind', 'forward', 'next', 'previous', 'fullscreen', 'exit_fullscreen', 'controls', 'hide_controls']);
 
@@ -22,8 +22,8 @@ const definitions = {
         + 'with list_id, that list with its entries.', false, 'read'],
     create: [{ name, kind, entries: { ...entries, minItems: 0 } }, ['name'], 'Create a media list (kind mixed by default, audio or video), optionally with its first entries.', true, 'write'],
     rename: [{ list_id: id, name }, ['list_id', 'name'], 'Rename a media list.', true, 'write'],
-    add: [{ list_id: id, entries }, ['list_id', 'entries'], 'Add media to a list (an entry already there is left as it is). An entry: { media audio|video, '
-        + 'source file|music|online, ref, provider, label, detail, image, duration }; its id, computed, is source:provider:ref.', true, 'write'],
+    add: [{ list_id: id, entries }, ['list_id', 'entries'], 'Add media to a list (an entry already there is left as it is). An entry: { media audio|video|image|project|shopping (a picture, a project or a shopping item in a mixed list only), '
+        + 'source file|music|online|project|shopping (a shopping item: ref category:normalized name), ref, provider, label, detail, image, duration }; its id, computed, is source:provider:ref.', true, 'write'],
     remove: [{ list_id: id, entry_ids: { type: 'array', minItems: 1, maxItems: MEDIA_LIST_ENTRIES_MAX, items: { type: 'string', minLength: 1, maxLength: 400 } } },
         ['list_id', 'entry_ids'], 'Take entries out of a media list (the media themselves stay).', true, 'write'],
     delete: [{ list_id: id }, ['list_id'], 'Delete a media list (its media stay where they are).', true, 'write'],
@@ -33,7 +33,9 @@ const definitions = {
         + 'the picture shown (controls) or hidden (hide_controls). NOT_PLAYING: nothing plays.', false, 'control']
 };
 const entrySchema = { type: 'object', properties: MEDIA_LIST_ENTRY_SCHEMA.properties };
+// `shared`: a list another account shares live with the user (`owner_id`): its entries open to both, its name and its deletion its owner's (NOT_OWNER).
 const listSchema = { type: 'object', properties: { id: { type: 'string' }, name: { type: 'string' }, kind: { type: 'string' }, count: { type: 'integer' }, holds: { type: 'boolean' },
+    shared: { type: 'boolean' }, owner_id: { type: 'string' },
     entries: { type: 'array', items: entrySchema } } };
 export const MEDIA_LIST_COMMANDS = Object.freeze(Object.entries(definitions).map(([action, [properties, required, description, persistent, access]]) => Object.freeze({
     name: `media_lists.${action}`, action, description, persistent, capability: `media_lists.${access}`,

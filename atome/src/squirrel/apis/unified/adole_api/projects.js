@@ -3,6 +3,7 @@ import { getSessionState, setCurrentProjectCache, getCurrentProjectCache, clearC
 import { list_atomes, create_atome, delete_atomes, get_atome } from './atomes.js';
 import { resolveAtomeId, resolveAtomeParentId, resolveAtomeProjectId } from './atome_record_projection.js';
 import { with_callback, getCurrentUserId, isLoggedOut } from './activities_support.js';
+import { ATOME_CHANGE_EVENTS, dispatchAtomeChange } from '../atome_change_signal.js';
 
 const dispatchProjectChanged = (detail = {}) => {
     if (typeof window === 'undefined') return;
@@ -138,21 +139,21 @@ export async function list_projects(options = {}, callback) {
 // record's `project_id`, the server's own index of a project) and, recursively, every atome held by one of them
 // (`meta.parent_id`), held ones first so the project goes last.
 const PROJECT_CONTENT_LIMIT = Number.MAX_SAFE_INTEGER;
-async function project_content_ids(projectId) {
+async function project_content(projectId) {
     const listed = await list_atomes({ project_id: projectId, limit: PROJECT_CONTENT_LIMIT });
     const side = listed?.meta?.source === 'tauri' ? 'tauri' : 'fastify';
     if (listed?.[side]?.error) return { ok: false, error: listed[side].error };
-    const records = (listed[side].atomes || []).map(record => ({ id: String(resolveAtomeId(record) || ''),
+    const records = (listed[side].atomes || []).map(record => ({ id: String(resolveAtomeId(record) || ''), type: record.atome_type || record.type || null,
         project: String(resolveAtomeProjectId(record) || ''), parent: String(resolveAtomeParentId(record) || '') })).filter(record => record.id && record.id !== projectId);
     const held = new Set([projectId]), order = [];
     for (let grew = true; grew;) {
         grew = false;
         for (const record of records) {
             if (held.has(record.id) || (record.project !== projectId && !held.has(record.parent))) continue;
-            held.add(record.id); order.push(record.id); grew = true;
+            held.add(record.id); order.push(record); grew = true;
         }
     }
-    return { ok: true, ids: order.reverse() };
+    return { ok: true, records: order.reverse() };
 }
 
 export async function delete_project(projectId, callback) {
@@ -164,22 +165,25 @@ export async function delete_project(projectId, callback) {
         }, callback);
     }
 
-    const content = await project_content_ids(String(projectId));
+    const content = await project_content(String(projectId));
     if (!content.ok) {
         const error = `project_content_unreadable:${content.error}`;
         return with_callback({ tauri: { success: false, error }, fastify: { success: false, error } }, callback);
     }
-    const result = await delete_atomes([...content.ids, String(projectId)]);
+    const result = await delete_atomes([...content.records.map(record => record.id), String(projectId)]);
     const deleted = result?.tauri?.success === true || result?.fastify?.success === true || result?.ok === true || result?.success === true;
     if (deleted) {
+        // Every atome it held is announced gone, as a commit announces it (atome_change_signal.js): a calendar event of the
+        // project leaves the calendar's reads and its alarms, native ones included, at once.
+        if (typeof window !== 'undefined') content.records.forEach(record => dispatchAtomeChange(window, ATOME_CHANGE_EVENTS.deleted, { id: record.id,
+            atome_id: record.id, project_id: projectId, atome_type: record.type, source: 'local', origin: 'commit', durable: true }));
         dispatchProjectAtomeEvent('squirrel:atome-deleted', {
             id: projectId,
             atome_id: projectId,
             projectId,
             project_id: projectId,
             type: 'project',
-            atome_type: 'project',
-            content_ids: content.ids
+            atome_type: 'project'
         });
     }
     return with_callback(result, callback);

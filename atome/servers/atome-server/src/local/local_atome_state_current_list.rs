@@ -27,8 +27,18 @@ pub(super) async fn handle_state_current_list(
     let cursor = atome_type
         .as_ref()
         .filter(|_| project_id.is_none())
-        .and_then(|_| message.get("storage_order").and_then(JsonValue::as_bool).filter(|on| *on))
-        .map(|_| message.get("after").and_then(JsonValue::as_i64).unwrap_or(0));
+        .and_then(|_| {
+            message
+                .get("storage_order")
+                .and_then(JsonValue::as_bool)
+                .filter(|on| *on)
+        })
+        .map(|_| {
+            message
+                .get("after")
+                .and_then(JsonValue::as_i64)
+                .unwrap_or(0)
+        });
     let include_total = message
         .get("include_total")
         .or_else(|| message.get("includeTotal"))
@@ -92,21 +102,15 @@ pub(super) async fn handle_state_current_list(
         scope_params.insert(0, rusqlite::types::Value::from(pid.to_string()));
     }
     if let (Some(kind), Some(after)) = (atome_type.as_ref(), cursor) {
-        // The type the properties carry, by their two expression indexes, past the cursor.
-        conditions.push(
-            "sc.rowid IN (SELECT rowid FROM state_current WHERE LOWER(COALESCE(json_extract(properties, '$.type'), '')) = ? AND rowid > ? UNION SELECT rowid FROM state_current WHERE LOWER(COALESCE(json_extract(properties, '$.kind'), '')) = ? AND rowid > ?)".to_string()
-        );
+        // The type is the envelope's (`atomes.atome_type`): the commit keeps it out of the
+        // properties, so a card made on this device carries none there. Its expression index
+        // walks the type's rows in its own storage order, past the cursor.
+        conditions.push("LOWER(COALESCE(a.atome_type, '')) = ? AND a.rowid > ?".to_string());
         if kind == "tool" {
             conditions.push("LOWER(sc.atome_id) NOT LIKE 'tool_ui.activity.select.%'".to_string());
         }
-        for value in [
-            rusqlite::types::Value::from(kind.clone()),
-            rusqlite::types::Value::from(after),
-            rusqlite::types::Value::from(kind.clone()),
-            rusqlite::types::Value::from(after),
-        ] {
-            scope_params.push(value);
-        }
+        scope_params.push(rusqlite::types::Value::from(kind.clone()));
+        scope_params.push(rusqlite::types::Value::from(after));
     } else if let Some(kind) = atome_type {
         conditions.push(
             // Each term reads one schema expression index; their union drives the query, so no
@@ -139,12 +143,14 @@ pub(super) async fn handle_state_current_list(
     let where_clause = format!(" WHERE {}", conditions.join(" AND "));
     // The page is chosen on ids only: sorting whole rows spilled OFFSET + LIMIT
     // `properties` blobs to a temporary file for every page.
-    let columns = "sc.atome_id, sc.owner_id, sc.project_id, sc.properties, sc.updated_at, sc.version, a.parent_id, a.atome_type, a.created_at, sc.rowid";
+    let columns = "sc.atome_id, sc.owner_id, sc.project_id, sc.properties, sc.updated_at, sc.version, a.parent_id, a.atome_type, a.created_at";
     let query = if cursor.is_some() {
-        format!("SELECT {columns} FROM state_current sc LEFT JOIN atomes a ON a.atome_id = sc.atome_id{where_clause} ORDER BY sc.rowid LIMIT ?")
+        format!(
+            "SELECT {columns}, a.rowid FROM atomes a JOIN state_current sc ON sc.atome_id = a.atome_id{where_clause} ORDER BY a.rowid LIMIT ?"
+        )
     } else {
         format!(
-            "SELECT {columns} FROM state_current sc LEFT JOIN atomes a ON a.atome_id = sc.atome_id WHERE sc.atome_id IN (SELECT sc.atome_id FROM state_current sc LEFT JOIN atomes a ON a.atome_id = sc.atome_id{where_clause} ORDER BY sc.updated_at DESC, sc.atome_id LIMIT ? OFFSET ?) ORDER BY sc.updated_at DESC, sc.atome_id"
+            "SELECT {columns}, sc.rowid FROM state_current sc LEFT JOIN atomes a ON a.atome_id = sc.atome_id WHERE sc.atome_id IN (SELECT sc.atome_id FROM state_current sc LEFT JOIN atomes a ON a.atome_id = sc.atome_id{where_clause} ORDER BY sc.updated_at DESC, sc.atome_id LIMIT ? OFFSET ?) ORDER BY sc.updated_at DESC, sc.atome_id"
         )
     };
     let mut params = scope_params;
@@ -162,17 +168,20 @@ pub(super) async fn handle_state_current_list(
     let rows = stmt
         .query_map(rusqlite::params_from_iter(params), |row| {
             let properties: Option<String> = row.get(3)?;
-            Ok((json!({
-                "atome_id": row.get::<_, String>(0)?,
-                "owner_id": row.get::<_, Option<String>>(1)?,
-                "project_id": row.get::<_, Option<String>>(2)?,
-                "parent_id": row.get::<_, Option<String>>(6)?,
-                "atome_type": row.get::<_, Option<String>>(7)?,
-                "properties": parse_json_value(properties.as_ref()),
-                "created_at": row.get::<_, Option<String>>(8)?,
-                "updated_at": row.get::<_, String>(4)?,
-                "version": row.get::<_, i64>(5)?
-            }), row.get::<_, i64>(9)?))
+            Ok((
+                json!({
+                    "atome_id": row.get::<_, String>(0)?,
+                    "owner_id": row.get::<_, Option<String>>(1)?,
+                    "project_id": row.get::<_, Option<String>>(2)?,
+                    "parent_id": row.get::<_, Option<String>>(6)?,
+                    "atome_type": row.get::<_, Option<String>>(7)?,
+                    "properties": parse_json_value(properties.as_ref()),
+                    "created_at": row.get::<_, Option<String>>(8)?,
+                    "updated_at": row.get::<_, String>(4)?,
+                    "version": row.get::<_, i64>(5)?
+                }),
+                row.get::<_, i64>(9)?,
+            ))
         })
         .map_err(|e| e.to_string());
 

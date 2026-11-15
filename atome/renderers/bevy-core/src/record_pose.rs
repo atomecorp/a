@@ -16,7 +16,7 @@ pub struct RecordPose {
     pub clip: Option<[f32; 4]>,
     pub clip_rotation: f32,
     pub rounded: Vec<[f32; 8]>,
-    pub fades: Vec<[f32; 7]>,
+    pub fades: Vec<crate::components::ClipFade>,
 }
 
 impl RecordPose {

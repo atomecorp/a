@@ -85,9 +85,9 @@
 	<key>NSAppleMusicUsageDescription</key>
 	<string>Atome accède à votre bibliothèque Musique pour rechercher et lire les morceaux demandés, créer vos playlists et y ajouter les titres de votre choix.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>Read selected calendars into your private Atome workspace.</string>
+	<string>Read selected calendars into your private Atome workspace, and keep your eVe appointments in an eVe calendar.</string>
 	<key>NSCalendarsUsageDescription</key>
-	<string>Read selected calendars into your private Atome workspace.</string>
+	<string>Read selected calendars into your private Atome workspace, and keep your eVe appointments in an eVe calendar.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Atome utilise la caméra pour capturer des photos et enregistrer des vidéos dans vos projets.</string>
 	<key>NSContactsUsageDescription</key>

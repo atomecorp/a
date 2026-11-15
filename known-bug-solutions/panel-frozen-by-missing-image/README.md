@@ -38,5 +38,6 @@ rest of the tree is projected. An abort still returns `null` as before.
 
 ## Open
 
-The missing contact photo itself (media present on another device, not on this
-iPad) is a separate media synchronization question — **To verify**.
+Closed 14 Nov. 2026: the missing contact photo was a card naming the importing device's
+file path; such cards are now read from the server and rewritten inline —
+see [contact-photo-device-bound-path](../contact-photo-device-bound-path/README.md).

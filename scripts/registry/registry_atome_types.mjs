@@ -3,7 +3,8 @@
 // (atome/src/shared/core_atome_types.js, read through #shared/atome_type_gate.js) for the servers that cannot import it:
 // atome-store (atome/engines/atome-store/src/type_gate.rs, compiled in), the store of the one local host
 // `atome-server::local` that Tauri and the iOS app run. It applies the Fastify gate's
-// rules with its error codes: an undeclared type is `atome_type_unknown`, an undeclared property `atome_property_unknown`.
+// rules with its error codes: an undeclared type is `atome_type_unknown`, an undeclared property `atome_property_unknown`,
+// a project `set` creating an atome without its type or kind `atome_set_target_missing`.
 import fs from 'node:fs';
 import { generatedFile, stable } from './registry_paths.mjs';
 
@@ -29,7 +30,11 @@ export async function atomeTypesDocument() {
     return stable({
         format: 'atome_types/1',
         owner: 'atome/src/shared/core_atome_types.js',
-        errors: { type_unknown: gate.ATOME_TYPE_UNKNOWN, property_unknown: gate.ATOME_PROPERTY_UNKNOWN },
+        errors: {
+            type_unknown: gate.ATOME_TYPE_UNKNOWN,
+            property_unknown: gate.ATOME_PROPERTY_UNKNOWN,
+            set_target_missing: gate.ATOME_SET_TARGET_MISSING
+        },
         envelope_keys: gate.ATOME_ENVELOPE_PROPERTY_KEYS,
         ungated_kinds: gate.ATOME_UNGATED_EVENT_KINDS,
         types

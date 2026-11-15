@@ -3,7 +3,7 @@ import { createCanonicalImport, createImportSnapshot, importRecordId, importReco
 import { importData, sameImportValue } from '../shared/import_reconciliation.js';
 import { matchesQuery } from './service_contact_utils.js';
 import { getSessionState } from '../apis/unified/adole_api/session.js';
-import { persistContactPhoto, CONTACT_PHOTO_PAYLOAD_INVALID } from './photo_media.js';
+import { persistContactPhoto, CONTACT_PHOTO_PAYLOAD_INVALID, hasStoredContactPhoto, readStoredContactPhoto } from './photo_media.js';
 import { contactBookPhone } from '../../shared/contact_book_hash.js';
 import { createPersonalContactImport } from './personal_profile.js';
 
@@ -130,6 +130,10 @@ async function removeFormerImportCopies(store, items, collected, prefix, snapsho
     }
     return removed;
 }
+
+// A stored photo not readable now (its media not yet synchronized here, the server out of reach): read again later.
+const photoReadLater = error => error?.name === 'TypeError' || error?.name === 'TimeoutError' || error?.name === 'AbortError'
+    || error?.message === 'contact_photo_asset_unavailable' || String(error?.message || '').startsWith('contact_photo_read_failed:');
 
 export function createLocalContactsSource({ source_id = 'eve_contacts_local', role = 'primary', writable = true,
     api, session, loadProfile } = {}) {
@@ -297,6 +301,31 @@ export function createLocalContactsSource({ source_id = 'eve_contacts_local', ro
             }
             await reread();
             return { ok: true, groups: merges.length, duplicates_merged: moved.size, merges, items: cache };
+        },
+        /**
+         * The cards that still name their photo by a stored file (imports before 24 Oct 2026, whose
+         * path was bound to the importing device: their tile stayed empty everywhere else) receive
+         * it inline, read from the server, like every imported photo since (photo_media.js). A photo
+         * the server no longer holds leaves its card without one; a server out of reach leaves the
+         * card for a later pass. The cards travel to every device of the account through the commit.
+         */
+        async inlineStoredPhotos() {
+            await hydrate();
+            const context = store.capture();
+            let inlined = 0, removed = 0, pending = 0;
+            for (const contact of cache.filter(hasStoredContactPhoto)) {
+                let photo;
+                try { photo = await readStoredContactPhoto(contact, context); }
+                catch (error) {
+                    if (!photoReadLater(error)) throw error;
+                    pending += 1;
+                    continue;
+                }
+                await store.write(contact.id, 'contact', { ...contact.raw, photo, user_face: photo, photo_asset_id: photo ? contact.photo_asset_id : '' }, context);
+                if (photo) inlined += 1; else removed += 1;
+            }
+            if (inlined || removed) await reread();
+            return { ok: true, inlined, removed, pending, items: cache };
         },
         async importLegacy(items, { owner_id } = {}) {
             if (owner_id !== store.capture().owner) throw new Error('legacy_contact_owner_confirmation_required');

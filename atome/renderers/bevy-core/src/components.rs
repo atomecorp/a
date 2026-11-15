@@ -38,11 +38,14 @@ pub struct AtomeClipRotation(pub f32);
 #[derive(Component, Clone, Debug, Default, PartialEq)]
 pub struct AtomeClipRoundedRects(pub Vec<[f32; 8]>);
 
-/// Edge fades of the clipping scroll areas above the atom (`clip_fade`): each `[x, y, width, height, top, bottom,
-/// curve]`, in the clip's frame, fades what it holds to transparent over `top` px under its top edge and `bottom` px
-/// above its bottom edge, eased by `curve` (see `clip_fade.rs`).
+/// One edge fade of a clipping area (`clip_fade`): `[x, y, width, height, top, bottom, curve, left, right]`, in the
+/// clip's frame, fades what it holds to transparent over `top` px under its top edge, `bottom` px above its bottom
+/// edge, `left` px inside its left edge and `right` px inside its right edge, eased by `curve` (see `clip_fade.rs`).
+pub type ClipFade = [f32; 9];
+
+/// Edge fades of the clipping areas above the atom (`ClipFade` each).
 #[derive(Component, Clone, Debug, Default, PartialEq)]
-pub struct AtomeClipFades(pub Vec<[f32; 7]>);
+pub struct AtomeClipFades(pub Vec<ClipFade>);
 
 #[derive(Clone, Copy, Debug, Component)]
 pub struct AtomeSpriteSourceRect(pub Option<Rect>);

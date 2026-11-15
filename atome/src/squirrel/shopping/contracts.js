@@ -17,8 +17,8 @@ const definitions = {
     add: [{ label, category, quantity: SHOPPING_QUANTITY_SCHEMA, note }, ['label'],
         'Add an item in the user\'s words (food by default; beauty, hygiene, household, kitchen or other). The same unchecked item receives the quantity instead of a duplicate.', true],
     update: [{ item_id: id, label, category, quantity: SHOPPING_QUANTITY_SCHEMA, note, favorite: { type: 'boolean' },
-        price: SHOPPING_PRICE_SCHEMA, image: SHOPPING_IMAGE_SCHEMA, avoided: { type: 'boolean' } }, ['item_id'],
-        'Change an item. quantity is the user\'s own amount, added to the amounts planned by meals; price { amount, currency } is what the user pays; favorite keeps it among the favourites; image is the user\'s photo (data URL); avoided true sets it aside in « À éviter » (out of the basket), false puts it back in the basket.', true],
+        price: SHOPPING_PRICE_SCHEMA, image: SHOPPING_IMAGE_SCHEMA, avoided: { type: 'boolean' }, in_cart: { type: 'boolean' } }, ['item_id'],
+        'Change an item. quantity is the user\'s own amount, added to the amounts planned by meals; price { amount, currency } is what the user pays; favorite keeps it among the favourites; image is the user\'s photo (data URL); avoided true sets it aside in « À éviter » (out of the basket), false puts it back in the basket; in_cart true puts a wished item in Achat\'s web Panier (bought on the web once validated), false takes it out.', true],
     check: [target, [], 'Mark an item as bought, by item_id or by its label in the user\'s words.', true],
     uncheck: [target, [], 'Mark a bought item as still to buy, by item_id or label.', true],
     remove: [target, [], 'Remove an item from the list, by item_id or label.', true],
@@ -31,7 +31,7 @@ const itemSchema = { type: 'object', required: ['id', 'label', 'category', 'chec
     id: { type: 'string' }, label: { type: 'string' }, category: { type: 'string' }, food_group: { type: 'string' },
     quantity: SHOPPING_QUANTITY_SCHEMA, checked: { type: 'boolean' }, checked_at: { type: 'string' }, added_at: { type: 'string' }, note: { type: 'string' },
     product: { type: 'object' }, favorite: { type: 'boolean' }, price: SHOPPING_PRICE_SCHEMA, image: { type: 'string' },
-    avoided: { type: 'boolean' }, avoided_at: { type: 'string' }, sources: { type: 'array', items: { type: 'string' } } } };
+    avoided: { type: 'boolean' }, avoided_at: { type: 'string' }, in_cart: { type: 'boolean' }, added_by: { type: 'string' }, checked_by: { type: 'string' }, sources: { type: 'array', items: { type: 'string' } } } };
 export const SHOPPING_COMMANDS = Object.freeze(Object.entries(definitions).map(([action, [properties, required, description, persistent]]) => Object.freeze({
     name: `shopping.${action}`, action, description, persistent, capability: persistent ? 'shopping.write' : 'shopping.read',
     input_schema: { type: 'object', additionalProperties: false, properties, required },

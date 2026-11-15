@@ -317,11 +317,13 @@ impl Sharing {
             })
             .ok_or("share_request_not_found")?;
         let pending_share = row["status"] == "pending";
+        // Worked on together (more than read granted): the list is shared live, said so on the request (R-161 N4).
+        let live = !read_only(&row);
         let Some(source) = self.source_of(&row).await? else {
             return Ok(
                 json!({ "ok": true, "share_id": row["share_id"], "status": row["status"],
                 "share_type": row["share_type"], "owner_id": row["owner_id"], "list": null, "receipt": null,
-                "pending": pending_share }),
+                "pending": pending_share, "live": live }),
             );
         };
         let receipt = self.receipt_of(&row).await;
@@ -370,7 +372,7 @@ impl Sharing {
         });
         Ok(
             json!({ "ok": true, "share_id": row["share_id"], "status": row["status"], "share_type": row["share_type"],
-            "owner_id": row["owner_id"], "list": list, "receipt": shown, "pending": pending_share || newer }),
+            "owner_id": row["owner_id"], "list": list, "receipt": shown, "pending": pending_share || newer, "live": live }),
         )
     }
 

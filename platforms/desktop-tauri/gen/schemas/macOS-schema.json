@@ -789,6 +789,12 @@
           "markdownDescription": "Allows the main application to sign authentication challenges with its protected device key."
         },
         {
+          "description": "Allows the canonical main page to arm the phone's alarms and write eVe's appointments into its calendar.",
+          "type": "string",
+          "const": "device-alarms",
+          "markdownDescription": "Allows the canonical main page to arm the phone's alarms and write eVe's appointments into its calendar."
+        },
+        {
           "description": "Allows the canonical main page to use native OS notification and call capabilities.",
           "type": "string",
           "const": "notifications",

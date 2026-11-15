@@ -187,7 +187,8 @@ function formatDate(value, reference, allDay = false, timezones = []) {
     return allDay ? base : `${base}T${parts.hour}${parts.minute}${parts.second}${reference?.params?.TZID || (reference && !reference.value.endsWith('Z')) ? '' : 'Z'}`;
 }
 
-function ruleValue(rule) {
+// The RRULE value of a canonical recurrence: the .ics export, and the phone's own calendar (calendar_device_export.js).
+export function ruleValue(rule) {
     // Preserve rules the editor cannot express; structured edits override recognized fields.
     const parts = Object.fromEntries(String(rule.rrule || '').split(';').filter(Boolean).map(p => p.split('=')));
     if (rule.freq) parts.FREQ = rule.freq.toUpperCase();

@@ -1,6 +1,7 @@
 import { extractEventPatch, eventDeletedPropertyKeys, eventExpectedPropertyVersions, assertIdempotentEventReplay } from '../../../../shared/adole_event_contract.js';
 import { personalProfileFromProperties } from '../../../../shared/profile_sharing.js';
 import { sanitizeAtomeProperties } from '../../../../shared/atome_contract.js';
+import { assertSetTargetDeclared } from '../../../../shared/atome_type_gate.js';
 import { isDeviceAtomeId } from '../../../../shared/device_scope_contract.js';
 import { mapStateCurrentToAtome } from './atome_record_projection.js';
 // Installation-scoped browser guest persistence. This is the only local guest
@@ -125,6 +126,9 @@ export async function commitWorkspaceEvents(ownerId, inputs, { actorType = 'user
                                 }
                                 const requestedOwner = event.owner_id || patch.owner_id || patch.ownerId;
                                 if (requestedOwner && String(requestedOwner) !== String(ownerId)) throw new Error('workspace_identity_mismatch');
+                                // A project write never creates an atome it does not name (no typeless ghost).
+                                assertSetTargetDeclared({ kind: event.kind, patch, declaredType: event.type || event.atome_type,
+                                    targetExists: Boolean(previous), projectId: event.payload?.scope === 'global' ? null : event.project_id });
                                 // gps_trip revision starts at value 0 / particle version 1 and is
                                 // incremented by every GPS transaction, including native transitions.
                                 // This also validates imported GPS states without a second version store.
@@ -161,26 +165,64 @@ export async function commitWorkspaceEvents(ownerId, inputs, { actorType = 'user
         });
     } catch (error) { throw failure || new Error(storageError(error)); }
     await dropDeletedFiles(ownerId, events.filter(event => event.kind === 'delete').map(event => event.atome_id));
+    await restoreDeletedFiles(ownerId, events.filter(event => event.kind === 'restore').map(event => event.atome_id));
     return { ok: true, success: true, events, event: events[0] };
 }
 
-// A media deleted, here or on another device (its deleted state imported): its bytes leave this browser's file store,
-// so a later pass never uploads them again (`synchronizeBrowserWorkspace`) nor the service worker serves them
-// (offline_media.js; rule 21, register R-115 D36). A kept file is named by its atome, else by its stored name.
+// A media deleted, here or on another device (its deleted state imported): its bytes are marked
+// `deleted_at`, so no listing reads them (`listGuestFiles`), a later pass never uploads them again
+// (`synchronizeBrowserWorkspace`) nor the service worker serves them (offline_media.js; rule 21,
+// register R-115 D36). Its `restore` (the undo of the delete) clears the mark; a mark older than
+// FILE_TRASH_KEEP_MS is erased. Erasing at once lost the take when the deletion was undone (the
+// atome came back, its video did not). A kept file is named by its atome, else by its stored name.
+// A file another live atome still holds (a duplicate shares its source's file, two media can share
+// a name) stays: deleting one atome never takes the bytes of another.
+const FILE_TRASH_KEEP_MS = 30 * 24 * 60 * 60 * 1000;
+
 async function dropDeletedFiles(ownerId, atomeIds) {
     if (!atomeIds.length) return;
+    const now = new Date();
     await transact([STORE_RECORDS, STORE_FILES], 'readwrite', tx => {
         const files = tx.objectStore(STORE_FILES), owned = files.getAll(ownerKeyRange(ownerId));
-        owned.onsuccess = () => {
-            if (!owned.result.length) return;
-            for (const atomeId of new Set(atomeIds.map(String))) {
-                const found = tx.objectStore(STORE_RECORDS).get(key(ownerId, atomeId));
-                found.onsuccess = () => {
-                    if (!found.result?.deleted_at) return;
-                    const name = found.result.properties?.file_name;
-                    owned.result.filter(file => String(file.atome_id) === atomeId || (name && file.file_name === name)).forEach(file => files.delete(file.key));
-                };
+        const held = tx.objectStore(STORE_RECORDS).getAll(ownerKeyRange(ownerId));
+        held.onsuccess = () => {
+            if (!owned.result?.length) return;
+            const live = held.result.filter(record => !record.deleted_at);
+            const liveIds = new Set(live.map(record => String(record.atome_id)));
+            const liveNames = new Set(live.map(record => record.properties?.file_name).filter(Boolean));
+            const byId = new Map(held.result.map(record => [String(record.atome_id), record]));
+            for (const file of owned.result) {
+                if (file.deleted_at && now - new Date(file.deleted_at) >= FILE_TRASH_KEEP_MS) files.delete(file.key);
             }
+            for (const atomeId of new Set(atomeIds.map(String))) {
+                const deleted = byId.get(atomeId);
+                if (!deleted?.deleted_at) continue;
+                const name = deleted.properties?.file_name;
+                owned.result
+                    .filter(file => !file.deleted_at)
+                    .filter(file => String(file.atome_id) === atomeId || (name && file.file_name === name))
+                    .filter(file => !liveNames.has(file.file_name) && !(file.atome_id && liveIds.has(String(file.atome_id))))
+                    .forEach(file => files.put({ ...file, deleted_at: now.toISOString() }));
+            }
+        };
+    });
+}
+
+// The undo of a delete: the files of each atome of `atomeIds` live again are listed again.
+async function restoreDeletedFiles(ownerId, atomeIds) {
+    if (!atomeIds.length) return;
+    const wanted = new Set(atomeIds.map(String));
+    await transact([STORE_RECORDS, STORE_FILES], 'readwrite', tx => {
+        const files = tx.objectStore(STORE_FILES), owned = files.getAll(ownerKeyRange(ownerId));
+        const held = tx.objectStore(STORE_RECORDS).getAll(ownerKeyRange(ownerId));
+        held.onsuccess = () => {
+            const restored = held.result.filter(record => !record.deleted_at && wanted.has(String(record.atome_id)));
+            if (!restored.length || !owned.result?.length) return;
+            const ids = new Set(restored.map(record => String(record.atome_id)));
+            const names = new Set(restored.map(record => record.properties?.file_name).filter(Boolean));
+            owned.result
+                .filter(file => file.deleted_at && (ids.has(String(file.atome_id)) || names.has(file.file_name)))
+                .forEach(({ deleted_at: _deletedAt, ...file }) => files.put(file));
         };
     });
 }
@@ -247,7 +289,7 @@ export async function putGuestFile(ownerId, { file_id: fileId = null, name, blob
 
 export async function listGuestFiles(ownerId) {
     const files = await transact([STORE_FILES], 'readonly', (transaction) => requestValue(transaction.objectStore(STORE_FILES).getAll()));
-    return (files || []).filter((file) => file.owner_id === String(ownerId));
+    return (files || []).filter((file) => file.owner_id === String(ownerId) && !file.deleted_at);
 }
 
 function rebindGuestMedia(value, fromOwner, toOwner) {
@@ -404,6 +446,7 @@ export async function importWorkspaceStates(ownerId, states) {
         };
     });
     await dropDeletedFiles(ownerId, owned.filter(state => state.deleted_at).map(state => state.atome_id));
+    await restoreDeletedFiles(ownerId, owned.filter(state => !state.deleted_at).map(state => state.atome_id));
 }
 
 export async function acknowledgeWorkspaceFile(ownerId, fileId) {

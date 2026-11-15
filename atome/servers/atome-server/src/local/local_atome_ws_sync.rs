@@ -74,16 +74,19 @@ where
                 &credential.remote_user_id,
                 slice,
             )?;
-            // A media deleted elsewhere: its copy on this device goes (local_atome_media_removal.rs, D36).
-            for (event, written) in slice.iter().zip(&written) {
-                if *written && event["kind"].as_str() == Some("delete") {
-                    super::local_atome_media_removal::remove_deleted_media(
-                        &db,
-                        state.storage_root(),
-                        event["atome_id"].as_str(),
-                    )?;
-                }
-            }
+            // A media deleted elsewhere: its copy on this device leaves its listings, kept aside;
+            // its restore (an undo made elsewhere) puts it back (local_atome_media_removal.rs, D36).
+            let applied: Vec<Value> = slice
+                .iter()
+                .zip(&written)
+                .filter(|(_, written)| **written)
+                .map(|(event, _)| event.clone())
+                .collect();
+            super::local_atome_media_removal::apply_media_lifecycle(
+                &db,
+                state.storage_root(),
+                &applied,
+            )?;
             inserted.extend(written);
         }
         tokio::task::yield_now().await;

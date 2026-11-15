@@ -42,6 +42,15 @@ pub async fn handle_history_command(
         })?;
         if let Some(events) = result["events"].as_array() {
             announce_committed_events(&db, events);
+            // Undoing a delete restores the atome: its bytes come back from `.deleted/`; redoing
+            // it moves them aside again (local_atome_media_removal.rs).
+            if result["ok"] == json!(true) {
+                crate::local::local_atome_media_removal::apply_media_lifecycle(
+                    &db,
+                    state.storage_root(),
+                    events,
+                )?;
+            }
         }
         Ok(result)
     });

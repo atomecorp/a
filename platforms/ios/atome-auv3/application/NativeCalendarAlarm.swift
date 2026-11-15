@@ -318,17 +318,26 @@ final class NativeCalendarAlarm {
         var scheduled: [String] = []
         var skipped: [String] = []
         let lock = NSLock()
+        // A desired alarm is laid again whole: the weekdays it no longer has leave with its old requests.
+        center.removePendingNotificationRequests(withIdentifiers: desired.keys.flatMap { notificationIdentifiers(for: $0) })
         for (id, descriptor) in desired {
-            guard let request = notificationRequest(id: id, descriptor: descriptor) else {
+            let requests = notificationRequests(id: id, descriptor: descriptor)
+            if requests.isEmpty {
                 lock.lock(); skipped.append(id); lock.unlock()
                 continue
             }
-            group.enter()
-            center.add(request) { error in
-                lock.lock()
-                if error == nil { scheduled.append(id) }
-                lock.unlock()
-                group.leave()
+            var added = 0
+            for request in requests {
+                group.enter()
+                center.add(request) { error in
+                    lock.lock()
+                    if error == nil {
+                        added += 1
+                        if added == 1 { scheduled.append(id) }
+                    }
+                    lock.unlock()
+                    group.leave()
+                }
             }
         }
         group.notify(queue: .main) {
@@ -340,32 +349,30 @@ final class NativeCalendarAlarm {
         }
     }
 
-    private static func notificationRequest(id: String, descriptor: [String: Any]) -> UNNotificationRequest? {
+    /// The requests of one alarm. A weekly alarm on several weekdays is one repeating request per weekday:
+    /// UNCalendarNotificationTrigger matches a single weekday, so a daily routine (seven weekdays) is seven requests.
+    private static func notificationRequests(id: String, descriptor: [String: Any]) -> [UNNotificationRequest] {
         let mode = (descriptor["mode"] as? String) ?? "fixed"
         let content = UNMutableNotificationContent()
         let title = (descriptor["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         content.title = (title?.isEmpty == false) ? title! : "Atome"
         content.sound = (descriptor["sound"] as? String).map { UNNotificationSound(named: UNNotificationSoundName("\($0).caf")) } ?? .default
-        let trigger: UNNotificationTrigger?
         if mode == "relative", let hour = descriptor["hour"] as? Int, let minute = descriptor["minute"] as? Int {
-            var components = DateComponents()
-            components.hour = hour
-            components.minute = minute
-            let weekdays = descriptor["weekdays"] as? [Int] ?? []
-            // UNCalendarNotificationTrigger cannot express a set of weekdays in
-            // one request: AlarmKit is the only clean path for that on iOS 26+.
-            // Pre-26 falls back to the first weekday of the set, or daily.
-            components.weekday = weekdays.first ?? 0
-            trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: !weekdays.isEmpty)
-        } else if let fireAt = descriptor["fireAt"] as? String,
-                  let date = ISO8601DateFormatter().date(from: fireAt), date > Date() {
-            let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
-            trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
-        } else {
-            trigger = nil
+            let weekdays = (descriptor["weekdays"] as? [Int] ?? []).filter { (1...7).contains($0) }
+            return weekdays.map { weekday in
+                var components = DateComponents()
+                components.hour = hour
+                components.minute = minute
+                components.weekday = weekday
+                let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
+                return UNNotificationRequest(identifier: weekdayIdentifier(for: id, weekday: weekday), content: content, trigger: trigger)
+            }
         }
-        guard let trigger else { return nil }
-        return UNNotificationRequest(identifier: notificationIdentifier(for: id), content: content, trigger: trigger)
+        guard let fireAt = descriptor["fireAt"] as? String,
+              let date = ISO8601DateFormatter().date(from: fireAt), date > Date() else { return [] }
+        let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
+        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+        return [UNNotificationRequest(identifier: notificationIdentifier(for: id), content: content, trigger: trigger)]
     }
 
     /// AlarmKit and local notifications are two stores: an alarm mirrored as a
@@ -374,7 +381,7 @@ final class NativeCalendarAlarm {
     /// banner a deleted item left in Notification Center with them. Only the
     /// identifiers derived from these atome alarm ids are touched.
     private static func removeNotifications(atomeIds: [String]) {
-        let identifiers = atomeIds.map { notificationIdentifier(for: $0) }
+        let identifiers = atomeIds.flatMap { notificationIdentifiers(for: $0) }
         guard !identifiers.isEmpty else { return }
         let center = UNUserNotificationCenter.current()
         center.removePendingNotificationRequests(withIdentifiers: identifiers)
@@ -383,6 +390,15 @@ final class NativeCalendarAlarm {
 
     private static func notificationIdentifier(for atomeId: String) -> String {
         notificationPrefix + nativeId(for: atomeId).uuidString.lowercased()
+    }
+
+    private static func weekdayIdentifier(for atomeId: String, weekday: Int) -> String {
+        notificationIdentifier(for: atomeId) + ".w\(weekday)"
+    }
+
+    /// Every identifier an atome alarm may hold: its one-off request and one per weekday.
+    private static func notificationIdentifiers(for atomeId: String) -> [String] {
+        [notificationIdentifier(for: atomeId)] + (1...7).map { weekdayIdentifier(for: atomeId, weekday: $0) }
     }
 
     // MARK: - Cancellation and inventory
@@ -412,7 +428,7 @@ final class NativeCalendarAlarm {
         }
         UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
             let present = Set(requests.map { $0.identifier.lowercased() })
-            let ids = owned.filter { present.contains(notificationIdentifier(for: $0).lowercased()) }.sorted()
+            let ids = owned.filter { id in notificationIdentifiers(for: id).contains { present.contains($0.lowercased()) } }.sorted()
             respond(completion, ["ok": true, "platform": "notification", "ids": ids, "owned": Array(owned).sorted()], nil)
         }
     }

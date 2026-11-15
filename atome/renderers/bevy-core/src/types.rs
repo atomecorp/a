@@ -402,7 +402,7 @@ pub struct AtomeRenderNode {
     pub clip_rounded_rects: Vec<[f32; 8]>,
     /// The scroll areas' edge fades over the atom (`AtomeClipFades`).
     #[serde(default)]
-    pub clip_fades: Vec<[f32; 7]>,
+    pub clip_fades: Vec<crate::components::ClipFade>,
     #[serde(default = "default_transform_scale")]
     pub scale: [f32; 2],
     #[serde(default)]

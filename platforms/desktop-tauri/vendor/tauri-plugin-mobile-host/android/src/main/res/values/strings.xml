@@ -7,4 +7,6 @@
     <string name="atome_answer">Answer</string>
     <string name="atome_decline">Decline</string>
     <string name="atome_end">End call</string>
+    <string name="atome_alarm_channel">Atome alarms</string>
+    <string name="atome_alarm_stop">Stop</string>
 </resources>

@@ -23,7 +23,7 @@ test('event streams use stable sequences and property history links to canonical
                 id: 'sync_schema_event_b', ts: '2026-01-01T00:00:01.000Z', kind: 'set',
                 atome_id: atomeId, project_id: projectId,
                 actor: { type: 'user', id: ownerId }, source: 'device-a',
-                payload: { props: { left: 20 } }
+                payload: { props: { type: 'shape', left: 20 } }
             },
             {
                 id: 'sync_schema_event_a', ts: '2026-01-01T00:00:00.000Z', kind: 'set',

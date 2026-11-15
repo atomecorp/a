@@ -116,15 +116,29 @@ async fn a_whole_typed_read_walks_the_type_from_a_cursor_each_row_once() {
             [],
         ).expect("owner atome");
         for index in 0..7 {
-            let (id, kind) = (format!("event-{index}"), if index == 3 { "note" } else { "calendar_event" });
-            let deleted = if index == 5 { ",\"__deleted\":true" } else { "" };
+            let (id, kind) = (
+                format!("event-{index}"),
+                if index == 3 { "note" } else { "calendar_event" },
+            );
+            let deleted = if index == 5 {
+                ",\"__deleted\":true"
+            } else {
+                ""
+            };
+            // The commit keeps the type in the envelope only: the even rows (made on this
+            // device) carry none in their properties; the others came with one from a server.
+            let typed = if index % 2 == 0 {
+                String::new()
+            } else {
+                format!("\"type\":\"{kind}\",")
+            };
             db.execute(
                 "INSERT INTO atomes (atome_id, atome_type, owner_id, creator_id) VALUES (?1, ?2, 'owner', 'owner')",
                 rusqlite::params![id, kind],
             ).expect("event atome");
             db.execute(
                 "INSERT INTO state_current (atome_id, owner_id, properties, version) VALUES (?1, 'owner', ?2, 1)",
-                rusqlite::params![id, format!("{{\"type\":\"{kind}\"{deleted}}}")],
+                rusqlite::params![id, format!("{{{typed}\"title\":\"{index}\"{deleted}}}")],
             ).expect("event state");
         }
     }
@@ -140,7 +154,13 @@ async fn a_whole_typed_read_walks_the_type_from_a_cursor_each_row_once() {
         .await;
         assert!(response.success, "{:?}", response.error);
         let data = response.data.expect("data");
-        ids.extend(data["states"].as_array().expect("states").iter().map(|row| row["atome_id"].as_str().unwrap().to_string()));
+        ids.extend(
+            data["states"]
+                .as_array()
+                .expect("states")
+                .iter()
+                .map(|row| row["atome_id"].as_str().unwrap().to_string()),
+        );
         after = data["next"].clone();
         if after.is_null() {
             break;

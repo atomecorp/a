@@ -198,7 +198,7 @@ fn a_record_moves_with_its_list_and_keeps_the_clips_it_lies_in() {
     // Scrolled from its top, the list's top edge now fades, its bottom one too.
     assert_eq!(
         shown.fades,
-        vec![[0.0, 100.0, 300.0, 400.0, 60.0, 60.0, 2.2]]
+        vec![[0.0, 100.0, 300.0, 400.0, 60.0, 60.0, 2.2, 0.0, 0.0]]
     );
     assert_eq!(opacity, 0.8);
 }
@@ -250,4 +250,92 @@ fn a_base_kept_from_an_earlier_description_is_cut_by_the_clips_where_they_now_li
     // Shown at offset 148 from either description: 743 − 148 = 487 + (256 − 148) = 595.
     assert_eq!(shown.position, [10.0, 595.0]);
     assert_eq!(shown.clip, Some([0.0, 595.0, 300.0, 40.0]));
+}
+
+// User, 14 Nov. 2026: an empty band in the project's rail, its tools drawn a whole former scroll away. A long rail
+// level rested scrolled to 221; the shorter level that replaced it laid its tool at offset 2, exactly where the
+// renderer had presented it. Judged by its value, the record kept its base read at 221 and moved 219 px down; the
+// other way, a tool not laid again (the same place on screen) kept the former level's offset and moved up.
+#[test]
+fn a_record_laid_again_where_it_was_presented_takes_the_offset_of_its_new_description() {
+    use bevy::prelude::*;
+    let mut app = App::new();
+    app.add_plugins(crate::AtomeBevyRendererPlugin::new(
+        crate::AtomeBevyRendererConfig::empty(430.0, 932.0),
+    ));
+    app.update();
+    let node: crate::AtomeRenderNode = serde_json::from_value(serde_json::json!({
+        "id":"tool", "kind":"shape", "logical_position":[10.0, 500.0], "logical_size":[40.0, 40.0],
+        "layer":3, "color":[0.0,1.0,0.0,1.0], "opacity":1.0
+    }))
+    .unwrap();
+    let entity = crate::apply_spawn(app.world_mut(), node).unwrap();
+    let spec = |max: f64, offset: f64, jump: bool| ScrollTreeSpec {
+        areas: vec![ScrollAreaSpec {
+            id: "rail".into(),
+            motion: MOTION,
+            area_box: [0.0, 100.0, 60.0, 600.0],
+            max,
+            offset,
+            jump,
+            edge_mask: None,
+            thumb_travel: 0.0,
+        }],
+        records: vec![ScrollRecordSpec {
+            id: "tool".into(),
+            opacity: 1.0,
+            role: ScrollRecordRole::Content,
+            area: None,
+            chain: vec![ScrollChainLink {
+                area: Some("rail".into()),
+                clip: None,
+            }],
+        }],
+    };
+    let y = |app: &App| {
+        app.world()
+            .get::<crate::AtomeLogicalPosition>(entity)
+            .unwrap()
+            .y
+    };
+    let lay = |app: &mut App, x: f32, y: f32| {
+        let patch: crate::AtomeTransformPatch = serde_json::from_value(serde_json::json!({
+            "id":"tool", "logical_position":[x, y], "logical_size":[40.0, 40.0]
+        }))
+        .unwrap();
+        crate::apply_transform(app.world_mut(), patch).unwrap();
+    };
+    let mut tree = ScrollTree::new(spec(300.0, 221.0, false));
+    tree.present(app.world_mut(), 0.0).unwrap();
+    assert_eq!(y(&app), 500.0);
+    // The shorter level: the same tool laid at the same place, for offset 2.
+    lay(&mut app, 10.0, 500.0);
+    tree.describe(spec(2.0, 2.0, true));
+    tree.present(app.world_mut(), 16.0).unwrap();
+    assert_eq!(y(&app), 500.0, "the tool left its place in the rail");
+    // Described again without the browser laying it: its base stays the one it read.
+    tree.describe(spec(2.0, 2.0, false));
+    tree.present(app.world_mut(), 32.0).unwrap();
+    assert_eq!(y(&app), 500.0);
+    // Scrolled by the renderer, then laid again by the browser where it now shows, for that offset.
+    // A longer level, revealed at 186: the tool, two cases further down its content, lies at the same place on
+    // screen and is not laid again; its pose holds for that offset.
+    tree.describe(spec(348.0, 188.0, true));
+    tree.present(app.world_mut(), 40.0).unwrap();
+    assert_eq!(
+        y(&app),
+        500.0,
+        "the tool not laid again moved with the former offset"
+    );
+    tree.describe(spec(2.0, 2.0, true));
+    tree.present(app.world_mut(), 44.0).unwrap();
+    assert_eq!(y(&app), 500.0);
+    tree.motion_mut("rail").unwrap().wheel(-2.0);
+    tree.present(app.world_mut(), 48.0).unwrap();
+    let shown = y(&app);
+    assert_eq!(shown, 502.0);
+    lay(&mut app, 10.0, shown);
+    tree.describe(spec(2.0, 0.0, false));
+    tree.present(app.world_mut(), 64.0).unwrap();
+    assert_eq!(y(&app), 502.0);
 }

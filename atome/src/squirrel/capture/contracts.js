@@ -15,6 +15,8 @@ const definitions = {
     start: [{ kind: { type: 'string', enum: CAPTURE_KINDS } }, ['kind'],
         'Open a capture on the Dashboard and start it at once in the last project: a sound, a video, the photo camera, a dictated text, a MIDI take. Its list shows under the preview.', true, 'write'],
     stop: [{}, [], 'End the take recording (it is kept and becomes current in its list).', true, 'write'],
+    close: [{}, [], 'Close the capture open on the Dashboard (its bottom record tool): a take recording is stopped and kept, the camera turned off; '
+        + 'a capture begun from a list (Créer) gives that list back.', true, 'write'],
     camera: [{}, [], 'Film with the next camera while one shows (Dashboard capture, a take on a project, the import panel): the photo camera reopens on it; '
         + 'a video take ends there, kept, and the next take starts at once on it. CAMERA_UNAVAILABLE: no camera showing, or only one camera.', true, 'write'],
     show: [{ atome_id: id, step: { type: 'string', enum: ['previous', 'next'] } }, [],
@@ -40,6 +42,6 @@ export const validateCaptureInput = (action, input) => {
 };
 export const captureError = error => (CAPTURE_ERRORS.includes(error?.code || error?.message || error) ? (error?.code || error?.message || error) : 'WRITE_FAILED');
 export const CAPTURE_ASSISTANT_INSTRUCTIONS = 'Captures and their lists: « enregistre un son / une vidéo », « prends une photo », « dicte un texte » call captures.start '
-    + '(kind audio, video, photo, text); « arrête » during a take calls captures.stop; « change de caméra », « l\'autre caméra » captures.camera. On the list open: captures.state gives its items; « la précédente », '
+    + '(kind audio, video, photo, text); « arrête » during a take calls captures.stop; « ferme la capture » captures.close; « change de caméra », « l\'autre caméra » captures.camera. On the list open: captures.state gives its items; « la précédente », '
     + '« la suivante » call captures.show (step); « lis-la », « joue-la », « lis-moi ce texte » captures.play; « pause » captures.pause; « cache / montre l\'aperçu » '
     + 'captures.preview; « plein écran », « sors du plein écran » captures.fullscreen; « supprime-la » captures.delete with the atome_id of the current item (captures.state). Never invent an atome_id.';

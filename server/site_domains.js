@@ -89,7 +89,9 @@ export function createSiteDomains({ query, store, publishing, resolver = dnsProm
     const connect = async (ownerId, { site_id: siteId, domain: input }) => {
         const domain = normalized(input);
         if (!DOMAIN.test(domain)) return fail('DOMAIN_INVALID');
-        return attach(ownerId, siteId, domain, 'pending');
+        // A domain of « Mes domaines » (bought here, R-157) is active at once: atome holds its DNS.
+        const held = await one('SELECT owner_id FROM site_domains WHERE domain = ?', [domain]);
+        return attach(ownerId, siteId, domain, held?.owner_id === ownerId ? 'active' : 'pending');
     };
     const issueCertificate = domain => new Promise(resolve => {
         if (!certCommand) return resolve(false);
@@ -181,8 +183,8 @@ export function createSiteDomains({ query, store, publishing, resolver = dnsProm
         await run('UPDATE site_domains SET mail_json = ? WHERE domain = ?', [JSON.stringify(next), row.domain]);
         return { ok: true, boxes: next };
     };
-    const domains = async ownerId => (await query('all', 'SELECT domain, state, expires_at, auto_renew, mail_json FROM site_domains WHERE owner_id = ?', [ownerId]) || [])
-        .map(row => ({ domain: row.domain, state: row.state, expires_at: row.expires_at, auto_renew: row.auto_renew === 1,
+    const domains = async ownerId => (await query('all', 'SELECT domain, state, expires_at, auto_renew, mail_json, created_at FROM site_domains WHERE owner_id = ?', [ownerId]) || [])
+        .map(row => ({ domain: row.domain, state: row.state, expires_at: row.expires_at, created_at: row.created_at, auto_renew: row.auto_renew === 1,
             renew: shownPrice(domainPrice(TLD_RENEW_CENTS[row.domain.split('.').pop()] || TLD_PROVIDER_CENTS[row.domain.split('.').pop()] || 0)), boxes: parse(row.mail_json) }));
 
     const handle = async (data, userId) => {

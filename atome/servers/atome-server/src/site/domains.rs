@@ -409,7 +409,13 @@ impl Site {
                 if !domain_shaped(&domain) {
                     return Ok(Some(fail("DOMAIN_INVALID")));
                 }
-                self.attach(user, &raw(data.get("site_id")), &domain, "pending")
+                // A domain of « Mes domaines » (bought here, R-157) is active at once: atome holds its DNS.
+                let state = if self.owned_domain(user, data).await?.is_some() {
+                    "active"
+                } else {
+                    "pending"
+                };
+                self.attach(user, &raw(data.get("site_id")), &domain, state)
                     .await?
             }
             "domain_verify" => self.verify(user, data).await?,

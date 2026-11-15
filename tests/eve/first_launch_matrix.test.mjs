@@ -88,7 +88,8 @@ describe('first launch canonical composition', () => {
         const events = new Map();
         const calendar = { createEvent: async event => { const id = 'event_' + ++serial; events.set(id, { ...event, id }); return { ok: true, event: { id } }; },
             updateEvent: async (id, changes) => { events.set(id, { ...events.get(id), ...changes }); return { ok: true, event: { id } }; },
-            deleteEvent: async id => { events.delete(id); return { ok: true }; } };
+            deleteEvent: async id => (events.delete(id) ? { ok: true } : { ok: false, error: 'calendar_event_not_found' }),
+            getEvent: async id => events.get(id) || null };
         const runtime = createProjectProgramRuntime({ actor: () => 'user', project: () => 'project', calendar, translate: key => key,
             read: async id => (id === 'project' ? { owner_id: 'user', properties: { project_program: program } } : events.get(id) || null),
             commit: async list => { program = list[0].props.project_program; return { ok: true }; } });
@@ -98,6 +99,10 @@ describe('first launch canonical composition', () => {
         expect(result.ok).toBe(true); expect(program.bricks).toEqual(['nap']); expect(program.status).toBe('draft');
         expect([...events.values()].map(event => event.recurrence.freq)).toEqual(Array(events.size).fill('daily'));
         expect(result.routine.find(item => item.key === 'bedtime').time).toBe('23:00');
+        // An event the person deleted in the calendar: Valider again makes it again instead of failing.
+        const bedtimeId = program.routine.items.find(item => item.key === 'bedtime').event_id; events.delete(bedtimeId);
+        expect((await runtime.invoke({ project_id: 'project', operation: 'configure', bricks: ['nap'], calendar: true, sleep_preferences: prefs })).ok).toBe(true);
+        expect(events.has(program.routine.items.find(item => item.key === 'bedtime').event_id)).toBe(true);
         expect((await runtime.invoke({ project_id: 'project', operation: 'configure', bricks: [], calendar: false, sleep_preferences: prefs })).ok).toBe(true);
         expect([...events.values()].every(event => event.suspended)).toBe(true); expect(events.has('event_1')).toBe(false);
         expect((await runtime.invoke({ project_id: 'project', operation: 'configure', bricks: ['nap'], calendar: true,

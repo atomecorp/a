@@ -87,6 +87,10 @@ final class AppPageHost {
                 AppNativeClipboardController.shared.handle(command: command, payload: payload, completion: completion)
             } else if AppNativeTextRecognizer.canHandle(command: command) {
                 AppNativeTextRecognizer.shared.handle(command: command, payload: payload, completion: completion)
+            } else if NativeDeviceCalendar.canHandle(command: command) {
+                NativeDeviceCalendar.shared.handle(command: command, payload: payload, completion: completion)
+            } else if NativeAlarmSounds.canHandle(command: command) {
+                NativeAlarmSounds.shared.handle(command: command, payload: payload, completion: completion)
             } else if NativeCalendarAlarm.canHandle(command: command) {
                 NativeCalendarAlarm.shared.handle(command: command, payload: payload, completion: completion)
             } else if WatchLinkInbox.canHandle(command: command) {

@@ -81,14 +81,12 @@ fn commit_message_events(
         Ok(committed)
     })?;
     announce_committed_events(&db, &committed);
-    // A media deleted here: its local bytes go too (local_atome_media_removal.rs, D36).
-    crate::local::local_atome_media_removal::remove_deleted_media(
+    // A media deleted here: its local bytes leave its listings, kept aside for an undo; a
+    // restore puts them back (local_atome_media_removal.rs, D36).
+    crate::local::local_atome_media_removal::apply_media_lifecycle(
         &db,
         state.storage_root(),
-        committed
-            .iter()
-            .filter(|event| event.get("kind").and_then(JsonValue::as_str) == Some("delete"))
-            .filter_map(|event| event.get("atome_id").and_then(JsonValue::as_str)),
+        &committed,
     )?;
     Ok(committed)
 }

@@ -55,5 +55,9 @@ export const SHOPPING_ITEM_TYPE = Object.freeze({ type: SHOPPING_ITEM_ATOME_TYPE
     product: SHOPPING_PRODUCT_SCHEMA, favorite: { type: 'boolean' }, price: SHOPPING_PRICE_SCHEMA, image: SHOPPING_IMAGE_SCHEMA, revision: { type: 'number', minimum: 0 },
     // Set aside in Quotidien's « À éviter » (never in the basket), and since when.
     avoided: { type: 'boolean' }, avoided_at: { type: 'string' },
+    // In Achat's web Panier (R-157): wished, put in the cart to be bought on the web, until Valider buys it (checked).
+    in_cart: { type: 'boolean' },
+    // Who put it in the list and who bought it (account ids): a list shared live says it by name (R-161).
+    added_by: { type: 'string', maxLength: 200 }, checked_by: { type: 'string', maxLength: 200 },
     access: { type: 'string', enum: ['private'] }, visibility: { type: 'string', enum: ['private'] }
 } });

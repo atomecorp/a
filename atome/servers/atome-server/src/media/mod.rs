@@ -1,6 +1,6 @@
 // Media and files: a video made playable (playback, shared with Tauri's local
 // server), the upload routes into a person's home (uploads, storage, wallpaper) and the
-// reads of its files (downloads, served, audio_track), the bytes of a deleted media removed (removal).
+// reads of its files (downloads, served, audio_track), the bytes of a deleted media removed (removal), kept aside until purged (trash).
 #[cfg(unix)]
 mod audio_track;
 #[cfg(unix)]
@@ -15,6 +15,7 @@ pub mod removal;
 pub mod served;
 #[cfg(unix)]
 pub(crate) mod storage;
+pub mod trash;
 #[cfg(unix)]
 pub mod uploads;
 #[cfg(unix)]

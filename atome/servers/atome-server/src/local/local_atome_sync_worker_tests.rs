@@ -1,6 +1,7 @@
 use super::{
-    compute_backoff_ms, is_syncable_event, normalize_outbound_event, prune_local_only_queue,
-    recover_interrupted_queue, resolve_sync_source, resolve_sync_target, retry_at,
+    TARGET_WAIT_ATTEMPTS, compute_backoff_ms, is_permanent_refusal, is_syncable_event,
+    normalize_outbound_event, prune_local_only_queue, recover_interrupted_queue,
+    requeue_media_read_failures, resolve_sync_source, resolve_sync_target, retry_at,
     should_enqueue_sync,
 };
 use crate::local::local_atome::{EventRecord, list_sync_queue_for_actor};
@@ -255,4 +256,52 @@ async fn the_worker_leaves_a_quiesced_vault_alone_until_it_is_resumed() {
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
     worker.abort();
+}
+
+// A creation whose file could not be read is waited for, never given up: dropping it once
+// left the server with the atome's later moves alone, a typeless ghost.
+#[test]
+fn an_unreadable_media_file_is_retried_and_old_failures_go_back_to_the_queue() {
+    assert!(!is_permanent_refusal(
+        "media_read_failed:/x/take.mov:No such file",
+        1
+    ));
+    assert!(!is_permanent_refusal(
+        "media_read_failed:/x/take.mov:No such file",
+        500
+    ));
+    assert!(!is_permanent_refusal("atome_set_target_missing", 1));
+    assert!(is_permanent_refusal(
+        "atome_set_target_missing",
+        TARGET_WAIT_ATTEMPTS
+    ));
+    assert!(is_permanent_refusal("event_id_conflict", 1));
+
+    let db = Connection::open_in_memory().expect("memory db");
+    db.execute_batch(
+        "CREATE TABLE sync_queue (
+            queue_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            atome_id TEXT,
+            payload TEXT NOT NULL,
+            target_server TEXT NOT NULL,
+            status TEXT NOT NULL,
+            error_message TEXT,
+            next_retry_at TEXT
+        );
+        INSERT INTO sync_queue (atome_id, payload, target_server, status, error_message)
+        VALUES ('take', '{}', 'fastify', 'failed', 'media_read_failed:/x/take.mov:No such file'),
+               ('denied', '{}', 'fastify', 'failed', 'property_write_denied');",
+    )
+    .expect("queue fixture");
+    assert_eq!(requeue_media_read_failures(&db), Ok(1));
+    let status = |atome_id: &str| -> String {
+        db.query_row(
+            "SELECT status FROM sync_queue WHERE atome_id = ?1",
+            [atome_id],
+            |row| row.get(0),
+        )
+        .expect("queue row")
+    };
+    assert_eq!(status("take"), "pending");
+    assert_eq!(status("denied"), "failed");
 }

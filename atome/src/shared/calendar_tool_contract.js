@@ -27,7 +27,8 @@ export const CALENDAR_AGENDA_TOOLS = [
     contract('alarm.set', 'Set an agenda alarm at an ISO date with timezone or after delay_ms; or, on an event (eventId), offsetMinutes before (negative) or after (positive) its start, or its end with relativeTo end (« 15 min avant le début », « 30 min après la fin »), with what it does: a ringtone or a launch (music, media, project, tool, visio and its guests). Optional command runs a Runtime V2 tool through MCP at that time; sensitive actions still need approval. eventId/alarmId replace an existing alarm.', true, {
         at: isoDate, delay_ms: { type: 'number', minimum: 1 }, title: { type: 'string' }, message: { type: 'string' },
         offsetMinutes: { type: 'integer', minimum: -44640, maximum: 44640 }, relativeTo: { type: 'string', enum: ['start', 'end'] },
-        ringtone: { type: 'string' }, launch,
+        ringtone: { type: 'string', description: 'gentle, chime, birds, bells, gong, clock; or media with ringtone_media (a sound of the person, mp3 or mp4).' },
+        ringtone_media: { type: 'object', properties: { atome_id: { type: 'string' }, label: { type: 'string' } } }, launch,
         eventId: id, alarmId: id, projectId: id, calendarId: id,
         command: { type: 'object', description: 'Specify tool_id for Runtime V2, or tool_name for an AI/MCP registered tool; input contains its arguments.',
             properties: { tool_id: { type: 'string' }, tool_name: { type: 'string' }, action: { type: 'string' }, input: { type: 'object' } } }

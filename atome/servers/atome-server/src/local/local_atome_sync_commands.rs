@@ -43,11 +43,12 @@ pub async fn handle_sync_message(
                 environment_fingerprint,
             ) {
                 Ok(()) => {
-                    let state_republishing = super::local_atome_sync_worker::schedule_current_user_state_sync(
-                        state,
-                        user_id,
-                        remote_user_id,
-                    );
+                    let state_republishing =
+                        super::local_atome_sync_worker::schedule_current_user_state_sync(
+                            state,
+                            user_id,
+                            remote_user_id,
+                        );
                     response(
                         "sync",
                         &message,
@@ -205,8 +206,15 @@ pub async fn handle_sync_message(
                 }
             }
             if message.get("status_only").and_then(JsonValue::as_bool) == Some(true) {
-                return response("sync", &message, true,
-                    Some(json!({"pending_delivery_count": pending_delivery_count, "sync_status": sync_status})), None);
+                return response(
+                    "sync",
+                    &message,
+                    true,
+                    Some(
+                        json!({"pending_delivery_count": pending_delivery_count, "sync_status": sync_status}),
+                    ),
+                    None,
+                );
             }
             // The count and the oldest rows: the whole list (3.7 MB for an iPhone account) was
             // serialized to the page at every status read, ~345 ms of frozen page each time.
@@ -296,15 +304,34 @@ mod tests {
         assert_eq!(data["pending_delivery_count"], 1);
         assert_eq!(data["pending_count"], 105);
         let changes = data["changes"].as_array().unwrap();
-        assert_eq!((changes.len(), changes[0]["atome_id"].as_str()), (100, Some("note-000")));
+        assert_eq!(
+            (changes.len(), changes[0]["atome_id"].as_str()),
+            (100, Some("note-000"))
+        );
         assert_eq!(
             data["sync_status"]["last_error_code"],
             "property_write_denied"
         );
         // The home's status read: the state and the deliveries' count, not the pending Atomes.
-        let status = handle_sync_message(json!({"action":"get-pending","status_only":true}), "account-a", &state).await.data.unwrap();
-        assert_eq!((status["pending_delivery_count"].as_i64(), status.get("changes").is_none()), (Some(1), true));
-        assert_eq!(status["sync_status"]["last_error_code"], "property_write_denied");
+        let status = handle_sync_message(
+            json!({"action":"get-pending","status_only":true}),
+            "account-a",
+            &state,
+        )
+        .await
+        .data
+        .unwrap();
+        assert_eq!(
+            (
+                status["pending_delivery_count"].as_i64(),
+                status.get("changes").is_none()
+            ),
+            (Some(1), true)
+        );
+        assert_eq!(
+            status["sync_status"]["last_error_code"],
+            "property_write_denied"
+        );
         state.db.lock().unwrap().execute("UPDATE sync_queue SET status='synced' WHERE json_extract(payload,'$.actor.id')='account-a'", []).unwrap();
         let data = handle_sync_message(request, "account-a", &state)
             .await

@@ -10,6 +10,11 @@ the established solution before attempting a new implementation.
 
 | Symptom | Folder |
 | --- | --- |
+| Touching Carnet (Dashboard Contacts) freezes the phone, then everything lags; `contactsList` runs over a hundred times | [contacts-rubric-directory-read-loop](contacts-rubric-directory-read-loop/README.md) |
+| Contact plates and Carnet rows without photo on every device but the importing one; `file missing … contact_photo_<hash>.jpg` | [contact-photo-device-bound-path](contact-photo-device-bound-path/README.md) |
+| Rencontre people as small empty plates (name and « contact » glyph, never the photo); a person with a phone photo missing; `vault_request_too_large` | [person-plates-laid-as-level-tools](person-plates-laid-as-level-tools/README.md) |
+| iOS / Tauri: an atome made on the device is missing from its typed list (a new contact « Contact introuvable », Créer's card not in the Carnet) | [local-typed-read-misses-device-made-atomes](local-typed-read-misses-device-made-atomes/README.md) |
+| A project's « select all » shows dashed frames around nothing (typeless objects); a video take taken on the iPhone/iPad disappears; deleting a duplicate takes the original's video | [ghost-atomes-typeless-set](ghost-atomes-typeless-set/README.md) |
 | A list (Captures › Audio, Vidéo) dragged by a row: thumbnails left behind, a waveform a row away from its name, rows overlapping, worst held still | [list-rows-split-while-dragging](list-rows-split-while-dragging/README.md) |
 | A list over the Dashboard moves when a box is ticked; the next tick lands a row away; Suppr. on ticked rows deletes nothing or the wrong ones | [list-jumps-when-band-changes](list-jumps-when-band-changes/README.md) |
 | A drag on a roller (Sport values, medication Heure/Dose, a date or time) scrolls the panel instead of turning the roller | [roller-drag-scrolls-panel](roller-drag-scrolls-panel/README.md) |
