@@ -8,7 +8,7 @@ import { PROJECT_SCENES } from '../../eVe/domains/rendering/project_scene_state.
 import {
     MYSTIC_FLIP_CENTRAL_DURATION_MS, MYSTIC_FLIP_DURATION_MS,
     MYSTIC_FLIP_EASE_PLATEAU, MYSTIC_FLIP_REDUCED_DURATION_MS, MYSTIC_FLIP_STAGGER_RATIO,
-    MYSTIC_MAX_TILES, MYSTIC_SHADOW_PAD_PX,
+    MYSTIC_MAX_TILES, MYSTIC_RING_TILES, MYSTIC_SHADOW_PAD_PX,
     MYSTIC_CENTER_SIZE_RATIO, MYSTIC_SHADOW_FADE_MS,
     MYSTIC_OPENING_MS, MYSTIC_SLOTS, MYSTIC_SLOT_NAMES, mysticTileGapPx,
     computeMysticLayout, planMysticTiles,
@@ -92,8 +92,10 @@ const closeTo = (actual, expected, message) => assert.ok(
 );
 
 test('the ladder is one deterministic ring whose first eight rungs are the cross', () => {
-    assert.equal(MYSTIC_SLOT_NAMES.length, MYSTIC_MAX_TILES);
-    assert.equal(new Set(MYSTIC_SLOT_NAMES).size, MYSTIC_MAX_TILES);
+    // The ring holds its 24 rungs; the shader holds more plates (64, for the grid's pages: user, 18 Nov. 2026).
+    assert.equal(MYSTIC_SLOT_NAMES.length, MYSTIC_RING_TILES);
+    assert.equal(new Set(MYSTIC_SLOT_NAMES).size, MYSTIC_RING_TILES);
+    assert.ok(MYSTIC_RING_TILES <= MYSTIC_MAX_TILES);
     assert.deepEqual(MYSTIC_SLOT_NAMES.slice(0, 8), [
         'east', 'west', 'north', 'south', 'northWest', 'northEast', 'southWest', 'southEast'
     ]);
@@ -104,7 +106,7 @@ test('the ladder is one deterministic ring whose first eight rungs are the cross
     assert.equal(resolveMysticSlot('center'), null);
     assert.equal(resolveMysticSlots(0).length, 0);
     assert.equal(resolveMysticSlots(-4).length, 0);
-    assert.equal(resolveMysticSlots(500).length, MYSTIC_MAX_TILES);
+    assert.equal(resolveMysticSlots(500).length, MYSTIC_RING_TILES);
     assert.deepEqual(resolveMysticSlots(2.4).map((slot) => slot.name), ['east', 'west']);
     const square = resolveMysticGrid(resolveMysticSlots(8));
     assert.deepEqual([square.columns, square.rows, square.count, square.radius], [3, 3, 8, 1]);
@@ -167,12 +169,14 @@ test('the canonical desktop set owns one rung each, and only the Atom sits in th
 test('the extras fill the free rungs in the order the context gave them, and the overflow is reported', () => {
     const many = items(...Array.from({ length: 30 }, (_, index) => `extra_${index}`));
     const routed = resolveMysticMenuLayout(many);
-    assert.equal(routed.tiles.length, MYSTIC_MAX_TILES);
-    assert.equal(routed.overflow.length, 30 - MYSTIC_MAX_TILES);
+    assert.equal(routed.tiles.length, MYSTIC_RING_TILES);
+    assert.equal(routed.overflow.length, 30 - MYSTIC_RING_TILES);
     assert.deepEqual(
         routed.tiles.map((tile) => tile.item.key),
-        many.slice(0, MYSTIC_MAX_TILES).map((entry) => entry.key)
+        many.slice(0, MYSTIC_RING_TILES).map((entry) => entry.key)
     );
+    // Every tile stands on a rung: the 25th entry and on are overflow, never a tile without a slot.
+    assert.ok(routed.tiles.every((tile) => MYSTIC_SLOT_NAMES.includes(tile.slot?.name)));
     // A second entry on a rung that is already taken takes the first free one.
     const duplicated = resolveMysticMenuLayout(items('capture', 'capture', 'capture'));
     assert.deepEqual(duplicated.tiles.map((tile) => tile.slot.name), ['east', 'west', 'north']);
@@ -695,7 +699,8 @@ test('the projection carries the mystic material and names the array it rejects'
     assert.deepEqual(minimal.mystic_count, [0, 0, 0, 0]);
     assert.equal(minimal.mystic_tiles.length, MYSTIC_MAX_TILES);
     assert.equal(minimal.mystic_tiles.every((row) => row.every((component) => component === 0)), true);
-    assert.equal(minimal.surface_parameters.length, MYSTIC_MAX_TILES);
+    // The petals keep their own 24 rows (procedural_sdf.rs: `surface_parameters: [Vec4; 24]`).
+    assert.equal(minimal.surface_parameters.length, 24);
     // One faulty entry names its own array: the diagnostic cannot be ambiguous.
     assert.throws(
         () => proceduralPatch({ morph: [1, 1, 0, 0], mystic_tiles: [[1, 2, 3]] }),

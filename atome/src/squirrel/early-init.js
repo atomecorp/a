@@ -12,7 +12,7 @@ if (location.hash.startsWith('#auth-link=')) {
     };
 }
 
-// The invitation of a closed sign-up (server/auth_invites.js), stripped the same way:
+// The invitation of a closed sign-up (atome/servers/atome-server/src/auth/invites.rs), stripped the same way:
 // held in memory until the account creation of this page uses it.
 if (location.hash.startsWith('#invite=')) {
     const match = /^#invite=([A-Za-z0-9_-]{43})$/.exec(location.hash);

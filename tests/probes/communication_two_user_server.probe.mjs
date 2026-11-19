@@ -1,7 +1,6 @@
 // Two accounts on one isolated server: a message sent to an offline person is pushed once at their next connection,
 // kept once in their message stack, marked read, and still read at the connection after. The server is atome-server
-// with its Rust vault supervisor (tests/helpers/probe_server.mjs, PROBE_PREBUILT_SERVER=1 runs the binaries built);
-// since 6 Nov. 2026 a bare `node server/server.js` has no vaults (vault_supervisor_socket_missing).
+// with its Rust vault supervisor, from the binaries already built (tests/helpers/probe_server.mjs).
 import assert from 'node:assert/strict';
 import { connectUser, makeContacts, sleep, startServer } from '../helpers/probe_server.mjs';
 

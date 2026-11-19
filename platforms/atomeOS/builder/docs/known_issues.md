@@ -33,7 +33,7 @@ to ARM or a VM result to physical hardware.
   declared in the previous builder. Cog package resolution and WebGPU must be
   established; the upstream ports `www/cog/Makefile` query returned 404. No browser
   substitution, Tauri FreeBSD bundle or GPU acceleration is asserted.
-- Fastify serves browser audio; it does not make a headless audio/MIDI appliance.
+- atome-server serves browser audio; it does not make a headless audio/MIDI appliance.
   Existing MIDI ports are Web MIDI or native Tauri contracts. Autonomous audio/MIDI
   builds are explicitly blocked pending a real canonical native execution path.
 - Kernel USB drivers and JACK installation do not prove browser MIDI or real-time

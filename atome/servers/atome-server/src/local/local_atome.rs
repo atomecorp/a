@@ -2,7 +2,7 @@
 // LOCAL ATOME MODULE - ADOLE v3.0 storage for Tauri
 // =============================================================================
 // WebSocket-first operations with HTTP parity handlers.
-// Schema: atomes + particles (unified with Fastify, source: database/schema.sql)
+// Schema: atomes + particles (the one vault schema, source: database/schema.sql)
 // =============================================================================
 use super::local_atome_sync_worker::{
     enqueue_sync_event, is_syncable_event, resolve_sync_source, resolve_sync_target,
@@ -225,7 +225,7 @@ fn should_dedupe_request_id(state: &LocalAtomeState, request_id: &Option<String>
 
 // =============================================================================
 // DATABASE INITIALIZATION - ADOLE v3.0 Schema
-// UNIFIED with Fastify (database/schema.sql) - Same 9 tables + views
+// The one vault schema (database/schema.sql) - Same 9 tables + views
 // =============================================================================
 
 pub fn init_database(data_dir: &Path, journal_mode: &str) -> Result<Connection, rusqlite::Error> {

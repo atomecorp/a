@@ -151,8 +151,6 @@ const buildLocalCommandIntent = (rawUtterance, parsed, options = {}) => normaliz
     }
 });
 
-export const readMailOrderReference = () => null;
-
 export const classifyVoiceIntent = (utterance, {
     intent_id = null,
     locale = DEFAULT_LOCALE,

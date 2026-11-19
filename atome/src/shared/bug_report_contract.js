@@ -1,6 +1,6 @@
 // One contract for the bug reports, read by the eVe client that files them
 // (eVe/domains/diagnostics/bug_reports.js) and by the Fastify server that keeps
-// them (server/ws_bug_reports.js): the frames, the origins and the bounded shape
+// them (atome/servers/atome-server/src/ws_api/sources/bug_reports.rs): the frames, the origins and the bounded shape
 // of a report. A report is filed by the user (the Avancé rubric of Réglages) or
 // by the assistant on the user's request or after a request it could not do.
 //
@@ -13,7 +13,7 @@ export const BUG_REPORT_STATUS = 'bug-report-status';
 export const BUG_REPORT_ORIGINS = Object.freeze(['user_requested', 'assistant_failure', 'manual']);
 export const BUG_REPORT_STATUS_MAX = 50;
 // A report is a bug or a feature request (« Bug / Demande », one add form). A request
-// is reviewed by an admin (server/ws_feature_requests.js): validated, it joins the
+// is reviewed by an admin (atome/servers/atome-server/src/ws_api/sources/feature_requests.rs): validated, it joins the
 // Roadmap (planned → in_progress → done), refused, it carries the admin's reason.
 export const BUG_REPORT_KINDS = Object.freeze(['bug', 'request']);
 export const FEATURE_REQUEST_ADMIN = 'feature-request-admin';

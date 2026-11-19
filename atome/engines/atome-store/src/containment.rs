@@ -1,5 +1,5 @@
 // ADOLE event containment — the project an event belongs to (same rule as the
-// Fastify owner `database/adole_event_containment.js`). An event's project is a
+// retired Fastify owner `database/adole_event_containment.js`). An event's project is a
 // fact of the atome's containment, never of the project the writing client has
 // open. The client stamps every commit with its current project; that stamp only
 // places a NEW atome that has no known container. The resolved project drives the

@@ -3,7 +3,7 @@
 // speaks MCP (newline-delimited JSON-RPC) on stdin/stdout, opens its own seat on the eVe server's
 // `/ws/api` (a key paired to the person's account, accepted by the number it prints: atome_mcp_seat.mjs),
 // announces itself as that program, and forwards every request through the existing `remote-control`
-// relay (server/remoteCommandRelay.js) to a running eVe page, which answers through its own MCP layer
+// relay (atome/servers/atome-server/src/ws_api/remote_commands.rs) to a running eVe page, which answers through its own MCP layer
 // and single entry, within the families the person granted it in Réglages › Mon matériel. No HTTP route.
 //
 //   ATOME_MCP_SERVER     ws(s)://host:port/ws/api            (or --server)

@@ -1,4 +1,4 @@
-// One person's vault: the operations Fastify's vault process answers
+// One person's vault: the operations Fastify's vault process answered
 // (server/userVaultProcess.js#handleOperation), on that person's own database
 // only. The process that holds it serves one principal; every event it commits is
 // that principal's (or the one actor the caller authorized), every read is of

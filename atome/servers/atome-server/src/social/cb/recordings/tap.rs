@@ -8,7 +8,7 @@
 // An Appel's voice, in duplex, is never paused: its takes are cut at the silence instead (lot L5, decision Q4;
 // live_translate/segments.rs `PacketCut`), read on each packet's level (`ssrc-audio-level`) or, without one, its size,
 // and on the time no packet came; so each piece reaches the translation while its speaker goes on talking. Silence
-// alone makes no take.
+// alone makes no take, nor does the rest a call's end leaves with less than 1 s of voice (`PacketCut::ended`).
 use super::ogg_opus::TakeWriter;
 use super::{Recordings, Take};
 use crate::social::cb::live_translate::RoomKind;
@@ -164,14 +164,12 @@ pub async fn attach(
                 }
                 Heard::Quiet(ms) => stretch = Some((ms, false)),
                 Heard::Paused => {
-                    // An Appel's piece of silence alone is dropped, never kept.
-                    if cut.as_ref().is_some_and(|cut| !cut.holds_voice()) {
+                    // An Appel's piece with less than 1 s of voice is dropped, never kept (a CB take, cut is None:
+                    // kept as before).
+                    if cut.as_mut().is_some_and(|cut| cut.ended() == Cue::Drop) {
                         take = None;
                     }
                     close(take.take()).await;
-                    if let Some(cut) = cut.as_mut() {
-                        cut.reset();
-                    }
                 }
                 Heard::Closed => break,
             }
@@ -184,7 +182,8 @@ pub async fn attach(
                 }
             }
         }
-        if cut.as_ref().is_some_and(|cut| !cut.holds_voice()) {
+        // The call ended (Fin, the producer or the room closed): the rest of an Appel's take follows the same rule.
+        if cut.as_mut().is_some_and(|cut| cut.ended() == Cue::Drop) {
             take = None;
         }
         close(take.take()).await;

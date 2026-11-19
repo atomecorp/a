@@ -32,12 +32,8 @@ test('Natural mode retains the canonical video mirror resolver after structured 
         'Natural must claim the verified current project before the engine background guard runs');
     assert.match(unmountSource, /allowNaturalSceneUnavailable && reconciled\?\.error === 'project_view_natural_scene_unavailable'/,
         'only an explicit workspace activation may defer the first Natural scene paint to its loader');
-    const projectActivationSource = fs.readFileSync(new URL(
-        '../../eVe/intuition/matrix/core/project_workspace_activation_runtime.js', import.meta.url
-    ), 'utf8');
-    assert.match(projectActivationSource,
-        /loadProjectAtomes\(projectId,[\s\S]*preparedViewMode\.restoreProjectViewMode\(projectId\)/,
-        'workspace activation must prepare the scene before revealing its selected representation');
+    // Workspace activation loads the scene before restoring its representation: proven by behaviour in
+    // project_workspace_activation_order.test.mjs (it replaced a regex on the activation's source).
     assert.ok(
         unmountSource.indexOf('await reconcileNaturalProjectSurface()')
         < unmountSource.lastIndexOf('state.mode = naturalMode'),

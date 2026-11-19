@@ -18,8 +18,8 @@ set -e
 # - SQUIRREL_SERVICE_NAME   (default: squirrel)
 #
 # Dev controls (opt-in):
-# - AUTO_DEV_STOP=1|0        (default: 0)  Stop local Fastify dev server (port)
-# - AUTO_DEV_START=1|0       (default: 0)  Start local Fastify dev server via ./run.sh --server
+# - AUTO_DEV_STOP=1|0        (default: 0)  Stop the local dev server, atome-server (port)
+# - AUTO_DEV_START=1|0       (default: 0)  Start the local dev server, atome-server, via ./run.sh --server
 # - DEV_FASTIFY_PORT=3001    (default: 3001)
 # - AUTO_RUN_SH_FULL=1|0     (default: 0)  Start full dev framework via ./run.sh (background)
 # - AUTO_DB_PURGE=1|0        (default: 1)  Purge DB content (local or remote) after cleanup
@@ -226,7 +226,7 @@ stop_dev_fastify_if_needed() {
     fi
 
     if ! command -v lsof >/dev/null 2>&1; then
-        echo "ℹ️  AUTO_DEV_STOP=1 but lsof is not available; skipping dev Fastify stop"
+        echo "ℹ️  AUTO_DEV_STOP=1 but lsof is not available; skipping the dev server stop"
         return 0
     fi
 
@@ -236,7 +236,7 @@ stop_dev_fastify_if_needed() {
         return 0
     fi
 
-    echo "🛑 Stopping local dev Fastify on port ${DEV_FASTIFY_PORT} (PIDs: ${pids})"
+    echo "🛑 Stopping the local dev server (atome-server) on port ${DEV_FASTIFY_PORT} (PIDs: ${pids})"
     # Best-effort: TERM then KILL
     kill $pids 2>/dev/null || true
     sleep 0.5
@@ -259,7 +259,7 @@ start_dev_fastify_if_needed() {
         return 0
     fi
 
-    echo "🚀 Starting local dev Fastify: ./run.sh --server"
+    echo "🚀 Starting the local dev server (atome-server): ./run.sh --server"
     (cd "$PROJECT_ROOT" && ./run.sh --server &) || true
     DEV_START_DONE=1
     STOPPED_DEV_FASTIFY=0
@@ -313,7 +313,7 @@ echo "Project root: $PROJECT_ROOT"
 # Stop production service early (avoid DB locks + data recreation)
 stop_production_service_if_needed
 
-# Optional: stop local dev Fastify before deleting DB/data
+# Optional: stop the local dev server before deleting DB/data
 stop_dev_fastify_if_needed
 
 # Remove Tauri build artifacts
@@ -324,9 +324,9 @@ remove_dir "$RUST_TARGET" "📦 Removing Rust workspace build artifacts"
 DATABASE_STORAGE="$PROJECT_ROOT/database_storage"
 remove_dir "$DATABASE_STORAGE" "🗃️  Removing database storage"
 
-# Remove Fastify DB (SQLite) when used.
-# Mirrors database/driver.js priorities:
-# - LIBSQL_URL/TURSO_DATABASE_URL => remote DB (cannot be wiped by deleting files)
+# Remove the central database (SQLite) when used.
+# As atome-server reads them (atome/servers/atome-server/src/settings.rs):
+# - LIBSQL_URL/TURSO_DATABASE_URL => refused by atome-server (nothing to delete here)
 # - SQLITE_PATH/ADOLE_SQLITE_PATH => local SQLite file
 if command -v node >/dev/null 2>&1; then
     DB_INFO_TMP=""
@@ -457,8 +457,9 @@ try {
 const libsqlUrl = process.env.LIBSQL_URL || process.env.TURSO_DATABASE_URL || '';
 const sqliteRaw = process.env.FORCE_SQLITE_PATH || process.env.SQLITE_PATH || process.env.ADOLE_SQLITE_PATH || '';
 const sqliteDefault = path.join(projectRoot, 'database_storage', 'adole.db');
+// atome-server reads a relative path from server/ (atome/servers/atome-server/src/settings.rs#central_database).
 const sqlitePath = sqliteRaw
-  ? (path.isAbsolute(sqliteRaw) ? sqliteRaw : path.join(projectRoot, sqliteRaw))
+  ? (path.isAbsolute(sqliteRaw) ? sqliteRaw : path.join(projectRoot, 'server', sqliteRaw))
   : sqliteDefault;
 const userRootRaw = process.env.SQUIRREL_SHELL_USER_ROOT || 'data/users';
 const userRootPath = path.isAbsolute(userRootRaw) ? userRootRaw : path.join(projectRoot, userRootRaw);
@@ -497,12 +498,12 @@ NODE
     fi
 
     if [ -n "$LIBSQL_URL_VALUE" ]; then
-        echo "ℹ️  Fastify DB appears remote (LIBSQL_URL/TURSO_DATABASE_URL is set)."
-        echo "    Cannot wipe remote DB by deleting local files."
+        echo "⚠️  LIBSQL_URL/TURSO_DATABASE_URL is set: atome-server refuses to start with it (its central"
+        echo "    database is SQLite only). Remove it from the environment; nothing is deleted."
     else
         if [ -n "$SQLITE_PATH_VALUE" ]; then
             if is_safe_project_path "$SQLITE_PATH_VALUE"; then
-                echo "🗃️  Removing Fastify SQLite DB (if present): $SQLITE_PATH_VALUE"
+                echo "🗃️  Removing the central SQLite DB (if present): $SQLITE_PATH_VALUE"
                 remove_file_and_sidecars "$SQLITE_PATH_VALUE" || true
             else
                 if [[ "$ALLOW_ABSOLUTE_DB_DELETE" == "1" ]]; then
@@ -536,10 +537,10 @@ NODE
         fi
     fi
 else
-    echo "ℹ️  Skipping Fastify DB cleanup: node is not installed"
+    echo "ℹ️  Skipping the central DB cleanup: node is not installed"
 fi
 
-# Remove Fastify user data root (recordings/downloads) if configured outside project root.
+# Remove the user data root (recordings/downloads) if configured outside project root.
 if [ -n "$USER_ROOT_VALUE" ]; then
     if is_safe_project_path "$USER_ROOT_VALUE"; then
         remove_dir "$USER_ROOT_VALUE" "🗃️  Removing user data root"

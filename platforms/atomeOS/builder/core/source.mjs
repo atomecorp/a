@@ -4,7 +4,12 @@ import { execFileSync, spawn } from 'node:child_process';
 import { pipeline } from 'node:stream/promises';
 import { projectRoot } from './recipe.mjs';
 
-const sourcePaths = ['atome/src', 'server', 'database', 'package.json', 'package-lock.json', 'scripts/fix_node_modules.sh'];
+// The served client (atome/src, package files for its vendored modules), the canonical schema (database/*.sql)
+// and the Rust workspace atome-server is built from in the image (every member's sources: cargo reads the whole
+// workspace).
+const sourcePaths = ['atome/src', 'database', 'package.json', 'package-lock.json', 'scripts/fix_node_modules.sh',
+  'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'deny.toml', 'atome/engines', 'atome/servers', 'atome/renderers',
+  'platforms/web', 'platforms/ios/bevy-renderer', 'platforms/desktop-tauri', 'tools/keychain-converter', 'tests'];
 const evePaths = ['eVe.js', 'version.txt', 'core', 'default', 'default_data', 'default_values', 'domains', 'elements', 'i18n', 'intuition', 'shared', 'user', 'voice'];
 export function validateSourceEntry(mode, name) {
   if (mode !== '100644' && mode !== '100755') throw new Error(`Non-regular payload entry refused: ${name}`);

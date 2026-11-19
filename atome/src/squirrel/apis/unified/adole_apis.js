@@ -180,7 +180,7 @@ export const AdoleAPI = {
       writable_properties: payload.writableProperties }, 'sharing_auth_unavailable'),
     revoke: (shareId) => fastifyCall({ type: 'share', action: 'revoke', share_id: shareId }, 'sharing_auth_unavailable'),
     withPeer: (peerUserId) => fastifyCall({ type: 'share', action: 'with-peer', peer_user_id: peerUserId }, 'sharing_auth_unavailable'),
-    // A list sent (server/sync_share_lists.js): read it, decide its new version, keep a copy, tell its recipients it changed.
+    // A list sent (atome/servers/atome-server/src/social/sharing/lists.rs): read it, decide its new version, keep a copy, tell its recipients it changed.
     pending: () => fastifyCall({ type: 'share', action: 'pending' }, 'sharing_auth_unavailable'),
     sent: () => fastifyCall({ type: 'share', action: 'sent' }, 'sharing_auth_unavailable'),
     // The shares made to this account, every status (a recipient's received lists checked again after being away).
@@ -307,19 +307,19 @@ export const AdoleAPI = {
     block: (userId) => fastifyCall({ type: 'contact', action: 'block', userId }, 'contacts_auth_unavailable'),
     unblock: (userId) => fastifyCall({ type: 'contact', action: 'unblock', userId }, 'contacts_auth_unavailable'),
     list: () => fastifyCall({ type: 'contact', action: 'list' }, 'contacts_auth_unavailable'),
-    // « Fin du lien »: the contact leaves both books, future shares stop (server/communication_relations.js).
+    // « Fin du lien »: the contact leaves both books, future shares stop (atome/servers/atome-server/src/social/relations.rs).
     end: (userId) => fastifyCall({ type: 'contact', action: 'end', userId }, 'contacts_auth_unavailable'),
     // The requests this account sent and nobody answered, taken back (leaving the objectives network).
     withdrawRequests: () => fastifyCall({ type: 'contact', action: 'withdraw-requests' }, 'contacts_auth_unavailable')
   },
-  // The objectives network (server/objective_network.js): the people found for an objective, a report.
+  // The objectives network (atome/servers/atome-server/src/social/objective_network.rs): the people found for an objective, a report.
   objectiveNetwork: {
     people: (objectiveKey) => fastifyCall({ type: 'objective-network', action: 'people', objectiveKey }, 'objective_network_auth_unavailable'),
     report: (userId, reason) => fastifyCall({ type: 'objective-network', action: 'report', userId, reason }, 'objective_network_auth_unavailable')
   },
   // News diffusees par le serveur : publication unique, abonnements par tags, registre de tags.
   news: {
-    // `reply` ({ parent_id, anchor_ms }): a VideoTrain reply, its audience the thread's (server/news_thread.js).
+    // `reply` ({ parent_id, anchor_ms }): a VideoTrain reply, its audience the thread's (atome/servers/atome-server/src/social/news/thread.rs).
     publish: ({ publication, tags = [], audience = 'all', reply = null } = {}) => fastifyCall(
       { type: 'news', action: 'publish', publication, tags, audience, ...(reply ? { reply } : {}) }, 'news_auth_unavailable'
     ),
@@ -344,16 +344,16 @@ export const AdoleAPI = {
     reported: (threadRef) => fastifyCall({ type: 'news', action: 'reported', threadRef }, 'news_auth_unavailable'),
     dismiss: (newsId) => fastifyCall({ type: 'news', action: 'dismiss', newsId }, 'news_auth_unavailable')
   },
-  // Public events (server/public_events.js): reading goes through `shows-nearby` kind `declared`; a report here.
+  // Public events (atome/servers/atome-server/src/social/public_events/mod.rs): reading goes through `shows-nearby` kind `declared`; a report here.
   publicEvents: {
     report: (eventId, reason) => fastifyCall({ type: 'public-events', action: 'report', eventId, reason }, 'events_auth_unavailable')
   },
-  // The shop (server/ws_shop.js) with an account: buying, an order's moves, a sale's conversations, a report.
+  // The shop (atome/servers/atome-server/src/ws_api/projection_ops.rs) with an account: buying, an order's moves, a sale's conversations, a report.
   // Browsing is the public `shop-public` frame (eVe/domains/shop/shop_runtime.js).
   shop: {
     call: (action, fields = {}) => fastifyCall({ ...fields, type: 'shop', action }, 'shop_auth_unavailable')
   },
-  // Coaches (server/ws_coaches.js) with an account: asking for a session, a coach's answer, a cancellation, one's bookings.
+  // Coaches (atome/servers/atome-server/src/ws_api/projection_ops.rs) with an account: asking for a session, a coach's answer, a cancellation, one's bookings.
   // Searching is the public `coaches-public` frame (eVe/domains/coaches/coach_runtime.js).
   coaches: {
     call: (action, fields = {}) => fastifyCall({ ...fields, type: 'coaches', action }, 'coach_auth_unavailable')
@@ -363,15 +363,15 @@ export const AdoleAPI = {
   cb: {
     call: (action, fields = {}) => fastifyCall({ ...fields, type: 'cb', action }, 'cb_auth_unavailable')
   },
-  // Websites (server/site_services.js): publishing, versions, planned operations, domains, mail, hosting.
+  // Websites (atome/servers/atome-server/src/site/mod.rs): publishing, versions, planned operations, domains, mail, hosting.
   site: {
     call: (action, fields = {}, options = {}) => fastifyCall({ ...fields, type: 'site', action }, 'site_auth_unavailable', options)
   },
-  // Scheduled sends (server/scheduled_sends.js): save, cancel, send-now, read, list; the server's clock sends them.
+  // Scheduled sends (atome/servers/atome-server/src/ws_api/scheduled/mod.rs): save, cancel, send-now, read, list; the server's clock sends them.
   scheduledSends: {
     call: (action, fields = {}) => fastifyCall({ ...fields, type: 'scheduled-send', action }, 'scheduled_auth_unavailable')
   },
-  // Forums (server/forums.js): create, invite, respond, claim (an e-mail's link), leave, list, members, feed.
+  // Forums (atome/servers/atome-server/src/social/news/forums.rs): create, invite, respond, claim (an e-mail's link), leave, list, members, feed.
   // A member posts through `news.publish` with `{ forum }` as audience.
   forums: {
     call: (action, fields = {}) => fastifyCall({ ...fields, type: 'forum', action }, 'forum_auth_unavailable')

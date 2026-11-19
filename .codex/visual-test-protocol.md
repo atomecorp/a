@@ -5,7 +5,7 @@
 This runbook defines the reproducible visual acceptance procedure for the real
 Atome code paths in test/debug mode:
 
-- Web through Fastify on `http://localhost:3001`.
+- Web through atome-server on `http://localhost:3001`.
 - Tauri Debug with its embedded Axum server on `http://127.0.0.1:3000`.
 - iOS Debug installed on a physically connected iPhone.
 
@@ -31,7 +31,7 @@ alone.
 ### Web
 
 ```sh
-scripts/run_fastify.sh
+scripts/run_fastify.sh   # starts target/release/atome-server, the one server
 curl -sSI http://localhost:3001/ | head -12
 ```
 
@@ -39,7 +39,7 @@ Wait for the actual eVe shell, `window.__DEBUG__` or `#intuition`, and the
 mounted Bevy main-menu tree before interacting. Do not use `DOMContentLoaded`,
 `networkidle`, or DOM readiness as the acceptance gate.
 
-Collect browser console messages, failed network requests, and Fastify output
+Collect browser console messages, failed network requests, and atome-server output
 from startup through the end of each scenario.
 
 ### Tauri
@@ -53,7 +53,7 @@ If a sandboxed `curl` cannot reach port 3000 while the application is running,
 repeat the read-only request with the required local-system permission. Verify
 the listener with `lsof -Pan -p <squirrel-pid> -iTCP -sTCP:LISTEN`.
 
-Collect the WebView console, Axum/Rust output, and any paired Fastify logs.
+Collect the WebView console, Axum/Rust output, and any paired atome-server logs.
 
 ### iOS
 

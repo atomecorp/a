@@ -32,14 +32,12 @@ for (const root of CLIENT_ROOTS) {
     }
 }
 
-// Scan the whole Node server, not a whitelist of four composition files: the
-// forbidden `/api/auth/*` routes used to live in server/auth_routes_*.js, which
-// the whitelist never looked at -- the guard reported "passed" while 21 HTTP
-// business routes were declared in the repository.
+// Scan the whole server, not a whitelist of a few composition files: the forbidden
+// `/api/auth/*` routes once lived in files a whitelist never looked at, and the guard
+// reported "passed" while 21 HTTP business routes were declared in the repository.
 const compositionFiles = [
-    ...filesUnder('server').map((file) => path.relative(ROOT, file)),
-    // The one local host of Tauri and the iOS app, then the routes only Tauri adds.
-    ...filesUnder('atome/servers/atome-server/src/local').map((file) => path.relative(ROOT, file)),
+    // atome-server, its local host of Tauri and the iOS app included, then the routes only Tauri adds.
+    ...filesUnder('atome/servers/atome-server/src').map((file) => path.relative(ROOT, file)),
     ...filesUnder('platforms/desktop-tauri/src/server').map((file) => path.relative(ROOT, file))
 ];
 for (const relativePath of compositionFiles) {
@@ -55,12 +53,13 @@ for (const relativePath of compositionFiles) {
     }
 }
 
-// /ws/sync is mounted by server.js on the runtime that server_services.js builds.
-const syncRoute = ['server/server.js', 'server/server_services.js']
-    .map((relativePath) => fs.readFileSync(path.join(ROOT, relativePath), 'utf8'))
+// /ws/sync resolves its account on the connection itself (ws_sync/security.rs) and never
+// opens the account-wide event scope.
+const syncRoute = filesUnder('atome/servers/atome-server/src/ws_sync')
+    .map((file) => fs.readFileSync(file, 'utf8'))
     .join('\n');
-if (!syncRoute.includes('authenticateWsSyncRequest') || syncRoute.includes('"account-events"')) {
-    failures.push('server/server.js + server/server_services.js: ws/sync authentication or scope guard missing');
+if (!syncRoute.includes('resolve_principal') || syncRoute.includes('"account-events"')) {
+    failures.push('atome/servers/atome-server/src/ws_sync: ws/sync authentication or scope guard missing');
 }
 
 if (failures.length) {

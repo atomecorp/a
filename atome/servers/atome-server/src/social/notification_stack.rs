@@ -1,7 +1,7 @@
 // A person's notification stack (server/notificationStack.js, ported): the
 // `message_stack` of their user atome in the central database, read and rewritten in
-// one immediate transaction so no two writers (this one, Fastify's services still
-// pushing through `stack:push`) lose each other's changes. Each write is an ordinary
+// one immediate transaction so no two writers (this server, another process on the same
+// database) lose each other's changes. Each write is an ordinary
 // commit of the user atome by its owner. A pushed notice keeps the read, archived,
 // to-do and urgent flags its earlier copy had; the unread and unarchived ones are all
 // kept, the others only within the last `max_keep`.
@@ -439,33 +439,6 @@ impl NotificationStack {
                 Ok(json!({ "ok": true, "count": next.len(), "stack": next, "removed_id": id }))
             })
             .await
-    }
-
-    /// The `stack:<op>` SERVICE frames Fastify's services send (server/notificationStack.js).
-    pub async fn service(&self, operation: &str, payload: &JsonValue) -> Result<JsonValue, String> {
-        let user = js::text(payload.get("user_id"));
-        match operation {
-            "stack:read" => self.read(&user).await,
-            "stack:push" => {
-                let keep = payload
-                    .get("max_keep")
-                    .and_then(JsonValue::as_i64)
-                    .unwrap_or(200);
-                self.push(&user, payload["notification"].clone(), keep)
-                    .await
-            }
-            "stack:publish-own" => {
-                self.publish_own(&user, payload["notification"].clone())
-                    .await
-            }
-            "stack:update" => {
-                let patch = payload.get("patch").cloned().unwrap_or_else(|| json!({}));
-                self.update(&user, payload.get("notification_id"), &patch)
-                    .await
-            }
-            "stack:remove" => self.remove(&user, payload.get("notification_id")).await,
-            _ => Err(format!("notification_stack_operation_unknown:{operation}")),
-        }
     }
 }
 

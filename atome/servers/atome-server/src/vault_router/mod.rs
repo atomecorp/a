@@ -2,8 +2,7 @@
 // the central registries name the vault of each atome and stream, an atome
 // created under another vault's object joins that vault when a share allows it,
 // and a state, a list or a stream seen through a share shows what the share
-// grants. Fastify asks it through SERVICE frames on the control socket; its
-// `/ws/api` envelope and authentication stay there until they are ported.
+// grants. The server's `/ws/api` and `/ws/sync` ask it by `router:<operation>` (`service`).
 pub mod central;
 pub(crate) use atome_js_values as js;
 pub(crate) mod shares;

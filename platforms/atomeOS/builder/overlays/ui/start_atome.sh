@@ -10,7 +10,7 @@ chmod 700 "$XDG_RUNTIME_DIR"
 count=0
 until curl -fsS -o /dev/null "$ATOME_BACKEND_URL"; do
     count=$((count + 1))
-    [ "$count" -lt "$ATOME_WAIT_TIMEOUT" ] || { printf '%s\n' 'Fastify is not ready; display startup failed.' >&2; exit 1; }
+    [ "$count" -lt "$ATOME_WAIT_TIMEOUT" ] || { printf '%s\n' 'atome-server is not ready; display startup failed.' >&2; exit 1; }
     sleep 1
 done
 exec cage -- cog --platform=wl "$ATOME_BACKEND_URL"

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = process.cwd();
-const SOURCE_ROOTS = ['eVe', 'atome/src', 'server', 'database', 'scripts', 'tests'];
+const SOURCE_ROOTS = ['eVe', 'atome/src', 'scripts', 'tests'];
 const IGNORED_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'temp', 'coverage']);
 const MUTATING_METHOD_RE = /method\s*:\s*['"`](POST|PUT|PATCH|DELETE)['"`]/i;
 const STATE_CURRENT_RE = /\/api\/state_current\b/;
@@ -12,18 +12,14 @@ const TIMELINE_DOM_BASELINE_RE = /\breadDomState\b/;
 const TIMELINE_PREVIEW_FILE_RE = /(?:atome_timeline|molecule|timeline)/i;
 const TIMELINE_PREVIEW_DOM_COMMIT_RE = /\b(?:preview|replay)\b[\s\S]{0,1200}\b(?:querySelector|getElementById|getAttribute|dataset)\b[\s\S]{0,1200}\b(?:commitBatch|Atome\.commit|\/api\/events\/commit)/i;
 
-const ALLOWED_STATE_CURRENT_WRITERS = new Set([
-    'server/atomeRoutes.orm.js'
-]);
+// The server (atome-server, Rust) is the only writer; no JavaScript writes state_current.
+const ALLOWED_STATE_CURRENT_WRITERS = new Set([]);
 
 const ALLOWED_EVENT_COMMIT_CALLERS = new Set([
     'eVe/core/atome_commit.js',
     'eVe/core/atome_commit_effects.js',
     'eVe/core/atome_commit_url.js',
-    'atome/src/squirrel/apis/unified/adole.js',
-    'server/atomeRoutes.orm.js',
-    'server/atomeEventRoutes.js',
-    'server/server.js'
+    'atome/src/squirrel/apis/unified/adole.js'
 ]);
 
 const toRelative = (root, filePath) => path.relative(root, filePath).split(path.sep).join('/');

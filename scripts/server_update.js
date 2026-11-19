@@ -1,16 +1,18 @@
 #!/usr/bin/env node
 
-import { execSync } from 'child_process';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { execSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { verifyDeployedSource, verifyRuntimeDependencies } from './verify_deployed_source.js';
-import { backupServerIdentity, ensureProductionSecureConfig, readEnvValue } from './server_secure_config.js';
 import { checkVaultConfinement } from './check_vault_confinement.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '..');
+// The operator's tools (atome/servers/atome-server/src/bin/atome_admin.rs), built by the rust-build phase.
+const atomeAdmin = path.join(projectRoot, 'target/release/atome_admin');
 const updateRunId = process.env.RUN_ID || `${new Date().toISOString().replace(/[-:.]/g, '').slice(0, 15)}Z-${process.pid}`;
 let activePhase = 'startup';
 
@@ -119,6 +121,12 @@ function readText(filePath) {
     return fs.readFileSync(filePath, 'utf8');
 }
 
+// The first `KEY=` line's value, trimmed (the environment file's own reading rule).
+function readEnvValue(content, key) {
+    const line = content.split(/\r?\n/).find((candidate) => candidate.startsWith(`${key}=`));
+    return line ? line.slice(key.length + 1).trim() : '';
+}
+
 function writeText(filePath, content, mode) {
     fs.writeFileSync(filePath, content, { mode });
 }
@@ -210,13 +218,35 @@ function ensureEnvFile({ envDir, envFile, appEnvExample, appEnvFallback }) {
         fs.chmodSync(envFile, 0o600);
         log(`Created default env file: ${envFile}`);
     }
+}
 
-    ensureProductionSecureConfig({
-        envFile,
-        identityDir: path.join(envDir, 'identity'),
-        projectRoot,
-        log
-    });
+// JWT_SECRET and COOKIE_SECRET of at least 32 characters, and the server identity key pair, in the env file.
+function ensureSecureConfig({ envDir, envFile }) {
+    run(`'${atomeAdmin}' server-identity ensure --env-file '${envFile}' --identity-dir '${path.join(envDir, 'identity')}'`);
+}
+
+// The CB recordings' key (R-173, atome-server social/cb/recordings/seal.rs `ATOME_CB_RECORDINGS_KEY`: AES-256-GCM of the
+// takes at rest, and through HKDF the Appel's pair fingerprints), born on this host and nowhere else: 32 random bytes as 64
+// hex digits, appended to the env file when it holds no such line, the file kept 0600. A key already there is never
+// touched, whatever it holds: replacing it would leave every sealed take unreadable. The log says what was done, never the
+// key. Returns `generated` or `present`.
+export function ensureCbRecordingsKey({ envFile, say = log }) {
+    const key = 'ATOME_CB_RECORDINGS_KEY';
+    const content = fileExists(envFile) ? readText(envFile) : '';
+    if (content.split(/\r?\n/).some((line) => line.startsWith(`${key}=`))) {
+        say(`${key} present in ${envFile}: kept as it is`);
+        return 'present';
+    }
+    const separator = content === '' || content.endsWith('\n') ? '' : '\n';
+    fs.writeFileSync(envFile, `${content}${separator}${key}=${randomBytes(32).toString('hex')}\n`, { mode: 0o600 });
+    fs.chmodSync(envFile, 0o600);
+    say(`${key} generated in ${envFile} (64 hex digits, mode 0600): back the env file up with the identity, a lost key leaves the sealed takes unreadable`);
+    return 'generated';
+}
+
+// The identity key pair copied beside the update's backup.
+function backupIdentity({ envFile, backupDir }) {
+    run(`'${atomeAdmin}' server-identity backup --env-file '${envFile}' --backup-dir '${backupDir}'`);
 }
 
 function ensureSystemdUnit({ serviceName, envFile }) {
@@ -279,7 +309,6 @@ function backupPaths({ backupRoot, envFile, pathsToBackup }) {
         fs.copyFileSync(envFile, envBackup);
         fs.chmodSync(envBackup, 0o600);
     }
-    backupServerIdentity({ envFile, backupDir, projectRoot });
 
     const tarPath = path.join(backupDir, 'backup.tgz');
     const existing = pathsToBackup.filter((p) => fileExists(p));
@@ -292,6 +321,7 @@ function backupPaths({ backupRoot, envFile, pathsToBackup }) {
     }
 
     log(`Backup created: ${backupDir}`);
+    return backupDir;
 }
 
 function ensureNodeModules() {
@@ -302,7 +332,7 @@ function ensureNodeModules() {
     }
 
     // For native modules like better-sqlite3, build tooling must exist; ffmpeg
-    // normalizes served videos (HEVC/.mov takes, server/server_media.js).
+    // normalizes served videos (HEVC/.mov takes, atome/servers/atome-server/src/media/playback.rs).
     // This is safe and idempotent on Debian/Ubuntu.
     run('apt-get update');
     // python3-pip: the mediasoup crate builds the visio worker (C++, meson and ninja installed by pip into its own
@@ -415,7 +445,7 @@ async function main() {
         appEnvFallback,
     }));
 
-    phase('backup', () => backupPaths({
+    const backupDir = phase('backup', () => backupPaths({
         backupRoot: opts.backupRoot,
         envFile: opts.envFile,
         pathsToBackup: [
@@ -445,6 +475,13 @@ async function main() {
     }
 
     phase('rust-build', () => buildRustServer());
+
+    // After the build: atome_admin is one of its binaries.
+    phase('secure-config', () => ensureSecureConfig({ envDir: opts.envDir, envFile: opts.envFile }));
+
+    phase('cb-recordings-key', () => ensureCbRecordingsKey({ envFile: opts.envFile }));
+
+    phase('identity-backup', () => backupIdentity({ envFile: opts.envFile, backupDir }));
 
     // A vault this host cannot confine stops the update before the restart.
     phase('vault-confinement', () => checkVaultConfinement({

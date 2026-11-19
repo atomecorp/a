@@ -2,10 +2,9 @@
 // streams it may follow, their replay from a cursor, and the delivery of every
 // committed event to the connections subscribed to its stream, projected per
 // share by the vault router. Who a connection is (device session, connection proof,
-// provisioning) is security.rs's. Fastify's services, while a reference Fastify runs beside this
-// server for the A/B probes, reach the runtime through SERVICE frames on the control socket
-// (`sync:<operation>`); the public directory's events are read from the central database and told
-// by social/directory/.
+// provisioning) is security.rs's. The server's own services reach the runtime by
+// `sync:<operation>` (`service`); the public directory's events are read from the central database
+// and told by social/directory/.
 mod record;
 mod security;
 

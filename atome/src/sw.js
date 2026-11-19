@@ -2,7 +2,7 @@
 // been verified and stored. Project events and files live in IndexedDB, outside
 // these disposable resource caches. Authentication responses are never cached.
 self.importScripts('/offline-manifest.js', '/offline_media.js');
-// The local resources (media and models a local feature reads, server/offline_local_resources.js)
+// The local resources (media and models a local feature reads, atome/servers/atome-server/src/http/offline_manifest/local.rs)
 // have their own cache and version: stored after activation, file by file, they survive
 // every code version and are never downloaded again while unchanged.
 const { version, assets, local } = self.__ATOME_OFFLINE_ASSETS__;

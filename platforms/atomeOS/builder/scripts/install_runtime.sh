@@ -14,9 +14,11 @@ if chroot "$WORK_MNT" pw usershow freebsd >/dev/null 2>&1; then
     chroot "$WORK_MNT" pw usermod freebsd -w no
 fi
 chroot "$WORK_MNT" chown -R atome:atome /opt/atome /var/db/atome
-# No install_full/run.sh: those provision other platforms. Use the actual Fastify entry.
+# No install_full/run.sh: those provision other platforms. The client's vendored modules, then the one server
+# (atome-server and its per-person atome-vault), built here from the pinned workspace.
 chroot "$WORK_MNT" su - atome -c 'cd /opt/atome && npm ci --omit=dev --foreground-scripts --no-audit --no-fund'
-chroot "$WORK_MNT" su - atome -c 'cd /opt/atome && node --input-type=module -e '\''await import("better-sqlite3"); await import("bcrypt"); await import("fastify");'\'''
+chroot "$WORK_MNT" su - atome -c 'cd /opt/atome && cargo build --release --locked -p atome-server -p atome-vault'
+chroot "$WORK_MNT" su - atome -c 'test -x /opt/atome/target/release/atome-server && test -x /opt/atome/target/release/atome-vault'
 # Source is immutable to the service. Writable user data stays at native server paths
 # redirected to the dedicated data directory, not in the executable payload.
 for data in database_storage data uploads; do

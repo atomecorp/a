@@ -418,6 +418,6 @@ class NodeSmtpClient {
 }
 
 export const createNodeIcloudImapClient = async (config = {}) => new NodeImapClient(config);
-// The SMTP client is the protocol's, not iCloud's: the server's own sender uses it too (server/system_mailer.js).
+// The SMTP client is the protocol's, not iCloud's: the server's own sender uses it too (atome/servers/atome-server/src/mail/mod.rs).
 export const createNodeSmtpClient = async (config = {}) => new NodeSmtpClient(config);
 export const createNodeIcloudSmtpClient = createNodeSmtpClient;

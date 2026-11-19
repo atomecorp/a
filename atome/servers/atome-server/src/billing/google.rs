@@ -22,7 +22,7 @@ const ENTITLED: [&str; 3] = [
     "SUBSCRIPTION_STATE_CANCELED",
 ];
 const INVALID: &str = "billing_proof_invalid";
-// A configuration or service account Fastify throws on: no `billing_` code.
+// A configuration or service account Fastify threw on: no `billing_` code.
 const ACCOUNT_INVALID: &str = "play_service_account_invalid";
 
 pub enum Notice {

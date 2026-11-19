@@ -6,7 +6,7 @@
 // capabilities, command bus, audit) as a restricted remote actor. Nothing is executed
 // here on another device's behalf, and nothing reaches the target but an intention.
 //
-// The server relays only (server/remoteCommandRelay.js); like the rest of teleport this
+// The server relays only (atome/servers/atome-server/src/ws_api/remote_commands.rs); like the rest of teleport this
 // is a separate brick that meets the others through the surface registry.
 
 import { FastifyAdapter } from '../apis/unified/adole.js';

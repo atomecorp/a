@@ -1,6 +1,6 @@
 // The subscription video services of Divertissement › Vidéo › Films & séries: the
 // ones a user declares (Réglages › Mots de passe et clés › Vidéo), the server's
-// catalogue filter (server/ws_video_catalog.js) and the internal page a service
+// catalogue filter (atome/servers/atome-server/src/ws_api/sources/video_catalog.rs) and the internal page a service
 // opens on (eVe/domains/media/streaming_view.js). Shared by the server and the client.
 //
 // - `tmdb`: the service's TMDB watch-provider ids in France (its offers with ads included);

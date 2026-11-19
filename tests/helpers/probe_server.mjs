@@ -11,21 +11,16 @@ import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 import { createPhoneLinkClient } from '../../atome/src/squirrel/security/auth_phone_link_client.js';
 import { createStorePurchase } from '../../atome/src/squirrel/billing/store_purchase.js';
-import { authSigningMessage } from '../../atome/src/shared/auth_link_contract.js';
-import { publicDeviceKey, randomHandle } from '../../server/auth_link_security.js';
+import { authDeviceKey, authSigningMessage } from '../../atome/src/shared/auth_link_contract.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-// COMM_SERVER_ROOT: replay a probe against another tree (e.g. `git archive HEAD`) to
-// measure the state BEFORE a fix (red first).
-const SERVER_ROOT = process.env.COMM_SERVER_ROOT || ROOT;
-// Since 2026-11-04 the server is atome-server (Axum + one Rust vault process per person); since
-// L3.10a (2026-11-06) it runs with no Fastify at all. The A/B probes still reach Fastify on
-// port+1000: the harness starts it beside atome-server as a reference (`node server.js`, the same
-// base, secret and vaults through atome-server's reference control socket,
-// ATOME_REFERENCE_CONTROL_DIR); PROBE_NO_REFERENCE=1 starts atome-server alone. An older tree
-// (COMM_SERVER_ROOT) still runs Fastify alone.
-const RUST_FRONT = !process.env.COMM_SERVER_ROOT;
-const REFERENCE = RUST_FRONT && process.env.PROBE_NO_REFERENCE !== '1';
+// The server is atome-server (Axum + one Rust vault process per person), alone: the Node
+// Fastify reference is gone (R-118 L3.10). A probe of another tree (the state BEFORE a fix)
+// runs that tree's own binaries, built in a target directory of its own: PROBE_SERVER_BIN.
+if (process.env.COMM_SERVER_ROOT) {
+    throw new Error('comm_server_root_retired: build the other tree\'s atome-server and atome-vault (CARGO_TARGET_DIR=…) '
+        + 'and set PROBE_SERVER_BIN to its atome-server.');
+}
 // The binaries already built, never a build of their own: many sessions share target/, and a build from a probe takes
 // its lock and replaces the binary others run (two did so by mistake on 17 Nov. 2026). A missing binary stops the probe
 // with what to do. PROBE_SERVER_BIN: binaries built in another target directory (a probe of a server change).
@@ -40,7 +35,6 @@ const serverBinaries = () => {
     return server;
 };
 const serverCommand = () => {
-    if (!RUST_FRONT) return { command: process.execPath, args: ['server.js'], cwd: path.join(SERVER_ROOT, 'server'), env: {} };
     // PROBE_FROZEN_ROOT: the front serves a frozen copy of the tree (a media upload waits on the offline app, whose install
     // fails while other sessions edit files; reference_probe_frozen_tree_for_offline_app).
     return { command: serverBinaries(), args: [], cwd: process.env.PROBE_FROZEN_ROOT || ROOT, env: {} };
@@ -63,8 +57,8 @@ async function opened(port, child, logs) {
     }
 }
 
-// A port whose server, page preview (port + 200, atome-server's ATOME_PAGE_PREVIEW_PORT default) and reference
-// Fastify (port + 1000) are all free: a server left on a port by a probe that died never makes the next one fail.
+// A port whose server and page preview (port + 200, atome-server's ATOME_PAGE_PREVIEW_PORT default) are both
+// free: a server left on a port by a probe that died never makes the next one fail.
 const bindable = (candidate, host) => new Promise((resolve) => {
     const probe = net.createServer();
     probe.once('error', () => resolve(false));
@@ -75,7 +69,7 @@ const portFree = async (candidate) => await bindable(candidate, '0.0.0.0') && aw
 const freePort = async () => {
     for (let attempt = 0; attempt < 200; attempt += 1) {
         const candidate = 3100 + Math.floor(Math.random() * 800);
-        if (await portFree(candidate) && await portFree(candidate + 200) && await portFree(candidate + 1000)) return candidate;
+        if (await portFree(candidate) && await portFree(candidate + 200)) return candidate;
     }
     throw new Error('probe_server_no_free_port');
 };
@@ -86,8 +80,7 @@ export async function startServer({ port: given = null, env = {}, dir: reuseDir 
     const dir = reuseDir || fs.mkdtempSync(path.join(os.tmpdir(), 'comm-harness-'));
     const sockets = socketDir || fs.mkdtempSync('/tmp/chv-');
     const launch = serverCommand();
-    const reference = REFERENCE ? path.join(sockets, 'ref') : null;
-    const shared = {
+    const serverEnv = {
         ...process.env,
         PORT: String(port),
         NODE_ENV: 'development',
@@ -114,28 +107,15 @@ export async function startServer({ port: given = null, env = {}, dir: reuseDir 
         child.stderr.on('data', onData);
         return child;
     };
-    const child = launched(launch.command, launch.args, launch.cwd,
-        reference ? { ...shared, ATOME_REFERENCE_CONTROL_DIR: reference } : shared);
+    const child = launched(launch.command, launch.args, launch.cwd, serverEnv);
     const children = [child];
-    // A server that never answers (a start timeout, its Fastify exiting) is stopped here: detached in its own
+    // A server that never answers (a start timeout, an exit) is stopped here: detached in its own
     // group, it would otherwise stay on its port after the probe's process has gone.
-    const killStarted = () => {
-        for (const one of children) { if (one.exitCode === null) { try { process.kill(-one.pid, 'SIGKILL'); } catch { /* already gone */ } } }
-    };
     let url = '';
     try {
         url = await opened(port, child, logs);
-        // The reference Fastify, once atome-server prepared the base and bound the control socket.
-        if (reference) {
-            const fastify = launched(process.execPath, ['server.js'], path.join(SERVER_ROOT, 'server'), {
-                ...shared, PORT: String(port + 1000), HOST: '127.0.0.1',
-                ATOME_VAULT_SUPERVISOR_SOCKET: path.join(reference, 'vaults.sock')
-            });
-            children.push(fastify);
-            await opened(port + 1000, fastify, logs);
-        }
     } catch (error) {
-        killStarted();
+        if (child.exitCode === null) { try { process.kill(-child.pid, 'SIGKILL'); } catch { /* already gone */ } }
         throw error;
     }
     // The server's base, vaults and sockets go with it: left behind, every probe run kept ~5-20 MB in
@@ -162,16 +142,16 @@ export async function startServer({ port: given = null, env = {}, dir: reuseDir 
     };
     const stop = async () => { await halt(); removeFiles(); };
     return {
-        // `pids`: each process group the harness started (atome-server, then the reference Fastify).
+        // `pids`: the process group the harness started (atome-server and its vaults).
         port, url, dir, logs, stop, pids: children.map((one) => one.pid),
         // Stop, then start again on the same port, base and JWT secret.
         restart: async () => { await halt(); return startServer({ port, env, dir, socketDir: sockets, jwtSecret, owned }); }
     };
 }
 
-function makeDevice() {
+async function makeDevice() {
     const keys = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
-    const { jwk: publicKey, keyId } = publicDeviceKey(keys.publicKey.export({ format: 'jwk' }));
+    const { publicKey, keyId } = await authDeviceKey(keys.publicKey.export({ format: 'jwk' }));
     const records = new Map();
     const device = {
         keyId, publicKey,
@@ -183,7 +163,7 @@ function makeDevice() {
         })
     };
     return {
-        forPhone: async () => device, randomHandle,
+        forPhone: async () => device, randomHandle: () => crypto.randomBytes(32).toString('base64url'),
         put: async (n, v) => records.set(n, v), read: async (n) => records.get(n),
         remove: async (n) => records.delete(n),
         keys: async (p) => [...records.keys()].filter((n) => n.startsWith(p)),
@@ -220,7 +200,7 @@ export async function connectUser(server, { phone, name, session = null } = {}) 
     } else {
         let installed = null;
         const client = createPhoneLinkClient({
-            devices: makeDevice(), send: (m) => call(m), locks: null, storePurchase: createStorePurchase({ host: null }),
+            devices: await makeDevice(), send: (m) => call(m), locks: null, storePurchase: createStorePurchase({ host: null }),
             installSession: async (r) => { installed = r; }
         });
         let result = await client.start(phone);

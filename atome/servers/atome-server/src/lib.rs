@@ -3,11 +3,12 @@
 //! schema (central_schema), answers the application's files, `/ws/api` (ws_api), the
 //! `/ws/sync` runtime (ws_sync), the media capability (`POST /api/media-token`, auth),
 //! the uploads (media), the server's own routes (status: versions, health, identity,
-//! database status) and the websites (site), with no Fastify behind it. A reference
-//! Fastify may still run beside it for the A/B probes, reaching the vaults through the
-//! supervisor's control socket (control). Its `http` module is shared with Tauri's
-//! local server.
+//! database status) and the websites (site), alone: no Node process. Its `http` module
+//! is shared with Tauri's local server.
 
+// The operator's tools (src/bin/atome_admin.rs): roles, public events, AI seats, server identity.
+#[cfg(unix)]
+pub mod admin;
 #[cfg(unix)]
 pub mod auth;
 pub mod billing;
@@ -15,8 +16,6 @@ pub mod billing;
 pub mod central_schema;
 #[cfg(unix)]
 pub mod conditions;
-#[cfg(unix)]
-pub mod control;
 #[cfg(unix)]
 pub mod dev;
 pub mod google_access;

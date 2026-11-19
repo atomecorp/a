@@ -86,7 +86,7 @@ pub fn body(content_type: Option<&str>, bytes: &Bytes) -> Result<Option<JsonValu
                 )),
             }
         }
-        // A body without a type meets no parser (Fastify registers no catch-all one).
+        // A body without a type meets no parser (Fastify registered no catch-all one).
         None if !bytes.is_empty() => Err((
             StatusCode::UNSUPPORTED_MEDIA_TYPE,
             "FST_ERR_CTP_INVALID_MEDIA_TYPE",
@@ -148,7 +148,7 @@ pub fn thrown(error: &NodeError) -> Response {
     response
 }
 
-/// The request's head and its JSON body, or the reply Fastify gives before the route.
+/// The request's head and its JSON body, or the reply Fastify gave before the route.
 pub async fn read(request: Request) -> Result<(Parts, Option<JsonValue>), Response> {
     read_bytes(request)
         .await

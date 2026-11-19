@@ -305,7 +305,7 @@ pub(super) async fn recover_inbound_media(
     Ok(())
 }
 
-// Inbound media is authorized by Fastify before it becomes a local render resource.
+// Inbound media is authorized by atome-server before it becomes a local render resource.
 pub(super) async fn download_inbound_media(
     state: &LocalAtomeState,
     remote_url: &str,

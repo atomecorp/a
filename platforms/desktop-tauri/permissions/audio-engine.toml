@@ -7,6 +7,7 @@ permissions = [
   "allow-audio-init",
   "allow-audio-load-clip",
   "allow-audio-load-clip-from-bytes",
+  "allow-audio-probe-duration-from-bytes",
   "allow-audio-has-clip",
   "allow-audio-play",
   "allow-audio-play-instance",
@@ -48,6 +49,10 @@ permissions = [
   "allow-audio-voice-read",
   "allow-audio-record-start",
   "allow-audio-record-stop",
+  "allow-audio-record-strip-start",
+  "allow-audio-record-strip-stop",
+  "allow-audio-driver",
+  "allow-audio-driver-set",
   "allow-audio-get-levels",
   "allow-audio-get-scope",
   "allow-audio-shutdown",
@@ -67,6 +72,11 @@ commands.allow = ["audio_load_clip"]
 identifier = "allow-audio-load-clip-from-bytes"
 description = "Enables the audio_load_clip_from_bytes command."
 commands.allow = ["audio_load_clip_from_bytes"]
+
+[[permission]]
+identifier = "allow-audio-probe-duration-from-bytes"
+description = "Enables the audio_probe_duration_from_bytes command."
+commands.allow = ["audio_probe_duration_from_bytes"]
 
 [[permission]]
 identifier = "allow-audio-has-clip"
@@ -117,6 +127,26 @@ commands.allow = ["audio_record_start"]
 identifier = "allow-audio-record-stop"
 description = "Enables the audio_record_stop command."
 commands.allow = ["audio_record_stop"]
+
+[[permission]]
+identifier = "allow-audio-record-strip-start"
+description = "Enables the audio_record_strip_start command."
+commands.allow = ["audio_record_strip_start"]
+
+[[permission]]
+identifier = "allow-audio-record-strip-stop"
+description = "Enables the audio_record_strip_stop command."
+commands.allow = ["audio_record_strip_stop"]
+
+[[permission]]
+identifier = "allow-audio-driver"
+description = "Enables the audio_driver command."
+commands.allow = ["audio_driver"]
+
+[[permission]]
+identifier = "allow-audio-driver-set"
+description = "Enables the audio_driver_set command."
+commands.allow = ["audio_driver_set"]
 
 [[permission]]
 identifier = "allow-audio-get-levels"

@@ -1,5 +1,5 @@
 // Deterministic health verdict for a packaged product, shared by the server
-// provider (server/ws_open_food_facts.js) and any client that re-assesses a
+// provider (atome/servers/atome-server/src/ws_api/sources/food_facts.rs) and any client that re-assesses a
 // stored product. It reads only open Open Food Facts data:
 //   - the Nutri-Score grade (a-e);
 //   - the NOVA processing group (1-4);
@@ -76,7 +76,7 @@ const RULE_CHECKS = Object.freeze({
 });
 
 // `product`: { nutriscore, nova, additives: [{ tag, risk }], ingredients_known, allergens, traces } (a product as
-// server/ws_open_food_facts.js normalizes it, or as a shopping item keeps it); `declared`: { allergens: [key], traces }
+// atome/servers/atome-server/src/ws_api/sources/food_facts.rs normalizes it, or as a shopping item keeps it); `declared`: { allergens: [key], traces }
 // (program_collection_runtime.js `allergens_read`), absent where the person is not known.
 // Returns { policy, provisional, state, rules: [{ rule_id, state, reason?, provisional, reads }] }: excluded when one
 // rule excludes, else to_check when one cannot be checked, else compliant.

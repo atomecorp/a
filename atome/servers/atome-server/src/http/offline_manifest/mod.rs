@@ -261,7 +261,7 @@ impl OfflineManifest {
     }
 
     /// The answer to a request `claims` took: the script, `no-cache`, encoded as @fastify/compress
-    /// encodes it, with Fastify's CORS; a tree it cannot read is Fastify's 500, said by name.
+    /// encoded it, with Fastify's CORS; a tree it cannot read is Fastify's 500, said by name.
     pub async fn answer(self: Arc<Self>, cors: &CorsPolicy, request: Request) -> Response {
         let headers = request.headers().clone();
         let head = request.method() == Method::HEAD;

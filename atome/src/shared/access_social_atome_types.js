@@ -4,7 +4,7 @@
 // - `objective_visibility`: whether others may find the person for one objective, and what they then see
 //   (eVe/domains/objectives/objective_network_runtime.js; the « Visib. » switch and its panel);
 // - `objective_network`: the person's whole objectives network on or off (Réglages › Confidentialité).
-// The server projects only what a lit « Visib. » shows into the objectives network (server/objective_network.js).
+// The server projects only what a lit « Visib. » shows into the objectives network (atome/servers/atome-server/src/social/objective_network.rs).
 const PRIVATE = Object.freeze({ access: { type: 'string', enum: ['private'] }, visibility: { type: 'string', enum: ['private'] },
     source_domain: { type: 'string', maxLength: 80 } });
 const SHORT = { type: 'string', maxLength: 80 };

@@ -168,7 +168,7 @@ fn range_of(text: &str) -> Option<(f64, Option<f64>)> {
     Some((number(start), (!end.is_empty()).then(|| number(end))))
 }
 
-// Node refuses a header past Latin-1 while Fastify sets a stream's headers one by one: the reply
+// Node refused a header past Latin-1 while Fastify set a stream's headers one by one: the reply
 // keeps those set before it (its type, its ranges, the `Vary` @fastify/compress named when it
 // would encode) and carries Fastify's error, sent as a stream.
 async fn refused_header(headers: &HeaderMap, kind: HeaderValue, head: bool) -> Response {

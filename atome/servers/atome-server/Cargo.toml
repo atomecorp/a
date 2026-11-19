@@ -4,7 +4,7 @@ version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
-description = "The one atome server: the vault supervisor (one atome-vault process per person), the shared HTTP behaviour (CORS, request id, static roots) and the front, in front of Fastify until every route is ported"
+description = "The one atome server: the vault supervisor (one atome-vault process per person), the shared HTTP behaviour (CORS, request id, static roots) and every route of the Web, the one server on every platform"
 
 # The SFU of the calls (src/visio, the mediasoup crate and its C++ worker), the server's own:
 # the local servers of Tauri and iOS build without it (`default-features = false`).
@@ -126,12 +126,12 @@ name = "central_schema"
 path = "../../../tests/atome_server/central_schema.rs"
 
 [[test]]
+name = "admin_tools"
+path = "../../../tests/atome_server/admin_tools.rs"
+
+[[test]]
 name = "offline_manifest"
 path = "../../../tests/atome_server/offline_manifest.rs"
-
-[[example]]
-name = "vault_supervisor"
-path = "../../../tests/atome_server/vault_supervisor.rs"
 
 [dependencies]
 atome-store = { path = "../../engines/atome-store" }
@@ -158,6 +158,9 @@ indexmap = "2"
 jsonwebtoken = "9"
 percent-encoding = "2"
 ring = "0.17"
+# The server identity's RSA-2048 key pair made by `atome_admin server-identity` (server_identity.rs
+# `create_key_pair`; ring signs with it but cannot make one): RustCrypto, MIT OR Apache-2.0.
+rsa = "0.10"
 regex = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "http2", "rustls-tls-native-roots", "stream"] }
 rusqlite.workspace = true

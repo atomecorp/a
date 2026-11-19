@@ -79,8 +79,10 @@ outbound IDs in subsequent processes; the Rust restart test checks the generic r
 cursor and projection those records go through. Browser tests exercise real contact and
 calendar CRUD through Atome.commit and IndexedDB, then delivery of those IDs.
 Personal-contact reconciliation tests retain manual fields and reject concurrent
-version changes. `tests/server/durable_event_retry.test.mjs` covers compaction,
-restart, duplicate batches, forged incoming fingerprints and existing journals.
+version changes. On Fastify, tests/server/durable_event_retry.test.mjs covered compaction,
+restart, duplicate batches, forged incoming fingerprints and existing journals; it went with
+Fastify (R-118 L3.10, 19 Nov. 2026), the account server's side being the worker_process and
+ws_sync tests above.
 
 Cleanup removes the duplicate iOS schema, old automatic startup/project routes,
 unreferenced pending-onboarding helper and eager Home vault dependency. The

@@ -172,7 +172,9 @@ test.each(['beginner', 'intermediate', 'advanced'])('%s List rows feed the share
     await content.handleEvent({ type: 'project_view.list.select', id: owner.id });
     expect(resolveProjectViewVisualSubject({ content }).record.id).toBe('group_child');
     expect(refresh).toHaveBeenCalled();
-    const state = { projectId, mode: 'list', presentationRatio: 1 / 3, presentationAvailableHeight: 600 };
+    // The divider rests at the viewer's snapped height, as the render writes it (project_view_surface_tree.js).
+    const state = { projectId, mode: 'list', presentationRatio: 1 / 3, presentationAvailableHeight: 600,
+        presentationVisualHeight: projectViewSplitHeights({ availableHeight: 600, ratio: 1 / 3 }).visualHeight };
     const render = vi.fn(), presentation = createProjectViewPresentationRuntime({ state, render });
     const before = projectViewSplitHeights({ availableHeight: 600, ratio: state.presentationRatio });
     await presentation.split({ phase: 'start', event: { client_y: 200 } });
@@ -307,7 +309,9 @@ test.each(['beginner', 'intermediate', 'advanced'])('%s List rows feed the share
     await content.handleEvent({ type: 'project_view.list.select', id: owner.id });
     expect(resolveProjectViewVisualSubject({ content }).record.id).toBe('group_child');
     expect(refresh).toHaveBeenCalled();
-    const state = { projectId, mode: 'list', presentationRatio: 1 / 3, presentationAvailableHeight: 600 };
+    // The divider rests at the viewer's snapped height, as the render writes it (project_view_surface_tree.js).
+    const state = { projectId, mode: 'list', presentationRatio: 1 / 3, presentationAvailableHeight: 600,
+        presentationVisualHeight: projectViewSplitHeights({ availableHeight: 600, ratio: 1 / 3 }).visualHeight };
     const render = vi.fn(), presentation = createProjectViewPresentationRuntime({ state, render });
     const before = projectViewSplitHeights({ availableHeight: 600, ratio: state.presentationRatio });
     await presentation.split({ phase: 'start', event: { client_y: 200 } });

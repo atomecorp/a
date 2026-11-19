@@ -6,7 +6,7 @@ the official FreeBSD kernel. No arbitrary latency tuning or JACK daemon is force
 
 Actual framework owners remain the Kira WASM browser runtime and the native
 engine for its already-supported hosts, plus eVe's Web MIDI/native MIDI ports.
-Fastify alone serves assets and commands; it is not a native device audio engine.
+atome-server alone serves assets and commands; it is not a native device audio engine.
 Autonomous headless audio/MIDI is explicitly blocked until that real execution
 path is available and tested on FreeBSD. A remote browser plays on the client.
 

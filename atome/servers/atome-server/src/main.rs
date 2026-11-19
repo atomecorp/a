@@ -1,8 +1,6 @@
 // `atome-server`: started from the project root, it brings the central database to its
 // schema, opens the vault supervisor and serves the public port alone. It stops every vault
-// on SIGINT or SIGTERM. For the A/B probes only, `ATOME_REFERENCE_CONTROL_DIR` names the
-// directory of the control socket a reference Fastify started beside it reaches the vaults
-// through (control.rs); without it no control socket is bound.
+// on SIGINT or SIGTERM.
 use atome_server::auth::{Sessions, media_token, sms::Sms};
 use atome_server::billing::Billing;
 use atome_server::http::{cors::CorsPolicy, statics::StaticRoots};
@@ -14,10 +12,10 @@ use atome_server::site::Site;
 use atome_server::social::Social;
 use atome_server::status::Status;
 use atome_server::vault_router::{VaultRouter, central::Central};
+use atome_server::vaults::Vaults;
 use atome_server::web::{self, Web};
 use atome_server::ws_api::WsApi;
 use atome_server::ws_sync::SyncRuntime;
-use atome_server::{control, vaults::Vaults};
 use std::collections::HashSet;
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
@@ -56,7 +54,7 @@ struct Config {
     // PORT+200 by default, and its public origin when one is configured (a sub-domain behind nginx).
     preview: SocketAddr,
     preview_origin: PreviewOrigin,
-    // Fastify's device-session secret and the replication peers' token (auth), and
+    // The device-session secret and the replication peers' token (auth), and
     // the media capability's lifetime.
     jwt_secret: Option<String>,
     sync_token: Option<String>,
@@ -81,7 +79,13 @@ struct Config {
 
 fn config() -> Result<Config, String> {
     let project_root = std::env::current_dir().map_err(|e| e.to_string())?;
-    if !project_root.join("server").join("server.js").is_file() {
+    // The client it serves (http/statics.rs) marks the project root.
+    if !project_root
+        .join("atome")
+        .join("src")
+        .join("index.html")
+        .is_file()
+    {
         return Err("atome_server_not_started_at_project_root".into());
     }
     let settings = Settings::load(&project_root)?;
@@ -213,7 +217,8 @@ async fn run() -> Result<i32, String> {
         config.project_root.clone(),
         router.clone(),
     );
-    // The one writer of the notification stacks, contacts and pushes, for Fastify's services and `/ws/api`.
+    // The one writer of the notification stacks, contacts and pushes, for `/ws/api` and the
+    // server's own services.
     let social = Social::open(
         &config.central,
         router.clone(),
@@ -318,23 +323,6 @@ async fn run() -> Result<i32, String> {
     // The linked social accounts' 60 s polling (R-190): with none linked, a tick makes no call.
     let (polling, polled_social) = (providers.clone(), social.clone());
     tokio::spawn(async move { polling.social_poll(&polled_social.notifier).await });
-    // The A/B probes' reference Fastify reaches the vaults, the vault router, `/ws/sync` and the
-    // social services through the control socket, which only it uses.
-    let control_directory = config
-        .settings
-        .get("ATOME_REFERENCE_CONTROL_DIR")
-        .map(PathBuf::from);
-    if let Some(directory) = &control_directory {
-        let control = control::bind(directory, "vaults.sock")?;
-        tokio::spawn(control.serve(
-            vaults.clone(),
-            Arc::new(control::Services {
-                router: router.clone(),
-                sync: sync.clone(),
-                social: social.clone(),
-            }),
-        ));
-    }
     tokio::spawn(vaults.clone().stop_idle());
     let offline_manifest =
         atome_server::http::offline_manifest::OfflineManifest::new(&config.project_root).await?;
@@ -420,9 +408,6 @@ async fn run() -> Result<i32, String> {
     };
     sync.stop().await;
     vaults.stop_all().await;
-    if let Some(directory) = &control_directory {
-        let _ = std::fs::remove_dir_all(directory);
-    }
     outcome
 }
 

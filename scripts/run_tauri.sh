@@ -92,7 +92,7 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Options:"
             echo "  -f, --force-deps      Force update all dependencies before starting"
-            echo "      --test            Start with local test mode and pre-auth OTP bypass"
+            echo "      --test            Start in local test mode: no SMS, the phone link handed back"
             echo "  -h, --help           Show this help message"
             echo ""
             echo "Examples:"
@@ -115,9 +115,9 @@ if [ "$TEST_MODE" = true ]; then
         exit 1
     fi
     export NODE_ENV=test
-    export SQUIRREL_AUTH_TEST_MODE=1
-    export SQUIRREL_AUTH_OTP_BYPASS=1
-    echo "🧪 Test mode enabled: pre-auth OTP verification bypass is active."
+    # atome-server and Tauri's Axum send no SMS: the phone link is handed back (auth/sms.rs).
+    export SQUIRREL_AUTH_SMS_MOCK=1
+    echo "🧪 Test mode enabled: no SMS is sent, the phone link is handed back."
 fi
 
 echo "🚀 Préparation de l'environnement Tauri..."

@@ -9,11 +9,21 @@ export const AUTH_SESSION_MAX_MS = 90 * 24 * 60 * 60 * 1000;
 export const AUTH_SHARED_SESSION_IDLE_MS = 2 * 60 * 60 * 1000;
 export const AUTH_SHARED_SESSION_MAX_MS = 12 * 60 * 60 * 1000;
 
+async function sha256Hex(text, subtle = globalThis.crypto.subtle) {
+    const digest = await subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
 export async function authPasswordRequestDigest(password, currentPassword = '') {
     if (typeof password !== 'string' || typeof currentPassword !== 'string') throw new Error('auth_password_invalid');
-    const bytes = new TextEncoder().encode(JSON.stringify(['atome.password.set.v1', password, currentPassword]));
-    const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
-    return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+    return sha256Hex(JSON.stringify(['atome.password.set.v1', password, currentPassword]));
+}
+
+// A device's public key as the server enrolls it, and its id: the SHA-256 (hex) of that JWK,
+// its members in this order (atome-server auth/proof.rs#public_device_key).
+export async function authDeviceKey({ x, y }, subtle = globalThis.crypto.subtle) {
+    const publicKey = { kty: 'EC', crv: 'P-256', x, y };
+    return { publicKey, keyId: await sha256Hex(JSON.stringify(publicKey), subtle) };
 }
 
 export function authSigningMessage({ purpose, reference, challenge, nonce, keyId, issuedAt }) {

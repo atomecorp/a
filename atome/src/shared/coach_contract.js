@@ -2,7 +2,7 @@
 // own coaching agenda — a `calendar` Atome of its vault — carries `coaching`: the name it shows, the quality it DECLARES
 // (never checked by eVe, always shown as declared), its specialties, its weekly hours, its unavailabilities, a session's
 // length and its cancellation delay, in its own time zone. The server projects a public coaching agenda into the shared
-// directory everyone searches (server/coach_directory.js) and books a slot on request (server/coach_bookings.js); the
+// directory everyone searches (atome/servers/atome-server/src/social/coaches/directory.rs) and books a slot on request (atome/servers/atome-server/src/social/coaches/bookings.rs); the
 // accepted session lands in both agendas. Instants are stored in UTC; the hours are the coach's wall time in its zone.
 // One owner for these shapes and the slot arithmetic, client and server.
 

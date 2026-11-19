@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // The certificate and nginx host of a website's personal domain (decision Q13, todo/publication_web_2026-10-28.md), on
-// the production server. `server/site_domains.js` runs it (ATOME_SITE_CERT_COMMAND) with the one domain whose DNS it
-// has just verified. It checks again that the domain is a site's, with its proof (TXT) and its CNAME to atome, asks
+// the production server. atome-server (atome/servers/atome-server/src/site/domain_link.rs) runs it
+// (ATOME_SITE_CERT_COMMAND) with the one domain whose DNS it has just verified. It checks again that the domain is a site's, with its proof (TXT) and its CNAME to atome, asks
 // Let's Encrypt for its certificate (webroot: nginx keeps serving), writes the domain's nginx servers and reloads nginx.
 // Renewal is certbot's own timer (the deploy hook reloads nginx). `--setup`, run once, installs the port-80 catch-all
 // answering the challenges and the include of the domains' servers. The person never sees any of it.
@@ -18,6 +18,9 @@ const ROOT = '/opt/a'; // the production checkout (reference: scripts/server_upd
 const WEBROOT = '/var/www/atome-acme';
 const HOSTS_DIR = '/etc/nginx/atome-sites';
 const SITE_FILE = '/etc/nginx/sites-available/atome-sites';
+// The CNAME a site's domain points to (site/domains.rs#SITE_CNAME_TARGET). Run as root, this
+// check holds its own value rather than taking one from its caller.
+const SITE_CNAME_TARGET = 'sites.atome.one';
 const ENABLED = '/etc/nginx/sites-enabled/atome-sites';
 const APP = 'http://127.0.0.1:3001';
 
@@ -41,7 +44,7 @@ ${challenge}    location / {
 }
 include ${HOSTS_DIR}/*.conf;
 `;
-// The same proxying as atome.one's own server: the app routes a personal host to its site (server/site_http.js).
+// The same proxying as atome.one's own server: the app routes a personal host to its site (atome/servers/atome-server/src/site/http.rs).
 const hostServers = (domain, app = APP) => `# ${domain}: written by scripts/site_domain_cert.mjs
 server {
     listen 80;
@@ -89,7 +92,6 @@ const issue = async (domain) => {
     const row = db.prepare('SELECT domain_token FROM site_publications WHERE domain = ?').get(domain);
     db.close();
     if (!row?.domain_token) fail(`not a site's domain: ${domain}`);
-    const { SITE_CNAME_TARGET } = await import(path.join(ROOT, 'server/site_domains.js'));
     const txt = (await dns.resolveTxt(`_atome.${domain}`).catch(() => [])).map(parts => parts.join(''));
     const cname = (await dns.resolveCname(domain).catch(() => [])).map(name => name.toLowerCase().replace(/\.$/, ''));
     if (!txt.includes(`atome-verify=${row.domain_token}`) || !cname.includes(SITE_CNAME_TARGET)) fail(`DNS not verified: ${domain}`);

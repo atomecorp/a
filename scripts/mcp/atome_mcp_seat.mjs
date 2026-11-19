@@ -1,7 +1,7 @@
 // The stdio bridge's own seat (scripts/mcp/atome_mcp_stdio.mjs): a key held by this program, paired to the
 // person's account like a new device (validated mockup MD1c). The bridge prints a two-digit number; eVe asks
 // « Tapez le nombre affiché sur <label> » on the person's device; once approved the server enrolls the key as a
-// program's (server/auth_devices.js `mcp_program`) and the session token names that seat (`prg`), so the relay
+// program's (atome/servers/atome-server/src/auth/devices.rs `mcp_program`) and the session token names that seat (`prg`), so the relay
 // answers MCP for it alone. The access token lives 15 minutes: the seat renews it with its key.
 //
 // `seatFile` (optional): the seat kept between runs (private key and session, mode 0600) so the program stays the
@@ -9,14 +9,14 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { createPairingClient } from '../../atome/src/squirrel/security/auth_pairing_client.js';
-import { authSigningMessage } from '../../atome/src/shared/auth_link_contract.js';
-import { publicDeviceKey, randomHandle } from '../../server/auth_link_security.js';
+import { authDeviceKey, authSigningMessage } from '../../atome/src/shared/auth_link_contract.js';
 
 const STATUS_POLL_MS = 2000;
 const RENEW_EVERY_MS = 10 * 60 * 1000;
 
-const deviceFor = (privateKey) => {
-    const { jwk: publicKey, keyId } = publicDeviceKey(crypto.createPublicKey(privateKey).export({ format: 'jwk' }));
+const randomHandle = () => crypto.randomBytes(32).toString('base64url');
+const deviceFor = async (privateKey) => {
+    const { publicKey, keyId } = await authDeviceKey(crypto.createPublicKey(privateKey).export({ format: 'jwk' }));
     return { keyId, publicKey, sign: async challenge => ({ challengeId: challenge.challenge,
         signature: crypto.sign('sha256', Buffer.from(authSigningMessage(challenge)), { key: privateKey, dsaEncoding: 'ieee-p1363' }).toString('base64url') }) };
 };
@@ -43,7 +43,7 @@ export async function openProgramSeat({ request, account, label, host, seatFile 
     if (!seat) {
         if (!account) throw new Error('mcp_seat_account_required');
         const privateKey = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).privateKey;
-        const device = deviceFor(privateKey);
+        const device = await deviceFor(privateKey);
         const records = new Map();
         let installed = null;
         const pairing = createPairingClient({ devices: { forScope: async () => device, randomHandle, put: async (key, value) => records.set(key, value),
@@ -66,7 +66,7 @@ export async function openProgramSeat({ request, account, label, host, seatFile 
         keepSeat(seatFile, seat);
         log(`accepted on ${installed.user.handle || 'the account'}`);
     }
-    const device = deviceFor(seat.privateKey);
+    const device = await deviceFor(seat.privateKey);
     const renew = async () => {
         const fields = { sessionId: seat.session.id, generation: seat.session.generation };
         const { challenge } = await auth('session-challenge', { ...fields, purpose: 'renew' });

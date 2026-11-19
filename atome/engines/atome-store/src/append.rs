@@ -4,7 +4,7 @@
 // the type gate, the prepared payload (a `set` that changes nothing answered with a
 // receipt and recorded nowhere), the containment, the stream sequence, the conflict
 // decisions, the insert, the projection stored with the event, the deferred references
-// resolved. Its result is the event Fastify returns, field for field.
+// resolved. Its result is the event Fastify returned, field for field.
 use super::*;
 
 pub type JsonEvent = JsonMap<String, JsonValue>;

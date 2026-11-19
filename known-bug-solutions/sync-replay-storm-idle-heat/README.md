@@ -111,7 +111,6 @@ reconnection loop itself was not exercised on the device.
 
 - `npx vitest run tests/eve/sync_engine.test.mjs` (burst persistence test).
 - `cargo test -p atome-vault -p atome-server --test worker_process --test ws_sync` (the Rust runtime, tests/atome_server/ws_sync.rs).
-- `node --test tests/server/ws_sync_stream_heads.test.mjs` (real vault workers).
 - `cargo test -p atome-server --lib local::local_atome_ws_sync_replay_tests` (the
   device's native client, the Rust local server since the Swift one was retired on
   6 Nov. 2026: batches of 500, a reconnection with nothing new resumes every stream at

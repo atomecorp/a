@@ -1,3 +1,4 @@
 stack:
   name: native
-  pkg: [cmake, ninja, pkgconf, gmake]
+  # The visio worker (mediasoup crate) is C++ built by meson, which pip installs for it.
+  pkg: [cmake, ninja, pkgconf, gmake, py311-pip]

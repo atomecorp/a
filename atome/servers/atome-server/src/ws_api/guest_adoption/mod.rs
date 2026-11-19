@@ -4,7 +4,7 @@
 // (`guest_adoption_operations`, `_payloads`, `_files`): `prepare` (the manifest's digest),
 // `import` (the payload, its files declared), `stage-file` (each file's bytes) and `finalize`
 // (steps.rs, finalize.rs, events.rs). The calls of one operation run one after the other; a
-// step that throws in Fastify is not answered here either, only logged.
+// step that threw in Fastify is not answered here either, only logged.
 mod events;
 mod files;
 mod finalize;

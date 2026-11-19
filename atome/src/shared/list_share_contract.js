@@ -8,7 +8,7 @@
 // - `shopping_list` (#shared/shopping_list_contract.js): a basket, its `shopping_item` children;
 // - `protocol_template` (#shared/health_protocol_contract.js): its ticked `lines`, its own `version`;
 // - a programme (`project` holding `project_program`): its plan only — its sessions and measures stay their maker's.
-// The server (server/sync_share_lists.js) reads the same view to show a list before it is accepted, to copy the version the
+// The server (atome/servers/atome-server/src/social/sharing/lists.rs) reads the same view to show a list before it is accepted, to copy the version the
 // recipient validates into their own account and to tell a new version from the one running; the app lays it (S2, S5, S6).
 // `list_receipt`: the recipient's own trace of a list received (the version validated, its copies, linked or detached).
 

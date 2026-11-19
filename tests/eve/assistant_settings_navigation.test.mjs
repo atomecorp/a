@@ -1,5 +1,5 @@
 import { test, expect, vi } from 'vitest';
-import { AI_SETTINGS_ERROR_CODES, createAssistantSettingsNavigation, openAssistantAiSettings } from '../../eVe/voice/assistant/assistant_ai_settings.js';
+import { AI_SETTINGS_ERROR_CODES, assistantErrorDestination, createAssistantSettingsNavigation, openAssistantAiSettings } from '../../eVe/voice/assistant/assistant_ai_settings.js';
 import { assistantErrorMessage, buildAssistantConversationNodes } from '../../eVe/voice/assistant/assistant_conversation_view.js';
 import { requestAssistantTool } from '../../eVe/voice/assistant/assistant_conversation_actions.js';
 import { openRequiredPanel } from '../../eVe/intuition/runtime/eve_intuition/panel_actions_runtime.js';
@@ -13,13 +13,28 @@ for (const error of AI_SETTINGS_ERROR_CODES) test(error + ' remains explicit wit
         api: { getState: () => ({ active: true, error, conversation: { turns: [] } }) } })).toEqual([]);
 });
 
-test('the capture error opens the declared Home tool on the exact OpenAI field', async () => {
+// User, 19 Nov (R-173, (a)): a text model's key lives on the server, so its error has no link and is said.
+test('a text provider key error has no link and never navigates', async () => {
+    const pause = vi.fn(async () => {}), navigate = vi.fn(async () => ({ ok: true }));
+    const navigation = createAssistantSettingsNavigation({ isActive: () => true, pause, navigate, onFailure: vi.fn() });
+    for (const error of AI_SETTINGS_ERROR_CODES) {
+        expect(assistantErrorDestination(error)).toBe('');
+        expect(navigation.handle(error, 'openai')).toBe(false);
+    }
+    await flush(); expect(pause).not.toHaveBeenCalled(); expect(navigate).not.toHaveBeenCalled();
+    expect(assistantErrorDestination('invalid_api_key', 'runway')).toBe('key:runway');
+    expect(assistantErrorDestination('invalid_api_key', 'musicgpt')).toBe('key:musicgpt');
+    await expect(openAssistantAiSettings({ error: 'invalid_api_key', providerId: 'openai', invoke: vi.fn(),
+        loadModule: async () => ({ ensureHomePanelModule: async () => {} }) })).rejects.toThrow('ai_key_provider_not_editable');
+});
+
+test('the capture error opens the declared Home tool on the exact media service field', async () => {
     const invoke = vi.fn(async () => ({ ok: true }));
-    await openAssistantAiSettings({ error: 'provider_principal_unavailable', invoke,
+    await openAssistantAiSettings({ error: 'provider_principal_unavailable', providerId: 'runway', invoke,
         loadModule: async () => ({ ensureHomePanelModule: async () => {} }) });
     expect(invoke).toHaveBeenCalledExactlyOnceWith({ tool_id: 'ui.home.panel', action: 'pointer.click', presentation: 'ui',
         source: { type: 'assistant_ai_settings' }, input: { section: 'settings',
-            subsections: ['settings.passkeys', 'passkeys.keys'], revealNodeId: 'home_key_openai_api', focusField: 'security.aiKeys.openai' } });
+            subsections: ['settings.passkeys', 'passkeys.keys'], revealNodeId: 'home_key_runway_api', focusField: 'security.aiKeys.runway' } });
 });
 
 test('a service provider failure focuses that provider without changing the active AI preference', async () => {
@@ -47,11 +62,11 @@ test('simultaneous errors for the same destination pause once and navigate once 
     const pause = vi.fn(async () => {}), navigate = vi.fn(async () => ({ ok: true }));
     const navigation = createAssistantSettingsNavigation({ isActive: () => true, pause, navigate, onFailure: vi.fn() });
     navigation.begin();
-    expect(navigation.handle('no_ai_key_configured')).toBe(true);
-    navigation.handle('provider_principal_unavailable'); navigation.handle('invalid_api_key');
+    expect(navigation.handle('no_ai_key_configured', 'runway')).toBe(true);
+    navigation.handle('provider_principal_unavailable', 'runway'); navigation.handle('invalid_api_key', 'runway');
     await flush();
     expect(pause).toHaveBeenCalledTimes(1); expect(navigate).toHaveBeenCalledTimes(1);
-    navigation.begin(); navigation.handle('no_ai_key_configured'); await flush();
+    navigation.begin(); navigation.handle('no_ai_key_configured', 'runway'); await flush();
     expect(navigate).toHaveBeenCalledTimes(2);
 });
 
@@ -67,14 +82,14 @@ test('an obsolete failure cannot alter a replacement attempt', async () => {
     const pending = deferred(), onFailure = vi.fn();
     const navigation = createAssistantSettingsNavigation({ isActive: () => true, pause: async () => {},
         navigate: async () => { await pending.promise; throw new Error('old_failure'); }, onFailure });
-    navigation.begin(); navigation.handle('invalid_api_key'); await flush();
+    navigation.begin(); navigation.handle('invalid_api_key', 'runway'); await flush();
     navigation.begin(); pending.resolve(); await flush(); expect(onFailure).not.toHaveBeenCalled();
 });
 
 test('a late prerequisite from a closed session cannot pause or open anything', async () => {
     const pause = vi.fn(), navigate = vi.fn();
     const navigation = createAssistantSettingsNavigation({ isActive: () => false, pause, navigate });
-    expect(navigation.handle('provider_principal_unavailable')).toBe(true);
+    expect(navigation.handle('provider_principal_unavailable', 'musicgpt')).toBe(true);
     await flush(); expect(pause).not.toHaveBeenCalled(); expect(navigate).not.toHaveBeenCalled();
 });
 

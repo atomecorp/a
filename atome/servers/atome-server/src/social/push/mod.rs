@@ -285,31 +285,6 @@ impl Push {
             .await?;
         Ok(rows.iter().any(|row| self.transport(row).configured()))
     }
-
-    /// The `push:<op>` SERVICE frames of Fastify's thin client (server/communication_push.js).
-    pub async fn service(&self, operation: &str, payload: &JsonValue) -> Result<JsonValue, String> {
-        let principal = js::id(payload.get("principal"));
-        match operation {
-            "push:deliver" => {
-                let except_key_ids = payload
-                    .get("exceptKeyIds")
-                    .and_then(JsonValue::as_array)
-                    .map(|keys| keys.iter().map(js::string).collect());
-                let audience = Audience {
-                    except_key_ids,
-                    personal_only: payload.get("personalOnly") == Some(&JsonValue::Bool(true)),
-                };
-                self.deliver(
-                    &principal,
-                    payload.get("item").unwrap_or(&json!({})),
-                    &audience,
-                )
-                .await
-            }
-            "push:available" => self.available(&principal).await.map(JsonValue::Bool),
-            other => Err(format!("push_operation_unknown:{other}")),
-        }
-    }
 }
 
 // What the device receives: the item's ids alone, and for a call what rings it.

@@ -43,6 +43,30 @@ test('voice context supplies fullscreen by default, preserves small-window reque
     await voice.execute({ call_id: 'epg', name: 'atome_6', arguments: '{"input":{"channel":"fr2"},"action":"pointer.click"}' });
     assert.equal(invocations[2].tool_id, 'tv.now'); assert.equal(Object.hasOwn(invocations[2].input, 'fullscreen'), false);
 });
+// R-173 L6 (sonde L6): a voice connection counted its tools for its whole life, so the 17th of a conversation was refused.
+// The limit is a person's turn, as in writing: each turn of theirs starts it again; a loop within one turn still stops.
+test('a voice connection counts its tools per turn of the person, and a loop within one turn still stops', async () => {
+    const incidents = [];
+    const session = createConversationSession({ actor: () => ({ id: 'u' }), quota: { getSummary: () => ({}), recordIncident: (...args) => incidents.push(args) }, maxToolCalls: 16,
+        mcp: async ({ method }) => ({ result: method === 'runtime.tools.list' ? { tools: TV_COMMANDS.map(c => ({ name: c.name, description: c.description, parameters: c.input_schema })) }
+            : method === 'ai.tools.list' ? { tools: [] } : { ok: true } }),
+        request: async () => { throw new Error('no provider response in this test'); } });
+    const voice = await session.createVoiceTools({ signal: new AbortController().signal, deliver: async () => {} });
+    let id = 0;
+    const search = () => voice.execute({ call_id: `c${++id}`, name: 'atome_tool_search', arguments: '{"query":"tv"}' });
+    // Two turns of the person, ten tools each: twenty in all, every one done.
+    for (const turn of [1, 2]) {
+        await session.appendVoiceTurn({ id: `t${turn}`, role: 'user', text: `demande ${turn}` });
+        for (let n = 0; n < 10; n++) await search();
+    }
+    // Seventeen within one turn: the seventeenth is refused.
+    await session.appendVoiceTurn({ id: 't3', role: 'user', text: 'demande 3' });
+    for (let n = 0; n < 16; n++) await search();
+    await assert.rejects(search(), /conversation_tool_limit/);
+    // The assistant's own words never start the count again.
+    await session.appendVoiceTurn({ id: 'a3', role: 'assistant', text: 'voilà' });
+    await assert.rejects(search(), /conversation_tool_limit/);
+});
 
 test('viewing commands are always at hand; an open tool adds its commands and one line, a closed one nothing', async () => {
     const { YOUTUBE_COMMANDS } = await import('../../atome/src/squirrel/youtube/contracts.js');
@@ -54,7 +78,9 @@ test('viewing commands are always at hand; an open tool adds its commands and on
         request: async () => { throw new Error('no provider response in this test'); } });
     const named = (voice) => voice.tools.map(tool => String(tool.description || '').split(':')[0]).filter(Boolean);
     const closed = await session.createVoiceTools({ signal: new AbortController().signal, deliver: async () => {} });
-    assert.deepEqual(named(closed).sort(), ['Discover authorized Atome tools by matching words in their names and descriptions. Search before choosing a tool that is not yet available.', 'tv.open_channel', 'youtube.play'].sort());
+    // Its own two tools (the search, and the yes to a question held with ASK_THE_PERSON: AGENTS.md rule 22), then the viewing commands.
+    assert.deepEqual(named(closed).sort(), ['Discover authorized Atome tools by matching words in their names and descriptions. Search before choosing a tool that is not yet available.',
+        'Do an action held with ASK_THE_PERSON, after the person said yes to your question in their own words.', 'tv.open_channel', 'youtube.play'].sort());
     assert.equal(closed.instructions.includes('Open tools:'), false);
     open = { preload: YOUTUBE_COMMANDS.map(c => c.name), notes: ['YouTube is open: « mets … » means youtube.play.'] };
     const opened = await session.createVoiceTools({ signal: new AbortController().signal, deliver: async () => {} });

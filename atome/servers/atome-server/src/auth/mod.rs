@@ -2,8 +2,8 @@
 // server/http_request_identity.js): a token signed with the server's secret
 // (`JWT_SECRET`, 32 characters at least), its claims those of a device session, its
 // session and its key live in the central database. Read from the request's
-// Bearer alone: Fastify registers no cookie parser, so its `access_token` cookie
-// branch never reads one. The replication peers' shared token
+// Bearer alone: Fastify registered no cookie parser, so its `access_token` cookie
+// branch never read one. The replication peers' shared token
 // (`SQUIRREL_SYNC_TOKEN`) names a principal without a session.
 pub mod account_actions;
 pub mod account_auth;
@@ -90,7 +90,7 @@ pub const PUBLIC_ERRORS: &[&str] = &[
 ];
 
 pub struct Sessions {
-    // None when the configured secret is shorter than Fastify accepts: nothing verifies.
+    // None when the configured secret is shorter than Fastify accepted: nothing verifies.
     secret: Option<String>,
     sync_token: Option<String>,
     central: Central,

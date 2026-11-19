@@ -100,14 +100,13 @@ Check membership, remaining quota and renewals in the Apple portal:
 
 ## Server lifecycle and retention
 
-`node scripts/ios/deploy.mjs --dry-run` lists the OTA files and production
-patches. `--apply` is a production change requiring explicit authorization.
-It backs up the touched sources and Nginx configuration under
-`/var/backups/atome-ios-ota/`, installs only the OTA module, suppresses OTA URL
-logging, initializes a server-only capability secret, validates syntax/Nginx,
-restarts the existing service and probes health. Failed deployment restores
-the backed-up files and restarts the preceding composition. It does not reset
-accounts, vaults or application databases.
+The OTA routes are part of atome-server (`atome/servers/atome-server/src/ios_ota/`)
+and ship with every server update (`scripts/server_update.js`). A server serves
+them once its store exists: `node scripts/ios/ota-store.mjs init` on the server
+creates it with its server-only capability secret (a production change requiring
+explicit authorization). The Nginx site keeps OTA URLs out of the access log
+(`location ^~ /ios/ { access_log off; … }`, written by `install_server.sh`).
+Nothing here resets accounts, vaults or application databases.
 
 IPA files enter `.incoming/UUID/`. The Mac verifies Apple's embedded signatures,
 certificate membership/expiry, entitlements, device-set equality and versions;

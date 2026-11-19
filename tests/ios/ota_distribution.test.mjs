@@ -3,11 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import Fastify from 'fastify';
-import { initialize, stage, publish, current, hashFile, cleanup, rollback, finalize, enroll, readJson, atomicJson, withStoreLock, probe } from '../../scripts/ios/ota-store.mjs';
-import { manifest, DOWNLOAD_TTL_MS, CURRENT_MANIFEST_PATH, issueCapability, verifyCapability, tokenHash } from '../../scripts/ios/ota-contract.mjs';
+import { initialize, stage, publish, current, hashFile, cleanup, rollback, finalize, enroll, withStoreLock, probe } from '../../scripts/ios/ota-store.mjs';
+import { manifest, DOWNLOAD_TTL_MS, CURRENT_MANIFEST_PATH, issueCapability, verifyCapability } from '../../scripts/ios/ota-contract.mjs';
 import { validateProfile, readPlist } from '../../scripts/ios/signing.mjs';
-import { registerIosOtaRoutes } from '../../server/http_ios_ota_routes.js';
 import { productContents, ledgerContent, writeContents, PROJECT_FILE, PRODUCT_FILES } from '../../scripts/ios/version-ledger.mjs';
 
 const fixtures = [];
@@ -87,36 +85,7 @@ describe('OTA access and wire contracts', () => {
         expect(verifyCapability('secret', issueCapability('secret', stable), now)).toEqual(stable);
         expect(() => verifyCapability('secret', issueCapability('secret', { ...stable, id: 'x' }), now)).toThrow();
     });
-    it('authorizes a personal link, serves a cookie-free manifest/IPA range, and revokes both', async () => {
-        const root = fixture(); const report = await candidate(root); await publish(report, 'https://atome.one', root);
-        const { token } = enroll('owner', root); const server = Fastify(); registerIosOtaRoutes(server, { root });
-        try {
-            expect((await server.inject('/ios/builds/invalid/atome.ipa')).statusCode).toBe(403);
-            await withStoreLock(root, async () => {
-                expect((await server.inject({ method: 'POST', url: '/ios/session', headers: { authorization: `Bearer ${token}` } })).statusCode).toBe(503);
-            });
-            const session = await server.inject({ method: 'POST', url: '/ios/session', headers: { authorization: `Bearer ${token}` } });
-            expect(session.statusCode).toBe(200);
-            const install = new URL(session.json().install); const url = new URL(install.searchParams.get('url'));
-            expect(url.pathname).toBe(CURRENT_MANIFEST_PATH);
-            const plist = await server.inject(url.pathname + url.search); expect(plist.statusCode).toBe(200);
-            const ipa = new URL(readPlist(plist.body).items[0].assets[0].url);
-            expect(ipa.pathname).toBe(`/ios/builds/${report.id}/atome.ipa`);
-            expect((await server.inject(`${CURRENT_MANIFEST_PATH}${ipa.search}`)).statusCode).toBe(403);
-            expect((await server.inject(`/ios/builds/${report.id}/atome.ipa${url.search}`)).statusCode).toBe(403);
-            const newer = await candidate(root, '25', 'signed-newer'); await publish(newer, 'https://atome.one', root);
-            const same = readPlist((await server.inject(url.pathname + url.search)).body).items[0];
-            expect(same.metadata['bundle-version']).toBe('25');
-            expect(new URL(same.assets[0].url).pathname).toBe(`/ios/builds/${newer.id}/atome.ipa`);
-            const ranged = await server.inject({ url: ipa.pathname + ipa.search, headers: { range: 'bytes=0-5' } });
-            expect(ranged.statusCode).toBe(206); expect(ranged.body).toBe('signed');
-            expect((await server.inject({ url: ipa.pathname + ipa.search, headers: { range: 'bytes=999-' } })).statusCode).toBe(416);
-            const config = readJson(path.join(root, 'settings.json')); config.users[tokenHash(token)].enabled = false;
-            atomicJson(path.join(root, 'settings.json'), config);
-            expect((await server.inject(ipa.pathname + ipa.search)).statusCode).toBe(403);
-            expect((await server.inject({ method: 'POST', url: '/ios/session', headers: { authorization: `Bearer ${token}` } })).statusCode).toBe(403);
-        } finally { await server.close(); }
-    });
+    // The routes serving a personal link, the manifest and the IPA are atome-server's (src/ios_ota/).
     it('refuses development, App Store, expired and wrong-identity profiles', () => {
         const profile = { TeamIdentifier: ['TEAM'], Entitlements: { 'application-identifier': 'TEAM.app', 'get-task-allow': false },
             ProvisionedDevices: ['B', 'A'], ExpirationDate: '2030-01-01' };

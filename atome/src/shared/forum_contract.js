@@ -1,6 +1,6 @@
 // Forums (user decisions 3, 4, 6 and 7 of 26 Oct. 2026; mockups f1–f3 validated 29 Oct.): a name and the people
 // chosen for it, a true forum — every member writes and reads the others' posts and sees who belongs; a person
-// added is invited and reads nothing before accepting. Shared by the server (server/forums.js) and the app
+// added is invited and reads nothing before accepting. Shared by the server (atome/servers/atome-server/src/social/news/forums.rs) and the app
 // (eVe/domains/forum/). A forum's posts are News publications whose audience is the forum.
 
 export const FORUM_NAME_MAX = 60;

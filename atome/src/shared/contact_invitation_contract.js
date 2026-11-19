@@ -1,6 +1,6 @@
 // An invitation to atome.one, kept as an Atome of the inviter: written on the device first, so one made
 // offline waits there and leaves at the next connection (eVe/intuition/tools/contact_invite.js); the server
-// mails it from its own sender with a link valid 21 days, for one account (server/auth_invites.js).
+// mails it from its own sender with a link valid 21 days, for one account (atome/servers/atome-server/src/auth/invites.rs).
 export const CONTACT_INVITATION_ATOME_TYPE = 'contact_invitation';
 export const CONTACT_INVITATION_STATES = Object.freeze(['pending', 'sent', 'failed']);
 // One address, without a display name or a list: what the server accepts too.

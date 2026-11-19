@@ -141,10 +141,12 @@ test('Mystic keeps the finger at every edge, the compass where it fits, and pins
     }
 });
 
-test('Entertainment and Interactivity use normal beginner taxonomy', () => {
-    const context = { type: 'project', selected: false, level: 'beginner', activity: 'entertainment' };
+// R-164 (15 Nov. 2026): Divertissement left the activities; its YouTube, PeerTube and TV tools joined Vidéo.
+test('Video and Interactivity use normal beginner taxonomy', () => {
+    const context = { type: 'project', selected: false, level: 'beginner', activity: 'video' };
     const keys = resolveContextMenu({ menu: 'sidebar', context }).map(item => item.key);
-    assert.ok(keys.includes('youtube_create')); assert.ok(keys.includes('tv'));
+    assert.ok(['youtube_create', 'peertube_create', 'tv'].every(key => keys.includes(key)));
+    assert.throws(() => resolveContextMenu({ menu: 'sidebar', context: { ...context, activity: 'entertainment' } }), /context_menus_activity_unknown/);
     const interaction = resolveContextMenu({ menu: 'sidebar', context: { ...context, activity: 'interactivity' } });
     assert.ok(interaction.some(item => item.key === 'interaction'));
 });

@@ -22,7 +22,7 @@ mod oauth;
 mod openai;
 mod params;
 mod realtime;
-mod shared_grant;
+pub(crate) mod shared_grant;
 pub(crate) mod social;
 mod speech;
 mod strava;

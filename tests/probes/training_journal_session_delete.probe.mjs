@@ -58,7 +58,8 @@ try {
     note('log_after_stop', { sessions: (log?.sessions || []).map(x => [x.status, x.sets_done, x.end]), error: log?.error ?? null,
         exercise: ((await tool('training.get_exercise', { exercise_id: EXERCISE }))?.sessions || []).map(x => [x.status, x.sets_done, x.start, x.end]) });
     await sleep(2500);
-    const journal = await tool('training.open_journal', {});
+    // The « Entraînement » carnet's Séances level (R-238): the session cards, each held for its delete.
+    const journal = await tool('training.open_journal', { view: 'sessions' });
     check('journal_opened', journal?.ok === true, journal);
     await sleep(3000);
     await shot(page, '1_journal');

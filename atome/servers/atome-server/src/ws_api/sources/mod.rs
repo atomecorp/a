@@ -1,6 +1,6 @@
 // The external sources of `/ws/api` (server/wsExternalResourceOperations.js, ported family by
 // family): bounded reads of public providers and of the server's own reference data, and the
-// account's reports to the operator. Fastify answers them after the device session is checked
+// account's reports to the operator. Fastify answered them after the device session is checked
 // (`validateConnectionDeviceSession`); here the connection checks it (identity.rs `connection_of`) and
 // says which account it is attached to. As on Fastify, a family's thrown error answers nothing:
 // it is told to the operator.

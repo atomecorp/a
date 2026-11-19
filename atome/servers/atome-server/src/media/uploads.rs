@@ -192,7 +192,7 @@ fn done(destination: &Destination, user: &str) -> Response {
 impl Uploads {
     pub async fn answer(&self, peer: std::net::SocketAddr, request: Request) -> Response {
         if request.method() == Method::GET {
-            // A GET carries no body Fastify would read.
+            // A GET carries no body Fastify would have read.
             let claims = self.sessions.validate_request(request.headers()).await;
             let user = user_id(claims.as_ref());
             return match self.storage.downloads(&self.router, &user).await {

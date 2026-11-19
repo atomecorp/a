@@ -15,7 +15,8 @@ vi.mock('../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_vault.js', () =>
     storeHomeCredential: (...args) => calls.credential(...args), storeHomeMailSecret: (...args) => calls.mail(...args),
     mailVaultEntryId: ({ userId }) => `mail.auth.${userId}`,
     readHomeVaultState: async () => ({ unlocked: true, credentials: [], mailConfigured: false,
-        providers: [{ id: 'openai', kind: 'chat', configured: true, models: ['fixture-model'] }] })
+        providers: [{ id: 'openai', kind: 'chat', configured: true, models: ['fixture-model'] },
+            { id: 'runway', kind: 'video', configured: false, models: [] }] })
 }));
 vi.mock('../../atome/src/squirrel/voice/bootstrap.js', () => ({
     bootstrapGlobalVoice: () => ({ wake: { subscribe: () => () => {} } })
@@ -61,7 +62,8 @@ test('focusing and leaving an empty replacement never overwrites a configured ke
     finally { f.close(); }
 });
 
-for (const outcome of ['focused', 'cancelled', 'unavailable']) test('requested OpenAI focus after projection: ' + outcome, async () => {
+// The key panel lists the media services only (R-120): a requested focus lands on Runway's field.
+for (const outcome of ['focused', 'cancelled', 'unavailable']) test('requested Runway focus after projection: ' + outcome, async () => {
     const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost', pretendToBeVisual: true });
     const previous = { window: globalThis.window, document: globalThis.document };
     globalThis.window = dom.window; globalThis.document = dom.window.document;
@@ -76,7 +78,7 @@ for (const outcome of ['focused', 'cancelled', 'unavailable']) test('requested O
         return painted;
     };
     const release = homeSurface.onOpen({ context: { section: 'settings', subsections: ['settings.passkeys', 'passkeys.keys'],
-        revealNodeId: 'home_key_openai_api', focusField: 'security.aiKeys.openai', onHomeNavigationReady: task => { ready = task; } }, refresh });
+        revealNodeId: 'home_key_runway_api', focusField: 'security.aiKeys.runway', onHomeNavigationReady: task => { ready = task; } }, refresh });
     try {
         await vi.waitFor(() => expect(readHomePanelState().loading).toBe(false));
         expect(dom.window.document.querySelector('#eve_hidden_text_service [data-role="active-text-editor"]')).toBeNull();
@@ -90,7 +92,7 @@ for (const outcome of ['focused', 'cancelled', 'unavailable']) test('requested O
             expect(dom.window.document.querySelector('#eve_hidden_text_service [data-role="active-text-editor"]')).toBeNull();
         } else {
             expect(result.ok).toBe(true);
-            expect(panels.reveal).toHaveBeenCalledWith(expect.objectContaining({ nodeId: 'home_key_openai_api' }));
+            expect(panels.reveal).toHaveBeenCalledWith(expect.objectContaining({ nodeId: 'home_key_runway_api' }));
             const editor = dom.window.document.querySelector('#eve_hidden_text_service [data-role="active-text-editor"]');
             expect(dom.window.document.activeElement).toBe(editor); expect(editor.value).toBe('');
         }

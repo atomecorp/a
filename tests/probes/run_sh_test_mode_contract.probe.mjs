@@ -16,12 +16,13 @@ const assertTestModeExports = (source, label) => {
     assert.match(source, /--test\)[\s\S]*TEST_MODE=true/, `${label} must parse --test`);
     assert.match(source, /NODE_ENV:-\}" == "production"[\s\S]*--test cannot run with NODE_ENV=production/, `${label} must reject NODE_ENV=production`);
     assert.match(source, /export NODE_ENV=test/, `${label} must force NODE_ENV=test`);
-    assert.match(source, /export SQUIRREL_AUTH_TEST_MODE=1/, `${label} must export the auth test mode marker`);
-    assert.match(source, /export SQUIRREL_AUTH_OTP_BYPASS=1/, `${label} must export the OTP bypass marker`);
+    assert.match(source, /--test cannot run[\s\S]*export SQUIRREL_AUTH_SMS_MOCK=1/, `${label} must hand the phone link back in test mode`);
+    // Only the retired Fastify server read these; atome-server and Tauri's Axum read neither.
+    assert.doesNotMatch(source, /SQUIRREL_AUTH_TEST_MODE|SQUIRREL_AUTH_OTP_BYPASS/, `${label} must not export a switch no server reads`);
 };
 
 assert.match(serviceCommands, /--test\s+Launch deterministic local test mode/, 'run.sh help must document --test');
-assert.match(serviceCommands, /--auth-local\s+Use local Fastify with simulated SMS validation/, 'run.sh help must document local auth');
+assert.match(serviceCommands, /--auth-local\s+Use the local server with simulated SMS validation/, 'run.sh help must document local auth');
 assert.match(serviceCommands, /--auth-prod\s+Use atome\.one and send a real, billable SMS/, 'run.sh help must identify billable production SMS');
 assert.match(runUnix, /SQUIRREL_AUTH_SMS_MOCK=1/, 'the default full development launch must enable simulated SMS');
 assert.match(runUnix, /FASTIFY_URL="http:\/\/127\.0\.0\.1:3001"/, 'local auth must use the local Fastify authority');

@@ -72,3 +72,47 @@ test('remote terminal call state stops local capture and both canonical media tr
     expect(transports).toHaveLength(2);
     for (const media of transports) expect(media.close).toHaveBeenCalledOnce();
 });
+// R-173 L5: the other's producer announced (newProducer) while the receive transport is being made was dropped, so that
+// voice was never heard for the whole call. It is consumed once the transport exists, and no producer is consumed twice.
+test('a producer announced before the receive transport is consumed once it exists, each producer once', async () => {
+    if (typeof globalThis.MediaStream === 'undefined') {
+        vi.stubGlobal('MediaStream', class { constructor(tracks = []) { this.tracks = [...tracks]; }
+            addTrack(track) { this.tracks.push(track); } removeTrack(track) { this.tracks = this.tracks.filter((t) => t !== track); }
+            getTracks() { return this.tracks; } getVideoTracks() { return this.tracks.filter((t) => t.kind === 'video'); } });
+    }
+    const win = new EventTarget(), consumed = [];
+    const announce = (producerId) => {
+        const event = new Event('squirrel:visio-event');
+        event.detail = { roomId: 'room', event: { type: 'newProducer', producer_id: producerId, peer_user_id: 'ana' } };
+        win.dispatchEvent(event);
+    };
+    const transport = () => ({ id: 'recv', on() {}, close: vi.fn(), produce: async () => ({ id: 'mine' }),
+        consume: async ({ producerId }) => ({ id: `c-${producerId}`, kind: 'audio', track: { kind: 'audio', stop() {} }, close() {} }) });
+    class Device {
+        async load() {}
+        get rtpCapabilities() { return {}; }
+        createSendTransport() { return transport(); }
+        createRecvTransport() { return transport(); }
+    }
+    const api = { security: { getAuthenticatedUser: () => ({ id: 'bunta' }) }, communication: {
+        visio: async ({ action, input }) => {
+            if (action === 'joinRoom') return { rtpCapabilities: {}, participants: [], existingProducers: [{ producer_id: 'p1', peer_user_id: 'ana' }] };
+            if (action === 'createTransport' && input.direction === 'recv') {
+                // Ana's voice announced while Bunta's receive transport is not there yet (the run-4 race), and announced twice.
+                announce('p2'); announce('p2');
+                await new Promise((resolve) => setTimeout(resolve, 0));
+            }
+            if (action === 'consume') { consumed.push(input.producer_id); return { consumerOptions: { producerId: input.producer_id } }; }
+            return action === 'createTransport' ? { transportOptions: {} } : {};
+        }
+    } };
+    const call = createVisioCallRuntime({ win, getApi: () => api, loadClient: async () => ({ Device }),
+        getUserMedia: async () => ({ getTracks: () => [], getVideoTracks: () => [] }) });
+    expect((await call.listen('room')).ok).toBe(true);
+    // p1 announced again after the join: already consumed, never twice. p2 was only announced early.
+    announce('p1');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(consumed.sort()).toEqual(['p1', 'p2']);
+    const ana = call.getState().participants.find((p) => p.userId === 'ana');
+    expect(ana.stream.getTracks()).toHaveLength(2);
+});

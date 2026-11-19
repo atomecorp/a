@@ -22,6 +22,19 @@ fn particle(row: &JsonValue, key: &str) -> Result<Option<JsonValue>, String> {
     }
 }
 
+/// `normalizePhone` (server/auth_crypto.js): its digits, one leading `+` kept.
+pub fn normalize_phone(value: &str) -> String {
+    let cleaned: String = value
+        .trim()
+        .chars()
+        .filter(|c| c.is_ascii_digit() || *c == '+')
+        .collect();
+    match cleaned.strip_prefix('+') {
+        Some(rest) => format!("+{}", rest.replace('+', "")),
+        None => cleaned,
+    }
+}
+
 pub fn phone_of(db: &Connection, principal: &str) -> Result<Option<String>, String> {
     db.query_row(
         "SELECT normalized_phone FROM principal_phone_credentials
@@ -221,8 +234,8 @@ const RESERVED_USER_PARTICLE_KEYS: [&str; 18] = [
 /// `createUserAtome` for an id no atome holds: the account atome, its username, visibility
 /// and access (`updateUserParticle`, authored by it), its verified number when it has one,
 /// and its state (`upsertUserStateCurrent`). Fastify's branches for an id already held (a
-/// deleted account reactivated, a mistyped one repaired) serve its sign-up alone, still
-/// Fastify's: an id already held is refused here as Fastify refuses a live account.
+/// deleted account reactivated, a mistyped one repaired) served its own sign-up alone, retired
+/// with it: an id already held is refused here as Fastify refused a live account.
 pub fn create(
     db: &Connection,
     principal: &str,

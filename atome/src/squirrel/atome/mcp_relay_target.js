@@ -1,5 +1,5 @@
 // The target side of a program's MCP request carried by the `remote-control` relay
-// (server/remoteCommandRelay.js, field `mcp`): this device answers it through its own standard
+// (atome/servers/atome-server/src/ws_api/remote_commands.rs, field `mcp`): this device answers it through its own standard
 // MCP layer (mcp_protocol.js) and single entry, as the program surface's actor (mcp_surface_grants.js).
 //
 // Relay adapters (architecture §6.3):

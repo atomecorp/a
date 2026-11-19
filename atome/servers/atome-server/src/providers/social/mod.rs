@@ -172,7 +172,7 @@ impl Config {
 }
 
 /// `Private/social.env` read in development (an existing variable winning); an unreadable file
-/// stops the server, as it stops Fastify's boot (`registerSocialRoutes`).
+/// stops the server, as it stopped Fastify's boot (`registerSocialRoutes`).
 pub fn config(settings: &Settings, project_root: &Path) -> Result<Config, String> {
     let file = settings.secret_file(
         project_root,

@@ -16,7 +16,6 @@ beforeAll(() => loadEngine({
     moduleUrl: new URL('../../atome/src/wasm/squirrel_audio_wasm.js', import.meta.url).href,
     binary: readFileSync(new URL('../../atome/src/wasm/squirrel_audio_wasm_bg.wasm', import.meta.url))
 }));
-vi.mock('../../database/adole.js', () => ({ default: { query: async () => { throw new Error('unexpected_database_access'); } } }));
 const involvement = { minutes: 10, basis: 'day', days: [1, 2, 3, 4, 5], rhythm: 3 };
 const start = '2030-01-07T20:00:00Z';
 const action = (key = 'a', at = start, minutes = 6, followupMinutes = 1, reviewMinutes = 1) => ({ key, title: 'Synthetic activity', tool: 'journal',

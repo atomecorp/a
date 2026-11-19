@@ -2,29 +2,29 @@
 
 > This repository (`a`, codename **Squirrel**) is the next-generation evolution of the original Atome Ruby framework and is still under active development. It is a work in progress, but not a mere proof of concept: it serves as the base for the fully functional solution. The roadmap includes a FreeBSD boot mode leveraging jails to provide connected, shareable environments that sync seamlessly online/offline (with robust conflict resolution), plus the same unified, agnostic object system that made classic Atome unique.
 > Atome (Squirrel version) is a full-stack, cross-platform creation framework aimed at building entire ecosystems: from multimedia operating-system-like experiences, audio/video editors, web apps, and services, down to tiny personal utilities or educational playgrounds.
-> Hybrid agnostic and multi purpose-first toolkit that mixes Vanilla JS + Squirrel UI DSL, a Node/Fastify toolchain, and a Rust/Tauri runtime to target web, desktop, mobile and even AUv3 hosts with a single codebase.
+> Hybrid agnostic and multi purpose-first toolkit that mixes Vanilla JS + Squirrel UI DSL, a Node build toolchain, and a Rust runtime (the atome-server Axum server, Tauri) to target web, desktop, mobile and even AUv3 hosts with a single codebase.
 
 ## Overview
 
-Squirrel provides a declarative UI DSL (expressed as plain JavaScript) that drives custom components, media tooling, and drag-and-drop workflows. The authoring syntax is intentionally Ruby-like (symbols, method blocks, `box/text` primitives) but compiles down to vanilla JS so it can run everywhere. The desktop shell is powered by Tauri 2, which embeds both a Rust (Axum) micro server and the Node/Fastify stack so that the same `/api/uploads` and static assets work across dev servers, packaged apps, and AUv3 extensions. Audio now uses the native CPAL/Kira path on Tauri, the Swift native AUv3 engine on iOS, and the WebAssembly/WebAudio path in browser contexts.
+Squirrel provides a declarative UI DSL (expressed as plain JavaScript) that drives custom components, media tooling, and drag-and-drop workflows. The authoring syntax is intentionally Ruby-like (symbols, method blocks, `box/text` primitives) but compiles down to vanilla JS so it can run everywhere. The server is atome-server (Rust, Axum), one binary on every platform; the desktop shell is powered by Tauri 2, which embeds its own Axum local server, so the same `/api/uploads` and static assets work across dev servers, packaged apps, and AUv3 extensions. Audio now uses the native CPAL/Kira path on Tauri, the Swift native AUv3 engine on iOS, and the WebAssembly/WebAudio path in browser contexts.
 
 ## Architecture at a glance
 
 | Layer | Purpose | Default ports / paths |
 | --- | --- | --- |
 | **Squirrel Frontend** (`src/application`) | Builds views via `$()` helpers and DSL-generated components. | Runs inside the browser, the Tauri webview, or WKWebView for AUv3. |
-| **Fastify server** (`server/server.js`) | Serves static files during development, exposes `/api/uploads` backed by `src/assets/uploads`, handles DB access (SQLite/libSQL via ADOLE). | `http://127.0.0.1:3001` |
+| **atome-server** (`atome/servers/atome-server`) | The one server (Rust, Axum): static files, `/ws/api`, `/ws/sync`, `/api/uploads` under `data/users/<id>`, accounts in SQLite, one `atome-vault` process per person. | `http://127.0.0.1:3001` |
 | **Axum server in Tauri** (`src-tauri/src/server`) | Mirrors the same API when the app runs inside Tauri, persisting uploads under the sandbox (`~/Library/Containers/.../uploads`). | `http://127.0.0.1:3000` |
-| **Tauri host** (`src-tauri`) | Launches the Axum server, makes sure Fastify is running (spawning it if needed), and exposes the port to the frontend. | Native desktop bundle. |
+| **Tauri host** (`platforms/desktop-tauri`) | Launches its Axum local server and exposes the port to the frontend; it syncs with atome-server as a client. | Native desktop bundle. |
 | **Audio runtime** (`engines/audio/core`, `platforms/web/audio-wasm`, `platforms/ios/atome-auv3`) | Shared native recorder utilities, browser audio WASM, and Swift AUv3 audio host code. | Depends on the chosen target. |
 
 ## Key capabilities
 
 - **Declarative UI DSL** – Build interfaces entirely in JS using Squirrel selectors (no raw HTML/CSS edits).
 - **Drag & drop uploads** – `src/application/aBox/index.js` streams blobs to `/api/uploads`, refreshes metadata, and offers one-click downloads.
-- **Multi-runtime parity** – Fastify (Node) and Axum (Rust) implement the same endpoints, so Tauri/AUv3 and the browser stay aligned.
+- **Multi-runtime parity** – atome-server and Tauri's local server (both Rust, Axum) implement the same endpoints, so Tauri/AUv3 and the browser stay aligned.
 - **Audio tooling** –  GSAP animations, Tone.js helpers, native CPAL/Kira audio, Swift AUv3 audio, and WebAudio/WASM browser support.
-- **Automation scripts** – `run.sh` installs deps, configures SQLite paths, launches Fastify + Tauri, or builds production bundles.
+- **Automation scripts** – `run.sh` installs deps, configures SQLite paths, launches atome-server + Tauri, or builds production bundles.
 
 ## Prerequisites
 
@@ -58,13 +58,13 @@ For a non-launching audit:
 npm install
 ```
 
-### 3. Run only the Fastify backend (dev web)
+### 3. Run only the server (dev web)
 
 ```bash
 npm run start:server
 ```
 
-This serves `src/` at `http://127.0.0.1:3001`, exposes `/api/uploads`, and uses `src/assets/uploads` as the storage root.
+This builds and starts `target/release/atome-server`, which serves the client at `http://127.0.0.1:3001` and keeps each person's files under `data/users/<id>`.
 
 ### 4. Launch only the Tauri shell
 
@@ -72,17 +72,17 @@ This serves `src/` at `http://127.0.0.1:3001`, exposes `/api/uploads`, and uses 
 npm run tauri dev
 ```
 
-Tauri embeds the Axum server on port `3000`, points the webview to the same `src/` assets, and spawns Fastify if it is not already running.
+Tauri embeds the Axum server on port `3000`, and points the webview to the same `src/` assets.
 
 ### 5. Orchestrated workflow
 
 ```bash
-./run.sh              # installs deps (if needed), starts Fastify + Tauri
+./run.sh              # installs deps (if needed), starts atome-server + Tauri
 ./run.sh --force-deps # forces dependency reinstall before launch
 ./run.sh --prod       # builds frontend + tauri bundle, mounts the dmg
 ```
 
-`run.sh` also ensures `SQLITE_PATH` exists by using `database_storage/adole.db` as the default database location. For cloud deployments, set `LIBSQL_URL` and `LIBSQL_AUTH_TOKEN` for Turso.
+`run.sh` also ensures `SQLITE_PATH` exists by using `database_storage/adole.db` as the default database location.
 
 ### 6. Production bundles & packages
 
@@ -169,12 +169,12 @@ lower floor fails at link time.
 
 1. `DragDrop.createDropZone` in `src/application/aBox/index.js` collects dropped files.
 2. Each file is sent as `application/octet-stream` with an `X-Filename` header to `/api/uploads`.
-3. The server (Fastify or Axum) sanitizes the filename, resolves collisions, writes to disk, and responds with `{ success: true, file }`.
+3. The server (atome-server, or Tauri's Axum) sanitizes the filename, resolves collisions, writes to disk, and responds with `{ success: true, file }`.
 4. `fetchUploadsMetadata` polls `/api/uploads` to rebuild the list; clicking an entry triggers `/api/uploads/:file` for download.
 
 > **Storage paths**
 >
-> - **Fastify (Node)**: saves under `src/assets/uploads` relative to the repo root.
+> - **atome-server**: saves under `data/users/<id>` relative to the repo root.
 > - **Tauri/Axum**: saves under the app’s sandbox (`~/Library/Containers/.../uploads`). When the UI runs inside AUv3 or the packaged app, inspect that path instead of the repo folder.
 
 ## Repository tour
@@ -196,9 +196,10 @@ platforms/
 ├── web/audio-wasm/         # Browser Kira WASM audio engine source
 ├── ios/atome-auv3/         # Swift AUv3 host + UI bridge
 ├── ios/shared/             # Shared iOS support code
-server/
-├── server.js               # Fastify server used outside of Tauri
-scripts/                    # Helper scripts run by run.sh (dependencies, Fastify, Tauri)
+atome/servers/
+├── atome-server/           # The one server (Rust, Axum)
+├── atome-vault/            # One process per person's vault
+scripts/                    # Helper scripts run by run.sh (dependencies, server, Tauri)
 deploy/
 ├── certs/                  # Production HTTPS certificates (ignored except .gitkeep)
 dev/
@@ -228,7 +229,7 @@ The generated JS is still plain ES modules and ends up calling helpers like `cre
 
 - The root `CMakeLists.txt` builds shared targets: `dsp_core`, `ring_buffer`, `disk_reader`.
 - `platforms/web/audio-wasm` exposes the browser audio engine source, and `platforms/ios/atome-auv3` renders the Squirrel UI via WKWebView while routing audio through the Swift native AUv3 engine.
-- `scripts/run_fastify.sh` and `scripts/run_tauri.sh` are development launchers; `auv3.sh` deploys a debug AUv3 build to a connected device and `build_PWA_app.sh` packages the PWA. Release artifacts come from `./run.sh --tauri-prod` (macOS bundle), `./run.sh apk` (Android APK/AAB, see below) and `scripts/XCode_testflight_generator` (iOS/AUv3 upload).
+- `scripts/run_fastify.sh` (it starts atome-server; the name is kept) and `scripts/run_tauri.sh` are development launchers; `auv3.sh` deploys a debug AUv3 build to a connected device and `build_PWA_app.sh` packages the PWA. Release artifacts come from `./run.sh --tauri-prod` (macOS bundle), `./run.sh apk` (Android APK/AAB, see below) and `scripts/XCode_testflight_generator` (iOS/AUv3 upload).
 - Historical incident records are retained under `atome/documentations/archive/problem-solving/`; they are not current architecture contracts.
 
 ## Documentation & references

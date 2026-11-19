@@ -273,6 +273,8 @@ if [ "$OS_TYPE" == "linux" ]; then
     ensure_package "git" "git"
     ensure_package "build-essential" "gmake" # gmake on FreeBSD
     ensure_package "python3" "python3"
+    # The visio worker (mediasoup crate) is C++ built by meson, which pip installs for it.
+    ensure_package "python3-pip" "py311-pip"
     ensure_package "pkg-config" "pkgconf"
     ensure_package "qemu-system-x86" "qemu"
     ensure_package "qemu-utils" "qemu-utils" # Included in qemu on FreeBSD usually
@@ -409,20 +411,13 @@ touch node_modules/.install_complete
 
 log_ok "✅ npm dependencies installed."
 
-# --- 4. Database Setup (SQLite) --------------------------------------------
+# --- 4. Server Build (Rust) -------------------------------------------------
+# atome-server prepares the central database itself when it starts (central_schema).
 
-log_info "🗄️  Initializing SQLite Database..."
-
-# Initialize the database by running migrations
+log_info "🦀 Building atome-server and atome-vault..."
 cd "$APP_DIR"
-node -e "
-import { initDatabase, closeDatabase } from './database/adole.js';
-await initDatabase();
-console.log('Database initialized successfully');
-await closeDatabase();
-" 2>&1 || log_warn "Database initialization will be done on first run"
-
-log_ok "✅ Database ready."
+cargo build --release --locked -p atome-server -p atome-vault
+log_ok "✅ Server built."
 
 # --- 5. Nginx Configuration ------------------------------------------------
 
@@ -467,6 +462,13 @@ else
 server {
     listen 80;
     server_name $DOMAIN $WWW_DOMAIN;
+    # The iOS developer distribution's capability URLs are never logged (atome-server ios_ota).
+    location ^~ /ios/ {
+        access_log off;
+        proxy_pass http://127.0.0.1:$NODE_PORT;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
     location / {
         proxy_pass http://127.0.0.1:$NODE_PORT;
         proxy_http_version 1.1;
@@ -546,37 +548,19 @@ mkdir -p "$UPLOADS_DIR"
 chown -R $USER:$USER "$UPLOADS_DIR"
 chmod -R 775 "$UPLOADS_DIR"
 
-NODE_EXEC=$(command -v node)
+SERVER_EXEC="$APP_DIR/target/release/atome-server"
 
 if [ "$OS_TYPE" == "linux" ]; then
     # --- Systemd (Linux) ---
-    # Note: We run as root to avoid permission issues with node_modules
-    # The server binds to 127.0.0.1 so it's only accessible via Nginx
-    cat > /etc/systemd/system/$SERVICE_NAME.service <<EOF
-[Unit]
-Description=Squirrel Node.js Server
-After=network.target
-
-[Service]
-Type=simple
-User=root
-Group=root
-WorkingDirectory=$APP_DIR
-ExecStart=$NODE_EXEC $APP_DIR/server/server.js
-Restart=always
-RestartSec=5
-EnvironmentFile=$ENV_FILE
-Environment=NODE_ENV=production
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=$SERVICE_NAME
-
-[Install]
-WantedBy=multi-user.target
-EOF
-    systemctl daemon-reload
-    systemctl enable $SERVICE_NAME
-    systemctl restart $SERVICE_NAME
+    # The unit, the secrets and the vault confinement are scripts/server_update.js's (one owner): it
+    # writes the unit for /etc/<service>/squirrel.env, checks the vaults and restarts the service.
+    if [ "$ENV_FILE" != "/etc/$SERVICE_NAME/squirrel.env" ] || { [ "$SERVICE_NAME" != "squirrel" ] && [ "$SERVICE_NAME" != "squirrel-staging" ]; }; then
+        log_error "server_update.js serves squirrel or squirrel-staging with /etc/<service>/squirrel.env (got $SERVICE_NAME, $ENV_FILE)."
+        exit 1
+    fi
+    STAGING_FLAG=""
+    [ "$SERVICE_NAME" == "squirrel-staging" ] && STAGING_FLAG="--staging"
+    node scripts/server_update.js --no-git --no-deps $STAGING_FLAG
 
 elif [ "$OS_TYPE" == "freebsd" ]; then
     # --- RC.D (FreeBSD) ---
@@ -600,7 +584,7 @@ load_rc_config \$name
 
 pidfile="/var/run/\${name}.pid"
 command="/usr/sbin/daemon"
-command_args="-P \${pidfile} -r -f $NODE_EXEC server/server.js"
+command_args="-P \${pidfile} -r -f $SERVER_EXEC"
 
 # Export env vars from .env manually for sh
 export \$(grep -v '^#' $APP_DIR/.env | xargs)

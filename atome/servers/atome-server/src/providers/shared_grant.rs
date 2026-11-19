@@ -1,5 +1,6 @@
 // Bounded, revocable test seats on the platform OpenAI key (server/providerSharedGrant.js, ported:
-// `claim` and `recordTokens`; the operator's grant, revoke and listing stay the operator script's).
+// `claim` and `recordTokens`, and the operator's listing, grant, revoke, unblock and auto-enrollment
+// switch, which `atome_admin ai-seats` drives, src/admin/ai_seats.rs).
 // The key file never leaves the server: it is not returned, logged, synchronized or stored in a
 // vault. A person's own key always takes precedence and never takes a seat.
 use crate::settings::Settings;
@@ -17,11 +18,12 @@ const UNMETERED: [&str; 4] = [
     "realtime-close",
 ];
 
-struct Limits {
-    seats: i64,
-    operations: i64,
-    tokens: i64,
-    realtime: i64,
+/// The seats' count and each seat's daily allowance (`OPENAI_SHARED_*`).
+pub struct Limits {
+    pub seats: i64,
+    pub operations: i64,
+    pub tokens: i64,
+    pub realtime: i64,
 }
 
 pub struct SharedGrant {
@@ -127,6 +129,111 @@ impl SharedGrant {
             .await
     }
 
+    /// The limits read from the settings, or the setting that does not read as a whole number.
+    pub fn limits(&self) -> Result<&Limits, String> {
+        self.limits.as_ref().map_err(Clone::clone)
+    }
+
+    /// `activeCount()`: the seats in use.
+    pub async fn active_count(&self) -> Result<i64, String> {
+        let row = self
+            .central
+            .get(
+                "SELECT COUNT(*) AS count FROM provider_shared_seats WHERE state = 'active'",
+                Vec::new(),
+            )
+            .await?;
+        Ok(number(&row, "count"))
+    }
+
+    /// `autoEnrollment()`: `open` unless the operator closed the automatic claims.
+    pub async fn auto_enrollment(&self) -> Result<String, String> {
+        let row = self
+            .central
+            .get(
+                "SELECT value FROM provider_shared_settings WHERE name = 'auto_enrollment'",
+                Vec::new(),
+            )
+            .await?;
+        Ok(row
+            .as_ref()
+            .and_then(|row| row["value"].as_str())
+            .filter(|value| !value.is_empty())
+            .unwrap_or("open")
+            .to_string())
+    }
+
+    /// `setAutoEnrollment(open)`.
+    pub async fn set_auto_enrollment(&self, open: bool) -> Result<(), String> {
+        self.central
+            .run(
+                "INSERT INTO provider_shared_settings (name, value) VALUES ('auto_enrollment', ?)
+                 ON CONFLICT(name) DO UPDATE SET value = excluded.value",
+                vec![json!(if open { "open" } else { "closed" })],
+            )
+            .await
+    }
+
+    /// `list()`: every seat with its whole consumption and today's tokens, first claimed first.
+    pub async fn list(&self) -> Result<Vec<JsonValue>, String> {
+        self.central
+            .all(
+                "SELECT s.principal_id, s.state, s.granted_by, s.claimed_ms, s.revoked_ms,
+                    COALESCE(SUM(u.operations), 0) AS operations, COALESCE(SUM(u.tokens), 0) AS tokens,
+                    COALESCE(SUM(u.realtime), 0) AS realtime,
+                    COALESCE(SUM(CASE WHEN u.day = ? THEN u.tokens END), 0) AS tokens_today
+                 FROM provider_shared_seats s LEFT JOIN provider_shared_usage u ON u.principal_id = s.principal_id
+                 GROUP BY s.principal_id ORDER BY s.claimed_ms"
+                    .to_string(),
+                vec![json!(Self::day())],
+            )
+            .await
+    }
+
+    /// `grant(principal)`: the operator's seat, refused when every seat is taken.
+    pub async fn grant(&self, principal: &str) -> Result<Option<JsonValue>, String> {
+        let current = self.seat(principal).await?;
+        if current.as_ref().map(|seat| &seat["state"]) == Some(&json!("active")) {
+            return Ok(current);
+        }
+        if self.active_count().await? >= self.limits()?.seats {
+            return Err("provider_shared_seats_full".into());
+        }
+        self.central
+            .run(
+                "INSERT INTO provider_shared_seats (principal_id, state, granted_by, claimed_ms, revoked_ms)
+                 VALUES (?, 'active', 'admin', ?, NULL) ON CONFLICT(principal_id) DO UPDATE SET
+                 state = 'active', granted_by = 'admin', claimed_ms = excluded.claimed_ms, revoked_ms = NULL",
+                vec![json!(principal), json!(atome_js_values::dates::now_ms())],
+            )
+            .await?;
+        self.seat(principal).await
+    }
+
+    /// `revoke(principal)`: the seat taken back and the person blocked from claiming another.
+    pub async fn revoke(&self, principal: &str) -> Result<Option<JsonValue>, String> {
+        let now = atome_js_values::dates::now_ms();
+        self.central
+            .run(
+                "INSERT INTO provider_shared_seats (principal_id, state, granted_by, claimed_ms, revoked_ms)
+                 VALUES (?, 'revoked', 'admin', ?, ?) ON CONFLICT(principal_id) DO UPDATE SET
+                 state = 'revoked', revoked_ms = excluded.revoked_ms",
+                vec![json!(principal), json!(now), json!(now)],
+            )
+            .await?;
+        self.seat(principal).await
+    }
+
+    /// `unblock(principal)`: the block removed, so the person may claim a free seat again.
+    pub async fn unblock(&self, principal: &str) -> Result<(), String> {
+        self.central
+            .run(
+                "DELETE FROM provider_shared_seats WHERE principal_id = ? AND state = 'revoked'",
+                vec![json!(principal)],
+            )
+            .await
+    }
+
     /// The platform key for an entitled person, or none when the feature is off, the person
     /// blocked or no seat free. A used-up daily seat is eVe's shared credit. A metered call also
     /// reserves its money first (billing/guard.rs, R-193): the person's own balance, or for an
@@ -137,7 +244,7 @@ impl SharedGrant {
         principal: &str,
         action: &str,
     ) -> Result<Option<(String, Option<String>)>, String> {
-        let limits = self.limits.as_ref().map_err(Clone::clone)?;
+        let limits = self.limits()?;
         if principal.is_empty() || self.read_key()?.is_none() {
             return Ok(None);
         }

@@ -3,7 +3,7 @@
 // (atome/src/shared/shop_contract.js#shopSplit). Payment is SIMULATED for now on every platform; the real
 // marketplace provider (payouts, seller checks, Apple's in-app purchase for digital goods) comes later.
 // One owner for the order's states and the moves allowed between them, server and client: `shopOrderStep`
-// is pure, the server applies it and keeps every step (server/shop_orders.js).
+// is pure, the server applies it and keeps every step (atome/servers/atome-server/src/social/shop/orders.rs).
 import { SHOP_DIGITAL_KINDS } from './shop_contract.js';
 
 const HOUR_MS = 3600 * 1000, DAY_MS = 24 * HOUR_MS;

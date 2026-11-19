@@ -84,11 +84,12 @@ test('source export refuses secrets, state and symlinks; keeps only committed so
     assert.throws(() => validateSourceEntry('100644', name), /Sensitive/);
   }
   assert.throws(() => validateSourceEntry('120000', 'public-link'), /Non-regular/);
-  validateSourceEntry('100644', 'server/server.js');
+  validateSourceEntry('100644', 'atome/servers/atome-server/src/main.rs');
   const target = path.join(work, 'sources'); fs.mkdirSync(target);
   await prepareSources(plans({ target: 'pc-amd64-uefi' })[0], target);
   const entries = execFileSync('tar', ['-tf', path.join(target, 'framework.tar')], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
-  assert.match(entries, /server\/server.js/);
+  assert.match(entries, /atome\/servers\/atome-server\/src\/main.rs/);
+  assert.match(entries, /(^|\n)Cargo.lock\n/);
   assert.doesNotMatch(entries, /(^|\n)(private\/|\.git\/|database_storage\/|node_modules\/)/);
   const eveEntries = execFileSync('tar', ['-tf', path.join(target, 'eve.tar')], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
   assert.match(eveEntries, /domains\//);

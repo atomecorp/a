@@ -1,15 +1,17 @@
+// The browser's phone-link client signs in end to end against a real, isolated atome-server (its SMS mock:
+// tests/helpers/probe_server.mjs): start, challenge, consume, the simulated payment of a new account, then the
+// existing account signing in again with no payment, the attempt gone from the device's records each time.
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import WebSocket from 'ws';
 import { createPhoneLinkClient } from '../../atome/src/squirrel/security/auth_phone_link_client.js';
-import { authSigningMessage } from '../../atome/src/shared/auth_link_contract.js';
-import { publicDeviceKey, randomHandle } from '../../server/auth_link_security.js';
+import { createStorePurchase } from '../../atome/src/squirrel/billing/store_purchase.js';
+import { authDeviceKey, authSigningMessage } from '../../atome/src/shared/auth_link_contract.js';
+import { startServer } from '../helpers/probe_server.mjs';
 
-const endpoint = process.env.AUTH_E2E_WS_URL || 'ws://127.0.0.1:3101/ws/api';
 const keys = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
-const { jwk: publicKey, keyId } = publicDeviceKey(keys.publicKey.export({ format: 'jwk' }));
+const { publicKey, keyId } = await authDeviceKey(keys.publicKey.export({ format: 'jwk' }));
 const records = new Map();
-const actions = [];
 
 const device = {
     keyId,
@@ -25,7 +27,7 @@ const device = {
 
 const devices = {
     forPhone: async () => device,
-    randomHandle,
+    randomHandle: () => crypto.randomBytes(32).toString('base64url'),
     put: async (name, value) => records.set(name, value),
     read: async (name) => records.get(name),
     remove: async (name) => records.delete(name),
@@ -33,10 +35,11 @@ const devices = {
     aliasPhone: async () => {}
 };
 
-async function send(message) {
-    const requestId = crypto.randomUUID();
-    actions.push(message.action);
-    return new Promise((resolve, reject) => {
+const signIn = async (endpoint, phone) => {
+    const actions = [];
+    const send = (message) => new Promise((resolve, reject) => {
+        const requestId = crypto.randomUUID();
+        actions.push(message.action);
         const socket = new WebSocket(endpoint);
         const timer = setTimeout(() => {
             socket.terminate();
@@ -52,26 +55,41 @@ async function send(message) {
             resolve(response);
         });
     });
+    let installed = null;
+    const client = createPhoneLinkClient({
+        devices, send, locks: null, storePurchase: createStorePurchase({ host: null }),
+        installSession: async (result) => { installed = result; }
+    });
+    let result = await client.start(phone);
+    if (result?.paymentRequired) result = await client.pay({ method: 'paypal' });
+    return { result, installed, actions };
+};
+
+const server = await startServer();
+try {
+    const phone = `+33994${String(process.pid % 50000).padStart(5, '0')}`;
+    const first = await signIn(server.url, phone);
+    assert.equal(first.result.ok, true, JSON.stringify(first.result));
+    assert.equal(first.result.session.keyId, keyId);
+    assert.equal(first.installed.user.id, first.result.user.id);
+    assert.equal(records.has('attempt'), false);
+    // A new account: the consume answers that a payment is required; the payment, signed on a challenge of its own
+    // (auth_phone_link_client.js#attemptProof), settles the attempt.
+    assert.deepEqual(first.actions, [
+        'phone-link-start', 'phone-link-challenge', 'phone-link-consume', 'phone-link-challenge', 'phone-link-payment'
+    ]);
+
+    // One SMS a minute for a number (auth/phone_link/mod.rs, `phone-minute`): a new start inside it is refused, and
+    // leaves no attempt behind; past the minute the existing account signs in.
+    await assert.rejects(signIn(server.url, phone), /auth_rate_limited/);
+    assert.equal(records.has('attempt'), false);
+    await new Promise((resolve) => setTimeout(resolve, 61_000));
+    const again = await signIn(server.url, phone);
+    assert.equal(again.result.ok, true, JSON.stringify(again.result));
+    assert.equal(again.result.user.id, first.result.user.id);
+    assert.deepEqual(again.actions, ['phone-link-start', 'phone-link-challenge', 'phone-link-consume']);
+    assert.equal(records.has('attempt'), false);
+    console.log(JSON.stringify({ ok: true, first: first.actions, again: again.actions }));
+} finally {
+    await server.stop();
 }
-
-let installed;
-const client = createPhoneLinkClient({
-    devices,
-    send,
-    locks: null,
-    installSession: async (result) => { installed = result; }
-});
-
-const result = await client.start('+33600000001');
-assert.equal(result.ok, true);
-assert.equal(result.session.keyId, keyId);
-assert.equal(installed.user.id, result.user.id);
-assert.equal(records.has('attempt'), false);
-assert.deepEqual(actions, ['phone-link-start', 'phone-link-challenge', 'phone-link-consume']);
-
-console.log(JSON.stringify({
-    ok: true,
-    automatic: true,
-    smsSent: false,
-    actions
-}));

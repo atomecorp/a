@@ -1,7 +1,7 @@
 // The shop (user decisions of 28 Oct. 2026): one shop per person, many sales in it. A sale is its seller's
 // `shop_listing` Atome; `listing` (written by the seller's devices) says what the public reads of it,
 // `listing_status` (written by the server only) whether it is live. The server projects every live listing
-// into the shared base everyone browses, visitor and guest included (server/shop_listings.js); buying,
+// into the shared base everyone browses, visitor and guest included (atome/servers/atome-server/src/social/shop/listings.rs); buying,
 // writing to the seller and a favourite need an account. One owner for the listing's shape, the price split
 // and the escrow's rules, client and server.
 import { billingCommissionCents } from './billing_contract.js';

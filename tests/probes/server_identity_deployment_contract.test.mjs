@@ -1,12 +1,10 @@
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+// The deployment's own checks (scripts/verify_deployed_source.js, scripts/server_update.js). The server identity
+// itself (its key pair made once, kept, backed up, a mismatch refused) is atome-server's admin tool
+// (src/server_identity/secure_config.rs, tests/atome_server/admin_tools.rs).
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
-import {
-    createServerIdentityKeyPair,
-    validateServerIdentityKeyPair
-} from '../../server/serverIdentity.js';
-import { ensureServerIdentity } from '../../scripts/server_secure_config.js';
 import {
     verifyProductionDependencyLock,
     verifyRuntimeDependencies
@@ -14,17 +12,6 @@ import {
 
 const tempRoots = [];
 const testTempRoot = fileURLToPath(new URL('../../temp/', import.meta.url));
-
-function createFixture() {
-    mkdirSync(testTempRoot, { recursive: true });
-    const root = mkdtempSync(path.join(testTempRoot, 'squirrel-server-identity-'));
-    tempRoots.push(root);
-    const envDir = path.join(root, 'etc', 'squirrel');
-    mkdirSync(envDir, { recursive: true });
-    const envFile = path.join(envDir, 'squirrel.env');
-    writeFileSync(envFile, 'NODE_ENV=production\n', { mode: 0o600 });
-    return { root, envDir, envFile, identityDir: path.join(envDir, 'identity') };
-}
 
 function createDependencyFixture({ includeRuntime = false } = {}) {
     mkdirSync(testTempRoot, { recursive: true });
@@ -52,129 +39,19 @@ function createDependencyFixture({ includeRuntime = false } = {}) {
     return root;
 }
 
-function envValues(envFile) {
-    return Object.fromEntries(readFileSync(envFile, 'utf8')
-        .split(/\r?\n/)
-        .filter(Boolean)
-        .map((line) => {
-            const separator = line.indexOf('=');
-            return [line.slice(0, separator), line.slice(separator + 1)];
-        }));
-}
-
 afterEach(() => {
     while (tempRoots.length > 0) rmSync(tempRoots.pop(), { recursive: true, force: true });
 });
 
 describe('production server identity deployment', () => {
-    it('creates one persistent validated identity and preserves it on rerun', () => {
-        const fixture = createFixture();
-        const options = {
-            envFile: fixture.envFile,
-            identityDir: fixture.identityDir,
-            projectRoot: fixture.root
-        };
-        const first = ensureServerIdentity(options);
-        const firstPrivate = readFileSync(first.privateKeyPath, 'utf8');
-        const firstPublic = readFileSync(first.publicKeyPath, 'utf8');
-        const firstEnv = envValues(fixture.envFile);
-
-        expect(first.generated).toBe(true);
-        expect(firstEnv.SERVER_ID).toMatch(/^squirrel-server-[a-f0-9]{16}$/);
-        expect(firstEnv.SERVER_NAME).toBe('Squirrel Server');
-        expect(firstEnv.SERVER_PRIVATE_KEY_PATH).toBe(first.privateKeyPath);
-        expect(firstEnv.SERVER_PUBLIC_KEY_PATH).toBe(first.publicKeyPath);
-        expect(statSync(first.privateKeyPath).mode & 0o777).toBe(0o600);
-        expect(statSync(first.publicKeyPath).mode & 0o777).toBe(0o644);
-        expect(validateServerIdentityKeyPair(firstPrivate, firstPublic).fingerprint).toBe(first.fingerprint);
-
-        const second = ensureServerIdentity(options);
-        expect(second.generated).toBe(false);
-        expect(second.fingerprint).toBe(first.fingerprint);
-        expect(readFileSync(second.privateKeyPath, 'utf8')).toBe(firstPrivate);
-        expect(readFileSync(second.publicKeyPath, 'utf8')).toBe(firstPublic);
-        expect(envValues(fixture.envFile).SERVER_ID).toBe(firstEnv.SERVER_ID);
-    });
-
-    it('fails closed for incomplete configured paths', () => {
-        const fixture = createFixture();
-        writeFileSync(fixture.envFile, 'SERVER_PRIVATE_KEY_PATH=/missing/server.key\n', { mode: 0o600 });
-        expect(() => ensureServerIdentity({
-            envFile: fixture.envFile,
-            identityDir: fixture.identityDir,
-            projectRoot: fixture.root
-        }))
-            .toThrow('server_identity_key_paths_incomplete');
-    });
-
-    it('preserves configured keys and adds stable missing identity metadata', () => {
-        const fixture = createFixture();
-        const pair = createServerIdentityKeyPair();
-        const privateKeyPath = path.join(fixture.root, 'configured.key');
-        const publicKeyPath = path.join(fixture.root, 'configured.pub');
-        writeFileSync(privateKeyPath, pair.privateKey, { mode: 0o644 });
-        writeFileSync(publicKeyPath, pair.publicKey, { mode: 0o600 });
-        writeFileSync(fixture.envFile, [
-            `SERVER_PRIVATE_KEY_PATH=${privateKeyPath}`,
-            `SERVER_PUBLIC_KEY_PATH=${publicKeyPath}`,
-            ''
-        ].join('\n'), { mode: 0o600 });
-
-        const first = ensureServerIdentity({
-            envFile: fixture.envFile,
-            identityDir: fixture.identityDir,
-            projectRoot: fixture.root
-        });
-        const firstEnv = envValues(fixture.envFile);
-        const second = ensureServerIdentity({
-            envFile: fixture.envFile,
-            identityDir: fixture.identityDir,
-            projectRoot: fixture.root
-        });
-
-        expect(first.generated).toBe(false);
-        expect(second.fingerprint).toBe(first.fingerprint);
-        expect(firstEnv.SERVER_ID).toMatch(/^squirrel-server-[a-f0-9]{16}$/);
-        expect(envValues(fixture.envFile).SERVER_ID).toBe(firstEnv.SERVER_ID);
-        expect(firstEnv.SERVER_NAME).toBe('Squirrel Server');
-        expect(statSync(privateKeyPath).mode & 0o777).toBe(0o600);
-        expect(statSync(publicKeyPath).mode & 0o777).toBe(0o644);
-    });
-
-    it('fails closed when configured public and private keys do not match', () => {
-        const fixture = createFixture();
-        const first = createServerIdentityKeyPair();
-        const second = createServerIdentityKeyPair();
-        const privateKeyPath = path.join(fixture.root, 'configured.key');
-        const publicKeyPath = path.join(fixture.root, 'configured.pub');
-        writeFileSync(privateKeyPath, first.privateKey, { mode: 0o600 });
-        writeFileSync(publicKeyPath, second.publicKey, { mode: 0o644 });
-        writeFileSync(fixture.envFile, [
-            `SERVER_PRIVATE_KEY_PATH=${privateKeyPath}`,
-            `SERVER_PUBLIC_KEY_PATH=${publicKeyPath}`,
-            ''
-        ].join('\n'), { mode: 0o600 });
-
-        expect(() => ensureServerIdentity({
-            envFile: fixture.envFile,
-            identityDir: fixture.identityDir,
-            projectRoot: fixture.root
-        }))
-            .toThrow('server_identity_key_pair_mismatch');
-    });
-
-    it('keeps deployment verification and backup on the same identity owner', () => {
+    it('provisions and backs up the identity through the native admin tool before the restart', () => {
         const updater = readFileSync(new URL('../../scripts/server_update.js', import.meta.url), 'utf8');
-        const secureConfig = readFileSync(new URL('../../scripts/server_secure_config.js', import.meta.url), 'utf8');
         const verifier = readFileSync(new URL('../../scripts/verify_deployed_source.js', import.meta.url), 'utf8');
-        const generator = readFileSync(new URL('../../scripts/generate-server-keys.js', import.meta.url), 'utf8');
-
-        expect(updater).toContain('ensureProductionSecureConfig({');
-        expect(updater).toContain('backupServerIdentity({ envFile, backupDir, projectRoot });');
-        expect(secureConfig).toContain('export function ensureServerIdentity');
+        expect(updater).toContain("server-identity ensure --env-file");
+        expect(updater).toContain("server-identity backup --env-file");
+        expect(updater.indexOf("phase('secure-config'")).toBeLessThan(updater.indexOf("phase('identity-backup'"));
+        expect(updater.indexOf("phase('identity-backup'")).toBeLessThan(updater.indexOf("phase('restart'"));
         expect(verifier).toContain('production server identity provisioning');
-        expect(generator).toContain('createServerIdentityKeyPair');
-        expect(generator).not.toContain("crypto.generateKeyPairSync('rsa'");
     });
 });
 
@@ -198,37 +75,4 @@ describe('production server dependency deployment', () => {
         expect(updater.indexOf("phase('verify-runtime-dependencies'"))
             .toBeLessThan(updater.indexOf("phase('restart'"));
     });
-});
-
-it('allows credential-free native identity verification without opening account routes', async () => {
-    const { default: fastify } = await import('fastify');
-    const { default: cors } = await import('@fastify/cors');
-    const { registerServerIdentityRoutes } = await import('../../server/auth_routes_server.js');
-    const app = fastify();
-    await app.register(cors, { origin: false, credentials: true });
-    registerServerIdentityRoutes(app, {});
-    // Execute the existing health registration, rather than recreating its CORS policy.
-    const { registerServerInfoRoutes } = await import('../../server/http_status_routes.js');
-    registerServerInfoRoutes(app, { SERVER_TYPE: 'Fastify', DATABASE_ENABLED: true });
-    app.get('/private-probe', () => ({ ok: true }));
-    try {
-        for (const origin of ['null', 'atome://', 'http://127.0.0.1:49152']) {
-            const headers = { origin, 'access-control-request-method': 'POST', 'access-control-request-headers': 'content-type' };
-            const preflight = await app.inject({ method: 'OPTIONS', url: '/api/server/verify', headers });
-            expect(preflight.statusCode).toBe(204);
-            expect(preflight.headers['access-control-allow-origin']).toBe('*');
-            expect(preflight.headers['access-control-allow-credentials']).toBeUndefined();
-            const response = await app.inject({ method: 'POST', url: '/api/server/verify', headers: { origin }, payload: {} });
-            expect(response.statusCode).toBe(400);
-            expect(response.headers['access-control-allow-origin']).toBe('*');
-            expect(response.headers['access-control-allow-credentials']).toBeUndefined();
-            const health = await app.inject({ url: '/health', headers: { origin } });
-            expect(health.statusCode).toBe(200);
-            expect(health.json().status).toBe('ok');
-            expect(health.headers['access-control-allow-origin']).toBe('*');
-            expect(health.headers['access-control-allow-credentials']).toBeUndefined();
-            const restricted = await app.inject({ url: '/private-probe', headers: { origin } });
-            expect(restricted.headers['access-control-allow-origin']).toBeUndefined();
-        }
-    } finally { await app.close(); }
 });

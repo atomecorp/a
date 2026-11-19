@@ -22,13 +22,8 @@ const REQUIRED_PRODUCTION_DEPENDENCIES = [
 
 const REQUIRED_MARKERS = [
     {
-        file: 'server/server.js',
-        marker: "const eveStaticRoot = path.join(projectRoot, 'eVe');",
-        label: 'server eVe static root',
-    },
-    {
-        file: 'server/server.js',
-        marker: "prefix: '/eVe/'",
+        file: 'atome/servers/atome-server/src/http/statics.rs',
+        marker: '("/eVe/".into(), project.join("eVe")),',
         label: 'server eVe static route',
     },
     {
@@ -57,13 +52,13 @@ const REQUIRED_MARKERS = [
         label: 'production --server argument guard',
     },
     {
-        file: 'scripts/server_secure_config.js',
-        marker: "ensureEnvSecret(envFile, 'JWT_SECRET', log);",
+        file: 'atome/servers/atome-server/src/server_identity/secure_config.rs',
+        marker: 'ensure_secret(env_file, "JWT_SECRET", log)?;',
         label: 'production env auth secret provisioning',
     },
     {
         file: 'scripts/server_update.js',
-        marker: 'ensureProductionSecureConfig({',
+        marker: "server-identity ensure --env-file",
         label: 'production server identity provisioning',
     },
     {

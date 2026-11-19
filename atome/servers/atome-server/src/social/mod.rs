@@ -1,6 +1,6 @@
-// The communication services Fastify kept in the central database
-// (server/notificationStack.js, communication_relations.js, communication_push.js and
-// their neighbours), ported one by one, each on its own connection to that database.
+// The communication services of the central database (server/notificationStack.js,
+// communication_relations.js, communication_push.js and their neighbours, ported one by one
+// from Fastify, retired), each on its own connection to that database.
 pub mod cb;
 pub mod coaches;
 pub(crate) mod conditions;
@@ -36,7 +36,6 @@ use crate::media::Storage;
 use crate::vault_router::VaultRouter;
 use crate::vault_router::central::Central;
 use crate::ws_sync::SyncRuntime;
-use serde_json::Value as JsonValue;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -140,104 +139,5 @@ impl Social {
             push,
             sync,
         }))
-    }
-
-    /// The SERVICE frames of Fastify's thin clients, `None` for another prefix.
-    pub async fn service(
-        &self,
-        operation: &str,
-        payload: &JsonValue,
-    ) -> Option<Result<JsonValue, String>> {
-        let (prefix, _) = operation.split_once(':')?;
-        Some(match prefix {
-            "stack" => self.stack.service(operation, payload).await,
-            "relations" => self.relations_service(operation, payload).await,
-            "push" => self.push.service(operation, payload).await,
-            "messages" => self.messages_service(operation, payload).await,
-            "news" => self.news_service(operation, payload).await,
-            "directory" => self.directory.service(operation, payload).await,
-            _ => return None,
-        })
-    }
-
-    // A relation's decision; its `accepted` effects (a note made a first message) are carried
-    // out here, what remains (peers to tell) is the caller's.
-    async fn relations_service(
-        &self,
-        operation: &str,
-        payload: &JsonValue,
-    ) -> Result<JsonValue, String> {
-        let decided = self.relations.service(operation, payload).await?;
-        let mut rest = Vec::new();
-        for effect in decided["effects"].as_array().into_iter().flatten() {
-            if effect["effect"] == "accepted" {
-                self.messages.accepted(effect).await?;
-            } else {
-                rest.push(effect.clone());
-            }
-        }
-        Ok(serde_json::json!({ "result": decided["result"], "effects": rest }))
-    }
-
-    // `messages:send` answers what the send leaves to its caller (the frame to deliver, the
-    // notice to push); `messages:conversation` reads or deletes.
-    async fn messages_service(
-        &self,
-        operation: &str,
-        payload: &JsonValue,
-    ) -> Result<JsonValue, String> {
-        let user = crate::vault_router::js::id(payload.get("user"));
-        let data = payload
-            .get("data")
-            .cloned()
-            .unwrap_or_else(|| serde_json::json!({}));
-        match operation {
-            "messages:send" => {
-                let sent = self.messages.send(&self.stack, &user, &data).await?;
-                Ok(
-                    serde_json::json!({ "result": sent.result, "target": sent.target, "deliver": sent.deliver, "push": sent.push }),
-                )
-            }
-            "messages:conversation" => self.messages.conversation(&user, &data).await,
-            "messages:read" => self.messages.read(&user, &data).await,
-            "messages:persist" => {
-                let owner = crate::vault_router::js::id(payload.get("owner"));
-                self.messages
-                    .persist(
-                        &owner,
-                        payload.get("properties").unwrap_or(&JsonValue::Null),
-                    )
-                    .await
-            }
-            other => Err(format!("messages_operation_unknown:{other}")),
-        }
-    }
-
-    // A News decided for Fastify (a scheduled publication, a file read through a News): its
-    // answer and each recipient's notice, carried by the thin client.
-    async fn news_service(
-        &self,
-        operation: &str,
-        payload: &JsonValue,
-    ) -> Result<JsonValue, String> {
-        let user = crate::vault_router::js::id(payload.get("user"));
-        let mut notices = Vec::new();
-        let result = match operation {
-            "news:publish" => {
-                let message = payload.get("message").unwrap_or(&JsonValue::Null);
-                self.news.publish(&user, message, &mut notices).await?
-            }
-            "news:can-read-media" => {
-                let at = |key: &str| crate::vault_router::js::text(payload.get(key));
-                serde_json::json!(
-                    self.news
-                        .can_read_media(&user, &at("atome_id"), &at("owner_id"), &mut notices)
-                        .await?
-                )
-            }
-            other => return Err(format!("news_operation_unknown:{other}")),
-        };
-        let notices: Vec<JsonValue> = notices.iter().map(Notice::carried).collect();
-        Ok(serde_json::json!({ "result": result, "notices": notices }))
     }
 }

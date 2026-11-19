@@ -3,6 +3,7 @@
 // (atome/src/shared/profile_sharing.js) that holds something, and an adult's Rencontre
 // declarations, kept for matching only.
 use super::meeting::{self, Meeting};
+use crate::auth::accounts::normalize_phone;
 use crate::social::news::db::text;
 use serde_json::{Map as JsonMap, Value as JsonValue, json};
 
@@ -81,19 +82,6 @@ fn row_value(row: &JsonValue, profile: &JsonValue, keys: &[&str]) -> String {
         .map(|key| text(Some(&parse(row.get(*key)))))
         .find(|value| !value.is_empty())
         .unwrap_or_default()
-}
-
-// `normalizePhone` (server/auth_crypto.js): its digits, one leading `+` kept.
-fn normalize_phone(value: &str) -> String {
-    let cleaned: String = value
-        .trim()
-        .chars()
-        .filter(|c| c.is_ascii_digit() || *c == '+')
-        .collect();
-    match cleaned.strip_prefix('+') {
-        Some(rest) => format!("+{}", rest.replace('+', "")),
-        None => cleaned,
-    }
 }
 
 // An account still named by its sign-up phone number has no name to publish.

@@ -1,6 +1,13 @@
 # Server Installation & Management Guide
 
-This guide explains how to install, configure, and manage the **Atome/Squirrel** server.
+This guide explains how to install, configure, and manage the **Atome/Squirrel** server: **atome-server**
+(Rust, Axum: `atome/servers/atome-server`), the one server since Fastify was retired (2026-11-19). It serves the
+client, every route and WebSocket, the clocks, and one `atome-vault` process per person (`atome/servers/atome-vault`).
+No Node process serves anything; Node only builds and checks the client.
+
+> **Historical names.** `scripts/run_fastify.sh`, `SQUIRREL_FASTIFY_URL`, `window.__SQUIRREL_FASTIFY_URL__`,
+> `window.__SQUIRREL_TAURI_FASTIFY_URL__` and `--fastify-url` keep the names they had under Fastify; they are kept
+> API names and all point at atome-server.
 The installation process is fully automated and supports both **Linux (Debian/Ubuntu)** and **FreeBSD**.
 
 ## 🌍 Supported Platforms
@@ -20,7 +27,7 @@ The installation process is fully automated and supports both **Linux (Debian/Ub
 
 ## 🚀 Installation
 
-The `install_server.sh` script handles everything: system dependencies, Node.js, PostgreSQL, Nginx, SSL certificates, and service creation.
+The `install_server.sh` script handles everything: system dependencies, the Rust build of atome-server, Nginx, SSL certificates, and service creation.
 
 ### 1. Clone the Repository
 
@@ -43,11 +50,14 @@ sudo ./install_server.sh
 **What this script does:**
 
 * **Detects OS**: Adapts commands (`apt` vs `pkg`, `systemd` vs `rc.d`).
-* **Installs Dependencies**: Node.js 20, PostgreSQL 16, Nginx, Certbot, Rust, etc.
-* **Configures Database**: Creates `squirrel` database and `postgres` user.
+* **Installs Dependencies**: Rust (rustup), Node.js 20 (client build), the C++ compiler and `python3-pip` the visio
+  worker's build needs, SQLite headers, Nginx, Certbot.
+* **Builds the Server**: `atome-server` and `atome-vault` with Cargo; atome-server prepares the central SQLite
+  database itself when it starts (`atome/servers/atome-server/src/central_schema/`).
 * **Sets up Nginx**: Configures a reverse proxy (Port 80/443 -> 3001).
 * **Enables SSL**: Automatically generates Let's Encrypt certificates if a domain is pointed.
-* **Installs Service**: Creates a system service (`squirrel`) for auto-restart.
+* **Installs Service**: Creates a system service (`squirrel`) running `target/release/atome-server`, restarted on failure
+  (on Linux through `scripts/server_update.js --no-git --no-deps`).
 
 ---
 
@@ -67,18 +77,14 @@ NODE_ENV=production
 PORT=3001
 HOST=127.0.0.1
 SQLITE_PATH=/opt/a/database_storage/adole.db
-SQUIRREL_UPLOADS_DIR=/opt/a/uploads
-
-# Optional: For cloud deployment with Turso/libSQL
-# LIBSQL_URL=libsql://your-database.turso.io
-# LIBSQL_AUTH_TOKEN=your_auth_token
-
-# Optional: Disable browser UI log forwarding (production)
-# SQUIRREL_DISABLE_UI_LOGS=1
 ```
 
-* **HOST=127.0.0.1**: Ensures the Node.js server is only accessible via Nginx (security).
+* **HOST=127.0.0.1**: Ensures atome-server is only accessible via Nginx (security); it is the default when
+  `NODE_ENV=production`, `0.0.0.0` otherwise.
 * **PORT**: Internal port (default 3001).
+* **SQLITE_PATH**: The central database (default `database_storage/adole.db`; a relative path is read from `server/`).
+  The vaults live under `SQUIRREL_VAULT_ROOT` (default `database_storage/vaults`). There is no libSQL/Turso mode:
+  a `LIBSQL_URL` or `TURSO_DATABASE_URL` stops the server at startup (`vault_router_requires_sqlite:libsql_is_set`).
 * **JWT_SECRET** and **COOKIE_SECRET**: Required authentication secrets. `install_server.sh` and `update_server.sh` generate strong values in the service environment file when they are missing or too short, and preserve existing valid values.
 
 > ⚠️ Important: On production servers, do not rely on untracked files inside `/opt/a` (like a manually created `.env`). They can be deleted by update operations. Use `/etc/squirrel/squirrel.env`.
@@ -110,14 +116,15 @@ with `system_mail_unconfigured` and nothing is created. The test server takes th
 `/etc/squirrel-staging/squirrel.env`, with `ATOME_SITE_ORIGIN=https://staging.atome.one`. Restart the service after a
 change (`systemctl restart squirrel`).
 
-The mail is sent by `server/system_mailer.js` through the framework's own SMTP client
-(`atome/src/squirrel/mail/node_protocol_clients.js`); invitations live in the `auth_invites` table
-(`server/auth_invites.js`): a digest of the link's secret and a keyed index of the address, never the link or the
+The mail is sent by atome-server's own sender (`atome/servers/atome-server/src/mail/mod.rs`) through its own SMTP
+client (`src/mail/smtp.rs`, on tokio and rustls); invitations live in the `auth_invites` table
+(`atome/servers/atome-server/src/auth/invites.rs`): a digest of the link's secret and a keyed index of the address, never the link or the
 address themselves.
 
 ### Lockfile (Reproducible Installs)
 
-Production installs use `npm ci`, which requires a committed lockfile.
+Production installs use `npm ci` (the client's build and checks) and `cargo build --release --locked`, which require
+the committed `package-lock.json` and `Cargo.lock`.
 Make sure `package-lock.json` is tracked in git and up to date with `package.json`.
 The lockfile must validate with the production npm version as well as local npm;
 Debian production currently uses npm 10, which requires the top-level optional
@@ -186,19 +193,30 @@ system service is active, so it never runs the development bootstrap or `npm ci`
 | Action | Command | Description |
 | :--- | :--- | :--- |
 | **Start (HTTPS)** | `./run.sh --https` | Start production server via systemd/nginx |
-| **Foreground diagnostics** | `./run.sh --server` | Start Fastify in the foreground after stopping the service |
+| **Foreground diagnostics** | `./run.sh --server` | Start atome-server in the foreground after stopping the service |
 | **Status** | `./run.sh status` | Check if server is running & view recent logs |
 | **Stop** | `./run.sh stop` | Stop the service |
 | **Restart** | `./run.sh restart` | Restart the service (e.g. after updates) |
 | **Logs** | `./run.sh logs` | View live logs (Ctrl+C to exit) |
 | **Check** | `./run.sh check` | Run system diagnostics (Nginx, SSL, Ports) |
 
+### Operator tools
+
+The operator's tools are one Rust binary, `target/release/atome_admin`
+(`atome/servers/atome-server/src/bin/atome_admin.rs`, built with the server): account roles, reported public events,
+the shared assistant seats, and the server identity's keys. Run it from the project root with the service
+environment loaded; its header lists the groups and commands:
+
+```bash
+cd /opt/a && set -a && . /etc/squirrel/squirrel.env && set +a && target/release/atome_admin <group> <command>
+```
+
 ### Development vs Production
 
 | Mode | Command | Protocol | Use Case |
 | :--- | :--- | :--- | :--- |
 | **Development** | `./run.sh --server` | HTTP | Local testing, debugging |
-| **Production foreground diagnostics** | `./run.sh stop && ./run.sh --server` | HTTP behind manual session | Direct Fastify diagnostics with the service environment |
+| **Production foreground diagnostics** | `./run.sh stop && ./run.sh --server` | HTTP behind manual session | Direct atome-server diagnostics with the service environment |
 | **Production** | `./run.sh --https` | HTTPS (via Nginx) | Production servers |
 
 ### Test server: staging.atome.one
@@ -233,12 +251,12 @@ never overwrite production's). Remove that file and its `sites-enabled` link onc
 
 ---
 
-## 🖥️ Tauri Clients: Fastify Endpoint (Sync + Share)
+## 🖥️ Tauri Clients: Server Endpoint (Sync + Share)
 
 In the **Tauri desktop app**, the UI origin is typically `https://tauri.localhost`.
-This origin is **not** the cloud Fastify server.
+This origin is **not** the cloud server (atome-server).
 
-To ensure that **sync** (`/ws/sync`) and **sharing / direct-messages** (`/ws/api`) use the **cloud Fastify** (e.g. `https://atome.one`) in **Tauri production**, the client supports an explicit override.
+To ensure that **sync** (`/ws/sync`) and **sharing / direct-messages** (`/ws/api`) use the **cloud atome-server** (e.g. `https://atome.one`) in **Tauri production**, the client supports an explicit override.
 
 ### Recommended (Tauri production)
 
@@ -258,19 +276,21 @@ This will drive:
 
 In development, you can keep using local config (for example, via `server_config.json`) and you usually **do not** need to set `__SQUIRREL_TAURI_FASTIFY_URL__`.
 
-If you want to point your dev Tauri client at a staging Fastify, set:
+If you want to point your dev Tauri client at the test server, set:
 
 ```js
-window.__SQUIRREL_TAURI_FASTIFY_URL__ = 'https://your-staging-domain.example';
+window.__SQUIRREL_TAURI_FASTIFY_URL__ = 'https://staging.atome.one';
 ```
 
 > Important: this is a **client-side** setting (Tauri/webview), not a server setting. It must be executed early (before importing/loading the Squirrel bundle).
 
 ---
 
-## 🧩 Fastify Server Overview (Runtime)
+## 🧩 atome-server Overview (Runtime)
 
-The Fastify server runs from `server/server.js`. WebSocket owns application operations; HTTP owns bootstrap, health/configuration discovery, diagnostics, and explicit file/media/archive resource transfer.
+atome-server runs from `target/release/atome-server` (source `atome/servers/atome-server/src/main.rs`), started from
+the project root, whose `atome/src/index.html` it checks at startup. It speaks plain HTTP on its port; TLS is Nginx's.
+WebSocket owns application operations; HTTP owns bootstrap, health/configuration discovery, diagnostics, and explicit file/media/archive resource transfer.
 
 ### Start Options (Advanced)
 
@@ -278,12 +298,12 @@ The Fastify server runs from `server/server.js`. WebSocket owns application oper
 # Foreground HTTP server for development or manual diagnostics
 ./run.sh --server
 
-# Manual (runs Fastify directly)
-node server/server.js
+# Manual (builds if needed, then runs atome-server directly)
+./scripts/run_fastify.sh
 ```
 
 For installed production servers, prefer the service commands above (`./run.sh
---https`, `./run.sh restart`, `./run.sh status`, and `./run.sh logs`) so Fastify
+--https`, `./run.sh restart`, `./run.sh status`, and `./run.sh logs`) so atome-server
 continues to run under systemd or rc.d behind Nginx.
 
 ### Key Endpoints
@@ -303,7 +323,8 @@ After installation or update, run:
 npm run check:websocket-only-transport
 ```
 
-For detailed API and WebSocket usage examples, see `server/README.md`.
+The HTTP routes are mounted by `atome/servers/atome-server/src/http/` (the list is in
+`.codex/modules/05-api-rendering-and-ui.md`, « Existing HTTP divergences »).
 For the minimal shared `/ws/sync` protocol, see `atome/documentations/sync_protocol.md`.
 
 ### Manual Service Management (Advanced)
@@ -330,177 +351,22 @@ tail -f /var/log/messages  # Logs (or specific app log if configured)
 
 ---
 
-## � AiS — Apple iOS Server (AUV3 Platform)
+## 📱 iOS, AUv3, Tauri and Android: the local server
 
-**AiS (Apple iOS Server)** is a specialized HTTP server that runs **exclusively on iOS** within the **AUV3 (Audio Unit V3)** plugin environment. Unlike Fastify (Node.js) or Axum (Rust/Tauri), AiS is a **native Swift implementation** designed for iOS sandboxing and real-time audio constraints.
+The iOS app and its AUv3 extension, like Tauri and Android, run **atome-server's local module**
+(`atome/servers/atome-server/src/local/`, the "AiS server" of older docs) inside their own process, on one SQLite
+vault (`adole.db`, in the app group's container on iOS). On iOS, `platforms/ios/atome-auv3/Common/LocalServer.swift`
+only starts it (paths, the keychain's session key, the device key's verifier) and rebinds it when iOS takes its
+listening socket back during a suspension; it answers on loopback only.
 
-### Key Characteristics
+* It serves the same client and the same routes as atome-server, so the page works offline through it.
+* It syncs with atome-server (`SQUIRREL_FASTIFY_URL`, `https://atome.one` by default) through its sync queue
+  (`local_atome_sync_worker.rs`) and relays what only the cloud does (`public_relay.rs`, `provider_relay.rs`).
+* Offline it stays the local read/write authority and replays its changes once atome-server is reachable.
+* Nothing is installed by hand: it is built into the app (Xcode for iOS/AUv3; `atome-server` with
+  `default-features = false`, so no SFU).
 
-| Feature | Value |
-|---------|-------|
-| **Platform** | iOS only (AUV3 extension) |
-| **Implementation** | Swift (Network framework) |
-| **Port** | Dynamic (usually 8080+) |
-| **Bind Address** | `127.0.0.1` only (loopback) |
-| **Database** | SQLite in the App Group container for canonical local events, projections, and sync cursors |
-| **Location** | `/platforms/ios/atome-auv3/Common/LocalHTTPServer.swift` |
-
-### Why AiS Exists
-
-* **iOS extensions cannot run Node.js or Rust runtimes** (sandboxing + security)
-* **Audio Unit plugins require ultra-low latency** and minimal memory footprint
-* **WebView needs local HTTP access** for serving audio files (custom schemes have limitations)
-* **Emulates Fastify API** for frontend compatibility across all platforms
-
-### Architecture Differences
-
-Unlike production servers (Fastify/Axum), AiS does **not use SQL databases**:
-
-```
-┌─────────────────────────────────────┐
-│  AUV3 Extension (iOS Sandbox)       │
-├─────────────────────────────────────┤
-│  WKWebView (Squirrel UI)            │
-│    ↓ HTTP requests ↓                │
-│  AiS (LocalHTTPServer.swift)        │
-│    ↓ file operations ↓              │
-│  App Group Shared Container         │
-│    - /audio/ (M4A, MP3, WAV)        │
-│    - /projects/ (JSON)              │
-│    - /cache/                        │
-│  ↓ optional sync ↓                  │
-│  iCloud Drive                       │
-└─────────────────────────────────────┘
-```
-
-### No Installation Required
-
-AiS is **embedded in the iOS app bundle** and starts automatically when:
-
-* The AUV3 plugin is loaded by a DAW (GarageBand, Logic Pro, etc.)
-* The companion iOS app launches
-
-**No manual installation steps needed** — it's part of the Xcode build process.
-
-### Configuration
-
-AiS configuration is handled via iOS app settings, not environment files:
-
-```swift
-// Automatic configuration in AudioUnitViewController.swift
-LocalHTTPServer.shared.start(preferredPort: 8080)
-```
-
-The WebView frontend detects AiS automatically:
-
-```javascript
-// Platform detection in kickstart.js
-if (current_platform().toLowerCase().includes('auv3')) {
-  window.__SQUIRREL_SERVER__ = 'AiS';
-  window.__SQUIRREL_FASTIFY_URL__ = `http://127.0.0.1:${AiS_PORT}`;
-}
-```
-
-### Key API Endpoints
-
-AiS emulates these Fastify routes for compatibility:
-
-* `GET /api/server-info` — Server metadata (version, platform)
-* `GET /audio/*` — Serve audio files with HTTP Range support (streaming)
-* `GET /api/file/*` — Read files from App Group Shared Container
-* `POST /api/file/*` — Write files to App Group Shared Container
-
-### Data Persistence
-
-**Important**: AUV3 extensions use **non-persistent WebView storage** (`WKWebsiteDataStore.nonPersistent()`).
-
-### Realtime Sync (AiS + Fastify)
-
-- AiS should expose `/ws/sync` using the same protocol as Axum (see `atome/documentations/sync_protocol.md`).
-- Fastify remains the reference server; AiS should relay realtime sync to/from Fastify when network is available.
-- When offline, AiS remains the local read/write authority and replays changes once Fastify is reachable.
-
-This means:
-
-* **LocalStorage is cleared** on each extension reload
-* **Critical data must be saved to App Group Shared Container**
-* **Use `iCloudFileManager`** for cross-device sync (optional)
-
-Example persistence flow:
-
-```javascript
-// ❌ Don't rely on this in AUV3
-localStorage.setItem('project', JSON.stringify(data));
-
-// ✅ Do this instead (persists across reloads)
-await fetch('/api/file/projects/my-project.json', {
-  method: 'POST',
-  body: JSON.stringify(data)
-});
-```
-
-### Performance
-
-AiS is optimized for iOS Audio Unit constraints:
-
-* **Startup time**: < 50ms (native Swift, no runtime)
-* **Memory footprint**: 2-5 MB (minimal overhead)
-* **Latency**: < 1ms (loopback interface)
-* **Audio streaming**: Gapless playback with Range requests
-* **FastStart optimization**: M4A files are reorganized for progressive playback
-
-### Limitations
-
-* **No WebSocket support** (use `window.webkit.messageHandlers` instead)
-* **Extension lifecycle**: Server stops when DAW closes the plugin
-* **Sandboxed I/O**: Only App Group Shared Container + scoped bookmarks
-* **No external network access** (security requirement)
-* **No PostgreSQL/SQLite** (file-based storage only)
-
-### Development vs Production
-
-| Aspect | Development | Production (AUV3) |
-|--------|-------------|-------------------|
-| **Testing** | iOS Simulator or device via Xcode | DAW host (GarageBand, Logic) |
-| **Debugging** | Xcode debugger attached to extension | Console logs via `os_log` |
-| **Storage** | Local files in simulator | App Group + iCloud |
-| **Updates** | Xcode rebuild + reinstall | App Store updates only |
-
-### Monitoring & Logs
-
-AiS logs are visible in:
-
-* **Xcode Console** (when debugging)
-* **iOS Console.app** (macOS device logs)
-* **Device logs** via `xcrun simctl spawn` (simulator)
-
-Example log filtering:
-
-```bash
-# View AiS logs on connected iOS device
-xcrun devicectl device info logs --device <UDID> | grep "LocalHTTPServer"
-```
-
-### When to Use AiS
-
-Use AiS when:
-
-* Building iOS Audio Unit plugins
-* Testing Squirrel UI in DAW hosts
-* Implementing audio-heavy workflows on iOS
-
-**Do not use AiS for**:
-
-* Production web servers (use Fastify)
-* Desktop apps (use Axum/Tauri)
-* Cross-platform database sync (use Eden/PostgreSQL)
-
-### Related Documentation
-
-* **Architecture details**: `atome/documentations/databas_architecture.md` (Section 6: AiS)
-* **AUV3 implementation**: `/platforms/ios/atome-auv3/Common/LocalHTTPServer.swift`
-* **WebView integration**: `/platforms/ios/atome-auv3/Common/WebViewManager.swift`
-* **File management**: `/platforms/ios/atome-auv3/Common/iCloudFileManager.swift`
+The realtime sync protocol both sides speak is `atome/documentations/sync_protocol.md`.
 
 ---
 
@@ -534,14 +400,14 @@ This update command will:
 * Run one confined vault on the host (`scripts/check_vault_confinement.mjs`): Linux ≥ 5.19 with Landlock enabled
   (`landlock` in `/sys/kernel/security/lsm`), and every folder above the vault root crossable (`o+x`); otherwise the
   update stops before the restart
-* Restart the system service (`atome-server`, which serves alone since L3.10a) and reload Nginx
+* Restart the system service (`squirrel`, running `atome-server`) and reload Nginx
 
 > ⚠️ Avoid running `git clean -fd` on production unless you also reinstall dependencies and restore your environment files.
 
 ### Visio: what the host needs (since 2026-11-06)
 
-The calls' SFU runs inside `atome-server` (`atome/servers/atome-server/src/visio/`, the `mediasoup` crate 0.21.0, the
-same worker generation as Node's mediasoup 3.19); no Node process and no `mediasoup-worker` binary is involved.
+The calls' SFU runs inside `atome-server` (`atome/servers/atome-server/src/visio/`, the `mediasoup` crate 0.21.0);
+no Node process and no `mediasoup-worker` binary is involved.
 
 * **Build (Debian 12, arm64 or x86_64)**: the crate compiles the C++ worker during `cargo build` (about 8 minutes the
   first time, then cached in `target/`). It needs a C++17 compiler (`build-essential`, `g++`), `python3` with pip
@@ -551,13 +417,13 @@ same worker generation as Node's mediasoup 3.19); no Node process and no `medias
   of the worker in two target directories at the same moment break each other (they share the crate's
   `subprojects/` folder in `~/.cargo/registry`): build in the one `target/`.
 * **Settings** (`/etc/squirrel/squirrel.env`), read once at startup; an invalid value stops the server with
-  `<NAME>_invalid` (Fastify fell back to the default silently): `MEDIASOUP_LISTEN_IP` (default `127.0.0.1`; a public
+  `<NAME>_invalid`: `MEDIASOUP_LISTEN_IP` (default `127.0.0.1`; a public
   server sets `0.0.0.0`), `MEDIASOUP_ANNOUNCED_IP` (the public IP the ICE candidates announce; without it on a
   loopback listen address the log warns that remote clients exchange no media), `MEDIASOUP_RTC_MIN_PORT` /
   `MEDIASOUP_RTC_MAX_PORT` (default 40000–49999; staging keeps 50000–50999).
 * **Firewall**: the RTC port range open in UDP and TCP (UDP preferred, TCP when UDP is blocked).
 * **Startup**: the worker starts once, before the server listens; a worker that cannot start is the server's startup
-  error (`visio_worker_start_failed:…`), and a worker that dies ends the process (systemd restarts it), as on Fastify.
+  error (`visio_worker_start_failed:…`), and a worker that dies ends the process (systemd restarts it).
 * Tauri and the iOS app build `atome-server` with `default-features = false`: their local servers carry no SFU.
 
 Legacy/manual update (still works if you know what you're doing):

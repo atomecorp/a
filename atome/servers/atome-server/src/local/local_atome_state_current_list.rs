@@ -49,7 +49,7 @@ pub(super) async fn handle_state_current_list(
         .or_else(|| message.get("excludeSystem"))
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
-    // Same contract as the Fastify list (database/adole.js): a deleted Atome
+    // Same contract as the Fastify list had (database/adole.js, retired): a deleted Atome
     // (tombstone) is listed only on request.
     let include_deleted = message
         .get("include_deleted")

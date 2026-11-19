@@ -62,8 +62,8 @@ Three faults, found together:
   workspace, shared file).
 - `cargo test -p atome-store` (`gate_follows_the_generated_types`, commit parity case
   `set_target_missing` in `tests/fixtures/atome_store/commit_cases.*`).
-- `cargo test -p atome-store unchanged_receipts` and `node --test tests/server/event_receipts.test.mjs`
-  (an unchanged set: no event, a receipt; its resend never overwrites a later change).
+- `cargo test -p atome-store unchanged_receipts` (an unchanged set: no event, a receipt; its resend
+  never overwrites a later change; its Fastify twin went with Fastify, R-118 L3.10).
 - `cargo test -p atome-server --lib` (`a_file_another_live_atome_holds_stays` with its undo,
   `an_unreadable_media_file_is_retried_and_old_failures_go_back_to_the_queue`,
   `media::trash` tests).

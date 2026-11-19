@@ -1,7 +1,7 @@
 // The delivery receipt of a `set` that changed nothing (database/adole_event_receipts.js on
-// Fastify): no event is recorded for it, so its receipt alone lets a resend of the same event
-// id — its acknowledgement lost — be recognised and ignored, never applied again over a
-// later change. A receipt lies outside the history: never replayed, synced nor projected.
+// Fastify, retired): no event is recorded for it, so its receipt alone lets a resend of the
+// same event id — its acknowledgement lost — be recognised and ignored, never applied again
+// over a later change. A receipt lies outside the history: never replayed, synced nor projected.
 use super::*;
 use append::{JsonEvent, record_of};
 

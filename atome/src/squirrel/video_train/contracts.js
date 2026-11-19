@@ -4,7 +4,7 @@ import { VIDEO_TRAIN_ANCHOR_MAX_MS, VIDEO_TRAIN_MEASURE_SOURCES, VIDEO_TRAIN_REP
 
 // One contract for runtime V2, AI discovery and direct MCP calls (lot L11, cahier FEAT-005): a Sport session's
 // summary sent to chosen people and an exercise's thread (VideoTrain) — every action of their screens
-// (eVe/domains/video_train/) runs through these commands. The server decides every right (server/news_thread.js).
+// (eVe/domains/video_train/) runs through these commands. The server decides every right (atome/servers/atome-server/src/social/news/thread.rs).
 export const VIDEO_TRAIN_ERRORS = Object.freeze(['INVALID_ARGUMENT', 'AUTH_REQUIRED', 'PRESENTATION_UNAVAILABLE', 'NOT_OPEN',
     'TRAINING_EXERCISE_UNKNOWN', 'news_not_found', 'news_vote_own', 'news_report_own', 'news_retired', 'news_author_required',
     'news_thread_audience_private', 'video_train_people_required', 'video_train_recipient_without_account', 'video_train_reply_empty',

@@ -1,7 +1,6 @@
 // A local sync QA topology: one isolated server reachable on the LAN, two accounts each holding a project, and a
 // manifest (temp/sync-qa/<run>/topology.json, mode 600) that device tests read. The server is atome-server with its
-// Rust vault supervisor (tests/helpers/probe_server.mjs, PROBE_PREBUILT_SERVER=1 runs the binaries built); since
-// 6 Nov. 2026 a bare `node server/server.js` has no vaults (vault_supervisor_socket_missing).
+// Rust vault supervisor, from the binaries already built (tests/helpers/probe_server.mjs).
 // SQUIRREL_SYNC_QA_PORT: the port (3011); SQUIRREL_SYNC_QA_HOLD=1 keeps the server until the probe is stopped.
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';

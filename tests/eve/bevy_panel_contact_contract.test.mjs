@@ -284,12 +284,13 @@ test('Contact band preserves conditional multi-delete and partial-failure recove
         // While cards are ticked, only what acts on them: Suppr., Export, Tout / Aucun — and Créer.
         assert.deepEqual(tools.map((item) => item.key), ['contact_search', 'contact_delete', 'contact_export', 'contact_select_all', 'contact_create']);
         const remove = tools.find((item) => item.key === 'contact_delete');
-        assert.equal(remove.lit, false);
+        // An armed delete turns red (D36: `danger`, bevy_ui_tools_band.js#toolsBandDeleteLook), not lit.
+        assert.equal(remove.danger, false);
 
         // Suppr. deletes at its second touch, through the one arming of every delete (bevy_ui_tools_band.js).
         await remove.onSelect();
         assert.equal(emitted.length, 0, 'the first touch only arms the deletion');
-        assert.equal(bandKeys().find((item) => item.key === 'contact_delete').lit, true, 'the armed delete is lit');
+        assert.equal(bandKeys().find((item) => item.key === 'contact_delete').danger, true, 'the armed delete is red');
         await bandKeys().find((item) => item.key === 'contact_delete').onSelect();
         assert.deepEqual(emitted, [{ type: 'contact.delete.confirm' }]);
         assert.equal('status' in contactSurface.readState(), false, 'Contact notices stay out of the shared band status');

@@ -118,7 +118,8 @@ test('closing during preparation suppresses delayed audio and obsolete provider 
     } finally { provider.resolve({ ok: true, providerId: 'openai' }); await h.dispose(); vi.useRealTimers(); }
 });
 
-test('the capture prerequisite offers an explicit settings link and reconnects only on activation', async () => {
+// User, 19 Nov (R-173, (a)): the text model's key is atome's own, so its error is said, without a link.
+test('the capture prerequisite is said without a settings link and reconnects only on activation', async () => {
     let configured = false;
     const settings = vi.fn(async () => ({ ok: true }));
     const h = harness(async () => configured ? { ok: true, providerId: 'openai' }
@@ -127,21 +128,21 @@ test('the capture prerequisite offers an explicit settings link and reconnects o
         const conversationId = h.api.getState().conversation.id;
         h.api.selectLevel(3);
         await h.api.open(); await h.flush(); await h.advance();
+        expect(h.api.getState().error).toBe('provider_principal_unavailable');
+        expect(h.api.openErrorPanel(h.api.getState().error)).toBe(false); await h.flush();
         expect(settings).not.toHaveBeenCalled();
-        h.api.openErrorPanel(h.api.getState().error); await h.flush();
-        expect(settings).toHaveBeenCalledOnce();
-        expect(h.api.getState()).toMatchObject({ active: true, inputMode: 'text', connected: false,
+        expect(h.api.getState()).toMatchObject({ active: true, connected: false,
             conversation: { id: conversationId, level: 3 } });
         expect(h.controller.open).not.toHaveBeenCalled();
         configured = true; await h.flush(); expect(h.controller.open).not.toHaveBeenCalled();
         await h.api.open(); await h.flush(); await h.advance();
         expect(h.api.getState()).toMatchObject({ connected: true, conversation: { id: conversationId, level: 3 } });
-        expect(settings).toHaveBeenCalledOnce();
+        expect(settings).not.toHaveBeenCalled();
     } finally { await h.dispose(); }
 });
 
 test('a failed settings opening exposes a short error rather than swallowing the refusal', async () => {
-    const h = harness(async () => ({ ok: false, error: 'invalid_api_key' }), async () => { throw new Error('missing_canvas'); });
+    const h = harness(async () => ({ ok: false, error: 'not_authenticated' }), async () => { throw new Error('missing_canvas'); });
     try {
         await h.api.open(); await h.flush(); await h.advance();
         h.api.openErrorPanel(h.api.getState().error); await h.flush();
@@ -161,7 +162,7 @@ test('a text prerequisite preserves the exact turn and its explicit attachment w
         const result = await h.api.sendText('Keep my exact request'); await h.flush();
         expect(result).toMatchObject({ ok: false, error: 'no_ai_key_configured' });
         expect(settings).not.toHaveBeenCalled();
-        h.api.openErrorPanel(result.error); await h.flush(); expect(settings).toHaveBeenCalledOnce();
+        expect(h.api.openErrorPanel(result.error)).toBe(false); await h.flush(); expect(settings).not.toHaveBeenCalled();
         expect(h.api.getState().conversation).toMatchObject({ id: before.id, level: before.level,
             turns: [{ role: 'user', text: 'Keep my exact request', attachments: [{ id: attachment, name: 'reference.txt' }] }] });
         expect(h.api.getState().image.references[0].id).toBe(attachment);

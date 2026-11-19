@@ -2,7 +2,7 @@
 // month's test budget and its ceilings per category, the allowed (tester) accounts and their
 // own ceilings, the invitations' activation terms, and the administrators' list. Every frame
 // checks the role again on the server; an administrator proposes a new one, the principal
-// administrator (`owner`, given only by scripts/account_roles_admin.mjs) confirms it.
+// administrator (`owner`, given only by `atome_admin roles`) confirms it.
 use super::{guard, wallet};
 use crate::vault_router::central::row_json;
 use crate::ws_api::sources::account_roles::{self, ADMIN, OWNER, TESTER};

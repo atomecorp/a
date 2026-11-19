@@ -1,6 +1,5 @@
-// The binary frames between the supervisor and a vault process, and between
-// Fastify and the supervisor: a `u32` big-endian length of what follows, a `u64`
-// request id, a one-byte tag, the body. One connection carries many requests at
+// The binary frames between the supervisor and a vault process: a `u32` big-endian
+// length of what follows, a `u64` request id, a one-byte tag, the body. One connection carries many requests at
 // once; a reply names the request it answers.
 use serde_json::Value as JsonValue;
 use std::io::{self, Read, Write};
@@ -12,16 +11,10 @@ pub const REQUEST: u8 = 1;
 pub const RESULT: u8 = 2;
 // The operation's refusal, an error code in UTF-8.
 pub const FAILURE: u8 = 3;
-// An operation for one principal's vault: `u16` principal length, the principal,
-// then a request body.
-pub const ROUTED: u8 = 4;
-// An operation of the supervisor itself (its vault router, `router:<name>`): a
-// request body.
-pub const SERVICE: u8 = 5;
 
 // Id and tag.
 pub const HEAD_BYTES: usize = 9;
-// The vault process's request bound (Fastify's vault socket refused more).
+// The vault process's request bound.
 pub const MAX_REQUEST_BYTES: usize = 2_000_000;
 // A reply is bounded by its operation (a stream batch: 8 MB and one event).
 pub const MAX_REPLY_BYTES: usize = 256 * 1024 * 1024;
@@ -125,15 +118,4 @@ pub fn parse_request(body: &[u8]) -> Result<(&str, JsonValue), String> {
     let payload =
         serde_json::from_slice(payload).map_err(|_| "vault_payload_invalid".to_string())?;
     Ok((operation, payload))
-}
-
-pub fn routed_body(principal: &str, request: &[u8]) -> Vec<u8> {
-    let mut body = prefixed(principal);
-    body.extend_from_slice(request);
-    body
-}
-
-// The principal and its request body.
-pub fn parse_routed(body: &[u8]) -> Result<(&str, &[u8]), String> {
-    split_prefixed(body)
 }

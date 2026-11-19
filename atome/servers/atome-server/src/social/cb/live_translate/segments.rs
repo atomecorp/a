@@ -271,12 +271,19 @@ impl PacketCut {
         self.cut.silence_ms
     }
 
-    /// Whether the piece being gathered holds some voice: one closed without (the call ended in a silence) is dropped.
-    pub fn holds_voice(&self) -> bool {
-        self.voice_ms > 0
+    /// The take ends before its cut (the call ended, its producer paused or closed): the piece gathered so far follows the
+    /// pieces' own rule, kept and translated only with 1 s of voice at least, else dropped. The next one starts afresh.
+    pub fn ended(&mut self) -> Cue {
+        let cue = if self.voice_ms >= PIECE_MIN_VOICE_MS as u64 {
+            Cue::Cut
+        } else {
+            Cue::Drop
+        };
+        self.reset();
+        cue
     }
 
-    /// The take was closed elsewhere (its producer paused, its longest length): the next one starts afresh.
+    /// The take was closed elsewhere (its longest length): the next one starts afresh.
     pub fn reset(&mut self) {
         self.piece_ms = 0;
         self.voice_ms = 0;

@@ -2,7 +2,7 @@
 // unless its policy enables it (shell_policy.rs), open to the accounts its allowlist or a
 // per-account policy names, one command from an allowlist run without a shell (shell_run.rs),
 // inside the person's sandbox home unless a token-guarded `root` or `elevated` (install only)
-// scope is allowed. Fastify's checks run in its order.
+// scope is allowed. The checks run in Fastify's order.
 use super::shell_policy::{
     self, DEFAULT_ALLOWED, DEFAULT_DURATION_MS, DEFAULT_OUTPUT_BYTES, Policy, includes,
     truthy_setting,
@@ -214,7 +214,7 @@ fn refused(error: &str) -> JsonValue {
 }
 
 /// `executeShellCommand(payload)` for `caller`: the reply's fields after `type` and `requestId`,
-/// or the error Fastify's handler catches.
+/// or the error Fastify's handler caught.
 pub async fn execute(
     project_root: &Path,
     payload: &JsonValue,

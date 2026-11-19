@@ -11,7 +11,6 @@ set -euo pipefail
 
 MODE="stable"          # stable | latest
 SKIP_TAURI=false
-SKIP_FASTIFY=false
 SKIP_SYSTEM=false
 SKIP_INSTALL_SERVER=false
 
@@ -90,7 +89,6 @@ Options:
   -s, --stable                 Shortcut for --mode stable
   -l, --latest                 Shortcut for --mode latest
   --skip-tauri             Skip updating @tauri-apps/cli
-  --skip-fastify           Skip updating Fastify and related plugins
   --skip-system            Skip OS/system dependency installation
   --skip-install-server    Skip calling install_server.sh (Debian/FreeBSD)
   --os <auto|debian|freebsd|macos>
@@ -123,10 +121,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-tauri)
       SKIP_TAURI=true
-      shift
-      ;;
-    --skip-fastify)
-      SKIP_FASTIFY=true
       shift
       ;;
     --skip-system)
@@ -519,25 +513,6 @@ update_tauri_cli() {
   log_ok "✅ @tauri-apps/cli bumped to latest"
 }
 
-update_fastify_stack() {
-  if [ "$SKIP_FASTIFY" = true ]; then
-    log_warn "⏭️  Skipping Fastify update (--skip-fastify)"
-    return
-  fi
-
-  log_info "🛠  Updating Fastify stack to latest"
-  (
-    cd "$PROJECT_ROOT" &&
-    npm install \
-      fastify@latest \
-      @fastify/static@latest \
-      @fastify/websocket@latest \
-      @fastify/cors@latest
-  )
-  log_ok "✅ Fastify stack bumped to latest"
-}
-
-
 reinstall_project_dependencies() {
   local installer="$PROJECT_ROOT/scripts/install_dependencies.sh"
   if [ ! -f "$installer" ]; then
@@ -669,12 +644,6 @@ run_latest_updates() {
 # Execution logic moved to main() at the end of script
 
 
-install_sqlite_modules() {
-  log_info "🧩 Ensuring SQLite/libSQL drivers are installed"
-  (cd "$PROJECT_ROOT" && npm install better-sqlite3@latest @libsql/client@latest)
-  log_ok "✅ SQLite/libSQL drivers installed"
-}
-
 setup_sqlite_database() {
   local sqlite_path="${SQLITE_PATH:-$PROJECT_ROOT/database_storage/adole.db}"
   local sqlite_dir
@@ -767,12 +736,6 @@ main() {
     log_info "⏭️  Skipping Tauri CLI update"
   fi
 
-  if [[ "$SKIP_FASTIFY" == "false" ]]; then
-    update_fastify_stack
-  else
-    log_info "⏭️  Skipping Fastify plugins update"
-  fi
-
   if [[ "$MODE" == "stable" ]]; then
     run_stable_updates
   else
@@ -780,7 +743,6 @@ main() {
   fi
 
   reinstall_project_dependencies
-  install_sqlite_modules
   setup_sqlite_database
   ensure_runtime_directories
 

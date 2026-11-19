@@ -390,7 +390,7 @@ fn commit_atome_events(
         .iter()
         .filter(|event| event.get("inserted") == Some(&JsonValue::Bool(true)))
         .count();
-    // A new event carries no `inserted` mark in Fastify's answer (its WeakSet holds it); a retry says `false`.
+    // A new event carries no `inserted` mark in Fastify's answer (its WeakSet held it); a retry says `false`.
     let events: Vec<JsonValue> = committed
         .into_iter()
         .map(|mut event| {

@@ -1,4 +1,4 @@
 profile:
   name: desktop
-stacks: [base, js, network]
+stacks: [base, js, network, native, rust]
 modules: [display, audio, midi]

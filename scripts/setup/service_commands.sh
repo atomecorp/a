@@ -6,13 +6,13 @@ print_usage() {
     echo "Development Options:"
     echo "  -f, --force-deps      Force update all dependencies before starting"
     echo "      --test            Launch deterministic local test mode"
-    echo "      --auth-local      Use local Fastify with simulated SMS validation (default in dev)"
+    echo "      --auth-local      Use the local server with simulated SMS validation (default in dev)"
     echo "      --auth-prod       Use atome.one and send a real, billable SMS"
     echo "      --prod            Build a production Tauri bundle and exit"
-    echo "      --tauri           Launch only Tauri (no local Fastify server)"
+    echo "      --tauri           Launch only Tauri (no local server)"
     echo "      --tauri-prod      Build and launch the production Tauri app bundle"
-    echo "      --server          Launch only Fastify server (HTTP, dev or prod foreground diagnostics)"
-    echo "      --fastify-url URL Configure remote Fastify server URL for Tauri"
+    echo "      --server          Launch only atome-server (HTTP, dev or prod foreground diagnostics)"
+    echo "      --fastify-url URL Configure the remote server URL for Tauri"
     echo ""
     echo "Production Options:"
     echo "      --https           Start production server via systemd/nginx (HTTPS)"
@@ -38,9 +38,9 @@ print_usage() {
     echo "  -h, --help            Show this help message"
     echo ""
     echo "Examples:"
-    echo "  $ENTRYPOINT_DISPLAY                   # Dev: Start both Fastify + Tauri"
+    echo "  $ENTRYPOINT_DISPLAY                   # Dev: Start both atome-server + Tauri"
     echo "  $ENTRYPOINT_DISPLAY --auth-prod       # Dev app with real SMS through atome.one"
-    echo "  $ENTRYPOINT_DISPLAY --server          # Start only Fastify (HTTP)"
+    echo "  $ENTRYPOINT_DISPLAY --server          # Start only atome-server (HTTP)"
     echo "  $ENTRYPOINT_DISPLAY --https           # Prod: Start via systemd/nginx (HTTPS)"
     echo "  $ENTRYPOINT_DISPLAY status            # Prod: Check service status"
     echo "  $ENTRYPOINT_DISPLAY logs              # Prod: View live logs"
@@ -135,9 +135,14 @@ service_foreground_server() {
     export NODE_ENV=production
     cd "$PROJECT_ROOT"
 
+    local server="$PROJECT_ROOT/target/release/atome-server"
+    if [[ ! -x "$server" ]]; then
+        echo "ERROR: $server is not built (./run.sh update builds it)."
+        exit 1
+    fi
     echo "Starting $SERVICE_NAME foreground server with $env_file"
     echo "Press Ctrl+C to stop."
-    exec node "$PROJECT_ROOT/server/server.js"
+    exec "$server"
 }
 
 service_start() {

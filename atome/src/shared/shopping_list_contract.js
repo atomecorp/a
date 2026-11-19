@@ -5,7 +5,7 @@ import { NUTRITION_FOOD_GROUPS, NUTRITION_PORTION_UNITS } from './program_nutrit
 
 export const SHOPPING_ITEM_ATOME_TYPE = 'shopping_item';
 // Each account's basket: one root under which every item lies (its meta parent_id). Shared live with
-// other accounts, it carries every item, present and to come (server/syncShareHierarchy.js).
+// other accounts, it carries every item, present and to come (atome/servers/atome-server/src/vault_router/shares.rs).
 export const SHOPPING_LIST_ATOME_TYPE = 'shopping_list';
 export const shoppingListId = owner => `shopping_list_${owner}`;
 export const SHOPPING_LIST_TYPE = Object.freeze({ type: SHOPPING_LIST_ATOME_TYPE, kind: 'data_model', traits: ['data'], schema: {

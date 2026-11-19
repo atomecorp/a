@@ -1,7 +1,7 @@
-// A row as better-sqlite3 hands it to Fastify: an object of its columns in their
+// A row as better-sqlite3 handed it to Fastify: an object of its columns in their
 // order, a later column of the same name replacing an earlier one, integers and
 // reals as numbers, text as strings, NULL as null. The vault's replies are built
-// on it, so they carry what Fastify's `SELECT *` carries.
+// on it, so they carry what Fastify's `SELECT *` carried.
 use super::*;
 use rusqlite::types::ValueRef;
 

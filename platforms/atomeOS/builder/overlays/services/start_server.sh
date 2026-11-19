@@ -6,4 +6,4 @@ set -a
 . /usr/local/etc/aos/runtime.env
 set +a
 cd /opt/atome
-exec /usr/local/bin/node server/server.js
+exec /opt/atome/target/release/atome-server

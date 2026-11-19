@@ -3,7 +3,12 @@
 // whose public half's fingerprint is the SHA-256 of its SPKI DER. A client challenges
 // the server (`POST /api/server/verify`) and checks the RSA-PSS SHA-256 signature of
 // `serverId:challenge:timestamp:nonce` with the public key. Without both files, or with
-// a pair that does not match, the server has no signing capability.
+// a pair that does not match, the server has no signing capability. The pair is made, checked,
+// adopted and backed up in the environment file by secure_config (the operator's
+// `atome_admin server-identity`).
+#[cfg(unix)]
+pub mod secure_config;
+
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use ring::rand::{SecureRandom, SystemRandom};
@@ -13,6 +18,8 @@ use sha2::{Digest, Sha256};
 use std::path::Path;
 
 pub const ALGORITHM: &str = "RSA-PSS-SHA256";
+const KEY_BITS: usize = 2048;
+const PUBLIC_EXPONENT: u32 = 65537;
 
 struct Signing {
     key: RsaKeyPair,
@@ -83,8 +90,13 @@ fn signing(project_root: &Path, private: &str, public: &str) -> Result<Signing, 
         .map_err(|e| format!("server_identity_private_key_unreadable:{e}"))?;
     let public_pem = std::fs::read_to_string(project_root.join(public))
         .map_err(|e| format!("server_identity_public_key_unreadable:{e}"))?;
+    pair(&private_text, public_pem)
+}
+
+// The two halves read together: the private key (PKCS#8 or PKCS#1) and the SPKI public key it must derive.
+fn pair(private_text: &str, public_pem: String) -> Result<Signing, String> {
     let (label, private_der) =
-        pem_blocks(&private_text).ok_or("server_identity_private_key_invalid")?;
+        pem_blocks(private_text).ok_or("server_identity_private_key_invalid")?;
     let key = match label.as_str() {
         "PRIVATE KEY" => RsaKeyPair::from_pkcs8(&private_der),
         "RSA PRIVATE KEY" => RsaKeyPair::from_der(&private_der),
@@ -103,6 +115,85 @@ fn signing(project_root: &Path, private: &str, public: &str) -> Result<Signing, 
         public_pem,
         fingerprint: format!("sha256:{}", hex(&Sha256::digest(&spki))),
     })
+}
+
+/// `validateServerIdentityKeyPair(privatePem, publicPem)`: the public key's fingerprint
+/// (`sha256:<hex>` of its SPKI DER) when the two halves belong together.
+pub fn validate_key_pair(private_pem: &str, public_pem: &str) -> Result<String, String> {
+    pair(private_pem, public_pem.to_string()).map(|signing| signing.fingerprint)
+}
+
+/// `createServerIdentityId()`: `squirrel-server-` and 8 random bytes in hex.
+pub fn create_server_id() -> Result<String, String> {
+    let mut bytes = [0u8; 8];
+    SystemRandom::new()
+        .fill(&mut bytes)
+        .map_err(|_| "server_identity_random_failed".to_string())?;
+    Ok(format!("squirrel-server-{}", hex(&bytes)))
+}
+
+/// A key pair as PEM texts: the private key in PKCS#8, the public key in SPKI.
+pub struct KeyPairPem {
+    pub private: String,
+    pub public: String,
+}
+
+#[derive(Debug)]
+struct RandomFailed;
+
+impl std::fmt::Display for RandomFailed {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("the system random source failed")
+    }
+}
+
+impl std::error::Error for RandomFailed {}
+
+// The system's random source (ring's, the one the signatures use) as the generator RSA asks for.
+struct SystemSource(SystemRandom);
+
+impl rsa::rand_core::TryRng for SystemSource {
+    type Error = RandomFailed;
+
+    fn try_next_u32(&mut self) -> Result<u32, RandomFailed> {
+        let mut bytes = [0u8; 4];
+        self.try_fill_bytes(&mut bytes)?;
+        Ok(u32::from_le_bytes(bytes))
+    }
+
+    fn try_next_u64(&mut self) -> Result<u64, RandomFailed> {
+        let mut bytes = [0u8; 8];
+        self.try_fill_bytes(&mut bytes)?;
+        Ok(u64::from_le_bytes(bytes))
+    }
+
+    fn try_fill_bytes(&mut self, destination: &mut [u8]) -> Result<(), RandomFailed> {
+        self.0.fill(destination).map_err(|_| RandomFailed)
+    }
+}
+
+impl rsa::rand_core::TryCryptoRng for SystemSource {}
+
+/// `createServerIdentityKeyPair()`: a new RSA key of 2048 bits, exponent 65537.
+pub fn create_key_pair() -> Result<KeyPairPem, String> {
+    use rsa::pkcs8::{EncodePrivateKey, EncodePublicKey, LineEnding};
+    let failed = |e: &dyn std::fmt::Display| format!("server_identity_key_generation_failed:{e}");
+    let key = rsa::PrivateKey::new_with_exp(
+        &mut SystemSource(SystemRandom::new()),
+        KEY_BITS,
+        rsa::BoxedUint::from(PUBLIC_EXPONENT),
+    )
+    .map_err(|e| failed(&e))?;
+    let private = key
+        .to_pkcs8_pem(LineEnding::LF)
+        .map_err(|e| failed(&e))?
+        .to_string();
+    let public = key
+        .to_public_key()
+        .to_public_key_der()
+        .and_then(|der| Ok(der.to_pem("PUBLIC KEY", LineEnding::LF)?))
+        .map_err(|e| failed(&e))?;
+    Ok(KeyPairPem { private, public })
 }
 
 impl ServerIdentity {

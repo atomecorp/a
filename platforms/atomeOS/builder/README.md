@@ -35,10 +35,10 @@ into a matching-architecture UEFI guest; qualify QEMU/UTM first where available.
 Parallels/Fusion/VirtualBox compatibility is not implied by the format.
 
 `desktop`, `audio` and `dev` select `display,audio,midi`. `minimal` selects no
-optional module and still runs the real Fastify server. An explicit `--modules`
+optional module and still runs the real atome-server. An explicit `--modules`
 list replaces the preset; repeated module/target options accumulate. Audio and
 MIDI are independent of display in the configuration. Autonomous audio/MIDI is
-currently blocked because the existing Fastify server does not own device audio
+currently blocked because atome-server does not own device audio
 or MIDI; the browser normally owns them. A remote client's audio device is not
 the appliance's audio device. No fake native engine is installed.
 
@@ -180,7 +180,7 @@ are not yet verified. Never publish a stable release from this development path.
 ## Security, diagnostics and status
 
 No user/provider secrets or pre-generated device identities are included. Images
-lock the root/default FreeBSD/service passwords, disable SSH, bind Fastify to
+lock the root/default FreeBSD/service passwords, disable SSH, bind atome-server to
 loopback and block unsolicited inbound network access. First boot creates unique
 runtime secrets/server identity and SSH host keys. The server and optional UI
 run as the unprivileged `atome` user with at most three restart attempts. Native

@@ -28,7 +28,7 @@ pub(super) struct Who {
     pub program: Result<Option<String>, String>,
 }
 
-/// Who a frame comes from, in the order Fastify meets it: the device session, then (for an
+/// Who a frame comes from, in the order Fastify met it: the device session, then (for an
 /// action the family knows, else `refusal`) the account its token names
 /// (`resolveWsApiPrincipal(connection, message)`) and whether that account is provisioned.
 /// `Err` is the reply that ends the frame.

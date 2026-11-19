@@ -337,6 +337,8 @@ export const trainingLoadStepValid = value => Number.isFinite(value) && value >=
 export const trainingLoadStep = (exercise, own = null) => own ?? exercise.load_step_kg;
 // What the log's histogram shows of each session (user, 2026-10-30, Q16): its active minutes, its volume, its heaviest load, its repetitions.
 export const TRAINING_LOG_METRICS = Object.freeze(['minutes', 'volume', 'load', 'reps']);
+// The « Entraînement » carnet's levels (R-238): its overview, an exercise's progress, the sessions by week.
+export const TRAINING_LOG_VIEWS = Object.freeze(['overview', 'progress', 'sessions']);
 // The highest of them: the commands' contract bound before each exercise's own.
 export const TRAINING_LOAD_CEILING_KG = Math.max(...TRAINING_EXERCISES.map(trainingLoadMax).filter(value => value !== null));
 // A load kept, within its exercise's values when read (an exercise without a load has none).

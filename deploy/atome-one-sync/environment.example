@@ -12,3 +12,5 @@ JWT_SECRET=REPLACE_WITH_AT_LEAST_32_RANDOM_BYTES
 COOKIE_SECRET=REPLACE_WITH_AT_LEAST_32_RANDOM_BYTES
 SERVER_PRIVATE_KEY_PATH=/etc/squirrel/identity/server-private.pem
 SERVER_PUBLIC_KEY_PATH=/etc/squirrel/identity/server-public.pem
+# ATOME_CB_RECORDINGS_KEY (64 hex digits) is generated on the host by scripts/server_update.js (phase cb-recordings-key)
+# when this file has none; never set a placeholder here, never change it once set (the sealed CB takes need it).

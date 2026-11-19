@@ -141,11 +141,11 @@ by the local server. Its row was what let a resend of the same event id be recog
   (the Rust local server that replaced the Swift one on 6 Nov. 2026: a `set` that
   changes nothing, the whole origin or its type alone, appends no event and queues no
   delivery; a real change still does).
-- `cargo test -p atome-store unchanged_receipts` and `node --test tests/server/event_receipts.test.mjs`
-  (each engine: an unchanged set records no event, only its receipt; its resend after a
-  later change is ignored, interactive and offline-lww).
-- `cargo test -p atome-store commit_parity` (case `unchanged_set_receipt`, regenerated from
-  Fastify's engine by `node tests/fixtures/atome_store/generate_commit_cases.mjs`).
+- `cargo test -p atome-store unchanged_receipts` (an unchanged set records no event, only its
+  receipt; its resend after a later change is ignored, interactive and offline-lww). Its Fastify
+  twin, tests/server/event_receipts.test.mjs, went with Fastify (R-118 L3.10, 19 Nov. 2026).
+- `cargo test -p atome-store commit_parity` (case `unchanged_set_receipt`, recorded from
+  Fastify's engine before its removal; `commit_cases.expected.json` is now the reference).
 - `cargo test -p atome-server --lib local::local_atome_ws_sync_replay_tests` (a
   replay interleaved with `acked`/`pong` is persisted whole, every ack names an
   event already durable; subscriptions go in batches of 500).

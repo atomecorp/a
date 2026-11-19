@@ -10,7 +10,7 @@ export const SHOWS_ERRORS = Object.freeze(['INVALID_ARGUMENT', 'PLATE_NOT_FOUND'
     'PRESENTATION_UNAVAILABLE', 'CALENDAR_UNAVAILABLE', 'NAVIGATION_FAILED', 'PLACE_NOT_FOUND']);
 // The radius of the rubric: any whole km of its range (eVe/domains/dashboard/dashboard_preferences.js#DASHBOARD_SHOWS_RADIUS_RANGE_KM).
 const radiusKm = Object.freeze({ type: 'integer', minimum: 1, maximum: 100 });
-// The orders each server kind (server/ws_shows.js) can be read in, its first by default: an outing by
+// The orders each server kind (atome/servers/atome-server/src/ws_api/sources/shows.rs) can be read in, its first by default: an outing by
 // `date` (soonest), `distance` (nearest) or `name` (its place's name, A to Z), a place by `distance` or
 // `name`. The kinds absent keep their one order (films by popularity, matches by date, DATAtourisme's).
 const DATED = Object.freeze(['date', 'distance', 'name']), PLACED = Object.freeze(['distance', 'name']);

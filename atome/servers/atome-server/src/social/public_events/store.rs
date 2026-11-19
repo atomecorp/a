@@ -181,6 +181,40 @@ impl Store {
             .await
     }
 
+    /// `restore(eventId)`: a hidden series shown again, its reports forgotten (the operator's word).
+    pub async fn restore(&self, event_id: &str) -> Result<(), String> {
+        let event_id = event_id.to_string();
+        self.central
+            .transaction(move |db| {
+                run(
+                    db,
+                    "UPDATE public_event_series SET hidden_at = NULL, reports = 0 WHERE event_id = ?",
+                    &[&event_id],
+                )?;
+                run(
+                    db,
+                    "DELETE FROM public_event_reports WHERE event_id = ?",
+                    &[&event_id],
+                )
+                .map(drop)
+            })
+            .await
+    }
+
+    /// `reported()`: the reported series, most reported first, 200 at most.
+    pub async fn reported(&self) -> Result<Vec<JsonValue>, String> {
+        self.central
+            .transaction(|db| {
+                all(
+                    db,
+                    "SELECT event_id, author_id, author_name, reports, hidden_at, payload_json FROM public_event_series
+                     WHERE reports > 0 ORDER BY reports DESC, updated_at DESC LIMIT 200",
+                    &[],
+                )
+            })
+            .await
+    }
+
     /// The occurrences in `cells` still to end, with their series, soonest first (`around`).
     pub async fn around(
         &self,

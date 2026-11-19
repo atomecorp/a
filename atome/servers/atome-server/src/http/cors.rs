@@ -206,7 +206,7 @@ fn private_network(request: &HeaderMap, response: &mut HeaderMap) {
     }
 }
 
-// Fastify names Origin in Vary on every reply, a CORS request or not.
+// Fastify named Origin in Vary on every reply, a CORS request or not.
 fn vary_origin(response: &mut HeaderMap) {
     let named = response
         .get_all(header::VARY)

@@ -1,7 +1,7 @@
 // Every request carries one id, the caller's own `x-request-id` when it sent a
 // non-blank one, else a new one (Fastify's `genReqId`, server/server.js); the
 // id goes on to whatever answers it and comes back on the reply, unless the reply
-// carries `Untagged`: Fastify answers a CORS preflight before it names the request.
+// carries `Untagged`: Fastify answered a CORS preflight before it named the request.
 // A reply carrying `Failed` (a route's thrown error, a body refused before the route) is kept among
 // the server's recent errors (`recordRecentError` of Fastify's `onError` hook, server/server_dedup.js),
 // which `/dev/state` reports.

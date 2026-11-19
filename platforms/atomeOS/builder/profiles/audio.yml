@@ -1,5 +1,5 @@
 # Existing named preset, composed through the same modules; no unmeasured tuning.
 profile:
   name: audio
-stacks: [base, js, network]
+stacks: [base, js, network, native, rust]
 modules: [display, audio, midi]

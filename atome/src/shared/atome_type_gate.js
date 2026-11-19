@@ -1,7 +1,7 @@
 // The one answer to « may this atome type, and these properties, be written? »: a type is known when it is
 // declared in CORE_ATOME_TYPE_DEFINITIONS (#shared/core_atome_types.js), and a property when its type's
 // schema declares it (`allow_unknown_properties: false`, every type). The server's event commit
-// (database/adole_event_log.js#appendEvent) refuses any other type or property before anything is stored,
+// (atome/engines/atome-store/src/type_gate.rs) refuses any other type or property before anything is stored,
 // so a typo or an invented type or key never becomes durable truth, nor does a project `set` that would
 // create an atome without saying what it is (`assertSetTargetDeclared`). The native servers (Axum, Swift) apply
 // the same rules from eVe/registry/generated/atome_types.json, generated from this owner.
@@ -15,7 +15,7 @@ export const ATOME_TYPE_UNKNOWN = 'atome_type_unknown';
 export const ATOME_PROPERTY_UNKNOWN = 'atome_property_unknown';
 export const ATOME_SET_TARGET_MISSING = 'atome_set_target_missing';
 
-// A copy's provenance, carried by the copy of an atome of any type (server/shop_delivery.js#copyProject).
+// A copy's provenance, carried by the copy of an atome of any type (atome/servers/atome-server/src/social/shop/delivery.rs).
 const COPY_PROVENANCE_PROPERTY_KEYS = ['shared_from', 'original_atome_id', 'share_type', 'shop_order_id'];
 
 // Envelope fields carried in a patch (type, parent, owner, deletion, a copy's provenance…): never gated.

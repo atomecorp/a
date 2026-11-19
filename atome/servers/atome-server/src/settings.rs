@@ -62,9 +62,8 @@ impl Settings {
             .or_else(|| self.below.get(name).cloned())
     }
 
-    /// Fastify's central database (database/driver.js): its path, a relative one read from
-    /// Fastify's directory as better-sqlite3 reads it. The vault router and the operator's tools
-    /// share it.
+    /// The central database: its path, a relative one read from `server/` (as Fastify's
+    /// better-sqlite3 read it, retired). The vault router and the operator's tools share it.
     pub fn central_database(&self, project_root: &Path) -> Result<std::path::PathBuf, String> {
         if ["LIBSQL_URL", "TURSO_DATABASE_URL"]
             .iter()
@@ -84,12 +83,6 @@ impl Settings {
         } else {
             project_root.join("server").join(path)
         })
-    }
-
-    /// A key `.env.local` must not set: Fastify would read it over the value this
-    /// server hands it, and the two would part.
-    pub fn overridden_locally(&self, name: &str) -> bool {
-        self.above.contains_key(name)
     }
 
     #[cfg(unix)]

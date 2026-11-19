@@ -1,4 +1,4 @@
-import { authSigningMessage } from '../../shared/auth_link_contract.js';
+import { authDeviceKey, authSigningMessage } from '../../shared/auth_link_contract.js';
 import { readOptionalAuthCache } from './auth_optional_cache.js';
 
 const encode = (bytes) => btoa(String.fromCharCode(...new Uint8Array(bytes))).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
@@ -116,9 +116,7 @@ export function createAuthDeviceStore({ indexedDB = globalThis.indexedDB, crypto
             record = await insertOnce(`key:${scope}`, { publicKey, privateKey: pair.privateKey, native: false, scope });
         }
         if (record.native !== Boolean(nativeKey)) throw new Error('auth_device_provider_mismatch');
-        const { x, y } = record.publicKey;
-        const publicKey = { kty: 'EC', crv: 'P-256', x, y };
-        const keyId = hex(await crypto.subtle.digest('SHA-256', utf8(JSON.stringify(publicKey))));
+        const { publicKey, keyId } = await authDeviceKey(record.publicKey, crypto.subtle);
         return {
             keyId, publicKey, scope: record.scope,
             async sign(challenge) {

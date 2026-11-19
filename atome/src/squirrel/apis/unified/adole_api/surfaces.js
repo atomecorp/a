@@ -59,7 +59,7 @@ export const getLocalSurfaceId = () => {
     return generated;
 };
 
-// The registry's own bound (server/auth_devices.js#normalizeDeviceMeta).
+// The registry's own bound (atome/servers/atome-server/src/auth/devices.rs).
 const normalizeDeviceName = (value) => String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 64);
 
 const readLocalDevice = async () => {

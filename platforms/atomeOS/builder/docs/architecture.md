@@ -24,7 +24,8 @@ The pre-existing audit `todo/atome OS Audit.md` remains the task record.
 - `installer/sbc/flash.mjs`: shared macOS USB/SD discovery, confirmation, write,
   exact-length readback and ejection. Desktop boot media use this same owner.
 - `overlays/services/` and `overlays/ui/`: rc.d, unique first-boot identities,
-  independently supervised real Fastify service and existing Cage/Cog candidate.
+  independently supervised real atome-server service (built in the image from the
+  pinned Rust workspace) and existing Cage/Cog candidate.
 - `scripts/configure_installer.sh`, `installer/desktop/install.mjs`: optional UEFI
   installer-media packaging and one native installer entry point. Reuse
   FreeBSD `bsdinstall` for destructive disk operations, preserving the same real
@@ -32,7 +33,7 @@ The pre-existing audit `todo/atome OS Audit.md` remains the task record.
   unsupported mode/target combinations fail explicitly. Native execution is not
   validated by host tests.
 
-Fastify still serves atome/eVe through its canonical APIs. Bevy/WebGPU, Kira WASM,
+atome-server serves atome/eVe through its canonical APIs. Bevy/WebGPU, Kira WASM,
 MIDI owners, persistence and commands remain in their existing framework owners.
 A native autonomous FreeBSD audio/MIDI runtime has not been found/validated.
 WebSDL was not found after repository searches; it is not invented or packaged.

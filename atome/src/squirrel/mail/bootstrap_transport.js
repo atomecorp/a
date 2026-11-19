@@ -135,7 +135,7 @@ const resolveMailSyncBase = (env) => {
     return resolveFastifyBase(env);
 };
 
-// The Fastify server answers mail calls for a verified device session only (server/mailRoutes.js): its token goes
+// The Fastify server answers mail calls for a verified device session only (atome/servers/atome-server/src/mail/mod.rs): its token goes
 // with every call made to it. The local Tauri server, bound to this machine, needs none. Null: no session to send.
 const resolveMailSyncHeaders = async (env, baseUrl) => {
     if (baseUrl !== resolveFastifyBase(env)) return {};
@@ -220,10 +220,13 @@ const loadPersistedMailPreferences = async (env) => {
             const result = await explicitLoader();
             const profile = result?.profile && typeof result.profile === 'object' ? result.profile : null;
             if (!profile) return null;
-            return persistRuntimeMailPreferences(env, mergeMailCredentialSources(
+            const account = mergeMailCredentialSources(
                 profile?.preferences?.mail && typeof profile.preferences.mail === 'object' ? profile.preferences.mail : null,
                 profile?.email ? { email: profile.email } : null
-            ));
+            );
+            // The device keeps its copy without the password; the account's own settings, password included, answer.
+            persistRuntimeMailPreferences(env, account);
+            return account;
         } catch (_) {
             return null;
         }

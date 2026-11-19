@@ -252,7 +252,7 @@ impl Status {
                 }
                 config.to_string()
             }
-            // Fastify sends the file as it is when it is not JSON.
+            // Fastify sent the file as it is when it is not JSON.
             Err(_) => raw,
         };
         let mut response = (StatusCode::OK, text).into_response();

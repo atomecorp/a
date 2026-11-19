@@ -36,10 +36,16 @@ afterEach(() => { globalThis.window = previousWindow; });
 test('an eVe template becomes usable without waiting for an unrelated work-project bootstrap', async () => {
     const openWorkspaceDashboardAndMainMenu = vi.fn(async () => ({ ok: true, route: 'dashboard_eve' }));
     const ensureProjectReady = vi.fn(() => new Promise(() => {}));
+    // The home's domain is settled before the home is laid (dashboard_domain.js#settleDashboardDomain).
+    const settleDashboardDomain = vi.fn(async () => {
+        expect(openWorkspaceDashboardAndMainMenu).toHaveBeenCalledTimes(settleDashboardDomain.mock.calls.length - 1);
+        return { ok: true, domain: 'root' };
+    });
     const open = createWorkspaceBootstrapOpen({ openWorkspaceDashboardAndMainMenu, publishNativeBootMilestone() {},
-        waitForHomePreferences: async () => ({ ok: true }), followRestore: () => () => {} });
+        waitForHomePreferences: async () => ({ ok: true }), settleDashboardDomain, followRestore: () => () => {} });
     expect(await open({ source: 'startup', ensureProjectReady })).toMatchObject({ ok: true, route: 'dashboard_eve', resumed: false });
     expect(ensureProjectReady).not.toHaveBeenCalled(); expect(openWorkspaceDashboardAndMainMenu).toHaveBeenCalledOnce();
+    expect(settleDashboardDomain).toHaveBeenCalledOnce();
     boot.onboarding = true;
     expect(await open({ ensureProjectReady })).toMatchObject({ ok: true, route: 'dashboard_eve' });
     expect(openWorkspaceDashboardAndMainMenu).toHaveBeenCalledTimes(2);

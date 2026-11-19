@@ -1,6 +1,6 @@
 // The communities of the network (a network in the network): people sharing one
 // goal, their posts seen by every member, kept by a host account that moderates.
-// Shared by the server (server/communities.js) and the app (eVe/domains/community/).
+// Shared by the server (atome/servers/atome-server/src/social/news/communities.rs) and the app (eVe/domains/community/).
 // A host's opening posts carry a key, not words: each app shows them in its language
 // (`eve.sleep_routine.community.post.<key>.title|text`), with a picture shipped in the app.
 

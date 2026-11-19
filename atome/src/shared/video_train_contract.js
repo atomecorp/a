@@ -3,7 +3,7 @@
 // replies (video, sound, picture or text) carry their parent and the moment of it they answer
 // (`anchor_ms`). One vote per voter and contribution, counted by the server and shown only to the thread's
 // readers. « Votes » lit: the best voted accessible video reply first (« Mieux noté »), then the others by
-// votes; ties go to the older, then to the id. Shared by the server (server/news_thread.js) and the
+// votes; ties go to the older, then to the id. Shared by the server (atome/servers/atome-server/src/social/news/thread.rs) and the
 // client (eVe/domains/video_train/).
 
 export const VIDEO_TRAIN_KINDS = Object.freeze(['video', 'audio', 'image', 'text']);

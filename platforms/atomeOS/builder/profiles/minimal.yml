@@ -1,4 +1,4 @@
 profile:
   name: minimal
-stacks: [base, js, network]
+stacks: [base, js, network, native, rust]
 modules: []

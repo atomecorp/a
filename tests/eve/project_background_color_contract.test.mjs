@@ -119,14 +119,18 @@ test('navigation retains a protected wallpaper URL, including a fetch completing
     }
 });
 
-test('the project rail resolves the colour tool and keeps the sibling project actions', () => {
-    assert.equal(CONTEXT_MENUS.menus.sidebar.objects.project.couleur, 'beginner',
-        'the project composition of the rail declares the colour tool');
+// R-175 (user, 15 Nov. 2026): Photo (already in the bottom band), Colorer and Multipiste left the ground rail of a project;
+// Activité holds Multipiste. The project's colour stays a canonical property, painted by the tests above.
+test('the project ground rail holds no Photo, Colorer nor Multipiste and keeps its own actions', () => {
+    for (const tool of ['couleur', 'photo', 'multitrack']) {
+        assert.equal(Object.hasOwn(CONTEXT_MENUS.menus.sidebar.objects.project, tool), false, `the ground rail declares no ${tool}`);
+    }
     for (const level of ['beginner', 'advanced']) {
         const keys = projectRailKeys(level);
-        assert.ok(keys.includes('couleur'), `the ${level} project rail exposes the colour tool`);
-        assert.ok(keys.includes('select_all'), `the ${level} project rail keeps its previous rail-only tool`);
-        assert.ok(keys.includes('photo') && keys.includes('import'), `the ${level} project rail keeps its declared capture/import actions`);
+        assert.ok(!keys.some(key => ['couleur', 'photo', 'multitrack'].includes(key)), `the ${level} ground rail shows neither Photo, Colorer nor Multipiste`);
+        for (const key of ['project_templates', 'select_all', 'view_zoom', 'view_zoom_reset', 'view_fit', 'info', 'import', 'activity']) {
+            assert.ok(keys.includes(key), `the ${level} ground rail keeps ${key}`);
+        }
     }
 });
 

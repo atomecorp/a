@@ -2,7 +2,7 @@
 // The event stays its author's `calendar_event` Atome; `publication` (written by the author's
 // devices) says what the public reads of it, `publication_status` (written by the server only)
 // says whether it is live. The server projects every live event into the shared base read by the
-// Activité rubrics (server/public_events.js). One owner for the publication's shape and checks,
+// Activité rubrics (atome/servers/atome-server/src/social/public_events/mod.rs). One owner for the publication's shape and checks,
 // client and server.
 import { ACTIVITY_CATEGORY_SLUGS } from './activity_categories.js';
 

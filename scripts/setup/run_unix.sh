@@ -273,7 +273,7 @@ cleanup() {
 
     if [[ -n "${FASTIFY_PID}" ]]; then
         if kill "$FASTIFY_PID" 2>/dev/null; then
-            echo "✅ Serveur Fastify arrêté"
+            echo "✅ Serveur atome-server arrêté"
         fi
     fi
 
@@ -361,13 +361,13 @@ if [[ "$AUTH_MODE" == "local" && ( "$PROD_BUILD" = true || "${NODE_ENV:-}" == "p
 fi
 
 if [[ "$AUTH_MODE" == "local" && "$TAURI_ONLY" = true ]]; then
-    echo "ERROR: --auth-local needs the local Fastify server; do not combine it with --tauri."
+    echo "ERROR: --auth-local needs the local atome-server; do not combine it with --tauri."
     exit 1
 fi
 
 # A complete local development launch uses a local, cryptographically verified
 # link without contacting the paid SMS provider. Tauri-only and production
-# builds have no local Fastify authority, so they retain the public service.
+# builds have no local server authority, so they retain the public service.
 PRODUCTION_SERVER_SETUP=false
 if is_production_install; then
     PRODUCTION_SERVER_SETUP=true
@@ -401,9 +401,9 @@ if [ "$TEST_MODE" = true ]; then
         exit 1
     fi
     export NODE_ENV=test
-    export SQUIRREL_AUTH_TEST_MODE=1
-    export SQUIRREL_AUTH_OTP_BYPASS=1
-    echo "🧪 Test mode enabled: pre-auth OTP verification bypass is active."
+    # atome-server and Tauri's Axum send no SMS: the phone link is handed back (auth/sms.rs).
+    export SQUIRREL_AUTH_SMS_MOCK=1
+    echo "🧪 Test mode enabled: no SMS is sent, the phone link is handed back."
 fi
 
 # The selected authority is exported above for both the WebView and the native
@@ -416,7 +416,7 @@ fi
 # Mode --server uniquement (pas de Tauri)
 if [ "$SERVER_ONLY" = true ]; then
     ensure_dev_auth_secrets
-    echo "📡 Mode serveur uniquement (Fastify sur port 3001)"
+    echo "📡 Mode serveur uniquement (atome-server sur port 3001)"
     echo "📂 Répertoire: $(pwd)"
     echo "🔧 Node.js: $(node --version)"
     echo "📦 NPM: $(npm --version)"
@@ -433,7 +433,7 @@ if [ "$SERVER_ONLY" = true ]; then
         touch node_modules/.install_complete
     fi
     
-    echo "📡 Démarrage du serveur Fastify..."
+    echo "📡 Démarrage du serveur atome-server..."
     if [ "$FORCE_DEPS" = true ]; then
         if [ "$TEST_MODE" = true ]; then
             "$SCRIPTS_DIR/run_fastify.sh" --test --force-deps
@@ -450,7 +450,7 @@ if [ "$SERVER_ONLY" = true ]; then
     exit 0
 fi
 
-# Mode --tauri uniquement (pas de Fastify local)
+# Mode --tauri uniquement (pas de serveur local)
 if [ "$TAURI_ONLY" = true ]; then
     ensure_dev_auth_secrets
     echo "🖥️  Mode Tauri uniquement (Axum sur port 3000)"
@@ -460,9 +460,9 @@ if [ "$TAURI_ONLY" = true ]; then
     echo ""
     
     if [ -n "$FASTIFY_URL" ]; then
-        echo "🌐 Connexion au serveur Fastify distant: $FASTIFY_URL"
+        echo "🌐 Connexion au serveur distant: $FASTIFY_URL"
     else
-        echo "ℹ️  Pas de serveur Fastify configuré (Tauri fonctionne en mode local)"
+        echo "ℹ️  Pas de serveur distant configuré (Tauri fonctionne en mode local)"
     fi
     
     # Install deps if needed
@@ -530,10 +530,10 @@ if [ "$TAURI_ONLY" = true ]; then
 fi
 
 # =============================================================================
-# MODE NORMAL: Fastify + Tauri
+# MODE NORMAL: atome-server + Tauri
 # =============================================================================
 
-echo "🚀 Mode complet: Tauri (port 3000) + Fastify (port 3001)"
+echo "🚀 Mode complet: Tauri (port 3000) + atome-server (port 3001)"
 ensure_dev_auth_secrets
 echo "📂 Répertoire: $(pwd)"
 echo "🔧 Node.js: $(node --version)"
@@ -608,10 +608,10 @@ fi
 # Capturer les signaux d'interruption
 trap cleanup SIGINT SIGTERM EXIT
 
-# Mode normal: Fastify + Tauri (les modes --server et --tauri ont déjà exit plus haut)
+# Mode normal: atome-server + Tauri (les modes --server et --tauri ont déjà exit plus haut)
 
-# Lancer Fastify en arrière-plan via le script
-echo "📡 Démarrage du serveur Fastify..."
+# Lancer atome-server en arrière-plan via le script
+echo "📡 Démarrage du serveur atome-server..."
 if [ "$FORCE_DEPS" = true ]; then
     if [ "$TEST_MODE" = true ]; then
         "$SCRIPTS_DIR/run_fastify.sh" --test --force-deps &
@@ -627,7 +627,7 @@ else
 fi
 FASTIFY_PID=$!
 
-# Attendre un peu que Fastify démarre
+# Attendre un peu qu'atome-server démarre
 sleep 2
 
 # Lancer Tauri en arrière-plan via le script
@@ -648,7 +648,7 @@ fi
 TAURI_PID=$!
 
 echo "✅ Serveurs lancés:"
-echo "   - Fastify: http://localhost:3001 (PID: $FASTIFY_PID)"
+echo "   - atome-server: http://localhost:3001 (PID: $FASTIFY_PID)"
 echo "   - Tauri en cours de démarrage... (PID: $TAURI_PID)"
 echo ""
 echo "💡 Appuyez sur Ctrl+C pour arrêter les serveurs"

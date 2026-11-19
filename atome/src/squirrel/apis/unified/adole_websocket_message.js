@@ -65,14 +65,14 @@ PUSH_EVENTS['share-invitation'] = (message) => {
     return { share: message.share || null, streams };
 };
 PUSH_EVENTS['share-decision'] = (message) => ({ share: message.share || null });
-// A public event changed in these grid cells (server/public_events.js): an open Activité list reads again.
+// A public event changed in these grid cells (atome/servers/atome-server/src/social/public_events/mod.rs): an open Activité list reads again.
 PUSH_EVENTS['public-events-changed'] = (message) => ({ cells: Array.isArray(message.cells) ? message.cells : [] });
-// A shop's sales changed (server/shop_listings.js): an open Boutiques list of that seller reads again.
+// A shop's sales changed (atome/servers/atome-server/src/social/shop/listings.rs): an open Boutiques list of that seller reads again.
 PUSH_EVENTS['shop-changed'] = (message) => ({ sellerId: typeof message.sellerId === 'string' ? message.sellerId : '' });
-// A coach of the directory changed (server/coach_directory.js), or one of this account's bookings moved (server/coach_bookings.js).
+// A coach of the directory changed (atome/servers/atome-server/src/social/coaches/directory.rs), or one of this account's bookings moved (atome/servers/atome-server/src/social/coaches/bookings.rs).
 PUSH_EVENTS['coaches-changed'] = (message) => ({ coachId: typeof message.coachId === 'string' ? message.coachId : '' });
 PUSH_EVENTS['coach-bookings-changed'] = (message) => ({ bookingId: typeof message.bookingId === 'string' ? message.bookingId : '' });
-// A scheduled send of this account left or changed (server/scheduled_sends.js): its Agenda event follows.
+// A scheduled send of this account left or changed (atome/servers/atome-server/src/ws_api/scheduled/mod.rs): its Agenda event follows.
 // A bottle's thread changed (CB sociale, social/cb/bottles/actions.rs `live_thread`): its open thread reads again (lot L2b).
 PUSH_EVENTS['cb-bottle-thread'] = (message) => ({ bottle: typeof message.bottle === 'string' ? message.bottle : '', thread: typeof message.thread === 'string' ? message.thread : '' });
 // An Appel's invitation or call (social/cb/random_call.rs, lot L5): its state, the invitation `cbi_…`, the room `cbr_…` and
@@ -162,7 +162,7 @@ const RESPONSE_PAYLOADS = {
         blocked: message.blocked,
         failed: message.failed,
         recipients: message.recipients,
-        // VideoTrain (server/news_thread.js).
+        // VideoTrain (atome/servers/atome-server/src/social/news/thread.rs).
         thread_ref: message.thread_ref,
         threads: message.threads,
         votes: message.votes,
@@ -177,7 +177,7 @@ const RESPONSE_PAYLOADS = {
         file_name: message.file_name,
         title: message.title
     }),
-    // Communities (server/communities.js): membership, the thread, the host's moderation.
+    // Communities (atome/servers/atome-server/src/social/news/communities.rs): membership, the thread, the host's moderation.
     'community-response': (message) => ({
         joined: message.joined,
         member: message.member,
@@ -257,7 +257,7 @@ const RESPONSE_PAYLOADS = {
         recoveryCode: message.recoveryCode,
         // The account's backup keys sealed for this new device (pair-complete, recovery-complete; #backup_keyring.js).
         backupKeys: message.backupKeys,
-        // Sign-up by invitation (server/auth_invites.js).
+        // Sign-up by invitation (atome/servers/atome-server/src/auth/invites.rs).
         open: message.open,
         invited: message.invited,
         inviteInvalid: message.inviteInvalid,

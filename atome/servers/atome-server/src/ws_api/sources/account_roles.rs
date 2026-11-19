@@ -2,22 +2,81 @@
 // (database/auth_security_schema.sql, table `auth_account_roles`): `admin` validates or refuses the
 // feature requests and moves them on the Roadmap (feature_requests.rs); `tester` tries what is not
 // open to everyone yet (the CB sociale's video bottles, social/cb/bottles.rs `cb.bottle_video`). A role is given and taken
-// back only on the server (scripts/account_roles_admin.mjs); no frame grants one.
+// back only on the server (the operator's `atome_admin roles`, src/admin/roles.rs); no frame grants one.
 //
 // `account-roles` on /ws/api: the roles of the signed-in account asking, so the app shows the
 // admin's views; the server checks the role again on every admin frame.
 use super::{Asker, response};
-use crate::social::news::db::{all, get};
+use crate::social::news::db::{all, get, run};
 use rusqlite::Connection;
 use serde_json::{Value as JsonValue, json};
 
 /// The roles a server gives (server/auth_account_roles.js `ACCOUNT_ROLES`).
 pub(crate) const ADMIN: &str = "admin";
 pub(crate) const TESTER: &str = "tester";
-/// The principal administrator (R-193): confirms a new admin; given only by the roles script.
+/// The principal administrator (R-193): confirms a new admin; given only by `atome_admin roles`.
 pub(crate) const OWNER: &str = "owner";
 
+/// Every role, in `ACCOUNT_ROLES`' order.
+pub(crate) const ROLES: [&str; 3] = [ADMIN, TESTER, OWNER];
+
 pub(super) const KIND: &str = "account-roles";
+
+// `requireRole(role)`: a role the server gives, else `account_role_unknown:<role>`.
+fn known(role: &str) -> Result<&str, String> {
+    if ROLES.contains(&role) {
+        Ok(role)
+    } else {
+        Err(format!("account_role_unknown:{role}"))
+    }
+}
+
+/// `roles.list(principalId)`: the roles `principal` holds, by name.
+pub(crate) fn list(db: &Connection, principal: &str) -> Result<Vec<String>, String> {
+    Ok(all(
+        db,
+        "SELECT role FROM auth_account_roles WHERE principal_id = ? ORDER BY role",
+        &[&principal],
+    )?
+    .into_iter()
+    .filter_map(|row| row["role"].as_str().map(str::to_string))
+    .collect())
+}
+
+/// `roles.grant(principalId, role, by)`: given once (a role already held keeps its first grant).
+pub(crate) fn grant(
+    db: &Connection,
+    principal: &str,
+    role: &str,
+    by: &str,
+    now_ms: i64,
+) -> Result<Vec<String>, String> {
+    run(
+        db,
+        "INSERT OR IGNORE INTO auth_account_roles (principal_id, role, granted_ms, granted_by) VALUES (?, ?, ?, ?)",
+        &[&principal, &known(role)?, &now_ms, &by],
+    )?;
+    list(db, principal)
+}
+
+/// `roles.revoke(principalId, role)`.
+pub(crate) fn revoke(db: &Connection, principal: &str, role: &str) -> Result<Vec<String>, String> {
+    run(
+        db,
+        "DELETE FROM auth_account_roles WHERE principal_id = ? AND role = ?",
+        &[&principal, &known(role)?],
+    )?;
+    list(db, principal)
+}
+
+/// `roles.holders(role)`: who holds it (`principal_id`, `granted_ms`, `granted_by`), first granted first.
+pub(crate) fn holders(db: &Connection, role: &str) -> Result<Vec<JsonValue>, String> {
+    all(
+        db,
+        "SELECT principal_id, granted_ms, granted_by FROM auth_account_roles WHERE role = ? ORDER BY granted_ms",
+        &[&known(role)?],
+    )
+}
 
 /// `wsSignedInPrincipal(connection, message)`: the account the message's own token names, else the
 /// connection's still valid one, when provisioned; none when its token does not verify. The
@@ -73,22 +132,15 @@ pub(super) async fn answer(asker: &Asker<'_>, message: &JsonValue) -> Result<Jso
     };
     // A guest or a visitor has no role: an empty answer, not a failure.
     let roles = match principal {
-        Some(principal) => asker
-            .connection
-            .ws_api
-            .sessions
-            .central()
-            .transaction(move |db| {
-                all(
-                    db,
-                    "SELECT role FROM auth_account_roles WHERE principal_id = ? ORDER BY role",
-                    &[&principal],
-                )
-            })
-            .await?
-            .into_iter()
-            .map(|row| row["role"].clone())
-            .collect(),
+        Some(principal) => {
+            asker
+                .connection
+                .ws_api
+                .sessions
+                .central()
+                .transaction(move |db| list(db, &principal))
+                .await?
+        }
         None => Vec::new(),
     };
     Ok(response(

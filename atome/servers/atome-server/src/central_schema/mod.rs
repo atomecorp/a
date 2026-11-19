@@ -90,9 +90,9 @@ pub fn prepare(path: &Path, project_root: &Path) -> Result<(), String> {
         .map_err(failed)
 }
 
-// A SHA-256 of the chain's sources, in the negative half of `user_version`: Fastify writes its
-// own fingerprint (of the JS sources) in the positive half and 0 is a new file, so neither
-// takes the other's mark for its own. Each, finding the other's, runs its idempotent chain again.
+// A SHA-256 of the chain's sources, in the negative half of `user_version`: 0 is a new file and
+// the positive half held Fastify's fingerprint of its JS sources until its removal, so a file
+// marked otherwise runs the idempotent chain again.
 fn fingerprint(schema: &str, auth_schema: &str) -> i32 {
     let mut hash = Sha256::new();
     for source in [schema, auth_schema].into_iter().chain(CHAIN_SOURCES) {

@@ -5,10 +5,18 @@ import { test } from 'vitest';
 const root = new URL('../..', import.meta.url);
 const read = (relativePath) => fs.readFileSync(new URL(relativePath, root), 'utf8');
 
-test('Fastify never queues canonical commits toward a client-local Tauri server', () => {
-    const source = read('server/atomeRoutes.orm.js');
-    assert.doesNotMatch(source, /SYNC_TARGET_SERVER\s*=\s*['"]tauri['"]/);
-    assert.doesNotMatch(source, /syncTarget:\s*shouldEnqueue\s*\?\s*SYNC_TARGET_SERVER/);
+// Every Rust source file under `relativeDir`, as [path, text].
+const rustSources = (relativeDir) => fs.readdirSync(new URL(relativeDir, root), { recursive: true })
+    .filter((name) => name.endsWith('.rs'))
+    .map((name) => [`${relativeDir}/${name}`, read(`${relativeDir}/${name}`)]);
+
+test('the server never queues canonical commits toward a client: only the local host (Tauri, iOS) fills sync_queue', () => {
+    const server = rustSources('atome/servers/atome-server/src').filter(([path]) => !path.includes('/src/local/'));
+    const queued = [...server, ...rustSources('atome/servers/atome-vault/src'), ...rustSources('atome/engines/atome-store/src')]
+        .filter(([, text]) => text.includes('INSERT INTO sync_queue'))
+        .map(([path]) => path);
+    assert.deepEqual(queued, []);
+    assert.ok(read('atome/servers/atome-server/src/local/local_atome_sync_worker.rs').includes('INSERT INTO sync_queue'));
 });
 
 test('one realtime owner delivers canonical events and the ws/api console bridge is absent', () => {
@@ -46,10 +54,13 @@ test('the open SyncEngine owner exists and implements replay controls', () => {
 });
 
 test('manual linked sharing remains linked and detached copy stays explicit', () => {
-    const source = read('server/syncSharingService.js');
-    assert.doesNotMatch(source, /shareMode\s*===\s*['"]real-time['"]\s*\?\s*shareType\s*:\s*['"]copy['"]/);
-    assert.match(source, /share_mode\s*!==\s*['"]manual['"]/);
-    assert.match(source, /publication_cursor/);
+    // atome-server's share engine: the type is read on its own, never derived from the mode.
+    const source = read('atome/servers/atome-server/src/social/sharing/grants.rs');
+    const typeOf = source.slice(source.indexOf('fn type_of('), source.indexOf('}\n}', source.indexOf('fn type_of(')));
+    assert.match(typeOf, /"copy" \| "detached" => "detached"/);
+    assert.doesNotMatch(typeOf, /mode/);
+    assert.match(source, /row\["share_mode"\] != "manual"/);
+    assert.match(source, /stream_head\(/);
 });
 
 test('Home server environment is device-local and never persisted in profile Atome preferences', () => {

@@ -46,6 +46,8 @@ export const createConversationSession = ({
 } = {}) => {
     let controller = null, completion = Promise.resolve();
     let generation = 0;
+    // The open voice connections' work: `maxToolCalls` counts a person's turn, as in writing, so each turn of theirs starts it again.
+    const voiceWorks = new Set();
     let saved = false;
     // Held actions asked in the conversation (AGENTS.md rule 22): confirmation id → the call to send again.
     const asked = new Map();
@@ -316,6 +318,8 @@ export const createConversationSession = ({
         },
         async appendVoiceTurn(turn) {
             checkPrincipal();
+            // A turn of the person's: the tools it calls for are counted afresh (a loop within one turn still stops at the limit).
+            if (turn.role === 'user') voiceWorks.forEach(work => { work.count = 0; });
             if (state.live?.id === turn.id) state.live = null;
             if (!['user', 'assistant'].includes(turn.role) || !turn.text || state.turns.some(item => item.id === turn.id)) return emit();
             state.turns.push({ id: turn.id || uuid(), role: turn.role, text: String(turn.text), modality: 'audio',
@@ -326,6 +330,8 @@ export const createConversationSession = ({
             const registry = await prepareTools(signal);
             const work = { ...registry, input: [], calls: [], count: 0,
                 intent: state.id + ':voice:' + (++generation), source: { type: 'voice', layer: 'openai_realtime_conversation' }, deliver };
+            voiceWorks.add(work);
+            signal.addEventListener('abort', () => voiceWorks.delete(work), { once: true });
             const seen = new Set();
             return {
                 tools: copy(registry.tools), instructions: registry.instructions,

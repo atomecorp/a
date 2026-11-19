@@ -81,7 +81,10 @@ export const ATOME_WRITTEN_PROPERTIES = Object.freeze({
         // Laid in a project as its tile (R-202, eVe/domains/rendering/file_tile_source.js), by the project's drop
         // (project_drop_external_runtime.js#importFilesToProjectViaCreator): its place, its size and its stored file.
         height: ANY, left: ANY, media_kind: S, media_url: S, media_user_id: S, order: N, render_order: N, renderOrder: N, top: ANY,
-        width: ANY, z_index: N, zIndex: N
+        width: ANY, z_index: N, zIndex: N,
+        // A folder brought into a project (R-202 Q14): the project holding its files, opened by its tile
+        // (eVe/intuition/runtime/data_import.js#layFolderInProject, eVe/domains/media/project_file_open.js).
+        folder_project_id: S
     },
     sound: {
         ...CONVERSATION_MEDIA,
@@ -156,10 +159,11 @@ export const ATOME_WRITTEN_PROPERTIES = Object.freeze({
     },
     // `import_source`: the { format, key } of the file a project was imported from
     // (eVe/domains/molecule_import/timeline_document_import.js), so the same file imported again updates it.
+    // `data_folder`: a folder of Médiathèque › Données (R-202 Q17, eVe/domains/data/data_folders.js).
     // `uses_media`: the media Atome ids its `molecule_timeline` plays (clips, instruments' samples), written at each save
     // (molecule_stores.js), so a project shared as a folder lets its parties read them (atome-server media/shared_folders.rs).
     project: {
-        action_recording: O, action_templates: A, active: B, background: S, backgroundColor: S, bg: S, color: S,
+        action_recording: O, action_templates: A, active: B, background: S, backgroundColor: S, bg: S, color: S, data_folder: B,
         forced_activity: S, import_source: O, left: S, loop: B, material: O, matrix_slot: N, matrixSlot: N, molecule_timeline: O,
         news_audience: S, news_id: S, news_origin_author_id: S, news_participants: A, news_share_mode: S,
         news_template: ANY, news_writable: B, playback_loop: B, playback_mode: S, preview_height: N,

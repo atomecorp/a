@@ -1,7 +1,7 @@
 // A server notice to one person (server/communication_delivery.js `deliverNotification`):
 // pushed onto their notification stack, under the same `eve-comm-share` envelope as a
 // message, so the client has one path. What is left to its caller is the live frame
-// (Fastify's connections, else its queue) and the push to the person's devices, sent once
+// (the open connections, else the queue) and the push to the person's devices, sent once
 // the answer has left.
 use super::NotificationStack;
 use crate::auth::accounts;

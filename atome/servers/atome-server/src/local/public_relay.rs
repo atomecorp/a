@@ -4,14 +4,14 @@ use serde_json::{Value, json};
 use tokio::time::{Duration, timeout};
 use tokio_tungstenite::tungstenite::Message;
 
-// Public, unauthenticated /ws/api operations owned by Fastify (YouTube search,
+// Public, unauthenticated /ws/api operations owned by atome-server (YouTube search,
 // PeerTube search and stream resolution,
 // television catalogue, YouTube live resolution, the shows around a position, the films and series
 // of Divertissement › Vidéo, GPS resources, Open Food
 // Facts, the free book catalogs, the Médiathèque's free media and the bug reports
 // kept on atome.one, the shop's sales everyone browses, the coaches' directory, the health reference bundle's
 // manifest and chunks). The desktop runtime has no copy of them: it forwards the frame,
-// without any credential, to the configured Fastify server and returns its
+// without any credential, to the configured atome-server and returns its
 // single reply.
 pub(super) const PUBLIC_TYPES: [&str; 20] = [
     "youtube-search",

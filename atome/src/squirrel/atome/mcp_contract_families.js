@@ -49,6 +49,7 @@ import { QR_ASSISTANT_INSTRUCTIONS, QR_COMMANDS, validateQrInput } from '../qr/c
 import { INTERACTIONS_ASSISTANT_INSTRUCTIONS, INTERACTIONS_COMMANDS, validateInteractionsInput } from '../interactions/contracts.js';
 import { PUBLISH_ASSISTANT_INSTRUCTIONS, PUBLISH_COMMANDS, PUBLISH_CONFIRMED_COMMANDS, validatePublishInput } from '../publish/contracts.js';
 import { FORUM_ASSISTANT_INSTRUCTIONS, FORUM_COMMANDS, FORUM_CONFIRMED_COMMANDS, validateForumInput } from '../forum/contracts.js';
+import { CB_ASSISTANT_INSTRUCTIONS, CB_COMMANDS, CB_CONFIRMED_COMMANDS, validateCbInput } from '../cb/contracts.js';
 import { VIDEO_TRAIN_ASSISTANT_INSTRUCTIONS, VIDEO_TRAIN_COMMANDS, VIDEO_TRAIN_CONFIRMED_COMMANDS, validateVideoTrainInput } from '../video_train/contracts.js';
 import { RESULTS_SEND_ASSISTANT_INSTRUCTIONS, RESULTS_SEND_COMMANDS, validateResultsSendInput } from '../results_send/contracts.js';
 import { STRAVA_ASSISTANT_INSTRUCTIONS, STRAVA_COMMANDS, validateStravaInput } from '../strava/contracts.js';
@@ -70,19 +71,19 @@ export const MCP_CONTRACT_FAMILIES = Object.freeze([
         confirmed: SOCIAL_CONFIRMED_COMMANDS },
     { id: 'apple_music', commands: APPLE_MUSIC_COMMANDS, validate: validateAppleMusicInput, noClient: 'HOST_UNSUPPORTED' },
     { id: 'music', commands: MUSIC_COMMANDS, validate: validateMusicInput, noClient: 'AUTH_REQUIRED',
-        instructions: MUSIC_ASSISTANT_INSTRUCTIONS, preload: ['music.get_state', 'music.play', 'music.search'] },
+        instructions: MUSIC_ASSISTANT_INSTRUCTIONS, preload: ['music.get_state', 'music.play'] },
     { id: 'gps', commands: GPS_COMMANDS, validate: validateGpsInput, noClient: 'HOST_UNSUPPORTED',
         instructions: GPS_ASSISTANT_INSTRUCTIONS, preload: ['gps.navigate_to', 'gps.stop_navigation'] },
     { id: 'training', commands: TRAINING_COMMANDS, validate: validateTrainingInput, noClient: 'AUTH_REQUIRED',
         confirmed: ['training.schedule_week', 'training.take_ready_program', 'training.remove_media', 'training.remove_discipline', 'training.remove_activity', 'training.remove_session'], instructions: TRAINING_ASSISTANT_INSTRUCTIONS,
-        preload: ['training.prepare_session', 'training.session_transition', 'training.get_session'] },
+        preload: ['training.prepare_session', 'training.session_transition'] },
     { id: 'brick_session', commands: BRICK_SESSION_COMMANDS, validate: validateBrickSessionInput, noClient: 'AUTH_REQUIRED',
-        instructions: BRICK_SESSION_ASSISTANT_INSTRUCTIONS, preload: ['brick_session.prepare', 'brick_session.transition', 'brick_session.get'] },
+        instructions: BRICK_SESSION_ASSISTANT_INSTRUCTIONS, preload: ['brick_session.prepare', 'brick_session.transition'] },
     // Bien-être › Beauté (R-006 Q68): a photo turns the camera on, the user's to allow.
     { id: 'beauty', commands: BEAUTY_COMMANDS, validate: validateBeautyInput, noClient: 'PRESENTATION_UNAVAILABLE',
-        confirmed: ['beauty.shoot', 'beauty.remove_photo'], instructions: BEAUTY_ASSISTANT_INSTRUCTIONS, preload: ['beauty.open', 'beauty.shoot', 'beauty.set_reminder'] },
+        confirmed: ['beauty.shoot', 'beauty.remove_photo'], instructions: BEAUTY_ASSISTANT_INSTRUCTIONS, preload: ['beauty.shoot'] },
     { id: 'health_declaration', commands: HEALTH_DECLARATION_COMMANDS, validate: validateHealthDeclarationInput, noClient: 'AUTH_REQUIRED',
-        instructions: HEALTH_DECLARATION_ASSISTANT_INSTRUCTIONS, preload: ['health_declaration.add', 'health_declaration.withdraw'] },
+        instructions: HEALTH_DECLARATION_ASSISTANT_INSTRUCTIONS, preload: ['health_declaration.add'] },
     { id: 'health_feeling', commands: HEALTH_FEELING_COMMANDS, validate: validateHealthFeelingInput, noClient: 'AUTH_REQUIRED', confirmed: HEALTH_FEELING_CONFIRMED_COMMANDS,
         instructions: HEALTH_FEELING_ASSISTANT_INSTRUCTIONS, preload: ['health_feeling.set'] },
     // The health profile read by the assistant or MCP: the user agrees at each question that needs it (decision Q28).
@@ -115,115 +116,120 @@ export const MCP_CONTRACT_FAMILIES = Object.freeze([
     // A Thalasso stay and its cares (decision Q26); ending a stay is the user's to confirm.
     { id: 'thalasso', commands: THALASSO_COMMANDS, validate: validateThalassoInput, noClient: 'AUTH_REQUIRED',
         confirmed: THALASSO_CONFIRMED_COMMANDS, instructions: THALASSO_ASSISTANT_INSTRUCTIONS,
-        preload: ['thalasso.stay_read', 'thalasso.stay_set', 'thalasso.care_add', 'thalasso.care_done'] },
+        preload: ['thalasso.stay_set'] },
     { id: 'sensors', commands: SENSORS_COMMANDS, validate: validateSensorsInput, noClient: 'health_host_unsupported',
-        confirmed: ['sensors.delete'], instructions: SENSORS_ASSISTANT_INSTRUCTIONS, preload: ['sensors.status', 'sensors.list'] },
+        confirmed: ['sensors.delete'], instructions: SENSORS_ASSISTANT_INSTRUCTIONS },
     // Erasing the body weight and age from the card is the user's to allow.
     { id: 'body_data', commands: BODY_DATA_COMMANDS, validate: validateBodyDataInput, noClient: 'AUTH_REQUIRED',
-        confirmed: ['body_data.delete'], instructions: BODY_DATA_ASSISTANT_INSTRUCTIONS, preload: ['body_data.consent', 'body_data.set_consent'] },
+        confirmed: ['body_data.delete'], instructions: BODY_DATA_ASSISTANT_INSTRUCTIONS },
     { id: 'shopping', commands: SHOPPING_COMMANDS, validate: validateShoppingInput, noClient: 'AUTH_REQUIRED',
         confirmed: ['shopping.clear_checked'], instructions: SHOPPING_ASSISTANT_INSTRUCTIONS,
-        preload: ['shopping.add', 'shopping.check', 'shopping.list', 'shopping.open'] },
+        preload: ['shopping.add'] },
     // Deleting a media list is the user's to confirm (its media stay).
     { id: 'media_lists', commands: MEDIA_LIST_COMMANDS, validate: validateMediaListInput, noClient: 'AUTH_REQUIRED',
         confirmed: ['media_lists.delete'], instructions: MEDIA_LIST_ASSISTANT_INSTRUCTIONS,
-        preload: ['media_lists.list', 'media_lists.create', 'media_lists.add', 'media_lists.open'] },
+        preload: ['media_lists.open'] },
     { id: 'share', commands: SHARE_COMMANDS, validate: validateShareInput, noClient: 'AUTH_REQUIRED',
-        confirmed: SHARE_CONFIRMED_COMMANDS, instructions: SHARE_ASSISTANT_INSTRUCTIONS, preload: ['share.send', 'share.pending', 'share.accept'] },
+        confirmed: SHARE_CONFIRMED_COMMANDS, instructions: SHARE_ASSISTANT_INSTRUCTIONS, preload: ['share.send'] },
     { id: 'shows', commands: SHOWS_COMMANDS, validate: validateShowsInput, noClient: 'PRESENTATION_UNAVAILABLE',
         instructions: SHOWS_ASSISTANT_INSTRUCTIONS,
-        preload: ['shows.search', 'shows.open', 'shows.set_place', 'shows.add_to_calendar', 'shows.navigate', 'shows.open_site', 'shows.open_tickets'] },
+        preload: ['shows.search'] },
     { id: 'web', commands: WEB_COMMANDS, validate: validateWebInput, noClient: 'PRESENTATION_UNAVAILABLE',
-        instructions: WEB_ASSISTANT_INSTRUCTIONS, preload: ['web.open', 'web.navigate', 'web.favorite', 'web.size', 'web.close'] },
+        instructions: WEB_ASSISTANT_INSTRUCTIONS, preload: ['web.open'] },
     // Publishing an event to everyone around is the user's to confirm.
     { id: 'events', commands: EVENTS_COMMANDS, validate: validateEventsInput, noClient: 'PRESENTATION_UNAVAILABLE',
         confirmed: EVENTS_CONFIRMED_COMMANDS, instructions: EVENTS_ASSISTANT_INSTRUCTIONS,
-        preload: ['events.declare', 'events.nearby', 'events.mine', 'events.open', 'events.panel', 'events.save'] },
+        preload: ['events.declare'] },
     // Selling and buying are the user's to confirm (the payment is simulated for now).
     { id: 'shop', commands: SHOP_COMMANDS, validate: validateShopInput, noClient: 'PRESENTATION_UNAVAILABLE',
         confirmed: SHOP_CONFIRMED_COMMANDS, instructions: SHOP_ASSISTANT_INSTRUCTIONS,
-        preload: ['shop.browse', 'shop.open', 'shop.sell', 'shop.mine', 'shop.buy', 'shop.write', 'shop.plans', 'shop.plan_item'] },
+        preload: ['shop.sell'] },
     // Asking a coach for a session, cancelling one, publishing one's coaching are the user's to confirm.
     { id: 'coaches', commands: COACH_COMMANDS, validate: validateCoachInput, noClient: 'PRESENTATION_UNAVAILABLE',
         confirmed: COACH_CONFIRMED_COMMANDS, instructions: COACH_ASSISTANT_INSTRUCTIONS,
-        preload: ['coaches.find', 'coaches.slots', 'coaches.book', 'coaches.bookings', 'coaches.open', 'coaches.mine'] },
+        preload: ['coaches.find'] },
     { id: 'films', commands: FILMS_COMMANDS, validate: validateFilmsInput, noClient: 'PRESENTATION_UNAVAILABLE',
-        instructions: FILMS_ASSISTANT_INSTRUCTIONS, preload: ['films.search', 'films.play', 'films.open', 'films.control', 'films.set_service'] },
+        instructions: FILMS_ASSISTANT_INSTRUCTIONS, preload: ['films.search'] },
     { id: 'creation', commands: CREATION_COMMANDS, validate: validateCreationInput, noClient: 'PRESENTATION_UNAVAILABLE',
         confirmed: ['creation.send', 'creation.delete'], instructions: CREATION_ASSISTANT_INSTRUCTIONS,
-        preload: ['creation.list', 'creation.read', 'creation.new_text', 'creation.open'] },
+        preload: ['creation.new_text'] },
     // The spreadsheet in a text: cells, formulas, grid — the assistant limited to the text named.
     { id: 'calc', commands: CALC_COMMANDS, validate: validateCalcInput, noClient: 'PRESENTATION_UNAVAILABLE',
-        instructions: CALC_ASSISTANT_INSTRUCTIONS, preload: ['calc.cells', 'calc.cell', 'calc.formula', 'calc.view'] },
+        instructions: CALC_ASSISTANT_INSTRUCTIONS, preload: ['calc.cell'] },
     { id: 'document', commands: DOCUMENT_COMMANDS, validate: validateDocumentInput, noClient: 'PRESENTATION_UNAVAILABLE',
-        instructions: DOCUMENT_ASSISTANT_INSTRUCTIONS, preload: ['document.templates', 'document.template', 'document.role'] },
+        instructions: DOCUMENT_ASSISTANT_INSTRUCTIONS, preload: ['document.templates'] },
     { id: 'script', commands: SCRIPT_COMMANDS, validate: validateScriptInput, noClient: 'PRESENTATION_UNAVAILABLE',
-        confirmed: SCRIPT_CONFIRMED_COMMANDS, instructions: SCRIPT_ASSISTANT_INSTRUCTIONS, preload: ['script.list'] },
+        confirmed: SCRIPT_CONFIRMED_COMMANDS, instructions: SCRIPT_ASSISTANT_INSTRUCTIONS, preload: ['script.save'] },
     // The camera, turned on and taken from by a command, is the user's to allow.
     { id: 'media_import', commands: MEDIA_IMPORT_COMMANDS, validate: validateMediaImportInput, noClient: 'NOT_OPEN',
         confirmed: ['media_import.camera', 'media_import.take', 'media_import.delete'], instructions: MEDIA_IMPORT_ASSISTANT_INSTRUCTIONS,
-        preload: ['media_import.state', 'media_import.list', 'media_import.choose'] },
+        preload: ['media_import.open'] },
     // A capture turns the camera or the microphone on, a delete takes items out of the project: the user's to allow.
     { id: 'captures', commands: CAPTURE_COMMANDS, validate: validateCaptureInput, noClient: 'PRESENTATION_UNAVAILABLE',
         confirmed: ['captures.start', 'captures.delete'], instructions: CAPTURE_ASSISTANT_INSTRUCTIONS,
-        preload: ['captures.state', 'captures.show', 'captures.play', 'captures.stop', 'captures.close', 'captures.camera'] },
+        preload: ['captures.start'] },
     // Lighting an effect turns the microphone on, a delete takes an effect or an instrument away for good: the user's to allow.
     { id: 'audio_fx', commands: AUDIO_FX_COMMANDS, validate: validateAudioFxInput, noClient: 'HOST_UNSUPPORTED',
         confirmed: ['audio_fx.start', 'audio_fx.delete', 'audio_fx.instrument_delete', 'audio_fx.delete_preset'], instructions: AUDIO_FX_ASSISTANT_INSTRUCTIONS,
-        preload: ['audio_fx.catalog', 'audio_fx.start', 'audio_fx.stop', 'audio_fx.set_param'] },
+        preload: ['audio_fx.start'] },
     // Deleting a profile changes what every list shows: the user's to allow.
     { id: 'profiles', commands: LIFE_PROFILE_COMMANDS, validate: validateLifeProfileInput, noClient: 'AUTH_REQUIRED',
         confirmed: ['profiles.delete'], instructions: LIFE_PROFILE_ASSISTANT_INSTRUCTIONS,
-        preload: ['profiles.list', 'profiles.activate', 'profiles.create', 'profiles.assign'] },
+        preload: ['profiles.activate'] },
     { id: 'food', commands: FOOD_COMMANDS, validate: validateFoodInput, noClient: 'HOST_UNSUPPORTED',
-        instructions: FOOD_ASSISTANT_INSTRUCTIONS, preload: ['food.search', 'food.alternatives', 'food.scan', 'food.add'] },
+        instructions: FOOD_ASSISTANT_INSTRUCTIONS, preload: ['food.search'] },
     { id: 'books', commands: BOOKS_COMMANDS, validate: validateBooksInput, noClient: 'PRESENTATION_UNAVAILABLE', confirmed: BOOKS_CONFIRMED_COMMANDS,
-        instructions: BOOKS_ASSISTANT_INSTRUCTIONS, preload: ['books.list', 'books.open', 'books.page', 'books.transport'] },
+        instructions: BOOKS_ASSISTANT_INSTRUCTIONS, preload: ['books.list'] },
     { id: 'projects', commands: PROJECTS_COMMANDS, validate: validateProjectsInput, noClient: 'PRESENTATION_UNAVAILABLE',
-        confirmed: ['projects.delete'], instructions: PROJECTS_ASSISTANT_INSTRUCTIONS, preload: ['projects.list', 'projects.search', 'projects.open', 'projects.create', 'projects.favorite'] },
+        confirmed: ['projects.delete'], instructions: PROJECTS_ASSISTANT_INSTRUCTIONS, preload: ['projects.list'] },
     { id: 'code_project', commands: CODE_PROJECT_COMMANDS, validate: validateCodeProjectInput, noClient: 'PRESENTATION_UNAVAILABLE',
-        instructions: CODE_PROJECT_ASSISTANT_INSTRUCTIONS, preload: ['code_project.create', 'code_project.open'] },
+        instructions: CODE_PROJECT_ASSISTANT_INSTRUCTIONS, preload: ['code_project.create'] },
     { id: 'dashboard_progression', commands: DASHBOARD_PROGRESSION_COMMANDS, validate: validateDashboardProgressionInput,
         noClient: 'progression_actor_required', confirmed: ['dashboard.objective.delete'], instructions: DASHBOARD_PROGRESSION_ASSISTANT_INSTRUCTIONS },
     // Putting a site online, buying a domain or a mail box is the user's to confirm.
     { id: 'site', commands: SITE_COMMANDS, validate: validateSiteInput, noClient: 'PRESENTATION_UNAVAILABLE',
         confirmed: SITE_CONFIRMED_COMMANDS, instructions: SITE_ASSISTANT_INSTRUCTIONS,
-        preload: ['site.state', 'site.publish', 'site.pages', 'site.list', 'site.menu', 'site.form', 'site.goto'] },
+        preload: ['site.publish'] },
     { id: 'qr', commands: QR_COMMANDS, validate: validateQrInput, noClient: 'PRESENTATION_UNAVAILABLE',
-        instructions: QR_ASSISTANT_INSTRUCTIONS, preload: ['qr.open', 'qr.keep', 'qr.make'] },
+        instructions: QR_ASSISTANT_INSTRUCTIONS, preload: ['qr.open'] },
     { id: 'interactions', commands: INTERACTIONS_COMMANDS, validate: validateInteractionsInput, noClient: 'PRESENTATION_UNAVAILABLE',
-        instructions: INTERACTIONS_ASSISTANT_INSTRUCTIONS, preload: ['interactions.list', 'interactions.create'] },
+        instructions: INTERACTIONS_ASSISTANT_INSTRUCTIONS, preload: ['interactions.create'] },
     // Sending a session to people and withdrawing a contribution are the user's to confirm.
     { id: 'video_train', commands: VIDEO_TRAIN_COMMANDS, validate: validateVideoTrainInput, noClient: 'AUTH_REQUIRED',
         confirmed: VIDEO_TRAIN_CONFIRMED_COMMANDS, instructions: VIDEO_TRAIN_ASSISTANT_INSTRUCTIONS,
-        preload: ['video_train.share', 'video_train.thread', 'video_train.open_thread', 'video_train.reply', 'video_train.vote'] },
+        preload: ['video_train.share'] },
     // « Envoyer mes résultats »: the choice of what leaves; Publier sends it (publish.*, confirmed there).
     { id: 'results_send', commands: RESULTS_SEND_COMMANDS, validate: validateResultsSendInput, noClient: 'PRESENTATION_UNAVAILABLE',
-        instructions: RESULTS_SEND_ASSISTANT_INSTRUCTIONS, preload: ['results_send.open', 'results_send.read', 'results_send.pick', 'results_send.next'] },
+        instructions: RESULTS_SEND_ASSISTANT_INSTRUCTIONS, preload: ['results_send.open'] },
     // Strava (Préférences › Santé): connecting and disconnecting the person's account are the user's to confirm.
     { id: 'strava', commands: STRAVA_COMMANDS, validate: validateStravaInput, noClient: 'AUTH_REQUIRED',
-        confirmed: ['strava.connect', 'strava.disconnect', 'strava.remove_imports', 'strava.remove_import'], instructions: STRAVA_ASSISTANT_INSTRUCTIONS, preload: ['strava.get_state', 'strava.import'] },
+        confirmed: ['strava.connect', 'strava.disconnect', 'strava.remove_imports', 'strava.remove_import'], instructions: STRAVA_ASSISTANT_INSTRUCTIONS, preload: ['strava.import'] },
     // This device's health store as a source of sport sessions (Préférences › Santé): connecting and disconnecting are the user's to confirm.
     { id: 'health_sync', commands: HEALTH_SYNC_COMMANDS, validate: validateHealthSyncInput, noClient: 'health_host_unsupported',
-        confirmed: HEALTH_SYNC_CONFIRMED_COMMANDS, instructions: HEALTH_SYNC_ASSISTANT_INSTRUCTIONS, preload: ['health_sync.get_state', 'health_sync.sync'] },
+        confirmed: HEALTH_SYNC_CONFIRMED_COMMANDS, instructions: HEALTH_SYNC_ASSISTANT_INSTRUCTIONS, preload: ['health_sync.sync'] },
     // Publier: a send, an update, a send now and a cancel are the user's to confirm.
     { id: 'publish', commands: PUBLISH_COMMANDS, validate: validatePublishInput, noClient: 'AUTH_REQUIRED',
         confirmed: PUBLISH_CONFIRMED_COMMANDS, instructions: PUBLISH_ASSISTANT_INSTRUCTIONS,
-        preload: ['publish.recipients', 'publish.send', 'publish.list', 'publish.edit', 'publish.cancel'] },
+        preload: ['publish.send'] },
     // Forums: making one, inviting, answering an invitation, leaving and writing are the user's to confirm.
     { id: 'forum', commands: FORUM_COMMANDS, validate: validateForumInput, noClient: 'AUTH_REQUIRED',
         confirmed: FORUM_CONFIRMED_COMMANDS, instructions: FORUM_ASSISTANT_INSTRUCTIONS,
-        preload: ['forum.list', 'forum.create', 'forum.post', 'forum.members', 'forum.open'] },
+        preload: ['forum.create'] },
+    // The CB sociale (R-173 L6): the band's own actions; the reach, a call accepted, a bottle launched or answered are the
+    // person's to confirm (accepting a call by its input: mcp_security_policy.js), speaking and the notice have no command.
+    { id: 'cb', commands: CB_COMMANDS, validate: validateCbInput, noClient: 'PRESENTATION_UNAVAILABLE',
+        confirmed: CB_CONFIRMED_COMMANDS, instructions: CB_ASSISTANT_INSTRUCTIONS,
+        preload: ['communication.cb.tune'] },
     // Programs and held requests (R-104 D8): a grant, a withdrawal and a yes are the person's alone, in the app.
     { id: 'mcp_access', commands: MCP_ACCESS_COMMANDS, validate: validateMcpAccessInput, noClient: 'NOT_LOCAL',
-        confirmed: MCP_ACCESS_CONFIRMED_COMMANDS, instructions: MCP_ACCESS_ASSISTANT_INSTRUCTIONS, preload: ['mcp_access.programs', 'mcp_access.confirmations'] },
+        confirmed: MCP_ACCESS_CONFIRMED_COMMANDS, instructions: MCP_ACCESS_ASSISTANT_INSTRUCTIONS, preload: ['mcp_access.programs'] },
     // The objectives network (R-104 D8): being findable, a report, a block, the end of a link and leaving are the user's to confirm.
     { id: 'objective_network', commands: OBJECTIVE_NETWORK_COMMANDS, validate: validateObjectiveNetworkInput, noClient: 'AUTH_REQUIRED',
         confirmed: OBJECTIVE_NETWORK_CONFIRMED_COMMANDS, instructions: OBJECTIVE_NETWORK_ASSISTANT_INSTRUCTIONS,
-        preload: ['objective_network.people_open', 'objective_network.visibility_set', 'objective_network.network_set'] },
+        preload: ['objective_network.people_open'] },
     // The money screens (R-193): a payment, a withdrawal and every administrator's change are the user's to confirm.
     { id: 'billing', commands: BILLING_COMMANDS, validate: validateBillingInput, noClient: 'AUTH_REQUIRED',
-        confirmed: BILLING_CONFIRMED_COMMANDS, instructions: BILLING_ASSISTANT_INSTRUCTIONS, preload: ['billing.wallet', 'billing.open'] }
+        confirmed: BILLING_CONFIRMED_COMMANDS, instructions: BILLING_ASSISTANT_INSTRUCTIONS, preload: ['billing.wallet'] }
 ].map(family => Object.freeze({ confirmed: [], preload: [], instructions: '', ...family, layer: `atome_mcp_${family.id}` })));
 
 export const MCP_CONTRACT_COMMANDS = Object.freeze(MCP_CONTRACT_FAMILIES.flatMap(family => family.commands));

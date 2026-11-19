@@ -35,8 +35,8 @@ Use the requested context first: Web, Tauri, iOS, server, AUv3, or another speci
 
 | Runtime | Required logs when involved |
 | --- | --- |
-| Web | Browser console, failed network requests, test runner, and relevant Fastify output. |
-| Tauri | WebView console, Tauri terminal, Rust/Axum output, and paired Fastify logs. |
+| Web | Browser console, failed network requests, test runner, and relevant atome-server output. |
+| Tauri | WebView console, Tauri terminal, Rust/Axum output, and paired atome-server logs. |
 | iOS | Xcode/device native output, WebView console where available, and participating backend logs. |
 | Server/integration | Relevant server and test process logs, beyond the final summary. |
 

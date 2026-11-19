@@ -1,7 +1,6 @@
-// The central database (Fastify's `SQLITE_PATH`, database/driver.js): the
-// registries telling which vault holds an atome or a stream, and the shares.
-// Fastify keeps writing its other tables there; both wait on each other's
-// writes as better-sqlite3 does (5 s).
+// The central database (`SQLITE_PATH`): the registries telling which vault holds
+// an atome or a stream, and the shares. The server's other owners write their
+// tables there too; each connection waits on the others' writes (5 s).
 use rusqlite::types::ValueRef;
 use rusqlite::{Connection, OpenFlags, Params, Row};
 use serde_json::{Map as JsonMap, Value as JsonValue};
@@ -52,7 +51,7 @@ impl Central {
         })
     }
 
-    // A database call off the async threads (a write may wait on Fastify's).
+    // A database call off the async threads (a write may wait on another connection's).
     async fn call<T: Send + 'static>(
         &self,
         work: impl FnOnce(&Connection) -> rusqlite::Result<T> + Send + 'static,

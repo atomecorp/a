@@ -1,5 +1,6 @@
 import { PERSONAL_IMPORT_TOOLS } from '#shared/personal_import_tools.js';
 import { MCP_CONFIRMED_CONTRACT_COMMANDS, MCP_CONTRACT_COMMANDS, findContractCommand } from './mcp_contract_families.js';
+import { CB_CONFIRMED_WHEN, CB_OUTWARD_COMMANDS } from '../cb/contracts.js';
 import { cloneValue } from './mcp_core.js';
 import { isMcpResourceUri, listMcpPromptEntries, listMcpResourceEntries } from './mcp_resources.js';
 import { normalizeRuntimeToolIdentifier } from './mcp_runtime.js';
@@ -28,7 +29,10 @@ const OUTWARD_COMMANDS = new Set(['mail.send', 'communication.send', 'calendar.s
     // erased with their copies, a health product erased with every intake, a forum with everyone's posts, a book's
     // files, a mail box. A deletion the history keeps (a project, a creation, a list) is done at once.
     'media_import.delete', 'shop.delete', 'social.delete', 'sensors.delete', 'body_data.delete', 'health_products.remove',
-    'health_products.list_remove', 'forum.delete', 'books.remove', 'site.mail_remove']);
+    'health_products.list_remove', 'forum.delete', 'books.remove', 'site.mail_remove',
+    // The CB sociale (R-173 L6, cahier §8): a call accepted, a bottle launched or answered reach another person, a wider reach
+    // sends the voice to more people (user, 19 Nov. 2026); each only when its input asks it (cb/contracts.js CB_CONFIRMED_WHEN).
+    ...CB_OUTWARD_COMMANDS]);
 const OUTWARD_AI_TIERS = Object.freeze(['high', 'irreversible']);
 const outwardOf = subject => OUTWARD_COMMANDS.has(String(subject || '').split(':').pop());
 const MCP_RATE_LIMIT_RULES = Object.freeze([
@@ -166,7 +170,8 @@ const COMMUNICATION_READS = ['communication.list', 'communication.search', 'comm
 // One contract command, whatever its door (its own method, runtime.tools.call, a toolchain step).
 function contractPolicy(contract, input = {}) {
     const capture = MEDIA_CAPTURE_COMMANDS.includes(contract.name);
-    const consent = CONSENT_COMMANDS.includes(contract.name) && input?.granted === true;
+    // A consent the actor would give itself, or a command confirmed for such an input only (a CB call accepted, not refused).
+    const consent = (CONSENT_COMMANDS.includes(contract.name) && input?.granted === true) || CB_CONFIRMED_WHEN[contract.name]?.(input) === true;
     const policy = allow(contract.name, [contract.capability, ...(capture ? [MEDIA_CAPTURE_CAPABILITY] : [])], {
         // A connection and a reply (each one a new message on the network) are never replayed.
         ...(contract.name.startsWith('social.') ? { idempotent: !['social.connect', 'social.reply'].includes(contract.name) } : {}),
@@ -218,7 +223,8 @@ export function listAclRules() {
         tools: [
             ...['mail.send', 'communication.send', ...MAIL_WRITES, ...CALENDAR_WRITES, 'contacts.push_icloud', 'contacts.delete', ...CONTACT_WRITES]
                 .map(name => rule(resolveAccessPolicy(name, {}))),
-            ...MCP_CONTRACT_COMMANDS.map(command => rule(contractPolicy(command, { granted: true }))),
+            // Each command at its strictest: a consent given, a call accepted, the reach widened to the world.
+            ...MCP_CONTRACT_COMMANDS.map(command => rule(contractPolicy(command, { granted: true, accept: true, range: 'world' }))),
             ...['ui.capture.*', 'ui.detail.record.toggle', 'ui.timeline.record.start', 'ui.automation', 'ui.timeline.read', 'ui.timeline.*']
                 .map(toolId => rule(runtimeToolPolicy(toolId, {})))
         ],

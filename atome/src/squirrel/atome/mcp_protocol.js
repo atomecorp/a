@@ -17,7 +17,7 @@ export const MCP_PROTOCOL_VERSIONS = Object.freeze(['2025-06-18', '2025-03-26', 
 export const MCP_SERVER_INFO = Object.freeze({ name: 'atome-eve', version: '1.0.0' });
 const CONFIRMATION_META = 'atome/confirmation';
 const CONFIRMATION_ID_META = 'atome/confirmation_id';
-// A page of tools/list stays well under the relay's answer size (server/remoteCommandRelay.js).
+// A page of tools/list stays well under the relay's answer size (atome/servers/atome-server/src/ws_api/remote_commands.rs).
 const TOOLS_PAGE_SIZE = 50;
 
 const isObject = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value);

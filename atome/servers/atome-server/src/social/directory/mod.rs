@@ -1,8 +1,8 @@
 // The public directory (server/directoryPublicService.js, ported): each user's public card,
 // projected from their profile into `directory_public_profiles`, every change of it an
 // invalidation event of the `directory.public` stream that the devices following it hear
-// (ws_sync/). Read by `/ws/api`'s `directory` family (entries.rs), the contacts' list, and
-// Fastify's thin client (`directory:*` SERVICE frames).
+// (ws_sync/). Read by `/ws/api`'s `directory` family (entries.rs) and the contacts' list;
+// `directory:*` operations of `Social::service` were Fastify's thin client's (retired).
 mod card;
 mod entries;
 mod meeting;
@@ -10,8 +10,8 @@ mod meeting;
 pub use card::Profile;
 
 use crate::social::news::db::{get, run, text};
+use crate::vault_router::VaultRouter;
 use crate::vault_router::central::Central;
-use crate::vault_router::{VaultRouter, js};
 use crate::ws_sync::SyncRuntime;
 use atome_store::append::iso_now;
 use futures_util::future::join_all;
@@ -253,22 +253,6 @@ impl Directory {
         }
         let profiles = self.list(String::new(), 500, 0, String::new()).await?.len();
         Ok(json!({ "profiles": profiles, "failed": failed }))
-    }
-
-    /// The SERVICE frames of Fastify's thin client (server/directory_client.js).
-    pub async fn service(&self, operation: &str, payload: &JsonValue) -> Result<JsonValue, String> {
-        let principal = js::id(payload.get("principal_id"));
-        match operation {
-            "directory:refresh" => {
-                self.refresh(&principal, payload.get("deleted") == Some(&json!(true)))
-                    .await
-            }
-            "directory:source-profile" => Ok(self
-                .source_profile(&principal)
-                .await?
-                .map_or(JsonValue::Null, |profile| profile.json())),
-            _ => Err(format!("directory_operation_unknown:{operation}")),
-        }
     }
 }
 

@@ -101,33 +101,27 @@ can address a WebGPU canvas: `findBevyUiNodeTarget`, `clickCanvasTarget`,
 ### Start the server in the mode the probe expects
 
 ```bash
-lsof -ti:3001 || ./scripts/run_fastify.sh
+lsof -ti:3001 || ./scripts/run_fastify.sh --test
 ```
 
 Check `lsof` first: `scripts/run_fastify.sh` kills whatever holds port 3001
 unconditionally, so launching it blindly takes down a server someone else is using.
+Despite its name it starts `target/release/atome-server`, the one server (Rust, Axum);
+no Node process serves anything.
 
-**Which mode matters, and the two are not interchangeable.** `--test` exports
-`SQUIRREL_AUTH_OTP_BYPASS=1`; with it, `requestPhoneVerificationDelivery` returns
-`{ok: true, otpBypassed: true}` and **no `code`** (`server/auth_otp.js:114`). A probe
-that requires `requested.code` therefore fails on a `--test` server, while a probe
-that never calls `requestPhoneVerification` fails with `phone_verification_required`
-on a plain one. A probe must read `otpBypassed` and skip the verify step when it is
-true — then both modes work:
-
-```js
-const requested = await api.auth.requestPhoneVerification(phone, 'enrollment', { exposeForTest: true });
-if (requested?.otpBypassed !== true) {
-  if (!requested?.ok || !requested?.code) throw new Error('verification_unavailable');
-  await api.auth.verifyPhoneVerification(phone, requested.code, 'enrollment');
-}
-await api.auth.create(phone, password, username, { autoLogin: true });
-```
+`--test` sets `SQUIRREL_AUTH_SMS_MOCK=1`: no SMS leaves, and the phone link is handed
+back to the client that asked for it (`atome/servers/atome-server/src/auth/sms.rs`,
+refused when `NODE_ENV=production`). Without it a sign-in sends a real, billable SMS.
+An account is made the way the app makes it, through the phone-link client
+(`atome/src/squirrel/security/auth_phone_link_client.js`) and a device key; a probe
+that only needs accounts and a server of its own uses `tests/helpers/probe_server.mjs`
+(`startServer`, `connectUser`), which starts the built binary alone on a free port,
+never 3001 (`PROBE_SERVER_BIN` names another binary).
 
 Confirm the database is up before blaming auth — one call settles it:
 `curl -fsS localhost:3001/api/db/status` returns `status: "connected"`.
-`server/server.js` loads `.env` itself by absolute path, so the working directory of
-the launcher is irrelevant.
+atome-server reads `.env` from the project root itself (`settings.rs`), so the working
+directory of the launcher is irrelevant.
 
 ### Run and read the result
 
