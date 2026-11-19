@@ -9,7 +9,7 @@ import { getFastifyHttpBaseUrl } from '../apis/unified/adole_backend.js';
 const REFRESH_MARGIN_MS = 5 * 60 * 1000;
 const RETRY_DELAY_MS = 15 * 1000;
 
-let cached = null; // { token, expiresAt, sub }
+let cached = null; // { token, expiresAt, sub, base }
 // A context without a session of its own (the preview capture frame) borrows the
 // capability of the page that owns the session.
 let delegated = null; // { token, expiresAt }
@@ -37,6 +37,9 @@ const scheduleRefresh = (expiresAt) => {
 
 export function clearMediaToken() {
     cached = null;
+    delegated = null;
+    inflight = null;
+    lastFailureAt = 0;
     if (refreshTimer) clearTimeout(refreshTimer);
     refreshTimer = null;
 }
@@ -49,7 +52,7 @@ export function refreshMediaToken() {
         clearMediaToken();
         return Promise.resolve('');
     }
-    inflight = (async () => {
+    const task = Promise.resolve().then(async () => {
         try {
             const response = await fetch(`${String(base).replace(/\/+$/, '')}/api/media-token`, {
                 method: 'POST',
@@ -59,17 +62,20 @@ export function refreshMediaToken() {
             });
             const body = await response.json().catch(() => null);
             if (!response.ok || !body?.token) throw new Error(body?.error || `media_token_http_${response.status}`);
-            cached = { token: body.token, expiresAt: Number(body.expiresAt) || 0, sub: decodeSub(bearer) };
+            if (inflight !== task || getFastifyHttpBaseUrl() !== base || decodeSub(currentBearer()) !== decodeSub(bearer)) return '';
+            cached = { token: body.token, expiresAt: Number(body.expiresAt) || 0, sub: decodeSub(bearer), base };
             scheduleRefresh(cached.expiresAt);
             return cached.token;
         } catch (error) {
-            lastFailureAt = Date.now();
-            if (cached && cached.sub !== decodeSub(currentBearer())) clearMediaToken();
+            if (inflight === task) {
+                if (cached && cached.sub !== decodeSub(currentBearer())) clearMediaToken();
+                lastFailureAt = Date.now();
+            }
             throw error;
-        } finally {
-            inflight = null;
         }
-    })();
+    });
+    inflight = task;
+    void task.finally(() => { if (inflight === task) inflight = null; }).catch(() => {});
     return inflight;
 }
 
@@ -82,7 +88,8 @@ export function getMediaTokenSync() {
         return delegated && delegated.expiresAt > Date.now() + 30 * 1000 ? delegated.token : '';
     }
     const now = Date.now();
-    const valid = cached && cached.expiresAt > now + 30 * 1000 && cached.sub === decodeSub(bearer);
+    const valid = cached && cached.expiresAt > now + 30 * 1000 && cached.sub === decodeSub(bearer)
+        && cached.base === getFastifyHttpBaseUrl();
     if (!valid || cached.expiresAt - now < REFRESH_MARGIN_MS) {
         if (!inflight && now - lastFailureAt > RETRY_DELAY_MS) refreshMediaToken().catch(() => {});
     }

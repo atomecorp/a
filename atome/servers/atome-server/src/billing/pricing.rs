@@ -83,6 +83,28 @@ pub fn ai_cost_micro_cents(action: &str, usage: &JsonValue) -> Result<i64, Strin
     Ok(tokens("input_tokens") * input + tokens("output_tokens") * output)
 }
 
+/// A generation's cost (Runway's video, MusicGPT's music, R-120), given in its provider's US
+/// cents, in millionths of a euro cent at the dated rate the token prices use.
+pub fn usd_cents_micro_cents(usd_cents: f64) -> Result<i64, String> {
+    if !usd_cents.is_finite() || usd_cents < 0.0 {
+        return Err("money_generation_cost_invalid".into());
+    }
+    Ok((usd_cents * cents(&["ai", "usdCentMicroCents"]) as f64).round() as i64)
+}
+
+/// What a generation reserves, in whole euro cents: its cost and the 3 %, rounded up.
+pub fn generation_hold_cents(cost_micro_cents: i64) -> i64 {
+    let billed = cost_micro_cents + commission(cost_micro_cents);
+    (billed + 999_999).div_euclid(1_000_000)
+}
+
+/// The dated reservation, in US cents, of a provider that gives no estimate before its call.
+pub fn generation_hold_usd_cents(provider: &str) -> Result<f64, String> {
+    money()["ai"]["generationHoldUsdCents"][provider]
+        .as_f64()
+        .ok_or_else(|| format!("money_generation_price_missing:{provider}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -117,5 +139,18 @@ mod tests {
             ai_cost_micro_cents("speech", &JsonValue::Null),
             Ok(1_000_000)
         );
+    }
+
+    #[test]
+    fn a_generation_is_held_at_its_cost_and_three_percent_rounded_up() {
+        // Runway gen4.5, 5 s at 12 credits: 60 US cents, 55.2 euro cents, 56.856 with the 3 %.
+        let cost = usd_cents_micro_cents(60.0).unwrap();
+        assert_eq!(cost, 55_200_000);
+        assert_eq!(generation_hold_cents(cost), 57);
+        assert_eq!(generation_hold_cents(0), 0);
+        assert_eq!(generation_hold_usd_cents("musicgpt"), Ok(20.0));
+        assert!(generation_hold_usd_cents("other").is_err());
+        assert!(usd_cents_micro_cents(f64::NAN).is_err());
+        assert!(usd_cents_micro_cents(-1.0).is_err());
     }
 }

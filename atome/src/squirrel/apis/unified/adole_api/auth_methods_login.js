@@ -1,8 +1,8 @@
 import { getFastifyHttpBaseUrl } from '../adole_backend.js';
 import { requeueRefusedBrowserWorkspaceEvents, synchronizeBrowserWorkspace, subscribeBrowserWorkspaceChanges } from './browser_workspace.js';
-// Application authentication owner: remote proof exchange and local authorization
-// are separate lifecycles. Neither a cached phone nor an expired bearer unlocks data.
 import { TauriAdapter, FastifyAdapter } from '../adole.js';
+import { resetConnectionState } from '../adole_connection.js';
+import { disconnectFastifyWs } from '../adole_websocket.js';
 import { createAuthDeviceStore } from '../../../security/auth_device.js';
 import { readOptionalAuthCache } from '../../../security/auth_optional_cache.js';
 import { createPhoneLinkClient } from '../../../security/auth_phone_link_client.js';
@@ -18,9 +18,59 @@ let localRenewal = null;
 let localExpiresAt = 0;
 let remoteExpiresAt = 0;
 let remoteRenewalTimer = null;
-// The server session lives 15 min and was renewed only when a request needed it: an idle
-// device lost its presence and every call to it went straight to voicemail. It is renewed
-// on schedule while signed in (the renewal re-announces presence, see FastifyAdapter.setToken).
+let changingRemoteServer = false;
+let remoteServerRevision = 0;
+const remoteAuthResults = new WeakMap();
+const LEGACY_AUTHORITY = 'squirrel_auth_legacy_authority';
+const BOUND_AUTHORITY = 'squirrel_auth_bound_authority';
+const remoteBase = () => getFastifyHttpBaseUrl() || '';
+const authorityStorage = () => globalThis.window?.localStorage;
+const legacyAuthority = () => authorityStorage()?.getItem(LEGACY_AUTHORITY) ?? remoteBase();
+export const getBoundRemoteAuthority = () => authorityStorage()?.getItem(BOUND_AUTHORITY) || legacyAuthority();
+
+const remoteAuthRoute = () => `${remoteServerRevision}|${remoteBase()}`;
+export function checkRemoteAuthResult(result) {
+    const route = remoteAuthResults.get(result);
+    if (route && route !== remoteAuthRoute()) throw new Error('auth_server_changed');
+}
+
+export async function sendRemoteAuth(send) {
+    const route = remoteAuthRoute();
+    const result = await send();
+    if (route !== remoteAuthRoute()) throw new Error('auth_server_changed');
+    if (result?.token) remoteAuthResults.set(result, route);
+    return result;
+}
+
+// The server marker is routing metadata. The protected grant and device key
+// remain the only source of proof, including when revisiting a previous server.
+export async function changeRemoteServer(apply) {
+    if (changingRemoteServer) return { ok: false, error: 'sync_environment_busy' };
+    changingRemoteServer = true;
+    try {
+        await renewal?.catch(() => {});
+        return await apply(async () => {
+            const storage = authorityStorage();
+            storage?.setItem(LEGACY_AUTHORITY, legacyAuthority());
+            const { settleRemoteSyncConfiguration } = await import('./auth_fastify_token.js');
+            await settleRemoteSyncConfiguration();
+            if (isTauriRuntime() && getSessionState().mode === 'authenticated') {
+                const stopped = await TauriAdapter.sync.clearRemote();
+                if (!stopped?.ok && !stopped?.success) throw new Error(stopped?.error || 'local_sync_stop_failed');
+            }
+            const env = globalThis.window;
+            if (remoteRenewalTimer) env?.clearTimeout?.(remoteRenewalTimer);
+            remoteRenewalTimer = null;
+            remoteExpiresAt = 0;
+            remoteServerRevision += 1;
+            client = null;
+            FastifyAdapter.clearToken();
+            disconnectFastifyWs();
+            resetConnectionState();
+        });
+    } finally { changingRemoteServer = false; }
+}
+// Renew while idle so the device stays reachable for calls.
 const scheduleRemoteRenewal = () => {
     const env = globalThis.window;
     if (!env?.setTimeout) return;
@@ -64,7 +114,8 @@ export function deviceStore() {
         read: readNativeSessionGrant,
         clear: clearNativeRemoteSession
     } : null;
-    devices = createAuthDeviceStore({ nativeKey, nativeSession });
+    devices = createAuthDeviceStore({ nativeKey, nativeSession,
+        remoteAuthority: { current: remoteBase, legacy: legacyAuthority, bound: getBoundRemoteAuthority } });
     return devices;
 }
 
@@ -120,11 +171,13 @@ function installLocal(result, backend) {
     return { ok: true, authenticated: true, user, backend };
 }
 
-// The session's key is named by its account scope (V1) or, for phone accounts, its phone.
 export async function installRemote(result, { attemptId, scope, renewal = false } = {}) {
+    checkRemoteAuthResult(result);
+    const authority = remoteBase();
     const store = deviceStore();
     const phone = result.user.phone || null;
     const device = scope ? await store.forScope(scope) : await store.forPhone(phone);
+    checkRemoteAuthResult(result);
     let local;
     if (isTauriRuntime()) {
         const fields = { scope: device.scope, keyId: device.keyId,
@@ -134,6 +187,7 @@ export async function installRemote(result, { attemptId, scope, renewal = false 
             throw new Error('auth_challenge_invalid');
         }
         local = await localRequest('local-link-complete', { ...fields, ...await device.sign(challenge) });
+        if (authority !== remoteBase()) throw new Error('auth_server_changed');
         local.user = { ...local.user, first_launch_version: result.user.first_launch_version || null };
         try {
             await store.put('local-grant', { phone, keyId: device.keyId, scope: device.scope, user: normalizeUser(local.user),
@@ -146,6 +200,9 @@ export async function installRemote(result, { attemptId, scope, renewal = false 
         await store.put('local-grant', { phone, ...(scope ? { scope } : {}), keyId: device.keyId, user: normalizeUser(result.user), locked: false });
     }
     await setBrowserWorkspaceIdentity(local.user);
+    checkRemoteAuthResult(result);
+    if (authority !== remoteBase()) throw new Error('auth_server_changed');
+    if (authority !== getBoundRemoteAuthority()) authorityStorage()?.setItem(BOUND_AUTHORITY, authority);
     FastifyAdapter.setToken(result.token);
     remoteExpiresAt = Date.now() + 840000;
     scheduleRemoteRenewal();
@@ -164,25 +221,22 @@ export async function installRemote(result, { attemptId, scope, renewal = false 
 }
 
 export function phoneLinkClient() {
-    if (!client) client = createPhoneLinkClient({ devices: deviceStore(), send: async (message) => {
+    if (!client) client = createPhoneLinkClient({ devices: deviceStore(), send: (message) => sendRemoteAuth(async () => {
         const env = globalThis.window || globalThis;
-        // run.sh's local mode is deliberately self-contained: the native shell
-        // forwards the short proof exchange to the loopback Fastify process.
-        // This avoids WebKit cross-origin/network policy differences while the
-        // server still validates the same device signatures as production.
+        // The native mock environment sends proof through its loopback bridge.
         const localAuthority = String(env.__SQUIRREL_TAURI_FASTIFY_URL__ || '').trim();
         if (/^http:\/\/(127\.0\.0\.1|localhost)(?::\d+)?$/.test(localAuthority)
             && typeof env.__TAURI_INTERNALS__?.invoke === 'function') {
             return env.__TAURI_INTERNALS__.invoke('auth_development_request', { message });
         }
         return FastifyAdapter.ws.send(message);
-    }, installSession: installRemote, storePurchase: billingStorePurchase(), connectionProof: !isTauriRuntime(), onPending: detail => globalThis.window?.dispatchEvent(
+    }), installSession: installRemote, checkSession: checkRemoteAuthResult, storePurchase: billingStorePurchase(),
+    connectionProof: !isTauriRuntime(), onPending: detail => globalThis.window?.dispatchEvent(
         new CustomEvent('squirrel:phone-login-pending', { detail })) });
     return client;
 }
 
-// One restoration at a time: the boot's auto-login and a module asking for the local session (health, commit
-// transport) met on iOS and each signed its own resume, two local sessions issued where one was needed.
+// Boot and the first local request share the same proof exchange.
 export function restoreLocalAuthorization() {
     if (!localRenewal) localRenewal = restoreLocalAuthorizationOnce().finally(() => { localRenewal = null; });
     return localRenewal;
@@ -244,6 +298,7 @@ export async function lockLocalAuthorization() {
 }
 
 export function ensureRemoteSession() {
+    if (changingRemoteServer) return Promise.reject(new Error('sync_environment_busy'));
     if (FastifyAdapter.getToken() && remoteExpiresAt > Date.now()) return Promise.resolve({ ok: true });
     if (!renewal) renewal = phoneLinkClient().renew().then(() => ({ ok: true })).finally(() => { renewal = null; });
     return renewal;

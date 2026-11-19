@@ -135,6 +135,7 @@ test('failed desktop session recovery settles authentication instead of blocking
         .replace('export const sessionAccountMethods', 'const sessionAccountMethods');
     let settled = 0;
     const context = {
+        purgeLegacyAuthStorage: () => {},
         loadSessionState: () => ({ mode: 'logged_out' }),
         restoreLocalAuthorization: async () => ({ authenticated: false }),
         initializePhoneLinks: async () => {},

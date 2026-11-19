@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
 import { normalizeSelectableListPresentation } from '../../atome/src/squirrel/components/selectable_list_contract.js';
-import { projectBevyUiTreeRecords } from '../../eVe/domains/rendering/bevy_ui_overlay_record_projection.js';
 import { createBevyUiPointerRuntime } from '../../eVe/domains/rendering/bevy_ui_pointer_runtime.js';
 import { createTestScrollRuntime } from './bevy_scroll_engine_double.mjs';
 import { INTERACTIVE_KINDS, SUPPORTED_KINDS } from '../../eVe/domains/rendering/bevy_ui_tree_normalization.js';
@@ -10,7 +9,7 @@ import {
     hierarchicalSelectableListNode,
     selectableListGroupNode
 } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_selectable_list.js';
-import { BEVY_PANEL_TOKENS, hoverSurface, resolveListRowTokens, selectedSurface } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
+import { BEVY_PANEL_TOKENS, hoverSurface, pressedSurface, resolveListRowTokens, selectedSurface } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
 
 const options = [
     { value: 'first', label: 'List item' },
@@ -54,6 +53,8 @@ test('canonical Squirrel selectable-list contract requires a known enabled exclu
     assert.equal(presentation.selectedIndex, 1);
     assert.throws(() => normalizeSelectableListPresentation({ options: [options[0]], value: 'first' }), /squirrel_selectable_list_options_minimum:2/);
     assert.throws(() => normalizeSelectableListPresentation({ options, value: null }), /squirrel_selectable_list_value_required/);
+    // An optional list (a palette laid as a list before one tool is armed, R-236) may hold no value.
+    assert.equal(normalizeSelectableListPresentation({ options, value: null, optional: true }).value, null);
     assert.throws(() => normalizeSelectableListPresentation({ options, value: 'third' }), /squirrel_select_value_unknown:third/);
     assert.throws(() => normalizeSelectableListPresentation({ options, value: 'unavailable' }), /squirrel_selectable_list_selected_option_disabled:unavailable/);
     assert.throws(() => normalizeSelectableListPresentation({
@@ -91,10 +92,14 @@ test('shared selectable-list builder uses native buttons, existing Select states
     assert.deepEqual(first.style.shadow, hovered.shadow, 'the hover keeps the material\'s own drop shadow');
     assert.deepEqual(first.style.tint ?? first.style.background, hovered.tint ?? hovered.background);
     assert.deepEqual(second.style.background, BEVY_PANEL_TOKENS.controlMaterial.background);
-    // The one selected look (AGENTS.md rule 15): the row's own face lit and pressed in, never a check mark beside it.
+    // While the finger holds it, a row takes the press look (AGENTS.md rule 15), selected or not.
+    const pressed = { ...BEVY_PANEL_TOKENS.controlMaterial, ...pressedSurface(BEVY_PANEL_TOKENS.controlMaterial) };
+    assert.deepEqual(second.style.surfacePaint, pressed.surfacePaint);
+    // Released, the one selected look: the row's own face lit and pressed in, never a check mark beside it.
+    const released = findNode(selectableListGroupNode({ id: 'list', options, value: 'second', on: { activate: () => {} } }), 'list_option_1');
     const selected = { ...BEVY_PANEL_TOKENS.controlMaterial, ...selectedSurface(BEVY_PANEL_TOKENS.controlMaterial) };
-    assert.deepEqual(second.style.surfacePaint, selected.surfacePaint);
-    assert.deepEqual(second.style.tint ?? second.style.background, selected.tint ?? selected.background);
+    assert.deepEqual(released.style.surfacePaint, selected.surfacePaint);
+    assert.deepEqual(released.style.tint ?? released.style.background, selected.tint ?? selected.background);
     assert.equal(findNode(group, 'list_option_1_selected_mark_short'), null);
     assert.equal(first.on.activate instanceof Function, true);
     assert.equal(unavailable.on, undefined);

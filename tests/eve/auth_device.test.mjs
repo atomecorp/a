@@ -4,6 +4,33 @@ import crypto from 'node:crypto';
 import { createAuthDeviceStore } from '../../atome/src/squirrel/security/auth_device.js';
 import { authSigningMessage } from '../../atome/src/shared/auth_link_contract.js';
 
+test('proof descriptors and deferred revocations stay with their issuing server', async () => {
+    const original = 'https://primary.example';
+    let server = original;
+    const record = { userId: 'u1', session: { id: 's1', keyId: 'key1', generation: 3 } };
+    const store = createAuthDeviceStore({
+        indexedDB: new IDBFactory(),
+        crypto: crypto.webcrypto,
+        nativeSession: { read: async () => ({ keyId: 'key1', remoteSession: record }), clear: async () => {} },
+        remoteAuthority: { current: () => server, legacy: () => original, bound: () => original }
+    });
+    await store.put('account:u1', record);
+    await store.put('revoke:s1', record);
+    await store.put('attempt', { attemptId: 'attempt1' });
+    server = 'https://another.example';
+    expect(await store.read('session')).toBeUndefined();
+    expect(await store.read('account:u1')).toBeUndefined();
+    expect(await store.read('attempt')).toBeUndefined();
+    expect(await store.keys('revoke:')).toEqual([]);
+    await store.remove('attempt');
+    server = original;
+    expect(await store.read('session')).toMatchObject(record);
+    expect(await store.read('account:u1')).toMatchObject(record);
+    expect(await store.read('attempt')).toMatchObject({ attemptId: 'attempt1' });
+    expect(await store.keys('revoke:')).toEqual(['revoke:s1']);
+    await store.close();
+});
+
 describe('device authentication keys', () => {
     it('retains a non-exportable signing identity across restart', async () => {
         const indexedDB = new IDBFactory();

@@ -7,7 +7,7 @@ import { createPairingClient } from '../../../security/auth_pairing_client.js';
 import { billingStorePurchase } from '../../../billing/store_purchase.js';
 import { createWebAuthnApprover } from '../../../security/auth_webauthn_client.js';
 import { authSigningMessage } from '../../../../shared/auth_link_contract.js';
-import { deviceStore, ensureRemoteSession, installRemote } from './auth_methods_login.js';
+import { checkRemoteAuthResult, deviceStore, ensureRemoteSession, installRemote, sendRemoteAuth } from './auth_methods_login.js';
 
 let client = null;
 // Native shells bring their own user-verified key provider (§4.3); until then
@@ -56,8 +56,8 @@ export function pairingClient() {
     client = createPairingClient({ devices: deviceStore(), approver,
         // Native shells also use the remote token from Swift/Rust, which cannot prove a connection yet.
         connectionProof: !native,
-        send: (message) => FastifyAdapter.ws.send(message), token: () => FastifyAdapter.getToken(), ensureSession: ensureRemoteSession,
-        installSession: installRemote, storePurchase: billingStorePurchase() });
+        send: (message) => sendRemoteAuth(() => FastifyAdapter.ws.send(message)), token: () => FastifyAdapter.getToken(), ensureSession: ensureRemoteSession,
+        installSession: installRemote, checkSession: checkRemoteAuthResult, storePurchase: billingStorePurchase() });
     return client;
 }
 

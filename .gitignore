@@ -135,7 +135,8 @@ tests/eve/*
 !tests/eve/assistant_dock_lifecycle.test.mjs
 !tests/eve/assistant_visual_contract.test.mjs
 !tests/eve/required_panel_consumers.test.mjs
-!tests/eve/last_creation_tool_shortcut.test.mjs
+!tests/eve/creation_tool_leaves_rail_when_disarmed.test.mjs
+!tests/eve/project_view_grid_snap.test.mjs
 !tests/eve/tv_inplace_player.test.mjs
 !tests/eve/dashboard_creation_contract.test.mjs
 !tests/eve/dashboard_project_change_events.test.mjs

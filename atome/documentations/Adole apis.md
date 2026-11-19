@@ -424,7 +424,7 @@ AdoleAPI.auth.current((result) => {
 3. **Machine Identification**: Each device gets a persistent non-secret identifier; this identifier is not an authentication token
 4. **User-Machine Association**: Bidirectional relationship for session restoration
 5. **WebSocket Communication**: Uses WebSocket for real-time operations
-6. **Token Management**: Browser sessions use HttpOnly cookies; native bearer material uses the approved credential store or encrypted vault. Remaining Web Storage token paths are active remediation debt in `todo/cleanup_architecture/secure_auth_token_storage.md`
+6. **Token Management** — Browser access tokens stay in memory and session resumption requires device proof. Native credential material uses its protected store. [Session storage and server changes](security_architecture.md#session-storage-and-server-changes)
 
 ---
 

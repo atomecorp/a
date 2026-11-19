@@ -8,7 +8,7 @@ const utf8 = (value) => new TextEncoder().encode(value);
 // IndexedDB can persist non-exportable CryptoKeys without exporting private bytes.
 // Native consumers inject the platform key capability; they never use browser keys.
 export function createAuthDeviceStore({ indexedDB = globalThis.indexedDB, crypto = globalThis.crypto,
-    nativeKey = null, nativeSession = null, databaseName = 'atome_auth_device_v1' } = {}) {
+    nativeKey = null, nativeSession = null, remoteAuthority = null, databaseName = 'atome_auth_device_v1' } = {}) {
     let opening = null;
     const open = () => {
         if (!indexedDB || !crypto?.subtle) throw new Error('auth_protected_storage_unavailable');
@@ -31,7 +31,9 @@ export function createAuthDeviceStore({ indexedDB = globalThis.indexedDB, crypto
     }
     const cacheRead = (key) => storage('readonly', (store) => store.get(key));
     const cachePut = (key, value) => storage('readwrite', (store) => store.put(value, key));
-    async function read(key) {
+    const isRemoteRecord = key => ['session', 'attempt', 'pair-attempt', 'recovery-attempt'].includes(key)
+        || key.startsWith('account:') || key.startsWith('revoke:');
+    async function readRecord(key) {
         if (key !== 'session' || !nativeSession) return cacheRead(key);
         let cached;
         try { cached = await cacheRead(key); } catch (_) { /* optional WebView cache */ }
@@ -45,16 +47,29 @@ export function createAuthDeviceStore({ indexedDB = globalThis.indexedDB, crypto
         // newer generation in IndexedDB. Never accept a different account/key.
         if (sameOwner && (!durable || (cached.session.id === durable.session.id
             && cached.session.generation >= durable.session.generation))) return cached;
-        return durable || undefined;
+        if (!durable) return undefined;
+        return remoteAuthority ? { ...durable, authority: remoteAuthority.bound() } : durable;
+    }
+    async function read(key) {
+        const record = await readRecord(key);
+        if (!record || !remoteAuthority || !isRemoteRecord(key)) return record;
+        const issuer = record.authority || remoteAuthority.legacy();
+        return issuer === remoteAuthority.current() ? record : undefined;
     }
     async function put(key, value) {
+        if (remoteAuthority && isRemoteRecord(key)) value = { ...value, authority: remoteAuthority.current() };
         try { return await cachePut(key, value); } catch (error) {
             if (key !== 'session' || !nativeSession) throw error;
             // installRemote must subsequently complete the verified native bind.
         }
     }
     async function remove(key) {
-        if (key === 'session' && nativeSession) await nativeSession.clear();
+        if (key === 'session' && nativeSession && (!remoteAuthority
+            || remoteAuthority.current() === remoteAuthority.bound())) await nativeSession.clear();
+        if (remoteAuthority && isRemoteRecord(key)) {
+            const cached = await readOptionalAuthCache(() => cacheRead(key));
+            if (cached && (cached.authority || remoteAuthority.legacy()) !== remoteAuthority.current()) return;
+        }
         try { return await storage('readwrite', (store) => store.delete(key)); } catch (error) {
             if (key !== 'session' || !nativeSession) throw error;
         }
@@ -141,7 +156,12 @@ export function createAuthDeviceStore({ indexedDB = globalThis.indexedDB, crypto
             await put(`key:${await phoneScope(nextPhone)}`, previous);
             if (previousPhone !== nextPhone) await remove(`key:${await phoneScope(previousPhone)}`);
         },
-        async keys(prefix) { return (await storage('readonly', (store) => store.getAllKeys())).filter((key) => String(key).startsWith(prefix)); },
+        async keys(prefix) {
+            const keys = (await storage('readonly', (store) => store.getAllKeys())).filter(key => String(key).startsWith(prefix));
+            if (!remoteAuthority || !isRemoteRecord(prefix)) return keys;
+            const records = await Promise.all(keys.map(read));
+            return keys.filter((_, index) => records[index]);
+        },
         randomHandle: () => encode(crypto.getRandomValues(new Uint8Array(32))),
         async close() { if (opening) (await opening).close(); opening = null; } };
 }

@@ -10,6 +10,10 @@ If any instruction in this file conflicts with ../../AGENTS.md, ../../AGENTS.md 
 
 # User Authentication - Production TODO
 
+## 2026-11-19 — Current work
+
+The Rust server implements OVHcloud SMS, optional Argon2id passwords and recovery by code. Server switching purges legacy session tokens and resumes by device proof. Release acceptance remains tracked in the execution register. The dated notes and older Fastify plan below are historical. [Current priorities](../cleanup_architecture/README.md) · [Session storage](../../atome/documentations/security_architecture.md#session-storage-and-server-changes)
+
 ## 2026-10-16 — Reconciliation of the user-confirmed SMS baseline
 
 The user explicitly confirmed in this conversation that SMS is received and sign-in works. That existing functional baseline is complete for backlog purposes and must not be recreated or kept as a prerequisite delivery task. This is user-reported evidence, not a new Codex carrier/device run. Later 2026-10-14/15 password, pairing, deadline and security changes retain their own deployment/platform verification limits; they do not invalidate or silently broaden the earlier confirmation. ATM-2001 tracks only that remaining evolution/activation. Historical statements below about missing SMS receipt proof are dated provenance, not the current baseline status.
@@ -35,8 +39,7 @@ Historical transport/security inventory — qualify against the current phone-li
 - The HTTP routes below are historical implementation inventory. Canonical maintained
   authentication operations must migrate to `/ws/api`.
 - Password hashing is currently bcrypt cost 10 on Fastify and Tauri. The product target
-  is Argon2id with successful-login migration of legacy bcrypt verifiers, registered in
-  `todo/cleanup_architecture/argon2id_password_hash_migration.md`.
+  was Argon2id with successful-login migration of legacy bcrypt verifiers.
 - New and changed passwords are single-factor passphrases of at least 15 Unicode code
   points. At least 64 code points, spaces, and Unicode must be accepted without
   composition rules or truncation, and compromised/common values must be rejected.
@@ -44,14 +47,11 @@ Historical transport/security inventory — qualify against the current phone-li
   verification.
 - SMS-only password reset is the current transitional behavior. The validated target is
   SMS plus the authorized application device key, or SMS plus a locally saved Recovery
-  Kit after device loss. The current route may be retired only when the complete
-  replacement in
-  `todo/cleanup_architecture/account_recovery_trusted_device_and_recovery_kit.md` is
-  implemented and validated.
+  Kit after device loss was the proposal at the time. The validated flow now uses
+  a recovery code to open the account and add a device.
 - All product-side authentication and OTP operations use `/ws/api`. Only the
-  server-owned SMS infrastructure adapter may use the external protocol imposed by the
-  configured provider. The active implementation and validation work is registered in
-  `todo/cleanup_architecture/production_sms_provider_boundary.md`.
+  server-owned SMS infrastructure adapter uses the external protocol imposed by the
+  configured provider. The Rust implementation is part of the release checks above.
 
 ## ✅ Completed
 
@@ -74,16 +74,9 @@ Historical transport/security inventory — qualify against the current phone-li
 
 ### 1. SMS Provider Integration (Critical)
 
-OVHcloud SMS is the selected production provider. Implement it behind the server-owned,
-provider-neutral SMS transport contract defined in
-`todo/cleanup_architecture/production_sms_provider_boundary.md`.
-
-Clients and product modules must continue to use `/ws/api` exclusively. They must never
-call the provider, contain its credentials, or select/fallback between providers.
-
-Repository audit note: no maintained OVHcloud adapter or `ovh` dependency is currently
-present. The existing reusable surface is the provider-neutral `sendSMS()` function,
-which still fails closed in production.
+The Rust server owns the OVHcloud SMS adapter. Clients request a phone link through
+`/ws/api`. Release acceptance includes verifying actual carrier receipt and sign-in
+on the candidate. [SMS adapter](../../atome/servers/atome-server/src/auth/sms.rs)
 
 ---
 

@@ -16,7 +16,7 @@ vi.mock('../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_vault.js', () =>
     mailVaultEntryId: ({ userId }) => `mail.auth.${userId}`,
     readHomeVaultState: async () => ({ unlocked: true, credentials: [], mailConfigured: false,
         providers: [{ id: 'openai', kind: 'chat', configured: true, models: ['fixture-model'] },
-            { id: 'runway', kind: 'video', configured: false, models: [] }] })
+            { id: 'spotify', kind: 'music', configured: false, models: [] }] })
 }));
 vi.mock('../../atome/src/squirrel/voice/bootstrap.js', () => ({
     bootstrapGlobalVoice: () => ({ wake: { subscribe: () => () => {} } })
@@ -62,8 +62,8 @@ test('focusing and leaving an empty replacement never overwrites a configured ke
     finally { f.close(); }
 });
 
-// The key panel lists the media services only (R-120): a requested focus lands on Runway's field.
-for (const outcome of ['focused', 'cancelled', 'unavailable']) test('requested Runway focus after projection: ' + outcome, async () => {
+// The key panel lists the music services only (R-120: every AI key is atome's own): a requested focus lands on Spotify's field.
+for (const outcome of ['focused', 'cancelled', 'unavailable']) test('requested Spotify focus after projection: ' + outcome, async () => {
     const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost', pretendToBeVisual: true });
     const previous = { window: globalThis.window, document: globalThis.document };
     globalThis.window = dom.window; globalThis.document = dom.window.document;
@@ -77,8 +77,8 @@ for (const outcome of ['focused', 'cancelled', 'unavailable']) test('requested R
         panels.sourceTrees.set('eve_bevy_panel_home', { tree: { root: { id: 'home', children: outcome === 'unavailable' ? [] : children } } });
         return painted;
     };
-    const release = homeSurface.onOpen({ context: { section: 'settings', subsections: ['settings.passkeys', 'passkeys.keys'],
-        revealNodeId: 'home_key_runway_api', focusField: 'security.aiKeys.runway', onHomeNavigationReady: task => { ready = task; } }, refresh });
+    const release = homeSurface.onOpen({ context: { section: 'settings', subsections: ['settings.passkeys', 'passkeys.music'],
+        revealNodeId: 'home_key_spotify_api', focusField: 'security.aiKeys.spotify', onHomeNavigationReady: task => { ready = task; } }, refresh });
     try {
         await vi.waitFor(() => expect(readHomePanelState().loading).toBe(false));
         expect(dom.window.document.querySelector('#eve_hidden_text_service [data-role="active-text-editor"]')).toBeNull();
@@ -92,7 +92,7 @@ for (const outcome of ['focused', 'cancelled', 'unavailable']) test('requested R
             expect(dom.window.document.querySelector('#eve_hidden_text_service [data-role="active-text-editor"]')).toBeNull();
         } else {
             expect(result.ok).toBe(true);
-            expect(panels.reveal).toHaveBeenCalledWith(expect.objectContaining({ nodeId: 'home_key_runway_api' }));
+            expect(panels.reveal).toHaveBeenCalledWith(expect.objectContaining({ nodeId: 'home_key_spotify_api' }));
             const editor = dom.window.document.querySelector('#eve_hidden_text_service [data-role="active-text-editor"]');
             expect(dom.window.document.activeElement).toBe(editor); expect(editor.value).toBe('');
         }

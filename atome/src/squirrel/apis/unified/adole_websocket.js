@@ -94,10 +94,12 @@ class TauriWebSocket {
             try {
                 const socket = new WebSocket(this.url);
                 this.socket = socket;
+                this.finishConnect = resolve;
 
                 socket.onopen = () => {
                     if (this.disposed || this.socket !== socket) return;
                     this.clearConnectionTimer();
+                    this.finishConnect = null;
                     clearTimeout(this.reconnectTimer);
                     this.reconnectTimer = null;
                     // Open again: the next loss starts its back-off from one second, not from where the last one stopped.
@@ -152,6 +154,8 @@ class TauriWebSocket {
     handleDisconnect({ socket = this.socket, scheduleReconnect = true } = {}) {
         if (socket && this.socket !== socket) return;
         this.clearConnectionTimer();
+        this.finishConnect?.(false);
+        this.finishConnect = null;
         this.isConnected = false;
         this.isConnecting = false;
         this.stopPing();
@@ -416,6 +420,11 @@ function getFastifyWs() {
     }
 
     return _fastifyWs;
+}
+
+export function disconnectFastifyWs() {
+    _fastifyWs?.dispose();
+    _fastifyWs = null;
 }
 
 /**

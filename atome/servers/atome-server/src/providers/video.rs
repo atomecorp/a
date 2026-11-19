@@ -2,10 +2,13 @@
 // canonical `video.*` actions, a budget a routing constraint, the generated file stored as one of
 // the person's files (their `Downloads`, registered as an atome) and answered as a file reference,
 // never as bytes nor a provider URL. Runway's names and pricing live in its adapter alone; the mock
-// (`ATOME_AI_VIDEO_MOCK=1`, probes only) answers the bundled demo video.
-use super::credentials::Credentials;
-use super::generation::{self, Codes, Jobs, Provider, now_ms, or_null, round, text};
+// (`ATOME_AI_VIDEO_MOCK=1`, probes only) answers the bundled demo video. Runway runs on atome's key
+// (`RUNWAY_SHARED_KEY_FILE`, R-120): its estimate is reserved on the ledger before the call, the
+// real credits settled once the video is made (generation_ledger.rs).
+use super::generation::{self, Codes, Jobs, PlatformKeys, Provider, now_ms, or_null, text};
+use super::generation_ledger as ledger;
 use super::http::{self, Done};
+use super::video_runway::{PRICING_VERSION, Runway, UNIT, credits_cost, usd};
 use crate::media::storage::{self, Registration, Storage};
 use crate::settings::Settings;
 use crate::vault_router::central::Central;
@@ -14,7 +17,7 @@ use serde_json::{Map as JsonMap, Value as JsonValue, json};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-pub const ERRORS: [&str; 17] = [
+pub const ERRORS: [&str; 16] = [
     "AUTH_ERROR",
     "QUOTA_EXCEEDED",
     "PAYMENT_REQUIRED",
@@ -29,26 +32,15 @@ pub const ERRORS: [&str; 17] = [
     "DOWNLOAD_FAILED",
     "COST_LIMIT_EXCEEDED",
     "UNKNOWN_PROVIDER_ERROR",
-    "NO_PROVIDER_KEY",
     "JOB_NOT_FOUND",
     "CANCELLED",
 ];
-const CODES: Codes = Codes {
+pub(super) const CODES: Codes = Codes {
     list: &ERRORS,
     fallback: "UNKNOWN_PROVIDER_ERROR",
     capability: "UNSUPPORTED_CAPABILITY",
 };
 const ASPECT_RATIOS: [&str; 6] = ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"];
-const PRICING_VERSION: &str = "2026-09-21";
-const USD_PER_CREDIT: f64 = 0.01;
-const UNIT: &str = "credits_per_second";
-
-struct Runway {
-    base_url: String,
-    version: String,
-    text_model: String,
-    image_model: String,
-}
 
 enum Adapter {
     Runway(Runway),
@@ -125,6 +117,8 @@ struct Job {
     completed_at: Option<i64>,
     error: Option<String>,
     stored: JsonMap<String, JsonValue>,
+    // The ledger's hold for this job, settled or given back when it ends (none for the mock).
+    hold: Option<String>,
 }
 
 impl generation::Job for Job {
@@ -218,180 +212,10 @@ fn required(request: &JsonValue) -> Vec<&'static str> {
     required
 }
 
-/// `Math.round(credits * usdPerCredit * 100) / 100`.
-fn usd(credits: f64) -> JsonValue {
-    js::number_json(round(credits * USD_PER_CREDIT * 100.0) / 100.0)
-}
-
-// Canonical aspect ratio as Runway's `ratio`, and what each model takes (only documented values).
-fn runway_ratio(aspect: &str) -> &'static str {
-    match aspect {
-        "9:16" => "720:1280",
-        "1:1" => "960:960",
-        "4:3" => "1104:832",
-        "3:4" => "832:1104",
-        "21:9" => "1584:672",
-        _ => "1280:720",
-    }
-}
-
-struct Limits {
-    text: Option<&'static [&'static str]>,
-    image: &'static [&'static str],
-    credits_per_second: f64,
-}
-
-fn limits(model: &str) -> Option<Limits> {
-    match model {
-        "gen4.5" => Some(Limits {
-            text: Some(&["1280:720", "720:1280"]),
-            image: &[
-                "1280:720", "720:1280", "1104:832", "960:960", "832:1104", "1584:672",
-            ],
-            credits_per_second: 12.0,
-        }),
-        "gen4_turbo" => Some(Limits {
-            text: None,
-            image: &[
-                "1280:720", "720:1280", "1104:832", "832:1104", "960:960", "1584:672",
-            ],
-            credits_per_second: 5.0,
-        }),
-        _ => None,
-    }
-}
-
-impl Runway {
-    fn pick(&self, request: &JsonValue) -> Done<(String, Limits, bool)> {
-        let image = !request["source"]["image"].is_null();
-        let wanted = [
-            request.get("model"),
-            request.pointer("/providerOptions/runway/model"),
-        ]
-        .into_iter()
-        .flatten()
-        .find(|v| js::truthy(Some(v)));
-        let model = match wanted {
-            Some(JsonValue::String(model)) => model.clone(),
-            Some(_) => return Err(CODES.error("UNSUPPORTED_MODEL")),
-            None if image => self.image_model.clone(),
-            None => self.text_model.clone(),
-        };
-        match limits(&model) {
-            Some(limits) if image || limits.text.is_some() => Ok((model, limits, image)),
-            _ => Err(CODES.error("UNSUPPORTED_MODEL")),
-        }
-    }
-
-    /// `toRunwayPayload`: every adjusted or ignored field a warning.
-    fn payload(
-        &self,
-        request: &JsonValue,
-    ) -> Done<(JsonValue, Vec<JsonValue>, &'static str, JsonValue)> {
-        let (model, limits, image) = self.pick(request)?;
-        let mut warnings = Vec::new();
-        let allowed = if image {
-            limits.image
-        } else {
-            limits.text.unwrap_or_default()
-        };
-        let aspect = js::string(&request["aspectRatio"]);
-        let mut ratio = runway_ratio(&aspect);
-        if !allowed.contains(&ratio) {
-            let wanted = if aspect == "9:16" || aspect == "3:4" {
-                "720:1280"
-            } else {
-                "1280:720"
-            };
-            warnings.push(json!({ "field": "aspectRatio", "code": "ADJUSTED", "message": format!("{aspect} unavailable for {model}") }));
-            ratio = if allowed.contains(&wanted) {
-                wanted
-            } else {
-                allowed[0]
-            };
-        }
-        let asked = request["duration"].as_f64().unwrap_or(5.0);
-        let duration = round(asked).clamp(2.0, 10.0);
-        if duration != asked {
-            warnings.push(json!({ "field": "duration", "code": "ADJUSTED", "message": format!("clamped to {duration}s") }));
-        }
-        if !request["resolution"].is_null() {
-            warnings.push(json!({ "field": "resolution", "code": "IGNORED", "message": "resolution follows the ratio on this provider" }));
-        }
-        if !request["fps"].is_null() {
-            warnings.push(json!({ "field": "fps", "code": "IGNORED" }));
-        }
-        if !request["negativePrompt"].is_null() {
-            warnings.push(json!({ "field": "negativePrompt", "code": "IGNORED" }));
-        }
-        let mut payload =
-            json!({ "model": model, "ratio": ratio, "duration": js::number_json(duration) });
-        if request["prompt"] != json!("") {
-            payload["promptText"] = request["prompt"].clone();
-        }
-        if image {
-            payload["promptImage"] = request["source"]["image"]["dataUri"].clone();
-        }
-        if !request["controls"]["seed"].is_null() {
-            payload["seed"] = request["controls"]["seed"].clone();
-        }
-        let path = if image {
-            "image_to_video"
-        } else {
-            "text_to_video"
-        };
-        Ok((
-            payload,
-            warnings,
-            path,
-            json!({ "duration": js::number_json(duration), "ratio": ratio }),
-        ))
-    }
-
-    fn estimate(&self, request: &JsonValue) -> Done<JsonValue> {
-        let (model, limits, _) = self.pick(request)?;
-        let (_, _, _, effective) = self.payload(request)?;
-        let credits = limits.credits_per_second * effective["duration"].as_f64().unwrap_or(0.0);
-        Ok(
-            json!({ "model": model, "credits": js::number_json(credits), "costUsd": usd(credits), "unit": UNIT,
-            "pricingVersion": PRICING_VERSION }),
-        )
-    }
-
-    async fn call(
-        &self,
-        method: reqwest::Method,
-        path: &str,
-        key: &str,
-        body: Option<JsonValue>,
-    ) -> Done<JsonValue> {
-        let mut request = http::client()
-            .request(method, format!("{}{path}", self.base_url))
-            .header("Authorization", format!("Bearer {key}"))
-            .header("X-Runway-Version", &self.version);
-        if let Some(body) = body {
-            request = request
-                .header("Content-Type", "application/json")
-                .body(body.to_string());
-        }
-        let response = http::send(request)
-            .await
-            .map_err(|_| CODES.error("PROVIDER_UNAVAILABLE"))?;
-        // Provider messages are never forwarded (they may echo request data).
-        if !response.status().is_success() {
-            return Err(CODES.for_status(response.status().as_u16(), "UNKNOWN_PROVIDER_ERROR"));
-        }
-        if response.status().as_u16() == 204 {
-            return Ok(json!({}));
-        }
-        let bytes = http::bytes(response, usize::MAX).await.unwrap_or_default();
-        Ok(serde_json::from_slice(&bytes).unwrap_or_else(|_| json!({})))
-    }
-}
-
 /// The process's video service: its providers in preference order, the jobs, where outputs go.
 pub struct Video {
     adapters: Vec<Adapter>,
+    keys: PlatformKeys,
     jobs: Jobs<Job>,
     storage: Arc<Storage>,
     central: Central,
@@ -425,6 +249,7 @@ impl Video {
         }
         Self {
             adapters,
+            keys: PlatformKeys::load(settings, &[("runway", "RUNWAY_SHARED_KEY_FILE")]),
             jobs: Jobs::default(),
             storage,
             central,
@@ -437,19 +262,6 @@ impl Video {
             .any(|adapter| adapter.credential() == Some(credential))
     }
 
-    pub async fn validate_key(&self, credential: &str, key: &str) -> Done<()> {
-        for adapter in &self.adapters {
-            if let Adapter::Runway(runway) = adapter
-                && adapter.credential() == Some(credential)
-            {
-                runway
-                    .call(reqwest::Method::GET, "/v1/organization", key, None)
-                    .await?;
-            }
-        }
-        Ok(())
-    }
-
     fn estimate_of(adapter: &Adapter, request: &JsonValue) -> Done<JsonValue> {
         match adapter {
             Adapter::Runway(runway) => runway.estimate(request),
@@ -459,11 +271,7 @@ impl Video {
         }
     }
 
-    async fn route<'a>(
-        &'a self,
-        request: &JsonValue,
-        vault: &Credentials,
-    ) -> Done<(&'a Adapter, Option<String>, String)> {
+    fn route<'a>(&'a self, request: &JsonValue) -> Done<(&'a Adapter, Option<String>, String)> {
         let wanted = js::string(&request["provider"]);
         let budget = request["routing"]["maxCostUsd"].as_f64();
         generation::resolve(
@@ -471,7 +279,7 @@ impl Video {
             &CODES,
             &wanted,
             &required(request),
-            vault,
+            &self.keys,
             |adapter| {
                 let cost = Self::estimate_of(adapter, request)?["costUsd"].as_f64();
                 Ok(match (budget, cost) {
@@ -480,7 +288,6 @@ impl Video {
                 })
             },
         )
-        .await
     }
 
     /// One `video.*` action.
@@ -489,7 +296,6 @@ impl Video {
         action: &str,
         payload: &JsonValue,
         principal: &str,
-        vault: &Credentials,
     ) -> Done<JsonValue> {
         let input = payload
             .get("request")
@@ -497,7 +303,7 @@ impl Video {
             .unwrap_or(payload);
         match action {
             "video.providers" => {
-                Ok(json!({ "providers": generation::list(&self.adapters, vault).await? }))
+                Ok(json!({ "providers": generation::list(&self.adapters, &self.keys)? }))
             }
             "video.capabilities" => {
                 let id = payload
@@ -509,19 +315,19 @@ impl Video {
             }
             "video.estimate" => {
                 let request = normalize(input)?;
-                let (adapter, _, reason) = self.route(&request, vault).await?;
+                let (adapter, _, reason) = self.route(&request)?;
                 let mut out = json!({ "provider": adapter.id(), "routingReason": reason });
                 if let JsonValue::Object(estimate) = Self::estimate_of(adapter, &request)? {
                     out.as_object_mut().expect("object").extend(estimate);
                 }
                 Ok(out)
             }
-            "video.generate" => self.generate(principal, input, vault).await,
-            "video.job" => self.job(principal, payload.get("job_id"), vault).await,
-            "video.cancel" => self.cancel(principal, payload.get("job_id"), vault).await,
+            "video.generate" => self.generate(principal, input).await,
+            "video.job" => self.job(principal, payload.get("job_id")).await,
+            "video.cancel" => self.cancel(principal, payload.get("job_id")).await,
             "video.output" => {
                 let index = js::number_or(payload.get("index"), 0.0);
-                self.store_output(principal, payload.get("job_id"), index, vault)
+                self.store_output(principal, payload.get("job_id"), index)
                     .await
             }
             _ => Err("provider_operation_not_allowed".into()),
@@ -548,40 +354,51 @@ impl Video {
             "warnings": job.warnings })
     }
 
-    async fn generate(
-        &self,
-        principal: &str,
-        input: &JsonValue,
-        vault: &Credentials,
-    ) -> Done<JsonValue> {
+    async fn generate(&self, principal: &str, input: &JsonValue) -> Done<JsonValue> {
         let request = normalize(input)?;
-        let (adapter, key, reason) = self.route(&request, vault).await?;
+        let (adapter, key, reason) = self.route(&request)?;
         let estimate = Self::estimate_of(adapter, &request)?;
-        let (provider_job_id, model, effective, warnings) = match adapter {
+        let (provider_job_id, model, effective, warnings, hold) = match adapter {
             Adapter::Mock(_) => (
                 json!(format!("mock-{}", now_ms())),
                 json!("mock-demo"),
                 json!({ "duration": request["duration"], "ratio": request["aspectRatio"] }),
                 Vec::new(),
+                None,
             ),
             Adapter::Runway(runway) => {
                 let (payload, warnings, path, effective) = runway.payload(&request)?;
-                let data = runway
+                let cost = credits_cost(estimate["credits"].as_f64().unwrap_or(f64::NAN))?;
+                let hold = ledger::reserve(&self.central, principal, cost).await?;
+                let accepted = runway
                     .call(
                         reqwest::Method::POST,
                         &format!("/v1/{path}"),
                         key.as_deref().unwrap_or(""),
                         Some(payload.clone()),
                     )
-                    .await?;
-                if !js::truthy(data.get("id")) {
-                    return Err(CODES.error("UNKNOWN_PROVIDER_ERROR"));
-                }
+                    .await
+                    .and_then(|data| {
+                        if js::truthy(data.get("id")) {
+                            Ok(data)
+                        } else {
+                            Err(CODES.error("UNKNOWN_PROVIDER_ERROR"))
+                        }
+                    });
+                let data = match accepted {
+                    Ok(data) => data,
+                    Err(failure) => {
+                        ledger::release(&self.central, &hold).await?;
+                        return Err(failure);
+                    }
+                };
+                ledger::keep(&self.central, &hold).await?;
                 (
                     data["id"].clone(),
                     payload["model"].clone(),
                     effective,
                     warnings,
+                    Some(hold),
                 )
             }
         };
@@ -610,34 +427,45 @@ impl Video {
             completed_at: None,
             error: None,
             stored: JsonMap::new(),
+            hold,
         };
         let out = Self::public(&job);
         self.jobs.put(&job.id.clone(), job);
         Ok(out)
     }
 
-    async fn ready(&self, job: &Job, vault: &Credentials) -> Done<(&Adapter, String)> {
+    fn ready(&self, job: &Job) -> Done<(&Adapter, String)> {
         let Some(adapter) = self.adapters.iter().find(|a| a.id() == job.provider) else {
             return Err(CODES.error("PROVIDER_UNAVAILABLE"));
         };
-        let key = generation::key_for(adapter, vault).await?;
+        let key = generation::key_for(adapter, &self.keys)?;
         if adapter.credential().is_some() && key.is_none() {
-            return Err(CODES.error("NO_PROVIDER_KEY"));
+            return Err(CODES.error("PROVIDER_UNAVAILABLE"));
         }
         Ok((adapter, key.unwrap_or_default()))
     }
 
-    async fn job(
-        &self,
-        principal: &str,
-        id: Option<&JsonValue>,
-        vault: &Credentials,
-    ) -> Done<JsonValue> {
+    /// The job's money once it ends: the real credits paid to Runway, or the hold given back.
+    async fn close_hold(&self, job: &Job, credits: Option<f64>) -> Done<()> {
+        let Some(hold) = &job.hold else {
+            return Ok(());
+        };
+        if job.status != "succeeded" {
+            return ledger::release(&self.central, hold).await;
+        }
+        let credits = credits
+            .or_else(|| job.estimate["credits"].as_f64())
+            .unwrap_or(f64::NAN);
+        let cost = credits_cost(credits)?;
+        ledger::settle(&self.central, hold, "video.generate", job.provider, cost).await
+    }
+
+    async fn job(&self, principal: &str, id: Option<&JsonValue>) -> Done<JsonValue> {
         let mut job = self.jobs.owned(&CODES, principal, id)?;
         if ["succeeded", "failed", "cancelled", "expired"].contains(&job.status.as_str()) {
             return Ok(Self::public(&job));
         }
-        let (adapter, key) = self.ready(&job, vault).await?;
+        let (adapter, key) = self.ready(&job)?;
         let polled = match adapter {
             Adapter::Mock(_) => {
                 json!({ "status": "succeeded", "outputs": [{ "index": 0, "url": null, "format": "mp4" }], "costActualUsd": 0 })
@@ -676,6 +504,7 @@ impl Video {
                     "outputs": outputs, "error": (status == "failed").then_some(if rejected { "CONTENT_REJECTED" } else { "JOB_FAILED" }) });
                 if status == "succeeded" && credits.is_finite() {
                     polled["costActualUsd"] = usd(credits);
+                    polled["credits"] = js::number_json(credits);
                 }
                 polled
             }
@@ -714,22 +543,20 @@ impl Video {
                 .into(),
             );
         }
+        if ["succeeded", "failed", "cancelled"].contains(&job.status.as_str()) {
+            self.close_hold(&job, polled["credits"].as_f64()).await?;
+        }
         let out = Self::public(&job);
         self.jobs.put(&job.id.clone(), job);
         Ok(out)
     }
 
-    async fn cancel(
-        &self,
-        principal: &str,
-        id: Option<&JsonValue>,
-        vault: &Credentials,
-    ) -> Done<JsonValue> {
+    async fn cancel(&self, principal: &str, id: Option<&JsonValue>) -> Done<JsonValue> {
         let mut job = self.jobs.owned(&CODES, principal, id)?;
         if ["succeeded", "failed", "cancelled"].contains(&job.status.as_str()) {
             return Ok(Self::public(&job));
         }
-        let (adapter, key) = self.ready(&job, vault).await?;
+        let (adapter, key) = self.ready(&job)?;
         if let Adapter::Runway(runway) = adapter {
             let path = format!("/v1/tasks/{}", generation::component(&job.provider_job_id));
             runway
@@ -739,6 +566,7 @@ impl Video {
         job.status = "cancelled".into();
         job.error = Some("CANCELLED".into());
         job.completed_at = Some(now_ms());
+        self.close_hold(&job, None).await?;
         let out = Self::public(&job);
         self.jobs.put(&job.id.clone(), job);
         Ok(out)
@@ -750,7 +578,6 @@ impl Video {
         principal: &str,
         id: Option<&JsonValue>,
         index: f64,
-        vault: &Credentials,
     ) -> Done<JsonValue> {
         let mut job = self.jobs.owned(&CODES, principal, id)?;
         if job.status != "succeeded" {
@@ -769,7 +596,7 @@ impl Video {
         else {
             return Err(CODES.error("DOWNLOAD_FAILED"));
         };
-        let (adapter, _) = self.ready(&job, vault).await?;
+        let (adapter, _) = self.ready(&job)?;
         let (bytes, mime) = match adapter {
             Adapter::Mock(file) => (
                 tokio::fs::read(file)

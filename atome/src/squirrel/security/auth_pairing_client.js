@@ -8,7 +8,7 @@ import { backupDigest, createBackupKeyring } from './backup_keyring.js';
 const hex = (bytes) => Array.from(new Uint8Array(bytes), (value) => value.toString(16).padStart(2, '0')).join('');
 
 export function createPairingClient({ devices, approver, send, token, ensureSession, installSession, connectionProof = false,
-    storePurchase, crypto = globalThis.crypto, now = Date.now }) {
+    storePurchase, crypto = globalThis.crypto, now = Date.now, checkSession }) {
     const keyring = createBackupKeyring({ devices, crypto });
     async function request(action, fields = {}) {
         const result = await send({ type: 'auth', action, ...fields });
@@ -38,6 +38,7 @@ export function createPairingClient({ devices, approver, send, token, ensureSess
     async function accept(result, scope, approveRecord, deviceClass = 'personal') {
         const device = await devices.forScope(scope);
         if (!result?.token || !result.user?.id || result.session?.keyId !== device.keyId) throw new Error('auth_session_invalid');
+        checkSession?.(result);
         await devices.put('session', { scope, phone: result.user.phone || null, session: result.session, userId: result.user.id, deviceClass });
         if (approveRecord) await devices.put(`approve:${scope}`, approveRecord);
         await installSession(result, { scope });

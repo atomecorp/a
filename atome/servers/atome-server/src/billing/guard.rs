@@ -278,9 +278,15 @@ pub fn release(db: &Connection, reference: &str, now: i64) -> Result<(), String>
 /// A hold whose provider has accepted the order (a domain ordered at OVH): kept until the
 /// provider says it delivered or cancelled, however long that takes, never released by age.
 pub fn keep(db: &Connection, hold: &str) -> Result<(), String> {
+    keep_until(db, hold, i64::MAX)
+}
+
+/// A hold whose provider has accepted a job kept for a time (a generation, R-120): kept as long
+/// as the job, then given back if nobody fetched what it made.
+pub fn keep_until(db: &Connection, hold: &str, expires_ms: i64) -> Result<(), String> {
     db.execute(
         "UPDATE money_holds SET expires_ms = ? WHERE hold_ref = ? AND state = 'held'",
-        params![i64::MAX, hold],
+        params![expires_ms, hold],
     )
     .map(drop)
     .map_err(|e| e.to_string())

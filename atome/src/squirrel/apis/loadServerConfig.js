@@ -263,17 +263,15 @@ function readTauriFastifyOverride() {
     }
     return '';
 }
-function applyFastifyGlobalsFromHttpBase(httpBase, config = null) {
+function applyFastifyGlobalsFromHttpBase(httpBase, config = null, { validateOnly = false } = {}) {
     const base = resolveCanonicalFastifyHttpBase(httpBase);
     if (!base) return false;
     if (shouldBlockFastifyPrimaryOnLocalAxumPage()) {
-        clearFastifyRuntimeGlobals();
-        clearFastifyOverrideStorage();
+        if (!validateOnly) { clearFastifyRuntimeGlobals(); clearFastifyOverrideStorage(); }
         return false;
     }
     if (isCrossOriginLoopbackFastifyBaseForBrowser(base) && !canUseFastifyPrimaryOnLocalAxumPage()) {
-        clearFastifyRuntimeGlobals();
-        clearFastifyOverrideStorage();
+        if (!validateOnly) { clearFastifyRuntimeGlobals(); clearFastifyOverrideStorage(); }
         return false;
     }
     if (
@@ -281,9 +279,10 @@ function applyFastifyGlobalsFromHttpBase(httpBase, config = null) {
         || isDisallowedFastifyLoopbackPort(base, config)
         || isLikelyTauriLoopbackBase(base, config)
     ) {
-        clearFastifyOverrideStorage();
+        if (!validateOnly) clearFastifyOverrideStorage();
         return false;
     }
+    if (validateOnly) return true;
 
     window.__SQUIRREL_FASTIFY_URL__ = base;
 

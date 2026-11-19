@@ -6,12 +6,14 @@
 // on the same connection, and when it closes), its pending remote approvals and its voice sessions.
 // The dispatch itself is dispatch.rs; what it asks of the connection is `Link`.
 mod audio;
+mod audio_musicgpt;
 mod catalog;
 mod chat;
 mod chat_dispatch;
 mod credentials;
 mod dispatch;
 mod generation;
+mod generation_ledger;
 mod hosted;
 pub(crate) mod http;
 pub mod live_translate;
@@ -28,6 +30,7 @@ mod speech;
 mod strava;
 mod translate;
 mod video;
+mod video_runway;
 
 pub use dispatch::answer;
 pub use http::Done;
@@ -109,7 +112,7 @@ impl Providers {
             shared: shared_grant::SharedGrant::load(settings, central.clone()),
             model_router: model_router::ModelRouter::load(settings),
             everyone: Arc::default(),
-            audio: audio::Audio::load(settings),
+            audio: audio::Audio::load(settings, central.clone()),
             video: video::Video::load(settings, project_root, storage, central),
             music: music::Music::load(settings),
             strava: strava::Strava::load(settings, project_root, &social),
@@ -312,8 +315,11 @@ const SHARED_CREDIT_FAILURES: [&str; 4] = [
     "billing_not_active",
     "provider_http_402",
 ];
-const KNOWN_PREFIXES: [&str; 7] = [
+// `money_`: the ledger's refusal before a metered call (billing/guard.rs: no balance left, a
+// tester's budget spent), told as it is so the person hears why.
+const KNOWN_PREFIXES: [&str; 8] = [
     "provider_",
+    "money_",
     "social_",
     "not_authenticated",
     "no_ai_key_configured",

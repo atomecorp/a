@@ -181,3 +181,12 @@ Elle attend ton « vas-y » pour pousser, faire une build TestFlight, puis l'aud
 
 ## Q26 · Installer la nouvelle build sur ton iPhone (session `local_731f62e4-c840-4cd6-993c-f526184eee1b`) — ÉCARTÉ le 18 nov. (installation pour essai : l'utilisateur testera tout lui-même)
 La build Debug 1.59 (57) du 18 nov. est prête dans la DerivedData. Elle contient le renderer a12c97d09b401efe (grille des Créations, iPhone qui ne rame plus), l'audio-wasm (lecture à l'envers, warp) et la correction CarPlay. Tu as dit « laisse tomber l'installation iPhone pour le moment ». **Question :** dis « installe » quand ton iPhone est rebranché, et 731f l'installe.
+
+## Q27–Q31 · Dernière série (19 nov.) — RÉPONDU : « 1A, 2B, 3a-3, 3b oui, 3c les deux, 4B, 5A »
+- Données (R-202) : A, A, A (dernière tuile, outil Dossier, Suppr. → corbeille 30 j) ; pastille « partagé » : 3. Transmis à f41d (rouverte).
+- Q27 message discret dans un projet : A, dans le champ de la bande du projet (maquette 7), le champ s'ouvre sur téléphone. Transmis à f41d et ee16 (un seul propriétaire).
+- Q28 palette Template sur téléphone (R-236) : B, ranger les modèles autrement, maquette d'abord. Transmis à ee16 (rouverte).
+- Q29 inspecteur de cellule (R-199) : ADSR « forme » (maquette 3) ; enveloppe sur la forme d'onde quand l'inspecteur est ouvert ; Début/Fin et Ratchet tous les deux. Transmis à 2e6a (rouverte).
+- Q30 réglages mail des invitations : B, copie depuis `private/mail atome` (local, ignoré par git) vers prod et staging, sans afficher les valeurs. Transmis à dfe5 (rouverte).
+- Q31 message à l'équipe Atome dans Publier : A, il part tout de suite (comportement actuel gardé, rien à faire).
+- Reste à l'utilisateur : l'enregistrement DNS `sites` chez o2switch.

@@ -35,9 +35,8 @@ If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGEN
 
 4. **Historical "shadow user" creation** in server.js:
    - The implementation creates a Fastify user when a valid JWT names an absent principal.
-   - This is no longer an accepted account-linking contract. It must be removed and
-     replaced by the explicit provisioning flow in
-     `todo/cleanup_architecture/explicit_cross_runtime_account_provisioning.md`.
+   - The current Rust owner requires explicit account creation and guest adoption.
+     Release checks are tracked in the [architecture backlog](../cleanup_architecture/README.md#avant-la-prochaine-livraison).
    - The first-screen `Try` guest mode remains a separate supported local/private mode
      and must not create a Fastify shadow account.
 

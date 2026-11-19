@@ -33,12 +33,14 @@ export const runMoleculeEnduranceAcceptance = async ({ page, project, fixture, r
                     await clickMenuTarget(page, await visibleMenuTool(page, project.id, 'view'));
                     await clickMenuTarget(page, await visibleMenuTool(page, project.id, 'view_list'));
                 } else {
-                    const multitrack = await awaitBevyUiNodeTarget(page, { nodeId: 'atome_contextual_tool_container_multitrack', treeId: rail });
-                    assert(multitrack, 'endurance_multitrack_missing');
-                    await clickCanvasTarget(page, multitrack);
-                    const choice = await awaitBevyUiNodeTarget(page, {
-                        nodeId: `atome_contextual_tool_container_multitrack_multitrack_${mode}`, treeId: rail
-                    });
+                    // Multitrack opens the multitrack view used last (R-243); the views row then chooses among them.
+                    if (current !== 'timeline' && current !== 'mix') {
+                        const multitrack = await awaitBevyUiNodeTarget(page, { nodeId: 'atome_contextual_tool_container_multitrack', treeId: rail });
+                        assert(multitrack, 'endurance_multitrack_missing');
+                        await clickCanvasTarget(page, multitrack);
+                    }
+                    const row = current === 'mix' ? 'project_view_mix_row' : 'project_view_timeline_row';
+                    const choice = await awaitBevyUiNodeTarget(page, { nodeId: `${row}_multitrack_${mode}`, treeId: 'eve_bevy_ui_project_view' });
                     assert(choice, `endurance_view_choice_missing:${mode}`);
                     await clickCanvasTarget(page, choice);
                 }

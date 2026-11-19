@@ -1,17 +1,21 @@
 // The AI Audio Service (server/ai_audio/, ported): provider-neutral audio generation, the client
-// naming only canonical `audio.*` actions, the keys read from the person's vault. MusicGPT's names
-// (endpoints, payload fields, statuses) live in its adapter alone; the mock (`ATOME_AI_AUDIO_MOCK=1`,
-// probes only) renders a short sine arpeggio as a real WAV. Provider URLs stay here: a client
-// fetches an output's bytes through `audio.output`.
-use super::credentials::Credentials;
-use super::generation::{self, Codes, Jobs, Provider, now_ms, or_null, round, text};
+// naming only canonical `audio.*` actions. MusicGPT's names (endpoints, payload fields, statuses)
+// live in its adapter alone; the mock (`ATOME_AI_AUDIO_MOCK=1`, probes only) renders a short sine
+// arpeggio as a real WAV. Provider URLs stay here: a client fetches an output's bytes through
+// `audio.output`. MusicGPT runs on atome's key (`MUSICGPT_SHARED_KEY_FILE`, R-120): a dated amount
+// is reserved on the ledger before the call, the real cost it reports settled once the music is
+// made (generation_ledger.rs).
+use super::audio_musicgpt::{MusicGpt, conversion, dollars_cost};
+use super::generation::{self, Codes, Jobs, PlatformKeys, Provider, now_ms, or_null, round, text};
+use super::generation_ledger as ledger;
 use super::http::{self, Done};
 use crate::settings::Settings;
+use crate::vault_router::central::Central;
 use crate::vault_router::js;
 use base64::Engine;
 use serde_json::{Map as JsonMap, Value as JsonValue, json};
 
-pub const ERRORS: [&str; 13] = [
+pub const ERRORS: [&str; 12] = [
     "PROVIDER_UNAVAILABLE",
     "AUTH_ERROR",
     "QUOTA_EXCEEDED",
@@ -23,10 +27,9 @@ pub const ERRORS: [&str; 13] = [
     "TIMEOUT",
     "CANCELLED",
     "OUTPUT_UNAVAILABLE",
-    "NO_PROVIDER_KEY",
     "JOB_NOT_FOUND",
 ];
-const CODES: Codes = Codes {
+pub(super) const CODES: Codes = Codes {
     list: &ERRORS,
     fallback: "GENERATION_FAILED",
     capability: "CAPABILITY_UNAVAILABLE",
@@ -46,12 +49,6 @@ const CANONICAL_FIELDS: [&str; 13] = [
     "referenceMidi",
     "stemTargets",
 ];
-
-struct MusicGpt {
-    base_url: String,
-    version: String,
-    model: Option<String>,
-}
 
 enum Adapter {
     MusicGpt(MusicGpt),
@@ -117,6 +114,8 @@ struct Job {
     created_at: i64,
     completed_at: Option<i64>,
     error: Option<String>,
+    // The ledger's hold for this job, settled or given back when it ends (none for the mock).
+    hold: Option<String>,
 }
 
 impl generation::Job for Job {
@@ -234,129 +233,8 @@ fn mock_wav() -> Vec<u8> {
     out
 }
 
-impl MusicGpt {
-    async fn call(&self, path: &str, key: &str, body: Option<JsonValue>) -> Done<JsonValue> {
-        let address = format!("{}/{}/{path}", self.base_url, self.version);
-        let mut request = match &body {
-            Some(body) => http::client()
-                .post(address)
-                .header("Content-Type", "application/json")
-                .body(body.to_string()),
-            None => http::client().get(address),
-        };
-        request = request.header("Authorization", key);
-        let response = http::send(request)
-            .await
-            .map_err(|_| CODES.error("PROVIDER_UNAVAILABLE"))?;
-        // Provider messages are never forwarded: they may echo request data.
-        if !response.status().is_success() {
-            return Err(CODES.for_status(response.status().as_u16(), "GENERATION_FAILED"));
-        }
-        let bytes = http::bytes(response, usize::MAX)
-            .await
-            .map_err(|_| CODES.error("GENERATION_FAILED"))?;
-        serde_json::from_slice(&bytes).map_err(|_| CODES.error("GENERATION_FAILED"))
-    }
-
-    fn payload(&self, request: &JsonValue) -> (JsonValue, Vec<JsonValue>) {
-        let mut payload = JsonMap::new();
-        let mut put = |name: &str, value: &JsonValue| {
-            if js::truthy(Some(value)) {
-                payload.insert(name.into(), value.clone());
-            }
-        };
-        put("prompt", &request["prompt"]);
-        let style: Vec<String> = ["style", "instrument"]
-            .iter()
-            .filter(|f| !request[**f].is_null())
-            .map(|f| js::string(&request[*f]))
-            .collect();
-        put("music_style", &json!(style.join(", ")));
-        put("lyrics", &request["lyrics"]);
-        put("title", &request["title"]);
-        let instrumental = request["instrumental"] == json!(true)
-            && !(request["vocals"] == json!(true) && request["lyrics"].is_null());
-        payload.insert("make_instrumental".into(), json!(instrumental));
-        payload.insert("generate_album_cover".into(), json!(false));
-        let model = Some(request["model"].clone())
-            .filter(|m| !m.is_null())
-            .or_else(|| self.model.clone().map(JsonValue::from));
-        if self.version != "v1"
-            && let Some(model) = model
-        {
-            payload.insert("model".into(), model);
-        }
-        let mut warnings = Vec::new();
-        if !request["duration"].is_null() {
-            warnings.push(json!({ "field": "duration", "code": "CAPABILITY_UNAVAILABLE", "message": "duration is not controllable on this provider" }));
-        }
-        if !request["tempo"].is_null() {
-            warnings.push(json!({ "field": "tempo", "code": "IGNORED", "message": "tempo is only conveyed through the prompt" }));
-        }
-        if !request["key"].is_null() {
-            warnings.push(json!({ "field": "key", "code": "IGNORED", "message": "key is only conveyed through the prompt" }));
-        }
-        (JsonValue::Object(payload), warnings)
-    }
-}
-
-/// `fromMusicGPTConversion`: a conversion record as canonical outputs.
-fn conversion(record: &JsonValue) -> (String, Vec<JsonValue>, JsonValue) {
-    let wav_url = |url: &str| {
-        regex::Regex::new(r"(?i)\.wav(\?|$)")
-            .expect("pattern")
-            .is_match(url)
-    };
-    let mut outputs = Vec::new();
-    for n in [1, 2] {
-        let mp3 = record
-            .get(format!("conversion_path_{n}"))
-            .filter(|v| js::truthy(Some(v)));
-        let wav = record
-            .get(format!("conversion_path_wav_{n}"))
-            .filter(|v| js::truthy(Some(v)));
-        if mp3.is_none() && wav.is_none() {
-            continue;
-        }
-        let mut formats = JsonMap::new();
-        if let Some(wav) = wav {
-            formats.insert("wav".into(), wav.clone());
-        }
-        if let Some(mp3) = mp3 {
-            formats.insert("mp3".into(), mp3.clone());
-        }
-        outputs.push(json!({ "index": n - 1, "format": if wav.is_some() { "wav" } else { "mp3" }, "formats": formats,
-            "url": wav.or(mp3), "duration": positive_or_null(record.get(format!("conversion_duration_{n}"))),
-            "title": record.get(format!("title_{n}")).filter(|v| js::truthy(Some(v))) }));
-    }
-    if outputs.is_empty()
-        && let Some(url) = record.get("audio_url").filter(|v| js::truthy(Some(v)))
-    {
-        outputs.push(json!({ "index": 0, "format": if wav_url(&js::string(url)) { "wav" } else { "mp3" }, "formats": {},
-            "url": url, "duration": positive_or_null(record.get("conversion_duration")),
-            "title": record.get("title").filter(|v| js::truthy(Some(v))) }));
-    }
-    let status = match js::text(record.get("status").filter(|v| js::truthy(Some(v))))
-        .to_uppercase()
-        .as_str()
-    {
-        "IN_QUEUE" | "QUEUED" | "PENDING" => "queued",
-        "COMPLETED" => "completed",
-        "ERROR" | "FAILED" => "failed",
-        _ => "running",
-    };
-    (
-        status.into(),
-        outputs,
-        record
-            .get("conversion_cost")
-            .cloned()
-            .unwrap_or(JsonValue::Null),
-    )
-}
-
 /// `Number(value) || null`.
-fn positive_or_null(value: Option<&JsonValue>) -> JsonValue {
+pub(super) fn positive_or_null(value: Option<&JsonValue>) -> JsonValue {
     let number = value.map_or(f64::NAN, |v| js::number(Some(v)));
     if number == 0.0 || number.is_nan() {
         JsonValue::Null
@@ -368,11 +246,13 @@ fn positive_or_null(value: Option<&JsonValue>) -> JsonValue {
 /// The process's audio service: its providers in preference order, and the jobs.
 pub struct Audio {
     adapters: Vec<Adapter>,
+    keys: PlatformKeys,
     jobs: Jobs<Job>,
+    central: Central,
 }
 
 impl Audio {
-    pub fn load(settings: &Settings) -> Self {
+    pub fn load(settings: &Settings, central: Central) -> Self {
         let version = settings.get("MUSICGPT_API_VERSION").filter(|v| {
             v.len() > 1 && v.starts_with('v') && v[1..].bytes().all(|c| c.is_ascii_digit())
         });
@@ -391,7 +271,9 @@ impl Audio {
         }
         Self {
             adapters,
+            keys: PlatformKeys::load(settings, &[("musicgpt", "MUSICGPT_SHARED_KEY_FILE")]),
             jobs: Jobs::default(),
+            central,
         }
     }
 
@@ -402,32 +284,12 @@ impl Audio {
             .any(|adapter| adapter.credential() == Some(credential))
     }
 
-    /// `validateKey`: a lookup of an unknown task is a 4xx for a valid key, 401/403 for a refused one.
-    pub async fn validate_key(&self, credential: &str, key: &str) -> Done<()> {
-        for adapter in &self.adapters {
-            if let Adapter::MusicGpt(gpt) = adapter
-                && adapter.credential() == Some(credential)
-            {
-                let probe =
-                    "byId?conversionType=MUSIC_AI&task_id=00000000-0000-0000-0000-000000000000";
-                if let Err(failure) = gpt.call(probe, key, None).await
-                    && (failure.message == "AUTH_ERROR"
-                        || failure.message == "PROVIDER_UNAVAILABLE")
-                {
-                    return Err(failure);
-                }
-            }
-        }
-        Ok(())
-    }
-
     /// One `audio.*` action.
     pub async fn action(
         &self,
         action: &str,
         payload: &JsonValue,
         principal: &str,
-        vault: &Credentials,
     ) -> Done<JsonValue> {
         let input = payload
             .get("request")
@@ -435,7 +297,7 @@ impl Audio {
             .unwrap_or(payload);
         match action {
             "audio.providers" => {
-                Ok(json!({ "providers": generation::list(&self.adapters, vault).await? }))
+                Ok(json!({ "providers": generation::list(&self.adapters, &self.keys)? }))
             }
             "audio.capabilities" => {
                 let id = payload
@@ -445,8 +307,8 @@ impl Audio {
                     .unwrap_or_default();
                 generation::capabilities(&self.adapters, &CODES, &id)
             }
-            "audio.generate" => self.generate(principal, input, vault).await,
-            "audio.job" => self.job(principal, payload.get("job_id"), vault).await,
+            "audio.generate" => self.generate(principal, input).await,
+            "audio.job" => self.job(principal, payload.get("job_id")).await,
             "audio.output" => {
                 let format = payload
                     .get("format")
@@ -478,12 +340,7 @@ impl Audio {
             "warnings": job.warnings })
     }
 
-    async fn generate(
-        &self,
-        principal: &str,
-        input: &JsonValue,
-        vault: &Credentials,
-    ) -> Done<JsonValue> {
+    async fn generate(&self, principal: &str, input: &JsonValue) -> Done<JsonValue> {
         let request = normalize(input)?;
         let wanted = js::string(&request["provider"]);
         let (adapter, key, _reason) = generation::resolve(
@@ -491,11 +348,10 @@ impl Audio {
             &CODES,
             &wanted,
             &required(&request),
-            vault,
+            &self.keys,
             |_| Ok(None),
-        )
-        .await?;
-        let (provider_job_id, model, eta, cost, variants, warnings) = match adapter {
+        )?;
+        let (provider_job_id, model, eta, cost, variants, warnings, hold) = match adapter {
             Adapter::Mock => (
                 json!(format!("mock-{}", now_ms())),
                 json!("mock-sine"),
@@ -503,19 +359,37 @@ impl Audio {
                 json!({ "amount": 0, "unit": "credits" }),
                 json!([]),
                 Vec::new(),
+                None,
             ),
             Adapter::MusicGpt(gpt) => {
                 let (payload, mut warnings) = gpt.payload(&request);
-                let data = gpt
+                let reserved = crate::billing::pricing::generation_hold_usd_cents(adapter.id())?;
+                let reserved = crate::billing::pricing::usd_cents_micro_cents(reserved)?;
+                let hold = ledger::reserve(&self.central, principal, reserved).await?;
+                let accepted = gpt
                     .call(
                         "MusicAI",
                         key.as_deref().unwrap_or(""),
                         Some(payload.clone()),
                     )
-                    .await?;
-                if data.get("success") == Some(&json!(false)) || !js::truthy(data.get("task_id")) {
-                    return Err(CODES.error("GENERATION_FAILED"));
-                }
+                    .await
+                    .and_then(|data| {
+                        if data.get("success") == Some(&json!(false))
+                            || !js::truthy(data.get("task_id"))
+                        {
+                            Err(CODES.error("GENERATION_FAILED"))
+                        } else {
+                            Ok(data)
+                        }
+                    });
+                let data = match accepted {
+                    Ok(data) => data,
+                    Err(failure) => {
+                        ledger::release(&self.central, &hold).await?;
+                        return Err(failure);
+                    }
+                };
+                ledger::keep(&self.central, &hold).await?;
                 if js::truthy(data.get("is_flagged")) {
                     warnings.push(
                         json!({ "code": "FLAGGED", "message": "prompt flagged by provider" }),
@@ -539,6 +413,7 @@ impl Audio {
                     estimate,
                     json!(variants),
                     warnings,
+                    Some(hold),
                 )
             }
         };
@@ -560,18 +435,14 @@ impl Audio {
             created_at: now_ms(),
             completed_at: None,
             error: None,
+            hold,
         };
         let out = Self::public(&job);
         self.jobs.put(&job.id.clone(), job);
         Ok(out)
     }
 
-    async fn job(
-        &self,
-        principal: &str,
-        id: Option<&JsonValue>,
-        vault: &Credentials,
-    ) -> Done<JsonValue> {
+    async fn job(&self, principal: &str, id: Option<&JsonValue>) -> Done<JsonValue> {
         let mut job = self.jobs.owned(&CODES, principal, id)?;
         if job.status == "completed" || job.status == "failed" {
             return Ok(Self::public(&job));
@@ -579,9 +450,9 @@ impl Audio {
         let Some(adapter) = self.adapters.iter().find(|a| a.id() == job.provider) else {
             return Err(CODES.error("PROVIDER_UNAVAILABLE"));
         };
-        let key = generation::key_for(adapter, vault).await?;
+        let key = generation::key_for(adapter, &self.keys)?;
         if adapter.credential().is_some() && key.is_none() {
-            return Err(CODES.error("NO_PROVIDER_KEY"));
+            return Err(CODES.error("PROVIDER_UNAVAILABLE"));
         }
         let (status, outputs, cost, error) = match adapter {
             Adapter::Mock => (
@@ -633,12 +504,36 @@ impl Audio {
                     .unwrap_or_else(|| "GENERATION_FAILED".into()),
             );
         }
+        if job.status == "completed" || job.status == "failed" {
+            self.close_hold(&job).await?;
+        }
         let mut out = Self::public(&job);
         if job.status == "failed" {
             out["error"] = json!(job.error);
         }
         self.jobs.put(&job.id.clone(), job);
         Ok(out)
+    }
+
+    /// The job's money once it ends: the cost MusicGPT reports (else its estimate, else the dated
+    /// amount reserved) paid to it, or the hold given back.
+    async fn close_hold(&self, job: &Job) -> Done<()> {
+        let Some(hold) = &job.hold else {
+            return Ok(());
+        };
+        if job.status != "completed" {
+            return ledger::release(&self.central, hold).await;
+        }
+        let cost = match [&job.cost_actual, &job.cost_estimate]
+            .into_iter()
+            .find_map(|cost| cost["amount"].as_f64())
+        {
+            Some(dollars) => dollars_cost(dollars)?,
+            None => crate::billing::pricing::usd_cents_micro_cents(
+                crate::billing::pricing::generation_hold_usd_cents(job.provider)?,
+            )?,
+        };
+        ledger::settle(&self.central, hold, "audio.generate", job.provider, cost).await
     }
 
     /// One output downloaded here, so a client (an opaque iOS origin) never fetches a provider URL.

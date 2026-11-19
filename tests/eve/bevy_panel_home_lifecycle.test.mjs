@@ -8,7 +8,7 @@ import { homeSurface } from "../../eVe/intuition/runtime/bevy_panel/bevy_panel_h
 import { FastifyAdapter, TauriAdapter } from "../../atome/src/squirrel/apis/unified/adole.js";
 import { classifyRetryableMutationException, classifyRetryableMutationResult } from "../../eVe/intuition/tools/core/tool_registry_mutations.js";
 
-test('Home applies a validated server through the existing HTTP/WebSocket and reconnect owners', async () => {
+test('Home applies a validated server and detaches the previous transport before authentication', async () => {
     const previousWindow = globalThis.window;
     const calls = [];
     const records = new Map();
@@ -21,7 +21,8 @@ test('Home applies a validated server through the existing HTTP/WebSocket and re
         },
         localStorage: {
             getItem: (key) => records.get(String(key)) || null,
-            setItem: (key, value) => records.set(String(key), String(value))
+            setItem: (key, value) => records.set(String(key), String(value)),
+            removeItem: (key) => records.delete(String(key))
         },
         Squirrel: {
             SyncEngine: {
@@ -43,7 +44,7 @@ test('Home applies a validated server through the existing HTTP/WebSocket and re
         assert.equal(result.selected, 'https://server.example');
         assert.equal(globalThis.window.__SQUIRREL_FASTIFY_URL__, 'https://server.example');
         assert.match(globalThis.window.__SQUIRREL_FASTIFY_WS_API_URL__, /^wss:\/\/server\.example\//);
-        assert.deepEqual(calls, ['clear', 'disconnect', 'retry', 'remote-stop', 'remote-start:server-user']);
+        assert.deepEqual(calls, ['disconnect', 'remote-stop', 'clear']);
         assert.equal(records.get('squirrel_tauri_fastify_url_override'), 'https://server.example');
 
         globalThis.window.__SQUIRREL_FORCE_TAURI_RUNTIME__ = true;

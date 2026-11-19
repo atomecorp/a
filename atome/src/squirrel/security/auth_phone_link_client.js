@@ -7,7 +7,7 @@ const DEAD_SESSION_ERRORS = new Set(['auth_session_stale', 'auth_session_reused'
 // Owns proof exchange and persistent, non-bearer descriptors. Application session
 // projection and native local authorization remain the auth facade's owners.
 export function createPhoneLinkClient({ devices, send, installSession, storePurchase, locks = globalThis.navigator?.locks,
-    now = Date.now, onPending = () => {}, connectionProof = false }) {
+    now = Date.now, onPending = () => {}, connectionProof = false, checkSession }) {
     let serial = Promise.resolve();
     let confirmation = null;
     const exclusive = (work) => {
@@ -72,6 +72,7 @@ export function createPhoneLinkClient({ devices, send, installSession, storePurc
             phone = result.user.phone;
         }
         // Save no access token. A crash after this write can renew using the key.
+        checkSession?.(result);
         await devices.put('session', { phone, session: result.session, userId: result.user.id });
         if (attemptId) await devices.remove('attempt');
         await installSession(result, { attemptId });
@@ -241,6 +242,7 @@ export function createPhoneLinkClient({ devices, send, installSession, storePurc
                 const result = await request('session-renew', { ...fields, ...signed, ...(connectionProof ? { pop: true } : {}) });
                 if (!record.scope) return accept(result, record.phone);
                 if (!result.token || result.user?.id !== record.userId || result.session?.keyId !== device.keyId) throw new Error('auth_session_invalid');
+                checkSession?.(result);
                 await devices.put('session', { ...record, session: result.session });
                 await installSession(result, { scope: record.scope, renewal: true });
                 return result;

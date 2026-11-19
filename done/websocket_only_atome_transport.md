@@ -44,7 +44,7 @@ HTTP remains allowed only where request/response resource transfer is intrinsica
 ## Dependencies
 
 - The canonical `/ws/api` connection, authentication attachment, request-id correlation, and typed response routing must remain shared by Tauri and Fastify.
-- `/ws/sync` must remain a distinct authenticated, permission-scoped real-time notification channel according to `todo/cleanup_architecture/authenticated_permission_scoped_ws_sync.md`.
+- `/ws/sync` must remain a distinct authenticated, permission-scoped real-time notification channel. [Synchronization contract](../eVe/documentations/realtime_sync_architecture.md)
 - Durable mutations must continue through the append-only event helpers and database projection boundary.
 - Soft-delete, actor normalization, authorization, idempotency, sync emission, transactions, replay, and snapshot semantics must remain unchanged.
 - Binary resource transfer exceptions must remain explicitly separated from Atome business operations.
@@ -73,7 +73,7 @@ HTTP remains allowed only where request/response resource transfer is intrinsica
 - Disconnect, reconnect, authentication expiry, duplicate request, timeout, authorization failure, and offline queue behavior return deterministic typed results.
 - HTTP Atome business routes are removed or made unavailable to application clients, with no silent fallback.
 - Static/config/health and binary media/file transport exceptions are documented and mechanically distinguished from Atome business operations.
-- `/ws/sync` satisfies every exit criterion in `todo/cleanup_architecture/authenticated_permission_scoped_ws_sync.md`; no anonymous or globally broadcast application event remains.
+- `/ws/sync` admits authenticated principals and dispatches application events according to their current rights. [Release acceptance checks](../todo/cleanup_architecture/README.md#avant-la-prochaine-livraison)
 
 ## Required validation
 

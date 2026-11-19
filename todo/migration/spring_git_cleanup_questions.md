@@ -6,7 +6,7 @@ This file preserves documentary arbitration provenance. [execution_order.md](../
 
 User decision, 2026-10-13: **retain the recent flow; archive the former unconditional cookie requirement**. Keep SMS/device-proof authentication and access tokens in memory, with device-key-bound resumption. The optional password/SMS choice previously approved for an already verified account is unchanged.
 
-Older source: [secure_auth_token_storage.md](../cleanup_architecture/secure_auth_token_storage.md), now updated, formerly prescribed:
+The former token-storage task prescribed the following. The implementation is now recorded in the [session-storage contract](../../atome/documentations/security_architecture.md#session-storage-and-server-changes).
 
 > Browser authentication uses HttpOnly secure cookies and server-side refresh sessions.
 

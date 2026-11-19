@@ -129,14 +129,13 @@ export const listAiModelProviders = () => AI_MODEL_PROVIDER_LIST.map((entry) => 
 // Providers that only need a key (no chat/completion role). They never enter the
 // chat registry above, so conversation routing and model refresh ignore them.
 // `server_vault` keys are stored by the server and never read back by the UI.
+// The music services only: the Spotify application Client ID and the Deezer profile ID. Runway's video and
+// MusicGPT's music run on atome's own keys on the server, billed on the ledger (R-120, 19 Nov. 2026).
 export const AI_SERVICE_KEY_PROVIDERS = freeze([
-    freeze({ id: 'musicgpt', label: 'MusicGPT', kind: 'audio', after: 'openai', docs_url: 'https://docs.musicgpt.com' }),
-    freeze({ id: 'runway', label: 'Runway', kind: 'video', after: 'musicgpt', docs_url: 'https://docs.dev.runwayml.com' }),
-    // Music services: the Spotify application Client ID and the Deezer profile ID.
-    freeze({ id: 'spotify', label: 'Spotify', kind: 'music', after: 'runway' }),
+    freeze({ id: 'spotify', label: 'Spotify', kind: 'music', after: 'openai' }),
     freeze({ id: 'deezer', label: 'Deezer', kind: 'music', after: 'spotify' })
 ]);
-export const SERVER_VAULT_AI_PROVIDERS = freeze(['openai', 'musicgpt', 'runway', 'spotify', 'deezer']);
+export const SERVER_VAULT_AI_PROVIDERS = freeze(['openai', 'spotify', 'deezer']);
 export const isServerVaultAiProvider = (providerId) => SERVER_VAULT_AI_PROVIDERS.includes(String(providerId || '').trim().toLowerCase());
 
 /** Every provider the key panel lists, in display order (service providers right after their anchor). */
@@ -145,7 +144,7 @@ export const listAiKeyProviders = () => {
     const decorate = (entry, kind) => ({ ...clone(entry), kind, server_vault: isServerVaultAiProvider(entry.id) });
     AI_MODEL_PROVIDER_LIST.forEach((entry) => {
         out.push(decorate(entry, 'chat'));
-        // Service providers chain after their anchor (openai → musicgpt → runway).
+        // Service providers chain after their anchor (openai → spotify → deezer).
         const appendAfter = (anchor) => AI_SERVICE_KEY_PROVIDERS.filter((service) => service.after === anchor).forEach((service) => {
             out.push(decorate({ id: service.id, label: service.label, models: [] }, service.kind));
             appendAfter(service.id);

@@ -5,6 +5,7 @@
 //  Created by jeezs on 26/04/2022.
 //
 
+import OSLog
 import SwiftUI
 import WebKit
 
@@ -16,6 +17,8 @@ final class FullscreenWebViewController: UIViewController {
     private let bootStatusLabel = UILabel()
     private let bootRetryButton = UIButton(type: .system)
     private let bootRestoreGauge = BootRestoreGauge()
+    /// iOS 27: kept for as long as the page's window lives; dropping it unregisters the connected screen.
+    private var externalDisplayRegistration: AnyObject?
 
     override func loadView() {
         WebViewManager.markBootMilestone("view_load_started")
@@ -51,6 +54,26 @@ final class FullscreenWebViewController: UIViewController {
         view.insetsLayoutMarginsFromSafeArea = true
         AppPageHost.shared.start(windowless: false)
         injectFullscreenFixJS()
+        registerExternalDisplay()
+    }
+
+    /// A connected screen (R-212). From iOS 27 the Info.plist role alone no longer gives the app the screen's
+    /// scene: without this registration iOS mirrors the device with black bands. The system then connects
+    /// ExternalDisplaySceneDelegate itself; before iOS 27 the Info.plist role still does it.
+    private func registerExternalDisplay() {
+        guard #available(iOS 27.0, *), externalDisplayRegistration == nil else { return }
+        let configuration = UISceneConfiguration(
+            name: "External Display",
+            sessionRole: .windowExternalDisplayNonInteractive
+        )
+        configuration.delegateClass = ExternalDisplaySceneDelegate.self
+        let registration = registerSceneAccessory(.externalNonInteractive(sceneConfiguration: configuration))
+        externalDisplayRegistration = registration
+        // registerSceneAccessory has no failure path; what iOS says about it is logged, so a screen still
+        // mirrored can be read in the device's log (subsystem "atome", category "ExternalDisplay").
+        Logger(subsystem: "atome", category: "ExternalDisplay").notice(
+            "external display accessory registered, available: \(registration.isAvailable), enabled: \(registration.isEnabled)"
+        )
     }
 
     override func viewDidAppear(_ animated: Bool) {

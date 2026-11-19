@@ -217,17 +217,11 @@ async fn run<L: Link>(
         return Ok(json!({ "data": data }));
     }
     if action.starts_with("video.") {
-        let data = providers
-            .video
-            .action(action, &payload, principal, &vault)
-            .await?;
+        let data = providers.video.action(action, &payload, principal).await?;
         return Ok(json!({ "data": data }));
     }
     if action.starts_with("audio.") {
-        let data = providers
-            .audio
-            .action(action, &payload, principal, &vault)
-            .await?;
+        let data = providers.audio.action(action, &payload, principal).await?;
         return Ok(json!({ "data": data }));
     }
     let nothing = json!({});
@@ -357,8 +351,10 @@ async fn run<L: Link>(
     Ok(json!({ "data": data }))
 }
 
-/// A key of another provider than OpenAI (audio, video, music): its status, removal or check
-/// with that provider before it is sealed.
+/// A key of another provider than OpenAI: a music account's (Spotify, Deezer) status, removal or
+/// check with that provider before it is sealed. Runway and MusicGPT run on atome's keys (R-120):
+/// a person's own key for them is no longer taken; one stored earlier stays in their vault, unused,
+/// and can still be removed.
 async fn other_credential<L: Link>(
     providers: &Providers,
     link: &L,
@@ -375,6 +371,10 @@ async fn other_credential<L: Link>(
         return Err("provider_not_supported".into());
     }
     match action {
+        // Whether atome's own key is there is `video.providers` / `audio.providers`.
+        "credential.status" | "credential.store" if audio || video => {
+            Err("provider_operation_not_allowed".into())
+        }
         "credential.status" => {
             let configured = vault
                 .read(provider)
@@ -397,13 +397,7 @@ async fn other_credential<L: Link>(
             {
                 return Err("provider_key_invalid".into());
             }
-            if audio {
-                providers.audio.validate_key(provider, &candidate).await?;
-            } else if video {
-                providers.video.validate_key(provider, &candidate).await?;
-            } else {
-                music::Music::validate_key(provider, &candidate).await?;
-            }
+            music::Music::validate_key(provider, &candidate).await?;
             link.check(principal).await?;
             Ok(vault.store(provider, &candidate).await?)
         }

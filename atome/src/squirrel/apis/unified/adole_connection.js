@@ -235,6 +235,13 @@ function generateClientId() {
  */
 const tokenMemory = new Map();
 
+export function purgeLegacyAuthStorage(local = globalThis.localStorage, session = globalThis.sessionStorage) {
+    for (const storage of [local, session]) {
+        for (const key of ['auth_token', CONFIG.TAURI_TOKEN_KEY, CONFIG.FASTIFY_TOKEN_KEY,
+            'fastify_login_cache_v1', 'squirrel_sync_environment_tokens_v1']) storage?.removeItem(key);
+    }
+}
+
 function clearPreviousFastifyTokenStorage(local = globalThis.localStorage, session = globalThis.sessionStorage) {
     local?.removeItem?.('auth_token');
     session?.removeItem?.('auth_token');

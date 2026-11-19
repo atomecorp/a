@@ -12,6 +12,7 @@ const configureTauriRemoteSync = async () => {
     if (!isTauriRuntime()) return { ok: true, reason: 'not_tauri_runtime' };
     const remoteToken = FastifyAdapter?.getToken?.();
     const localToken = TauriAdapter?.getToken?.();
+    const remoteUrl = String(getFastifyHttpBaseUrl() || '').trim().replace(/\/+$/, '');
     if (!remoteToken || !localToken) {
         return { ok: false, reason: 'sync_identity_token_missing' };
     }
@@ -24,7 +25,8 @@ const configureTauriRemoteSync = async () => {
     if (!localSession?.ok || !remoteSession?.ok || !localUserId || !remoteUserId) {
         return { ok: false, reason: 'sync_identity_principal_missing' };
     }
-    const remoteUrl = String(getFastifyHttpBaseUrl() || '').trim().replace(/\/+$/, '');
+    if (remoteToken !== FastifyAdapter.getToken() || localToken !== TauriAdapter.getToken()
+        || remoteUrl !== getFastifyHttpBaseUrl()) return { ok: false, reason: 'sync_identity_changed' };
     if (!/^https?:\/\//i.test(remoteUrl)) {
         return { ok: false, reason: 'sync_remote_url_missing' };
     }
@@ -61,6 +63,12 @@ let configuredSessions = '';
 let configuredResult = null;
 let configuring = null;
 
+export async function settleRemoteSyncConfiguration() {
+    await configuring?.task.catch(() => {});
+    configuredSessions = '';
+    configuredResult = null;
+}
+
 export async function ensureFastifyToken() {
     try {
         await ensureLocalSession();
@@ -82,7 +90,7 @@ export async function ensureFastifyToken() {
         return await configuring.task;
     } catch (error) {
         configuredSessions = ''; configuredResult = null;
-        FastifyAdapter.clearToken();
+        if (error?.message !== 'sync_environment_busy') FastifyAdapter.clearToken();
         return { ok: false, reason: error?.message || 'remote_session_unavailable' };
     }
 }

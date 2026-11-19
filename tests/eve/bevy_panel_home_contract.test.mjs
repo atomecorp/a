@@ -37,7 +37,7 @@ const baseState = (overrides = {}) => ({
         'settings.security': true,
         'settings.privacy': true,
         'passkeys.passwords': true,
-        'passkeys.keys': true,
+        'passkeys.music': true,
         'preferences.visual': true,
         'preferences.language': true,
         'preferences.communication': true,
@@ -127,7 +127,6 @@ test('Home is the card of the current user with a collapsed Settings accordion b
         'home_profile_passions_accordion',
         'home_profile_experiences_accordion',
         'home_passwords_accordion',
-        'home_ai_keys_accordion',
         'home_preferences_visual_accordion',
         'home_preferences_language_accordion',
         'home_preferences_communication_accordion',
@@ -275,12 +274,14 @@ test('Home refuses public access without a name and restores the last public dis
     assert.equal(persisted, 1);
 });
 
-test('Passwords and keys expose direct AI provider settings without a vault unlock screen', () => {
-    const providers = ['openai', 'anthropic', 'mistral', 'google', 'deepseek'].map((id) => ({
+// Every AI key is atome's own on the server (R-120): the keys left are the music services'.
+test('Passwords and keys expose the music services’ keys without a vault unlock screen', () => {
+    const providers = ['spotify', 'deezer'].map((id) => ({
         id,
         label: id,
-        models: [`${id}-model`],
-        configured: id === 'openai'
+        kind: 'music',
+        models: [],
+        configured: id === 'spotify'
     }));
     const state = baseState({
         expanded: 'settings',
@@ -301,13 +302,14 @@ test('Passwords and keys expose direct AI provider settings without a vault unlo
     providers.forEach(({ id }) => {
         // The key receipt and catalog verification are visible beside the provider settings.
         assert.deepEqual(all.find((entry) => entry.id === `home_key_${id}`).children.map((entry) => entry.id),
-            [`home_key_${id}_title`, `home_key_${id}_api`, `home_key_${id}_status`, `home_key_${id}_catalog_status`, `home_key_${id}_model`], id);
+            [`home_key_${id}_title`, `home_key_${id}_api`, `home_key_${id}_status`], id);
     });
     assert.equal(all.some((entry) => entry.id === 'home_ai_budget'), false);
-    const providerRows = all.find((entry) => entry.id === 'home_provider_keys').children;
+    const providerRows = all.find((entry) => entry.id === 'home_music_keys').children;
     assert.deepEqual(providerRows.map((entry) => entry.kind === 'divider' ? '|' : entry.id),
         providers.flatMap(({ id }, index) => index ? ['|', `home_key_${id}`] : [`home_key_${id}`]));
-    assert.ok(all.some((entry) => entry.id === 'home_ai_keys_accordion'));
+    assert.ok(all.some((entry) => entry.id === 'home_music_keys_accordion'));
+    assert.equal(all.some((entry) => entry.id === 'home_ai_keys_accordion'), false);
     assert.equal(all.some((entry) => /home_vault_|locked_notice/i.test(entry.id || '')), false);
 });
 
@@ -501,17 +503,17 @@ test('Home opening geometry follows handedness, rests above the ribbon and fills
 
 test('stored provider keys show a fixed mask and a durable receipt; unavailable status is distinct from a missing key', () => {
     const render = provider => flatten(buildHomeContent(baseState({ expanded: 'settings', vault: {
-        credentials: [], providers: [{ id: 'openai', label: 'OpenAI', models: [], ...provider }] }
+        credentials: [], providers: [{ id: 'spotify', label: 'Spotify', kind: 'music', models: [], ...provider }] }
     }), { emit() {}, bodyWidth: 452, editing }));
     const saved = render({ configured: true });
-    const field = saved.find(node => node.id === 'home_key_openai_api_input');
+    const field = saved.find(node => node.id === 'home_key_spotify_api_input');
     assert.ok(JSON.stringify(field).includes('••••••••'));
-    assert.equal(editing.displayValue('security.aiKeys.openai'), '');
+    assert.equal(editing.displayValue('security.aiKeys.spotify'), '');
     const unknown = render({ configured: null, error: 'provider_connection_failed' });
     assert.equal(JSON.stringify(unknown).includes('••••••••'), false);
-    assert.match(JSON.stringify(unknown.find(node => node.id === 'home_key_openai_api_input')), /Status unavailable|Statut indisponible/);
-    assert.match(JSON.stringify(saved.find(node => node.id === 'home_key_openai_status')), /Key saved|Clé enregistrée/);
-    assert.match(JSON.stringify(unknown.find(node => node.id === 'home_key_openai_status')), /unavailable|indisponible/);
+    assert.match(JSON.stringify(unknown.find(node => node.id === 'home_key_spotify_api_input')), /Status unavailable|Statut indisponible/);
+    assert.match(JSON.stringify(saved.find(node => node.id === 'home_key_spotify_status')), /Key saved|Clé enregistrée/);
+    assert.match(JSON.stringify(unknown.find(node => node.id === 'home_key_spotify_status')), /unavailable|indisponible/);
 });
 
 test('Home keeps all section headers available while the profile is pending or timed out', () => {
@@ -543,12 +545,12 @@ test('choosing the model of a configured chat provider makes it the active one',
 
 test('a Home section request lands the card there before the profile answer', () => {
     homeSurface.onOpen({ context: { section: 'settings', subsection: 'settings.passkeys',
-        revealNodeId: 'home_ai_keys_accordion' }, refresh: () => {} });
+        revealNodeId: 'home_music_keys_accordion' }, refresh: () => {} });
     const snapshot = readHomePanelState();
     assert.equal(snapshot.expanded, 'settings');
     assert.equal(snapshot.subsections['settings.passkeys'], true);
     assert.equal(snapshot.subsections['settings.preferences'], false);
-    assert.equal(snapshot.subsections['passkeys.keys'], true);
+    assert.equal(snapshot.subsections['passkeys.music'], true);
 });
 
 

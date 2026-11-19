@@ -128,7 +128,7 @@ test('the project ground rail holds no Photo, Colorer nor Multipiste and keeps i
     for (const level of ['beginner', 'advanced']) {
         const keys = projectRailKeys(level);
         assert.ok(!keys.some(key => ['couleur', 'photo', 'multitrack'].includes(key)), `the ${level} ground rail shows neither Photo, Colorer nor Multipiste`);
-        for (const key of ['project_templates', 'select_all', 'view_zoom', 'view_zoom_reset', 'view_fit', 'info', 'import', 'activity']) {
+        for (const key of ['project_templates', 'select_all', 'view_visual', 'info', 'import', 'activity']) {
             assert.ok(keys.includes(key), `the ${level} ground rail keeps ${key}`);
         }
     }

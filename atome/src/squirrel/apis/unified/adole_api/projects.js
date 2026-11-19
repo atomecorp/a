@@ -1,5 +1,5 @@
 import { generateUUID } from '../adole.js';
-import { getSessionState, setCurrentProjectCache, getCurrentProjectCache, clearCurrentProjectCache, updateWindowProject } from './session.js';
+import { getSessionState, setCurrentProjectCache, getCurrentProjectCache, updateWindowProject } from './session.js';
 import { list_atomes, create_atome, delete_atomes, get_atome } from './atomes.js';
 import { resolveAtomeId, resolveAtomeParentId, resolveAtomeProjectId } from './atome_record_projection.js';
 import { with_callback, getCurrentUserId, isLoggedOut } from './activities_support.js';
@@ -156,6 +156,33 @@ async function project_content(projectId) {
     return { ok: true, records: order.reverse() };
 }
 
+// The projects held by `projectId` (a Données folder's subfolders, a project imported into an open one: R-202 Q14/Q17), at
+// every depth: each is its own scope (`project_id` its own id), held by its canonical parent (`meta.parent_id`), so its
+// project's content listing never names it. Deepest first, as their content goes before them.
+async function held_projects(projectId) {
+    const listed = await list_atomes({ type: 'project', limit: PROJECT_CONTENT_LIMIT });
+    const side = listed?.meta?.source === 'tauri' ? 'tauri' : 'fastify';
+    if (listed?.[side]?.error) return { ok: false, error: listed[side].error };
+    const parentOf = new Map((listed[side].atomes || []).map(record => [String(resolveAtomeId(record) || ''), String(resolveAtomeParentId(record) || '')]));
+    const depthOf = (id) => { let depth = 0; for (let at = parentOf.get(id); at; at = parentOf.get(at)) { if (at === projectId) return depth + 1; depth += 1; } return 0; };
+    const held = [...parentOf.keys()].map(id => ({ id, depth: id && id !== projectId ? depthOf(id) : 0 })).filter(entry => entry.depth > 0);
+    return { ok: true, ids: held.sort((a, b) => b.depth - a.depth).map(entry => entry.id) };
+}
+
+// Everything deleted with a project, the project last: each held project's content then that project, deepest first,
+// then the project's own content (D36: deleting a project deletes its content; R-202: a folder goes with all it holds).
+async function project_deletion(projectId) {
+    const nested = await held_projects(projectId);
+    if (!nested.ok) return nested;
+    const records = [];
+    for (const id of [...nested.ids, projectId]) {
+        const content = await project_content(id);
+        if (!content.ok) return content;
+        records.push(...content.records, ...(id === projectId ? [] : [{ id, type: 'project', project: id, parent: '' }]));
+    }
+    return { ok: true, records };
+}
+
 export async function delete_project(projectId, callback) {
     if (!projectId) {
         const error = 'Missing project id.';
@@ -165,7 +192,7 @@ export async function delete_project(projectId, callback) {
         }, callback);
     }
 
-    const content = await project_content(String(projectId));
+    const content = await project_deletion(String(projectId));
     if (!content.ok) {
         const error = `project_content_unreadable:${content.error}`;
         return with_callback({ tauri: { success: false, error }, fastify: { success: false, error } }, callback);

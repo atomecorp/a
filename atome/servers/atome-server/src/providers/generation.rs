@@ -1,15 +1,46 @@
 // What the provider-neutral generation services share (server/ai_generation/core.js, ported): the
 // domain's closed list of codes, the provider registry with its capability-based `auto` routing
 // (registration order is the preference), per-person jobs kept a day, and the HTTP status read as
-// a code. Each domain (audio.rs, video.rs) keeps its own request, job and vocabulary.
-use super::credentials::Credentials;
+// a code. Each domain (audio.rs, video.rs) keeps its own request, job and vocabulary. The keys are
+// the platform's (R-120): a generation is atome's service, paid on the ledger (generation_ledger.rs),
+// never on a person's own key.
 use super::http::{Done, Failure};
+use crate::settings::Settings;
 use crate::vault_router::js;
 use serde_json::{Value as JsonValue, json};
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Mutex;
 
-const JOB_TTL_MS: i64 = 24 * 3600 * 1000;
+pub const JOB_TTL_MS: i64 = 24 * 3600 * 1000;
+
+/// A generation service's platform keys: each provider's key file (`<ID>_SHARED_KEY_FILE`), read
+/// when used, never returned, logged or stored. A provider without one is unavailable.
+pub struct PlatformKeys(Vec<(&'static str, PathBuf)>);
+
+impl PlatformKeys {
+    /// `files`: each credential and the setting naming its key file.
+    pub fn load(settings: &Settings, files: &[(&'static str, &str)]) -> Self {
+        Self(
+            files
+                .iter()
+                .filter_map(|(credential, setting)| {
+                    settings
+                        .get(setting)
+                        .filter(|file| !file.is_empty())
+                        .map(|file| (*credential, PathBuf::from(file)))
+                })
+                .collect(),
+        )
+    }
+
+    fn read(&self, credential: &str) -> Done<Option<String>> {
+        match self.0.iter().find(|(name, _)| *name == credential) {
+            Some((_, file)) => Ok(Some(super::shared_grant::read_key_file(file)?)),
+            None => Ok(None),
+        }
+    }
+}
 
 pub fn now_ms() -> i64 {
     atome_js_values::dates::now_ms()
@@ -85,10 +116,10 @@ pub trait Provider {
     fn models(&self) -> Option<JsonValue>;
 }
 
-/// The provider's key from the person's vault, none when it needs none.
-pub async fn key_for(provider: &impl Provider, vault: &Credentials) -> Done<Option<String>> {
+/// The provider's platform key, none when it needs none or has none.
+pub fn key_for(provider: &impl Provider, keys: &PlatformKeys) -> Done<Option<String>> {
     match provider.credential() {
-        Some(credential) => Ok(vault.read(credential).await?.filter(|key| !key.is_empty())),
+        Some(credential) => keys.read(credential),
         None => Ok(None),
     }
 }
@@ -103,12 +134,11 @@ fn describe(provider: &impl Provider, configured: JsonValue) -> JsonValue {
     out
 }
 
-/// Every provider, with whether the person can use it.
-pub async fn list(providers: &[impl Provider], vault: &Credentials) -> Done<JsonValue> {
+/// Every provider, with whether its platform key is there.
+pub fn list(providers: &[impl Provider], keys: &PlatformKeys) -> Done<JsonValue> {
     let mut out = Vec::new();
     for provider in providers {
-        let configured =
-            provider.credential().is_none() || key_for(provider, vault).await?.is_some();
+        let configured = provider.credential().is_none() || key_for(provider, keys)?.is_some();
         out.push(describe(provider, json!(configured)));
     }
     Ok(json!(out))
@@ -131,13 +161,14 @@ fn supports(provider: &impl Provider, required: &[&str]) -> bool {
 }
 
 /// The chosen provider, its key and why: the one named, or under `auto` the first with every
-/// required capability, a key, and `accept`'s consent.
-pub async fn resolve<'a, P: Provider>(
+/// required capability, a platform key, and `accept`'s consent. A provider whose key is absent is
+/// unavailable (`PROVIDER_UNAVAILABLE`).
+pub fn resolve<'a, P: Provider>(
     providers: &'a [P],
     codes: &Codes,
     wanted: &str,
     required: &[&str],
-    vault: &Credentials,
+    keys: &PlatformKeys,
     accept: impl Fn(&P) -> Done<Option<&'static str>>,
 ) -> Done<(&'a P, Option<String>, String)> {
     if !wanted.is_empty() && wanted != "auto" {
@@ -147,9 +178,9 @@ pub async fn resolve<'a, P: Provider>(
         if !supports(provider, required) {
             return Err(codes.error(codes.capability));
         }
-        let key = key_for(provider, vault).await?;
+        let key = key_for(provider, keys)?;
         if provider.credential().is_some() && key.is_none() {
-            return Err(codes.error("NO_PROVIDER_KEY"));
+            return Err(codes.error("PROVIDER_UNAVAILABLE"));
         }
         if let Some(verdict) = accept(provider)? {
             return Err(codes.error(verdict));
@@ -163,7 +194,7 @@ pub async fn resolve<'a, P: Provider>(
             continue;
         }
         capable = true;
-        let key = key_for(provider, vault).await?;
+        let key = key_for(provider, keys)?;
         if provider.credential().is_some() && key.is_none() {
             continue;
         }
@@ -178,7 +209,7 @@ pub async fn resolve<'a, P: Provider>(
         ));
     }
     Err(codes.error(rejection.unwrap_or(if capable {
-        "NO_PROVIDER_KEY"
+        "PROVIDER_UNAVAILABLE"
     } else {
         codes.capability
     })))

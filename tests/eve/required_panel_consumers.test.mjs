@@ -37,17 +37,16 @@ test('the registered Home action forwards its field and source while already lat
         source: { type: 'assistant_ai_settings' } }));
 });
 
-for (const [projectId, error, providerId] of [['', 'ai_generator_project_missing', 'openai'],
-    ['project', 'NO_PROVIDER_KEY', 'runway'], ['project', 'not_authenticated', 'musicgpt']]) {
+for (const [projectId, error] of [['', 'ai_generator_project_missing'], ['project', 'not_authenticated']]) {
     test('generator prerequisite keeps the prompt and navigates without a reply: ' + error, async () => {
         const navigate = vi.fn(async () => ({ ok: true })), run = vi.fn(async () => { throw new Error(error); });
         const dock = { open: async () => {}, blur() {}, refresh() {} };
-        const runtime = createGenerativeSlotRuntime({ id: 'fixture', kind: 'video', providerId,
+        const runtime = createGenerativeSlotRuntime({ id: 'fixture', kind: 'video',
             run, resolveProjectId: () => projectId, openSettings: navigate, dockFactory: () => dock,
             requestFrame: () => 1, translate: key => key, env: {} });
         await runtime.open();
         expect(await runtime.sendText('Keep this prompt')).toEqual({ ok: false, error }); await flush();
-        expect(navigate).toHaveBeenCalledOnce(); expect(navigate.mock.calls[0][0]).toMatchObject({ error, providerId });
+        expect(navigate).toHaveBeenCalledOnce(); expect(navigate.mock.calls[0][0]).toMatchObject({ error });
         const turns = runtime.getState().conversation.turns;
         expect(turns.at(-1)).toEqual({ role: 'user', text: 'Keep this prompt' });
         expect(turns.filter(turn => turn.role === 'assistant')).toHaveLength(1);
@@ -56,9 +55,23 @@ for (const [projectId, error, providerId] of [['', 'ai_generator_project_missing
     });
 }
 
+// Runway and MusicGPT run on atome's keys (R-120, 19 Nov.): a key or availability error is said, never a link.
+for (const error of ['invalid_api_key', 'PROVIDER_UNAVAILABLE', 'money_insufficient_balance'])
+test('a generator service error is said in the conversation without navigating: ' + error, async () => {
+    const navigate = vi.fn(async () => ({ ok: true }));
+    const runtime = createGenerativeSlotRuntime({ id: 'fixture', kind: 'video', errorPrefix: 'fixture.error',
+        run: async () => { throw new Error(error); }, resolveProjectId: () => 'project', openSettings: navigate,
+        dockFactory: () => ({ open: async () => {}, blur() {}, refresh() {} }), requestFrame: () => 1,
+        translate: (key, fallback) => fallback ?? key, env: {} });
+    await runtime.open();
+    expect(await runtime.sendText('A prompt')).toEqual({ ok: false, error }); await flush();
+    expect(navigate).not.toHaveBeenCalled();
+    expect(runtime.getState().conversation.turns.at(-1)).toMatchObject({ role: 'assistant' });
+});
+
 test('a late generator rejection after close does not navigate', async () => {
     const job = deferred(), navigate = vi.fn(); const frames = [];
-    const runtime = createGenerativeSlotRuntime({ id: 'fixture', kind: 'audio', run: async () => { await job.promise; throw new Error('NO_PROVIDER_KEY'); },
+    const runtime = createGenerativeSlotRuntime({ id: 'fixture', kind: 'audio', run: async () => { await job.promise; throw new Error('not_authenticated'); },
         resolveProjectId: () => 'project', openSettings: navigate, dockFactory: () => ({ open: async () => {}, blur() {}, refresh() {}, close: async () => {} }),
         requestFrame: frame => { frames.push(frame); return frames.length; }, renderScene: async () => {}, clearScene: async () => {}, now: () => 0, env: {} });
     await runtime.open(); const pending = runtime.sendText('Prompt'); await flush();

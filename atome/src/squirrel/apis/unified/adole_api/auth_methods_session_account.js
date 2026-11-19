@@ -2,6 +2,7 @@
 // `auth` is imported from the entry (circular, read at call-time) so detached re-exports
 // (AdoleAPI.auth.*) keep resolving cross-method calls against the composed facade.
 import { TauriAdapter, FastifyAdapter } from '../adole.js';
+import { purgeLegacyAuthStorage } from '../adole_connection.js';
 import {
     getSessionState,
     setSessionState,
@@ -92,10 +93,7 @@ export const sessionAccountMethods = {
 
     async tryAutoLogin() {
         // Plaintext credentials from previous releases are removed, never reused.
-        for (const key of ['fastify_login_cache_v1', 'auth_token', 'local_auth_token', 'cloud_auth_token']) {
-            globalThis.localStorage?.removeItem(key);
-            globalThis.sessionStorage?.removeItem(key);
-        }
+        purgeLegacyAuthStorage();
         const stored = loadSessionState();
         let restored = { authenticated: false };
         let localError;

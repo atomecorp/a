@@ -30,8 +30,11 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 /// asks to open or close through `AssistantRequestInbox` and whose phase it mirrors
 /// (assistant_native_link.js). The Atom's pictures come from the page
 /// (assistant_carplay_pictures.js). One Atom only on the voice surface (user, 18 Nov. 2026):
-/// it breathes while she listens, its dot speaks while she speaks; she hangs up when asked
-/// to aloud, or with CarPlay's own close. Touching the Atom on the home grid calls her back.
+/// it breathes while she listens, its dot speaks while she speaks. From iOS 26.4 the voice surface
+/// is CarPlay's root (user, 19 Nov. 2026, mockup validated): no ✕, no grid, no « atome » caption;
+/// a microphone beside the Atom cuts her listening (she hangs up) and gives it back, and from
+/// iOS 27 atome's standard wallpaper lies behind. Before iOS 26.4 the surface is presented over a
+/// grid: she hangs up when asked to aloud, or with CarPlay's own close; the grid's Atom calls her back.
 final class CarPlayAssistantLink: NSObject, CPInterfaceControllerDelegate {
     static let shared = CarPlayAssistantLink()
     private static let stateCommand = "carplay_assistant_state"
@@ -50,18 +53,23 @@ final class CarPlayAssistantLink: NSObject, CPInterfaceControllerDelegate {
         voiceLive = value
         liveLock.unlock()
     }
-    private static let phases = ["connecting", "listening", "responding", "speaking", "error"]
+    private static let phases = ["connecting", "listening", "responding", "speaking", "error", "muted"]
     // The template's states: the Atom still while she connects, breathing while she listens or
     // thinks, its dot speaking while she speaks, still under an error.
     private static let stateOfPhase = ["connecting": "rest", "listening": "listening", "responding": "listening",
-                                       "speaking": "speaking", "error": "error"]
+                                       "speaking": "speaking", "error": "error", "muted": "rest"]
     private static let gridSide: CGFloat = 80
+    /// The root surface's state with her microphone cut (`muted`, the conversation open) or once she hung up:
+    /// the Atom at its stopped opacity, the microphone shown cut.
+    private static let stoppedState = "stopped"
+    private static let mutedTint = UIColor(red: 1, green: 0.36, blue: 0.48, alpha: 1)
 
     private struct Pictures {
         let rest: UIImage
         let stopped: UIImage
         let listening: UIImage
         let talking: UIImage
+        let wallpaper: UIImage?
     }
 
     private var pictures: Pictures?
@@ -72,6 +80,8 @@ final class CarPlayAssistantLink: NSObject, CPInterfaceControllerDelegate {
     private var voiceTemplatePresented = false
     private var activeState = ""
     private var active = false
+    /// iOS 26.4 and later: the voice template is the root template (see the class note); before, the grid is.
+    private var voiceIsRoot = false
     /// The car's screen is connected: the page must live even behind a locked phone (AppBackgroundLifecycle).
     private(set) var isConnected = false
 
@@ -89,10 +99,48 @@ final class CarPlayAssistantLink: NSObject, CPInterfaceControllerDelegate {
         // phone's screen went black). The person can still lock it; the voice session goes on then.
         UIApplication.shared.isIdleTimerDisabled = true
         AppPageHost.shared.start(windowless: true)
+        if #available(iOS 26.4, *) {
+            voiceIsRoot = true
+            guard pictures != nil else {
+                // Until the page sends the Atom's pictures, the surface waits empty.
+                setVoiceRoot(CPVoiceControlTemplate(voiceControlStates: [
+                    CPVoiceControlState(identifier: "rest", titleVariants: nil, image: nil, repeats: false)
+                ]))
+                return
+            }
+            let template = makeVoiceTemplate(message: "")
+            voiceTemplate = template
+            voiceTemplateMessage = ""
+            activeState = Self.stoppedState
+            setVoiceRoot(template)
+            return
+        }
+        showGrid()
+    }
+
+    private func showGrid() {
+        guard let interface else { return }
         let grid = CPGridTemplate(title: Self.displayName(), gridButtons: [])
         self.grid = grid
-        interfaceController.setRootTemplate(grid, animated: false, completion: nil)
+        interface.setRootTemplate(grid, animated: false, completion: nil)
         showGridButton()
+    }
+
+    /// The voice template as CarPlay's root. No fallback: a refusal is a defect, journaled and logged as one.
+    private func setVoiceRoot(_ template: CPVoiceControlTemplate) {
+        guard let interface else { return }
+        interface.setRootTemplate(template, animated: false) { [weak self] done, error in
+            guard let self, self.interface === interface else { return }
+            guard done else {
+                let code = (error as NSError?)?.code ?? 0
+                CarPlayJournal.shared.write("carplay", "carplay_voice_root_refused", ["code": code])
+                NSLog("[carplay] carplay_voice_root_refused code=%d", code)
+                return
+            }
+            guard self.voiceTemplate === template else { return }
+            self.voiceTemplatePresented = true
+            template.activateVoiceControlState(withIdentifier: self.activeState)
+        }
     }
 
     /// Opens the assistant without a tap; the Atom on the grid listens again after a stop.
@@ -115,6 +163,7 @@ final class CarPlayAssistantLink: NSObject, CPInterfaceControllerDelegate {
         interface?.delegate = nil
         interface = nil
         grid = nil
+        voiceIsRoot = false
         voiceTemplate = nil
         voiceTemplateMessage = ""
         voiceTemplatePresented = false
@@ -125,7 +174,7 @@ final class CarPlayAssistantLink: NSObject, CPInterfaceControllerDelegate {
     // CarPlay's close (✕) took the voice surface away: she hangs up, the grid's Atom calls her back.
     // A template this link dismisses itself is no longer `voiceTemplate` when it disappears.
     func templateDidDisappear(_ aTemplate: CPTemplate, animated: Bool) {
-        guard let voiceTemplate, aTemplate === voiceTemplate, voiceTemplatePresented else { return }
+        guard !voiceIsRoot, let voiceTemplate, aTemplate === voiceTemplate, voiceTemplatePresented else { return }
         CarPlayJournal.shared.write("carplay", "voice_template_closed_by_car")
         self.voiceTemplate = nil
         voiceTemplateMessage = ""
@@ -193,6 +242,27 @@ final class CarPlayAssistantLink: NSObject, CPInterfaceControllerDelegate {
         let opened = phase != "closed"
         if opened != active { active = opened; showGridButton() }
         Self.setCarVoiceLive(opened && isConnected)
+        if voiceIsRoot {
+            // The root surface stays: muted or closed, the Atom rests dimmed and the microphone shows cut.
+            if phase == "muted" {
+                activeState = Self.stoppedState
+            } else if opened {
+                guard let state = Self.stateOfPhase[phase] else { preconditionFailure("carplay phase without state: \(phase)") }
+                activeState = state
+            } else {
+                activeState = Self.stoppedState
+            }
+            if let voiceTemplate, message == voiceTemplateMessage {
+                if voiceTemplatePresented { voiceTemplate.activateVoiceControlState(withIdentifier: activeState) }
+                return
+            }
+            let template = makeVoiceTemplate(message: message)
+            voiceTemplate = template
+            voiceTemplateMessage = message
+            voiceTemplatePresented = false
+            setVoiceRoot(template)
+            return
+        }
         if !opened {
             guard let template = voiceTemplate else { return }
             let presented = voiceTemplatePresented
@@ -227,13 +297,44 @@ final class CarPlayAssistantLink: NSObject, CPInterfaceControllerDelegate {
 
     private func makeVoiceTemplate(message: String) -> CPVoiceControlTemplate {
         guard let pictures else { preconditionFailure("carplay_assistant_pictures_missing") }
-        // The Atom alone: no button under it, no caption but an error's.
-        return CPVoiceControlTemplate(voiceControlStates: [
-            CPVoiceControlState(identifier: "rest", titleVariants: nil, image: pictures.rest, repeats: false),
-            CPVoiceControlState(identifier: "listening", titleVariants: nil, image: pictures.listening, repeats: true),
-            CPVoiceControlState(identifier: "speaking", titleVariants: nil, image: pictures.talking, repeats: true),
-            CPVoiceControlState(identifier: "error", titleVariants: [message], image: pictures.rest, repeats: false)
-        ])
+        // The Atom alone, no caption but an error's; on the root surface, its microphone beside it.
+        var states = [
+            Self.state("rest", nil, pictures.rest, pictures.wallpaper, false),
+            Self.state("listening", nil, pictures.listening, pictures.wallpaper, true),
+            Self.state("speaking", nil, pictures.talking, pictures.wallpaper, true),
+            Self.state("error", [message], pictures.rest, pictures.wallpaper, false)
+        ]
+        if voiceIsRoot {
+            states.append(Self.state(Self.stoppedState, nil, pictures.stopped, pictures.wallpaper, false))
+            if #available(iOS 26.4, *), CPVoiceControlState.maximumActionButtonCount > 0 {
+                for state in states { state.actionButtons = [microphoneButton(listening: state.identifier != Self.stoppedState)] }
+            }
+        }
+        return CPVoiceControlTemplate(voiceControlStates: states)
+    }
+
+    private static func state(_ identifier: String, _ titles: [String]?, _ image: UIImage, _ wallpaper: UIImage?,
+                              _ repeats: Bool) -> CPVoiceControlState {
+        if #available(iOS 27.0, *), let wallpaper {
+            return CPVoiceControlState(identifier: identifier, titleVariants: titles, image: image, backgroundImage: wallpaper, repeats: repeats)
+        }
+        return CPVoiceControlState(identifier: identifier, titleVariants: titles, image: image, repeats: repeats)
+    }
+
+    /// Listening, the microphone cuts her listening (`mute`: the runtime's own switch, the conversation stays);
+    /// cut, it gives it back (`listen`), or calls her back once she hung up (`open`).
+    @available(iOS 26.4, *)
+    private func microphoneButton(listening: Bool) -> CPButton {
+        let glyph = UIImage.SymbolConfiguration(pointSize: 30, weight: .semibold)
+        guard let symbol = UIImage(systemName: listening ? "mic.fill" : "mic.slash.fill", withConfiguration: glyph) else {
+            preconditionFailure("carplay_microphone_symbol_missing")
+        }
+        let image = symbol.withTintColor(listening ? .white : Self.mutedTint, renderingMode: .alwaysOriginal)
+        return CPButton(image: image) { [weak self] _ in
+            guard let self else { return }
+            CarPlayJournal.shared.write("carplay", "microphone", ["listening": !listening])
+            self.request(listening ? "mute" : (self.active ? "listen" : "open"))
+        }
     }
 
     private static func pictures(from painted: [String: Any]) -> Pictures? {
@@ -241,7 +342,11 @@ final class CarPlayAssistantLink: NSObject, CPInterfaceControllerDelegate {
               let rest = image(painted["rest"], scale: scale),
               let listening = loop(painted["listening"], scale: scale),
               let talking = loop(painted["talking"], scale: scale) else { return nil }
-        return Pictures(rest: rest, stopped: rest.withAlpha(CGFloat(stoppedOpacity)), listening: listening, talking: talking)
+        // The wallpaper, when sent, must be one: a broken one is refused, never dropped silently.
+        let wallpaper = painted["wallpaper"].flatMap { image($0, scale: 1) }
+        if painted["wallpaper"] != nil, wallpaper == nil { return nil }
+        return Pictures(rest: rest, stopped: rest.withAlpha(CGFloat(stoppedOpacity)), listening: listening, talking: talking,
+                        wallpaper: wallpaper)
     }
 
     /// `{ loopMs, frames }` painted by the page: one animated image that comes back to its first frame.

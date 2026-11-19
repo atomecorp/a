@@ -55,7 +55,7 @@ Before implementation, the task must answer at minimum:
 - `todo/ai_voice/AI_integration_problems_to_solve.md`
 - `todo/ai_voice/Full_vocal_AI_integration.md`
 - `todo/ai_voice/eVe_MCP_APIS_Tools.md`
-- `todo/cleanup_architecture/eve_atome_master_cleanup_plan.md`
+- [Current architecture cleanup priorities](../cleanup_architecture/README.md)
 - `todo/execution_order.md`
 
 Add more files as soon as real overlap is discovered.

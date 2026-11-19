@@ -612,7 +612,11 @@ fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32
 
     var color = vec3(0.0);
     var alpha = 0.0;
-    for (var index = 0; index < count; index = index + 1) {
+    // Composed front to back from the LAST tile: a later tile lies over an earlier one, as the Mystic tree lays its
+    // records (a later sibling drawn and touched over, bevy_ui_mystic_model.js: the empty plates first, the content
+    // over them). Read from the first, every empty plate's hole hid the content under it until the wave ended.
+    for (var step = 0; step < count; step = step + 1) {
+        let index = count - 1 - step;
         let tile = material.mystic_tiles[index];
         if tile.z <= 0.5 { continue; }
         let half_side = max(tile.z, 1.0);

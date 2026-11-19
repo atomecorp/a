@@ -75,7 +75,14 @@ export const BILLING_MONEY = Object.freeze({
             'gpt-6-astra': Object.freeze({ input: 230, output: 1840 }),
             'gpt-live-1': Object.freeze({ input: 400, output: 1600 })
         }),
-        flatMicroCents: Object.freeze({ speech: 1_000_000, 'realtime-connect': 5_000_000, image: 4_000_000 })
+        flatMicroCents: Object.freeze({ speech: 1_000_000, 'realtime-connect': 5_000_000, image: 4_000_000 }),
+        // One US cent in millionths of a euro cent: the 0.92 the prices above use (18 Nov. 2026). A
+        // generation (Runway's video, MusicGPT's music, R-120) is billed in its provider's US cents.
+        usdCentMicroCents: 920_000,
+        // What a generation reserves before its provider is called when the provider gives no
+        // estimate first, in US cents: MusicGPT's pay-as-you-go song is $0.10 a minute (19 Nov. 2026),
+        // two minutes reserved; the real cost it reports is what is settled.
+        generationHoldUsdCents: Object.freeze({ musicgpt: 20 })
     }),
     holdCents: Object.freeze({ ai: 5, domains: 0, shop: 0, services: 0 }),
     categories: Object.freeze(['ai', 'domains', 'shop', 'services', 'storage']),

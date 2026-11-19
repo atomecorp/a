@@ -9,13 +9,14 @@ const settingsSource = readFileSync('eVe/intuition/runtime/bevy_panel/bevy_panel
 const securitySource = readFileSync('eVe/intuition/runtime/bevy_panel/bevy_panel_home_security.js', 'utf8');
 const definitions = readFileSync('eVe/intuition/panel_definitions.js', 'utf8');
 
-assert.match(userSource, /window\.open_home_panel = open_home_panel/);
+assert.match(userSource, /export \{[^}]*\bopen_home_panel\b/);
+assert.doesNotMatch(userSource, /window\.open_home_panel =/);
 assert.match(userSource, /bevy_panel_home_runtime\.js/);
 assert.doesNotMatch(userSource, /bevy_panel_surfaces\.js/);
 assert.match(routeSource, /openBevyPanelSurface\('home'/);
 assert.match(routeSource, /ensureSharedLoginSequence/);
 assert.match(routeSource, /api\.security\.startGuest/);
-assert.match(routeSource, /api\.auth\.bootstrap/);
+assert.match(routeSource, /api\.auth\.current/);
 assert.match(definitions, /surface_id: 'eve_bevy_panel_home'/);
 assert.doesNotMatch(definitions, /eve_user_dialog/);
 
@@ -27,11 +28,11 @@ assert.match(viewSource, /id: `home_\$\{key\}_accordion`/);
 assert.doesNotMatch(viewSource, /home_session_exit/);
 assert.match(settingsSource, /id: 'home_credentials_add'/);
 assert.match(settingsSource, /id: 'home_passwords_accordion'/);
-assert.match(settingsSource, /id: 'home_ai_keys_accordion'/);
+assert.match(settingsSource, /id: 'home_music_keys_accordion'/);
 assert.doesNotMatch(viewSource, /home_professional|eve\.user\.pro\.label/);
 
 assert.match(surfaceSource, /persistHomeProfile/);
-assert.match(securitySource, /changeHomePassword/);
+assert.match(securitySource, /auth\.setPassword/);
 assert.match(securitySource, /deleteHomeAccount/);
 assert.doesNotMatch(surfaceSource, /localStorage|sessionStorage|innerHTML|querySelector|createElement/);
 

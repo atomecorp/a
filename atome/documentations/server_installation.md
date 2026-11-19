@@ -242,12 +242,11 @@ cd /opt/a-staging && node scripts/server_update.js --staging
 ```
 
 `--staging` selects the `squirrel-staging` service, `/etc/squirrel-staging/squirrel.env` and its backups; the health
-check reads the port from that file. Its public name needs the DNS A record `staging` → the server in atome.one's zone;
-then `/usr/local/lib/atome-sites/site_domain_cert.mjs --host staging.atome.one 3101` takes its certificate and writes
-its nginx servers (`scripts/site_domain_cert.mjs`). Until then it answers at `https://atome.one:8443` (user
-authorization, 2026-10-29): `/etc/nginx/sites-available/atome-staging-8443`, atome.one's certificate, proxy to 3101 with
-`Host: localhost` and no `Set-Cookie` passed (browsers share atome.one's cookies across ports, a staging session must
-never overwrite production's). Remove that file and its `sites-enabled` link once staging.atome.one exists.
+check reads the port from that file. It answers at `https://staging.atome.one` (since 19 Nov. 2026): the DNS A record
+`staging` → the server in atome.one's zone, then `/usr/local/lib/atome-sites/site_domain_cert.mjs --host
+staging.atome.one 3101`, which took its Let's Encrypt certificate (renewed by certbot's timer) and wrote its nginx
+servers (`scripts/site_domain_cert.mjs`). Its former route, `https://atome.one:8443`, is disabled (its `sites-enabled`
+link removed; `/etc/nginx/sites-available/atome-staging-8443` kept, unused).
 
 ---
 

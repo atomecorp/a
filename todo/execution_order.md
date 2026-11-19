@@ -112,11 +112,11 @@ Partiel
 
 - [ ] ATM-2001 — Activate and accept remaining optional-password/security changes; SMS baseline is complete.
 
-Need/domain: account access / identity. Advancement: SMS receipt and successful sign-in confirmed by the user in this conversation; removed from remaining creation work. Optional Argon2id password, phone-based password/SMS choice, protected credentials and device/session proof are implemented. Verification: existing focused tests, Web gestures and signed iOS compilation are dated evidence, not rerun here; later cross-device/pairing/deadline changes retain their own limits. Evidence: server/auth_password.js (challenge/login/set), auth_password_crypto.js, wsPhoneLinkAuth.js, auth_phone_link.js; password owner protected outside Atome history. Sources: [phone-link status](auth_phone_link_implementation.md), [auth backlog](communication_social/user_auth.md), [password migration](cleanup_architecture/argon2id_password_hash_migration.md), FRAMEWORK_STATE entries dated 2026-10-14/15. Remaining: maintained compromised-secret-list configuration and coordinated activation where not deployed; acceptance of the new password and hardening paths, not another initial SMS implementation. Missing screening data refuses password setup. Recovery Kit is not delivered by these changes. Next: preserve the functional SMS baseline and scope only the activation/new-change remainder to the affected runtime. Optional password does not block other feature work. Scenarios: SCN-2001/SCN-2004.
+Need/domain: account access and session security. SMS receipt and sign-in were confirmed by the user. The Rust server implements the OVH adapter, optional Argon2id passwords and legacy bcrypt upgrade. Missing screening data refuses password setup. Server switching purges legacy Web Storage credentials and resumes with a device proof. Remaining: verify authentication, recovery and password configuration on the release candidate. [Release checks](cleanup_architecture/README.md#avant-la-prochaine-livraison), [session storage evidence](../eVe/documentations/FRAMEWORK_STATE.md#2026-11-19--session-storage-and-server-changes), [dated SMS evidence](auth_phone_link_implementation.md). Scenarios: SCN-2001/SCN-2004.
 
 Supporting record ATM-2002 — Identity, provisioning and privacy checks attached to feature delivery.
 
-Need/domain: stable account ownership and bounded permissions / supporting verification. Advancement: opaque stable principal IDs, separate verified-phone credentials and authenticated per-vault ownership are implemented; do not recreate them. Evidence: server/auth_identity.js#replaceVerifiedPhone, generateOpaquePrincipalId migration, auth_phone_link.js#finishAttempt, userVaultRouter.js#commit; commit 788c76449 also removes password_hash from public identity output. Verification: no complete fresh cross-runtime/security audit in this documentary pass. Historical shadow-account/phone-derived-ID statements in source specifications are not automatically current defects. Sources: todo/cleanup_architecture/stable_user_identity_independent_of_phone.md; todo/cleanup_architecture/explicit_cross_runtime_account_provisioning.md; todo/cleanup_architecture/account_recovery_trusted_device_and_recovery_kit.md. Remaining: feature-specific consent/revocation/provisioning coverage and separately unimplemented Recovery Kit scope. Next: run only relevant existing checks with the consuming feature; promote a reproducible missing behavior to a bounded repair rather than treating the whole identity system as unfinished. No dependency on redoing the user-confirmed SMS flow. Scenario: SCN-2002.
+Need/domain: stable account ownership and bounded permissions. Opaque principals, separate verified-phone credentials, explicit guest adoption and authenticated vault access are implemented in Rust. The recovery-code journey was validated on Web, iPhone and iPad in October. Remaining: check consent, provisioning, permission changes and revocation for the consuming feature and release candidate. [Release checks and implementation evidence](cleanup_architecture/README.md). Scenario: SCN-2002.
 
   2026-10-14 bounded personal-profile evidence: existing account identity is retained during iOS Contacts import; authorized unique verified-phone candidates or explicit Contact selection feed the one private profile, import conflicts and expected property versions preserve manual edits. Six current focused cases pass; actual Contacts full/limited/denied permission, photo and cross-device/reinstallation acceptance remain To verify. See [personal import evidence](../eVe/documentations/PERSONAL_IMPORT_VALIDATION_2026-10-02.md). This does not certify the complete privacy/ACL workstream.
 
@@ -180,7 +180,7 @@ Domain: Molecule, AV, export and screen recording. Priority: provisional. Advanc
 
 - [ ] ATM-2011 — Add snapshot-tail acceleration and historical branching beyond existing manual restore/full replay.
 
-Domain: History and replay. Priority: provisional. Advancement: manual snapshot/restore and full scoped replay are implemented. Evidence: database/adole.js#rebuildStateCurrentFromEvents currently queries ordered events for the entire scope; database/state_snapshot_restore.js builds canonical restore events. Remaining: trusted snapshot-plus-cursor tail reconstruction/equivalence and the documented historical-branch/divergence/merge semantics; existing restore is not evidence those future paths exist. Sources: todo/cleanup_architecture/snapshot_accelerated_state_rebuild.md; todo/ai_voice/time_machine_historical_branching.md. Verification: no new replay campaign here. Dependencies: preserve immutable history and current mutation owner; resolve any genuine product-semantic ambiguity before implementation. Necessary internal contracts alone no longer require separate authorization under AGENTS.md. Next: implement only the bounded missing capability selected in this workstream; never recreate manual snapshots or introduce automatic canonical snapshots.
+Domain: History and replay. Priority: provisional. Manual snapshot creation and restore exist in the Rust store and local server. Remaining: prove reconstruction from a trusted snapshot and its event cursor is equivalent to full scoped replay. Historical branching, divergence and merge remain tracked separately under this task. Sources: todo/cleanup_architecture/snapshot_accelerated_state_rebuild.md; todo/ai_voice/time_machine_historical_branching.md. Preserve the immutable history and use the existing mutation owner.
 
 - [ ] ATM-2012 — Complete remaining Calendar/Conditions/health consumers beyond existing engines and Programme integrations.
 
@@ -236,7 +236,7 @@ Legacy phase correspondence: security/auth → ATM-2001/2002; state/sync → ATM
 - `todo/New work/`
 - `todo/media_handling/`
 - `todo/sharing_search_monitoring/`
-- `todo/cleanup_architecture/`
+- `todo/cleanup_architecture/` — [current priorities and remaining work](cleanup_architecture/README.md)
 - `todo/audits/`
 - `todo/rendering_graphics/`
 - `todo/tools/`
@@ -249,7 +249,6 @@ Legacy phase correspondence: security/auth → ATM-2001/2002; state/sync → ATM
 - `todo/ui_bevy/finder_place_map_package.md`
 - `todo/audits/2026-07-14_framework_documentation_conformance.md`
 - `done/obsolete/eVe_optimisations.md`
-- `todo/cleanup_architecture/file_size_inventory_2026-07-14.md`
 - `todo/dev_ops/developer-experience.md`
 - `todo/molecule/PROJET_MOLECULE_DEBUG.md`
 - `todo/New work/atome_songlist_full_spec.md`
@@ -267,7 +266,6 @@ Legacy phase correspondence: security/auth → ATM-2001/2002; state/sync → ATM
 - `done/planning_audit/execution_order_reconciliation_2026-07-16.md`
 - `todo/1- condition.md`
 - `todo/2- Granularity_Validation.md`
-- `todo/cleanup_architecture/file_size_and_coding_standards_remediation.md`
 - `done/urgent_task.md`
 - `todo/eve_features/update_panel_refactor.md`
 - `todo/eve_features/panel_tools_above_footer_band.md`
@@ -285,23 +283,13 @@ Legacy phase correspondence: security/auth → ATM-2001/2002; state/sync → ATM
 - `maps/CODEMAP.md`
 - `maps/DESIGN_MAP.md`
 - `done/websocket_only_atome_transport.md`
-- `todo/cleanup_architecture/authenticated_permission_scoped_ws_sync.md`
-- `todo/cleanup_architecture/stable_user_identity_independent_of_phone.md`
-- `todo/cleanup_architecture/explicit_cross_runtime_account_provisioning.md`
-- `todo/cleanup_architecture/argon2id_password_hash_migration.md`
-- `todo/cleanup_architecture/production_sms_provider_boundary.md`
-- `todo/cleanup_architecture/account_recovery_trusted_device_and_recovery_kit.md`
-- `todo/cleanup_architecture/secure_auth_token_storage.md`
 - `todo/cleanup_architecture/snapshot_accelerated_state_rebuild.md`
 - `todo/ai_voice/time_machine_historical_branching.md`
 - `todo/ai_voice/history_and_ai.md`
-- `todo/cleanup_architecture/system_ui_component_ssot.md`
-- `todo/cleanup_architecture/v2_full_migration_framework.md`
 - `todo/eve_features/menu_interactions.md`
 - `todo/eve_features/calendar_todos.md`
 - `todo/eve_features/map_localization.md`
 - `todo/communication_social/matrix_flower_context_menu.md`
-- `todo/cleanup_architecture/eve_atome_master_cleanup_plan.md`
 - `todo/ai_voice/eVe_MCP_APIS_Tools.md`
 - `done/planning_audit/framework_security_audit_and_vulnerability_remediation.md`
 - `todo/communication_social/user_auth.md`
@@ -316,9 +304,6 @@ Legacy phase correspondence: security/auth → ATM-2001/2002; state/sync → ATM
 - `todo/sharing_search_monitoring/finder.md`
 - `todo/sharing_search_monitoring/finder_UI.md`
 - `todo/debug_communication_notifications_publications_2026-09-01.md`
-- `todo/cleanup_architecture/framework_cleanup_and_ui_optimization_plan_2026-04-19.md`
-- `todo/cleanup_architecture/deep_ux_performance_and_ios_boot_compliance.md`
-- `todo/cleanup_architecture/ios_fullscreen_surface_compliance.md`
 - `todo/tools/tool_sanitisation.md`
 - `todo/eve_features/Notification_tool.md`
 - `todo/ai_voice/AI_integration_problems_to_solve.md`
@@ -419,8 +404,8 @@ Confirmed path corrections: the recording integration plan, video recording/prev
 ARB-0001 was resolved by the user on 2026-10-13: retain the recent SMS/device-proof
 session with access tokens in memory; retire the old unconditional HttpOnly-cookie
 migration requirement. [Decision record](migration/spring_git_cleanup_questions.md)
-and [updated token-storage specification](cleanup_architecture/secure_auth_token_storage.md)
-preserve the provenance. ATM-2001/ATM-2002 retain the applicable security/runtime
+and [session-storage contract](../atome/documentations/security_architecture.md#session-storage-and-server-changes)
+preserve the decision and current implementation. ATM-2001/ATM-2002 retain the applicable security/runtime
 acceptance criteria; the future optional password/SMS choice is unchanged.
 There is no pending documentary arbitration in this triage. No application or
 session configuration change follows from this decision.
